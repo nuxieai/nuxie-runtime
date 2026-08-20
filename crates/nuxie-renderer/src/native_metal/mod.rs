@@ -36,8 +36,9 @@ mod upload_buffer_ring;
 use super::gpu;
 use super::{
     logical_frame::{
-        prepare_atomic_path_flush, prepare_single_gradient_batch, AtomicPathFlushInput,
-        PreparedAtomicPathFlush,
+        prepare_atomic_clipped_path_flush, prepare_atomic_path_flush,
+        prepare_single_gradient_batch, AtomicPathFlushInput, LogicalDrawState,
+        PreparedAtomicPatchKind, PreparedAtomicPathFlush,
     },
     BackendWorkMetrics, LogicalFrameConfig, LogicalPaint, LogicalPath, LogicalShader, RenderMode,
     RendererError,
@@ -117,6 +118,10 @@ pub struct NativeMetalExecutionInventory {
     pub render_pass_initialize_pipeline: bool,
     pub midpoint_fan_pipeline: bool,
     pub render_pass_resolve_pipeline: bool,
+    /// Flush-wide clipping selected specialized initialize/midpoint/resolve.
+    pub clipped_path_pipeline_set: bool,
+    pub outer_curve_pipeline: bool,
+    pub interior_triangulation_pipeline: bool,
     pub atomic_draws: usize,
     pub atomic_draw_groups: usize,
     /// Semantic PLS barriers: initial, group transitions, and pre-resolve.
@@ -215,6 +220,7 @@ impl NativeMetalFactory {
             clear_color,
             state: NativeMetalRenderState::default(),
             state_stack: Vec::new(),
+            atomic_logical_state: LogicalDrawState::default(),
             solid_draws: Vec::new(),
             atomic_path_inputs: Vec::new(),
             gradient_draws: Vec::new(),
@@ -350,6 +356,7 @@ pub struct NativeMetalFrame {
     clear_color: u32,
     state: NativeMetalRenderState,
     state_stack: Vec<NativeMetalRenderState>,
+    atomic_logical_state: LogicalDrawState,
     solid_draws: Vec<SolidTracerDraw>,
     atomic_path_inputs: Vec<AtomicPathInput>,
     gradient_draws: Vec<GradientDraw>,
@@ -468,7 +475,7 @@ impl AtomicPathUploadData {
             paints: &self.paints,
             paint_aux: &self.paint_aux,
             contours: &flush.contours,
-            triangles: &[],
+            triangles: &flush.triangles,
         }
     }
 }
@@ -572,17 +579,35 @@ impl GradientUploadData {
 
 impl Renderer for NativeMetalFrame {
     fn save(&mut self) {
+        if self.reject_post_clipped_content_state_mutation() {
+            return;
+        }
         self.state_stack.push(self.state);
+        if self.mode == RenderMode::ClockwiseAtomic {
+            self.atomic_logical_state.save();
+        }
     }
 
     fn restore(&mut self) {
+        if self.reject_post_clipped_content_state_mutation() {
+            return;
+        }
         if let Some(state) = self.state_stack.pop() {
             self.state = state;
+        }
+        if self.mode == RenderMode::ClockwiseAtomic {
+            self.atomic_logical_state.restore();
         }
     }
 
     fn transform(&mut self, transform: Mat2D) {
+        if self.reject_post_clipped_content_state_mutation() {
+            return;
+        }
         self.state.transform = super::multiply(self.state.transform, transform);
+        if self.mode == RenderMode::ClockwiseAtomic {
+            self.atomic_logical_state.transform(transform);
+        }
     }
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
@@ -652,11 +677,15 @@ impl Renderer for NativeMetalFrame {
                     .get_or_insert("native Metal atomic tracer requires opaque solid color");
                 return;
             }
-            let state = super::DrawState {
-                transform: self.state.transform,
-                opacity: self.state.opacity,
-                ..Default::default()
-            };
+            if self.atomic_logical_state.state.clip_stack_height != 0
+                && !self.atomic_path_inputs.is_empty()
+            {
+                self.unsupported.get_or_insert(
+                    "native Metal atomic clip tracer supports one clipped content draw",
+                );
+                return;
+            }
+            let state = self.atomic_logical_state.state;
             self.atomic_path_inputs.push(AtomicPathInput {
                 path: path.clone(),
                 paint: paint.clone(),
@@ -738,9 +767,28 @@ impl Renderer for NativeMetalFrame {
         });
     }
 
-    fn clip_path(&mut self, _path: &dyn RenderPath) {
-        self.unsupported
-            .get_or_insert("native Metal tracer does not support clipping yet");
+    fn clip_path(&mut self, path: &dyn RenderPath) {
+        if self.mode != RenderMode::ClockwiseAtomic {
+            self.unsupported
+                .get_or_insert("native Metal tracer does not support clipping yet");
+            return;
+        }
+        if !self.atomic_path_inputs.is_empty() {
+            self.unsupported
+                .get_or_insert("native Metal atomic clip tracer requires clips before content");
+            return;
+        }
+        let Some(path) = path.as_any().downcast_ref::<LogicalPath>() else {
+            self.unsupported
+                .get_or_insert("clip path from another renderer backend");
+            return;
+        };
+        if let Err(error) = self
+            .atomic_logical_state
+            .clip_path(self.logical_frame_config(), path)
+        {
+            self.unsupported.get_or_insert(error);
+        }
     }
 
     fn draw_image(
@@ -771,11 +819,29 @@ impl Renderer for NativeMetalFrame {
     }
 
     fn modulate_opacity(&mut self, opacity: f32) {
+        if self.reject_post_clipped_content_state_mutation() {
+            return;
+        }
         self.state.opacity *= opacity;
+        if self.mode == RenderMode::ClockwiseAtomic {
+            self.atomic_logical_state.state.opacity *= opacity;
+        }
     }
 }
 
 impl NativeMetalFrame {
+    fn reject_post_clipped_content_state_mutation(&mut self) -> bool {
+        let must_reject = self.mode == RenderMode::ClockwiseAtomic
+            && !self.atomic_path_inputs.is_empty()
+            && self.atomic_logical_state.state.clip_stack_height != 0;
+        if must_reject {
+            self.unsupported.get_or_insert(
+                "native Metal atomic clip tracer does not support state mutation after content",
+            );
+        }
+        must_reject
+    }
+
     fn logical_frame_config(&self) -> LogicalFrameConfig {
         let target = self.target.borrow();
         LogicalFrameConfig {
@@ -813,6 +879,9 @@ impl NativeMetalFrame {
                     .atomic_path_inputs
                     .iter()
                     .any(|draw| draw.paint.shader.is_some()));
+        let clipped_path_pipeline_set = atomic_pipelines.is_some_and(|pipelines| {
+            pipelines.outer_curve.is_some() && pipelines.interior.is_some()
+        });
         let execution_inventory = NativeMetalExecutionInventory {
             mode: self.mode,
             color_ramp_pipeline,
@@ -823,6 +892,11 @@ impl NativeMetalFrame {
             render_pass_initialize_pipeline: atomic_pipelines.is_some(),
             midpoint_fan_pipeline: atomic_pipelines.is_some(),
             render_pass_resolve_pipeline: atomic_pipelines.is_some(),
+            clipped_path_pipeline_set,
+            outer_curve_pipeline: atomic_pipelines
+                .is_some_and(|pipelines| pipelines.outer_curve.is_some()),
+            interior_triangulation_pipeline: atomic_pipelines
+                .is_some_and(|pipelines| pipelines.interior.is_some()),
             atomic_draws: self.atomic_draw_count,
             atomic_draw_groups: self.atomic_draw_group_count,
             atomic_barriers: self.atomic_barrier_count,
@@ -910,8 +984,15 @@ impl NativeMetalFrame {
                     state: input.state,
                 })
                 .collect::<Vec<_>>();
-            let flush = prepare_atomic_path_flush(self.logical_frame_config(), &inputs)
-                .map_err(RendererError::Unsupported)?;
+            let config = self.logical_frame_config();
+            let flush = if self.atomic_logical_state.state.clip_stack_height == 0 {
+                prepare_atomic_path_flush(config, &inputs)
+            } else if inputs.len() == 1 {
+                prepare_atomic_clipped_path_flush(config, &mut self.atomic_logical_state, inputs[0])
+            } else {
+                Err("native Metal atomic clip tracer requires one content draw")
+            }
+            .map_err(RendererError::Unsupported)?;
             if let Some(flush) = flush {
                 if flush.gradient_batch.is_some()
                     && (flush.draws.len() != 1
@@ -923,7 +1004,10 @@ impl NativeMetalFrame {
                         "native Metal atomic gradient tracer requires one visible closed cubic fill",
                     ));
                 }
-                if flush.draws.iter().any(|draw| draw.instance_count == 0)
+                if flush
+                    .draws
+                    .iter()
+                    .any(|draw| draw.instance_count == 0 && draw.triangle_range.is_empty())
                     || flush.spans.is_empty()
                     || flush.contours.is_empty()
                 {
@@ -941,6 +1025,7 @@ impl NativeMetalFrame {
                         .map_or(0, |batch| batch.height as usize),
                     tessellation_height as usize,
                     pixel_format,
+                    flush.uses_clipping,
                     upload_data.batch(&flush),
                 )?;
                 if self.collect_work_metrics {
@@ -981,7 +1066,7 @@ impl NativeMetalFrame {
                             .expect("atomic path resource reservation retained by the frame"),
                     )?
                 };
-                self.atomic_draw_count = flush.draws.len();
+                self.atomic_draw_count = flush.authored_draw_count;
                 self.atomic_draw_group_count = flush.draw_group_starts.len();
                 let barriers = atomic_barrier_inventory(
                     self.atomic_draw_group_count,
@@ -1000,13 +1085,20 @@ impl NativeMetalFrame {
                         .iter()
                         .map(|draw| draw.instance_count as usize)
                         .sum::<usize>();
+                    let submitted_path_instances = flush
+                        .draws
+                        .iter()
+                        // Interior triangulation is a non-instanced draw, but
+                        // the work metric counts it as one submitted instance.
+                        .map(|draw| (draw.instance_count as usize).max(1))
+                        .sum::<usize>();
                     self.backend_work.gpu_draw_instances = u64::try_from(
                         flush
                             .gradient_batch
                             .as_ref()
                             .map_or(0, |batch| batch.spans.len())
                             + flush.spans.len()
-                            + path_instances
+                            + submitted_path_instances
                             + 2,
                     )
                     .unwrap_or(u64::MAX);
@@ -1466,9 +1558,6 @@ fn encode_atomic_main_pass(
         &mut render_passes,
     )?;
 
-    encoder.setRenderPipelineState(&pipelines.midpoint);
-    bind_vertex_buffer(&encoder, context.path_patch_vertex_buffer(), 0);
-    encoder.setCullMode(MTLCullMode::Back);
     let mut next_group_start = flush.draw_group_starts.iter().copied().skip(1).peekable();
     for (draw_index, draw) in flush.draws.iter().enumerate() {
         if next_group_start.peek().copied() == Some(draw_index) {
@@ -1484,24 +1573,60 @@ fn encode_atomic_main_pass(
                 &mut render_passes,
             )?;
             next_group_start.next();
-            encoder.setRenderPipelineState(&pipelines.midpoint);
+        }
+        if draw.instance_count != 0 {
+            let (pipeline, index_count, index_offset) = match draw.patch_kind {
+                PreparedAtomicPatchKind::Midpoint => {
+                    (&pipelines.midpoint, gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT, 0)
+                }
+                PreparedAtomicPatchKind::OuterCurve => (
+                    pipelines.outer_curve.as_ref().ok_or_else(|| {
+                        RendererError::NativeMetal(
+                            "atomic clipped outer-curve pipeline is absent".to_owned(),
+                        )
+                    })?,
+                    gpu::OUTER_CURVE_PATCH_INDEX_COUNT,
+                    (gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT
+                        + gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT)
+                        * std::mem::size_of::<u16>(),
+                ),
+            };
+            encoder.setRenderPipelineState(pipeline);
             bind_vertex_buffer(&encoder, context.path_patch_vertex_buffer(), 0);
             encoder.setCullMode(MTLCullMode::Back);
-        }
-        set_vertex_bytes(&encoder, &draw.base_instance, 4)?;
-        // SAFETY: the context retains a complete 72-index midpoint patch and
-        // matching vertex buffer. This scheduled draw's `instance_count`
-        // names its initialized, relocated canonical patch range in the
-        // flush-wide tessellation texture and retained upload lease.
-        unsafe {
-            encoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
+            set_vertex_bytes(&encoder, &draw.base_instance, 4)?;
+            // SAFETY: the retained patch index/vertex buffers contain the
+            // generated midpoint and outer-curve ranges; this command names
+            // only its initialized relocated instances.
+            unsafe {
+                encoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
                     MTLPrimitiveType::Triangle,
-                    gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT,
+                    index_count,
                     MTLIndexType::UInt16,
                     context.path_patch_index_buffer(),
-                    0,
+                    index_offset,
                     draw.instance_count as usize,
                 );
+            }
+        } else {
+            let pipeline = pipelines.interior.as_ref().ok_or_else(|| {
+                RendererError::NativeMetal("atomic clipped interior pipeline is absent".to_owned())
+            })?;
+            let triangles = lease.triangles.as_deref().ok_or_else(|| {
+                RendererError::NativeMetal("atomic interior triangle upload is absent".to_owned())
+            })?;
+            encoder.setRenderPipelineState(pipeline);
+            bind_vertex_buffer(&encoder, triangles, 0);
+            encoder.setCullMode(MTLCullMode::None);
+            // SAFETY: the typed logical writer initialized every retained
+            // triangle in this command's exact range.
+            unsafe {
+                encoder.drawPrimitives_vertexStart_vertexCount(
+                    MTLPrimitiveType::Triangle,
+                    draw.triangle_range.start,
+                    draw.triangle_range.len(),
+                );
+            }
         }
     }
     // C++ attaches `plsAtomicPreResolve` to the resolve batch. Apply it once

@@ -52,6 +52,7 @@ impl<'a> NativeMetalDrawableFrame<'a> {
             clear_color,
             state: NativeMetalRenderState::default(),
             state_stack: Vec::new(),
+            atomic_logical_state: super::LogicalDrawState::default(),
             solid_draws: Vec::new(),
             atomic_path_inputs: Vec::new(),
             gradient_draws: Vec::new(),

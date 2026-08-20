@@ -5,7 +5,8 @@
 
 use nuxie_render_stream::RenderStream;
 use nuxie_renderer::{
-    BackendWorkMetrics, NativeMetalExecutionInventory, NativeMetalFactory, RenderMode, WgpuFactory,
+    BackendWorkMetrics, NativeMetalExecutionInventory, NativeMetalFactory, RenderMode,
+    RendererError, WgpuFactory,
 };
 use std::fs::File;
 use std::io::BufReader;
@@ -218,6 +219,9 @@ fn native_metal_forced_atomic_triangle_matches_pinned_cpp_metal_oracle() {
             render_pass_initialize_pipeline: true,
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
+            clipped_path_pipeline_set: false,
+            outer_curve_pipeline: false,
+            interior_triangulation_pipeline: false,
             atomic_draws: 1,
             atomic_draw_groups: 1,
             atomic_barriers: 2,
@@ -290,6 +294,9 @@ fn native_metal_forced_atomic_gradient_cubic_matches_pinned_cpp_metal_oracle() {
             render_pass_initialize_pipeline: true,
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
+            clipped_path_pipeline_set: false,
+            outer_curve_pipeline: false,
+            interior_triangulation_pipeline: false,
             atomic_draws: 1,
             atomic_draw_groups: 1,
             atomic_barriers: 2,
@@ -358,6 +365,9 @@ fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() 
             render_pass_initialize_pipeline: true,
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
+            clipped_path_pipeline_set: false,
+            outer_curve_pipeline: false,
+            interior_triangulation_pipeline: false,
             atomic_draws: 4,
             atomic_draw_groups: 4,
             atomic_barriers: 5,
@@ -399,6 +409,100 @@ fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() 
         [0xff; 4],
         "forced generic-atomic Rust Metal overfill versus pinned C++ Metal",
     );
+}
+
+#[test]
+fn native_metal_forced_atomic_nested_clip_matches_pinned_cpp_metal_oracle() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(
+            fixture_root.join("streams/first-light-nested-clip-probe.rive-stream"),
+        )
+        .expect("read nested clip stream"),
+    )
+    .expect("parse nested clip stream");
+    let (width, height) = stream.frame_size.expect("nested clip frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire forced-atomic native Metal nested-clip frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay nested clip through the public Factory/Renderer seam");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish forced-atomic native Metal nested clip");
+
+    assert_eq!(output.execution_inventory.atomic_draws, 3);
+    assert_eq!(output.execution_inventory.atomic_draw_groups, 5);
+    assert_eq!(output.execution_inventory.atomic_barriers, 6);
+    assert!(output.execution_inventory.clipped_path_pipeline_set);
+    assert!(output.execution_inventory.outer_curve_pipeline);
+    assert!(output.execution_inventory.interior_triangulation_pipeline);
+    assert!(!output.execution_inventory.atomic_color_plane);
+    assert!(output.execution_inventory.atomic_clip_plane);
+    assert!(output.execution_inventory.atomic_coverage_plane);
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 2,
+            buffer_upload_calls: 7,
+            buffer_upload_bytes: 2_752,
+            queue_submissions: 1,
+            gpu_draw_calls: 8,
+            gpu_draw_instances: 61,
+            tessellation_spans: 25,
+            path_patches: 32,
+            ..BackendWorkMetrics::default()
+        },
+        "one tessellation pass and initialize/five low-level path groups/resolve"
+    );
+
+    let cpp_metal = read_png(
+        fixture_root.join("reference/metal/first-light-nested-clip-probe-clockwise-atomic.png"),
+    );
+    assert_rgba8_with_tolerance(
+        &output.pixels,
+        &cpp_metal,
+        0,
+        Some(0),
+        true,
+        "forced generic-atomic Rust Metal nested clip versus pinned C++ Metal",
+    );
+}
+
+#[test]
+fn native_metal_forced_atomic_nested_clip_rejects_restore_after_content() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream_text = std::fs::read_to_string(
+        fixture_root.join("streams/first-light-nested-clip-probe.rive-stream"),
+    )
+    .expect("read nested clip stream");
+    let stream_text = stream_text
+        .replace(
+            "clearColor value=0x00000000\n",
+            "clearColor value=0x00000000\nsave\n",
+        )
+        .replace("\nframe\n", "\nrestore\nframe\n");
+    let stream = RenderStream::parse(&stream_text).expect("parse restore-after-content stream");
+    let (width, height) = stream.frame_size.expect("nested clip frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+    let mut frame = factory
+        .begin_frame(stream.clear_color.unwrap_or(0))
+        .expect("acquire forced-atomic nested-clip frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay restore-after-content stream through the public seam");
+
+    assert!(matches!(
+        frame.finish(),
+        Err(RendererError::Unsupported(
+            "native Metal atomic clip tracer does not support state mutation after content"
+        ))
+    ));
 }
 
 #[test]

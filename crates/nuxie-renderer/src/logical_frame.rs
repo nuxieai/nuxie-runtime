@@ -3162,15 +3162,24 @@ pub(crate) struct AtomicPathFlushInput<'a> {
     pub(crate) state: DrawState,
 }
 
-/// One scheduled midpoint draw in a prepared generic-atomic logical flush.
 #[cfg(any(test, feature = "native-metal-experimental"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PreparedAtomicPatchKind {
+    Midpoint,
+    OuterCurve,
+}
+
+/// One scheduled midpoint draw in a prepared generic-atomic logical flush.
+#[cfg(any(test, feature = "native-metal-experimental"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PreparedAtomicPathDraw {
     pub(crate) input_index: usize,
     pub(crate) path_id: u16,
     pub(crate) draw_group: u32,
     pub(crate) base_instance: u32,
     pub(crate) instance_count: u32,
+    pub(crate) patch_kind: PreparedAtomicPatchKind,
+    pub(crate) triangle_range: std::ops::Range<usize>,
 }
 
 /// Flush-wide resources and the canonical disjoint draw-group schedule for the
@@ -3188,11 +3197,52 @@ pub(crate) struct PreparedAtomicPathFlush {
     pub(crate) paint_aux: Vec<gpu::PaintAuxData>,
     pub(crate) spans: Vec<gpu::TessVertexSpan>,
     pub(crate) contours: Vec<gpu::ContourData>,
+    pub(crate) triangles: Vec<gpu::TriangleVertex>,
     pub(crate) draws: Vec<PreparedAtomicPathDraw>,
     pub(crate) draw_group_starts: Vec<usize>,
     pub(crate) gradient_batch: Option<GradientBatch>,
+    pub(crate) uses_clipping: bool,
+    pub(crate) authored_draw_count: usize,
     #[cfg(test)]
     pub(crate) canonical_draw_resources: Vec<PreparedTypedDrawResources>,
+}
+
+#[cfg(any(test, feature = "native-metal-experimental"))]
+struct PendingAtomicPath {
+    input_index: usize,
+    bounds: [i32; 4],
+    resources: PreparedTypedDrawResources,
+    gradient_batch: Option<GradientBatch>,
+}
+
+#[cfg(any(test, feature = "native-metal-experimental"))]
+fn relocate_atomic_path_geometry(
+    draw: &mut PendingAtomicPath,
+    next_base_instance: u32,
+    segment_span: u32,
+    spans: &mut Vec<gpu::TessVertexSpan>,
+    contours: &mut [gpu::ContourData],
+    contour_offset: u32,
+) -> Result<u32, &'static str> {
+    let mut draw_spans = std::mem::take(&mut draw.resources.spans);
+    draw_spans.retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+    let mut base_instance = draw.resources.base_instance;
+    for span in &mut draw_spans {
+        super::globalize_midpoint_span_contour_id(
+            span,
+            draw.resources.contour_base,
+            contour_offset,
+        );
+    }
+    super::relocate_tessellation_logically(
+        &mut draw_spans,
+        &mut base_instance,
+        contours,
+        next_base_instance,
+        segment_span,
+    );
+    spans.append(&mut draw_spans);
+    Ok(base_instance)
 }
 
 #[cfg(any(test, feature = "native-metal-experimental"))]
@@ -3239,6 +3289,141 @@ pub(crate) fn shift_atomic_path_contour_ids(
     Ok(next_contour_base)
 }
 
+#[cfg(any(test, feature = "native-metal-experimental"))]
+fn prepare_atomic_path_draw_resources(
+    config: LogicalFrameConfig,
+    path: &LogicalPath,
+    paint: &LogicalPaint,
+    state: DrawState,
+    prepared: &PreparedFillGeometry,
+    role: DrawRole,
+) -> Result<PreparedSingleAtomicPathDraw, &'static str> {
+    if paint.style != RenderPaintStyle::Fill || paint.feather != 0.0 || state.clip_rect.is_some() {
+        return Err("atomic path preparation requires a non-feathered fill without a clip rect");
+    }
+    if let Some(shader) = paint.shader.as_ref() {
+        match shader {
+            super::LogicalShader::Linear { colors, stops, .. }
+                if colors.len() == 2 && stops.as_slice() == [0.0, 1.0] => {}
+            super::LogicalShader::Linear { .. } => {
+                return Err("atomic path preparation only supports simple linear gradients");
+            }
+            super::LogicalShader::Radial { .. } => {
+                return Err("atomic path preparation only supports linear gradients");
+            }
+        }
+    }
+
+    let (mut path_data, spans, contours, triangles, base_instance, instance_count, uses_interior) =
+        if prepared.should_use_interior(path, state.transform) {
+            let interior = prepared
+                .atomic_interior_tessellation(path, state.transform, true, false, false)
+                .ok_or("atomic path omitted interior geometry")?
+                .clone();
+            (
+                interior.path,
+                interior.spans,
+                interior.contours,
+                interior.triangles,
+                interior.base_instance,
+                interior.instance_count,
+                true,
+            )
+        } else {
+            let mut tessellation = prepared
+                .midpoint(path, state.transform)
+                .map(|prepared| prepared.tessellation.clone())
+                .ok_or("atomic path omitted midpoint geometry")?;
+            let [xx, yx, xy, yy, _, _] = state.transform.0;
+            tessellation.make_double_sided_with_direction(
+                super::draw::clockwise_atomic_negate_coverage_from_area(
+                    super::draw::path_coarse_area(&path.raw_path),
+                    xx * yy - xy * yx,
+                    path.fill_rule,
+                    true,
+                ),
+            );
+            (
+                tessellation.path,
+                tessellation.spans,
+                tessellation.contours,
+                Vec::new(),
+                tessellation.base_instance,
+                tessellation.instance_count,
+                false,
+            )
+        };
+    path_data.z_index = 0;
+    path_data.coverage_buffer_range.pitch = config.width.div_ceil(32) * 32;
+    // The canonical writer only enables its dense fast path for midpoint
+    // fills. Interior geometry keeps the generic contour-ID mapping even when
+    // this particular path happens to use contiguous local IDs.
+    let local_contour_ids_are_dense =
+        !uses_interior && contours.len() <= gpu::CONTOUR_ID_MASK as usize;
+    let gradient_batch = paint
+        .shader
+        .as_ref()
+        .map(|shader| {
+            prepare_single_gradient_batch(shader, state.opacity, state.transform)
+                .ok_or("atomic path has invalid gradient parameters")
+        })
+        .transpose()?;
+    let gradient = gradient_batch.as_ref().and_then(|batch| batch.draw(0));
+    let fill_rule = atomic_paint_fill_rule(path.fill_rule, true);
+    let paint_data = match role {
+        DrawRole::ClipUpdate {
+            replacement_id,
+            parent_id,
+        } => gpu::PaintData::clip_update(replacement_id, parent_id, fill_rule),
+        DrawRole::Content { clip_id } => gradient
+            .map_or_else(
+                || {
+                    gpu::PaintData::solid(
+                        modulate_color_alpha(paint.color, state.opacity),
+                        fill_rule,
+                        paint.blend_mode,
+                    )
+                },
+                |gradient| {
+                    gpu::PaintData::gradient(
+                        gradient.paint_type,
+                        gradient.texture_y,
+                        fill_rule,
+                        paint.blend_mode,
+                    )
+                },
+            )
+            .with_clip_id(clip_id),
+        DrawRole::ClipReset { .. } => return Err("atomic clip reset is outside the native slice"),
+    }
+    .with_generic_clockwise_fill();
+    let paint_aux = gradient.map_or_else(
+        || clip_rect_paint_aux(None),
+        |gradient| gradient_paint_aux(None, gradient),
+    );
+    let triangle_count = triangles.len();
+    Ok(PreparedSingleAtomicPathDraw {
+        resources: PreparedTypedDrawResources {
+            contour_base: 0,
+            path: path_data,
+            paint: paint_data,
+            paint_aux,
+            spans,
+            contours,
+            triangles,
+            base_instance,
+            instance_count,
+            triangle_count,
+            borrowed_triangle_count: 0,
+            main_triangle_batches: Vec::new(),
+            has_interior_triangles: uses_interior,
+            uses_interior,
+            local_contour_ids_are_dense,
+        },
+        gradient_batch,
+    })
+}
+
 /// Prepares one unclipped solid or linear-gradient path through the canonical
 /// production logical writer contract for the bounded native-Metal
 /// generic-atomic tracer.
@@ -3263,107 +3448,20 @@ pub(crate) fn prepare_single_atomic_path_draw(
     let Some(admitted) = admit_path_draw(config, state, path, paint)? else {
         return Ok(None);
     };
-    if admitted.paint.style != RenderPaintStyle::Fill
-        || admitted.paint.feather != 0.0
-        || admitted.state.clip_rect.is_some()
-    {
-        return Err("single atomic path preparation requires an unclipped fill");
-    }
-    if let Some(shader) = admitted.paint.shader.as_ref() {
-        match shader {
-            super::LogicalShader::Linear { colors, stops, .. }
-                if colors.len() == 2 && stops.as_slice() == [0.0, 1.0] => {}
-            super::LogicalShader::Linear { .. } => {
-                return Err("single atomic path preparation only supports simple linear gradients");
-            }
-            super::LogicalShader::Radial { .. } => {
-                return Err("single atomic path preparation only supports linear gradients");
-            }
-        }
-    }
     let prepared = admitted
         .preparation
         .prepared_fill
         .as_deref()
         .ok_or("single atomic path omitted prepared fill geometry")?;
-    if prepared.should_use_interior(&admitted.path, admitted.state.transform) {
-        return Err("single atomic path preparation requires midpoint geometry");
-    }
-    let mut tessellation = prepared
-        .midpoint(&admitted.path, admitted.state.transform)
-        .map(|prepared| prepared.tessellation.clone())
-        .ok_or("single atomic path omitted midpoint geometry")?;
-    let [xx, yx, xy, yy, _, _] = admitted.state.transform.0;
-    tessellation.make_double_sided_with_direction(
-        super::draw::clockwise_atomic_negate_coverage_from_area(
-            super::draw::path_coarse_area(&admitted.path.raw_path),
-            xx * yy - xy * yx,
-            admitted.path.fill_rule,
-            true,
-        ),
-    );
-    let mut path_data = tessellation.path;
-    path_data.z_index = 0;
-    path_data.coverage_buffer_range.pitch = config.width.div_ceil(32) * 32;
-    let mut contours = tessellation.contours;
-    for contour in &mut contours {
-        contour.path_id = 1;
-    }
-    let local_contour_ids_are_dense = contours.len() <= gpu::CONTOUR_ID_MASK as usize;
-    let gradient_batch = admitted
-        .paint
-        .shader
-        .as_ref()
-        .map(|shader| {
-            prepare_single_gradient_batch(shader, admitted.state.opacity, admitted.state.transform)
-                .ok_or("single atomic path has invalid gradient parameters")
-        })
-        .transpose()?;
-    let gradient = gradient_batch.as_ref().and_then(|batch| batch.draw(0));
-    let paint_data = gradient
-        .map_or_else(
-            || {
-                gpu::PaintData::solid(
-                    modulate_color_alpha(admitted.paint.color, admitted.state.opacity),
-                    atomic_paint_fill_rule(admitted.path.fill_rule, true),
-                    admitted.paint.blend_mode,
-                )
-            },
-            |gradient| {
-                gpu::PaintData::gradient(
-                    gradient.paint_type,
-                    gradient.texture_y,
-                    atomic_paint_fill_rule(admitted.path.fill_rule, true),
-                    admitted.paint.blend_mode,
-                )
-            },
-        )
-        .with_clip_id(0)
-        .with_generic_clockwise_fill();
-    let paint_aux = gradient.map_or_else(
-        || clip_rect_paint_aux(None),
-        |gradient| gradient_paint_aux(None, gradient),
-    );
-    Ok(Some(PreparedSingleAtomicPathDraw {
-        resources: PreparedTypedDrawResources {
-            contour_base: 0,
-            path: path_data,
-            paint: paint_data,
-            paint_aux,
-            spans: tessellation.spans,
-            contours,
-            triangles: Vec::new(),
-            base_instance: tessellation.base_instance,
-            instance_count: tessellation.instance_count,
-            triangle_count: 0,
-            borrowed_triangle_count: 0,
-            main_triangle_batches: Vec::new(),
-            has_interior_triangles: false,
-            uses_interior: false,
-            local_contour_ids_are_dense,
-        },
-        gradient_batch,
-    }))
+    prepare_atomic_path_draw_resources(
+        config,
+        &admitted.path,
+        &admitted.paint,
+        admitted.state,
+        prepared,
+        DrawRole::Content { clip_id: 0 },
+    )
+    .map(Some)
 }
 
 /// Prepares one bounded same-logical-flush set of unclipped solid midpoint
@@ -3381,13 +3479,6 @@ pub(crate) fn prepare_atomic_path_flush(
     if inputs.is_empty() {
         return Ok(None);
     }
-    struct PendingAtomicPath {
-        input_index: usize,
-        bounds: [i32; 4],
-        resources: PreparedTypedDrawResources,
-        gradient_batch: Option<GradientBatch>,
-    }
-
     let mut pending = Vec::<PendingAtomicPath>::with_capacity(inputs.len());
     let mut next_contour_base = 0_u32;
     for (input_index, input) in inputs.iter().enumerate() {
@@ -3419,6 +3510,150 @@ pub(crate) fn prepare_atomic_path_flush(
             gradient_batch: prepared.gradient_batch,
         });
     }
+    assemble_atomic_path_flush(config, pending, false)
+}
+
+/// Prepares the bounded native-Metal generic-atomic nested-clip tracer without
+/// constructing the backend-bearing `SolidDraw` envelope. Admission happens
+/// before clip replay; clip replacement IDs and parent IDs advance in the
+/// canonical outer-to-inner order, followed by exactly one content draw.
+#[cfg(any(test, feature = "native-metal-experimental"))]
+pub(crate) fn prepare_atomic_clipped_path_flush(
+    config: LogicalFrameConfig,
+    logical_state: &mut LogicalDrawState,
+    input: AtomicPathFlushInput<'_>,
+) -> Result<Option<PreparedAtomicPathFlush>, &'static str> {
+    if config.mode != RenderMode::ClockwiseAtomic {
+        return Err("atomic clip preparation requires clockwise-atomic mode");
+    }
+    if logical_state.state.clip_rect.is_some() {
+        return Err("atomic native clip tracer does not support clip rectangles");
+    }
+    let Some(admitted) = admit_path_draw(config, logical_state.state, input.path, input.paint)?
+    else {
+        return Ok(None);
+    };
+    let height = logical_state.state.clip_stack_height;
+    if height == 0 {
+        return prepare_atomic_path_flush(config, std::slice::from_ref(&input));
+    }
+    if logical_state.generic_atomic_path_clip_id != 0 {
+        return Err("atomic native clip tracer supports one logical clip flush");
+    }
+    let update_count = u32::try_from(height).map_err(|_| "more than 65535 clip updates")?;
+    let end = logical_state
+        .next_clip_id
+        .checked_add(update_count)
+        .ok_or("more than 65535 clip updates")?;
+    if end > u16::MAX as u32 + 1 {
+        return Err("more than 65535 clip updates");
+    }
+
+    let mut pending = Vec::with_capacity(height + 1);
+    let mut next_contour_base = 0_u32;
+    let mut parent_id = 0_u16;
+    let next_clip_id = logical_state.next_clip_id;
+    let frame_state = logical_state.state;
+    for clip_index in 0..height {
+        let replacement_id = (next_clip_id + clip_index as u32) as u16;
+        let clip = &mut logical_state.clips[clip_index];
+        clip.clip_id = replacement_id;
+        let clip_path = clip.path.clone();
+        let clip_matrix = clip.matrix;
+        let clip_bounds = clip
+            .pixel_bounds
+            .ok_or("atomic clip update omitted pixel bounds")?;
+        let prepared_fill = Arc::clone(&clip.prepared_fill);
+        let clip_state = DrawState {
+            transform: clip_matrix,
+            opacity: 1.0,
+            clip_rect: None,
+            clip_stack_height: 0,
+            ..frame_state
+        };
+        let mut prepared = prepare_atomic_path_draw_resources(
+            config,
+            &clip_path,
+            &LogicalPaint::default(),
+            clip_state,
+            &prepared_fill,
+            DrawRole::ClipUpdate {
+                replacement_id,
+                parent_id,
+            },
+        )?;
+        let contour_base = next_contour_base;
+        next_contour_base =
+            shift_atomic_path_contour_ids(&mut prepared.resources.spans, contour_base)?;
+        prepared.resources.contour_base = contour_base;
+        for contour in &mut prepared.resources.contours {
+            contour.path_id = u32::from(replacement_id);
+        }
+        for triangle in &mut prepared.resources.triangles {
+            triangle.weight_path_id =
+                (triangle.weight_path_id & !0xffff) | i32::from(replacement_id);
+        }
+        pending.push(PendingAtomicPath {
+            input_index: usize::MAX,
+            bounds: clip_bounds,
+            resources: prepared.resources,
+            gradient_batch: None,
+        });
+        parent_id = replacement_id;
+    }
+    logical_state.next_clip_id = end;
+
+    let prepared_fill = admitted
+        .preparation
+        .prepared_fill
+        .as_deref()
+        .ok_or("atomic clipped content omitted prepared fill geometry")?;
+    let mut content = prepare_atomic_path_draw_resources(
+        config,
+        &admitted.path,
+        &admitted.paint,
+        admitted.state,
+        prepared_fill,
+        DrawRole::Content { clip_id: parent_id },
+    )?;
+    let content_contour_base = next_contour_base;
+    next_contour_base =
+        shift_atomic_path_contour_ids(&mut content.resources.spans, content_contour_base)?;
+    content.resources.contour_base = content_contour_base;
+    let content_path_id =
+        u32::try_from(pending.len() + 1).map_err(|_| "atomic path ID exceeds UInt32")?;
+    for contour in &mut content.resources.contours {
+        contour.path_id = content_path_id;
+    }
+    for triangle in &mut content.resources.triangles {
+        triangle.weight_path_id = (triangle.weight_path_id & !0xffff)
+            | i32::try_from(content_path_id)
+                .map_err(|_| "atomic triangle path ID exceeds Int32")?;
+    }
+    validate_atomic_path_flush_limits(pending.len() + 1, next_contour_base as usize)?;
+    let content_bounds = intersect_pixel_bounds(
+        admitted
+            .preparation
+            .pixel_bounds
+            .ok_or("atomic clipped content omitted pixel bounds")?,
+        admitted.state.overall_clip_pixel_bounds,
+    );
+    pending.push(PendingAtomicPath {
+        input_index: 0,
+        bounds: content_bounds,
+        resources: content.resources,
+        gradient_batch: content.gradient_batch,
+    });
+    logical_state.commit_generic_atomic_path_clip(config, parent_id, true);
+    assemble_atomic_path_flush(config, pending, true)
+}
+
+#[cfg(any(test, feature = "native-metal-experimental"))]
+fn assemble_atomic_path_flush(
+    config: LogicalFrameConfig,
+    mut pending: Vec<PendingAtomicPath>,
+    uses_clipping: bool,
+) -> Result<Option<PreparedAtomicPathFlush>, &'static str> {
     if pending.is_empty() {
         return Ok(None);
     }
@@ -3430,7 +3665,6 @@ pub(crate) fn prepare_atomic_path_flush(
         super::intersection_board::GroupingType::Disjoint,
     );
     board.resize_and_reset(config.width, config.height);
-    let mut groups = Vec::<Vec<usize>>::new();
     let mut group_for_pending = vec![0_u32; pending.len()];
     for (pending_index, draw) in pending.iter().enumerate() {
         let bounds = draw.bounds;
@@ -3440,90 +3674,97 @@ pub(crate) fn prepare_atomic_path_flush(
             bounds[2].saturating_add(1),
             bounds[3].saturating_add(1),
         );
-        let local_group = board.add_rectangle(rect, 1).max(1) as usize;
-        if groups.len() < local_group {
-            groups.resize_with(local_group, Vec::new);
-        }
-        groups[local_group - 1].push(pending_index);
+        let layer_count = if draw.resources.uses_interior { 2 } else { 1 };
+        let local_group = board.add_rectangle(rect, layer_count).max(1) as usize;
         group_for_pending[pending_index] =
             u32::try_from(local_group).map_err(|_| "atomic draw group overflow")?;
     }
 
     let midpoint_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+    let outer_span = gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32;
     let mut paths = Vec::with_capacity(pending.len());
     let mut paints = Vec::with_capacity(pending.len());
     let mut paint_aux = Vec::with_capacity(pending.len());
     let mut spans = Vec::new();
     super::append_tessellation_padding_span(&mut spans, 0, midpoint_span);
     let mut contours = Vec::new();
+    let mut triangles = Vec::new();
     let mut local_contour_ids = Vec::new();
-    let mut authored_draws = Vec::with_capacity(pending.len());
-    let mut next_base_instance = 1_u32;
+    let mut contour_offsets = Vec::with_capacity(pending.len());
+    let mut contour_ranges = Vec::with_capacity(pending.len());
+    // The tessellation shelf is emitted midpoint-first, but the contour plane
+    // is a logical resource plane and therefore remains in authored path
+    // order. Allocate its IDs before relocating either physical shelf.
+    for (pending_index, draw) in pending.iter().enumerate() {
+        let path_id =
+            u16::try_from(pending_index + 1).map_err(|_| "atomic path ID exceeds UInt16")?;
+        let contour_start = contours.len();
+        let contour_offset = super::append_relocated_midpoint_contours_to_flush(
+            &draw.resources.spans,
+            &draw.resources.contours,
+            draw.resources.contour_base,
+            draw.resources.local_contour_ids_are_dense,
+            u32::from(path_id),
+            0,
+            &mut contours,
+            &mut local_contour_ids,
+        );
+        contour_offsets.push(contour_offset);
+        contour_ranges.push(contour_start..contours.len());
+    }
+    let mut relocated_base_instances = vec![0_u32; pending.len()];
+    let mut patch_kinds = vec![PreparedAtomicPatchKind::Midpoint; pending.len()];
     #[cfg(test)]
     let canonical_draw_resources = pending
         .iter()
         .map(|draw| draw.resources.clone())
         .collect::<Vec<_>>();
 
+    let mut next_midpoint_base = 1_u32;
     for (pending_index, draw) in pending.iter_mut().enumerate() {
-        let path_id =
-            u16::try_from(pending_index + 1).map_err(|_| "atomic path ID exceeds UInt16")?;
-        let draw_group = group_for_pending[pending_index];
-        let mut draw_spans = std::mem::take(&mut draw.resources.spans);
-        draw_spans.retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
-        let mut base_instance = draw.resources.base_instance;
-        let relocation = next_base_instance
-            .checked_sub(base_instance)
-            .and_then(|patches| patches.checked_mul(midpoint_span))
-            .ok_or("atomic tessellation relocation overflow")?;
-        let contour_offset = super::append_relocated_midpoint_contours_to_flush(
-            &draw_spans,
-            &draw.resources.contours,
-            draw.resources.contour_base,
-            draw.resources.local_contour_ids_are_dense,
-            u32::from(path_id),
-            relocation,
-            &mut contours,
-            &mut local_contour_ids,
-        );
-        for span in &mut draw_spans {
-            super::globalize_midpoint_span_contour_id(
-                span,
-                draw.resources.contour_base,
-                contour_offset,
-            );
+        if draw.resources.uses_interior {
+            patch_kinds[pending_index] = PreparedAtomicPatchKind::OuterCurve;
+            continue;
         }
-        super::relocate_tessellation_logically(
-            &mut draw_spans,
-            &mut base_instance,
-            &mut [],
-            next_base_instance,
+        relocated_base_instances[pending_index] = relocate_atomic_path_geometry(
+            draw,
+            next_midpoint_base,
             midpoint_span,
-        );
-        spans.append(&mut draw_spans);
-        let mut path = draw.resources.path;
-        path.z_index = draw_group;
-        paths.push(path);
-        paints.push(draw.resources.paint);
-        paint_aux.push(draw.resources.paint_aux);
-        authored_draws.push(PreparedAtomicPathDraw {
-            input_index: draw.input_index,
-            path_id,
-            draw_group,
-            base_instance,
-            instance_count: draw.resources.instance_count,
-        });
-        next_base_instance = next_base_instance
+            &mut spans,
+            &mut contours[contour_ranges[pending_index].clone()],
+            contour_offsets[pending_index],
+        )?;
+        next_midpoint_base = next_midpoint_base
             .checked_add(draw.resources.instance_count)
-            .ok_or("atomic patch range overflow")?;
+            .ok_or("atomic midpoint patch range overflow")?;
     }
-
-    let geometry_end = next_base_instance
+    let midpoint_end = next_midpoint_base
         .checked_mul(midpoint_span)
         .ok_or("atomic tessellation range overflow")?;
-    let outer_start = super::align_to(geometry_end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32);
+    let outer_start = super::align_to(midpoint_end, outer_span);
+    super::append_tessellation_padding_span(&mut spans, midpoint_end, outer_start);
+    let mut next_outer_base = outer_start / outer_span;
+    for (pending_index, draw) in pending.iter_mut().enumerate() {
+        if !draw.resources.uses_interior {
+            continue;
+        }
+        relocated_base_instances[pending_index] = relocate_atomic_path_geometry(
+            draw,
+            next_outer_base,
+            outer_span,
+            &mut spans,
+            &mut contours[contour_ranges[pending_index].clone()],
+            contour_offsets[pending_index],
+        )?;
+        next_outer_base = next_outer_base
+            .checked_add(draw.resources.instance_count)
+            .ok_or("atomic outer patch range overflow")?;
+    }
+    let outer_end = next_outer_base
+        .checked_mul(outer_span)
+        .ok_or("atomic tessellation range overflow")?;
     if usize::try_from(
-        outer_start
+        outer_end
             .checked_add(1)
             .ok_or("atomic tessellation range overflow")?,
     )
@@ -3532,15 +3773,14 @@ pub(crate) fn prepare_atomic_path_flush(
     {
         return Err("atomic path flush exceeds the canonical tessellation limit");
     }
-    super::append_tessellation_padding_span(&mut spans, geometry_end, outer_start);
     super::append_tessellation_padding_span(
         &mut spans,
-        outer_start,
-        outer_start
+        outer_end,
+        outer_end
             .checked_add(1)
             .ok_or("atomic tessellation range overflow")?,
     );
-    let tessellation_height = outer_start
+    let tessellation_height = outer_end
         .checked_add(1)
         .ok_or("atomic tessellation range overflow")?
         .div_ceil(gpu::TESS_TEXTURE_WIDTH as u32);
@@ -3548,18 +3788,77 @@ pub(crate) fn prepare_atomic_path_flush(
         return Err("atomic tessellation texture exceeds device limit");
     }
 
+    let mut authored_draws = Vec::with_capacity(pending.len().saturating_mul(2));
+    let mut group_commands = Vec::<Vec<usize>>::new();
+    for (pending_index, draw) in pending.iter_mut().enumerate() {
+        let path_id =
+            u16::try_from(pending_index + 1).map_err(|_| "atomic path ID exceeds UInt16")?;
+        let draw_group = group_for_pending[pending_index];
+        let triangle_start = triangles.len();
+        for triangle in &mut draw.resources.triangles {
+            triangle.weight_path_id = (triangle.weight_path_id & !0xffff) | i32::from(path_id);
+        }
+        triangles.append(&mut draw.resources.triangles);
+        let triangle_range = triangle_start..triangles.len();
+        if draw.resources.instance_count == 0 && triangle_range.is_empty() {
+            return Err("atomic path omitted both patch and triangle geometry");
+        }
+        let mut path = draw.resources.path;
+        path.z_index = draw_group;
+        paths.push(path);
+        paints.push(draw.resources.paint);
+        paint_aux.push(draw.resources.paint_aux);
+        let patch_command_index = authored_draws.len();
+        authored_draws.push(PreparedAtomicPathDraw {
+            input_index: draw.input_index,
+            path_id,
+            draw_group,
+            base_instance: relocated_base_instances[pending_index],
+            instance_count: draw.resources.instance_count,
+            patch_kind: patch_kinds[pending_index],
+            triangle_range: triangle_start..triangle_start,
+        });
+        let patch_group = usize::try_from(draw_group).map_err(|_| "atomic draw group overflow")?;
+        if group_commands.len() < patch_group {
+            group_commands.resize_with(patch_group, Vec::new);
+        }
+        group_commands[patch_group - 1].push(patch_command_index);
+        if !triangle_range.is_empty() {
+            let interior_group = draw_group
+                .checked_add(1)
+                .ok_or("atomic interior draw group overflow")?;
+            let interior_command_index = authored_draws.len();
+            authored_draws.push(PreparedAtomicPathDraw {
+                input_index: draw.input_index,
+                path_id,
+                draw_group: interior_group,
+                base_instance: 0,
+                instance_count: 0,
+                patch_kind: PreparedAtomicPatchKind::OuterCurve,
+                triangle_range,
+            });
+            let interior_group =
+                usize::try_from(interior_group).map_err(|_| "atomic draw group overflow")?;
+            if group_commands.len() < interior_group {
+                group_commands.resize_with(interior_group, Vec::new);
+            }
+            group_commands[interior_group - 1].push(interior_command_index);
+        }
+    }
+
     let mut draws = Vec::with_capacity(authored_draws.len());
-    let mut draw_group_starts = Vec::with_capacity(groups.len());
-    for group in groups {
+    let mut draw_group_starts = Vec::with_capacity(group_commands.len());
+    for group in group_commands {
         if group.is_empty() {
             continue;
         }
         draw_group_starts.push(draws.len());
-        draws.extend(group.into_iter().map(|index| authored_draws[index]));
+        draws.extend(group.into_iter().map(|index| authored_draws[index].clone()));
     }
     let gradient_batch = pending
         .iter_mut()
         .find_map(|draw| draw.gradient_batch.take());
+    let authored_draw_count = paths.len();
 
     Ok(Some(PreparedAtomicPathFlush {
         paths,
@@ -3567,9 +3866,12 @@ pub(crate) fn prepare_atomic_path_flush(
         paint_aux,
         spans,
         contours,
+        triangles,
         draws,
         draw_group_starts,
         gradient_batch,
+        uses_clipping,
+        authored_draw_count,
         #[cfg(test)]
         canonical_draw_resources,
     }))

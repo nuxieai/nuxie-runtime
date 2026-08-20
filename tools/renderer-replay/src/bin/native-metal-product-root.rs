@@ -80,6 +80,9 @@ fn main() {
                 render_pass_initialize_pipeline: true,
                 midpoint_fan_pipeline: true,
                 render_pass_resolve_pipeline: true,
+                clipped_path_pipeline_set: false,
+                outer_curve_pipeline: false,
+                interior_triangulation_pipeline: false,
                 atomic_draws: 1,
                 atomic_draw_groups: 1,
                 atomic_barriers: 2,
@@ -130,6 +133,9 @@ fn main() {
                 render_pass_initialize_pipeline: true,
                 midpoint_fan_pipeline: true,
                 render_pass_resolve_pipeline: true,
+                clipped_path_pipeline_set: false,
+                outer_curve_pipeline: false,
+                interior_triangulation_pipeline: false,
                 atomic_draws: 1,
                 atomic_draw_groups: 1,
                 atomic_barriers: 2,
@@ -163,6 +169,72 @@ fn main() {
         assert!(!multi_output.execution_inventory.atomic_color_plane);
         assert!(multi_output.execution_inventory.atomic_clip_plane);
         assert!(multi_output.execution_inventory.atomic_coverage_plane);
+
+        // Root flush-wide generic-atomic clipping plus both physical geometry
+        // families. This is the checked-in nested-clip tracer shape: the
+        // outer clip and content require outer curves plus interior triangles,
+        // while the nested clip remains a midpoint fan.
+        atomic_factory
+            .resize(640, 640)
+            .expect("resize forced-atomic nested-clip target");
+        let mut outer_clip = RawPath::new();
+        outer_clip.move_to(40.0, 60.0);
+        outer_clip.line_to(600.0, 60.0);
+        outer_clip.line_to(600.0, 280.0);
+        outer_clip.line_to(380.0, 280.0);
+        outer_clip.line_to(380.0, 600.0);
+        outer_clip.line_to(40.0, 600.0);
+        outer_clip.close();
+        outer_clip.move_to(420.0, 420.0);
+        outer_clip.line_to(580.0, 420.0);
+        outer_clip.line_to(580.0, 580.0);
+        outer_clip.line_to(420.0, 580.0);
+        outer_clip.close();
+        let outer_clip = atomic_factory.make_render_path(outer_clip, FillRule::Clockwise);
+        let mut nested_clip = RawPath::new();
+        nested_clip.move_to(140.0, 160.0);
+        nested_clip.line_to(520.0, 160.0);
+        nested_clip.line_to(520.0, 520.0);
+        nested_clip.line_to(440.0, 520.0);
+        nested_clip.line_to(440.0, 320.0);
+        nested_clip.line_to(300.0, 320.0);
+        nested_clip.line_to(300.0, 520.0);
+        nested_clip.line_to(140.0, 520.0);
+        nested_clip.close();
+        let nested_clip = atomic_factory.make_render_path(nested_clip, FillRule::Clockwise);
+        let mut clipped_content = RawPath::new();
+        clipped_content.move_to(0.0, 0.0);
+        clipped_content.line_to(640.0, 0.0);
+        clipped_content.line_to(640.0, 640.0);
+        clipped_content.line_to(0.0, 640.0);
+        clipped_content.close();
+        let clipped_content = atomic_factory.make_render_path(clipped_content, FillRule::Clockwise);
+        let mut clipped_paint = atomic_factory.make_render_paint();
+        clipped_paint.color(0xffff_ffff);
+        let mut clipped_frame = atomic_factory
+            .begin_frame(0)
+            .expect("acquire forced-atomic nested-clip command buffer");
+        clipped_frame.clip_path(outer_clip.as_ref());
+        clipped_frame.clip_path(nested_clip.as_ref());
+        clipped_frame.draw_path(clipped_content.as_ref(), clipped_paint.as_ref());
+        let clipped_output = clipped_frame
+            .finish_for_benchmark()
+            .expect("finish forced-atomic native Metal nested clip");
+        assert_eq!(clipped_output.execution_inventory.atomic_draws, 3);
+        assert_eq!(clipped_output.execution_inventory.atomic_draw_groups, 5);
+        assert_eq!(clipped_output.execution_inventory.atomic_barriers, 6);
+        assert!(clipped_output.execution_inventory.clipped_path_pipeline_set);
+        assert!(clipped_output.execution_inventory.outer_curve_pipeline);
+        assert!(
+            clipped_output
+                .execution_inventory
+                .interior_triangulation_pipeline
+        );
+        assert_eq!(clipped_output.pixels[..4], [0, 0, 0, 0]);
+        assert_eq!(
+            clipped_output.pixels[(512 * 640 + 512) * 4..][..4],
+            [255, 255, 255, 255]
+        );
 
         factory
             .resize(32, 32)

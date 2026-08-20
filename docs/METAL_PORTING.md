@@ -645,8 +645,28 @@ measured current Rust-WGPU frame differs from C++ at 72 pixels with maximum
 delta 16, so it is diagnostic history rather than a reason to fit or widen the
 Metal candidate contract.
 
-This is not general atomic-flush parity. Clips, gradients in the same flush,
-radial or complex gradients, feather atlas, images, strokes, advanced blends,
+The fourth slice adds the existing `first-light-nested-clip-probe`: two
+authored clip updates followed by one content path become five low-level
+generic-atomic groups—outer curve and interior for the outer clip, midpoint
+for the nested clip, then outer curve and interior for content. Initialize and
+resolve carry the same flush-wide `ENABLE_CLIPPING | ENABLE_DITHER` feature
+mask as every path batch; generic Atomics masks out `ENABLE_NESTED_CLIPPING`,
+so dynamic `PaintData` replacement/parent IDs carry nesting. The contour plane
+remains authored as path IDs `[1, 1, 2, 3]` even though tessellation is packed
+midpoint-first. Pinned scheduling and subpass reservation are
+`render_context.cpp:1689-1802`, barriers are `1955-1964` and `2223-2241`,
+path/paint IDs are `3033-3054`, and generic path feature selection is
+`3948-3971`; `gpu.hpp:807-825` removes nested specialization. Metal applies
+the combined feature mask to every batch at
+`render_context_metal_impl.mm:1763-1775`, realizes the five groups and six
+semantic barriers at `1857-1925`, and draws initialize/resolve at `1989-1997`.
+The public tracer and same-runner row preserve the existing byte-exact 0/0
+contract and exact occupancy. The rooted Mach-O executes the real clipped
+midpoint, outer-curve, and interior-triangulation pipeline family.
+
+This is not general atomic-flush parity. Clip rectangles, clip-stack mutation
+after content, gradients in the same flush, radial or complex gradients,
+feather atlas, images, strokes, advanced blends,
 multiple logical flushes, the general scheduler, MSAA, fallback, and
 simulator/old-hardware matrices remain deferred. Encountering one of those
 families is a stop condition, not grounds to widen this slice or its tolerance.

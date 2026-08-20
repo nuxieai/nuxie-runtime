@@ -126,10 +126,11 @@ promotion requirement.
 
 The first mechanical wave records the complete
 `generate_draw_combinations.py` translation with its focused byte oracle as
-`ported`. The render-context header and implementation remain `in-progress`:
-only draw-pipeline policy, render-target/lazy atomic resources, and the shared
-exact `DrawType` discriminants are present. A separate
-`shader_compile_plan.rs` is not integrated evidence for those rows.
+`ported`. The background compiler and render-context rows remain
+`in-progress`: background compilation includes job inputs and the deterministic
+macro/source plan, but not the compiler thread or `newLibraryWithSource`;
+render-context coverage includes only draw-pipeline policy, render-target/lazy
+atomic resources, and the shared exact `DrawType` discriminants.
 
 ## Trial translation: UNIV-2086
 

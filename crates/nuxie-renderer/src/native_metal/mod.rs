@@ -14,6 +14,8 @@ mod draw_pipeline;
 mod pipeline_names;
 #[allow(dead_code)]
 mod render_target;
+#[allow(dead_code)]
+mod shader_compile_plan;
 
 use super::{LogicalPaint, LogicalPath, LogicalShader, RendererError};
 use buffer::NativeMetalBuffer;

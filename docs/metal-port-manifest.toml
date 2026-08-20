@@ -5,7 +5,7 @@ upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 33, in-progress = 2, ported = 1, verified = 0 }
+expected_status_counts = { pending = 31, in-progress = 4, ported = 1, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -42,17 +42,23 @@ evidence = ["crates/nuxie-renderer/src/native_metal/render_target.rs"]
 upstream = "renderer/src/metal/background_shader_compiler.h"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "in-progress"
+rust_modules = ["crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs"]
+evidence = [
+  "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_macros.txt",
+]
 
 [[source]]
 upstream = "renderer/src/metal/background_shader_compiler.mm"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "in-progress"
+rust_modules = ["crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs"]
+evidence = [
+  "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_macros.txt",
+]
 
 [[source]]
 upstream = "renderer/src/metal/render_context_metal_impl.mm"
@@ -94,7 +100,10 @@ lane = "platform-shaders"
 issue = "UNIV-2086"
 status = "ported"
 rust_modules = ["crates/nuxie-renderer/src/native_metal/draw_combinations.rs"]
-evidence = ["crates/nuxie-renderer/src/native_metal/draw_combinations.rs"]
+evidence = [
+  "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/draw_combinations-4ac7b327-9f33bdcd.metal",
+]
 
 [[source]]
 upstream = "renderer/src/shaders/metal/tessellate.metal"

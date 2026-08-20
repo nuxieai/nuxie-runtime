@@ -19,3 +19,14 @@ backend = "metal"
 status = "exact"
 max_channel_delta = 0
 max_different_pixels = 0
+
+[[entry]]
+id = "native-metal-gm-overfill-opaque-generic-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/gm/overfill_opaque.rive-stream"
+reference = "fixtures/renderer/reference/metal/gm/overfill_opaque-clockwise-atomic.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 48

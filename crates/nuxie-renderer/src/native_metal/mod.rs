@@ -35,7 +35,10 @@ mod upload_buffer_ring;
 
 use super::gpu;
 use super::{
-    logical_frame::{prepare_single_atomic_path_draw, prepare_single_gradient_batch},
+    logical_frame::{
+        prepare_atomic_path_flush, prepare_single_gradient_batch, AtomicPathFlushInput,
+        PreparedAtomicPathFlush,
+    },
     BackendWorkMetrics, LogicalFrameConfig, LogicalPaint, LogicalPath, LogicalShader, RenderMode,
     RendererError,
 };
@@ -114,6 +117,12 @@ pub struct NativeMetalExecutionInventory {
     pub render_pass_initialize_pipeline: bool,
     pub midpoint_fan_pipeline: bool,
     pub render_pass_resolve_pipeline: bool,
+    pub atomic_draws: usize,
+    pub atomic_draw_groups: usize,
+    /// Semantic PLS barriers: initial, group transitions, and pre-resolve.
+    pub atomic_barriers: usize,
+    pub atomic_memory_barriers: usize,
+    pub atomic_render_pass_breaks: usize,
 }
 
 impl NativeMetalFactory {
@@ -207,7 +216,7 @@ impl NativeMetalFactory {
             state: NativeMetalRenderState::default(),
             state_stack: Vec::new(),
             solid_draws: Vec::new(),
-            atomic_path_draw: None,
+            atomic_path_inputs: Vec::new(),
             gradient_draws: Vec::new(),
             atlas_requests: Vec::new(),
             resource_lease: None,
@@ -216,6 +225,11 @@ impl NativeMetalFactory {
                 command_encoders: u64::from(collect_work_metrics),
                 ..BackendWorkMetrics::default()
             },
+            atomic_draw_count: 0,
+            atomic_draw_group_count: 0,
+            atomic_barrier_count: 0,
+            atomic_memory_barrier_count: 0,
+            atomic_render_pass_break_count: 0,
             unsupported: None,
         })
     }
@@ -337,12 +351,17 @@ pub struct NativeMetalFrame {
     state: NativeMetalRenderState,
     state_stack: Vec<NativeMetalRenderState>,
     solid_draws: Vec<SolidTracerDraw>,
-    atomic_path_draw: Option<AtomicPathDraw>,
+    atomic_path_inputs: Vec<AtomicPathInput>,
     gradient_draws: Vec<GradientDraw>,
     atlas_requests: Vec<AtlasRequest>,
     resource_lease: Option<context::PreparedResourceLease>,
     collect_work_metrics: bool,
     backend_work: BackendWorkMetrics,
+    atomic_draw_count: usize,
+    atomic_draw_group_count: usize,
+    atomic_barrier_count: usize,
+    atomic_memory_barrier_count: usize,
+    atomic_render_pass_break_count: usize,
     unsupported: Option<&'static str>,
 }
 
@@ -366,9 +385,10 @@ struct SolidTracerDraw {
     premultiplied_color: [f32; 4],
 }
 
-struct AtomicPathDraw {
-    resources: super::logical_frame::PreparedTypedDrawResources,
-    gradient_batch: Option<super::logical_frame::GradientBatch>,
+struct AtomicPathInput {
+    path: LogicalPath,
+    paint: LogicalPaint,
+    state: super::DrawState,
 }
 
 struct GradientDraw {
@@ -399,46 +419,56 @@ struct AtlasUploadData {
 
 struct AtomicPathUploadData {
     flush_uniforms: gpu::FlushUniforms,
-    paths: [gpu::PathData; 2],
-    paints: [gpu::PaintData; 2],
-    paint_aux: [gpu::PaintAuxData; 2],
+    paths: Vec<gpu::PathData>,
+    paints: Vec<gpu::PaintData>,
+    paint_aux: Vec<gpu::PaintAuxData>,
 }
 
 impl AtomicPathUploadData {
-    fn new(width: u32, height: u32, clear_color: u32, draw: &AtomicPathDraw) -> Self {
-        let tessellation_height = super::draw::tessellation_texture_height(&draw.resources.spans);
+    fn new(width: u32, height: u32, clear_color: u32, flush: &PreparedAtomicPathFlush) -> Self {
+        let tessellation_height = super::draw::tessellation_texture_height(&flush.spans);
         let mut flush_uniforms = super::analytic_uniforms(width, height, tessellation_height);
         flush_uniforms.color_clear_value = gpu::swizzle_rive_color_to_rgba_premul(clear_color);
         flush_uniforms.coverage_clear_value = 0;
-        flush_uniforms.max_path_id = 1;
+        flush_uniforms.max_path_id = u32::try_from(flush.paths.len()).unwrap_or(u32::MAX);
         flush_uniforms.render_target_update_bounds = [0, 0, width as i32, height as i32];
-        if let Some(gradient_batch) = draw.gradient_batch.as_ref() {
+        if let Some(gradient_batch) = flush.gradient_batch.as_ref() {
             flush_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height.max(1) as f32;
         }
+        let mut paths = Vec::with_capacity(flush.paths.len() + 1);
+        paths.push(gpu::PathData::zeroed());
+        paths.extend_from_slice(&flush.paths);
+        let mut paints = Vec::with_capacity(flush.paints.len() + 1);
+        paints.push(gpu::PaintData::solid(
+            0,
+            FillRule::NonZero,
+            BlendMode::SrcOver,
+        ));
+        paints.extend_from_slice(&flush.paints);
+        let mut paint_aux = Vec::with_capacity(flush.paint_aux.len() + 1);
+        paint_aux.push(gpu::PaintAuxData::zeroed());
+        paint_aux.extend_from_slice(&flush.paint_aux);
         Self {
             flush_uniforms,
-            paths: [gpu::PathData::zeroed(), draw.resources.path],
-            paints: [
-                gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
-                draw.resources.paint,
-            ],
-            paint_aux: [gpu::PaintAuxData::zeroed(), draw.resources.paint_aux],
+            paths,
+            paints,
+            paint_aux,
         }
     }
 
-    fn batch<'a>(&'a self, draw: &'a AtomicPathDraw) -> context::UploadBatch<'a> {
+    fn batch<'a>(&'a self, flush: &'a PreparedAtomicPathFlush) -> context::UploadBatch<'a> {
         context::UploadBatch {
             flush_uniforms: &self.flush_uniforms,
-            gradient_spans: draw
+            gradient_spans: flush
                 .gradient_batch
                 .as_ref()
                 .map_or(&[], |batch| batch.spans.as_slice()),
-            tessellation_spans: &draw.resources.spans,
+            tessellation_spans: &flush.spans,
             paths: &self.paths,
             paints: &self.paints,
             paint_aux: &self.paint_aux,
-            contours: &draw.resources.contours,
-            triangles: &draw.resources.triangles,
+            contours: &flush.contours,
+            triangles: &[],
         }
     }
 }
@@ -610,7 +640,6 @@ impl Renderer for NativeMetalFrame {
 
         if self.mode == RenderMode::ClockwiseAtomic {
             if !self.solid_draws.is_empty()
-                || self.atomic_path_draw.is_some()
                 || !self.gradient_draws.is_empty()
                 || !self.atlas_requests.is_empty()
             {
@@ -623,41 +652,16 @@ impl Renderer for NativeMetalFrame {
                     .get_or_insert("native Metal atomic tracer requires opaque solid color");
                 return;
             }
-            if paint.shader.is_some() && !is_single_closed_cubic_contour(path) {
-                self.unsupported.get_or_insert(
-                    "native Metal atomic gradient tracer requires one closed cubic fill",
-                );
-                return;
-            }
             let state = super::DrawState {
                 transform: self.state.transform,
                 opacity: self.state.opacity,
                 ..Default::default()
             };
-            let prepared =
-                prepare_single_atomic_path_draw(self.logical_frame_config(), path, paint, state);
-            match prepared {
-                Ok(Some(prepared))
-                    if !prepared.resources.uses_interior
-                        && prepared.resources.triangles.is_empty()
-                        && !prepared.resources.spans.is_empty()
-                        && prepared.resources.instance_count != 0 =>
-                {
-                    self.atomic_path_draw = Some(AtomicPathDraw {
-                        resources: prepared.resources,
-                        gradient_batch: prepared.gradient_batch,
-                    });
-                }
-                Ok(Some(_)) => {
-                    self.unsupported.get_or_insert(
-                        "native Metal atomic tracer only supports midpoint-fan path resources",
-                    );
-                }
-                Ok(None) => {}
-                Err(error) => {
-                    self.unsupported.get_or_insert(error);
-                }
-            }
+            self.atomic_path_inputs.push(AtomicPathInput {
+                path: path.clone(),
+                paint: paint.clone(),
+                state,
+            });
             return;
         }
 
@@ -806,9 +810,9 @@ impl NativeMetalFrame {
         let color_ramp_pipeline = gradient_texture
             && (!self.gradient_draws.is_empty()
                 || self
-                    .atomic_path_draw
-                    .as_ref()
-                    .is_some_and(|draw| draw.gradient_batch.is_some()));
+                    .atomic_path_inputs
+                    .iter()
+                    .any(|draw| draw.paint.shader.is_some()));
         let execution_inventory = NativeMetalExecutionInventory {
             mode: self.mode,
             color_ramp_pipeline,
@@ -819,6 +823,11 @@ impl NativeMetalFrame {
             render_pass_initialize_pipeline: atomic_pipelines.is_some(),
             midpoint_fan_pipeline: atomic_pipelines.is_some(),
             render_pass_resolve_pipeline: atomic_pipelines.is_some(),
+            atomic_draws: self.atomic_draw_count,
+            atomic_draw_groups: self.atomic_draw_group_count,
+            atomic_barriers: self.atomic_barrier_count,
+            atomic_memory_barriers: self.atomic_memory_barrier_count,
+            atomic_render_pass_breaks: self.atomic_render_pass_break_count,
         };
         let mut upload_completion = self.transfer_upload_ownership()?;
         let completion = NativeMetalContext::commit_and_wait(&self.command_buffer);
@@ -877,7 +886,7 @@ impl NativeMetalFrame {
         if let Some(reason) = self.unsupported {
             return Err(RendererError::Unsupported(reason));
         }
-        if let Some(draw) = self.atomic_path_draw.as_ref() {
+        if !self.atomic_path_inputs.is_empty() {
             let (width, height, pixel_format, texture) = {
                 let target = self.target.borrow();
                 let texture = target.retained_target_texture().ok_or_else(|| {
@@ -892,73 +901,122 @@ impl NativeMetalFrame {
                     texture,
                 )
             };
-            let tessellation_height =
-                super::draw::tessellation_texture_height(&draw.resources.spans);
-            let upload_data = AtomicPathUploadData::new(width, height, self.clear_color, draw);
-            let lease = self.context.prepare_atomic_path_resources(
-                draw.gradient_batch
-                    .as_ref()
-                    .map_or(0, |batch| batch.height as usize),
-                tessellation_height as usize,
-                pixel_format,
-                upload_data.batch(draw),
-            )?;
-            if self.collect_work_metrics {
-                self.backend_work.buffer_upload_calls = lease.upload_calls;
-                self.backend_work.buffer_upload_bytes = lease.upload_bytes;
-            }
-            self.resource_lease = Some(lease);
-            if let Some(gradient_batch) = draw.gradient_batch.as_ref() {
-                encode_color_ramp_pass(
-                    &self.context,
-                    &self.command_buffer,
-                    gradient_batch,
-                    self.resource_lease
+            let inputs = self
+                .atomic_path_inputs
+                .iter()
+                .map(|input| AtomicPathFlushInput {
+                    path: &input.path,
+                    paint: &input.paint,
+                    state: input.state,
+                })
+                .collect::<Vec<_>>();
+            let flush = prepare_atomic_path_flush(self.logical_frame_config(), &inputs)
+                .map_err(RendererError::Unsupported)?;
+            if let Some(flush) = flush {
+                if flush.gradient_batch.is_some()
+                    && (flush.draws.len() != 1
+                        || !is_single_closed_cubic_contour(
+                            &self.atomic_path_inputs[flush.draws[0].input_index].path,
+                        ))
+                {
+                    return Err(RendererError::Unsupported(
+                        "native Metal atomic gradient tracer requires one visible closed cubic fill",
+                    ));
+                }
+                if flush.draws.iter().any(|draw| draw.instance_count == 0)
+                    || flush.spans.is_empty()
+                    || flush.contours.is_empty()
+                {
+                    return Err(RendererError::Unsupported(
+                        "native Metal atomic tracer only supports midpoint-fan path resources",
+                    ));
+                }
+                let tessellation_height = super::draw::tessellation_texture_height(&flush.spans);
+                let upload_data =
+                    AtomicPathUploadData::new(width, height, self.clear_color, &flush);
+                let lease = self.context.prepare_atomic_path_resources(
+                    flush
+                        .gradient_batch
                         .as_ref()
-                        .expect("atomic gradient reservation retained by the frame"),
+                        .map_or(0, |batch| batch.height as usize),
+                    tessellation_height as usize,
+                    pixel_format,
+                    upload_data.batch(&flush),
                 )?;
-            }
-            encode_atomic_tessellation_pass(
-                &self.context,
-                &self.command_buffer,
-                draw,
-                self.resource_lease
-                    .as_ref()
-                    .expect("atomic path resource reservation retained by the frame"),
-            )?;
-            let atomic_render_passes = {
-                let mut target = self.target.borrow_mut();
-                encode_atomic_main_pass(
+                if self.collect_work_metrics {
+                    self.backend_work.buffer_upload_calls = lease.upload_calls;
+                    self.backend_work.buffer_upload_bytes = lease.upload_bytes;
+                }
+                self.resource_lease = Some(lease);
+                if let Some(gradient_batch) = flush.gradient_batch.as_ref() {
+                    encode_color_ramp_pass(
+                        &self.context,
+                        &self.command_buffer,
+                        gradient_batch,
+                        self.resource_lease
+                            .as_ref()
+                            .expect("atomic gradient reservation retained by the frame"),
+                    )?;
+                }
+                encode_atomic_tessellation_pass(
                     &self.context,
                     &self.command_buffer,
-                    &mut target,
-                    width,
-                    height,
-                    self.clear_color,
-                    draw,
+                    &flush,
                     self.resource_lease
                         .as_ref()
                         .expect("atomic path resource reservation retained by the frame"),
-                )?
-            };
-            if self.collect_work_metrics {
-                let gradient_passes = u64::from(draw.gradient_batch.is_some());
-                self.backend_work.render_passes = 1 + atomic_render_passes + gradient_passes;
-                self.backend_work.gpu_draw_calls = 4 + gradient_passes;
-                self.backend_work.gpu_draw_instances = u64::try_from(
-                    draw.gradient_batch
-                        .as_ref()
-                        .map_or(0, |batch| batch.spans.len())
-                        + draw.resources.spans.len()
-                        + draw.resources.instance_count as usize
-                        + 2,
-                )
-                .unwrap_or(u64::MAX);
-                self.backend_work.tessellation_spans =
-                    u64::try_from(draw.resources.spans.len()).unwrap_or(u64::MAX);
-                self.backend_work.path_patches = u64::from(draw.resources.instance_count);
+                )?;
+                let atomic_render_passes = {
+                    let mut target = self.target.borrow_mut();
+                    encode_atomic_main_pass(
+                        &self.context,
+                        &self.command_buffer,
+                        &mut target,
+                        width,
+                        height,
+                        self.clear_color,
+                        &flush,
+                        self.resource_lease
+                            .as_ref()
+                            .expect("atomic path resource reservation retained by the frame"),
+                    )?
+                };
+                self.atomic_draw_count = flush.draws.len();
+                self.atomic_draw_group_count = flush.draw_group_starts.len();
+                let barriers = atomic_barrier_inventory(
+                    self.atomic_draw_group_count,
+                    self.context.capabilities().atomic_barrier_type,
+                );
+                self.atomic_barrier_count = barriers.semantic;
+                self.atomic_memory_barrier_count = barriers.memory;
+                self.atomic_render_pass_break_count = barriers.render_pass_breaks;
+                if self.collect_work_metrics {
+                    let gradient_passes = u64::from(flush.gradient_batch.is_some());
+                    self.backend_work.render_passes = 1 + atomic_render_passes + gradient_passes;
+                    self.backend_work.gpu_draw_calls =
+                        u64::try_from(flush.draws.len()).unwrap_or(u64::MAX) + 3 + gradient_passes;
+                    let path_instances = flush
+                        .draws
+                        .iter()
+                        .map(|draw| draw.instance_count as usize)
+                        .sum::<usize>();
+                    self.backend_work.gpu_draw_instances = u64::try_from(
+                        flush
+                            .gradient_batch
+                            .as_ref()
+                            .map_or(0, |batch| batch.spans.len())
+                            + flush.spans.len()
+                            + path_instances
+                            + 2,
+                    )
+                    .unwrap_or(u64::MAX);
+                    self.backend_work.tessellation_spans =
+                        u64::try_from(flush.spans.len()).unwrap_or(u64::MAX);
+                    self.backend_work.path_patches =
+                        u64::try_from(path_instances).unwrap_or(u64::MAX);
+                }
+                return Ok((width, height, texture));
             }
-            return Ok((width, height, texture));
         }
         let atlas_flush = if self.atlas_requests.is_empty() {
             None
@@ -1188,10 +1246,10 @@ impl NativeMetalFrame {
 fn encode_atomic_tessellation_pass(
     context: &NativeMetalContext,
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
-    draw: &AtomicPathDraw,
+    flush: &PreparedAtomicPathFlush,
     lease: &context::PreparedResourceLease,
 ) -> Result<(), RendererError> {
-    let tessellation_height = super::draw::tessellation_texture_height(&draw.resources.spans);
+    let tessellation_height = super::draw::tessellation_texture_height(&flush.spans);
     let pass = MTLRenderPassDescriptor::renderPassDescriptor();
     pass.setRenderTargetWidth(tessellation_resource::TESSELLATION_TEXTURE_WIDTH);
     pass.setRenderTargetHeight(tessellation_height as usize);
@@ -1238,7 +1296,7 @@ fn encode_atomic_tessellation_pass(
                 MTLIndexType::UInt16,
                 context.tess_span_index_buffer(),
                 0,
-                draw.resources.spans.len(),
+                flush.spans.len(),
             );
     }
     encoder.endEncoding();
@@ -1247,6 +1305,26 @@ fn encode_atomic_tessellation_pass(
 
 const ATOMIC_CLIP_BUFFER_INDEX: usize = 17;
 const ATOMIC_COVERAGE_BUFFER_INDEX: usize = 19;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct AtomicBarrierInventory {
+    semantic: usize,
+    memory: usize,
+    render_pass_breaks: usize,
+}
+
+fn atomic_barrier_inventory(
+    draw_group_count: usize,
+    barrier_type: AtomicBarrierType,
+) -> AtomicBarrierInventory {
+    let semantic = draw_group_count.saturating_add(1);
+    AtomicBarrierInventory {
+        semantic,
+        memory: usize::from(barrier_type == AtomicBarrierType::MemoryBarrier) * semantic,
+        render_pass_breaks: usize::from(barrier_type == AtomicBarrierType::RenderPassBreak)
+            * semantic,
+    }
+}
 
 fn make_atomic_main_encoder(
     context: &NativeMetalContext,
@@ -1346,7 +1424,7 @@ fn encode_atomic_main_pass(
     width: u32,
     height: u32,
     clear: u32,
-    draw: &AtomicPathDraw,
+    flush: &PreparedAtomicPathFlush,
     lease: &context::PreparedResourceLease,
 ) -> Result<u64, RendererError> {
     let pipelines = lease
@@ -1390,22 +1468,45 @@ fn encode_atomic_main_pass(
 
     encoder.setRenderPipelineState(&pipelines.midpoint);
     bind_vertex_buffer(&encoder, context.path_patch_vertex_buffer(), 0);
-    set_vertex_bytes(&encoder, &draw.resources.base_instance, 4)?;
     encoder.setCullMode(MTLCullMode::Back);
-    // SAFETY: the context retains a complete 72-index midpoint patch and its
-    // matching vertex buffer, while `instance_count` names initialized
-    // canonical patches retained in the tessellation texture and upload lease.
-    unsafe {
-        encoder
-            .drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
-                MTLPrimitiveType::Triangle,
-                gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT,
-                MTLIndexType::UInt16,
-                context.path_patch_index_buffer(),
-                0,
-                draw.resources.instance_count as usize,
-            );
+    let mut next_group_start = flush.draw_group_starts.iter().copied().skip(1).peekable();
+    for (draw_index, draw) in flush.draws.iter().enumerate() {
+        if next_group_start.peek().copied() == Some(draw_index) {
+            encoder = apply_atomic_barrier(
+                context,
+                command_buffer,
+                &pass,
+                target,
+                width,
+                height,
+                lease,
+                encoder,
+                &mut render_passes,
+            )?;
+            next_group_start.next();
+            encoder.setRenderPipelineState(&pipelines.midpoint);
+            bind_vertex_buffer(&encoder, context.path_patch_vertex_buffer(), 0);
+            encoder.setCullMode(MTLCullMode::Back);
+        }
+        set_vertex_bytes(&encoder, &draw.base_instance, 4)?;
+        // SAFETY: the context retains a complete 72-index midpoint patch and
+        // matching vertex buffer. This scheduled draw's `instance_count`
+        // names its initialized, relocated canonical patch range in the
+        // flush-wide tessellation texture and retained upload lease.
+        unsafe {
+            encoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
+                    MTLPrimitiveType::Triangle,
+                    gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT,
+                    MTLIndexType::UInt16,
+                    context.path_patch_index_buffer(),
+                    0,
+                    draw.instance_count as usize,
+                );
+        }
     }
+    // C++ attaches `plsAtomicPreResolve` to the resolve batch. Apply it once
+    // after the final group, independent of the number of authored draws in
+    // that group.
     encoder = apply_atomic_barrier(
         context,
         command_buffer,
@@ -2611,5 +2712,38 @@ mod tests {
         assert_eq!(inline_triangle_fan_vertex_count(172), Some(510));
         assert_eq!(inline_triangle_fan_vertex_count(173), None);
         assert_eq!(inline_triangle_fan_vertex_count(usize::MAX), None);
+    }
+
+    #[test]
+    fn four_atomic_draw_groups_apply_exact_upstream_barrier_policy() {
+        assert_eq!(
+            atomic_barrier_inventory(4, AtomicBarrierType::RasterOrderGroup),
+            AtomicBarrierInventory {
+                semantic: 5,
+                memory: 0,
+                render_pass_breaks: 0,
+            }
+        );
+        assert_eq!(
+            atomic_barrier_inventory(4, AtomicBarrierType::MemoryBarrier),
+            AtomicBarrierInventory {
+                semantic: 5,
+                memory: 5,
+                render_pass_breaks: 0,
+            }
+        );
+        assert_eq!(
+            atomic_barrier_inventory(4, AtomicBarrierType::RenderPassBreak),
+            AtomicBarrierInventory {
+                semantic: 5,
+                memory: 0,
+                render_pass_breaks: 5,
+            }
+        );
+        assert_eq!(
+            1 + atomic_barrier_inventory(4, AtomicBarrierType::RenderPassBreak).render_pass_breaks,
+            6,
+            "initial main pass plus one replacement pass per semantic barrier"
+        );
     }
 }

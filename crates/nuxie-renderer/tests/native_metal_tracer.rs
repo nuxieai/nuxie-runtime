@@ -73,6 +73,15 @@ fn assert_rgba8_with_tolerance(
     );
 }
 
+fn assert_clear_color_occupancy(actual: &[u8], expected: &[u8], clear: [u8; 4], label: &str) {
+    let mismatch = actual
+        .chunks_exact(4)
+        .zip(expected.chunks_exact(4))
+        .enumerate()
+        .find(|(_, (actual, expected))| (*actual != clear) != (*expected != clear));
+    assert_eq!(mismatch, None, "{label}: differs-from-clear occupancy");
+}
+
 #[test]
 fn native_metal_frame_clears_and_reads_back() {
     let factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
@@ -88,6 +97,50 @@ fn native_metal_frame_clears_and_reads_back() {
             0x02, 0x03, 0x04, 0x11, 0x02, 0x03, 0x04, 0x11, 0x02, 0x03, 0x04, 0x11, 0x02, 0x03,
             0x04, 0x11,
         ]
+    );
+}
+
+#[test]
+fn native_metal_forced_atomic_culls_offscreen_draws_before_flush_shape_validation() {
+    fn render(stream_text: &str) -> Vec<u8> {
+        let stream = RenderStream::parse(stream_text).expect("parse offscreen atomic stream");
+        let (width, height) = stream.frame_size.expect("offscreen atomic frame size");
+        let mut factory =
+            NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+                .expect("force native Metal generic-atomic mode");
+        let mut frame = factory
+            .begin_frame(stream.clear_color.unwrap_or(0))
+            .expect("acquire offscreen atomic frame");
+        stream
+            .replay_frame(0, &mut factory, &mut frame)
+            .expect("replay offscreen atomic frame");
+        frame.finish().expect("finish offscreen atomic frame")
+    }
+
+    let empty = render(
+        "rive-golden-stream-v1\nframeSize width=8 height=8\nclearColor value=0xff123456\nframe\n",
+    );
+    let all_offscreen = render(
+        "rive-golden-stream-v1\nframeSize width=8 height=8\nclearColor value=0xff123456\ndrawPath path={id=1,fillRule=0,path={verbs=[move,line,line,close],points=[(100,100),(120,100),(110,120)]}} paint={id=1,style=fill,color=0xffff0000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}\nframe\n",
+    );
+    assert_eq!(
+        all_offscreen, empty,
+        "a fully culled flush remains clear-only"
+    );
+    let empty_path = render(
+        "rive-golden-stream-v1\nframeSize width=8 height=8\nclearColor value=0xff123456\ndrawPath path={id=1,fillRule=0,path={verbs=[],points=[]}} paint={id=1,style=fill,color=0xffff0000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}\nframe\n",
+    );
+    assert_eq!(empty_path, empty, "an empty path remains clear-only");
+
+    let visible_only = render(
+        "rive-golden-stream-v1\nframeSize width=8 height=8\nclearColor value=0xff123456\ndrawPath path={id=2,fillRule=0,path={verbs=[move,line,line,close],points=[(1,1),(7,1),(4,7)]}} paint={id=2,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}\nframe\n",
+    );
+    let offscreen_gradient_then_visible = render(
+        "rive-golden-stream-v1\nframeSize width=8 height=8\nclearColor value=0xff123456\nmakeLinearGradient id=1 start=(100,100) end=(120,100) stops=[{color=0xffff0000,stop=0},{color=0xff0000ff,stop=1}]\ndrawPath path={id=1,fillRule=0,path={verbs=[move,cubic,line,cubic,close],points=[(100,110),(100,100),(120,100),(120,110),(120,115),(120,120),(100,120),(100,110)]}} paint={id=1,style=fill,color=0xffffffff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=1}\ndrawPath path={id=2,fillRule=0,path={verbs=[move,line,line,close],points=[(1,1),(7,1),(4,7)]}} paint={id=2,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}\nframe\n",
+    );
+    assert_eq!(
+        offscreen_gradient_then_visible, visible_only,
+        "culled gradients do not contaminate visible flush-shape validation"
     );
 }
 
@@ -165,6 +218,11 @@ fn native_metal_forced_atomic_triangle_matches_pinned_cpp_metal_oracle() {
             render_pass_initialize_pipeline: true,
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
+            atomic_draws: 1,
+            atomic_draw_groups: 1,
+            atomic_barriers: 2,
+            atomic_memory_barriers: 0,
+            atomic_render_pass_breaks: 0,
         },
         "opaque SrcOver must execute the real fixed-function generic-atomic branch"
     );
@@ -232,6 +290,11 @@ fn native_metal_forced_atomic_gradient_cubic_matches_pinned_cpp_metal_oracle() {
             render_pass_initialize_pipeline: true,
             midpoint_fan_pipeline: true,
             render_pass_resolve_pipeline: true,
+            atomic_draws: 1,
+            atomic_draw_groups: 1,
+            atomic_barriers: 2,
+            atomic_memory_barriers: 0,
+            atomic_render_pass_breaks: 0,
         },
         "gradient SrcOver must execute the real fixed-function generic-atomic branch"
     );
@@ -260,6 +323,81 @@ fn native_metal_forced_atomic_gradient_cubic_matches_pinned_cpp_metal_oracle() {
         Some(0),
         true,
         "forced generic-atomic Rust Metal gradient versus pinned C++ Metal",
+    );
+}
+
+#[test]
+fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(fixture_root.join("streams/gm/overfill_opaque.rive-stream"))
+            .expect("read overfill opaque stream"),
+    )
+    .expect("parse overfill opaque stream");
+    let (width, height) = stream.frame_size.expect("overfill opaque frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire forced-atomic native Metal overfill frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay overfill through the public Factory/Renderer seam");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish forced-atomic native Metal overfill");
+    assert_eq!(
+        output.execution_inventory,
+        NativeMetalExecutionInventory {
+            mode: RenderMode::ClockwiseAtomic,
+            color_ramp_pipeline: false,
+            gradient_texture: false,
+            atomic_color_plane: false,
+            atomic_clip_plane: true,
+            atomic_coverage_plane: true,
+            render_pass_initialize_pipeline: true,
+            midpoint_fan_pipeline: true,
+            render_pass_resolve_pipeline: true,
+            atomic_draws: 4,
+            atomic_draw_groups: 4,
+            atomic_barriers: 5,
+            atomic_memory_barriers: 0,
+            atomic_render_pass_breaks: 0,
+        },
+        "overfill must execute four canonical overlap groups without fallback"
+    );
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 2,
+            buffer_upload_calls: 6,
+            buffer_upload_bytes: 9_624,
+            queue_submissions: 1,
+            gpu_draw_calls: 7,
+            gpu_draw_instances: 438,
+            tessellation_spans: 128,
+            path_patches: 308,
+            ..BackendWorkMetrics::default()
+        },
+        "one tessellation pass and initialize/four grouped paths/resolve"
+    );
+
+    let cpp_metal =
+        read_png(fixture_root.join("reference/metal/gm/overfill_opaque-clockwise-atomic.png"));
+    assert_rgba8_with_tolerance(
+        &output.pixels,
+        &cpp_metal,
+        2,
+        Some(48),
+        false,
+        "forced generic-atomic Rust Metal overfill versus pinned C++ Metal",
+    );
+    assert_clear_color_occupancy(
+        &output.pixels,
+        &cpp_metal,
+        [0xff; 4],
+        "forced generic-atomic Rust Metal overfill versus pinned C++ Metal",
     );
 }
 

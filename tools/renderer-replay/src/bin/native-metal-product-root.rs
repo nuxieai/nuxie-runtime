@@ -80,6 +80,11 @@ fn main() {
                 render_pass_initialize_pipeline: true,
                 midpoint_fan_pipeline: true,
                 render_pass_resolve_pipeline: true,
+                atomic_draws: 1,
+                atomic_draw_groups: 1,
+                atomic_barriers: 2,
+                atomic_memory_barriers: 0,
+                atomic_render_pass_breaks: 0,
             }
         );
         assert_eq!(
@@ -125,8 +130,39 @@ fn main() {
                 render_pass_initialize_pipeline: true,
                 midpoint_fan_pipeline: true,
                 render_pass_resolve_pipeline: true,
+                atomic_draws: 1,
+                atomic_draw_groups: 1,
+                atomic_barriers: 2,
+                atomic_memory_barriers: 0,
+                atomic_render_pass_breaks: 0,
             }
         );
+
+        // Root a real overlapping multi-draw flush and its canonical group
+        // transition; this prevents product dead stripping from retaining only
+        // the one-path generic-atomic specialization.
+        let mut overlap_path = RawPath::new();
+        overlap_path.move_to(12.0, 12.0);
+        overlap_path.line_to(52.0, 12.0);
+        overlap_path.line_to(32.0, 52.0);
+        overlap_path.close();
+        let overlap_path = atomic_factory.make_render_path(overlap_path, FillRule::NonZero);
+        let mut overlap_paint = atomic_factory.make_render_paint();
+        overlap_paint.color(0xffff_0000);
+        let mut multi_frame = atomic_factory
+            .begin_frame(0xffff_ffff)
+            .expect("acquire forced-atomic native Metal multi-draw command buffer");
+        multi_frame.draw_path(atomic_path.as_ref(), atomic_paint.as_ref());
+        multi_frame.draw_path(overlap_path.as_ref(), overlap_paint.as_ref());
+        let multi_output = multi_frame
+            .finish_for_benchmark()
+            .expect("finish forced-atomic native Metal multi-draw flush");
+        assert_eq!(multi_output.execution_inventory.atomic_draws, 2);
+        assert_eq!(multi_output.execution_inventory.atomic_draw_groups, 2);
+        assert_eq!(multi_output.execution_inventory.atomic_barriers, 3);
+        assert!(!multi_output.execution_inventory.atomic_color_plane);
+        assert!(multi_output.execution_inventory.atomic_clip_plane);
+        assert!(multi_output.execution_inventory.atomic_coverage_plane);
 
         factory
             .resize(32, 32)

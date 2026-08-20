@@ -621,12 +621,35 @@ exactly-once consumption report. Production uses the equivalent lightweight
 admitted record so the rooted product Mach-O does not retain WGPU through the
 backend-bearing `SolidDraw` envelope.
 
-This is not general atomic-flush parity. Clips, radial or complex gradients,
-feather atlas, images, strokes, advanced blends, multiple draws, multiple
-logical flushes, general scheduling, MSAA, fallback, and simulator/old-hardware
-matrices remain deferred. The next bounded slice is multi-draw/barrier
-behavior; encountering another deferred family is a stop condition, not
-grounds to widen this slice or its tolerance.
+The third slice materializes one canonical-equivalent lightweight flush for
+`gm/overfill_opaque`: four authored solid midpoint fills become four singleton
+overlap groups without changing path IDs, z ordering, or SrcOver compositing.
+Production deliberately avoids the backend-bearing canonical envelope so the
+rooted artifact stays WGPU-free. A test consumes the independent canonical
+typed slots exactly once, compares every per-draw field, and byte-compares the
+final relocated path, paint, auxiliary, tessellation, and contour upload planes.
+Pinned `render_context.cpp:1740-1802` supplies the padded-pixel-bounds
+`IntersectionBoard` schedule; `1955-1964` requires the initial atomic barrier
+and one at every draw-group transition; `2223-2241` attaches the final
+pre-resolve barrier. Metal realizes those five semantic barriers as five
+no-ops for raster-order groups, five fragment-to-fragment memory barriers, or
+five render-pass breaks (`render_context_metal_impl.mm:1857-1889`). Initialize
+and resolve execute once, while all paths in a disjoint group execute without
+an internal barrier. A companion logical test proves the non-singleton case.
+
+The same-runner row preserves the pre-existing 2-LSB/48-pixel C++ Metal
+contract. A fresh Apple M5 Max comparison produced byte-identical forced Rust
+Metal and pinned C++ Metal frames; the dynamic corpus records executable,
+stream, PNG, backend, adapter, and reference-input hashes. The separately
+measured current Rust-WGPU frame differs from C++ at 72 pixels with maximum
+delta 16, so it is diagnostic history rather than a reason to fit or widen the
+Metal candidate contract.
+
+This is not general atomic-flush parity. Clips, gradients in the same flush,
+radial or complex gradients, feather atlas, images, strokes, advanced blends,
+multiple logical flushes, the general scheduler, MSAA, fallback, and
+simulator/old-hardware matrices remain deferred. Encountering one of those
+families is a stop condition, not grounds to widen this slice or its tolerance.
 
 ## ORE-specific fail-closed rules
 

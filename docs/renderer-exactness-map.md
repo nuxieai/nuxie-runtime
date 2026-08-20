@@ -102,11 +102,16 @@ not a claim of full renderer parity.
 
 UNIV-2088 adds a separate `rust-metal-atomic` backend and the checked-in
 `tools/metal-port/tracer-corpus-atomic.toml`; `make
-renderer-metal-atomic-oracle-tracer` compares a forced generic-atomic triangle
-and linear-gradient cubic against the pinned C++ Metal replay on the same
-adapter. The triangle contract remains max-channel 2 and at most 32 differing
-pixels. The forced C++ atomic gradient is byte-identical to the existing
-checked-in gradient PNG, so its new atomic row is 0/0 with exact occupancy.
+renderer-metal-atomic-oracle-tracer` compares a forced generic-atomic triangle,
+linear-gradient cubic, and four-draw `gm/overfill_opaque` flush against the
+pinned C++ Metal replay on the same adapter. The triangle contract remains
+max-channel 2 and at most 32 differing pixels. The forced C++ atomic gradient
+is byte-identical to the existing checked-in gradient PNG, so its atomic row is
+0/0 with exact occupancy. The multi-draw row retains its pre-existing 2/48
+budget; its focused integration test separately checks
+differs-from-clear-white occupancy. The same-runner M5 Max measurement was
+byte-identical. Dynamic provenance distinguishes this from the separately
+measured Rust-WGPU diagnostic (72 pixels, maximum delta 16).
 The existing `rust-metal` candidate rows remain capability-driven and retain
 their original labels and budgets.
 

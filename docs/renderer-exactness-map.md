@@ -102,12 +102,13 @@ not a claim of full renderer parity.
 
 UNIV-2088 adds a separate `rust-metal-atomic` backend and the checked-in
 `tools/metal-port/tracer-corpus-atomic.toml`; `make
-renderer-metal-atomic-oracle-tracer` compares its one forced generic-atomic
-triangle against the pinned C++ Metal replay on the same adapter. That corpus
-contract remains max-channel 2 and at most 32 differing pixels. The focused
-native-Metal integration test separately requires exact occupancy against the
-same checked-in pinned-C++ image. The existing `rust-metal` candidate rows
-remain capability-driven and retain their original labels and budgets.
+renderer-metal-atomic-oracle-tracer` compares a forced generic-atomic triangle
+and linear-gradient cubic against the pinned C++ Metal replay on the same
+adapter. The triangle contract remains max-channel 2 and at most 32 differing
+pixels. The forced C++ atomic gradient is byte-identical to the existing
+checked-in gradient PNG, so its new atomic row is 0/0 with exact occupancy.
+The existing `rust-metal` candidate rows remain capability-driven and retain
+their original labels and budgets.
 
 `make renderer-metal-msaa-contract` is a green negative contract. Both the
 pinned source and current upstream native Metal explicitly exclude

@@ -3144,13 +3144,23 @@ pub(crate) fn admit_path_draw(
     }))
 }
 
-/// Prepares one unclipped solid path through the canonical production logical
-/// writer for the bounded native-Metal generic-atomic tracer.
+/// Lightweight canonical-equivalent resources for one native-Metal
+/// generic-atomic path draw.
+#[cfg(any(test, feature = "native-metal-experimental"))]
+pub(crate) struct PreparedSingleAtomicPathDraw {
+    pub(crate) resources: PreparedTypedDrawResources,
+    pub(crate) gradient_batch: Option<GradientBatch>,
+}
+
+/// Prepares one unclipped solid or linear-gradient path through the canonical
+/// production logical writer contract for the bounded native-Metal
+/// generic-atomic tracer.
 ///
 /// This materializes a lightweight admitted midpoint-fill record without
 /// constructing the backend-bearing `SolidDraw` envelope. A cfg(test)
 /// field-by-field oracle proves it matches the canonical production prepared
-/// slot and its exactly-once consumption report for the supported triangle.
+/// slot, gradient batch, and exactly-once consumption report for the supported
+/// single-draw fixtures.
 /// Scheduling, clipping, multiple draws, and multiple logical flushes
 /// deliberately remain outside this helper.
 #[cfg(any(test, feature = "native-metal-experimental"))]
@@ -3159,7 +3169,7 @@ pub(crate) fn prepare_single_atomic_path_draw(
     path: &LogicalPath,
     paint: &LogicalPaint,
     state: DrawState,
-) -> Result<Option<PreparedTypedDrawResources>, &'static str> {
+) -> Result<Option<PreparedSingleAtomicPathDraw>, &'static str> {
     if config.mode != RenderMode::ClockwiseAtomic {
         return Err("single atomic path preparation requires clockwise-atomic mode");
     }
@@ -3168,10 +3178,21 @@ pub(crate) fn prepare_single_atomic_path_draw(
     };
     if admitted.paint.style != RenderPaintStyle::Fill
         || admitted.paint.feather != 0.0
-        || admitted.paint.shader.is_some()
         || admitted.state.clip_rect.is_some()
     {
-        return Err("single atomic path preparation requires an unclipped solid fill");
+        return Err("single atomic path preparation requires an unclipped fill");
+    }
+    if let Some(shader) = admitted.paint.shader.as_ref() {
+        match shader {
+            super::LogicalShader::Linear { colors, stops, .. }
+                if colors.len() == 2 && stops.as_slice() == [0.0, 1.0] => {}
+            super::LogicalShader::Linear { .. } => {
+                return Err("single atomic path preparation only supports simple linear gradients");
+            }
+            super::LogicalShader::Radial { .. } => {
+                return Err("single atomic path preparation only supports linear gradients");
+            }
+        }
     }
     let prepared = admitted
         .preparation
@@ -3202,29 +3223,59 @@ pub(crate) fn prepare_single_atomic_path_draw(
         contour.path_id = 1;
     }
     let local_contour_ids_are_dense = contours.len() <= gpu::CONTOUR_ID_MASK as usize;
-    let paint_data = gpu::PaintData::solid(
-        modulate_color_alpha(admitted.paint.color, admitted.state.opacity),
-        atomic_paint_fill_rule(admitted.path.fill_rule, true),
-        admitted.paint.blend_mode,
-    )
-    .with_clip_id(0)
-    .with_generic_clockwise_fill();
-    Ok(Some(PreparedTypedDrawResources {
-        contour_base: 0,
-        path: path_data,
-        paint: paint_data,
-        paint_aux: clip_rect_paint_aux(None),
-        spans: tessellation.spans,
-        contours,
-        triangles: Vec::new(),
-        base_instance: tessellation.base_instance,
-        instance_count: tessellation.instance_count,
-        triangle_count: 0,
-        borrowed_triangle_count: 0,
-        main_triangle_batches: Vec::new(),
-        has_interior_triangles: false,
-        uses_interior: false,
-        local_contour_ids_are_dense,
+    let gradient_batch = admitted
+        .paint
+        .shader
+        .as_ref()
+        .map(|shader| {
+            prepare_single_gradient_batch(shader, admitted.state.opacity, admitted.state.transform)
+                .ok_or("single atomic path has invalid gradient parameters")
+        })
+        .transpose()?;
+    let gradient = gradient_batch.as_ref().and_then(|batch| batch.draw(0));
+    let paint_data = gradient
+        .map_or_else(
+            || {
+                gpu::PaintData::solid(
+                    modulate_color_alpha(admitted.paint.color, admitted.state.opacity),
+                    atomic_paint_fill_rule(admitted.path.fill_rule, true),
+                    admitted.paint.blend_mode,
+                )
+            },
+            |gradient| {
+                gpu::PaintData::gradient(
+                    gradient.paint_type,
+                    gradient.texture_y,
+                    atomic_paint_fill_rule(admitted.path.fill_rule, true),
+                    admitted.paint.blend_mode,
+                )
+            },
+        )
+        .with_clip_id(0)
+        .with_generic_clockwise_fill();
+    let paint_aux = gradient.map_or_else(
+        || clip_rect_paint_aux(None),
+        |gradient| gradient_paint_aux(None, gradient),
+    );
+    Ok(Some(PreparedSingleAtomicPathDraw {
+        resources: PreparedTypedDrawResources {
+            contour_base: 0,
+            path: path_data,
+            paint: paint_data,
+            paint_aux,
+            spans: tessellation.spans,
+            contours,
+            triangles: Vec::new(),
+            base_instance: tessellation.base_instance,
+            instance_count: tessellation.instance_count,
+            triangle_count: 0,
+            borrowed_triangle_count: 0,
+            main_triangle_batches: Vec::new(),
+            has_interior_triangles: false,
+            uses_interior: false,
+            local_contour_ids_are_dense,
+        },
+        gradient_batch,
     }))
 }
 

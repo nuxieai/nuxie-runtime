@@ -524,7 +524,7 @@ different class of translation error.
    - `make renderer-metal-reference-replay`
    - `make renderer-metal-reference-check`
    - `make renderer-metal-oracle-tracers`
-   - `make renderer-metal-atomic-oracle-tracer` runs the one-row forced
+   - `make renderer-metal-atomic-oracle-tracer` runs the bounded forced
      generic-atomic lane without changing the capability-driven `rust-metal`
      backend used by the established rectangle, gradient, and atlas corpus;
    - `make renderer-metal-msaa-contract` is a green negative contract proving
@@ -579,7 +579,7 @@ different class of translation error.
    - release performance is recorded against the pre-cutover baseline and the
      pinned C++ comparator.
 
-### UNIV-2088 first generic-atomic slice
+### UNIV-2088 bounded generic-atomic slices
 
 The first slice is intentionally one public replay: an unclipped opaque green
 SrcOver triangle whose admitted geometry remains a midpoint fan. `rust-metal`
@@ -597,20 +597,36 @@ three pipelines with `ENABLE_DITHER | FIXED_FUNCTION_COLOR_OUTPUT`, binds the
 retained clip and coverage planes, and applies the selected raster-order-group,
 fragment memory-barrier, or render-pass-break topology.
 
-The checked-in same-runner manifest preserves the independently selected C++
-Metal numerical budget: maximum channel delta 2 and at most 32 differing
-pixels. The focused native-Metal integration test independently requires exact
-occupancy against the same checked-in pinned-C++ image. The test-only canonical
-oracle proves every prepared field and the canonical exactly-once consumption
-report. Production uses the equivalent lightweight admitted record so the
-rooted product Mach-O does not retain WGPU through the backend-bearing
-`SolidDraw` envelope.
+The second slice keeps that same one-draw topology and adds the existing
+`first-light-gradient-cubic` linear-gradient fill. It reuses the context-owned
+RGBA8 color-ramp texture and color-ramp pass, uploads the canonical gradient
+span beside the same midpoint tessellation, and binds the retained ramp at the
+generated fragment texture slot 8. Pinned gradient creation and serialization
+are `render_context.cpp:578-627` and `1450-1473`; the Metal texture and ramp
+pass are `render_context_metal_impl.mm:1041-1058` and `1404-1450`; and the
+generated draw binding is `1298-1385`. Fixed-function color output remains
+enabled, so this gradient slice still owns clip and coverage atomic planes but
+does not allocate the generic color plane.
 
-This is not general atomic-flush parity. Clips, gradients, feather atlas,
-images, strokes, advanced blends, multiple draws, multiple logical flushes,
-general scheduling, MSAA, fallback, and simulator/old-hardware matrices remain
-deferred. Encountering any of those families is a stop condition, not grounds
-to widen the slice or its tolerance.
+The checked-in same-runner manifest preserves the independently selected C++
+Metal triangle budget: maximum channel delta 2 and at most 32 differing
+pixels. Its second row dynamically compares the forced `rust-metal-atomic`
+candidate with pinned `ffi-metal --mode clockwise-atomic`. That forced C++
+capture is byte-identical to the already checked-in gradient PNG, so the new
+atomic gradient row and focused integration test require zero channel delta,
+zero differing pixels, and exact occupancy without changing the older
+capability-driven raster-gradient row. Test-only canonical oracles prove every
+prepared field, the gradient span/transform records, and the canonical
+exactly-once consumption report. Production uses the equivalent lightweight
+admitted record so the rooted product Mach-O does not retain WGPU through the
+backend-bearing `SolidDraw` envelope.
+
+This is not general atomic-flush parity. Clips, radial or complex gradients,
+feather atlas, images, strokes, advanced blends, multiple draws, multiple
+logical flushes, general scheduling, MSAA, fallback, and simulator/old-hardware
+matrices remain deferred. The next bounded slice is multi-draw/barrier
+behavior; encountering another deferred family is a stop condition, not
+grounds to widen this slice or its tolerance.
 
 ## ORE-specific fail-closed rules
 

@@ -72,6 +72,8 @@ fn main() {
             atomic_output.execution_inventory,
             NativeMetalExecutionInventory {
                 mode: RenderMode::ClockwiseAtomic,
+                color_ramp_pipeline: false,
+                gradient_texture: false,
                 atomic_color_plane: false,
                 atomic_clip_plane: true,
                 atomic_coverage_plane: true,
@@ -83,6 +85,47 @@ fn main() {
         assert_eq!(
             atomic_output.pixels[(24 * 64 + 32) * 4..][..4],
             [0, 255, 0, 255]
+        );
+
+        // Root the retained color-ramp resource and generated fragment texture
+        // binding on the same forced-atomic product path.
+        let mut gradient_path = RawPath::new();
+        gradient_path.move_to(8.0, 32.0);
+        gradient_path.cubic_to(8.0, 8.0, 56.0, 8.0, 56.0, 32.0);
+        gradient_path.line_to(56.0, 40.0);
+        gradient_path.cubic_to(56.0, 56.0, 8.0, 56.0, 8.0, 32.0);
+        gradient_path.close();
+        let gradient_path = atomic_factory.make_render_path(gradient_path, FillRule::NonZero);
+        let gradient = atomic_factory.make_linear_gradient(
+            8.0,
+            32.0,
+            56.0,
+            32.0,
+            &[0xffff_0000, 0xff00_00ff],
+            &[0.0, 1.0],
+        );
+        let mut gradient_paint = atomic_factory.make_render_paint();
+        gradient_paint.shader(Some(gradient.as_ref()));
+        let mut gradient_frame = atomic_factory
+            .begin_frame(0xff00_0000)
+            .expect("acquire forced-atomic native Metal gradient command buffer");
+        gradient_frame.draw_path(gradient_path.as_ref(), gradient_paint.as_ref());
+        let gradient_output = gradient_frame
+            .finish_for_benchmark()
+            .expect("finish forced-atomic native Metal gradient");
+        assert_eq!(
+            gradient_output.execution_inventory,
+            NativeMetalExecutionInventory {
+                mode: RenderMode::ClockwiseAtomic,
+                color_ramp_pipeline: true,
+                gradient_texture: true,
+                atomic_color_plane: false,
+                atomic_clip_plane: true,
+                atomic_coverage_plane: true,
+                render_pass_initialize_pipeline: true,
+                midpoint_fan_pipeline: true,
+                render_pass_resolve_pipeline: true,
+            }
         );
 
         factory

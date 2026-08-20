@@ -85,6 +85,7 @@ RENDERER_METAL_WGPU_TRACER_MANIFEST ?= $(CURDIR)/tools/metal-port/tracer-corpus-
 RENDERER_METAL_TRACER_OUTPUT_DIR ?= $(CURDIR)/target/renderer-metal-tracers
 RENDERER_METAL_WGPU_OUTPUT_DIR ?= $(RENDERER_METAL_TRACER_OUTPUT_DIR)/rust-wgpu-secondary
 RENDERER_METAL_ORACLE_ENTRIES ?= --entry native-metal-first-light-rectangle --entry native-metal-first-light-gradient-cubic --entry native-metal-first-light-atlas-feather-stroke --entry native-metal-first-light-two-atlas-feather-strokes
+RENDERER_METAL_ATOMIC_ORACLE_ENTRIES ?= --entry native-metal-first-light-triangle-generic-atomic --entry native-metal-first-light-gradient-cubic-generic-atomic
 RENDERER_DAWN_REFERENCE_BUILD_DIR ?= $(CURDIR)/target/renderer-dawn-reference-build
 RENDERER_DAWN_REFERENCE_DIR ?= $(CURDIR)/target/renderer-dawn-reference
 RENDERER_DAWN_REFERENCE_REPLAY ?= $(RENDERER_DAWN_REFERENCE_DIR)/renderer-replay
@@ -682,9 +683,9 @@ renderer-metal-oracle-tracers: renderer-native-metal-replay renderer-rust-replay
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
 
 # Purpose-built UNIV-2088 lane. Keep the established `rust-metal` corpus on
-# capability-driven selection; only this one-row tracer forces generic atomics.
+# capability-driven selection; only these bounded tracers force generic atomics.
 renderer-metal-atomic-oracle-tracer: renderer-native-metal-replay renderer-metal-reference-check
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_ATOMIC_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/generic-atomic" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --entry native-metal-first-light-triangle-generic-atomic
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_ATOMIC_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/generic-atomic" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ATOMIC_ORACLE_ENTRIES)
 
 # Native Metal deliberately has no WebGPU-style MSAA execution mode. Keep this
 # green negative contract so a future harness cannot silently relabel Dawn

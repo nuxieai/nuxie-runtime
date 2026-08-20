@@ -268,10 +268,12 @@ status = "in-progress"
 # retain overlapping concrete generations, and retry on the same coordinator.
 # The context also retains byte-exact shared ImageRect vertex/index buffers from
 # the pinned constructor; drawing them remains a later atomic-encoder slice.
-# UNIV-2088's first bounded generic-atomic slice ports the fixed-function
-# opaque SrcOver initialize/midpoint/resolve topology from 1363-1385,
-# 1759-1812, 1857-1925, and 1989-1997. It deliberately leaves this full source
-# row in-progress: clips, gradients, atlas, images, strokes, advanced blends,
+# UNIV-2088's bounded generic-atomic slices port the fixed-function opaque
+# SrcOver initialize/midpoint/resolve topology from 1363-1385, 1759-1812,
+# 1857-1925, and 1989-1997, then add the one-draw linear-gradient ramp resource
+# and generated fragment texture-8 binding from 1041-1058, 1298-1385, and
+# 1404-1450. They deliberately leave this full source row in-progress: clips,
+# radial/complex gradients, atlas, images, strokes, advanced blends,
 # multi-draw/multi-flush scheduling, simulator coverage, and fallback remain.
 rust_modules = [
   "crates/nuxie-renderer/src/apple_surface.rs",
@@ -327,6 +329,8 @@ evidence = [
   "fixtures/renderer/streams/first-light-two-atlas-feather-strokes.rive-stream",
   "fixtures/renderer/reference/metal/first-light-triangle-clockwise-atomic.png",
   "fixtures/renderer/streams/first-light-triangle.rive-stream",
+  "fixtures/renderer/reference/metal/first-light-gradient-cubic.png",
+  "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream",
   "tools/metal-port/tracer-corpus-atomic.toml",
   "tools/metal-port/tracer-corpus.toml",
   "tools/metal-port/tracer-corpus-wgpu-secondary.toml",
@@ -352,6 +356,7 @@ evidence = [
   "crates/nuxie-renderer/tests/native_metal_tracer.rs",
   "fixtures/renderer/reference/metal/first-light-gradient-cubic.png",
   "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream",
+  "tools/metal-port/tracer-corpus-atomic.toml",
   "tools/metal-port/tracer-corpus.toml",
 ]
 

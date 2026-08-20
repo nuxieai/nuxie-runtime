@@ -125,6 +125,13 @@ pub(crate) struct RenderTargetMetal {
     clip_atomic_buffer: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AtomicPlane {
+    Color,
+    Clip,
+    Coverage,
+}
+
 impl RenderTargetMetal {
     /// Creates a target and its raster-order memoryless attachments.
     ///
@@ -268,6 +275,64 @@ impl RenderTargetMetal {
             })
     }
 
+    /// Realizes every plane needed by one atomic flush as a single owner-set
+    /// publication. Later allocation failure cannot leave a partially
+    /// upgraded target generation visible to an encoder.
+    pub(crate) fn prepare_atomic_planes(
+        &mut self,
+        uses_color_plane: bool,
+    ) -> Result<(), RendererError> {
+        self.prepare_atomic_planes_core(uses_color_plane, &mut |_| Ok(()))
+    }
+
+    fn prepare_atomic_planes_core(
+        &mut self,
+        uses_color_plane: bool,
+        before_allocate: &mut impl FnMut(AtomicPlane) -> Result<(), RendererError>,
+    ) -> Result<(), RendererError> {
+        let color = (uses_color_plane && self.color_atomic_buffer.is_none())
+            .then(|| {
+                before_allocate(AtomicPlane::Color)?;
+                self.make_atomic_buffer()
+            })
+            .transpose()?;
+        let clip = self
+            .clip_atomic_buffer
+            .is_none()
+            .then(|| {
+                before_allocate(AtomicPlane::Clip)?;
+                self.make_atomic_buffer()
+            })
+            .transpose()?;
+        let coverage = self
+            .coverage_atomic_buffer
+            .is_none()
+            .then(|| {
+                before_allocate(AtomicPlane::Coverage)?;
+                self.make_atomic_buffer()
+            })
+            .transpose()?;
+        if let Some(color) = color {
+            self.color_atomic_buffer = Some(color);
+        }
+        if let Some(clip) = clip {
+            self.clip_atomic_buffer = Some(clip);
+        }
+        if let Some(coverage) = coverage {
+            self.coverage_atomic_buffer = Some(coverage);
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn prepare_atomic_planes_with_control(
+        &mut self,
+        uses_color_plane: bool,
+        before_allocate: &mut impl FnMut(AtomicPlane) -> Result<(), RendererError>,
+    ) -> Result<(), RendererError> {
+        self.prepare_atomic_planes_core(uses_color_plane, before_allocate)
+    }
+
     pub(crate) fn color_atomic_buffer(
         &mut self,
     ) -> Result<&ProtocolObject<dyn MTLBuffer>, RendererError> {
@@ -304,7 +369,8 @@ impl RenderTargetMetal {
             .expect("atomic buffer initialized above"))
     }
 
-    pub(crate) fn atomic_plane_inventory(&self) -> [bool; 3] {
+    #[cfg(test)]
+    fn atomic_plane_inventory(&self) -> [bool; 3] {
         [
             self.color_atomic_buffer.is_some(),
             self.clip_atomic_buffer.is_some(),
@@ -499,6 +565,99 @@ mod tests {
             clip as *const ProtocolObject<dyn MTLBuffer>
         };
         assert!(std::ptr::eq(first_clip_pointer, second_clip_pointer));
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[test]
+    fn atomic_plane_transaction_preserves_prior_owners_on_each_allocation_failure() {
+        let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            return;
+        };
+        let capabilities = MetalCapabilitySelection {
+            supports_raster_ordering: false,
+            ..capabilities_for_test()
+        };
+        let make_target = || {
+            RenderTargetMetal::new(
+                device.clone(),
+                MTLPixelFormat::BGRA8Unorm,
+                2,
+                3,
+                capabilities,
+            )
+            .unwrap()
+        };
+        let identities = |target: &RenderTargetMetal| {
+            [
+                target
+                    .color_atomic_buffer
+                    .as_ref()
+                    .map(|buffer| Retained::as_ptr(buffer) as *const ()),
+                target
+                    .clip_atomic_buffer
+                    .as_ref()
+                    .map(|buffer| Retained::as_ptr(buffer) as *const ()),
+                target
+                    .coverage_atomic_buffer
+                    .as_ref()
+                    .map(|buffer| Retained::as_ptr(buffer) as *const ()),
+            ]
+        };
+
+        for (failed_plane, seed_plane, expected_attempts) in [
+            (
+                AtomicPlane::Color,
+                AtomicPlane::Clip,
+                vec![AtomicPlane::Color],
+            ),
+            (
+                AtomicPlane::Clip,
+                AtomicPlane::Coverage,
+                vec![AtomicPlane::Color, AtomicPlane::Clip],
+            ),
+            (
+                AtomicPlane::Coverage,
+                AtomicPlane::Color,
+                vec![AtomicPlane::Clip, AtomicPlane::Coverage],
+            ),
+        ] {
+            let mut target = make_target();
+            match seed_plane {
+                AtomicPlane::Color => _ = target.color_atomic_buffer().unwrap(),
+                AtomicPlane::Clip => _ = target.clip_atomic_buffer().unwrap(),
+                AtomicPlane::Coverage => _ = target.coverage_atomic_buffer().unwrap(),
+            }
+            let prior_inventory = target.atomic_plane_inventory();
+            let prior_identities = identities(&target);
+            let mut attempts = Vec::new();
+            let mut fail_once = |plane| {
+                attempts.push(plane);
+                if plane == failed_plane {
+                    Err(RendererError::NativeMetal(format!(
+                        "injected {plane:?} atomic-plane allocation failure"
+                    )))
+                } else {
+                    Ok(())
+                }
+            };
+            assert!(target
+                .prepare_atomic_planes_with_control(true, &mut fail_once)
+                .is_err());
+            assert_eq!(attempts, expected_attempts);
+            assert_eq!(target.atomic_plane_inventory(), prior_inventory);
+            assert_eq!(identities(&target), prior_identities);
+
+            let mut allow_all = |_| Ok(());
+            target
+                .prepare_atomic_planes_with_control(true, &mut allow_all)
+                .expect("retry complete atomic-plane owner set");
+            assert_eq!(target.atomic_plane_inventory(), [true, true, true]);
+            for (prior, current) in prior_identities.into_iter().zip(identities(&target)) {
+                if prior.is_some() {
+                    assert_eq!(current, prior, "retry replaced a published plane owner");
+                }
+            }
+        }
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]

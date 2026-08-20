@@ -12783,6 +12783,314 @@ mod tests {
     }
 
     #[test]
+    fn native_metal_atomic_advanced_stop_guards_are_distinct() {
+        fn closed_rect(size: f32) -> LogicalPath {
+            let mut raw_path = RawPath::new();
+            raw_path.move_to(0.0, 0.0);
+            raw_path.line_to(size, 0.0);
+            raw_path.line_to(size, size);
+            raw_path.line_to(0.0, size);
+            raw_path.close();
+            LogicalPath {
+                raw_path: Arc::new(raw_path),
+                fill_rule: FillRule::Clockwise,
+                valid: true,
+            }
+        }
+        fn assert_stop(
+            result: Result<Option<logical_frame::PreparedAtomicPathFlush>, &'static str>,
+            expected: &'static str,
+        ) {
+            match result {
+                Err(actual) => assert_eq!(actual, expected),
+                Ok(_) => panic!("advanced atomic stop guard did not fail closed: {expected}"),
+            }
+        }
+
+        let config = LogicalFrameConfig {
+            width: 640,
+            height: 640,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 16_384,
+            msaa_atlas_supports_clip_rect: false,
+        };
+        let midpoint_path = closed_rect(180.0);
+        let advanced_gradient = LogicalPaint {
+            blend_mode: BlendMode::Exclusion,
+            shader: Some(LogicalShader::Linear {
+                start: (0.0, 0.0),
+                end: (180.0, 180.0),
+                colors: vec![0xffff_ffff, 0xff00_0000],
+                stops: vec![0.0, 1.0],
+            }),
+            ..LogicalPaint::default()
+        };
+        assert_stop(
+            logical_frame::prepare_atomic_path_flush(
+                config,
+                &[logical_frame::AtomicPathFlushInput {
+                    path: &midpoint_path,
+                    paint: &advanced_gradient,
+                    state: DrawState::default(),
+                }],
+            ),
+            "atomic advanced-blend flush requires unclipped solid draws",
+        );
+
+        let advanced_solid = LogicalPaint {
+            blend_mode: BlendMode::Exclusion,
+            ..LogicalPaint::default()
+        };
+        let mut clip_raw = RawPath::new();
+        clip_raw.move_to(0.0, 0.0);
+        clip_raw.line_to(220.0, 20.0);
+        clip_raw.line_to(100.0, 220.0);
+        clip_raw.close();
+        let clip_path = LogicalPath {
+            raw_path: Arc::new(clip_raw),
+            fill_rule: FillRule::Clockwise,
+            valid: true,
+        };
+        let mut clipped_state = logical_frame::LogicalDrawState::default();
+        clipped_state.clip_path(config, &clip_path).unwrap();
+        let clipped_input = logical_frame::AtomicPathFlushInput {
+            path: &midpoint_path,
+            paint: &advanced_solid,
+            state: clipped_state.state,
+        };
+        assert_stop(
+            logical_frame::prepare_atomic_clipped_path_flush(
+                config,
+                &mut clipped_state,
+                clipped_input,
+            ),
+            "atomic advanced-blend flush requires unclipped solid draws",
+        );
+
+        let interior_path = closed_rect(640.0);
+        assert_stop(
+            logical_frame::prepare_atomic_path_flush(
+                config,
+                &[logical_frame::AtomicPathFlushInput {
+                    path: &interior_path,
+                    paint: &advanced_solid,
+                    state: DrawState::default(),
+                }],
+            ),
+            "atomic advanced-blend flush only supports midpoint geometry",
+        );
+    }
+
+    #[test]
+    fn native_metal_atomic_advanced_flush_matches_canonical_slots_once() {
+        fn assert_resources_equal(
+            actual: &logical_frame::PreparedTypedDrawResources,
+            expected: &logical_frame::PreparedTypedDrawResources,
+        ) {
+            assert_eq!(
+                bytemuck::bytes_of(&actual.path),
+                bytemuck::bytes_of(&expected.path)
+            );
+            assert_eq!(
+                bytemuck::bytes_of(&actual.paint),
+                bytemuck::bytes_of(&expected.paint)
+            );
+            assert_eq!(
+                bytemuck::bytes_of(&actual.paint_aux),
+                bytemuck::bytes_of(&expected.paint_aux)
+            );
+            assert_eq!(
+                bytemuck::cast_slice::<_, u8>(&actual.spans),
+                bytemuck::cast_slice::<_, u8>(&expected.spans)
+            );
+            assert_eq!(
+                bytemuck::cast_slice::<_, u8>(&actual.contours),
+                bytemuck::cast_slice::<_, u8>(&expected.contours)
+            );
+            assert_eq!(
+                bytemuck::cast_slice::<_, u8>(&actual.triangles),
+                bytemuck::cast_slice::<_, u8>(&expected.triangles)
+            );
+            assert_eq!(actual.contour_base, expected.contour_base);
+            assert_eq!(actual.base_instance, expected.base_instance);
+            assert_eq!(actual.instance_count, expected.instance_count);
+            assert_eq!(actual.uses_interior, expected.uses_interior);
+        }
+
+        let config = LogicalFrameConfig {
+            width: 200,
+            height: 200,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 16_384,
+            msaa_atlas_supports_clip_rect: false,
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(10.0, 10.0);
+        raw_path.line_to(190.0, 10.0);
+        raw_path.line_to(190.0, 190.0);
+        raw_path.line_to(10.0, 190.0);
+        raw_path.close();
+        let path = LogicalPath {
+            raw_path: Arc::new(raw_path),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let paints = [
+            (0xffff_ffff, BlendMode::SrcOver),
+            (0xff10_f040, BlendMode::Exclusion),
+            (0x70ee_905a, BlendMode::Saturation),
+            (0xb090_5aee, BlendMode::Luminosity),
+        ]
+        .map(|(color, blend_mode)| LogicalPaint {
+            color,
+            blend_mode,
+            ..LogicalPaint::default()
+        });
+        let states = [DrawState::default(); 4];
+        let inputs = (0..4)
+            .map(|index| logical_frame::AtomicPathFlushInput {
+                path: &path,
+                paint: &paints[index],
+                state: states[index],
+            })
+            .collect::<Vec<_>>();
+        let prepared = logical_frame::prepare_atomic_path_flush(config, &inputs)
+            .unwrap()
+            .unwrap();
+        assert!(prepared.uses_advanced_blend);
+        assert!(prepared.uses_hsl_blend_modes);
+        assert!(!prepared.uses_clipping);
+        assert_eq!(prepared.draw_group_starts, [0, 1, 2, 3]);
+        assert_eq!(
+            prepared
+                .paints
+                .iter()
+                .map(|paint| (paint.params >> 4) & 0xf)
+                .collect::<Vec<_>>(),
+            [0, 10, 13, 15]
+        );
+
+        let mut frame = logical_frame::LogicalFrame::new(config);
+        let mut scratch = draw::StrokePreparationScratch::default();
+        for index in 0..4 {
+            let admitted =
+                logical_frame::admit_path_draw(config, states[index], &path, &paints[index])
+                    .unwrap()
+                    .unwrap();
+            frame
+                .push_content_batch(Vec::new(), admitted.finish(0, &mut scratch).unwrap())
+                .unwrap();
+        }
+        let mut board =
+            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+        frame.finalize_for_production(&mut board).unwrap();
+        let store = logical_frame::LogicalResourceStore::default();
+        let canonical_prepared = store.prepare_for_production(&frame).unwrap();
+        let typed = canonical_prepared.typed_draws(&frame.draws);
+        let mut canonical_draws = Vec::new();
+        for index in 0..4 {
+            let canonical = typed.draw(index).unwrap();
+            assert_resources_equal(&prepared.canonical_draw_resources[index], canonical);
+            assert!(!canonical.uses_interior);
+            canonical_draws.push(canonical.clone());
+        }
+
+        // Independently assemble the canonical typed slots into the exact
+        // midpoint-only upload layout. This proves the advanced paint bytes do
+        // not bypass global contour IDs, patch relocation, or shelf padding.
+        let midpoint_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let mut expected_paths = Vec::new();
+        let mut expected_paints = Vec::new();
+        let mut expected_paint_aux = Vec::new();
+        let mut expected_spans = Vec::new();
+        append_tessellation_padding_span(&mut expected_spans, 0, midpoint_span);
+        let mut expected_contours = Vec::new();
+        let mut expected_triangles = Vec::new();
+        let mut local_contour_ids = Vec::new();
+        let mut next_base_instance = 1_u32;
+        for (index, mut canonical) in canonical_draws.into_iter().enumerate() {
+            let scheduled = prepared
+                .draws
+                .iter()
+                .find(|draw| draw.input_index == index)
+                .unwrap();
+            canonical.path.z_index = scheduled.draw_group;
+            expected_paths.push(canonical.path);
+            expected_paints.push(canonical.paint);
+            expected_paint_aux.push(canonical.paint_aux);
+
+            let mut spans = canonical.spans;
+            spans.retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+            let relocation = next_base_instance
+                .checked_sub(canonical.base_instance)
+                .and_then(|patches| patches.checked_mul(midpoint_span))
+                .unwrap();
+            let contour_offset = append_relocated_midpoint_contours_to_flush(
+                &spans,
+                &canonical.contours,
+                canonical.contour_base,
+                canonical.local_contour_ids_are_dense,
+                u32::try_from(index + 1).unwrap(),
+                relocation,
+                &mut expected_contours,
+                &mut local_contour_ids,
+            );
+            for span in &mut spans {
+                globalize_midpoint_span_contour_id(span, canonical.contour_base, contour_offset);
+            }
+            let mut base_instance = canonical.base_instance;
+            relocate_tessellation_logically(
+                &mut spans,
+                &mut base_instance,
+                &mut [],
+                next_base_instance,
+                midpoint_span,
+            );
+            assert_eq!(scheduled.base_instance, base_instance);
+            assert_eq!(scheduled.instance_count, canonical.instance_count);
+            expected_spans.append(&mut spans);
+            next_base_instance += canonical.instance_count;
+            expected_triangles.extend(canonical.triangles.into_iter().map(|mut triangle| {
+                triangle.weight_path_id =
+                    (triangle.weight_path_id & !0xffff) | i32::try_from(index + 1).unwrap();
+                triangle
+            }));
+        }
+        let geometry_end = next_base_instance * midpoint_span;
+        let outer_start = align_to(geometry_end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32);
+        append_tessellation_padding_span(&mut expected_spans, geometry_end, outer_start);
+        append_tessellation_padding_span(&mut expected_spans, outer_start, outer_start + 1);
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.paths),
+            bytemuck::cast_slice::<_, u8>(&expected_paths)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.paints),
+            bytemuck::cast_slice::<_, u8>(&expected_paints)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.paint_aux),
+            bytemuck::cast_slice::<_, u8>(&expected_paint_aux)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.spans),
+            bytemuck::cast_slice::<_, u8>(&expected_spans)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.contours),
+            bytemuck::cast_slice::<_, u8>(&expected_contours)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.triangles),
+            bytemuck::cast_slice::<_, u8>(&expected_triangles)
+        );
+        let report = canonical_prepared.into_report();
+        assert_eq!(report.production_typed_output_eligible_draws, 4);
+        assert_eq!(report.production_typed_output_consumed_draws, 4);
+        assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
     fn native_metal_nested_clip_matches_canonical_slots_and_relocated_planes() {
         fn assert_resources_equal(
             actual: &logical_frame::PreparedTypedDrawResources,

@@ -113,6 +113,9 @@ pub struct NativeMetalExecutionInventory {
     pub gradient_texture: bool,
     /// Fixed-function atomic SrcOver does not use the offscreen color plane.
     pub atomic_color_plane: bool,
+    pub advanced_blend_pipeline: bool,
+    pub hsl_blend_pipeline: bool,
+    pub fixed_function_color_output: bool,
     pub atomic_clip_plane: bool,
     pub atomic_coverage_plane: bool,
     pub render_pass_initialize_pipeline: bool,
@@ -237,6 +240,8 @@ impl NativeMetalFactory {
             atomic_memory_barrier_count: 0,
             atomic_render_pass_break_count: 0,
             atomic_uses_clipping: false,
+            atomic_uses_advanced_blend: false,
+            atomic_uses_hsl_blend_modes: false,
             unsupported: None,
         })
     }
@@ -371,6 +376,8 @@ pub struct NativeMetalFrame {
     atomic_memory_barrier_count: usize,
     atomic_render_pass_break_count: usize,
     atomic_uses_clipping: bool,
+    atomic_uses_advanced_blend: bool,
+    atomic_uses_hsl_blend_modes: bool,
     unsupported: Option<&'static str>,
 }
 
@@ -657,7 +664,7 @@ impl Renderer for NativeMetalFrame {
         if !path.valid
             || paint.style != RenderPaintStyle::Fill
             || paint.invalid_shader
-            || paint.blend_mode != BlendMode::SrcOver
+            || (self.mode != RenderMode::ClockwiseAtomic && paint.blend_mode != BlendMode::SrcOver)
             || self.state.opacity != 1.0
         {
             self.unsupported
@@ -672,11 +679,6 @@ impl Renderer for NativeMetalFrame {
             {
                 self.unsupported
                     .get_or_insert("native Metal atomic tracer supports one path draw");
-                return;
-            }
-            if paint.shader.is_none() && paint.color >> 24 != 0xff {
-                self.unsupported
-                    .get_or_insert("native Metal atomic tracer requires opaque solid color");
                 return;
             }
             if self.atomic_logical_state.state.clip_stack_height != 0
@@ -865,12 +867,16 @@ impl NativeMetalFrame {
             Ok(encoded) => encoded,
             Err(error) => return Err(error),
         };
-        let [atomic_color_plane, atomic_clip_plane, atomic_coverage_plane] =
-            self.target.borrow().atomic_plane_inventory();
         let atomic_pipelines = self
             .resource_lease
             .as_ref()
             .and_then(|lease| lease.atomic_path_pipelines.as_ref());
+        // Execution inventory is frame-local. A reusable target may retain a
+        // color owner allocated by an earlier advanced flush, but a later
+        // fixed-function flush does not bind or execute against that plane.
+        let atomic_color_plane = atomic_pipelines.is_some() && self.atomic_uses_advanced_blend;
+        let atomic_clip_plane = atomic_pipelines.is_some();
+        let atomic_coverage_plane = atomic_pipelines.is_some();
         let gradient_texture = self
             .resource_lease
             .as_ref()
@@ -890,6 +896,10 @@ impl NativeMetalFrame {
             color_ramp_pipeline,
             gradient_texture,
             atomic_color_plane,
+            advanced_blend_pipeline: self.atomic_uses_advanced_blend,
+            hsl_blend_pipeline: self.atomic_uses_hsl_blend_modes,
+            fixed_function_color_output: atomic_pipelines.is_some()
+                && !self.atomic_uses_advanced_blend,
             atomic_clip_plane,
             atomic_coverage_plane,
             render_pass_initialize_pipeline: atomic_pipelines.is_some(),
@@ -1036,6 +1046,8 @@ impl NativeMetalFrame {
                     pixel_format,
                     flush.uses_clipping,
                     uses_interior_geometry,
+                    flush.uses_advanced_blend,
+                    flush.uses_hsl_blend_modes,
                     upload_data.batch(&flush),
                 )?;
                 if self.collect_work_metrics {
@@ -1086,6 +1098,8 @@ impl NativeMetalFrame {
                 self.atomic_memory_barrier_count = barriers.memory;
                 self.atomic_render_pass_break_count = barriers.render_pass_breaks;
                 self.atomic_uses_clipping = flush.uses_clipping;
+                self.atomic_uses_advanced_blend = flush.uses_advanced_blend;
+                self.atomic_uses_hsl_blend_modes = flush.uses_hsl_blend_modes;
                 if self.collect_work_metrics {
                     let gradient_passes = u64::from(flush.gradient_batch.is_some());
                     self.backend_work.render_passes = 1 + atomic_render_passes + gradient_passes;
@@ -1406,6 +1420,7 @@ fn encode_atomic_tessellation_pass(
     Ok(())
 }
 
+const ATOMIC_COLOR_BUFFER_INDEX: usize = 16;
 const ATOMIC_CLIP_BUFFER_INDEX: usize = 17;
 const ATOMIC_COVERAGE_BUFFER_INDEX: usize = 19;
 
@@ -1437,6 +1452,7 @@ fn make_atomic_main_encoder(
     width: u32,
     height: u32,
     lease: &context::PreparedResourceLease,
+    uses_color_plane: bool,
 ) -> Result<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>, RendererError> {
     let encoder = command_buffer
         .renderCommandEncoderWithDescriptor(pass)
@@ -1457,11 +1473,11 @@ fn make_atomic_main_encoder(
     bind_fragment_buffer(&encoder, &lease.paints, 6);
     bind_fragment_buffer(&encoder, &lease.paint_aux, 7);
     bind_vertex_buffer(&encoder, &lease.contours, 8);
-    // SAFETY: 7, 8, 9, 11, 17, and 19 are generated Metal binding indices for
-    // tessellation, gradient ramp, Gaussian LUT, linear-clamp sampler, clip
-    // atomics, and coverage atomics. Every object/buffer is retained by the
-    // context, resource lease, or render target until command-buffer
-    // completion.
+    // SAFETY: 7, 8, 9, 11, 16, 17, and 19 are generated Metal binding indices
+    // for tessellation, gradient ramp, Gaussian LUT, linear-clamp sampler,
+    // color atomics, clip atomics, and coverage atomics. Every object/buffer is
+    // retained by the context, resource lease, or render target until
+    // command-buffer completion.
     unsafe {
         encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
         if let Some(gradient) = lease.gradient.as_deref() {
@@ -1473,6 +1489,13 @@ fn make_atomic_main_encoder(
             Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
             11,
         );
+        if uses_color_plane {
+            encoder.setFragmentBuffer_offset_atIndex(
+                Some(target.color_atomic_buffer()?),
+                0,
+                ATOMIC_COLOR_BUFFER_INDEX,
+            );
+        }
         encoder.setFragmentBuffer_offset_atIndex(
             Some(target.clip_atomic_buffer()?),
             0,
@@ -1495,6 +1518,7 @@ fn apply_atomic_barrier(
     width: u32,
     height: u32,
     lease: &context::PreparedResourceLease,
+    uses_color_plane: bool,
     encoder: Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>,
     render_passes: &mut u64,
 ) -> Result<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>, RendererError> {
@@ -1515,7 +1539,16 @@ fn apply_atomic_barrier(
             let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
             attachment.setLoadAction(MTLLoadAction::Load);
             *render_passes = render_passes.saturating_add(1);
-            make_atomic_main_encoder(context, command_buffer, pass, target, width, height, lease)
+            make_atomic_main_encoder(
+                context,
+                command_buffer,
+                pass,
+                target,
+                width,
+                height,
+                lease,
+                uses_color_plane,
+            )
         }
     }
 }
@@ -1530,6 +1563,7 @@ fn encode_atomic_main_pass(
     flush: &PreparedAtomicPathFlush,
     lease: &context::PreparedResourceLease,
 ) -> Result<u64, RendererError> {
+    target.prepare_atomic_planes(flush.uses_advanced_blend)?;
     let pipelines = lease
         .atomic_path_pipelines
         .as_ref()
@@ -1549,8 +1583,16 @@ fn encode_atomic_main_pass(
     attachment.setClearColor(clear_color(clear));
 
     let mut render_passes = 1;
-    let mut encoder =
-        make_atomic_main_encoder(context, command_buffer, &pass, target, width, height, lease)?;
+    let mut encoder = make_atomic_main_encoder(
+        context,
+        command_buffer,
+        &pass,
+        target,
+        width,
+        height,
+        lease,
+        flush.uses_advanced_blend,
+    )?;
     encoder.setRenderPipelineState(&pipelines.initialize);
     // SAFETY: the generated initialize shader consumes the four implicit
     // triangle-strip vertices and requires no caller-provided vertex buffer.
@@ -1565,6 +1607,7 @@ fn encode_atomic_main_pass(
         width,
         height,
         lease,
+        flush.uses_advanced_blend,
         encoder,
         &mut render_passes,
     )?;
@@ -1580,6 +1623,7 @@ fn encode_atomic_main_pass(
                 width,
                 height,
                 lease,
+                flush.uses_advanced_blend,
                 encoder,
                 &mut render_passes,
             )?;
@@ -1651,6 +1695,7 @@ fn encode_atomic_main_pass(
         width,
         height,
         lease,
+        flush.uses_advanced_blend,
         encoder,
         &mut render_passes,
     )?;

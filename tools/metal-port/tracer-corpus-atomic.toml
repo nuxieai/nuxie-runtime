@@ -10,6 +10,17 @@ max_channel_delta = 2
 max_different_pixels = 32
 
 [[entry]]
+id = "native-metal-gm-overfill-blendmodes-generic-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/gm/overfill_blendmodes.rive-stream"
+reference = "fixtures/renderer/reference/metal/gm/overfill_blendmodes-clockwise-atomic.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 32
+
+[[entry]]
 id = "native-metal-first-light-gradient-cubic-generic-atomic"
 kind = "gm-stream"
 stream = "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream"

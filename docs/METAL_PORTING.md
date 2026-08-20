@@ -690,10 +690,40 @@ test, and product-root path all require the same three-draw/four-group/five-
 barrier inventory. The same-runner corpus preserves the checked-in 2-LSB and
 32-pixel budget; the measured Rust and pinned C++ Metal frames are byte-exact.
 
+The sixth slice replays `gm/overfill_blendmodes` as one flush of four
+overlapping solid midpoint fills. Authored SrcOver, Exclusion, Saturation, and
+Luminosity map to PLS blend IDs `[0, 10, 13, 15]`; the latter three make the
+entire flush use advanced blending and the HSL pair adds the HSL feature. This
+disables fixed-function color output for every batch, transactionally realizes
+the color, clip, and coverage atomic planes before encoding, and binds the
+color plane at generated fragment-buffer slot 16. The initialize job uses
+features `ENABLE_ADVANCED_BLEND | ENABLE_DITHER` and
+`STORE_COLOR_CLEAR`; midpoint and resolve add `ENABLE_HSL_BLEND_MODES`, while
+resolve also uses `COALESCED_RESOLVE_AND_TRANSFER`. Pipeline families are
+cached by fixed/advanced and HSL specialization, so this advanced-only frame
+does not eagerly compile an unused fixed-function family.
+
+Pinned fixed-function selection is `render_context.cpp:1067-1083`, disjoint
+grouping and PLS blend-key conversion are `1680-1808`, HSL/advanced feature
+selection is `3957-4010`, and the initial, transition, and pre-resolve barrier
+policy is `1953-1965` and `2223-2241`. The authoritative feature masks and
+initialize/resolve flags are `gpu.hpp:780-925`; Metal binds the three atomic
+planes at `render_context_metal_impl.mm:1298-1385`, filters whole-flush
+features and selects clear/resolve flags at `1759-1812`, then realizes barriers
+and draws at `1857-1925` and `1989-1997`. The exact inventory is four singleton
+draw groups and five semantic barriers, two render passes, seven GPU calls,
+438 submitted instances, six uploads totaling 9,624 bytes, 128 tessellation
+spans, and 308 path patches. The clear `0x20202020` occupies PLS as premultiplied
+RGBA8 `[4, 4, 4, 32]`; no extra destination-blend barrier is introduced. The
+public replay and independent canonical test prove typed slots, final relocated
+uploads, and exactly-once consumption. The sixth same-runner row retains its
+checked-in 2-LSB/32-pixel contract; the measured Apple M5 Max Rust and pinned
+C++ Metal frames are byte-exact.
+
 This is not general atomic-flush parity. Clip rectangles, clip-stack mutation
 after content, gradients in clipped flushes, more than one gradient in a flush,
-radial or complex gradients,
-feather atlas, images, strokes, advanced blends,
+radial or complex gradients, feather atlas, images, strokes, advanced blends
+combined with gradients or clipping, advanced outer-curve/interior geometry,
 multiple logical flushes, the general scheduler, MSAA, fallback, and
 simulator/old-hardware matrices remain deferred. Encountering one of those
 families is a stop condition, not grounds to widen this slice or its tolerance.

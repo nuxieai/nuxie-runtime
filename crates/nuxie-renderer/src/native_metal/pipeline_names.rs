@@ -28,6 +28,9 @@ pub(crate) const FEATHER_ATLAS_BLIT: u32 = 1 << 9;
 /// Upstream `ShaderMiscFlags::clockwiseFill`.
 pub(crate) const CLOCKWISE_FILL: u32 = 1 << 1;
 
+/// Upstream `ShaderMiscFlags::fixedFunctionColorOutput`.
+pub(crate) const FIXED_FUNCTION_COLOR_OUTPUT: u32 = 1 << 0;
+
 /// Return the fully qualified name of a precompiled Metal draw function.
 ///
 /// Upstream uses `RIVE_UNREACHABLE` for draw types that do not have a

@@ -1,5 +1,5 @@
 #[cfg(any(target_os = "ios", target_os = "macos"))]
-use nuxie_render_api::{Factory, FillRule, RawPath, Renderer};
+use nuxie_render_api::{BlendMode, Factory, FillRule, RawPath, Renderer};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 use nuxie_renderer::{NativeMetalExecutionInventory, NativeMetalFactory, RenderMode};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -75,6 +75,9 @@ fn main() {
                 color_ramp_pipeline: false,
                 gradient_texture: false,
                 atomic_color_plane: false,
+                advanced_blend_pipeline: false,
+                hsl_blend_pipeline: false,
+                fixed_function_color_output: true,
                 atomic_clip_plane: true,
                 atomic_coverage_plane: true,
                 render_pass_initialize_pipeline: true,
@@ -128,6 +131,9 @@ fn main() {
                 color_ramp_pipeline: true,
                 gradient_texture: true,
                 atomic_color_plane: false,
+                advanced_blend_pipeline: false,
+                hsl_blend_pipeline: false,
+                fixed_function_color_output: true,
                 atomic_clip_plane: true,
                 atomic_coverage_plane: true,
                 render_pass_initialize_pipeline: true,
@@ -231,6 +237,48 @@ fn main() {
                 .interior_triangulation_pipeline
         );
         assert!(!mixed_output.execution_inventory.atomic_color_plane);
+
+        // Root the non-fixed-function generic-atomic branch with both an
+        // advanced RGB blend and HSL blends, including translucent paint.
+        let advanced_specs = [
+            (0xffff_ffff, BlendMode::SrcOver),
+            (0xff10_f040, BlendMode::Exclusion),
+            (0x70ee_905a, BlendMode::Saturation),
+            (0xb090_5aee, BlendMode::Luminosity),
+        ];
+        let mut advanced_paints = Vec::new();
+        for (color, blend_mode) in advanced_specs {
+            let mut paint = atomic_factory.make_render_paint();
+            paint.color(color);
+            paint.blend_mode(blend_mode);
+            advanced_paints.push(paint);
+        }
+        let mut advanced_frame = atomic_factory
+            .begin_frame(0x2020_2020)
+            .expect("acquire forced-atomic advanced/HSL command buffer");
+        for paint in &advanced_paints {
+            advanced_frame.draw_path(mixed_background.as_ref(), paint.as_ref());
+        }
+        let advanced_output = advanced_frame
+            .finish_for_benchmark()
+            .expect("finish forced-atomic advanced/HSL flush");
+        assert!(advanced_output.execution_inventory.atomic_color_plane);
+        assert!(advanced_output.execution_inventory.advanced_blend_pipeline);
+        assert!(advanced_output.execution_inventory.hsl_blend_pipeline);
+        assert!(
+            !advanced_output
+                .execution_inventory
+                .fixed_function_color_output
+        );
+        assert_eq!(advanced_output.execution_inventory.atomic_draws, 4);
+        assert_eq!(advanced_output.execution_inventory.atomic_draw_groups, 4);
+        assert_eq!(advanced_output.execution_inventory.atomic_barriers, 5);
+        assert!(!advanced_output.execution_inventory.outer_curve_pipeline);
+        assert!(
+            !advanced_output
+                .execution_inventory
+                .interior_triangulation_pipeline
+        );
 
         // Root flush-wide generic-atomic clipping plus both physical geometry
         // families. This is the checked-in nested-clip tracer shape: the

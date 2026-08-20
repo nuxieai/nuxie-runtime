@@ -214,6 +214,9 @@ fn native_metal_forced_atomic_triangle_matches_pinned_cpp_metal_oracle() {
             color_ramp_pipeline: false,
             gradient_texture: false,
             atomic_color_plane: false,
+            advanced_blend_pipeline: false,
+            hsl_blend_pipeline: false,
+            fixed_function_color_output: true,
             atomic_clip_plane: true,
             atomic_coverage_plane: true,
             render_pass_initialize_pipeline: true,
@@ -289,6 +292,9 @@ fn native_metal_forced_atomic_gradient_cubic_matches_pinned_cpp_metal_oracle() {
             color_ramp_pipeline: true,
             gradient_texture: true,
             atomic_color_plane: false,
+            advanced_blend_pipeline: false,
+            hsl_blend_pipeline: false,
+            fixed_function_color_output: true,
             atomic_clip_plane: true,
             atomic_coverage_plane: true,
             render_pass_initialize_pipeline: true,
@@ -361,6 +367,9 @@ fn native_metal_forced_atomic_mixed_gradient_flush_matches_pinned_cpp_metal_orac
             color_ramp_pipeline: true,
             gradient_texture: true,
             atomic_color_plane: false,
+            advanced_blend_pipeline: false,
+            hsl_blend_pipeline: false,
+            fixed_function_color_output: true,
             atomic_clip_plane: true,
             atomic_coverage_plane: true,
             render_pass_initialize_pipeline: true,
@@ -434,6 +443,9 @@ fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() 
             color_ramp_pipeline: false,
             gradient_texture: false,
             atomic_color_plane: false,
+            advanced_blend_pipeline: false,
+            hsl_blend_pipeline: false,
+            fixed_function_color_output: true,
             atomic_clip_plane: true,
             atomic_coverage_plane: true,
             render_pass_initialize_pipeline: true,
@@ -483,6 +495,172 @@ fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() 
         [0xff; 4],
         "forced generic-atomic Rust Metal overfill versus pinned C++ Metal",
     );
+}
+
+#[test]
+fn native_metal_forced_atomic_overfill_blendmodes_matches_pinned_cpp_metal_oracle() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(fixture_root.join("streams/gm/overfill_blendmodes.rive-stream"))
+            .expect("read overfill blendmodes stream"),
+    )
+    .expect("parse overfill blendmodes stream");
+    let (width, height) = stream.frame_size.expect("overfill blendmodes frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire forced-atomic native Metal blendmodes frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay blendmodes through the public Factory/Renderer seam");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish forced-atomic native Metal blendmodes");
+    assert_eq!(
+        output.execution_inventory,
+        NativeMetalExecutionInventory {
+            mode: RenderMode::ClockwiseAtomic,
+            color_ramp_pipeline: false,
+            gradient_texture: false,
+            atomic_color_plane: true,
+            advanced_blend_pipeline: true,
+            hsl_blend_pipeline: true,
+            fixed_function_color_output: false,
+            atomic_clip_plane: true,
+            atomic_coverage_plane: true,
+            render_pass_initialize_pipeline: true,
+            midpoint_fan_pipeline: true,
+            render_pass_resolve_pipeline: true,
+            clipped_path_pipeline_set: false,
+            outer_curve_pipeline: false,
+            interior_triangulation_pipeline: false,
+            atomic_draws: 4,
+            atomic_draw_groups: 4,
+            atomic_barriers: 5,
+            atomic_memory_barriers: 0,
+            atomic_render_pass_breaks: 0,
+        },
+        "advanced/HSL blend must keep one packed color plane across four overlap groups"
+    );
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 2,
+            buffer_upload_calls: 6,
+            buffer_upload_bytes: 9_624,
+            queue_submissions: 1,
+            gpu_draw_calls: 7,
+            gpu_draw_instances: 438,
+            tessellation_spans: 128,
+            path_patches: 308,
+            ..BackendWorkMetrics::default()
+        },
+        "advanced blending changes color-plane execution, not geometry work"
+    );
+
+    let cpp_metal =
+        read_png(fixture_root.join("reference/metal/gm/overfill_blendmodes-clockwise-atomic.png"));
+    assert_rgba8_with_tolerance(
+        &output.pixels,
+        &cpp_metal,
+        2,
+        Some(32),
+        false,
+        "forced generic-atomic Rust Metal advanced blend versus pinned C++ Metal",
+    );
+    assert_clear_color_occupancy(
+        &output.pixels,
+        &cpp_metal,
+        [4, 4, 4, 32],
+        "forced generic-atomic Rust Metal advanced blend versus pinned C++ Metal",
+    );
+}
+
+#[test]
+fn native_metal_atomic_inventory_reports_current_flush_after_advanced_then_fixed() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let advanced = RenderStream::parse(
+        &std::fs::read_to_string(fixture_root.join("streams/gm/overfill_blendmodes.rive-stream"))
+            .expect("read advanced blend stream"),
+    )
+    .expect("parse advanced blend stream");
+    let fixed = RenderStream::parse(
+        &std::fs::read_to_string(fixture_root.join("streams/gm/overfill_opaque.rive-stream"))
+            .expect("read fixed blend stream"),
+    )
+    .expect("parse fixed blend stream");
+    let (width, height) = advanced.frame_size.expect("advanced frame size");
+    assert_eq!(fixed.frame_size, Some((width, height)));
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("create reusable generic-atomic factory");
+
+    let mut advanced_frame = factory
+        .begin_frame(advanced.clear_color.unwrap_or(0))
+        .expect("begin advanced frame");
+    advanced
+        .replay_frame(0, &mut factory, &mut advanced_frame)
+        .expect("replay advanced frame");
+    let advanced_output = advanced_frame
+        .finish_for_benchmark()
+        .expect("finish advanced frame");
+    assert!(advanced_output.execution_inventory.atomic_color_plane);
+    assert!(advanced_output.execution_inventory.advanced_blend_pipeline);
+    assert!(
+        !advanced_output
+            .execution_inventory
+            .fixed_function_color_output
+    );
+
+    let mut fixed_frame = factory
+        .begin_frame(fixed.clear_color.unwrap_or(0))
+        .expect("begin fixed frame on retained target");
+    fixed
+        .replay_frame(0, &mut factory, &mut fixed_frame)
+        .expect("replay fixed frame on retained target");
+    let fixed_output = fixed_frame
+        .finish_for_benchmark()
+        .expect("finish fixed frame on retained target");
+    assert!(fixed_output.execution_inventory.fixed_function_color_output);
+    assert!(!fixed_output.execution_inventory.advanced_blend_pipeline);
+    assert!(!fixed_output.execution_inventory.hsl_blend_pipeline);
+    assert!(
+        !fixed_output.execution_inventory.atomic_color_plane,
+        "inventory describes this fixed flush, not the color owner retained from the prior frame"
+    );
+    assert!(fixed_output.execution_inventory.atomic_clip_plane);
+    assert!(fixed_output.execution_inventory.atomic_coverage_plane);
+}
+
+#[test]
+fn native_metal_forced_atomic_rejects_advanced_blend_with_gradient_publicly() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream_text =
+        std::fs::read_to_string(fixture_root.join("streams/gm/overfill_blendmodes.rive-stream"))
+            .expect("read advanced blend stream");
+    let stream_text = stream_text
+        .replace(
+            "clearColor value=0x20202020\n",
+            "clearColor value=0x20202020\nmakeLinearGradient id=1 start=(0,0) end=(200,200) stops=[{color=0xffffffff,stop=0},{color=0xff000000,stop=1}]\n",
+        )
+        .replace("blendMode=23,shader=0}", "blendMode=23,shader=1}");
+    let stream = RenderStream::parse(&stream_text).expect("parse advanced-gradient stream");
+    let (width, height) = stream.frame_size.expect("advanced-gradient frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force generic-atomic mode");
+    let mut frame = factory
+        .begin_frame(stream.clear_color.unwrap_or(0))
+        .expect("begin advanced-gradient frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay advanced-gradient stream through public seam");
+    assert!(matches!(
+        frame.finish(),
+        Err(RendererError::Unsupported(
+            "atomic advanced-blend flush requires unclipped solid draws"
+        ))
+    ));
 }
 
 #[test]

@@ -66,6 +66,8 @@ impl<'a> NativeMetalDrawableFrame<'a> {
             atomic_memory_barrier_count: 0,
             atomic_render_pass_break_count: 0,
             atomic_uses_clipping: false,
+            atomic_uses_advanced_blend: false,
+            atomic_uses_hsl_blend_modes: false,
             unsupported: None,
         };
         Ok(Self { frame, drawable })

@@ -30,8 +30,9 @@ use super::upload_buffer_ring::UploadBufferRing;
 use super::{make_solid_pipeline, new_library_from_metallib_bytes};
 use crate::gpu::{self, DrawType};
 use crate::native_metal::shader_compile_plan::{
-    BackgroundCompileJob, InterlockMode, MetalFeatures, ENABLE_CLIPPING, ENABLE_DITHER,
-    FIXED_FUNCTION_COLOR_OUTPUT,
+    BackgroundCompileJob, InterlockMode, MetalFeatures, COALESCED_RESOLVE_AND_TRANSFER,
+    ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_DITHER, ENABLE_HSL_BLEND_MODES,
+    FIXED_FUNCTION_COLOR_OUTPUT, STORE_COLOR_CLEAR,
 };
 use crate::RendererError;
 use objc2::rc::Retained;
@@ -75,8 +76,14 @@ struct ResourceGeneration {
     atomic_path_pipelines: Option<AtomicPathPipelines>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct AtomicPathPipelines {
+    fixed: Option<AtomicFixedPathPipelines>,
+    advanced: [Option<AtomicAdvancedPathPipelines>; 2],
+}
+
+#[derive(Clone)]
+struct AtomicFixedPathPipelines {
     initialize: DrawPipeline,
     midpoint: DrawPipeline,
     resolve: DrawPipeline,
@@ -97,6 +104,22 @@ struct AtomicClippedPathPipelines {
     outer_curve: DrawPipeline,
     interior: DrawPipeline,
     resolve: DrawPipeline,
+}
+
+#[derive(Clone)]
+struct AtomicAdvancedPathPipelines {
+    initialize: DrawPipeline,
+    midpoint: DrawPipeline,
+    resolve: DrawPipeline,
+}
+
+#[derive(Clone, Copy)]
+struct AtomicPathRequest {
+    pixel_format: MTLPixelFormat,
+    uses_clipping: bool,
+    uses_interior_geometry: bool,
+    uses_advanced_blend: bool,
+    uses_hsl_blend_modes: bool,
 }
 
 pub(crate) struct AtomicPathPipelineStates {
@@ -412,6 +435,8 @@ impl NativeMetalContext {
         pixel_format: MTLPixelFormat,
         uses_clipping: bool,
         uses_interior_geometry: bool,
+        uses_advanced_blend: bool,
+        uses_hsl_blend_modes: bool,
         uploads: UploadBatch<'_>,
     ) -> Result<PreparedResourceLease, RendererError> {
         let mut allow_all = |_| Ok(());
@@ -422,7 +447,13 @@ impl NativeMetalContext {
             None,
             uploads,
             specialized_atlas_blit_job(),
-            Some((pixel_format, uses_clipping, uses_interior_geometry)),
+            Some(AtomicPathRequest {
+                pixel_format,
+                uses_clipping,
+                uses_interior_geometry,
+                uses_advanced_blend,
+                uses_hsl_blend_modes,
+            }),
             &mut allow_all,
         )
     }
@@ -457,7 +488,7 @@ impl NativeMetalContext {
         feather_atlas_is_stroke: Option<bool>,
         uploads: UploadBatch<'_>,
         specialized_job: BackgroundCompileJob,
-        atomic_path: Option<(MTLPixelFormat, bool, bool)>,
+        atomic_path: Option<AtomicPathRequest>,
         before: &mut impl FnMut(ResourcePreparationStage) -> Result<(), RendererError>,
     ) -> Result<PreparedResourceLease, RendererError> {
         let ownership = self.upload_coordinator.prepare_to_flush();
@@ -475,45 +506,55 @@ impl NativeMetalContext {
             TESSELLATION_TEXTURE_WIDTH,
             tessellation_height,
         )?;
-        if atomic_path.is_some() && generation.atomic_path_pipelines.is_none() {
-            generation.atomic_path_pipelines = Some(compile_atomic_path_pipelines(
-                &self.device,
-                self.capabilities,
-                self.platform,
-            )?);
-        }
-        if atomic_path.is_some_and(|(_, uses_clipping, uses_interior_geometry)| {
-            uses_interior_geometry && !uses_clipping
-        }) && generation
-            .atomic_path_pipelines
-            .as_ref()
-            .is_some_and(|pipelines| pipelines.interior_geometry.is_none())
-        {
-            generation
+        if let Some(request) = atomic_path {
+            let pipeline_families = generation
                 .atomic_path_pipelines
-                .as_mut()
-                .expect("atomic path pipeline set created above")
-                .interior_geometry = Some(compile_atomic_interior_geometry_pipelines(
-                &self.device,
-                self.capabilities,
-                self.platform,
-            )?);
-        }
-        if atomic_path.is_some_and(|(_, uses_clipping, _)| uses_clipping)
-            && generation
-                .atomic_path_pipelines
-                .as_ref()
-                .is_some_and(|pipelines| pipelines.clipped.is_none())
-        {
-            generation
-                .atomic_path_pipelines
-                .as_mut()
-                .expect("atomic path pipeline set created above")
-                .clipped = Some(compile_atomic_clipped_path_pipelines(
-                &self.device,
-                self.capabilities,
-                self.platform,
-            )?);
+                .get_or_insert_with(AtomicPathPipelines::default);
+            if request.uses_advanced_blend {
+                if request.uses_interior_geometry {
+                    return Err(RendererError::Unsupported(
+                        "atomic advanced-blend interior geometry is outside the native slice",
+                    ));
+                }
+                let key = atomic_advanced_pipeline_key(request.uses_hsl_blend_modes);
+                if pipeline_families.advanced[key].is_none() {
+                    pipeline_families.advanced[key] = Some(compile_atomic_advanced_path_pipelines(
+                        &self.device,
+                        self.capabilities,
+                        self.platform,
+                        request.uses_hsl_blend_modes,
+                    )?);
+                }
+            } else {
+                if pipeline_families.fixed.is_none() {
+                    pipeline_families.fixed = Some(compile_atomic_path_pipelines(
+                        &self.device,
+                        self.capabilities,
+                        self.platform,
+                    )?);
+                }
+                let fixed = pipeline_families
+                    .fixed
+                    .as_mut()
+                    .expect("fixed atomic family created above");
+                if request.uses_interior_geometry
+                    && !request.uses_clipping
+                    && fixed.interior_geometry.is_none()
+                {
+                    fixed.interior_geometry = Some(compile_atomic_interior_geometry_pipelines(
+                        &self.device,
+                        self.capabilities,
+                        self.platform,
+                    )?);
+                }
+                if request.uses_clipping && fixed.clipped.is_none() {
+                    fixed.clipped = Some(compile_atomic_clipped_path_pipelines(
+                        &self.device,
+                        self.capabilities,
+                        self.platform,
+                    )?);
+                }
+            }
         }
         if feather_atlas_extent.is_some() != feather_atlas_is_stroke.is_some() {
             return Err(RendererError::NativeMetal(
@@ -574,52 +615,92 @@ impl NativeMetalContext {
             None
         };
         let atomic_path_pipelines = atomic_path
-            .map(|(pixel_format, uses_clipping, uses_interior_geometry)| {
+            .map(|request| {
                 let pipelines = generation.atomic_path_pipelines.as_ref().ok_or_else(|| {
                     RendererError::NativeMetal("atomic path pipeline set is absent".to_owned())
                 })?;
-                let clipped = uses_clipping
+                let advanced_key = atomic_advanced_pipeline_key(request.uses_hsl_blend_modes);
+                let advanced = request
+                    .uses_advanced_blend
                     .then(|| {
-                        pipelines.clipped.as_ref().ok_or_else(|| {
+                        pipelines.advanced[advanced_key].as_ref().ok_or_else(|| {
                             RendererError::NativeMetal(
-                                "atomic clipped path pipeline set is absent".to_owned(),
+                                "atomic advanced-blend pipeline set is absent".to_owned(),
                             )
                         })
                     })
                     .transpose()?;
-                let interior_geometry = (uses_interior_geometry && !uses_clipping)
+                let fixed = (!request.uses_advanced_blend)
                     .then(|| {
-                        pipelines.interior_geometry.as_ref().ok_or_else(|| {
+                        pipelines.fixed.as_ref().ok_or_else(|| {
                             RendererError::NativeMetal(
-                                "atomic interior-geometry pipeline set is absent".to_owned(),
+                                "atomic fixed-function pipeline set is absent".to_owned(),
                             )
                         })
+                    })
+                    .transpose()?;
+                let clipped = request
+                    .uses_clipping
+                    .then(|| {
+                        fixed
+                            .expect("clipping is excluded from the advanced slice")
+                            .clipped
+                            .as_ref()
+                            .ok_or_else(|| {
+                                RendererError::NativeMetal(
+                                    "atomic clipped path pipeline set is absent".to_owned(),
+                                )
+                            })
+                    })
+                    .transpose()?;
+                let interior_geometry = (request.uses_interior_geometry
+                    && !request.uses_clipping
+                    && !request.uses_advanced_blend)
+                    .then(|| {
+                        fixed
+                            .expect("fixed family selected above")
+                            .interior_geometry
+                            .as_ref()
+                            .ok_or_else(|| {
+                                RendererError::NativeMetal(
+                                    "atomic interior-geometry pipeline set is absent".to_owned(),
+                                )
+                            })
                     })
                     .transpose()?;
                 Ok(AtomicPathPipelineStates {
-                    initialize: clipped
-                        .map_or(&pipelines.initialize, |pipelines| &pipelines.initialize)
-                        .retained_pipeline_state(pixel_format)
+                    initialize: advanced
+                        .map(|pipelines| &pipelines.initialize)
+                        .or_else(|| clipped.map(|pipelines| &pipelines.initialize))
+                        .or_else(|| fixed.map(|pipelines| &pipelines.initialize))
+                        .expect("requested atomic initialize pipeline")
+                        .retained_pipeline_state(request.pixel_format)
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
-                    midpoint: clipped
-                        .map_or(&pipelines.midpoint, |pipelines| &pipelines.midpoint)
-                        .retained_pipeline_state(pixel_format)
+                    midpoint: advanced
+                        .map(|pipelines| &pipelines.midpoint)
+                        .or_else(|| clipped.map(|pipelines| &pipelines.midpoint))
+                        .or_else(|| fixed.map(|pipelines| &pipelines.midpoint))
+                        .expect("requested atomic midpoint pipeline")
+                        .retained_pipeline_state(request.pixel_format)
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
                     outer_curve: clipped
                         .map(|pipelines| &pipelines.outer_curve)
                         .or_else(|| interior_geometry.map(|pipelines| &pipelines.outer_curve))
-                        .map(|pipeline| pipeline.retained_pipeline_state(pixel_format))
+                        .map(|pipeline| pipeline.retained_pipeline_state(request.pixel_format))
                         .transpose()
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
                     interior: clipped
                         .map(|pipelines| &pipelines.interior)
                         .or_else(|| interior_geometry.map(|pipelines| &pipelines.interior))
-                        .map(|pipeline| pipeline.retained_pipeline_state(pixel_format))
+                        .map(|pipeline| pipeline.retained_pipeline_state(request.pixel_format))
                         .transpose()
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
-                    resolve: clipped
-                        .map_or(&pipelines.resolve, |pipelines| &pipelines.resolve)
-                        .retained_pipeline_state(pixel_format)
+                    resolve: advanced
+                        .map(|pipelines| &pipelines.resolve)
+                        .or_else(|| clipped.map(|pipelines| &pipelines.resolve))
+                        .or_else(|| fixed.map(|pipelines| &pipelines.resolve))
+                        .expect("requested atomic resolve pipeline")
+                        .retained_pipeline_state(request.pixel_format)
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
                 })
             })
@@ -891,9 +972,9 @@ fn compile_atomic_path_pipelines(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
     capabilities: MetalCapabilitySelection,
     platform: ApplePlatform,
-) -> Result<AtomicPathPipelines, RendererError> {
+) -> Result<AtomicFixedPathPipelines, RendererError> {
     let [initialize, midpoint, resolve] = atomic_path_jobs();
-    Ok(AtomicPathPipelines {
+    Ok(AtomicFixedPathPipelines {
         initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
         midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
         resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
@@ -988,6 +1069,54 @@ fn compile_atomic_clipped_path_pipelines(
             outer_curve,
         )?,
         interior: compile_specialized_draw_pipeline(device, capabilities, platform, interior)?,
+        resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
+    })
+}
+
+const fn atomic_advanced_pipeline_key(uses_hsl_blend_modes: bool) -> usize {
+    uses_hsl_blend_modes as usize
+}
+
+fn atomic_advanced_path_jobs(uses_hsl_blend_modes: bool) -> [BackgroundCompileJob; 3] {
+    let path_features = ENABLE_DITHER
+        | ENABLE_ADVANCED_BLEND
+        | if uses_hsl_blend_modes {
+            ENABLE_HSL_BLEND_MODES
+        } else {
+            0
+        };
+    [
+        BackgroundCompileJob::new(
+            DrawType::RenderPassInitialize,
+            ENABLE_DITHER | ENABLE_ADVANCED_BLEND,
+            InterlockMode::Atomics,
+            STORE_COLOR_CLEAR,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::MidpointFanPatches,
+            path_features,
+            InterlockMode::Atomics,
+            0,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::RenderPassResolve,
+            path_features,
+            InterlockMode::Atomics,
+            COALESCED_RESOLVE_AND_TRANSFER,
+        ),
+    ]
+}
+
+fn compile_atomic_advanced_path_pipelines(
+    device: &Retained<ProtocolObject<dyn MTLDevice>>,
+    capabilities: MetalCapabilitySelection,
+    platform: ApplePlatform,
+    uses_hsl_blend_modes: bool,
+) -> Result<AtomicAdvancedPathPipelines, RendererError> {
+    let [initialize, midpoint, resolve] = atomic_advanced_path_jobs(uses_hsl_blend_modes);
+    Ok(AtomicAdvancedPathPipelines {
+        initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
+        midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
         resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
     })
 }
@@ -1268,7 +1397,7 @@ mod tests {
     use objc2_metal::{MTLCreateSystemDefaultDevice, MTLTexture};
 
     #[test]
-    fn generic_atomic_clipping_is_flush_wide_on_every_metal_path_batch() {
+    fn generic_atomic_feature_families_match_upstream_filtered_job_keys() {
         let plain = atomic_path_jobs();
         assert_eq!(
             plain.map(|job| (job.draw_type, job.shader_features, job.shader_misc_flags)),
@@ -1342,6 +1471,167 @@ mod tests {
                     FIXED_FUNCTION_COLOR_OUTPUT
                 ),
             ]
+        );
+
+        assert_eq!(atomic_advanced_pipeline_key(false), 0);
+        assert_eq!(atomic_advanced_pipeline_key(true), 1);
+        let advanced_hsl_features = ENABLE_ADVANCED_BLEND | ENABLE_HSL_BLEND_MODES | ENABLE_DITHER;
+        assert_eq!(
+            atomic_advanced_path_jobs(true).map(|job| {
+                assert_eq!(job.interlock_mode, InterlockMode::Atomics);
+                (job.draw_type, job.shader_features, job.shader_misc_flags)
+            }),
+            [
+                (
+                    DrawType::RenderPassInitialize,
+                    ENABLE_ADVANCED_BLEND | ENABLE_DITHER,
+                    STORE_COLOR_CLEAR,
+                ),
+                (DrawType::MidpointFanPatches, advanced_hsl_features, 0),
+                (
+                    DrawType::RenderPassResolve,
+                    advanced_hsl_features,
+                    COALESCED_RESOLVE_AND_TRANSFER,
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn generic_atomic_pipeline_cache_realizes_only_requested_keyed_families() {
+        fn pipeline_identity(pipeline: &DrawPipeline) -> *const () {
+            pipeline.pipeline_state(MTLPixelFormat::BGRA8Unorm).unwrap()
+                as *const ProtocolObject<dyn MTLRenderPipelineState> as *const ()
+        }
+        fn advanced_identities(family: &AtomicAdvancedPathPipelines) -> [*const (); 3] {
+            [
+                pipeline_identity(&family.initialize),
+                pipeline_identity(&family.midpoint),
+                pipeline_identity(&family.resolve),
+            ]
+        }
+        fn fixed_identities(family: &AtomicFixedPathPipelines) -> [*const (); 3] {
+            [
+                pipeline_identity(&family.initialize),
+                pipeline_identity(&family.midpoint),
+                pipeline_identity(&family.resolve),
+            ]
+        }
+
+        let Some(context) = live_context() else {
+            return;
+        };
+        let fixture = UploadFixture::new();
+        assert!(context
+            .resources
+            .lock()
+            .unwrap()
+            .generation
+            .atomic_path_pipelines
+            .is_none());
+
+        drop(
+            context
+                .prepare_atomic_path_resources(
+                    1,
+                    1,
+                    MTLPixelFormat::BGRA8Unorm,
+                    false,
+                    false,
+                    true,
+                    true,
+                    fixture.batch(),
+                )
+                .expect("realize advanced HSL family"),
+        );
+        let hsl_identities = {
+            let state = context.resources.lock().unwrap();
+            let families = state.generation.atomic_path_pipelines.as_ref().unwrap();
+            assert!(families.fixed.is_none());
+            assert!(families.advanced[0].is_none());
+            advanced_identities(families.advanced[1].as_ref().unwrap())
+        };
+
+        drop(
+            context
+                .prepare_atomic_path_resources(
+                    1,
+                    1,
+                    MTLPixelFormat::BGRA8Unorm,
+                    false,
+                    false,
+                    true,
+                    false,
+                    fixture.batch(),
+                )
+                .expect("realize non-HSL advanced family"),
+        );
+        let rgb_identities = {
+            let state = context.resources.lock().unwrap();
+            let families = state.generation.atomic_path_pipelines.as_ref().unwrap();
+            assert!(families.fixed.is_none());
+            assert_eq!(
+                advanced_identities(families.advanced[1].as_ref().unwrap()),
+                hsl_identities
+            );
+            advanced_identities(families.advanced[0].as_ref().unwrap())
+        };
+
+        drop(
+            context
+                .prepare_atomic_path_resources(
+                    1,
+                    1,
+                    MTLPixelFormat::BGRA8Unorm,
+                    false,
+                    false,
+                    false,
+                    false,
+                    fixture.batch(),
+                )
+                .expect("realize fixed-function family"),
+        );
+        let fixed_family_ids = {
+            let state = context.resources.lock().unwrap();
+            let families = state.generation.atomic_path_pipelines.as_ref().unwrap();
+            assert_eq!(
+                advanced_identities(families.advanced[0].as_ref().unwrap()),
+                rgb_identities
+            );
+            assert_eq!(
+                advanced_identities(families.advanced[1].as_ref().unwrap()),
+                hsl_identities
+            );
+            fixed_identities(families.fixed.as_ref().unwrap())
+        };
+
+        drop(
+            context
+                .prepare_atomic_path_resources(
+                    1,
+                    1,
+                    MTLPixelFormat::BGRA8Unorm,
+                    false,
+                    false,
+                    true,
+                    true,
+                    fixture.batch(),
+                )
+                .expect("reuse advanced HSL family"),
+        );
+        let state = context.resources.lock().unwrap();
+        let families = state.generation.atomic_path_pipelines.as_ref().unwrap();
+        assert_eq!(
+            advanced_identities(families.advanced[0].as_ref().unwrap()),
+            rgb_identities
+        );
+        assert_eq!(
+            advanced_identities(families.advanced[1].as_ref().unwrap()),
+            hsl_identities
+        );
+        assert_eq!(
+            fixed_identities(families.fixed.as_ref().unwrap()),
+            fixed_family_ids
         );
     }
 

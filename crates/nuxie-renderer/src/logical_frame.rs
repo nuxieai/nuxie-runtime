@@ -3202,6 +3202,8 @@ pub(crate) struct PreparedAtomicPathFlush {
     pub(crate) draw_group_starts: Vec<usize>,
     pub(crate) gradient_batch: Option<GradientBatch>,
     pub(crate) uses_clipping: bool,
+    pub(crate) uses_advanced_blend: bool,
+    pub(crate) uses_hsl_blend_modes: bool,
     pub(crate) authored_draw_count: usize,
     #[cfg(test)]
     pub(crate) canonical_draw_resources: Vec<PreparedTypedDrawResources>,
@@ -3213,6 +3215,8 @@ struct PendingAtomicPath {
     bounds: [i32; 4],
     resources: PreparedTypedDrawResources,
     gradient_batch: Option<GradientBatch>,
+    blend_mode: BlendMode,
+    is_translucent: bool,
 }
 
 #[cfg(any(test, feature = "native-metal-experimental"))]
@@ -3509,6 +3513,9 @@ pub(crate) fn prepare_atomic_path_flush(
             bounds,
             resources,
             gradient_batch: prepared.gradient_batch,
+            blend_mode: input.paint.blend_mode,
+            is_translucent: modulate_color_alpha(input.paint.color, input.state.opacity) >> 24
+                != 0xff,
         });
     }
     assemble_atomic_path_flush(config, pending, false)
@@ -3599,6 +3606,8 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
             bounds: clip_bounds,
             resources: prepared.resources,
             gradient_batch: None,
+            blend_mode: BlendMode::SrcOver,
+            is_translucent: false,
         });
         parent_id = replacement_id;
     }
@@ -3644,6 +3653,9 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
         bounds: content_bounds,
         resources: content.resources,
         gradient_batch: content.gradient_batch,
+        blend_mode: admitted.paint.blend_mode,
+        is_translucent: modulate_color_alpha(admitted.paint.color, admitted.state.opacity) >> 24
+            != 0xff,
     });
     logical_state.commit_generic_atomic_path_clip(config, parent_id, true);
     assemble_atomic_path_flush(config, pending, true)
@@ -3667,6 +3679,24 @@ fn assemble_atomic_path_flush(
     }
     if gradient_count > 1 {
         return Err("atomic path flush supports one gradient draw");
+    }
+    let uses_advanced_blend = pending
+        .iter()
+        .any(|draw| draw.blend_mode != BlendMode::SrcOver);
+    let uses_hsl_blend_modes = pending.iter().any(|draw| {
+        matches!(
+            draw.blend_mode,
+            BlendMode::Hue | BlendMode::Saturation | BlendMode::Color | BlendMode::Luminosity
+        )
+    });
+    if uses_advanced_blend && (uses_clipping || gradient_count != 0) {
+        return Err("atomic advanced-blend flush requires unclipped solid draws");
+    }
+    if uses_advanced_blend && pending.iter().any(|draw| draw.resources.uses_interior) {
+        return Err("atomic advanced-blend flush only supports midpoint geometry");
+    }
+    if !uses_advanced_blend && pending.iter().any(|draw| draw.is_translucent) {
+        return Err("atomic fixed-function SrcOver flush requires opaque solid color");
     }
 
     let mut board = super::intersection_board::IntersectionBoard::new(
@@ -3879,6 +3909,8 @@ fn assemble_atomic_path_flush(
         draw_group_starts,
         gradient_batch,
         uses_clipping,
+        uses_advanced_blend,
+        uses_hsl_blend_modes,
         authored_draw_count,
         #[cfg(test)]
         canonical_draw_resources,

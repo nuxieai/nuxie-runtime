@@ -52,7 +52,7 @@ impl<'a> NativeMetalDrawableFrame<'a> {
             state_stack: Vec::new(),
             solid_draws: Vec::new(),
             gradient_draws: Vec::new(),
-            atlas_draws: Vec::new(),
+            atlas_requests: Vec::new(),
             resource_lease: None,
             collect_work_metrics: false,
             backend_work: crate::BackendWorkMetrics::default(),

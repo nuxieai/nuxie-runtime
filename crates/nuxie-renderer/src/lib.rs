@@ -11697,29 +11697,262 @@ mod tests {
     }
 
     #[test]
-    fn native_metal_single_atlas_serializer_matches_the_canonical_writer() {
+    fn raster_ordering_atlas_flush_matches_canonical_two_draw_resources() {
         fn pod_slice<T: bytemuck::Pod>(values: &[T]) -> &[u8] {
             bytemuck::cast_slice(values)
         }
 
         let config = LogicalFrameConfig {
-            width: 64,
+            width: 96,
             height: 64,
             mode: RenderMode::RasterOrdering,
             max_texture_dimension_2d: 16_384,
             msaa_atlas_supports_clip_rect: true,
         };
-        let mut raw_path = RawPath::new();
-        raw_path.move_to(16.0, 16.0);
-        raw_path.line_to(48.0, 16.0);
-        raw_path.line_to(48.0, 48.0);
-        raw_path.line_to(16.0, 48.0);
-        raw_path.close();
-        let path = LogicalPath {
-            raw_path: Arc::new(raw_path),
-            fill_rule: FillRule::NonZero,
-            valid: true,
+        let make_rect = |left: f32, top: f32, right: f32, bottom: f32| {
+            let mut raw_path = RawPath::new();
+            raw_path.move_to(left, top);
+            raw_path.line_to(right, top);
+            raw_path.line_to(right, bottom);
+            raw_path.line_to(left, bottom);
+            raw_path.close();
+            LogicalPath {
+                raw_path: Arc::new(raw_path),
+                fill_rule: FillRule::NonZero,
+                valid: true,
+            }
         };
+        let paths = [
+            make_rect(8.0, 8.0, 38.0, 48.0),
+            make_rect(54.0, 12.0, 86.0, 50.0),
+        ];
+        // Author stroke before fill so the helper must preserve authored path
+        // IDs and blit order while matching C++'s fill-before-stroke atlas
+        // tessellation order.
+        let paints = [
+            LogicalPaint {
+                style: RenderPaintStyle::Stroke,
+                thickness: 6.0,
+                feather: 24.0,
+                color: 0xff22_66aa,
+                ..LogicalPaint::default()
+            },
+            LogicalPaint {
+                style: RenderPaintStyle::Fill,
+                feather: 24.0,
+                color: 0xffcc_8844,
+                ..LogicalPaint::default()
+            },
+        ];
+        let states = [DrawState::default(), DrawState::default()];
+
+        let prepared = logical_frame::prepare_raster_ordering_atlas_flush(
+            config,
+            &[
+                logical_frame::RasterOrderingAtlasInput {
+                    path: &paths[0],
+                    paint: &paints[0],
+                    state: states[0],
+                },
+                logical_frame::RasterOrderingAtlasInput {
+                    path: &paths[1],
+                    paint: &paints[1],
+                    state: states[1],
+                },
+            ],
+        )
+        .unwrap()
+        .unwrap();
+
+        let mut frame = logical_frame::LogicalFrame::new(config);
+        let mut scratch = draw::StrokePreparationScratch::default();
+        for index in 0..2 {
+            let admitted = logical_frame::admit_path_draw(
+                config,
+                states[index],
+                &paths[index],
+                &paints[index],
+            )
+            .unwrap()
+            .unwrap();
+            let draw = admitted.finish(0, &mut scratch).unwrap();
+            frame.push_content_batch(Vec::new(), draw).unwrap();
+        }
+        let mut board =
+            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+        frame.finalize(&mut board).unwrap();
+        let canonical_store = logical_frame::LogicalResourceStore::default();
+        let canonical_resources = canonical_store.prepare_for_production(&frame).unwrap();
+        let canonical = canonical_resources.typed_draws(&frame.draws);
+        let canonical = [canonical.draw(0).unwrap(), canonical.draw(1).unwrap()];
+
+        assert_eq!(prepared.paths.len(), 2);
+        assert_eq!(prepared.paints.len(), 2);
+        assert_eq!(prepared.paint_aux.len(), 2);
+        assert_eq!(prepared.triangles.len(), 12);
+        for index in 0..2 {
+            assert_eq!(
+                bytemuck::bytes_of(&prepared.paths[index]),
+                bytemuck::bytes_of(&canonical[index].path)
+            );
+            assert_eq!(
+                bytemuck::bytes_of(&prepared.paints[index]),
+                bytemuck::bytes_of(&canonical[index].paint)
+            );
+            assert_eq!(
+                bytemuck::bytes_of(&prepared.paint_aux[index]),
+                bytemuck::bytes_of(&canonical[index].paint_aux)
+            );
+            let authored_blit = index * 6..index * 6 + 6;
+            assert_eq!(
+                pod_slice(&prepared.triangles[authored_blit.clone()]),
+                pod_slice(&canonical[index].triangles)
+            );
+            assert!(prepared.triangles[authored_blit]
+                .iter()
+                .all(|vertex| vertex.weight_path_id & 0xffff == (index + 1) as i32));
+        }
+
+        assert_eq!(prepared.draws.len(), 2);
+        assert_eq!(prepared.fill_batches.len(), 1);
+        assert_eq!(prepared.stroke_batches.len(), 1);
+        assert_eq!(prepared.draws[0].input_index, 1);
+        assert!(!prepared.draws[0].is_stroke);
+        assert_eq!(prepared.draws[0].path_id, 2);
+        assert_eq!(prepared.draws[0].blit_vertex_range, 6..12);
+        assert_eq!(prepared.draws[1].input_index, 0);
+        assert!(prepared.draws[1].is_stroke);
+        assert_eq!(prepared.draws[1].path_id, 1);
+        assert_eq!(prepared.draws[1].blit_vertex_range, 0..6);
+        assert_eq!(prepared.draws[0].base_patch, 1);
+        assert_eq!(
+            prepared.fill_batches[0],
+            gpu::AtlasDrawBatch {
+                scissor: prepared.draws[0].scissor,
+                patch_count: prepared.draws[0].patch_count,
+                base_patch: prepared.draws[0].base_patch,
+            }
+        );
+        assert_eq!(
+            prepared.stroke_batches[0],
+            gpu::AtlasDrawBatch {
+                scissor: prepared.draws[1].scissor,
+                patch_count: prepared.draws[1].patch_count,
+                base_patch: prepared.draws[1].base_patch,
+            }
+        );
+        assert_eq!(
+            prepared.draws[1].base_patch,
+            prepared.draws[0].base_patch + prepared.draws[0].patch_count
+        );
+        for draw in &prepared.draws {
+            assert_eq!(
+                draw.scissor,
+                [
+                    u16::try_from(draw.atlas_placement.origin[0]).unwrap(),
+                    u16::try_from(draw.atlas_placement.origin[1]).unwrap(),
+                    u16::try_from(draw.atlas_placement.origin[0] + draw.atlas_placement.width)
+                        .unwrap(),
+                    u16::try_from(draw.atlas_placement.origin[1] + draw.atlas_placement.height)
+                        .unwrap(),
+                ]
+            );
+        }
+        assert_ne!(
+            prepared.draws[0].atlas_placement.origin,
+            prepared.draws[1].atlas_placement.origin
+        );
+        let first = prepared.draws[0].atlas_placement;
+        let second = prepared.draws[1].atlas_placement;
+        assert!(
+            first.origin[0] + first.width <= second.origin[0]
+                || second.origin[0] + second.width <= first.origin[0]
+                || first.origin[1] + first.height <= second.origin[1]
+                || second.origin[1] + second.height <= first.origin[1]
+        );
+        assert_eq!(
+            prepared.content_extent,
+            prepared.draws.iter().fold([0, 0], |extent, draw| [
+                extent[0].max(draw.atlas_placement.origin[0] + draw.atlas_placement.width),
+                extent[1].max(draw.atlas_placement.origin[1] + draw.atlas_placement.height),
+            ])
+        );
+        assert_eq!(
+            prepared.physical_extent,
+            cpp_webgpu_atlas_physical_size(
+                prepared.content_extent,
+                [config.width, config.height],
+                config.max_texture_dimension_2d,
+            )
+        );
+
+        let mut span_cursor = 1usize; // One flush-wide midpoint pre-padding span.
+        let mut contour_cursor = 0usize;
+        for draw in &prepared.draws {
+            let source = canonical[draw.input_index];
+            let mut expected_spans = source
+                .spans
+                .iter()
+                .copied()
+                .filter(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0)
+                .collect::<Vec<_>>();
+            let mut expected_contours = source.contours.clone();
+            for span in &mut expected_spans {
+                let local_id =
+                    (span.contour_id_with_flags & gpu::CONTOUR_ID_MASK) - source.contour_base;
+                span.contour_id_with_flags = (span.contour_id_with_flags & !gpu::CONTOUR_ID_MASK)
+                    | u32::try_from(contour_cursor)
+                        .unwrap()
+                        .checked_add(local_id)
+                        .unwrap();
+            }
+            let mut expected_base_patch = source.base_instance;
+            relocate_tessellation_logically(
+                &mut expected_spans,
+                &mut expected_base_patch,
+                &mut expected_contours,
+                draw.base_patch,
+                gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
+            );
+            assert_eq!(expected_base_patch, draw.base_patch);
+            let span_end = span_cursor + expected_spans.len();
+            let contour_end = contour_cursor + expected_contours.len();
+            assert_eq!(
+                pod_slice(&prepared.spans[span_cursor..span_end]),
+                pod_slice(&expected_spans)
+            );
+            assert_eq!(
+                pod_slice(&prepared.contours[contour_cursor..contour_end]),
+                pod_slice(&expected_contours)
+            );
+            assert!(prepared.contours[contour_cursor..contour_end]
+                .iter()
+                .all(|contour| contour.path_id == u32::from(draw.path_id)));
+            span_cursor = span_end;
+            contour_cursor = contour_end;
+        }
+        assert!(prepared.spans[span_cursor..]
+            .iter()
+            .all(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK == 0));
+        assert_eq!(contour_cursor, prepared.contours.len());
+    }
+
+    #[test]
+    fn raster_ordering_atlas_flush_coalesces_contiguous_unscissored_strokes() {
+        let make_rect = |left: f32, right: f32| {
+            let mut raw_path = RawPath::new();
+            raw_path.move_to(left, 96.0);
+            raw_path.line_to(right, 96.0);
+            raw_path.line_to(right, 128.0);
+            raw_path.line_to(left, 128.0);
+            raw_path.close();
+            LogicalPath {
+                raw_path: Arc::new(raw_path),
+                fill_rule: FillRule::NonZero,
+                valid: true,
+            }
+        };
+        let paths = [make_rect(64.0, 96.0), make_rect(160.0, 192.0)];
         let paint = LogicalPaint {
             style: RenderPaintStyle::Stroke,
             thickness: 8.0,
@@ -11727,78 +11960,45 @@ mod tests {
             ..LogicalPaint::default()
         };
         let state = DrawState::default();
+        let prepared = logical_frame::prepare_raster_ordering_atlas_flush(
+            LogicalFrameConfig {
+                width: 256,
+                height: 224,
+                mode: RenderMode::RasterOrdering,
+                max_texture_dimension_2d: 16_384,
+                msaa_atlas_supports_clip_rect: true,
+            },
+            &[
+                logical_frame::RasterOrderingAtlasInput {
+                    path: &paths[0],
+                    paint: &paint,
+                    state,
+                },
+                logical_frame::RasterOrderingAtlasInput {
+                    path: &paths[1],
+                    paint: &paint,
+                    state,
+                },
+            ],
+        )
+        .unwrap()
+        .unwrap();
 
-        let narrow =
-            logical_frame::prepare_single_raster_ordering_atlas_draw(config, state, &path, &paint)
-                .unwrap()
-                .unwrap()
-                .0;
-
-        let admitted = logical_frame::admit_path_draw(config, state, &path, &paint)
-            .unwrap()
-            .unwrap();
-        let mut scratch = draw::StrokePreparationScratch::default();
-        let draw = admitted.finish(0, &mut scratch).unwrap();
-        let mut frame = logical_frame::LogicalFrame::new(config);
-        frame.push_content_batch(Vec::new(), draw).unwrap();
-        let mut board =
-            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
-        frame.finalize(&mut board).unwrap();
-        let prepared = logical_frame::LogicalResourceStore::default()
-            .prepare_for_production(&frame)
-            .unwrap();
-        let selection = prepared.typed_draws(&frame.draws);
-        let canonical = selection.draw(0).unwrap();
-
-        let narrow_atlas = narrow.atlas_placement.unwrap();
-        let canonical_atlas = canonical.atlas_placement.unwrap();
+        assert!(prepared.fill_batches.is_empty());
+        assert_eq!(prepared.stroke_batches.len(), 1);
+        assert_eq!(prepared.stroke_batches[0].base_patch, 1);
         assert_eq!(
-            narrow_atlas.scale.to_bits(),
-            canonical_atlas.scale.to_bits()
-        );
-        assert_eq!(narrow_atlas.translate, canonical_atlas.translate);
-        assert_eq!(narrow_atlas.bounds, canonical_atlas.bounds);
-        assert_eq!(narrow_atlas.origin, canonical_atlas.origin);
-        assert_eq!(narrow_atlas.width, canonical_atlas.width);
-        assert_eq!(narrow_atlas.height, canonical_atlas.height);
-        assert_eq!(
-            bytemuck::bytes_of(&narrow.path),
-            bytemuck::bytes_of(&canonical.path)
+            prepared.stroke_batches[0].patch_count,
+            prepared.draws.iter().map(|draw| draw.patch_count).sum()
         );
         assert_eq!(
-            bytemuck::bytes_of(&narrow.paint),
-            bytemuck::bytes_of(&canonical.paint)
-        );
-        assert_eq!(
-            bytemuck::bytes_of(&narrow.paint_aux),
-            bytemuck::bytes_of(&canonical.paint_aux)
-        );
-        assert_eq!(pod_slice(&narrow.spans), pod_slice(&canonical.spans));
-        assert_eq!(pod_slice(&narrow.contours), pod_slice(&canonical.contours));
-        assert_eq!(
-            pod_slice(&narrow.triangles),
-            pod_slice(&canonical.triangles)
-        );
-        assert_eq!(narrow.contour_base, canonical.contour_base);
-        assert_eq!(narrow.base_instance, canonical.base_instance);
-        assert_eq!(narrow.instance_count, canonical.instance_count);
-        assert_eq!(narrow.triangle_count, canonical.triangle_count);
-        assert_eq!(
-            narrow.borrowed_triangle_count,
-            canonical.borrowed_triangle_count
-        );
-        assert_eq!(
-            narrow.main_triangle_batches.len(),
-            canonical.main_triangle_batches.len()
-        );
-        assert_eq!(
-            narrow.has_interior_triangles,
-            canonical.has_interior_triangles
-        );
-        assert_eq!(narrow.uses_interior, canonical.uses_interior);
-        assert_eq!(
-            narrow.local_contour_ids_are_dense,
-            canonical.local_contour_ids_are_dense
+            prepared.stroke_batches[0].scissor,
+            [
+                0,
+                0,
+                u16::try_from(prepared.content_extent[0]).unwrap(),
+                u16::try_from(prepared.content_extent[1]).unwrap(),
+            ]
         );
     }
 

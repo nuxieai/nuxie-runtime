@@ -14,6 +14,7 @@ fn native_metal_frame_clears_and_reads_back() {
     let factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
     let pixels = factory
         .begin_frame(0x1122_3344)
+        .expect("acquire one command buffer for native Metal frame")
         .finish()
         .expect("finish native Metal frame");
 
@@ -36,7 +37,9 @@ fn native_metal_solid_rectangle_matches_pinned_cpp_metal_oracle() {
     .expect("parse rectangle stream");
     let (width, height) = stream.frame_size.expect("rectangle frame size");
     let mut factory = NativeMetalFactory::new(width, height).expect("create native Metal renderer");
-    let mut frame = factory.begin_frame(stream.clear_color.unwrap_or(0));
+    let mut frame = factory
+        .begin_frame(stream.clear_color.unwrap_or(0))
+        .expect("acquire one command buffer for native Metal frame");
     stream
         .replay_frame(0, &mut factory, &mut frame)
         .expect("replay rectangle through Factory/Renderer seam");
@@ -67,11 +70,26 @@ fn native_metal_solid_rectangle_matches_pinned_cpp_metal_oracle() {
 #[test]
 fn native_metal_resize_and_abandoned_frame_leave_factory_reusable() {
     let mut factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
-    drop(factory.begin_frame(0xffff_ffff));
+    let old_frame = factory
+        .begin_frame(0xffff_ffff)
+        .expect("acquire abandoned frame command buffer");
 
     factory.resize(3, 1).expect("resize native Metal target");
+    assert_eq!(factory.dimensions(), (3, 1));
+
+    let old_pixels = old_frame
+        .finish()
+        .expect("old target generation remains usable after resize");
+    assert_eq!(old_pixels.len(), 2 * 2 * 4);
+
+    let abandoned = factory
+        .begin_frame(0xff00_0000)
+        .expect("acquire abandoned frame after resize");
+    drop(abandoned);
+
     let pixels = factory
         .begin_frame(0xff12_3456)
+        .expect("factory remains reusable after abandonment")
         .finish()
         .expect("submit frame after abandonment and resize");
 

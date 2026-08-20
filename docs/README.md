@@ -14,6 +14,7 @@ two ongoing workflows, and every document here supports one of them:
 
 | Document | What it is |
 |---|---|
+| `PARITY_WORKFLOW.md` | Reusable upstream-parity execution loop: evidence, work partitioning, model roles, validation, promotion, and progress reporting for Metal, WebGPU, Vulkan, and main-runtime work. |
 | `PORTING.md` | The C++→Rust translation manual (idioms, float exactness, invalidation fences, adaptation ceilings). Read before porting any upstream change. |
 | `METAL_PORTING.md` | Native Metal renderer-platform and ORE mechanical-port guide: source correspondence, lifetime rules, oracle hierarchy, validation ladder, and product decisions. |
 | `upstream-sync-map.md` | The recurring Upstream Sync cycle: triage, approval gate, porting order, pin advance. Cycle outputs land in `sync/`. |

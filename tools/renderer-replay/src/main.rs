@@ -109,7 +109,7 @@ fn replay_native_metal(
 ) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
     let mut factory = nuxie_renderer::NativeMetalFactory::new(width, height)?;
     let adapter = factory.adapter_name();
-    let mut frame = factory.begin_frame(clear);
+    let mut frame = factory.begin_frame(clear)?;
     stream.replay_frame(frame_index, &mut factory, &mut frame)?;
     Ok((frame.finish()?, Some(adapter)))
 }

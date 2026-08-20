@@ -15,7 +15,9 @@ fn main() {
     let path = factory.make_render_path(path, FillRule::NonZero);
     let mut paint = factory.make_render_paint();
     paint.color(0xff00_ff00);
-    let mut frame = factory.begin_frame(0);
+    let mut frame = factory
+        .begin_frame(0)
+        .expect("acquire native Metal tracer command buffer");
     frame.draw_path(path.as_ref(), paint.as_ref());
     let pixels = frame.finish().expect("finish native Metal tracer");
     assert_eq!(pixels[(32 * 64 + 32) * 4..][..4], [0, 255, 0, 255]);

@@ -6,7 +6,7 @@ porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 17, in-progress = 2, ported = 23, verified = 0 }
+expected_status_counts = { pending = 15, in-progress = 2, ported = 25, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -498,13 +498,22 @@ status = "ported"
 rust_modules = ["crates/nuxie-ore-metal/src/binding_map.rs"]
 evidence = ["crates/nuxie-ore-metal/src/binding_map.rs"]
 
+# Rust adaptation for the bind-group-layout pair: the pinned Metal context
+# writes `m_context` but no pinned reader consumes it, so the Rust leaf omits
+# that raw pointer and relies on `ResourceHandle`'s manager for deferred
+# release. `bind_group_layout_context_payload_copies_entries_and_has_metal_identity`
+# proves the copied payload and checked Metal backend identity;
+# `pre_first_frame_release_waits_even_when_frame_zero_is_caught_up` proves the
+# shared manager retains a zero-reference payload until its safe frame.
+# Group-range validation and context error publication remain assigned to the
+# pending `ore-context-metal` unit.
 [[source]]
 upstream = "renderer/src/ore/ore_bind_group_layout.cpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
+evidence = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_bind_group.hpp"
@@ -518,9 +527,9 @@ evidence = []
 upstream = "renderer/include/rive/renderer/ore/ore_bind_group_layout.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
+evidence = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_binding_map.hpp"
@@ -800,7 +809,7 @@ requires_lifetime_rows = true
 [[translation_unit]]
 id = "ore-bind-group-layout"
 phase = "bulk"
-worker_claim = "unclaimed"
+worker_claim = "luna-ore-bind-group-layout"
 sources = [
   "renderer/include/rive/renderer/ore/ore_bind_group_layout.hpp",
   "renderer/src/ore/ore_bind_group_layout.cpp",
@@ -812,7 +821,7 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "pending"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]

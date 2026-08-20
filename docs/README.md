@@ -17,6 +17,7 @@ two ongoing workflows, and every document here supports one of them:
 | `PARITY_WORKFLOW.md` | Reusable upstream-parity execution loop: evidence, work partitioning, model roles, validation, promotion, and progress reporting for Metal, WebGPU, Vulkan, and main-runtime work. |
 | `PORTING.md` | The C++→Rust translation manual (idioms, float exactness, invalidation fences, adaptation ceilings). Read before porting any upstream change. |
 | `METAL_PORTING.md` | Native Metal renderer-platform and ORE mechanical-port guide: source correspondence, lifetime rules, oracle hierarchy, validation ladder, and product decisions. |
+| `ore-port-lifetimes.tsv` | Field-level C++→Rust ownership ledger for the file-oriented ORE/Metal translation queue. |
 | `upstream-sync-map.md` | The recurring Upstream Sync cycle: triage, approval gate, porting order, pin advance. Cycle outputs land in `sync/`. |
 | `parity-gap-register.md` | The gap queue: every known difference vs upstream — verification gaps (V), missing features (F), API surface (A), coverage holes (C), deliberate divergences (D), housekeeping (H), upstream-blocked watches (W). |
 | `runtime-drift-queue.md` | Generated, clustered investigation queue across owner proofs, upstream tests, golden/silver differentials, tracked gaps, decisions, and extensions. The adjacent JSON is authoritative. |

@@ -496,12 +496,15 @@ when every pixel is geometrically correct. When a preselected tolerance fails,
 trace the pipeline key before considering fixture or threshold changes.
 
 Specialized AtlasBlit compilation remains lazy: creating a factory that never
-uses a feather atlas does not start the compiler or realize these pipeline
-states. First atlas allocation builds the mask pair and the specialized final
-pipeline as one fail-closed replacement before publishing the resource
-generation. The headless tracer now uses the same `BGRA8Unorm` target format as
-the pinned C++ replay and real Apple drawables, then normalizes readback bytes
-to the harness's RGBA contract.
+uses a feather atlas does not start the compiler. In the source-default
+asynchronous mode, the first request schedules the specialization once and may
+use the compatible preloaded raster ubershader; preparation refreshes its
+retained selection on later uses so a fallback is never frozen into the
+resource generation. The same-runner oracle selects `alwaysSynchronous`, like
+the pinned C++ replay, when the specialized key itself is part of oracle
+identity. The headless tracer uses the same `BGRA8Unorm` target format as the
+pinned C++ replay and real Apple drawables, then normalizes readback bytes to
+the harness's RGBA contract.
 
 The rooted no-WGPU Mach-O is 719,088 bytes and contains no WGPU, Naga, or WGSL
 markers. This is 83,248 bytes larger than the prior single-atlas checkpoint
@@ -515,15 +518,45 @@ This checkpoint still deliberately excludes multiple logical flushes,
 fill/stroke mixing in one native flush, gradient or image atlas paints,
 non-rectangular clips, advanced/HSL blends, and general draw scheduling.
 
+## File-first compatible pipeline cache
+
+The `render_context_metal_impl.mm:1117-1224` checkpoint is implemented as one
+deep `pipeline_cache` module, not another drawing feature. It owns the retained
+offline draw library, the single lazy background compiler, the source-exact
+feature masks and packed keys, and the absent/pending/ready/failed state of
+every requested key. Raster-order construction preloads exactly seven
+ubershaders in pinned order without starting the worker. Missing keys schedule
+once; completed jobs are drained from the compiler's LIFO completion stack and
+published under their own key, including unrelated completions.
+
+`allowAsynchronous` polls a specialization without blocking and then waits for
+its compatible fully featured fallback. `alwaysSynchronous` waits for the
+requested key. `onlyUbershaders` replaces the requested features before lookup.
+Shader or paired-pipeline creation failure is durable and falls back before a
+draw is rejected; a failed fully featured key remains unavailable and is never
+rescheduled. The tools-only ubershader-load failure is evaluated before cache
+mutation, and the pinned current-descriptor pipeline-failure quirk is covered
+by the deterministic backend test.
+
+Every currently reachable midpoint, atomic fixed/clip-rect/clipped/interior,
+advanced/HSL, and AtlasBlit family routes through this cache. Resource
+generations may retain selected pipeline clones for a prepared lease, but they
+do not schedule, wait, key, or cache failures independently. Public context
+options preserve the source default and allow explicit synchronous or
+uber-only product roots. The row remains `partial`, not `ported`, until the
+general flush supplies its per-flush failure input and production realizes the
+remaining clockwise/clockwise-atomic families.
+
 ## UNIV-2087 transactional resource generations
 
 Resource preparation publishes one coherent generation. The context cheaply
 clones the currently retained gradient, tessellation, feather-atlas, mask-pair,
-and specialized AtlasBlit owners; applies every requested resize and lazy
+and refreshable AtlasBlit selection; applies every requested resize and lazy
 realization to that candidate; prepares the upload rings; and only then swaps
-the complete candidate into context state. A later texture, pipeline, shader,
-or upload failure drops the candidate and leaves the previously published
-generation untouched. This is the typed-error Rust adaptation of the pinned
+the complete candidate into context state. A later texture or upload failure
+drops the candidate and leaves the previously published generation untouched.
+Pipeline and shader failure belongs to the independent compatible cache and
+selects a fallback before resource publication. This is the typed-error Rust adaptation of the pinned
 C++ sizing/allocation sequence in `renderer/src/render_context.cpp:2472-2817`
 and the Metal leaves in
 `renderer/src/metal/render_context_metal_impl.mm:1041-1224`, pinned at
@@ -532,15 +565,16 @@ and the Metal leaves in
 Live tests hold two complete generations at once and use Objective-C weak
 references to prove the retired gradient, tessellation, and atlas textures stay
 alive until their prepared lease drops. Deterministic failures after staged
-gradient growth, during atlas growth, and in the real background compiler's
-synthesized shader-failure path publish no partial state. Four consecutive
-failed preparations followed by a successful retry prove abandoned failures do
-not exhaust the three-slot coordinator. Leaf allocation tests independently
+gradient growth and during atlas growth publish no partial state. A synthesized
+specialized shader failure proves the preloaded compatible fallback can publish
+a valid generation without leaking the coordinator reservation. Repeated
+failure and retry behavior is covered at the cache and resource boundaries
+independently. Leaf allocation tests independently
 prove each texture owner preserves its descriptor and identity on allocation
 failure and accepts a later real Metal retry.
 
-This closes coherent prepared-generation ownership for the current synchronous
-public renderer. It does not claim simultaneous public GPU execution,
+This closes coherent prepared-generation ownership for the current native
+renderer. It does not claim simultaneous public GPU execution,
 `safeFrameNumber` scheduling, real hardware device loss, five-second resource
 trimming, or release deferred beyond context destruction; those require the
 general asynchronous scheduler rather than a test-only public API expansion.

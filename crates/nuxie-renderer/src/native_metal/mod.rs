@@ -22,6 +22,7 @@ mod feather_atlas_resource;
 mod gradient_resource;
 #[allow(dead_code)]
 mod image_texture;
+mod pipeline_cache;
 #[allow(dead_code)]
 mod pipeline_names;
 #[allow(dead_code)]
@@ -74,6 +75,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 pub use drawable::NativeMetalDrawableFrame;
+pub use pipeline_cache::{NativeMetalContextOptions, ShaderCompilationMode};
 
 const TRACER_METALLIB: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/native_metal_tracer.metallib"));
@@ -137,28 +139,61 @@ pub struct NativeMetalExecutionInventory {
 
 impl NativeMetalFactory {
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
-        Self::new_impl(width, height, None)
+        Self::new_impl(width, height, None, NativeMetalContextOptions::default())
     }
 
     pub fn new_with_mode(width: u32, height: u32, mode: RenderMode) -> Result<Self, RendererError> {
-        Self::new_impl(width, height, Some(mode))
+        Self::new_impl(
+            width,
+            height,
+            Some(mode),
+            NativeMetalContextOptions::default(),
+        )
+    }
+
+    pub fn new_with_context_options(
+        width: u32,
+        height: u32,
+        options: NativeMetalContextOptions,
+    ) -> Result<Self, RendererError> {
+        Self::new_impl(width, height, None, options)
+    }
+
+    pub fn new_with_mode_and_context_options(
+        width: u32,
+        height: u32,
+        mode: RenderMode,
+        options: NativeMetalContextOptions,
+    ) -> Result<Self, RendererError> {
+        Self::new_impl(width, height, Some(mode), options)
     }
 
     fn new_impl(
         width: u32,
         height: u32,
         requested_mode: Option<RenderMode>,
+        options: NativeMetalContextOptions,
     ) -> Result<Self, RendererError> {
         let device = MTLCreateSystemDefaultDevice()
             .ok_or_else(|| RendererError::NativeMetal("no system Metal device".to_owned()))?;
         let platform = select_apple_platform(&device);
-        let capabilities = select_device_capabilities(&device, platform);
+        let capabilities =
+            select_device_capabilities(&device, platform, options.disable_framebuffer_reads);
         // Preserve the established failure order: invalid target dimensions
         // are rejected immediately after the capability probe, before queue,
         // library, sampler, pipeline, or target allocation can mask them.
         validate_extent(width, height, capabilities.max_texture_size)?;
         let mode = select_native_metal_mode(capabilities, requested_mode)?;
-        let context = Arc::new(NativeMetalContext::new(device, capabilities, platform)?);
+        let queue = device.newCommandQueue().ok_or_else(|| {
+            RendererError::NativeMetal("MTLDevice returned no command queue".to_owned())
+        })?;
+        let context = Arc::new(NativeMetalContext::new_with_queue_and_options(
+            device,
+            queue,
+            capabilities,
+            platform,
+            options,
+        )?);
         let target = Rc::new(RefCell::new(make_tracer_target(&context, width, height)?));
         Ok(Self {
             context,
@@ -2149,7 +2184,8 @@ fn encode_gradient_final_draw(
         znear: 0.0,
         zfar: 1.0,
     });
-    encoder.setRenderPipelineState(context.midpoint_draw_pipeline(pixel_format)?);
+    let midpoint_pipeline = context.midpoint_draw_pipeline(pixel_format)?;
+    encoder.setRenderPipelineState(&midpoint_pipeline);
     // SAFETY: buffer slot zero is the pinned path-patch vertex ABI, offset zero
     // is aligned, and the context retains the complete buffer through completion.
     unsafe {
@@ -2507,6 +2543,7 @@ fn select_apple_platform(device: &ProtocolObject<dyn MTLDevice>) -> ApplePlatfor
 fn select_device_capabilities(
     device: &ProtocolObject<dyn MTLDevice>,
     platform: ApplePlatform,
+    disable_framebuffer_reads: bool,
 ) -> MetalCapabilitySelection {
     let device_capabilities = MetalDeviceCapabilities {
         supports_apple1: device.supportsFamily(MTLGPUFamily::Apple1),
@@ -2517,7 +2554,7 @@ fn select_device_capabilities(
         raster_order_groups: device.areRasterOrderGroupsSupported(),
     };
 
-    select_capabilities(platform, device_capabilities, false)
+    select_capabilities(platform, device_capabilities, disable_framebuffer_reads)
 }
 
 fn premultiplied_color(color: ColorInt, opacity: f32) -> [f32; 4] {

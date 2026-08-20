@@ -97,9 +97,9 @@ evidence_paths = [
 id = "renderer.offline_library_and_pipeline_cache"
 issue = "UNIV-2086"
 status = "in-progress"
-rule = "Platform-specific offline metallibs are the shipping shader source. Pipeline specialization and fallback selection preserve the upstream feature-key mapping without runtime Naga or WGSL."
-citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:29-56", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:240-266", "cpp:renderer/src/metal/render_context_metal_impl.mm:177-240"]
-required_tests = ["metallib provenance per Apple slice", "every runtime-reachable pipeline key resolves", "pipeline creation failure is fail-closed", "final Mach-O has no runtime shader translation"]
+rule = "Platform-specific offline metallibs are the shipping shader source. One context-owned compatible-pipeline cache owns the persistent compiler, exact raster preloads, source key/mask policy, three compilation modes, absent/pending/ready/failed slots, LIFO completion routing, and recursive ubershader fallback; resource generations retain only refreshable selected pipeline clones."
+citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:29-56", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:93-109", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:240-266", "cpp:renderer/src/metal/render_context_metal_impl.mm:177-402", "cpp:renderer/src/metal/render_context_metal_impl.mm:651-704", "cpp:renderer/src/metal/render_context_metal_impl.mm:1117-1224", "cpp:renderer/src/gpu.cpp:305-381", "cpp:renderer/include/rive/renderer/gpu.hpp:807-1023"]
+required_tests = ["metallib provenance per Apple slice", "exact seven raster preload keys order and function names without compiler startup", "source feature masks and ShaderUniqueKey goldens", "allow-asynchronous always-synchronous and only-ubershaders waiting policy", "missing key schedules once and pending or failed keys never reschedule", "unrelated LIFO completions publish under their own keys", "shader and pipeline failure use compatible fallback while failed full keys remain unavailable", "ubershader-load failure precedes cache mutation", "every runtime-reachable pipeline family routes through the deep cache", "final Mach-O has no runtime shader translation"]
 evidence_paths = [
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
@@ -108,6 +108,7 @@ evidence_paths = [
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_cache.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_macros.txt",
@@ -207,7 +208,7 @@ issue = "UNIV-2087"
 status = "ported"
 rule = "Gradient, Gaussian, tessellation, feather-atlas, sampler, path-patch, and image-rect resources remain context-owned and are resized or recreated at the same lifecycle points as upstream."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:244-275", "cpp:renderer/src/metal/render_context_metal_impl.mm:100-175", "cpp:renderer/src/metal/render_context_metal_impl.mm:717-725", "cpp:renderer/src/metal/render_context_metal_impl.mm:1041-1224", "cpp:renderer/src/render_context.cpp:2472-2817"]
-required_tests = ["gradient resize and reuse", "eight upload rings rotate and release exactly once", "deterministic narrow-slice work counters", "atlas resize and preservation rules", "same-flush atlas ordering and batching", "live atlas mask and final blit", "overlapping concrete resource generations release with their prepared leases", "later texture and specialized compiler failures publish no partial generation and allow retry", "byte-exact shared ImageRect buffers release with their context", "sampler permutation completeness"]
+required_tests = ["gradient resize and reuse", "eight upload rings rotate and release exactly once", "deterministic narrow-slice work counters", "atlas resize and preservation rules", "same-flush atlas ordering and batching", "live atlas mask and final blit", "overlapping concrete resource generations release with their prepared leases", "later texture failures publish no partial generation and allow retry", "specialized compiler failures remain cache-local and select a compatible preloaded fallback without leaking upload reservations", "byte-exact shared ImageRect buffers release with their context", "sampler permutation completeness"]
 evidence_paths = [
   "crates/nuxie-renderer/build.rs",
   "crates/nuxie-renderer/src/lib.rs",

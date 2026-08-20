@@ -95,10 +95,14 @@ status = "in-progress"
 # The same-flush atlas checkpoint lazily compiles the exact synchronous
 # AtlasBlit + ENABLE_DITHER key selected by the pinned oracle; compatible
 # precompiled ubershaders remain fallback inventory, not parity evidence.
-# The file-first constructor checkpoint moves that compiler from a transient
-# per-pipeline helper into the context, preserves lazy worker startup and join,
-# and exposes retained copies of the context's exact ordered queue and device.
-# Public ContextOptions and the complete compatible-pipeline cache remain open.
+# The file-first constructor/cache checkpoints move that compiler from a
+# transient per-pipeline helper into one deep context-owned cache, preserve
+# lazy worker startup and join, preload the exact seven raster ubershaders, and
+# expose retained copies of the context's exact ordered queue and device.
+# Public ContextOptions, all three compilation modes, schedule-once pending
+# slots, LIFO completion routing, durable failures, and compatible recursive
+# fallback are closed. Device-injected public MakeContext and the remaining
+# Apple configuration matrix stay open.
 rust_modules = [
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/logical_frame.rs",
@@ -112,6 +116,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/gradient_resource.rs",
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_cache.rs",
   "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
@@ -135,6 +140,7 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/gradient_resource.rs",
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_cache.rs",
   "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
@@ -310,16 +316,22 @@ status = "in-progress"
 # ENABLE_CLIP_RECT pipeline keys, exact scissor transitions, and full-target
 # resolve restoration from rive_renderer.cpp:204-309, render_context.cpp:81-91,
 # 2083-2088, 3024-3059, 3947-3961, and Metal 1753-1895.
-# The following file-first constructor checkpoint retains one lazy background
-# compiler for the complete context lifetime and routes every currently
-# realized specialized family through it. It also makes the exact context queue
-# retainable for the later same-context RenderCanvas/ORE factory rows.
+# The following file-first constructor/cache checkpoints retain one lazy
+# background compiler for the complete context lifetime and route every
+# currently realized family through the exact compatible-pipeline cache. The
+# cache owns source key/mask policy, seven raster preloads, all three modes,
+# schedule-once placeholders, LIFO completion routing, cached failures, and
+# recursive ubershader fallback. Selected family clones are refreshed on each
+# preparation, so an asynchronous fallback cannot become a permanent family
+# cache. The exact context queue is retainable for later same-context
+# RenderCanvas/ORE factory rows.
 # This full source row remains in-progress:
 # divergent path-clip stacks and general clip mutation/restores after content,
 # gradients in clipped flushes, radial gradients, atlas, images, strokes,
 # advanced blends with gradients/clips or non-midpoint
 # geometry, multi-flush/general scheduling,
-# simulator coverage, and fallback remain.
+# simulator coverage, production clockwise-family realization, and the general
+# FlushDescriptor failure-input seam remain.
 rust_modules = [
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/gpu.rs",
@@ -336,6 +348,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_cache.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
@@ -361,6 +374,7 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_cache.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",

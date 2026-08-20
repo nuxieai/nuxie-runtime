@@ -865,8 +865,8 @@ pub use metal::{WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuMetalPresen
     any(target_os = "ios", target_os = "macos")
 ))]
 pub use native_metal::{
-    NativeMetalDrawableFrame, NativeMetalExecutionInventory, NativeMetalFactory, NativeMetalFrame,
-    NativeMetalFrameOutput,
+    NativeMetalContextOptions, NativeMetalDrawableFrame, NativeMetalExecutionInventory,
+    NativeMetalFactory, NativeMetalFrame, NativeMetalFrameOutput, ShaderCompilationMode,
 };
 pub use work_metrics::BackendWorkMetrics;
 

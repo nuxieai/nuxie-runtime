@@ -6,6 +6,7 @@
 
 pub mod bind_group_layout;
 pub mod binding_map;
+pub mod buffer;
 pub mod gpu_resource;
 pub mod metal;
 pub mod rstb_entry_container;

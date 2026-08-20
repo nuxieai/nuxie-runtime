@@ -15,4 +15,5 @@ tools = []
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 objc2 = "0.6.4"
-objc2-metal = { version = "0.3.2", default-features = false, features = ["MTLAllocation", "MTLDevice", "MTLLibrary", "MTLPixelFormat", "MTLResource", "MTLSampler", "MTLTexture", "MTLTypes"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSString"] }
+objc2-metal = { version = "0.3.2", default-features = false, features = ["MTLAllocation", "MTLBuffer", "MTLDevice", "MTLLibrary", "MTLPixelFormat", "MTLResource", "MTLSampler", "MTLTexture", "MTLTypes"] }

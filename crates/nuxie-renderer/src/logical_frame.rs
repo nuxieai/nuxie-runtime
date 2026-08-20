@@ -3144,6 +3144,90 @@ pub(crate) fn admit_path_draw(
     }))
 }
 
+/// Prepares one unclipped solid path through the canonical production logical
+/// writer for the bounded native-Metal generic-atomic tracer.
+///
+/// This materializes a lightweight admitted midpoint-fill record without
+/// constructing the backend-bearing `SolidDraw` envelope. A cfg(test)
+/// field-by-field oracle proves it matches the canonical production prepared
+/// slot and its exactly-once consumption report for the supported triangle.
+/// Scheduling, clipping, multiple draws, and multiple logical flushes
+/// deliberately remain outside this helper.
+#[cfg(any(test, feature = "native-metal-experimental"))]
+pub(crate) fn prepare_single_atomic_path_draw(
+    config: LogicalFrameConfig,
+    path: &LogicalPath,
+    paint: &LogicalPaint,
+    state: DrawState,
+) -> Result<Option<PreparedTypedDrawResources>, &'static str> {
+    if config.mode != RenderMode::ClockwiseAtomic {
+        return Err("single atomic path preparation requires clockwise-atomic mode");
+    }
+    let Some(admitted) = admit_path_draw(config, state, path, paint)? else {
+        return Ok(None);
+    };
+    if admitted.paint.style != RenderPaintStyle::Fill
+        || admitted.paint.feather != 0.0
+        || admitted.paint.shader.is_some()
+        || admitted.state.clip_rect.is_some()
+    {
+        return Err("single atomic path preparation requires an unclipped solid fill");
+    }
+    let prepared = admitted
+        .preparation
+        .prepared_fill
+        .as_deref()
+        .ok_or("single atomic path omitted prepared fill geometry")?;
+    if prepared.should_use_interior(&admitted.path, admitted.state.transform) {
+        return Err("single atomic path preparation requires midpoint geometry");
+    }
+    let mut tessellation = prepared
+        .midpoint(&admitted.path, admitted.state.transform)
+        .map(|prepared| prepared.tessellation.clone())
+        .ok_or("single atomic path omitted midpoint geometry")?;
+    let [xx, yx, xy, yy, _, _] = admitted.state.transform.0;
+    tessellation.make_double_sided_with_direction(
+        super::draw::clockwise_atomic_negate_coverage_from_area(
+            super::draw::path_coarse_area(&admitted.path.raw_path),
+            xx * yy - xy * yx,
+            admitted.path.fill_rule,
+            true,
+        ),
+    );
+    let mut path_data = tessellation.path;
+    path_data.z_index = 0;
+    path_data.coverage_buffer_range.pitch = config.width.div_ceil(32) * 32;
+    let mut contours = tessellation.contours;
+    for contour in &mut contours {
+        contour.path_id = 1;
+    }
+    let local_contour_ids_are_dense = contours.len() <= gpu::CONTOUR_ID_MASK as usize;
+    let paint_data = gpu::PaintData::solid(
+        modulate_color_alpha(admitted.paint.color, admitted.state.opacity),
+        atomic_paint_fill_rule(admitted.path.fill_rule, true),
+        admitted.paint.blend_mode,
+    )
+    .with_clip_id(0)
+    .with_generic_clockwise_fill();
+    Ok(Some(PreparedTypedDrawResources {
+        contour_base: 0,
+        path: path_data,
+        paint: paint_data,
+        paint_aux: clip_rect_paint_aux(None),
+        spans: tessellation.spans,
+        contours,
+        triangles: Vec::new(),
+        base_instance: tessellation.base_instance,
+        instance_count: tessellation.instance_count,
+        triangle_count: 0,
+        borrowed_triangle_count: 0,
+        main_triangle_batches: Vec::new(),
+        has_interior_triangles: false,
+        uses_interior: false,
+        local_contour_ids_are_dense,
+    }))
+}
+
 /// Admit and materialize one same-logical-flush set of solid
 /// raster-ordering feather-atlas draws without constructing `SolidDraw`.
 ///

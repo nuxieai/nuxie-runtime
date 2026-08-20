@@ -268,6 +268,11 @@ status = "in-progress"
 # retain overlapping concrete generations, and retry on the same coordinator.
 # The context also retains byte-exact shared ImageRect vertex/index buffers from
 # the pinned constructor; drawing them remains a later atomic-encoder slice.
+# UNIV-2088's first bounded generic-atomic slice ports the fixed-function
+# opaque SrcOver initialize/midpoint/resolve topology from 1363-1385,
+# 1759-1812, 1857-1925, and 1989-1997. It deliberately leaves this full source
+# row in-progress: clips, gradients, atlas, images, strokes, advanced blends,
+# multi-draw/multi-flush scheduling, simulator coverage, and fallback remain.
 rust_modules = [
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/gpu.rs",
@@ -320,6 +325,9 @@ evidence = [
   "fixtures/renderer/reference/metal/first-light-two-atlas-feather-strokes-clockwise-atomic.provenance",
   "fixtures/renderer/streams/first-light-atlas-feather-stroke.rive-stream",
   "fixtures/renderer/streams/first-light-two-atlas-feather-strokes.rive-stream",
+  "fixtures/renderer/reference/metal/first-light-triangle-clockwise-atomic.png",
+  "fixtures/renderer/streams/first-light-triangle.rive-stream",
+  "tools/metal-port/tracer-corpus-atomic.toml",
   "tools/metal-port/tracer-corpus.toml",
   "tools/metal-port/tracer-corpus-wgpu-secondary.toml",
 ]

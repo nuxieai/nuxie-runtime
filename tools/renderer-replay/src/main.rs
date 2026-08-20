@@ -38,6 +38,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
         #[cfg(all(feature = "native-metal", target_os = "macos"))]
         "rust-metal" => replay_native_metal(&stream, options.frame, width, height, clear)?,
+        #[cfg(all(feature = "native-metal", target_os = "macos"))]
+        "rust-metal-atomic" => {
+            replay_native_metal_atomic(&stream, options.frame, width, height, clear, &options.mode)?
+        }
         #[cfg(all(feature = "ffi", target_os = "macos"))]
         "ffi-metal" => {
             replay_ffi_metal(&stream, options.frame, width, height, clear, &options.mode)?
@@ -53,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     ""
                 },
                 if cfg!(all(feature = "native-metal", target_os = "macos")) {
-                    " or `rust-metal`"
+                    " or `rust-metal` or `rust-metal-atomic`"
                 } else {
                     ""
                 },
@@ -90,7 +94,7 @@ fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
     if !matches!(mode, "msaa" | "clockwise-atomic") {
         return Err(format!("unsupported renderer mode `{mode}`"));
     }
-    if matches!(backend, "ffi-metal" | "rust-metal") && mode == "msaa" {
+    if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic") && mode == "msaa" {
         return Err(
             "native Metal does not implement `msaa`; upstream Metal selects raster-order or atomic execution"
                 .to_owned(),
@@ -108,6 +112,26 @@ fn replay_native_metal(
     clear: u32,
 ) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
     let mut factory = nuxie_renderer::NativeMetalFactory::new(width, height)?;
+    let adapter = factory.adapter_name();
+    let mut frame = factory.begin_frame(clear)?;
+    stream.replay_frame(frame_index, &mut factory, &mut frame)?;
+    Ok((frame.finish()?, Some(adapter)))
+}
+
+#[cfg(all(feature = "native-metal", target_os = "macos"))]
+fn replay_native_metal_atomic(
+    stream: &RenderStream,
+    frame_index: usize,
+    width: u32,
+    height: u32,
+    clear: u32,
+    mode: &str,
+) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
+    let mode = match mode {
+        "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
+        value => return Err(format!("unsupported native Metal mode `{value}`").into()),
+    };
+    let mut factory = nuxie_renderer::NativeMetalFactory::new_with_mode(width, height, mode)?;
     let adapter = factory.adapter_name();
     let mut frame = factory.begin_frame(clear)?;
     stream.replay_frame(frame_index, &mut factory, &mut frame)?;
@@ -259,7 +283,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|rust-metal|ffi-metal|ffi-dawn] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]
@@ -304,8 +328,10 @@ mod tests {
         let error = validate_backend_mode("ffi-metal", "msaa").unwrap_err();
         assert!(error.contains("native Metal does not implement `msaa`"));
         assert!(validate_backend_mode("rust-metal", "msaa").is_err());
+        assert!(validate_backend_mode("rust-metal-atomic", "msaa").is_err());
         validate_backend_mode("ffi-metal", "clockwise-atomic").unwrap();
         validate_backend_mode("rust-metal", "clockwise-atomic").unwrap();
+        validate_backend_mode("rust-metal-atomic", "clockwise-atomic").unwrap();
         validate_backend_mode("ffi-dawn", "msaa").unwrap();
     }
 }

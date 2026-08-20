@@ -1,0 +1,10 @@
+[[entry]]
+id = "native-metal-first-light-triangle-generic-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/first-light-triangle.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-triangle-clockwise-atomic.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 32

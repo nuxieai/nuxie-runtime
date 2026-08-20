@@ -29,10 +29,11 @@ h2 { margin:0; font-size:1.45rem; letter-spacing:-.025em; } .section-head p { ma
 .owner-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; } .owner { background:var(--panel); border:1px solid var(--line); } .owner summary { cursor:pointer; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:14px 16px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; } .owner p,.owner-meta { margin:0; padding:0 16px 15px; color:var(--muted); line-height:1.45; } .owner-meta { display:grid; gap:5px; font-size:.82rem; }
 .filters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; } .filters button { appearance:none; background:transparent; color:var(--ink); border:1px solid var(--line); padding:7px 10px; cursor:pointer; } .filters button[aria-pressed="true"] { border-color:var(--green); color:var(--green); background:var(--green-soft); }
 .table-wrap { overflow-x:auto; border:1px solid var(--line); background:var(--panel); } table { width:100%; border-collapse:collapse; min-width:920px; } th,td { padding:11px 13px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; } td small { color:var(--muted); } td:nth-child(1) { width:220px; } td:nth-child(3) { width:120px; } td:nth-child(5) { max-width:340px; overflow-wrap:anywhere; } tr:last-child td { border-bottom:0; }
-.reports { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; } .report { background:var(--panel); border:1px solid var(--line); border-top:4px solid var(--line); padding:18px; box-shadow:var(--shadow); } .report-green { border-top-color:var(--green); } .report-amber { border-top-color:var(--amber); } .report-head,.report footer { display:flex; justify-content:space-between; gap:10px; align-items:center; } .report time { color:var(--muted); } .report h3 { margin:15px 0 8px; } .report p { color:var(--muted); line-height:1.5; } .report footer { margin-top:16px; } .runs { display:grid; gap:8px; margin-top:14px; } .run { border-left:2px solid var(--line); padding-left:10px; } .run code,.run span { display:block; overflow-wrap:anywhere; } .run span { color:var(--muted); margin-top:3px; font-size:.82rem; }
+	.reports { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; } .report { background:var(--panel); border:1px solid var(--line); border-top:4px solid var(--line); padding:18px; box-shadow:var(--shadow); } .report-green { border-top-color:var(--green); } .report-amber { border-top-color:var(--amber); } .report-head,.report footer { display:flex; justify-content:space-between; gap:10px; align-items:center; } .report time { color:var(--muted); } .report h3 { margin:15px 0 8px; } .report p { color:var(--muted); line-height:1.5; } .report footer { margin-top:16px; } .runs { display:grid; gap:8px; margin-top:14px; } .run { border-left:2px solid var(--line); padding-left:10px; } .run code,.run span { display:block; overflow-wrap:anywhere; } .run span { color:var(--muted); margin-top:3px; font-size:.82rem; }
+	.suites { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; } .suite { background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--queued); padding:18px; box-shadow:var(--shadow); } .suite-green { border-left-color:var(--green); } .suite-active { border-left-color:var(--green); } .suite-amber { border-left-color:var(--amber); } .suite-head { display:flex; align-items:center; justify-content:space-between; gap:12px; } .suite h3 { margin:12px 0 7px; } .suite>p { color:var(--muted); line-height:1.5; } .suite dl { display:grid; grid-template-columns:90px 1fr; gap:8px 12px; margin:16px 0 0; font-size:.84rem; } .suite dt { color:var(--muted); font-weight:700; } .suite dd { margin:0; overflow-wrap:anywhere; }
 .gallery { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; } .gallery-card { margin:0; background:var(--panel); border:1px solid var(--line); overflow:hidden; } .gallery-card>a { display:grid; place-items:center; aspect-ratio:1/1; background:repeating-conic-gradient(from 45deg,var(--line) 0 25%,transparent 0 50%) 50%/18px 18px; } .gallery-card img { display:block; width:100%; height:100%; object-fit:contain; image-rendering:auto; } .gallery-card figcaption { padding:12px; display:grid; gap:8px; } .gallery-card figcaption>span { display:flex; flex-wrap:wrap; gap:6px; align-items:center; } .gallery-card .status { margin-left:0; } .gallery-card figcaption>a { font-size:.82rem; }
 .contract { border-left:4px solid var(--green); padding:5px 0 5px 18px; color:var(--muted); line-height:1.55; }
-@media (max-width:900px) { .hero { grid-template-columns:1fr; } .hero-meta { border-left:0; border-top:3px solid var(--green); padding-left:0; } .overview,.reports { grid-template-columns:1fr; } .source-grid,.owner-list { grid-template-columns:1fr; } .phases { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 0; } .gallery { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+	@media (max-width:900px) { .hero { grid-template-columns:1fr; } .hero-meta { border-left:0; border-top:3px solid var(--green); padding-left:0; } .overview,.reports,.suites { grid-template-columns:1fr; } .source-grid,.owner-list { grid-template-columns:1fr; } .phases { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 0; } .gallery { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:520px) { .shell { padding:28px 15px 60px; } .section-head { display:block; } .section-head p { margin-top:8px; } .phases,.gallery { grid-template-columns:1fr; } .source-card-head { display:block; } .source-card-head strong { display:block; margin-top:10px; } }
 </style>
 </head>
@@ -110,6 +111,131 @@ h2 { margin:0; font-size:1.45rem; letter-spacing:-.025em; } .section-head p { ma
           <div><strong>Whole-owner promotion</strong><span class="status status-queued">Queued</span><p>Promote the header and implementation only when every line, field, configuration, and reachable branch is closed.</p></div>
         </li>
         </ol></section>
+
+  <section class="section">
+    <div class="section-head"><h2>Validation exit gates</h2><p>Pinned C++ Metal proves source parity. Rust-WGPU is a separate product-behavior differential, and its current 4/736 coverage remains amber.</p></div>
+    <div class="suites">
+        <article class="suite suite-green">
+          <div class="suite-head"><code>V0</code><span class="status status-green">Green</span></div>
+          <h3>Inventory and provenance</h3>
+          <p>Corpus count reconciled after commit 53b4c035a added the 1,469th row.</p>
+          <dl>
+            <dt>Authority</dt><dd>Pinned manifests and source digests</dd>
+            <dt>Scope</dt><dd>1,469 corpus rows; 736 Metal-compatible; 733 explicit MSAA exclusions</dd>
+            <dt>Command</dt><dd><code>make metal-port-check &amp;&amp; make metal-port-progress-check</code></dd>
+            <dt>Green when</dt><dd>Pinned inputs, unique row counts, continuous source map, and generated dashboard all match.</dd>
+          </dl>
+        </article>
+
+        <article class="suite suite-active">
+          <div class="suite-head"><code>V1</code><span class="status status-active">Active</span></div>
+          <h3>Source and ownership closure</h3>
+          <p>Preparation audit active; source ledger remains 51.2% line-weighted ported.</p>
+          <dl>
+            <dt>Authority</dt><dd>Pinned C++/Objective-C++ source</dd>
+            <dt>Scope</dt><dd>Complete header, implementation, fields, configs, and directly owned supporting units</dd>
+            <dt>Command</dt><dd><code>make metal-port-check</code></dd>
+            <dt>Green when</dt><dd>Zero partial/missing primary ranges and no incomplete required owner.</dd>
+          </dl>
+        </article>
+
+        <article class="suite suite-queued">
+          <div class="suite-head"><code>V2</code><span class="status status-queued">Queued</span></div>
+          <h3>Compile and configuration matrix</h3>
+          <p>Not an implementation work queue during preparation/translation.</p>
+          <dl>
+            <dt>Authority</dt><dd>Translated Rust owner graph and pinned preprocessor branches</dd>
+            <dt>Scope</dt><dd>Apple native features, portable cfgs, macOS/iOS/tvOS/visionOS configurations</dd>
+            <dt>Command</dt><dd><code>Defined during compiler queue after complete translation is wired</code></dd>
+            <dt>Green when</dt><dd>All represented configurations compile warning-clean against the recorded baseline.</dd>
+          </dl>
+        </article>
+
+        <article class="suite suite-queued">
+          <div class="suite-head"><code>V3</code><span class="status status-queued">Queued</span></div>
+          <h3>Native structure, lifecycle, and failure</h3>
+          <p>Last bounded checkpoint passed 24/24; whole-owner suite waits for full translation.</p>
+          <dl>
+            <dt>Authority</dt><dd>Pinned Metal source behavior</dd>
+            <dt>Scope</dt><dd>Full native lib and tracer suites with Metal API and shader validation</dd>
+            <dt>Command</dt><dd><code>MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 cargo test -p nuxie-renderer --features native-metal-experimental --test native_metal_tracer</code></dd>
+            <dt>Green when</dt><dd>Complete flush topology, owners, failures, completion, and structural inventories pass.</dd>
+          </dl>
+        </article>
+
+        <article class="suite suite-queued">
+          <div class="suite-head"><code>V4</code><span class="status status-queued">Queued</span></div>
+          <h3>Pinned C++ Metal parity</h3>
+          <p>The 12-row bounded evidence is green; complete-corpus promotion gate is not yet implemented.</p>
+          <dl>
+            <dt>Authority</dt><dd>Rive C++ Metal at 4ac7b327 on the same adapter</dd>
+            <dt>Scope</dt><dd>Every Metal-compatible row; current bounded lanes cover 4 + 8 rows</dd>
+            <dt>Command</dt><dd><code>make renderer-metal-oracle-tracers &amp;&amp; make renderer-metal-atomic-oracle-tracer</code></dd>
+            <dt>Green when</dt><dd>Same-runner outputs, occupancy, execution path, and source-owned work contracts pass without tolerance widening.</dd>
+          </dl>
+        </article>
+
+        <article class="suite suite-amber">
+          <div class="suite-head"><code>V5</code><span class="status status-amber">Attention</span></div>
+          <h3>Rust Metal vs Rust-WGPU</h3>
+          <p>4/736 is regression evidence only and cannot support a whole-renderer WGPU parity claim.</p>
+          <dl>
+            <dt>Authority</dt><dd>Current product behavior on the same Nuxie revision</dd>
+            <dt>Scope</dt><dd>736/736 clockwise-atomic rows; current secondary manifest covers only 4</dd>
+            <dt>Command</dt><dd><code>Required behavior-phase target: make renderer-metal-wgpu-parity</code></dd>
+            <dt>Green when</dt><dd>All rows preserve pixels within predeclared independent budgets, exact occupancy, and public success/error behavior.</dd>
+          </dl>
+        </article>
+
+        <article class="suite suite-green">
+          <div class="suite-head"><code>V6</code><span class="status status-green">Green</span></div>
+          <h3>WebGPU MSAA exclusion</h3>
+          <p>Negative contract exists; these rows are not counted as native Metal parity.</p>
+          <dl>
+            <dt>Authority</dt><dd>Pinned native Metal mode contract</dd>
+            <dt>Scope</dt><dd>733 WebGPU-style MSAA corpus rows</dd>
+            <dt>Command</dt><dd><code>make renderer-metal-msaa-contract</code></dd>
+            <dt>Green when</dt><dd>Native Metal rejects the unsupported mode and the harness cannot relabel WGPU/Dawn output.</dd>
+          </dl>
+        </article>
+
+        <article class="suite suite-queued">
+          <div class="suite-head"><code>V7</code><span class="status status-queued">Queued</span></div>
+          <h3>Platform and hardware policy</h3>
+          <p>Awaiting complete translation.</p>
+          <dl>
+            <dt>Authority</dt><dd>Pinned platform branches and capability policy</dd>
+            <dt>Scope</dt><dd>Apple Silicon, Intel/discrete, old-hardware barrier policy, Apple device/simulator configs</dd>
+            <dt>Command</dt><dd><code>Platform matrix commands are recorded with the compiler and behavior evidence</code></dd>
+            <dt>Green when</dt><dd>Every pinned configuration is executed, compile-checked, or explicitly excluded.</dd>
+          </dl>
+        </article>
+
+        <article class="suite suite-queued">
+          <div class="suite-head"><code>V8</code><span class="status status-queued">Queued</span></div>
+          <h3>Rooted product and no fallback</h3>
+          <p>Bounded product root was green; final whole-renderer root must be rerun after translation.</p>
+          <dl>
+            <dt>Authority</dt><dd>Exact product executable and Cargo graph</dd>
+            <dt>Scope</dt><dd>Native product execution, Mach-O, linked libraries, shader inventory, rendered output</dd>
+            <dt>Command</dt><dd><code>make renderer-native-metal-tracer-binary</code></dd>
+            <dt>Green when</dt><dd>Translated path is rooted with no WGPU, Naga, Dawn, WGSL translation, or CPU fallback.</dd>
+          </dl>
+        </article>
+
+        <article class="suite suite-queued">
+          <div class="suite-head"><code>V9</code><span class="status status-queued">Queued</span></div>
+          <h3>Independent closeout</h3>
+          <p>Not started.</p>
+          <dl>
+            <dt>Authority</dt><dd>Independent source/spec and ownership/standards reviews</dd>
+            <dt>Scope</dt><dd>Complete translated owner and all retained evidence</dd>
+            <dt>Command</dt><dd><code>Run both independent reviews after V0-V8 are green</code></dd>
+            <dt>Green when</dt><dd>Every accepted finding is fixed and affected suites are rerun.</dd>
+          </dl>
+        </article>
+        </div>
+  </section>
 
   <section class="section">
     <div class="section-head"><h2>Whole-owner state</h2><p>9 pinned Metal source/support files: 7 ported, 2 in progress. Renderer ownership contracts: 5 ported, 5 in progress, 1 pending.</p></div>
@@ -637,6 +763,14 @@ h2 { margin:0; font-size:1.45rem; letter-spacing:-.025em; } .section-head p { ma
   </section>
 
   <section class="section"><div class="section-head"><h2>Progress reports and verification logs</h2><p>Checkpoint results are preserved without using them to define translation scope.</p></div><div class="reports">
+            <article class="report report-amber">
+              <div class="report-head"><time>2026-08-20</time><span class="status status-amber">Attention</span></div>
+              <h3>Whole-renderer validation contract recorded</h3>
+              <p>Pinned C++ Metal remains the source oracle. Rust-WGPU is now an explicit 736-row product differential; the existing four-row secondary lane is correctly labeled incomplete.</p>
+              <div class="runs"><div class="run"><code></code><span>corpus-r.toml: 1,469 unique rows</span></div><div class="run"><code></code><span>Metal-compatible clockwise-atomic rows: 736</span></div><div class="run"><code></code><span>explicit WebGPU-style MSAA exclusions: 733</span></div><div class="run"><code></code><span>current Rust-Metal-vs-WGPU coverage: 4/736</span></div></div>
+              <footer><a href="../docs/METAL_RENDERER_VALIDATION.md">Open evidence</a></footer>
+            </article>
+
             <article class="report report-green">
               <div class="report-head"><time>2026-08-20</time><span class="status status-green">Green</span></div>
               <h3>Whole-renderer Bun-style plan adopted</h3>

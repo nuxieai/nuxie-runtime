@@ -180,6 +180,11 @@ explicitly excludes feature/tracer-bullet implementation: the complete pinned
 Metal header and implementation are translated before compiler diagnostics and
 renderer fixtures become work queues.
 
+The exact exit suites are defined separately in
+[`METAL_RENDERER_VALIDATION.md`](METAL_RENDERER_VALIDATION.md). Pinned C++
+Metal is the source-parity oracle; current Rust-WGPU is a secondary 736-row
+product-behavior differential and never determines translation structure.
+
 ## ORE file-oriented translation phase
 
 The remaining source inventory is the backend-neutral ORE interface, its

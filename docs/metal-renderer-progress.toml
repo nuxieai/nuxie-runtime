@@ -3,6 +3,14 @@ updated = "2026-08-20"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 active_phase = "preparation"
 
+[corpus]
+manifest = "corpus-r.toml"
+expected_total_rows = 1469
+expected_clockwise_atomic_rows = 736
+expected_msaa_rows = 733
+wgpu_secondary_rows = 4
+cpp_metal_bounded_rows = 12
+
 [[phase]]
 id = "preparation"
 label = "Preparation closure"
@@ -38,6 +46,119 @@ id = "promotion"
 label = "Whole-owner promotion"
 status = "queued"
 detail = "Promote the header and implementation only when every line, field, configuration, and reachable branch is closed."
+
+[[suite]]
+id = "V0"
+label = "Inventory and provenance"
+status = "green"
+authority = "Pinned manifests and source digests"
+scope = "1,469 corpus rows; 736 Metal-compatible; 733 explicit MSAA exclusions"
+command = "make metal-port-check && make metal-port-progress-check"
+acceptance = "Pinned inputs, unique row counts, continuous source map, and generated dashboard all match."
+current = "Corpus count reconciled after commit 53b4c035a added the 1,469th row."
+
+[[suite]]
+id = "V1"
+label = "Source and ownership closure"
+status = "active"
+authority = "Pinned C++/Objective-C++ source"
+scope = "Complete header, implementation, fields, configs, and directly owned supporting units"
+command = "make metal-port-check"
+acceptance = "Zero partial/missing primary ranges and no incomplete required owner."
+current = "Preparation audit active; source ledger remains 51.2% line-weighted ported."
+
+[[suite]]
+id = "V2"
+label = "Compile and configuration matrix"
+status = "queued"
+authority = "Translated Rust owner graph and pinned preprocessor branches"
+scope = "Apple native features, portable cfgs, macOS/iOS/tvOS/visionOS configurations"
+command = "Defined during compiler queue after complete translation is wired"
+acceptance = "All represented configurations compile warning-clean against the recorded baseline."
+current = "Not an implementation work queue during preparation/translation."
+
+[[suite]]
+id = "V3"
+label = "Native structure, lifecycle, and failure"
+status = "queued"
+authority = "Pinned Metal source behavior"
+scope = "Full native lib and tracer suites with Metal API and shader validation"
+command = "MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 cargo test -p nuxie-renderer --features native-metal-experimental --test native_metal_tracer"
+acceptance = "Complete flush topology, owners, failures, completion, and structural inventories pass."
+current = "Last bounded checkpoint passed 24/24; whole-owner suite waits for full translation."
+
+[[suite]]
+id = "V4"
+label = "Pinned C++ Metal parity"
+status = "queued"
+authority = "Rive C++ Metal at 4ac7b327 on the same adapter"
+scope = "Every Metal-compatible row; current bounded lanes cover 4 + 8 rows"
+command = "make renderer-metal-oracle-tracers && make renderer-metal-atomic-oracle-tracer"
+acceptance = "Same-runner outputs, occupancy, execution path, and source-owned work contracts pass without tolerance widening."
+current = "The 12-row bounded evidence is green; complete-corpus promotion gate is not yet implemented."
+
+[[suite]]
+id = "V5"
+label = "Rust Metal vs Rust-WGPU"
+status = "amber"
+authority = "Current product behavior on the same Nuxie revision"
+scope = "736/736 clockwise-atomic rows; current secondary manifest covers only 4"
+command = "Required behavior-phase target: make renderer-metal-wgpu-parity"
+acceptance = "All rows preserve pixels within predeclared independent budgets, exact occupancy, and public success/error behavior."
+current = "4/736 is regression evidence only and cannot support a whole-renderer WGPU parity claim."
+
+[[suite]]
+id = "V6"
+label = "WebGPU MSAA exclusion"
+status = "green"
+authority = "Pinned native Metal mode contract"
+scope = "733 WebGPU-style MSAA corpus rows"
+command = "make renderer-metal-msaa-contract"
+acceptance = "Native Metal rejects the unsupported mode and the harness cannot relabel WGPU/Dawn output."
+current = "Negative contract exists; these rows are not counted as native Metal parity."
+
+[[suite]]
+id = "V7"
+label = "Platform and hardware policy"
+status = "queued"
+authority = "Pinned platform branches and capability policy"
+scope = "Apple Silicon, Intel/discrete, old-hardware barrier policy, Apple device/simulator configs"
+command = "Platform matrix commands are recorded with the compiler and behavior evidence"
+acceptance = "Every pinned configuration is executed, compile-checked, or explicitly excluded."
+current = "Awaiting complete translation."
+
+[[suite]]
+id = "V8"
+label = "Rooted product and no fallback"
+status = "queued"
+authority = "Exact product executable and Cargo graph"
+scope = "Native product execution, Mach-O, linked libraries, shader inventory, rendered output"
+command = "make renderer-native-metal-tracer-binary"
+acceptance = "Translated path is rooted with no WGPU, Naga, Dawn, WGSL translation, or CPU fallback."
+current = "Bounded product root was green; final whole-renderer root must be rerun after translation."
+
+[[suite]]
+id = "V9"
+label = "Independent closeout"
+status = "queued"
+authority = "Independent source/spec and ownership/standards reviews"
+scope = "Complete translated owner and all retained evidence"
+command = "Run both independent reviews after V0-V8 are green"
+acceptance = "Every accepted finding is fixed and affected suites are rerun."
+current = "Not started."
+
+[[report]]
+date = "2026-08-20"
+title = "Whole-renderer validation contract recorded"
+status = "amber"
+summary = "Pinned C++ Metal remains the source oracle. Rust-WGPU is now an explicit 736-row product differential; the existing four-row secondary lane is correctly labeled incomplete."
+results = [
+  "corpus-r.toml: 1,469 unique rows",
+  "Metal-compatible clockwise-atomic rows: 736",
+  "explicit WebGPU-style MSAA exclusions: 733",
+  "current Rust-Metal-vs-WGPU coverage: 4/736",
+]
+evidence = "docs/METAL_RENDERER_VALIDATION.md"
 
 [[report]]
 date = "2026-08-20"

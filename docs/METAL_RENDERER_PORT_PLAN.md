@@ -259,6 +259,13 @@ oracles, and work counters. At this phase fixtures expose defects in the
 complete translation. Fixes must be made in the source-corresponding owner,
 not as a new fixture branch.
 
+The complete validation matrix and the distinction between the primary C++
+Metal oracle and the secondary Rust-WGPU differential are specified in
+`METAL_RENDERER_VALIDATION.md`. In particular, the current four-row WGPU
+secondary corpus is regression evidence only. Whole-renderer promotion
+requires the complete Metal-compatible `clockwise-atomic` corpus differential,
+which currently contains 736 rows.
+
 ### 4.4 Platform matrix
 
 Verify every configuration represented in the pinned source and available in
@@ -327,6 +334,8 @@ Its red, amber, and green state comes directly from:
 - `docs/metal-port-manifest.toml` for complete source-file state;
 - `docs/metal-port-ownership.toml` for lifetime/owner state;
 - `docs/metal-renderer-progress.toml` for the active phase and dated reports;
+- `docs/METAL_RENDERER_VALIDATION.md` and the validation-suite records in
+  `docs/metal-renderer-progress.toml` for executable exit gates;
 - the Metal corpus manifests for checked-in rendered evidence.
 
 The dashboard must be regenerated whenever any of those inputs changes:

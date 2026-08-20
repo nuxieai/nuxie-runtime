@@ -80,7 +80,14 @@ struct AtomicPathPipelines {
     initialize: DrawPipeline,
     midpoint: DrawPipeline,
     resolve: DrawPipeline,
+    interior_geometry: Option<AtomicInteriorGeometryPipelines>,
     clipped: Option<AtomicClippedPathPipelines>,
+}
+
+#[derive(Clone)]
+struct AtomicInteriorGeometryPipelines {
+    outer_curve: DrawPipeline,
+    interior: DrawPipeline,
 }
 
 #[derive(Clone)]
@@ -404,6 +411,7 @@ impl NativeMetalContext {
         tessellation_height: usize,
         pixel_format: MTLPixelFormat,
         uses_clipping: bool,
+        uses_interior_geometry: bool,
         uploads: UploadBatch<'_>,
     ) -> Result<PreparedResourceLease, RendererError> {
         let mut allow_all = |_| Ok(());
@@ -414,7 +422,7 @@ impl NativeMetalContext {
             None,
             uploads,
             specialized_atlas_blit_job(),
-            Some((pixel_format, uses_clipping)),
+            Some((pixel_format, uses_clipping, uses_interior_geometry)),
             &mut allow_all,
         )
     }
@@ -449,7 +457,7 @@ impl NativeMetalContext {
         feather_atlas_is_stroke: Option<bool>,
         uploads: UploadBatch<'_>,
         specialized_job: BackgroundCompileJob,
-        atomic_path: Option<(MTLPixelFormat, bool)>,
+        atomic_path: Option<(MTLPixelFormat, bool, bool)>,
         before: &mut impl FnMut(ResourcePreparationStage) -> Result<(), RendererError>,
     ) -> Result<PreparedResourceLease, RendererError> {
         let ownership = self.upload_coordinator.prepare_to_flush();
@@ -474,7 +482,24 @@ impl NativeMetalContext {
                 self.platform,
             )?);
         }
-        if atomic_path.is_some_and(|(_, uses_clipping)| uses_clipping)
+        if atomic_path.is_some_and(|(_, uses_clipping, uses_interior_geometry)| {
+            uses_interior_geometry && !uses_clipping
+        }) && generation
+            .atomic_path_pipelines
+            .as_ref()
+            .is_some_and(|pipelines| pipelines.interior_geometry.is_none())
+        {
+            generation
+                .atomic_path_pipelines
+                .as_mut()
+                .expect("atomic path pipeline set created above")
+                .interior_geometry = Some(compile_atomic_interior_geometry_pipelines(
+                &self.device,
+                self.capabilities,
+                self.platform,
+            )?);
+        }
+        if atomic_path.is_some_and(|(_, uses_clipping, _)| uses_clipping)
             && generation
                 .atomic_path_pipelines
                 .as_ref()
@@ -549,7 +574,7 @@ impl NativeMetalContext {
             None
         };
         let atomic_path_pipelines = atomic_path
-            .map(|(pixel_format, uses_clipping)| {
+            .map(|(pixel_format, uses_clipping, uses_interior_geometry)| {
                 let pipelines = generation.atomic_path_pipelines.as_ref().ok_or_else(|| {
                     RendererError::NativeMetal("atomic path pipeline set is absent".to_owned())
                 })?;
@@ -558,6 +583,15 @@ impl NativeMetalContext {
                         pipelines.clipped.as_ref().ok_or_else(|| {
                             RendererError::NativeMetal(
                                 "atomic clipped path pipeline set is absent".to_owned(),
+                            )
+                        })
+                    })
+                    .transpose()?;
+                let interior_geometry = (uses_interior_geometry && !uses_clipping)
+                    .then(|| {
+                        pipelines.interior_geometry.as_ref().ok_or_else(|| {
+                            RendererError::NativeMetal(
+                                "atomic interior-geometry pipeline set is absent".to_owned(),
                             )
                         })
                     })
@@ -572,13 +606,15 @@ impl NativeMetalContext {
                         .retained_pipeline_state(pixel_format)
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
                     outer_curve: clipped
-                        .map(|pipelines| {
-                            pipelines.outer_curve.retained_pipeline_state(pixel_format)
-                        })
+                        .map(|pipelines| &pipelines.outer_curve)
+                        .or_else(|| interior_geometry.map(|pipelines| &pipelines.outer_curve))
+                        .map(|pipeline| pipeline.retained_pipeline_state(pixel_format))
                         .transpose()
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
                     interior: clipped
-                        .map(|pipelines| pipelines.interior.retained_pipeline_state(pixel_format))
+                        .map(|pipelines| &pipelines.interior)
+                        .or_else(|| interior_geometry.map(|pipelines| &pipelines.interior))
+                        .map(|pipeline| pipeline.retained_pipeline_state(pixel_format))
                         .transpose()
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
                     resolve: clipped
@@ -861,7 +897,42 @@ fn compile_atomic_path_pipelines(
         initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
         midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
         resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
+        interior_geometry: None,
         clipped: None,
+    })
+}
+
+const fn atomic_interior_geometry_jobs() -> [BackgroundCompileJob; 2] {
+    [
+        BackgroundCompileJob::new(
+            DrawType::OuterCurvePatches,
+            ENABLE_DITHER,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::InteriorTriangulation,
+            ENABLE_DITHER,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+    ]
+}
+
+fn compile_atomic_interior_geometry_pipelines(
+    device: &Retained<ProtocolObject<dyn MTLDevice>>,
+    capabilities: MetalCapabilitySelection,
+    platform: ApplePlatform,
+) -> Result<AtomicInteriorGeometryPipelines, RendererError> {
+    let [outer_curve, interior] = atomic_interior_geometry_jobs();
+    Ok(AtomicInteriorGeometryPipelines {
+        outer_curve: compile_specialized_draw_pipeline(
+            device,
+            capabilities,
+            platform,
+            outer_curve,
+        )?,
+        interior: compile_specialized_draw_pipeline(device, capabilities, platform, interior)?,
     })
 }
 
@@ -1214,6 +1285,24 @@ mod tests {
                 ),
                 (
                     DrawType::RenderPassResolve,
+                    ENABLE_DITHER,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+            ]
+        );
+        assert_eq!(
+            atomic_interior_geometry_jobs().map(|job| {
+                assert_eq!(job.interlock_mode, InterlockMode::Atomics);
+                (job.draw_type, job.shader_features, job.shader_misc_flags)
+            }),
+            [
+                (
+                    DrawType::OuterCurvePatches,
+                    ENABLE_DITHER,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+                (
+                    DrawType::InteriorTriangulation,
                     ENABLE_DITHER,
                     FIXED_FUNCTION_COLOR_OUTPUT
                 ),

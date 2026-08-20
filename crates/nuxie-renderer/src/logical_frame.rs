@@ -3464,10 +3464,11 @@ pub(crate) fn prepare_single_atomic_path_draw(
     .map(Some)
 }
 
-/// Prepares one bounded same-logical-flush set of unclipped solid midpoint
-/// fills for native Metal's generic-atomic path. Each authored input crosses
-/// canonical admission/preparation exactly once. Path IDs remain authored;
-/// execution order follows C++'s disjoint `IntersectionBoard` draw groups.
+/// Prepares one bounded same-logical-flush set of unclipped solid fills and at
+/// most one simple linear-gradient fill for native Metal's generic-atomic
+/// path. Each authored input crosses canonical admission/preparation exactly
+/// once. Path IDs remain authored; execution order follows C++'s disjoint
+/// `IntersectionBoard` draw groups.
 #[cfg(any(test, feature = "native-metal-experimental"))]
 pub(crate) fn prepare_atomic_path_flush(
     config: LogicalFrameConfig,
@@ -3657,8 +3658,15 @@ fn assemble_atomic_path_flush(
     if pending.is_empty() {
         return Ok(None);
     }
-    if pending.len() > 1 && pending.iter().any(|draw| draw.gradient_batch.is_some()) {
-        return Err("atomic path flush does not yet mix gradients with multiple draws");
+    let gradient_count = pending
+        .iter()
+        .filter(|draw| draw.gradient_batch.is_some())
+        .count();
+    if uses_clipping && gradient_count != 0 {
+        return Err("atomic clipped path flush does not support gradients");
+    }
+    if gradient_count > 1 {
+        return Err("atomic path flush supports one gradient draw");
     }
 
     let mut board = super::intersection_board::IntersectionBoard::new(

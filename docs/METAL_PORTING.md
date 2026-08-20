@@ -397,6 +397,43 @@ This checkpoint still deliberately excludes multiple logical flushes,
 fill/stroke mixing in one native flush, gradient or image atlas paints,
 non-rectangular clips, advanced/HSL blends, and general draw scheduling.
 
+## UNIV-2087 transactional resource generations
+
+Resource preparation publishes one coherent generation. The context cheaply
+clones the currently retained gradient, tessellation, feather-atlas, mask-pair,
+and specialized AtlasBlit owners; applies every requested resize and lazy
+realization to that candidate; prepares the upload rings; and only then swaps
+the complete candidate into context state. A later texture, pipeline, shader,
+or upload failure drops the candidate and leaves the previously published
+generation untouched. This is the typed-error Rust adaptation of the pinned
+C++ sizing/allocation sequence in `renderer/src/render_context.cpp:2472-2817`
+and the Metal leaves in
+`renderer/src/metal/render_context_metal_impl.mm:1041-1224`, pinned at
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
+
+Live tests hold two complete generations at once and use Objective-C weak
+references to prove the retired gradient, tessellation, and atlas textures stay
+alive until their prepared lease drops. Deterministic failures after staged
+gradient growth, during atlas growth, and in the real background compiler's
+synthesized shader-failure path publish no partial state. Four consecutive
+failed preparations followed by a successful retry prove abandoned failures do
+not exhaust the three-slot coordinator. Leaf allocation tests independently
+prove each texture owner preserves its descriptor and identity on allocation
+failure and accepts a later real Metal retry.
+
+This closes coherent prepared-generation ownership for the current synchronous
+public renderer. It does not claim simultaneous public GPU execution,
+`safeFrameNumber` scheduling, real hardware device loss, five-second resource
+trimming, or release deferred beyond context destruction; those require the
+general asynchronous scheduler rather than a test-only public API expansion.
+
+The same context also retains the pinned static ImageRect vertex and index
+buffers from `render_context_metal_impl.mm:717-725`. Their bytes come directly
+from the already-ported `IMAGE_RECT_VERTICES` and `IMAGE_RECT_INDICES`
+contracts, use shared Metal storage, and are released with the context. Owning
+these dormant buffers completes the upstream resource inventory without
+claiming the later atomic image-draw encoder.
+
 ## Compiler and commit workflow
 
 Use compiler errors as the work queue within one upstream source group:

@@ -2,9 +2,10 @@
 //!
 //! This is a direct ownership adaptation of the pinned upstream context:
 //! - `renderer/include/rive/renderer/metal/render_context_metal_impl.h:89-280`
-//! - `renderer/src/metal/render_context_metal_impl.mm:100-240,414-656`
+//! - `renderer/src/metal/render_context_metal_impl.mm:100-240,414-656,717-725`
 //! - `renderer/src/metal/render_context_metal_impl.mm:1023-1079,1227-1509`
 //! - `renderer/src/metal/render_context_metal_impl.mm:1898-1925,2016-2030`
+//! - `renderer/src/render_context.cpp:2472-2817`
 //!
 //! Pinned upstream source: `rive-runtime` at
 //! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
@@ -57,13 +58,32 @@ const UBER_PATH_FRAGMENT_MAIN: &str = "p1111111100::JB";
 const SPECIALIZED_DRAW_VERTEX_MAIN: &str = "GC";
 const SPECIALIZED_DRAW_FRAGMENT_MAIN: &str = "JB";
 
-struct ResourceState {
+/// Coherent retained owners published by one successful preparation.
+///
+/// Upstream mutates nullable Metal owners during its sizing pass. Rust stages
+/// a cheap retained clone and swaps it only after every fallible allocation,
+/// lazy pipeline realization, compilation, and upload succeeds so typed errors
+/// cannot expose a partially updated generation.
+#[derive(Clone)]
+struct ResourceGeneration {
     gradient: GradientResource,
     tessellation: TessellationResource,
     feather_atlas: Option<FeatherAtlasResource>,
     feather_atlas_pipelines: Option<FeatherAtlasPipelines>,
     specialized_atlas_blit_pipeline: Option<DrawPipeline>,
+}
+
+struct ResourceState {
+    generation: ResourceGeneration,
     uploads: UploadRings,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ResourcePreparationStage {
+    GradientTexture,
+    TessellationTexture,
+    FeatherAtlasTexture,
+    FeatherAtlasPipelines,
 }
 
 pub(crate) struct PreparedResourceLease {
@@ -136,6 +156,9 @@ pub(crate) struct NativeMetalContext {
     tess_span_index_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
     path_patch_vertex_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
     path_patch_index_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
+    // Pinned static owners for the later atomic ImageRect draw path.
+    _image_rect_vertex_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
+    _image_rect_index_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
     gaussian_integral_texture: Retained<ProtocolObject<dyn MTLTexture>>,
     upload_coordinator: BufferRingCoordinator,
     resources: Mutex<ResourceState>,
@@ -182,17 +205,21 @@ impl NativeMetalContext {
         let (patch_vertices, patch_indices) = gpu::generate_patch_buffer_data();
         let path_patch_vertex_buffer = make_buffer(&device, &patch_vertices)?;
         let path_patch_index_buffer = make_buffer(&device, &patch_indices)?;
+        let image_rect_vertex_buffer = make_buffer(&device, &gpu::IMAGE_RECT_VERTICES)?;
+        let image_rect_index_buffer = make_buffer(&device, &gpu::IMAGE_RECT_INDICES)?;
         let gaussian_integral_texture = make_gaussian_integral_texture(&device)?;
         let gradient = GradientResource::new(&device, GRADIENT_TEXTURE_WIDTH, 1)?
             .expect("the canonical gradient texture extent is nonzero");
         let tessellation = TessellationResource::new(&device, TESSELLATION_TEXTURE_WIDTH, 1)?
             .expect("the canonical tessellation texture extent is nonzero");
         let resources = Mutex::new(ResourceState {
-            gradient,
-            tessellation,
-            feather_atlas: None,
-            feather_atlas_pipelines: None,
-            specialized_atlas_blit_pipeline: None,
+            generation: ResourceGeneration {
+                gradient,
+                tessellation,
+                feather_atlas: None,
+                feather_atlas_pipelines: None,
+                specialized_atlas_blit_pipeline: None,
+            },
             uploads: UploadRings::default(),
         });
         let samplers = NativeMetalSamplers::new(&device)?;
@@ -215,6 +242,8 @@ impl NativeMetalContext {
             tess_span_index_buffer,
             path_patch_vertex_buffer,
             path_patch_index_buffer,
+            _image_rect_vertex_buffer: image_rect_vertex_buffer,
+            _image_rect_index_buffer: image_rect_index_buffer,
             gaussian_integral_texture,
             upload_coordinator: BufferRingCoordinator::new(),
             resources,
@@ -240,9 +269,9 @@ impl NativeMetalContext {
             .resources
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        state.feather_atlas.is_some()
-            && state.feather_atlas_pipelines.is_some()
-            && state.specialized_atlas_blit_pipeline.is_some()
+        state.generation.feather_atlas.is_some()
+            && state.generation.feather_atlas_pipelines.is_some()
+            && state.generation.specialized_atlas_blit_pipeline.is_some()
     }
 
     pub(crate) fn solid_pipeline(
@@ -285,6 +314,7 @@ impl NativeMetalContext {
             RendererError::NativeMetal("native Metal resource ring is poisoned".to_owned())
         })?;
         state
+            .generation
             .specialized_atlas_blit_pipeline
             .as_ref()
             .ok_or_else(|| {
@@ -327,14 +357,39 @@ impl NativeMetalContext {
         feather_atlas_is_stroke: Option<bool>,
         uploads: UploadBatch<'_>,
     ) -> Result<PreparedResourceLease, RendererError> {
+        let mut allow_all = |_| Ok(());
+        self.prepare_resources_with_control(
+            gradient_height,
+            tessellation_height,
+            feather_atlas_extent,
+            feather_atlas_is_stroke,
+            uploads,
+            specialized_atlas_blit_job(),
+            &mut allow_all,
+        )
+    }
+
+    fn prepare_resources_with_control(
+        &self,
+        gradient_height: usize,
+        tessellation_height: usize,
+        feather_atlas_extent: Option<[usize; 2]>,
+        feather_atlas_is_stroke: Option<bool>,
+        uploads: UploadBatch<'_>,
+        specialized_job: BackgroundCompileJob,
+        before: &mut impl FnMut(ResourcePreparationStage) -> Result<(), RendererError>,
+    ) -> Result<PreparedResourceLease, RendererError> {
         let ownership = self.upload_coordinator.prepare_to_flush();
         let mut state = self.resources.lock().map_err(|_| {
             RendererError::NativeMetal("native Metal resource ring is poisoned".to_owned())
         })?;
-        state
+        let mut generation = state.generation.clone();
+        before(ResourcePreparationStage::GradientTexture)?;
+        generation
             .gradient
             .resize(self.device(), GRADIENT_TEXTURE_WIDTH, gradient_height)?;
-        state.tessellation.resize(
+        before(ResourcePreparationStage::TessellationTexture)?;
+        generation.tessellation.resize(
             self.device(),
             TESSELLATION_TEXTURE_WIDTH,
             tessellation_height,
@@ -345,8 +400,10 @@ impl NativeMetalContext {
             ));
         }
         if let Some([width, height]) = feather_atlas_extent {
-            if state.feather_atlas.is_none() {
+            before(ResourcePreparationStage::FeatherAtlasTexture)?;
+            if generation.feather_atlas.is_none() {
                 let replacement = FeatherAtlasResource::new(self.device(), width, height)?;
+                before(ResourcePreparationStage::FeatherAtlasPipelines)?;
                 let pipelines =
                     FeatherAtlasPipelines::new(self.device(), self._draw_shader_library.library())
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
@@ -354,11 +411,12 @@ impl NativeMetalContext {
                     &self.device,
                     self.capabilities,
                     self.platform,
+                    specialized_job,
                 )?;
-                state.feather_atlas = replacement;
-                state.feather_atlas_pipelines = Some(pipelines);
-                state.specialized_atlas_blit_pipeline = Some(atlas_blit_pipeline);
-            } else if let Some(resource) = state.feather_atlas.as_mut() {
+                generation.feather_atlas = replacement;
+                generation.feather_atlas_pipelines = Some(pipelines);
+                generation.specialized_atlas_blit_pipeline = Some(atlas_blit_pipeline);
+            } else if let Some(resource) = generation.feather_atlas.as_mut() {
                 resource.ensure_capacity(self.device(), width, height)?;
             }
         }
@@ -366,23 +424,44 @@ impl NativeMetalContext {
         let upload_bytes = sizes.total_bytes()?;
         state.uploads.ensure_capacities(self.device(), sizes)?;
         let uploaded = state.uploads.upload(uploads)?;
-
-        Ok(PreparedResourceLease {
-            gradient: state.gradient.retained_texture(),
-            tessellation: state.tessellation.retained_texture().ok_or_else(|| {
-                RendererError::NativeMetal("tessellation resource texture is absent".to_owned())
-            })?,
-            feather_atlas: state
-                .feather_atlas
-                .as_ref()
-                .and_then(FeatherAtlasResource::retained_texture),
-            feather_atlas_pipeline: feather_atlas_is_stroke.map(|is_stroke| {
-                state
+        let gradient = generation.gradient.retained_texture();
+        let tessellation = generation.tessellation.retained_texture().ok_or_else(|| {
+            RendererError::NativeMetal("tessellation resource texture is absent".to_owned())
+        })?;
+        let feather_atlas = generation
+            .feather_atlas
+            .as_ref()
+            .and_then(FeatherAtlasResource::retained_texture);
+        if feather_atlas_extent.is_some() && feather_atlas.is_none() {
+            return Err(RendererError::NativeMetal(
+                "feather atlas resource texture is absent".to_owned(),
+            ));
+        }
+        let feather_atlas_pipeline = if let Some(is_stroke) = feather_atlas_is_stroke {
+            Some(
+                generation
                     .feather_atlas_pipelines
                     .as_ref()
-                    .expect("nonzero feather atlas allocation realizes its paired pipelines")
-                    .retained(is_stroke)
-            }),
+                    .ok_or_else(|| {
+                        RendererError::NativeMetal(
+                            "feather atlas pipeline pair is absent".to_owned(),
+                        )
+                    })?
+                    .retained(is_stroke),
+            )
+        } else {
+            None
+        };
+        // Publish every concrete texture and paired pipeline together only
+        // after all fallible realization, upload preparation, and lease-owner
+        // extraction has succeeded.
+        state.generation = generation;
+
+        Ok(PreparedResourceLease {
+            gradient,
+            tessellation,
+            feather_atlas,
+            feather_atlas_pipeline,
             flush_uniforms: uploaded.flush_uniforms,
             gradient_spans: uploaded.gradient_spans,
             tessellation_spans: uploaded.tessellation_spans,
@@ -603,10 +682,20 @@ impl UploadRings {
     }
 }
 
+const fn specialized_atlas_blit_job() -> BackgroundCompileJob {
+    BackgroundCompileJob::new(
+        DrawType::AtlasBlit,
+        ENABLE_DITHER,
+        InterlockMode::RasterOrdering,
+        0,
+    )
+}
+
 fn compile_specialized_atlas_blit_pipeline(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
     capabilities: MetalCapabilitySelection,
     platform: ApplePlatform,
+    job: BackgroundCompileJob,
 ) -> Result<DrawPipeline, RendererError> {
     let compiler = NativeBackgroundShaderCompiler::new_metal(
         device.clone(),
@@ -614,12 +703,6 @@ fn compile_specialized_atlas_blit_pipeline(
             atomic_barrier_type: capabilities.atomic_barrier_type,
         },
         platform,
-    );
-    let job = BackgroundCompileJob::new(
-        DrawType::AtlasBlit,
-        ENABLE_DITHER,
-        InterlockMode::RasterOrdering,
-        0,
     );
     compiler.push_job(job);
     let finished = compiler.pop_finished_job(true).ok_or_else(|| {
@@ -860,6 +943,370 @@ fn command_buffer_completion_result(
 mod tests {
     use super::*;
     use bytemuck::Zeroable;
+    use objc2::rc::{Retained, Weak};
+    use objc2_metal::{MTLCreateSystemDefaultDevice, MTLTexture};
+
+    struct UploadFixture {
+        flush_uniforms: gpu::FlushUniforms,
+        gradient_spans: [gpu::GradientSpan; 1],
+        tessellation_spans: [gpu::TessVertexSpan; 1],
+        paths: [gpu::PathData; 1],
+        paints: [gpu::PaintData; 1],
+        paint_aux: [gpu::PaintAuxData; 1],
+        contours: [gpu::ContourData; 1],
+        triangles: [gpu::TriangleVertex; 1],
+    }
+
+    impl UploadFixture {
+        fn new() -> Self {
+            Self {
+                flush_uniforms: gpu::FlushUniforms::zeroed(),
+                gradient_spans: [gpu::GradientSpan::zeroed()],
+                tessellation_spans: [gpu::TessVertexSpan::zeroed()],
+                paths: [gpu::PathData::zeroed()],
+                paints: [gpu::PaintData::zeroed()],
+                paint_aux: [gpu::PaintAuxData::zeroed()],
+                contours: [gpu::ContourData::zeroed()],
+                triangles: [gpu::TriangleVertex::zeroed()],
+            }
+        }
+
+        fn batch(&self) -> UploadBatch<'_> {
+            UploadBatch {
+                flush_uniforms: &self.flush_uniforms,
+                gradient_spans: &self.gradient_spans,
+                tessellation_spans: &self.tessellation_spans,
+                paths: &self.paths,
+                paints: &self.paints,
+                paint_aux: &self.paint_aux,
+                contours: &self.contours,
+                triangles: &self.triangles,
+            }
+        }
+    }
+
+    fn live_context() -> Option<NativeMetalContext> {
+        let device = MTLCreateSystemDefaultDevice()?;
+        let platform = super::super::select_apple_platform(&device);
+        let capabilities = super::super::select_device_capabilities(&device, platform);
+        Some(
+            NativeMetalContext::new(device, capabilities, platform)
+                .expect("create native Metal context"),
+        )
+    }
+
+    fn texture_identity(texture: &Retained<ProtocolObject<dyn MTLTexture>>) -> *const () {
+        Retained::as_ptr(texture) as *const ()
+    }
+
+    #[test]
+    fn context_owns_exact_upstream_image_rect_buffers_until_drop() {
+        use objc2_metal::MTLResource;
+
+        let Some(context) = live_context() else {
+            return;
+        };
+        let vertex_bytes: &[u8] = bytemuck::cast_slice(&gpu::IMAGE_RECT_VERTICES);
+        let index_bytes: &[u8] = bytemuck::cast_slice(&gpu::IMAGE_RECT_INDICES);
+        assert_eq!(
+            context._image_rect_vertex_buffer.length(),
+            vertex_bytes.len()
+        );
+        assert_eq!(context._image_rect_index_buffer.length(), index_bytes.len());
+        assert_eq!(
+            context._image_rect_vertex_buffer.storageMode(),
+            objc2_metal::MTLStorageMode::Shared
+        );
+        assert_eq!(
+            context._image_rect_index_buffer.storageMode(),
+            objc2_metal::MTLStorageMode::Shared
+        );
+        // SAFETY: both shared buffers are retained by `context`, their
+        // contents pointers cover exactly the lengths reported by Metal, and
+        // no mutation occurs while these byte slices are borrowed.
+        unsafe {
+            assert_eq!(
+                std::slice::from_raw_parts(
+                    context
+                        ._image_rect_vertex_buffer
+                        .contents()
+                        .as_ptr()
+                        .cast::<u8>(),
+                    vertex_bytes.len(),
+                ),
+                vertex_bytes
+            );
+            assert_eq!(
+                std::slice::from_raw_parts(
+                    context
+                        ._image_rect_index_buffer
+                        .contents()
+                        .as_ptr()
+                        .cast::<u8>(),
+                    index_bytes.len(),
+                ),
+                index_bytes
+            );
+        }
+        let vertex_owner = Weak::new(&*context._image_rect_vertex_buffer);
+        let index_owner = Weak::new(&*context._image_rect_index_buffer);
+        drop(context);
+        assert!(vertex_owner.load().is_none());
+        assert!(index_owner.load().is_none());
+    }
+
+    fn current_texture_identities(context: &NativeMetalContext) -> [Option<*const ()>; 3] {
+        let state = context.resources.lock().unwrap();
+        [
+            state
+                .generation
+                .gradient
+                .retained_texture()
+                .as_ref()
+                .map(texture_identity),
+            state
+                .generation
+                .tessellation
+                .retained_texture()
+                .as_ref()
+                .map(texture_identity),
+            state
+                .generation
+                .feather_atlas
+                .as_ref()
+                .and_then(FeatherAtlasResource::retained_texture)
+                .as_ref()
+                .map(texture_identity),
+        ]
+    }
+
+    #[test]
+    fn overlapping_resource_leases_retain_distinct_complete_generations() {
+        let Some(context) = live_context() else {
+            return;
+        };
+        let fixture = UploadFixture::new();
+        let first = context
+            .prepare_resources(2, 2, Some([16, 12]), Some(true), fixture.batch())
+            .expect("prepare first concrete generation");
+        let first_gradient = first.gradient.as_ref().unwrap();
+        let first_tessellation = &first.tessellation;
+        let first_atlas = first.feather_atlas.as_ref().unwrap();
+        let first_ids = [
+            texture_identity(first_gradient),
+            texture_identity(first_tessellation),
+            texture_identity(first_atlas),
+        ];
+        let first_weak = [
+            Weak::new(&**first_gradient),
+            Weak::new(&**first_tessellation),
+            Weak::new(&**first_atlas),
+        ];
+
+        let second = context
+            .prepare_resources(3, 4, Some([24, 20]), Some(true), fixture.batch())
+            .expect("prepare replacement concrete generation");
+        let second_ids = [
+            texture_identity(second.gradient.as_ref().unwrap()),
+            texture_identity(&second.tessellation),
+            texture_identity(second.feather_atlas.as_ref().unwrap()),
+        ];
+        assert_ne!(first_ids, second_ids);
+        assert_eq!(current_texture_identities(&context), second_ids.map(Some));
+        assert!(first_weak.iter().all(|owner| owner.load().is_some()));
+        assert_eq!((first_gradient.width(), first_gradient.height()), (512, 2));
+        assert_eq!(
+            (first_tessellation.width(), first_tessellation.height()),
+            (2048, 2)
+        );
+        assert_eq!((first_atlas.width(), first_atlas.height()), (16, 12));
+
+        drop(first);
+        assert!(first_weak.iter().all(|owner| owner.load().is_none()));
+        drop(second);
+        assert_eq!(current_texture_identities(&context), second_ids.map(Some));
+    }
+
+    #[test]
+    fn later_tessellation_failure_does_not_publish_staged_gradient() {
+        let Some(context) = live_context() else {
+            return;
+        };
+        let fixture = UploadFixture::new();
+        drop(
+            context
+                .prepare_resources(2, 2, None, None, fixture.batch())
+                .expect("prepare baseline generation"),
+        );
+        let baseline = current_texture_identities(&context);
+        let mut fail_tessellation = |stage| {
+            if stage == ResourcePreparationStage::TessellationTexture {
+                Err(RendererError::NativeMetal(
+                    "injected tessellation allocation failure".to_owned(),
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        assert!(context
+            .prepare_resources_with_control(
+                3,
+                4,
+                None,
+                None,
+                fixture.batch(),
+                specialized_atlas_blit_job(),
+                &mut fail_tessellation,
+            )
+            .is_err());
+        assert_eq!(current_texture_identities(&context), baseline);
+
+        let replacement = context
+            .prepare_resources(3, 4, None, None, fixture.batch())
+            .expect("retry after staged tessellation failure");
+        assert_ne!(current_texture_identities(&context), baseline);
+        drop(replacement);
+    }
+
+    #[test]
+    fn absent_required_tessellation_owner_does_not_publish_candidate_generation() {
+        let Some(context) = live_context() else {
+            return;
+        };
+        let fixture = UploadFixture::new();
+        drop(
+            context
+                .prepare_resources(2, 2, None, None, fixture.batch())
+                .expect("prepare baseline generation"),
+        );
+        let baseline = current_texture_identities(&context);
+
+        assert!(matches!(
+            context.prepare_resources(3, 0, None, None, fixture.batch()),
+            Err(RendererError::NativeMetal(message))
+                if message == "tessellation resource texture is absent"
+        ));
+        assert_eq!(current_texture_identities(&context), baseline);
+
+        drop(
+            context
+                .prepare_resources(3, 4, None, None, fixture.batch())
+                .expect("retry after absent candidate owner"),
+        );
+        assert_ne!(current_texture_identities(&context), baseline);
+    }
+
+    #[test]
+    fn atlas_growth_failure_preserves_prior_complete_generation() {
+        let Some(context) = live_context() else {
+            return;
+        };
+        let fixture = UploadFixture::new();
+        drop(
+            context
+                .prepare_resources(2, 2, Some([16, 12]), Some(false), fixture.batch())
+                .expect("prepare baseline atlas generation"),
+        );
+        let baseline = current_texture_identities(&context);
+        let baseline_pipeline = {
+            let state = context.resources.lock().unwrap();
+            let retained = state
+                .generation
+                .feather_atlas_pipelines
+                .as_ref()
+                .unwrap()
+                .retained(false);
+            Retained::as_ptr(&retained) as *const ()
+        };
+        let mut fail_atlas = |stage| {
+            if stage == ResourcePreparationStage::FeatherAtlasTexture {
+                Err(RendererError::NativeMetal(
+                    "injected atlas allocation failure".to_owned(),
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        assert!(context
+            .prepare_resources_with_control(
+                3,
+                4,
+                Some([24, 20]),
+                Some(false),
+                fixture.batch(),
+                specialized_atlas_blit_job(),
+                &mut fail_atlas,
+            )
+            .is_err());
+        assert_eq!(current_texture_identities(&context), baseline);
+        let state = context.resources.lock().unwrap();
+        let retained = state
+            .generation
+            .feather_atlas_pipelines
+            .as_ref()
+            .unwrap()
+            .retained(false);
+        assert_eq!(Retained::as_ptr(&retained) as *const (), baseline_pipeline);
+        drop(state);
+
+        drop(
+            context
+                .prepare_resources(3, 4, Some([24, 20]), Some(false), fixture.batch())
+                .expect("retry atlas growth"),
+        );
+        assert_ne!(current_texture_identities(&context), baseline);
+    }
+
+    #[test]
+    fn specialized_compile_failure_publishes_nothing_and_releases_reservation() {
+        use crate::native_metal::shader_compile_plan::SynthesizedFailureType;
+
+        let Some(context) = live_context() else {
+            return;
+        };
+        let fixture = UploadFixture::new();
+        drop(
+            context
+                .prepare_resources(2, 2, None, None, fixture.batch())
+                .expect("prepare baseline generation"),
+        );
+        let baseline = current_texture_identities(&context);
+        let failure_job = specialized_atlas_blit_job()
+            .with_synthesized_failure(SynthesizedFailureType::ShaderCompilation);
+
+        for _ in 0..4 {
+            let mut allow = |_| Ok(());
+            let error = match context.prepare_resources_with_control(
+                3,
+                4,
+                Some([16, 12]),
+                Some(true),
+                fixture.batch(),
+                failure_job,
+                &mut allow,
+            ) {
+                Err(error) => error,
+                Ok(_) => panic!("injected specialized compilation must fail"),
+            };
+            assert!(matches!(
+                error,
+                RendererError::NativeMetal(message)
+                    if message.contains("SynthesizedShaderCompilation")
+            ));
+            assert_eq!(current_texture_identities(&context), baseline);
+            let state = context.resources.lock().unwrap();
+            assert!(state.generation.feather_atlas.is_none());
+            assert!(state.generation.feather_atlas_pipelines.is_none());
+            assert!(state.generation.specialized_atlas_blit_pipeline.is_none());
+        }
+
+        let replacement = context
+            .prepare_resources(3, 4, Some([16, 12]), Some(true), fixture.batch())
+            .expect("retry after repeated specialized compilation failures");
+        assert_ne!(current_texture_identities(&context), baseline);
+        assert!(replacement.feather_atlas.is_some());
+        drop(replacement);
+    }
 
     #[test]
     fn missing_command_buffer_acquisition_fails_closed() {

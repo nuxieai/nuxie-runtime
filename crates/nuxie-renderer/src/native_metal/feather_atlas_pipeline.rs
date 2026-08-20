@@ -128,6 +128,7 @@ impl fmt::Display for FeatherAtlasPipelineError {
 impl Error for FeatherAtlasPipelineError {}
 
 /// One retained Metal render-pipeline state for the feather atlas.
+#[derive(Clone)]
 pub(crate) struct FeatherAtlasPipeline {
     pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     #[cfg(test)]
@@ -182,6 +183,7 @@ impl FeatherAtlasPipeline {
 
 /// Retained fill and stroke pipeline states created together, as in the
 /// upstream resize path's lazy pair initialization.
+#[derive(Clone)]
 pub(crate) struct FeatherAtlasPipelines {
     fill: FeatherAtlasPipeline,
     stroke: FeatherAtlasPipeline,

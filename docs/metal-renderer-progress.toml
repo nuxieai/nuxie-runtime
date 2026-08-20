@@ -149,6 +149,18 @@ current = "Not started."
 
 [[report]]
 date = "2026-08-20"
+title = "Mechanical translation conventions frozen"
+status = "green"
+summary = "Eight source-to-Rust mappings now govern the whole-file pass: native retention and nullability, intrusive ownership, bytes and alignment, enums and generated slots, errors, callbacks and completion, preprocessor configurations, and destruction order."
+results = [
+  "8/8 convention categories frozen",
+  "checker rejects omissions, inventions, duplicates, and empty invariants",
+  "fixture-specific Unsupported paths and fallback remain prohibited",
+]
+evidence = "docs/metal-translation-conventions.tsv"
+
+[[report]]
+date = "2026-08-20"
 title = "Conditional configuration surface made exhaustive"
 status = "amber"
 summary = "The campaign checker now derives all 30 conditional blocks across the pinned Metal context and background compiler units and rejects omitted blocks, invented blocks, or branch-line drift."

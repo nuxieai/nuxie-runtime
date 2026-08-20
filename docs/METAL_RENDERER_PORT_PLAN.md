@@ -71,6 +71,19 @@ state-bearing declaration in `RenderTargetMetal`, `ContextOptions`,
 37-field set from the pinned source and rejects missing, duplicate, invented,
 or line-drifted ledger rows.
 
+`docs/render-context-metal-configurations.tsv` separately accounts for every
+conditional block and every `#elif`/`#else` branch line in the primary context
+and background-compiler units. The campaign checker derives the 30-block set
+directly from the pinned sources, so an omitted platform, simulator, tools,
+canvas, or Objective-C header configuration fails the campaign gate.
+
+`docs/metal-translation-conventions.tsv` freezes the eight mechanical mappings
+used during the literal source pass: Objective-C retention/nullability,
+intrusive ownership, byte ranges/alignment, enums/flags/generated slots,
+assertions/errors, callbacks/completion, preprocessor configurations, and
+destruction/drop order. These rules prohibit source-convenient redesign while
+the owner is being translated.
+
 At plan adoption, the line ledger reports:
 
 | Source | Ported ranges | Partial ranges | Missing ranges |

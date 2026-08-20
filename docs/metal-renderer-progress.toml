@@ -1,0 +1,75 @@
+version = 1
+updated = "2026-08-20"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+active_phase = "preparation"
+
+[[phase]]
+id = "preparation"
+label = "Preparation closure"
+status = "active"
+detail = "Re-audit the complete source inventory and account for every state-bearing field before further implementation."
+
+[[phase]]
+id = "translation"
+label = "Mechanical translation"
+status = "queued"
+detail = "Translate the complete Metal ownership unit in pinned source order; fixtures do not select work."
+
+[[phase]]
+id = "compiler"
+label = "Compiler queue"
+status = "queued"
+detail = "Wire the complete translation and resolve diagnostics without deleting source behavior."
+
+[[phase]]
+id = "behavior"
+label = "Behavior verification"
+status = "queued"
+detail = "Run structural, lifecycle, failure, platform, image, work-count, and no-WGPU gates."
+
+[[phase]]
+id = "review"
+label = "Independent review"
+status = "queued"
+detail = "Complete separate source/spec and ownership/standards reviews, then fix accepted findings."
+
+[[phase]]
+id = "promotion"
+label = "Whole-owner promotion"
+status = "queued"
+detail = "Promote the header and implementation only when every line, field, configuration, and reachable branch is closed."
+
+[[report]]
+date = "2026-08-20"
+title = "Whole-renderer Bun-style plan adopted"
+status = "green"
+commit = "106b19559"
+summary = "The campaign now explicitly rejects feature/tracer-bullet implementation. Source ownership, compiler diagnostics, and then behavior verification are the only work queues."
+evidence = "docs/METAL_RENDERER_PORT_PLAN.md"
+
+[[report]]
+date = "2026-08-20"
+title = "Last fully verified source checkpoint"
+status = "green"
+commit = "34bf0b7e4"
+summary = "The common draw-pass source block preserved the existing native corpus and rooted product closure before the campaign returned to preparation."
+commands = [
+  "MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 cargo test -p nuxie-renderer --features native-metal-experimental --test native_metal_tracer",
+  "make renderer-metal-atomic-oracle-tracer",
+  "make renderer-native-metal-tracer-binary",
+  "make metal-port-check",
+]
+results = [
+  "native Metal tracer: 24/24 passed",
+  "same-runner C++ Metal corpus: 8/8 byte-exact",
+  "rooted no-WGPU Mach-O: 802,576 bytes, passed forbidden-dependency scan",
+  "Metal campaign manifest and ownership checker: passed",
+]
+evidence = "docs/METAL_PORTING.md"
+
+[[report]]
+date = "2026-08-20"
+title = "Uncommitted implementation work held"
+status = "amber"
+summary = "Mixed feather-atlas edits remain uncommitted. They are not a promoted feature checkpoint and will be judged only inside the complete implementation-body translation."
+evidence = "docs/METAL_RENDERER_PORT_PLAN.md"

@@ -373,7 +373,25 @@ macro_rules! resource_trait {
 
 // Narrow backend seams used by the descriptors. Concrete adapters implement
 // these traits; the ORE type layer intentionally defines no HAL.
-resource_trait!(Buffer);
+pub trait Buffer: Any + Send + Sync {
+    fn backend_id(&self) -> BackendId;
+    fn as_any(&self) -> &(dyn Any + Send + Sync);
+    fn size(&self) -> u32;
+    fn usage(&self) -> BufferUsage;
+    fn update(&self, data: &[u8], offset: u32) -> Result<(), crate::buffer::BufferUpdateError>;
+}
+
+impl dyn Buffer + '_ {
+    /// Downcast only after verifying the resource came from the backend
+    /// expected by the consuming adapter.
+    pub fn downcast_ref<T: Buffer>(&self, backend_id: BackendId) -> Option<&T> {
+        if self.backend_id() != backend_id {
+            return None;
+        }
+        self.as_any().downcast_ref::<T>()
+    }
+}
+
 resource_trait!(Texture);
 resource_trait!(TextureView);
 resource_trait!(Sampler);
@@ -1072,7 +1090,31 @@ mod tests {
         };
     }
 
-    impl_test_resource!(Buffer, MetalBuffer);
+    impl Buffer for MetalBuffer {
+        fn backend_id(&self) -> BackendId {
+            BackendId::of::<MetalBackend>()
+        }
+
+        fn as_any(&self) -> &(dyn Any + Send + Sync) {
+            self
+        }
+
+        fn size(&self) -> u32 {
+            4
+        }
+
+        fn usage(&self) -> BufferUsage {
+            BufferUsage::uniform
+        }
+
+        fn update(
+            &self,
+            _data: &[u8],
+            _offset: u32,
+        ) -> Result<(), crate::buffer::BufferUpdateError> {
+            Ok(())
+        }
+    }
     impl_test_resource!(ShaderModule, MetalShaderModule);
     impl_test_resource!(BindGroupLayout, MetalBindGroupLayout);
 

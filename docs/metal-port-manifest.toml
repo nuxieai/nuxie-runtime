@@ -6,7 +6,7 @@ porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 15, in-progress = 2, ported = 25, verified = 0 }
+expected_status_counts = { pending = 12, in-progress = 2, ported = 28, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -543,9 +543,9 @@ evidence = ["crates/nuxie-ore-metal/src/binding_map.rs"]
 upstream = "renderer/include/rive/renderer/ore/ore_buffer.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/buffer.rs", "crates/nuxie-ore-metal/src/types.rs"]
+evidence = ["crates/nuxie-ore-metal/src/buffer.rs", "crates/nuxie-ore-metal/src/metal/buffer.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_context.hpp"
@@ -635,21 +635,31 @@ status = "pending"
 rust_modules = []
 evidence = []
 
+# Rust adaptation for the Metal buffer pair: instead of retaining the
+# upstream raw `ContextMetal*`, each buffer retains the exact native device and
+# an Arc-backed serial/error state shared with the pending context unit. This
+# preserves completion-thread serial publication without a context/resource
+# cycle. `buffer_resource_retains_manager_and_rejects_wrong_backend` proves
+# deferred payload/state ownership, while
+# `live_bound_partial_update_orphans_copies_and_reuses_completed_backing` and
+# `allocation_failure_reports_error_keeps_current_and_retries_next_update`
+# prove the backing and degraded-failure contracts. Native construction and
+# context error publication remain assigned to `ore-context-render-pass`.
 [[source]]
 upstream = "renderer/src/ore/metal/ore_buffer_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/buffer.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/buffer.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_buffer_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/buffer.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/buffer.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_context_metal.mm"
@@ -827,7 +837,7 @@ requires_lifetime_rows = true
 [[translation_unit]]
 id = "ore-buffer"
 phase = "bulk"
-worker_claim = "unclaimed"
+worker_claim = "sol-ore-buffer"
 sources = [
   "renderer/include/rive/renderer/ore/ore_buffer.hpp",
   "renderer/src/ore/metal/ore_buffer_metal.hpp",
@@ -843,7 +853,7 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "pending"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]

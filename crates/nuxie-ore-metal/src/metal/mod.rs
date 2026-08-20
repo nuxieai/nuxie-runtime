@@ -1,5 +1,6 @@
 //! Concrete ORE Metal resource payloads.
 
+pub mod bind_group;
 pub mod buffer;
 pub mod pipeline;
 pub mod sampler;

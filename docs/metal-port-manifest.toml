@@ -6,7 +6,7 @@ porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 9, in-progress = 2, ported = 31, verified = 0 }
+expected_status_counts = { pending = 6, in-progress = 3, ported = 33, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -515,13 +515,24 @@ status = "ported"
 rust_modules = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
 evidence = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
 
+# Rust adaptation for the bind-group file closure: `BindGroup` holds each
+# accepted layout/buffer/view/sampler logical resource exactly once. Metal
+# buffer records replace the source raw `BufferMetal*` with a stable index into
+# that owned buffer vector and resolve the live orphanable MTLBuffer only when
+# the pending render-pass unit encodes it. Texture and sampler records retain
+# the native handles copied by the C++ adapter. Constructors remain
+# crate-private because `ore_context_metal.mm:850-977` still owns descriptor
+# validation, accepted-entry selection, error publication, and the unresolved
+# Lua-GC context/deferred-destroy seam. The focused owner, ordering,
+# late-backing, native-retain, and wrong-resource tests are in the two Rust
+# modules below.
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_bind_group.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "in-progress"
+rust_modules = ["crates/nuxie-ore-metal/src/bind_group.rs"]
+evidence = ["crates/nuxie-ore-metal/src/bind_group.rs", "crates/nuxie-ore-metal/src/metal/bind_group.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_bind_group_layout.hpp"
@@ -575,10 +586,12 @@ evidence = []
 # `pipeline_snapshot_owns_nested_descriptor_values_and_handles` and
 # `pipeline_retains_only_the_first_four_layouts_once` prove the deep snapshot
 # and exact logical refcounts. The live Metal
-# `native_states_publish_together_and_release_with_portable_owners` proves
-# all-or-nothing publication plus native and portable release after an
-# explicit autorelease-pool drain. Field declaration order separately encodes
-# C++'s depth-state, render-state, then portable-base destruction order.
+# `native_states_publish_together_and_own_portable_dependencies` proves
+# all-or-nothing publication, exact native-state identity while live, and
+# portable-owner release. Metal may cache immutable state objects, so weak
+# native deallocation is deliberately not used as an oracle. Field declaration
+# order separately encodes C++'s depth-state, render-state, then portable-base
+# destruction order.
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_pipeline.hpp"
 lane = "ore-metal"
@@ -639,17 +652,17 @@ evidence = ["crates/nuxie-ore-metal/src/types.rs"]
 upstream = "renderer/src/ore/metal/ore_bind_group_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_bind_group_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
 
 # Rust adaptation for the Metal buffer pair: instead of retaining the
 # upstream raw `ContextMetal*`, each buffer retains the exact native device and
@@ -969,7 +982,7 @@ requires_lifetime_rows = true
 [[translation_unit]]
 id = "ore-bind-group"
 phase = "bulk"
-worker_claim = "unclaimed"
+worker_claim = "luna-ore-bind-group"
 sources = [
   "renderer/include/rive/renderer/ore/ore_bind_group.hpp",
   "renderer/src/ore/metal/ore_bind_group_metal.hpp",

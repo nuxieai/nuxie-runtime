@@ -4,6 +4,7 @@
 //! `docs/metal-port-manifest.toml`. This crate deliberately remains separate
 //! from the built-in renderer-platform implementation.
 
+pub mod bind_group;
 pub mod bind_group_layout;
 pub mod binding_map;
 pub mod buffer;

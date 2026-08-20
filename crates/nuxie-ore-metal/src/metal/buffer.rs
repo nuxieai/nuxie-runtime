@@ -8,8 +8,10 @@
 #![allow(non_snake_case)]
 
 use std::any::Any;
-use std::sync::Arc;
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+use std::sync::{Arc, Weak};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 use std::sync::{Mutex, MutexGuard};
 
@@ -32,32 +34,53 @@ use objc2_metal::{MTLBuffer, MTLDevice, MTLResource, MTLResourceOptions, MTLStor
 const ALLOCATION_FAILURE: &str =
     "ore: Metal buffer backing allocation failed; reusing in flight backing for this update";
 
-/// Serial/error state shared with the pending `ContextMetal` translation.
+/// Serial/error state shared with `ContextMetal`.
 ///
 /// Upstream stores a raw `ContextMetal*` in each buffer. Rust retains only the
 /// exact state the buffer reads or writes, avoiding a context/resource cycle
 /// and keeping completion-thread serial publication alive independently.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 pub(crate) struct BufferMetalContextState {
     current: AtomicU64,
     completed: AtomicU64,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
-    last_error: Mutex<Option<String>>,
+    error_sink: Option<Weak<dyn BufferErrorSink>>,
+    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+    standalone_last_error: Mutex<Option<String>>,
 }
 
+/// Narrow immediate error publication seam used by versioned buffers.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub(crate) trait BufferErrorSink: Send + Sync {
+    fn set_buffer_error(&self, message: &str);
+}
+
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+impl BufferErrorSink for crate::context::ContextState {
+    fn set_buffer_error(&self, message: &str) {
+        self.set_last_error(message);
+    }
+}
+
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 impl BufferMetalContextState {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the pending context unit creates shared serial state"
-        )
-    )]
+    #[cfg(test)]
     pub(crate) fn new() -> Arc<Self> {
         Arc::new(Self {
             current: AtomicU64::new(0),
             completed: AtomicU64::new(0),
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
-            last_error: Mutex::new(None),
+            error_sink: None,
+            #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+            standalone_last_error: Mutex::new(None),
+        })
+    }
+
+    pub(crate) fn with_error_sink(error_sink: Weak<dyn BufferErrorSink>) -> Arc<Self> {
+        Arc::new(Self {
+            current: AtomicU64::new(0),
+            completed: AtomicU64::new(0),
+            error_sink: Some(error_sink),
+            #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+            standalone_last_error: Mutex::new(None),
         })
     }
 
@@ -70,10 +93,6 @@ impl BufferMetalContextState {
         self.completed.load(Ordering::Relaxed)
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the pending context unit advances this serial")
-    )]
     pub(crate) fn set_current_serial(&self, serial: u64) {
         let result = self
             .current
@@ -83,13 +102,6 @@ impl BufferMetalContextState {
         assert!(result.is_ok(), "Metal buffer serial must be monotonic");
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the pending context completion handler advances this serial"
-        )
-    )]
     pub(crate) fn complete_serial(&self, serial: u64) {
         assert!(
             serial <= self.current_serial(),
@@ -98,35 +110,40 @@ impl BufferMetalContextState {
         self.completed.fetch_max(serial, Ordering::Relaxed);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the pending context unit consumes this error")
-    )]
+    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
     pub(crate) fn take_last_error(&self) -> Option<String> {
-        self.lock_last_error().take()
+        self.lock_standalone_last_error().take()
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     fn set_last_error(&self, message: &str) {
-        *self.lock_last_error() = Some(message.to_owned());
+        if let Some(sink) = self.error_sink.as_ref().and_then(Weak::upgrade) {
+            sink.set_buffer_error(message);
+        } else {
+            #[cfg(test)]
+            {
+                *self.lock_standalone_last_error() = Some(message.to_owned());
+            }
+        }
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
-    fn lock_last_error(&self) -> MutexGuard<'_, Option<String>> {
-        self.last_error
+    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+    fn lock_standalone_last_error(&self) -> MutexGuard<'_, Option<String>> {
+        self.standalone_last_error
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 impl Default for BufferMetalContextState {
     fn default() -> Self {
         Self {
             current: AtomicU64::new(0),
             completed: AtomicU64::new(0),
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
-            last_error: Mutex::new(None),
+            error_sink: None,
+            #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+            standalone_last_error: Mutex::new(None),
         }
     }
 }
@@ -172,6 +189,7 @@ struct BufferMetalState {
 /// Concrete Metal buffer with orphan-on-update backing reuse.
 pub struct BufferMetal {
     base: BufferBase,
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
     context_state: Arc<BufferMetalContextState>,
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     device: RetainedMetalDevice,
@@ -181,13 +199,6 @@ pub struct BufferMetal {
 
 impl BufferMetal {
     #[cfg(any(target_os = "ios", target_os = "macos"))]
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the pending context unit constructs native buffers"
-        )
-    )]
     pub(crate) fn with_native_buffer(
         size: u32,
         usage: BufferUsage,
@@ -228,11 +239,12 @@ impl BufferMetal {
         &self.base
     }
 
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
     #[cfg_attr(
         not(test),
         expect(
             dead_code,
-            reason = "the pending context unit retains shared serial state"
+            reason = "native integration diagnostics inspect shared serial state"
         )
     )]
     pub(crate) fn context_state(&self) -> &Arc<BufferMetalContextState> {
@@ -289,20 +301,22 @@ impl BufferMetal {
         Ok(())
     }
 
+    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+    pub(crate) fn mark_bound(&self) {
+        let _ = self.mark_bound_and_current_buffer();
+    }
+
     #[cfg(any(target_os = "ios", target_os = "macos"))]
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the pending render-pass unit marks bound buffers")
-    )]
     #[expect(
         clippy::indexing_slicing,
         reason = "current_index always names an owned backing in the nonempty pool"
     )]
-    pub(crate) fn mark_bound(&self) {
+    pub(crate) fn mark_bound_and_current_buffer(&self) -> Retained<ProtocolObject<dyn MTLBuffer>> {
         let mut state = self.lock_state();
         let current_index = state.current_index;
         state.pool[current_index].serial = self.context_state.current_serial();
         state.bound_since_update = true;
+        state.pool[current_index].mtl.0.clone()
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -397,7 +411,7 @@ impl BufferMetal {
     }
 
     #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
-    fn fail_next_allocation_for_test(&self) {
+    pub(crate) fn fail_next_allocation_for_test(&self) {
         self.lock_state().fail_next_allocation = true;
     }
 }
@@ -507,6 +521,25 @@ mod tests {
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     #[test]
+    fn bound_backing_token_remains_the_exact_backing_after_an_orphaning_update() {
+        let Some(buffer) = live_buffer(8, None) else {
+            return;
+        };
+        let bound = buffer.mark_bound_and_current_buffer();
+
+        buffer
+            .update(&[9], 0)
+            .expect("a post-bind partial update orphans the backing");
+
+        assert_ne!(
+            Retained::as_ptr(&bound),
+            Retained::as_ptr(&buffer.current_buffer()),
+            "the encode token must keep naming the backing marked bound"
+        );
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[test]
     fn update_rejects_out_of_bounds_without_mutating_contents() {
         let Some(buffer) = live_buffer(8, None) else {
             return;
@@ -581,18 +614,18 @@ mod tests {
         assert_eq!(context_state.completed_serial(), 2);
 
         assert!(
-            std::panic::catch_unwind({
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe({
                 let context_state = Arc::clone(&context_state);
                 move || context_state.set_current_serial(3)
-            })
+            }))
             .is_err()
         );
         assert_eq!(context_state.current_serial(), 4);
         assert!(
-            std::panic::catch_unwind({
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe({
                 let context_state = Arc::clone(&context_state);
                 move || context_state.complete_serial(5)
-            })
+            }))
             .is_err()
         );
         assert_eq!(context_state.completed_serial(), 2);

@@ -130,6 +130,10 @@ pub struct Pipeline {
 
 impl Pipeline {
     /// Translate the protected unmanaged C++ constructor.
+    #[cfg_attr(
+        not(any(target_os = "ios", target_os = "macos")),
+        expect(dead_code, reason = "the ContextMetal factory is Apple-only")
+    )]
     pub(crate) fn new(desc: &PipelineDesc<'_>) -> Self {
         let snapshot = PipelineSnapshot::from_desc(desc);
         let bindingMap = binding_map_from_modules(desc);

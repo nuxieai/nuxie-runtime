@@ -9,7 +9,7 @@
     not(test),
     expect(
         dead_code,
-        reason = "the pending context/render-pass unit constructs and consumes bind groups"
+        reason = "the native ContextMetal/render-pass path is Apple-only"
     )
 )]
 
@@ -32,9 +32,9 @@ pub struct BindGroup {
     m_dynamicOffsetCount: u32,
     // The pinned header stores a non-owning Context* for a deferred Lua-GC
     // destruction route. There is no safe Rust Context/ContextMetal owner
-    // topology yet, so this dead back-pointer is deliberately not recreated.
-    // The pending context unit must establish that token/defer seam before a
-    // bind group can be published through the public context API.
+    // topology, so this dead back-pointer is deliberately not recreated. The
+    // context factory publishes groups without inventing the absent defer
+    // writer; the lifetime ledger keeps that source discrepancy explicit.
 }
 
 impl BindGroup {
@@ -44,13 +44,6 @@ impl BindGroup {
     /// backend checked-downcasts, slot resolution, and deciding which input
     /// entries are accepted. This constructor only adopts the already accepted
     /// strong handles and scalar state.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the pending ContextMetal unit publishes accepted bindings"
-        )
-    )]
     pub(crate) fn from_parts(
         dynamic_offset_count: u32,
         layout: Option<AnyResourceHandle>,

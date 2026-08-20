@@ -10,7 +10,7 @@
     not(test),
     expect(
         dead_code,
-        reason = "the pending context/render-pass unit constructs and consumes Metal bind groups"
+        reason = "the native ContextMetal/render-pass path is Apple-only"
     )
 )]
 
@@ -224,8 +224,8 @@ impl MTLSamplerBinding {
 ///
 /// The source `.mm` translation unit is intentionally empty. Construction,
 /// layout validation, resource downcasts, and error publication remain in the
-/// pending `ContextMetal` unit. This leaf owns only the accepted payload and
-/// exposes narrow encode-time accessors for the pending render-pass unit.
+/// `ContextMetal` unit. This leaf owns only the accepted payload and exposes
+/// narrow encode-time accessors for the Metal render-pass unit.
 pub struct BindGroupMetal {
     // Rust field-drop order mirrors C++ reverse member destruction: samplers,
     // textures, then buffers release before the portable base owners.
@@ -240,13 +240,6 @@ impl BindGroupMetal {
     ///
     /// UBOs are sorted by WGSL binding before publication, so dynamic offset
     /// arrays and stage emission observe a deterministic record order.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the pending ContextMetal unit publishes accepted bindings"
-        )
-    )]
     pub(crate) fn from_parts(
         base: BindGroup,
         mut buffers: Vec<MTLBufferBinding>,

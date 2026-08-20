@@ -16,19 +16,26 @@ mod draw_pipeline;
 #[allow(dead_code)]
 mod draw_shader;
 mod drawable;
+mod gradient_resource;
 #[allow(dead_code)]
 mod image_texture;
 #[allow(dead_code)]
 mod pipeline_names;
 #[allow(dead_code)]
 mod render_target;
+mod resource_ring;
 #[allow(dead_code)]
 mod samplers;
 #[allow(dead_code)]
 mod shader_compile_plan;
+mod tessellation_resource;
 
-use super::{LogicalPaint, LogicalPath, LogicalShader, RendererError};
+use super::gpu;
+use super::{
+    logical_frame::prepare_gradient_batch, LogicalPaint, LogicalPath, LogicalShader, RendererError,
+};
 use buffer::NativeMetalBuffer;
+use bytemuck::{Pod, Zeroable};
 use capabilities::{
     select_capabilities, ApplePlatform, MetalCapabilitySelection, MetalDeviceCapabilities,
 };
@@ -43,10 +50,10 @@ use objc2::{msg_send, rc::Retained};
 use objc2_foundation::{NSError, NSString};
 use objc2_metal::{
     MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder,
-    MTLCreateSystemDefaultDevice, MTLDevice, MTLGPUFamily, MTLLibrary, MTLLoadAction, MTLOrigin,
-    MTLPixelFormat, MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder, MTLRenderPassDescriptor,
-    MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLSize, MTLStorageMode, MTLStoreAction,
-    MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
+    MTLCreateSystemDefaultDevice, MTLCullMode, MTLDevice, MTLGPUFamily, MTLIndexType, MTLLibrary,
+    MTLLoadAction, MTLOrigin, MTLPixelFormat, MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder,
+    MTLRenderPassDescriptor, MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLSize,
+    MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor, MTLTextureUsage, MTLViewport,
 };
 use render_target::RenderTargetMetal;
 use std::cell::RefCell;
@@ -130,6 +137,8 @@ impl NativeMetalFactory {
             state: NativeMetalRenderState::default(),
             state_stack: Vec::new(),
             solid_draws: Vec::new(),
+            gradient_draws: Vec::new(),
+            resource_lease: None,
             unsupported: None,
         })
     }
@@ -248,7 +257,9 @@ pub struct NativeMetalFrame {
     clear_color: u32,
     state: NativeMetalRenderState,
     state_stack: Vec<NativeMetalRenderState>,
-    solid_draws: Vec<SolidDraw>,
+    solid_draws: Vec<SolidTracerDraw>,
+    gradient_draws: Vec<GradientDraw>,
+    resource_lease: Option<context::PreparedResourceLease>,
     unsupported: Option<&'static str>,
 }
 
@@ -267,9 +278,15 @@ impl Default for NativeMetalRenderState {
     }
 }
 
-struct SolidDraw {
+struct SolidTracerDraw {
     vertices: Vec<[f32; 2]>,
     premultiplied_color: [f32; 4],
+}
+
+struct GradientDraw {
+    gradient_batch: super::logical_frame::GradientBatch,
+    gradient: super::logical_frame::PreparedGradient,
+    tessellation: super::draw::FillTessellation,
 }
 
 impl Renderer for NativeMetalFrame {
@@ -300,13 +317,68 @@ impl Renderer for NativeMetalFrame {
         };
         if !path.valid
             || paint.style != RenderPaintStyle::Fill
-            || paint.shader.is_some()
             || paint.invalid_shader
             || paint.feather != 0.0
             || paint.blend_mode != BlendMode::SrcOver
-            || paint.color >> 24 != 0xff
             || self.state.opacity != 1.0
         {
+            self.unsupported
+                .get_or_insert("native Metal tracer only supports opaque solid SrcOver fills");
+            return;
+        }
+
+        if let Some(shader @ LogicalShader::Linear { .. }) = paint.shader.as_ref() {
+            if !self.solid_draws.is_empty()
+                || !self.gradient_draws.is_empty()
+                || !is_single_closed_cubic_contour(path)
+            {
+                self.unsupported.get_or_insert(
+                    "native Metal gradient tracer requires one closed cubic fill and no other draws",
+                );
+                return;
+            }
+            let logical_draw = super::SolidDraw::new(
+                path.clone(),
+                paint.clone(),
+                super::DrawState {
+                    transform: self.state.transform,
+                    opacity: self.state.opacity,
+                    ..Default::default()
+                },
+                super::DrawRole::Content { clip_id: 0 },
+                None,
+            );
+            let gradient_batch = prepare_gradient_batch(std::slice::from_ref(&logical_draw));
+            let Some(gradient) = gradient_batch.draw(0) else {
+                self.unsupported
+                    .get_or_insert("native Metal gradient parameters are invalid");
+                return;
+            };
+            let Some(mut tessellation) =
+                super::draw::build_fill_tessellation(&path.raw_path, self.state.transform)
+            else {
+                self.unsupported
+                    .get_or_insert("native Metal gradient path has no tessellatable geometry");
+                return;
+            };
+            for contour in &mut tessellation.contours {
+                contour.path_id = 1;
+            }
+            debug_assert!(matches!(shader, LogicalShader::Linear { .. }));
+            self.gradient_draws.push(GradientDraw {
+                gradient_batch,
+                gradient,
+                tessellation,
+            });
+            return;
+        }
+
+        if paint.shader.is_some() {
+            self.unsupported
+                .get_or_insert("native Metal tracer does not support this shader yet");
+            return;
+        }
+        if paint.color >> 24 != 0xff || !self.gradient_draws.is_empty() {
             self.unsupported
                 .get_or_insert("native Metal tracer only supports opaque solid SrcOver fills");
             return;
@@ -327,7 +399,7 @@ impl Renderer for NativeMetalFrame {
                 .get_or_insert("native Metal tracer path exceeds inline vertex limit");
             return;
         }
-        self.solid_draws.push(SolidDraw {
+        self.solid_draws.push(SolidTracerDraw {
             vertices,
             premultiplied_color: premultiplied_color(paint.color, self.state.opacity),
         });
@@ -371,9 +443,19 @@ impl Renderer for NativeMetalFrame {
 }
 
 impl NativeMetalFrame {
-    pub fn finish(self) -> Result<Vec<u8>, RendererError> {
-        let (width, height, texture) = self.encode()?;
-        NativeMetalContext::commit_and_wait(&self.command_buffer)?;
+    pub fn finish(mut self) -> Result<Vec<u8>, RendererError> {
+        let encoded = self.encode();
+        let (width, height, texture) = match encoded {
+            Ok(encoded) => encoded,
+            Err(error) => {
+                self.release_resource_slot()?;
+                return Err(error);
+            }
+        };
+        let completion = NativeMetalContext::commit_and_wait(&self.command_buffer);
+        let release = self.release_resource_slot();
+        completion?;
+        release?;
 
         let row_bytes = usize::try_from(width)
             .ok()
@@ -400,7 +482,7 @@ impl NativeMetalFrame {
     }
 
     fn encode(
-        &self,
+        &mut self,
     ) -> Result<(u32, u32, Retained<ProtocolObject<dyn MTLTexture>>), RendererError> {
         if let Some(reason) = self.unsupported {
             return Err(RendererError::Unsupported(reason));
@@ -411,19 +493,55 @@ impl NativeMetalFrame {
         let texture = target.retained_target_texture().ok_or_else(|| {
             RendererError::NativeMetal("native Metal target has no readback texture".into())
         })?;
+        if let Some(draw) = self.gradient_draws.first() {
+            let tessellation_height =
+                super::draw::tessellation_texture_height(&draw.tessellation.spans);
+            let lease = self.context.prepare_resources(
+                draw.gradient_batch.height as usize,
+                tessellation_height as usize,
+            )?;
+            self.resource_lease = Some(lease);
+            encode_gradient_resource_passes(
+                &self.context,
+                &self.command_buffer,
+                width,
+                height,
+                draw,
+                self.resource_lease
+                    .as_ref()
+                    .expect("gradient resource reservation retained by the frame"),
+            )?;
+        }
         let pass = MTLRenderPassDescriptor::renderPassDescriptor();
+        pass.setRenderTargetWidth(width as usize);
+        pass.setRenderTargetHeight(height as usize);
         let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
         attachment.setTexture(Some(&texture));
         attachment.setLoadAction(MTLLoadAction::Clear);
         attachment.setStoreAction(MTLStoreAction::Store);
         attachment.setClearColor(clear_color(self.clear_color));
+        if !self.gradient_draws.is_empty() {
+            configure_raster_order_attachments(&pass, &target)?;
+        }
         let encoder = self
             .command_buffer
             .renderCommandEncoderWithDescriptor(&pass)
             .ok_or_else(|| {
                 RendererError::NativeMetal("failed to create render command encoder".into())
             })?;
-        if !self.solid_draws.is_empty() {
+        if let Some(draw) = self.gradient_draws.first() {
+            encode_gradient_final_draw(
+                &self.context,
+                &encoder,
+                target.pixel_format(),
+                width,
+                height,
+                draw,
+                self.resource_lease
+                    .as_ref()
+                    .expect("gradient resource passes prepared a lease"),
+            )?;
+        } else if !self.solid_draws.is_empty() {
             encoder.setRenderPipelineState(self.context.solid_pipeline(target.pixel_format())?);
             let viewport = [width as f32, height as f32];
             let viewport_pointer = NonNull::from(&viewport).cast::<c_void>();
@@ -461,6 +579,302 @@ impl NativeMetalFrame {
         encoder.endEncoding();
         Ok((width, height, texture))
     }
+
+    fn release_resource_slot(&mut self) -> Result<(), RendererError> {
+        if let Some(lease) = self.resource_lease.take() {
+            self.context.release_resources(lease.slot)?;
+        }
+        Ok(())
+    }
+}
+
+fn is_single_closed_cubic_contour(path: &LogicalPath) -> bool {
+    let verbs = path.raw_path.verbs();
+    verbs.first() == Some(&PathVerb::Move)
+        && verbs.last() == Some(&PathVerb::Close)
+        && verbs.iter().filter(|verb| **verb == PathVerb::Move).count() == 1
+        && verbs.iter().any(|verb| *verb == PathVerb::Cubic)
+        && verbs.iter().all(|verb| {
+            matches!(
+                verb,
+                PathVerb::Move | PathVerb::Line | PathVerb::Cubic | PathVerb::Close
+            )
+        })
+}
+
+fn configure_raster_order_attachments(
+    pass: &MTLRenderPassDescriptor,
+    target: &RenderTargetMetal,
+) -> Result<(), RendererError> {
+    let textures = [
+        target.clip_memoryless_texture(),
+        target.scratch_color_memoryless_texture(),
+        target.coverage_memoryless_texture(),
+    ];
+    if textures.iter().any(|texture| texture.is_none()) {
+        return Err(RendererError::Unsupported(
+            "native Metal gradient tracer requires raster-order attachments",
+        ));
+    }
+    for (index, texture) in textures.into_iter().enumerate() {
+        // SAFETY: `index + 1` is limited to Metal color attachments 1...3,
+        // matching upstream's clip, scratch-color, and coverage planes; the
+        // render-pass descriptor retains the selected attachment descriptor.
+        let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(index + 1) };
+        attachment.setTexture(texture);
+        attachment.setLoadAction(if index == 1 {
+            MTLLoadAction::DontCare
+        } else {
+            MTLLoadAction::Clear
+        });
+        attachment.setStoreAction(MTLStoreAction::DontCare);
+        if index != 1 {
+            attachment.setClearColor(MTLClearColor {
+                red: 0.0,
+                green: 0.0,
+                blue: 0.0,
+                alpha: 0.0,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn encode_gradient_resource_passes(
+    context: &NativeMetalContext,
+    command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    width: u32,
+    height: u32,
+    draw: &GradientDraw,
+    lease: &context::PreparedResourceLease,
+) -> Result<(), RendererError> {
+    let tessellation_height = super::draw::tessellation_texture_height(&draw.tessellation.spans);
+    let mut uniforms = super::analytic_uniforms(width, height, tessellation_height);
+    uniforms.inverse_viewports[0] = -2.0 / draw.gradient_batch.height.max(1) as f32;
+    uniforms.max_path_id = 1;
+    uniforms.render_target_update_bounds = [0, 0, width as i32, height as i32];
+
+    let gradient_pass = MTLRenderPassDescriptor::renderPassDescriptor();
+    gradient_pass.setRenderTargetWidth(gradient_resource::GRADIENT_TEXTURE_WIDTH);
+    gradient_pass.setRenderTargetHeight(draw.gradient_batch.height as usize);
+    // SAFETY: every Metal render-pass descriptor exposes color attachment zero,
+    // which upstream uses for the RGBA8 color-ramp texture.
+    let gradient_attachment =
+        unsafe { gradient_pass.colorAttachments().objectAtIndexedSubscript(0) };
+    gradient_attachment.setTexture(Some(&lease.gradient));
+    gradient_attachment.setLoadAction(MTLLoadAction::DontCare);
+    gradient_attachment.setStoreAction(MTLStoreAction::Store);
+    let gradient_encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(&gradient_pass)
+        .ok_or_else(|| {
+            RendererError::NativeMetal("failed to create color-ramp encoder".to_owned())
+        })?;
+    gradient_encoder.setViewport(MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: gradient_resource::GRADIENT_TEXTURE_WIDTH as f64,
+        height: draw.gradient_batch.height as f64,
+        znear: 0.0,
+        zfar: 1.0,
+    });
+    gradient_encoder.setRenderPipelineState(context.color_ramp_pipeline());
+    set_vertex_bytes(&gradient_encoder, &uniforms, 3)?;
+    set_vertex_slice(&gradient_encoder, &draw.gradient_batch.spans, 0)?;
+    gradient_encoder.setCullMode(MTLCullMode::Back);
+    // SAFETY: the compiled color-ramp ABI consumes exactly eight vertices per
+    // span; `setVertexBytes` copied every initialized Pod span before this draw,
+    // and the instance count is the same slice length.
+    unsafe {
+        gradient_encoder.drawPrimitives_vertexStart_vertexCount_instanceCount(
+            MTLPrimitiveType::TriangleStrip,
+            0,
+            gpu::GRAD_SPAN_TRI_STRIP_VERTEX_COUNT,
+            draw.gradient_batch.spans.len(),
+        );
+    }
+    gradient_encoder.endEncoding();
+
+    let paths = [gpu::PathData::zeroed(), draw.tessellation.path];
+    let tessellation_pass = MTLRenderPassDescriptor::renderPassDescriptor();
+    tessellation_pass.setRenderTargetWidth(tessellation_resource::TESSELLATION_TEXTURE_WIDTH);
+    tessellation_pass.setRenderTargetHeight(tessellation_height as usize);
+    // SAFETY: every Metal render-pass descriptor exposes color attachment zero,
+    // which upstream uses for the RGBA32Uint tessellation texture.
+    let tessellation_attachment = unsafe {
+        tessellation_pass
+            .colorAttachments()
+            .objectAtIndexedSubscript(0)
+    };
+    tessellation_attachment.setTexture(Some(&lease.tessellation));
+    tessellation_attachment.setLoadAction(MTLLoadAction::DontCare);
+    tessellation_attachment.setStoreAction(MTLStoreAction::Store);
+    let tessellation_encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(&tessellation_pass)
+        .ok_or_else(|| {
+            RendererError::NativeMetal("failed to create tessellation encoder".to_owned())
+        })?;
+    tessellation_encoder.setViewport(MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: tessellation_resource::TESSELLATION_TEXTURE_WIDTH as f64,
+        height: tessellation_height as f64,
+        znear: 0.0,
+        zfar: 1.0,
+    });
+    tessellation_encoder.setRenderPipelineState(context.tessellate_pipeline());
+    // SAFETY: texture slot 9 is the pinned tessellation-shader Gaussian-table
+    // ABI, and the context-retained texture outlives command-buffer completion.
+    unsafe {
+        tessellation_encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+    }
+    set_vertex_bytes(&tessellation_encoder, &uniforms, 3)?;
+    set_vertex_slice(&tessellation_encoder, &draw.tessellation.spans, 0)?;
+    set_vertex_slice(&tessellation_encoder, &paths, 5)?;
+    set_vertex_slice(&tessellation_encoder, &draw.tessellation.contours, 8)?;
+    tessellation_encoder.setCullMode(MTLCullMode::Back);
+    // SAFETY: the retained index buffer contains exactly
+    // `K_TESS_SPAN_INDICES.len()` UInt16 indices from offset zero; all bound Pod
+    // inputs were copied by Metal and the instance count equals the span count.
+    unsafe {
+        tessellation_encoder
+            .drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
+                MTLPrimitiveType::Triangle,
+                tessellation_resource::K_TESS_SPAN_INDICES.len(),
+                MTLIndexType::UInt16,
+                context.tess_span_index_buffer(),
+                0,
+                draw.tessellation.spans.len(),
+            );
+    }
+    tessellation_encoder.endEncoding();
+    Ok(())
+}
+
+fn encode_gradient_final_draw(
+    context: &NativeMetalContext,
+    encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
+    pixel_format: MTLPixelFormat,
+    width: u32,
+    height: u32,
+    draw: &GradientDraw,
+    lease: &context::PreparedResourceLease,
+) -> Result<(), RendererError> {
+    let tessellation_height = super::draw::tessellation_texture_height(&draw.tessellation.spans);
+    let mut uniforms = super::analytic_uniforms(width, height, tessellation_height);
+    uniforms.inverse_viewports[0] = -2.0 / draw.gradient_batch.height.max(1) as f32;
+    uniforms.max_path_id = 1;
+    uniforms.render_target_update_bounds = [0, 0, width as i32, height as i32];
+    let paths = [gpu::PathData::zeroed(), draw.tessellation.path];
+    let paints = [
+        gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
+        gpu::PaintData::gradient(
+            draw.gradient.paint_type,
+            draw.gradient.texture_y,
+            FillRule::NonZero,
+            BlendMode::SrcOver,
+        ),
+    ];
+    let paint_aux = [
+        gpu::PaintAuxData::zeroed(),
+        super::gradient_paint_aux(None, draw.gradient),
+    ];
+    encoder.setViewport(MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: width as f64,
+        height: height as f64,
+        znear: 0.0,
+        zfar: 1.0,
+    });
+    encoder.setRenderPipelineState(context.midpoint_draw_pipeline(pixel_format)?);
+    // SAFETY: buffer slot zero is the pinned path-patch vertex ABI, offset zero
+    // is aligned, and the context retains the complete buffer through completion.
+    unsafe {
+        encoder.setVertexBuffer_offset_atIndex(Some(context.path_patch_vertex_buffer()), 0, 0);
+    }
+    // The first eight tessellation texels are a padding patch. Match
+    // RenderContextMetalImpl's PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX binding
+    // so instance zero starts at `base_instance == 1`, rather than joining the
+    // zero-filled padding texel at the origin to the authored contour.
+    set_vertex_bytes(encoder, &draw.tessellation.base_instance, 4)?;
+    set_vertex_bytes(encoder, &uniforms, 3)?;
+    set_fragment_bytes(encoder, &uniforms, 3)?;
+    set_vertex_slice(encoder, &paths, 5)?;
+    set_vertex_slice(encoder, &paints, 6)?;
+    set_vertex_slice(encoder, &paint_aux, 7)?;
+    set_vertex_slice(encoder, &draw.tessellation.contours, 8)?;
+    // SAFETY: slots 7, 8, 9, and 11 are the exact pinned ubershader ABI. The
+    // lease and context retain every texture and sampler until synchronous
+    // command-buffer completion, so no bound Objective-C object can dangle.
+    unsafe {
+        encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
+        encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        encoder.setFragmentTexture_atIndex(Some(&lease.gradient), 8);
+        encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        encoder.setFragmentSamplerState_atIndex(
+            Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
+            11,
+        );
+    }
+    encoder.setCullMode(MTLCullMode::Back);
+    // SAFETY: the retained patch index buffer contains at least
+    // `MIDPOINT_FAN_PATCH_INDEX_COUNT` UInt16 indices from offset zero, and the
+    // instance count comes from the validated tessellation batch.
+    unsafe {
+        encoder
+            .drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
+                MTLPrimitiveType::Triangle,
+                gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT,
+                MTLIndexType::UInt16,
+                context.path_patch_index_buffer(),
+                0,
+                draw.tessellation.instance_count as usize,
+            );
+    }
+    Ok(())
+}
+
+fn set_vertex_bytes<T: Pod>(
+    encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
+    value: &T,
+    index: usize,
+) -> Result<(), RendererError> {
+    set_vertex_slice(encoder, std::slice::from_ref(value), index)
+}
+
+fn set_vertex_slice<T: Pod>(
+    encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
+    values: &[T],
+    index: usize,
+) -> Result<(), RendererError> {
+    let bytes: &[u8] = bytemuck::cast_slice(values);
+    let pointer = NonNull::new(bytes.as_ptr().cast_mut().cast::<c_void>()).ok_or_else(|| {
+        RendererError::NativeMetal("native Metal inline vertex data is empty".to_owned())
+    })?;
+    // SAFETY: `T: Pod` guarantees initialized bytes, the non-null check rejects
+    // an empty slice, and Metal copies `bytes` during `setVertexBytes` before
+    // the borrowed Rust slice can expire.
+    unsafe {
+        encoder.setVertexBytes_length_atIndex(pointer, bytes.len(), index);
+    }
+    Ok(())
+}
+
+fn set_fragment_bytes<T: Pod>(
+    encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
+    value: &T,
+    index: usize,
+) -> Result<(), RendererError> {
+    let bytes = bytemuck::bytes_of(value);
+    let pointer = NonNull::new(bytes.as_ptr().cast_mut().cast::<c_void>()).ok_or_else(|| {
+        RendererError::NativeMetal("native Metal inline fragment data is empty".to_owned())
+    })?;
+    // SAFETY: `T: Pod` guarantees initialized bytes, and Metal copies the
+    // complete non-empty value during `setFragmentBytes` before this borrow ends.
+    unsafe {
+        encoder.setFragmentBytes_length_atIndex(pointer, bytes.len(), index);
+    }
+    Ok(())
 }
 
 /// Creates one complete size-dependent target generation for the diagnostic

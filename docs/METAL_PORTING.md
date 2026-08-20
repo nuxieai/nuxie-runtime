@@ -225,6 +225,35 @@ ABI remains on wgpu until the full cutover in UNIV-2092. The pure-runtime
 boundary ratchet rejects `CAMetalLayer` and `nextDrawable` if they spread into
 an unapproved protected source file.
 
+## UNIV-2087 first resource slice
+
+The first UNIV-2087 checkpoint ports the complete pinned
+`color_ramp.metal` and `tessellate.metal` source closures into the offline
+`native_metal_resources.metallib`. Its exact exported inventory is `EF`, `FF`,
+`WF`, and `XF`. The concrete Metal context owns one synchronous concrete
+gradient/tessellation resource generation, governed by the upstream-shaped
+three-slot reservation/release policy, plus the Gaussian integral texture, the
+canonical tessellation index/vertex data, and the resource pipelines. The
+public `Factory`/`Renderer` seam exercises them with one closed cubic,
+linear-gradient, clockwise midpoint-fan draw. Multiple simultaneously in-flight
+concrete resource generations are not claimed by this checkpoint.
+
+The primary oracle is pinned C++ Metal at
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`. The checked-in gradient fixture
+requires identical geometry/coverage occupancy and permits at most one RGBA8
+LSB of same-backend rounding. Current Rust wgpu remains a secondary regression
+oracle in `tools/metal-port/tracer-corpus-wgpu-secondary.toml`; its separate
+35-LSB release-replay bound cannot weaken the C++ Metal gate. The live Rust
+test uses a wider cross-backend guard because the default wgpu factory path has
+shown up to 59 LSB on the antialiased edge.
+
+This checkpoint deliberately does not claim the whole issue. General flush
+topology, atlas resources, image draws, clip updates, more than one concurrent
+resource generation, deterministic physical-work counters, and injected live
+device failure remain for later UNIV-2087 slices. The combined ownership row
+therefore stays `in-progress` even though both shader-source rows are
+`ported`. The shipping renderer remains wgpu-selected.
+
 ## Compiler and commit workflow
 
 Use compiler errors as the work queue within one upstream source group:

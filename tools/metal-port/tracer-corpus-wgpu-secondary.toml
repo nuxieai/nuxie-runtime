@@ -1,3 +1,8 @@
+# Secondary cross-backend oracle policy for the native Metal tracer slice.
+#
+# Keep this separate from tracer-corpus.toml so WGPU's backend-specific edge
+# rasterization tolerance can never weaken the pinned C++ Metal parity gate.
+
 [[entry]]
 id = "native-metal-first-light-rectangle"
 kind = "gm-stream"
@@ -17,5 +22,5 @@ reference = "fixtures/renderer/reference/metal/first-light-gradient-cubic.png"
 mode = "clockwise-atomic"
 backend = "metal"
 status = "exact"
-max_channel_delta = 1
+max_channel_delta = 35
 max_different_pixels = 0

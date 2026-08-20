@@ -248,6 +248,7 @@ impl PatchVertex {
 }
 
 pub(crate) const MIDPOINT_FAN_PATCH_SEGMENT_SPAN: usize = 8;
+pub(crate) const GRAD_SPAN_TRI_STRIP_VERTEX_COUNT: usize = 8;
 pub(crate) const OUTER_CURVE_PATCH_SEGMENT_SPAN: usize = 17;
 pub(crate) const MIDPOINT_FAN_PATCH_VERTEX_COUNT: usize = 42;
 pub(crate) const MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT: usize = 48;
@@ -1036,6 +1037,10 @@ mod tests {
 
     #[test]
     fn patch_buffers_match_cpp_counts_and_topology() {
+        // color_ramp.glsl addresses four ramp columns with vertex_id >> 1,
+        // which requires the same two vertices per column as upstream.
+        assert_eq!(GRAD_SPAN_TRI_STRIP_VERTEX_COUNT, 4 * 2);
+
         let (vertices, indices) = generate_patch_buffer_data();
         assert_eq!(vertices.len(), PATCH_VERTEX_BUFFER_COUNT);
         assert_eq!(indices.len(), PATCH_INDEX_BUFFER_COUNT);

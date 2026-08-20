@@ -51,6 +51,8 @@ impl<'a> NativeMetalDrawableFrame<'a> {
             state: NativeMetalRenderState::default(),
             state_stack: Vec::new(),
             solid_draws: Vec::new(),
+            gradient_draws: Vec::new(),
+            resource_lease: None,
             unsupported: None,
         };
         Ok(Self { frame, drawable })
@@ -58,11 +60,18 @@ impl<'a> NativeMetalDrawableFrame<'a> {
 
     /// Commits renderer work, then presents the borrowed drawable on the next
     /// command buffer from the same queue, matching the pinned product oracle.
-    pub fn finish(self) -> Result<(), RendererError> {
-        self.frame.encode()?;
-        self.frame
+    pub fn finish(mut self) -> Result<(), RendererError> {
+        if let Err(error) = self.frame.encode() {
+            self.frame.release_resource_slot()?;
+            return Err(error);
+        }
+        let completion = self
+            .frame
             .context
-            .commit_and_present(&self.frame.command_buffer, self.drawable)
+            .commit_and_present(&self.frame.command_buffer, self.drawable);
+        let release = self.frame.release_resource_slot();
+        completion?;
+        release
     }
 }
 

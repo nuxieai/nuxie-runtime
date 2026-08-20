@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 8, in-progress = 4, ported = 2, verified = 0 }
+expected_status_counts = { pending = 7, in-progress = 5, ported = 2, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -111,13 +111,31 @@ required_tests = ["Apple Silicon raster-order selection", "discrete Mac barrier 
 [[owner]]
 id = "renderer.gradient_tessellation_and_atlas_resources"
 issue = "UNIV-2087"
-status = "pending"
+# The first resource slice proves one synchronous concrete gradient/tessellation
+# texture pair governed by a three-slot reservation/release policy, resize/reuse,
+# the complete resource metallib, the Gaussian LUT, and one live linear-gradient
+# midpoint-fan draw. Multiple simultaneously in-flight concrete resource pairs,
+# atlas ownership, deterministic work counters, and injected device failure
+# remain before this combined owner can be ported.
+status = "in-progress"
 rule = "Gradient, Gaussian, tessellation, feather-atlas, sampler, path-patch, and image-rect resources remain context-owned and are resized or recreated at the same lifecycle points as upstream."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:244-275", "cpp:renderer/src/metal/render_context_metal_impl.mm:100-175"]
-required_tests = ["gradient resize and reuse", "tessellation span upload and rollover", "atlas resize and preservation rules", "sampler permutation completeness"]
+required_tests = ["gradient resize and reuse", "tessellation span upload and three-slot reservation", "atlas resize and preservation rules", "sampler permutation completeness"]
 evidence_paths = [
+  "crates/nuxie-renderer/build.rs",
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/gradient_resource.rs",
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/resource_ring.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/tessellation_resource.rs",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/resource_shader_provenance.txt",
+  "crates/nuxie-renderer/tests/native_metal_resource_shaders.rs",
+  "crates/nuxie-renderer/tests/native_metal_tracer.rs",
+  "fixtures/renderer/reference/metal/first-light-gradient-cubic.png",
+  "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream",
+  "tools/metal-port/tracer-corpus.toml",
+  "tools/metal-port/tracer-corpus-wgpu-secondary.toml",
 ]
 
 [[owner]]

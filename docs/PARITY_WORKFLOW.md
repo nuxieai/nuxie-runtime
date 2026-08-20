@@ -77,6 +77,36 @@ Use this loop for every slice:
 10. **Promote and checkpoint.** Update manifests, ownership records, issue
     tracker, and the merge checkpoint only after the evidence exists.
 
+### Live GPU diagnosis loop
+
+GPU slices need a shorter inner loop inside steps 4–8. A final black or
+corrupted frame does not identify whether the defect is resource preparation,
+binding, shader interpretation, or rasterization. Use this order:
+
+1. Enable the platform API validation layer and shader validation on every
+   live slice. Treat a validation-clean command buffer as a prerequisite, not
+   as pixel-parity evidence.
+2. Read back each newly introduced intermediate resource before debugging the
+   final pass. This separates upload/prepass defects from draw-pass defects.
+3. Bind and test upstream constants by name. Vertex counts, sampler slots,
+   instance offsets, and sentinel values are behavioral contracts even when a
+   small fixture appears to tolerate another value.
+4. Exercise inactive-feature sentinels used by the fully featured shader. For
+   example, an unclipped draw may require upstream's explicit wide-open clip
+   matrix rather than zero-filled auxiliary data.
+5. Change one variable to prove causality, then restore it. Reproducing an
+   artifact with a zero base instance is stronger evidence than repairing it
+   through an unrelated layout change.
+6. Compare against the same-backend pinned upstream oracle first. Keep a
+   cross-backend oracle in a separate manifest so its larger rasterization
+   tolerance can never weaken the primary parity gate.
+7. Require exact bytes and occupancy when stable. Permit a small numeric delta
+   only when the pinned same-backend oracle demonstrates hardware rounding,
+   and record the bound next to the fixture.
+
+This loop is reusable for Metal, WebGPU, Vulkan, and the main runtime wherever
+an intermediate state can be captured before the final observable result.
+
 Root the highest public seam named by the claim. A headless renderer executable
 can prove pixel output and forbidden-dependency absence while dead stripping
 the platform presentation adapter entirely. When the claimed slice includes a

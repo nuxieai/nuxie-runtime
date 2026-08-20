@@ -1,0 +1,64 @@
+# Pinned Rive C++ Metal resource wrappers, generated include batch, and Apple
+# build-artifact capture. Angle-bracket paths below are caller-selected output
+# locations; all other command arguments are literal.
+upstream_repository=rive-app/rive-runtime
+upstream_commit=4ac7b32798da0482e441ef09304dc3b480ed3ee5
+wrapper:color_ramp.metal=renderer/src/shaders/metal/color_ramp.metal:1-11
+wrapper:tessellate.metal=renderer/src/shaders/metal/tessellate.metal:1-13
+generator=renderer/src/shaders/minify.py
+generator_blob=c01fade10320484f541afaa7897a8109dd87b8e4
+generator_sha256=bf4b9f529a19765c5e6f28b68ef8a73f5bd65433cd87ce723df5df923e6bc22b
+generator_makefile=renderer/src/shaders/Makefile
+generator_makefile_blob=aebd167a67b9a888e100d265b90dfaca2bbdf059
+generator_makefile_sha256=ec5d0d98d78051e98cda80f92cd67858cb1fb70be64cddd8ad13bcd4ad5f50fc
+generator_premake=renderer/premake5_pls_renderer.lua
+generator_premake_blob=a74e4468d6ee6306ca10380eb01345494cfa3c3f
+generator_premake_sha256=e00b0483a6c09608ef3ad8c61f1b30b3ef00e78722bc3e1228db7ee741d22c84
+generator_input_set_sha256=bb1df1e11890783d83263a0e8de0509af77fbeab9ee50634da9ef028fe9270b1
+generation_command=make -C renderer/src/shaders OUT=<generated-dir> FLAGS="-p <ply-3.11-dir>" minify
+verified_generator_runtime=Python 3.14.6; PLY 3.11
+verified_generation_date=2026-08-19
+source:color_ramp.metal=eb525a31f81466aa9b54828f38dd68c3dd62b2728a9fcf7f674304806fc56970
+source:tessellate.metal=e7bc6d35e1ad2f95e84b9595738c7035a0ff0bf13277681bec36ddf15cae3471
+source:metal.minified.glsl=e4845f27a7f9f293c139eebc9babdb03f30a3eb9c3fd5699b2a97abcd517c0a8
+source:constants.minified.glsl=0644011079b560f56ba301fb9e8163212ddc910cf9d592105a2c75eef839c597
+source:flush_uniforms.minified.glsl=644d2092ddf84a3cb929dfab1b75bdd6d1cd0ec2675b124fea68038c4ad855c0
+source:common.minified.glsl=536c2f979d42703bf8c14d2f5f310344c418853b9b23e955621fb1b39d048134
+source:color_ramp.minified.glsl=6aa0102a8144f8bce2f038b0a427bd79ca0ae1080c21dd69a23d64e0cfe55321
+source:bezier_utils.minified.glsl=8d4ef7f0d559022ef409dd3198f780d6a3ce07157c7737c8b94add5b191b266d
+source:tessellate.minified.glsl=ec7700f65d09836c8e7fcc4f1fcf6da9ffbb1f0425e072d3cf96e00264b30eb7
+
+# Cargo build authority. `build_script_sha256` covers the target-to-SDK,
+# deployment-target, and Metal-language-standard selection in build.rs.
+build_script=crates/nuxie-renderer/build.rs:1-175
+build_script_sha256=48a44277db2aeb7b3e2c1e9a2c5e524b0d12d747f5d220621fd32baf21b8faac
+compile_command=xcrun -sdk <sdk> metal -c <deployment-target> <metal-standard> -I crates/nuxie-renderer/src/native_metal/shaders -ffast-math -ffp-contract=fast -fpreserve-invariance -fvisibility=hidden <source> -o <air>
+link_command=xcrun -sdk <sdk> metallib <color-ramp-air> <tessellate-air> -o <metallib>
+xcode_version=26.6
+xcode_build=17F113
+metal_compiler=Apple metal 32023.883 (metalfe-32023.883)
+metallib_linker=AIR-LLD 32023.883 (metalfe-32023.883)
+
+# Five Rust targets produce three platform Metal artifacts because AIR and
+# metallib contents do not depend on the host CPU architecture.
+target:aarch64-apple-darwin=macosx
+target:x86_64-apple-darwin=macosx
+target:aarch64-apple-ios=iphoneos
+target:aarch64-apple-ios-sim=iphonesimulator
+target:x86_64-apple-ios=iphonesimulator
+sdk:macosx=26.5 (25F70)
+sdk:iphoneos=26.5 (23F81a)
+sdk:iphonesimulator=26.5 (23F81a)
+arguments:macosx=-mmacosx-version-min=12.0 -std=macos-metal2.3
+arguments:iphoneos=-mios-version-min=15.0 -std=ios-metal2.2
+arguments:iphonesimulator=-miphonesimulator-version-min=15.0 -std=ios-metal2.2
+output:macosx:native_metal_color_ramp.air=b3b813765e71d663443d2b8ec3ee3f6e2ef2392739c099c65b8b1ffc8daa8293
+output:macosx:native_metal_tessellate.air=c878f2db92df6d9218d51b497f66b4dd6cc787657858628c7182d1709c5d7738
+output:macosx:native_metal_resources.metallib=7e3a8abdf3857358aba9bf1c66094a569bcee457b1d05dfc8ee251b3de6c4dc6
+output:iphoneos:native_metal_color_ramp.air=0cb5ae35fd4ded323f179653c35d426bba83010a9a5df961f5189c68856e4899
+output:iphoneos:native_metal_tessellate.air=d4f51c0024d04b010dd4ec6d8a038e58d1aac8ca0d36aae8140c2229e3f577a7
+output:iphoneos:native_metal_resources.metallib=064a453f997e0668e1e7cd72f41912513b18f1e9cb9c6b1dd352663e422e5189
+output:iphonesimulator:native_metal_color_ramp.air=65ae7ab4f0249949a02ce0b61df743979a4785985a8afddd26938e06c4c0de0c
+output:iphonesimulator:native_metal_tessellate.air=7220feef30d5abcead1afee02d229cf6c49ac54bf4fc30c5e88e66338b5e2830
+output:iphonesimulator:native_metal_resources.metallib=9e0cb7a47124d4772e952e2e0e905a726d0f3c44b759d5ee61832030a1888f4d
+functions=EF,FF,WF,XF

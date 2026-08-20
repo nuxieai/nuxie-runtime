@@ -326,7 +326,10 @@ status = "in-progress"
 # cache. The following contiguous file-first resource-factory block wires raw
 # and encoded image creation, retained adoption, one same-texture RenderCanvas
 # owner, and the RIVE_CANVAS-equivalent ORE constructor from the exact retained
-# context device and queue. Image draw admission remains in the flush rows.
+# context device and queue. The next file-first lifecycle unit commits without
+# waiting and transfers each submitted ring slot into a copied Metal completion
+# block; caller readback/presentation waits are separate policy. Image draw
+# admission remains in the flush rows.
 # This full source row remains in-progress:
 # divergent path-clip stacks and general clip mutation/restores after content,
 # gradients in clipped flushes, radial gradients, atlas, images, strokes,
@@ -341,6 +344,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
+  "crates/nuxie-renderer/src/native_metal/command_submission.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
@@ -367,6 +371,7 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
+  "crates/nuxie-renderer/src/native_metal/command_submission.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",

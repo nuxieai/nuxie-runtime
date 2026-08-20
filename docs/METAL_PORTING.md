@@ -386,10 +386,13 @@ because that is also upstream's intentional ABI.
 
 A pure blocking coordinator separates pre-submit ownership from submitted GPU
 ownership. Dropping an unsubmitted lease abandons and wakes; submission moves
-release responsibility to an exact-once completion owner. The current public
-frame waits synchronously for Metal, then completes that owner. This proves the
-ownership protocol without claiming that the public renderer already supports
-multiple asynchronous in-flight frames or multiple concrete resource-texture
+release responsibility into Metal's copied completion block. The block releases
+the ring slot after either successful or failed GPU completion and owns that
+responsibility independently of the context and the caller's wait token. The
+current public frame still chooses to wait before readback or presentation, but
+waiting is no longer what makes the ring safe. This closes the pinned
+`commitCommandBuffer`/`prepareToFlush`/`postFlush` ownership unit without
+claiming a public asynchronous frame API or multiple concrete resource-texture
 generations.
 
 The live gradient oracle remains pixel-identical to the first checkpoint's

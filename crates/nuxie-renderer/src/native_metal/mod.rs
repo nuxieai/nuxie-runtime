@@ -9,6 +9,7 @@ mod background_shader_compiler;
 mod buffer;
 mod buffer_ring_coordinator;
 mod capabilities;
+mod command_submission;
 mod context;
 #[allow(dead_code)]
 mod draw_combinations;
@@ -1031,23 +1032,15 @@ impl NativeMetalFrame {
             atomic_memory_barriers: self.atomic_memory_barrier_count,
             atomic_render_pass_breaks: self.atomic_render_pass_break_count,
         };
-        let mut upload_completion = self.transfer_upload_ownership()?;
-        let completion = NativeMetalContext::commit_and_wait(&self.command_buffer);
+        let upload_completion = self.transfer_upload_ownership()?;
+        let completion = NativeMetalContext::commit_with_upload_completion(
+            &self.command_buffer,
+            upload_completion,
+        );
         if self.collect_work_metrics {
             self.backend_work.queue_submissions = 1;
         }
-        let release = upload_completion
-            .as_mut()
-            .map(|completion| {
-                completion.complete().map_err(|error| {
-                    RendererError::NativeMetal(format!(
-                        "complete native Metal upload-ring ownership: {error:?}"
-                    ))
-                })
-            })
-            .transpose();
-        completion?;
-        release?;
+        completion.wait()?;
 
         let row_bytes = usize::try_from(width)
             .ok()

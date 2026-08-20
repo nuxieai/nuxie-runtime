@@ -197,7 +197,9 @@ the complete workflow before the campaign expands:
    into its own output directory.
 4. Exercise create, submit, completion, resize, abandonment, and drop.
 5. Produce a rooted test Mach-O and prove the selected path contains none of
-   the forbidden dependency families.
+   the forbidden dependency families. The root must execute both deterministic
+   readback and the public caller-owned `CAMetalDrawable` presentation seam;
+   rooting only the headless frame is insufficient product-surface evidence.
 6. When the slice contains lifetime or unsafe-interop behavior that the
    differentials cannot observe, use the optional time-boxed behavioral review
    described below. Repair the guide, manifest, or harness if it exposes a
@@ -206,6 +208,22 @@ the complete workflow before the campaign expands:
 After this trial, implementation proceeds in the existing issue order. The
 issues are verification checkpoints; they must not distort source
 correspondence or create temporary shipping adapters.
+
+The UNIV-2086 closeout root is
+`tools/renderer-replay/src/bin/native-metal-product-root.rs`. This upper-layer
+oracle caller keeps `CAMetalLayer` ownership and drawable acquisition outside
+the protected renderer package. It asserts main-thread execution, then its
+explicit feature-selected factory checks a deterministic solid pixel, handles
+a missing drawable without creating a frame, resizes, configures a
+caller-owned `CAMetalLayer`, acquires its drawable,
+and renders and presents through the public Apple boundary before proving the
+layer remains reusable. Focused live tests separately reject a stale-sized
+drawable after resize and recycle repeatedly abandoned frames. The binary gate
+requires the acquisition and presentation selectors in the final Mach-O and
+rejects wgpu, Naga, and WGSL symbol/string reachability. The shipping Apple C
+ABI remains on wgpu until the full cutover in UNIV-2092. The pure-runtime
+boundary ratchet rejects `CAMetalLayer` and `nextDrawable` if they spread into
+an unapproved protected source file.
 
 ## Compiler and commit workflow
 

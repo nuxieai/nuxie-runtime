@@ -28,13 +28,12 @@ impl<'a> NativeMetalDrawableFrame<'a> {
         context: Arc<NativeMetalContext>,
         drawable: &'a ProtocolObject<dyn MTLDrawable>,
         texture: Retained<ProtocolObject<dyn MTLTexture>>,
+        expected_width: u32,
+        expected_height: u32,
         clear_color: u32,
     ) -> Result<Self, RendererError> {
-        validate_drawable_texture(&texture, context.device())?;
-        let width = u32::try_from(texture.width())
-            .map_err(|_| RendererError::NativeMetal("drawable width exceeds UInt32".to_owned()))?;
-        let height = u32::try_from(texture.height())
-            .map_err(|_| RendererError::NativeMetal("drawable height exceeds UInt32".to_owned()))?;
+        let (width, height) =
+            validate_drawable_texture(&texture, context.device(), expected_width, expected_height)?;
         let mut target = RenderTargetMetal::new(
             context.retained_device(),
             MTLPixelFormat::BGRA8Unorm,
@@ -84,7 +83,9 @@ impl DerefMut for NativeMetalDrawableFrame<'_> {
 fn validate_drawable_texture(
     texture: &ProtocolObject<dyn MTLTexture>,
     context_device: &ProtocolObject<dyn MTLDevice>,
-) -> Result<(), RendererError> {
+    expected_width: u32,
+    expected_height: u32,
+) -> Result<(u32, u32), RendererError> {
     if texture.pixelFormat() != MTLPixelFormat::BGRA8Unorm {
         return Err(RendererError::NativeMetal(
             "drawable texture is not BGRA8Unorm".to_owned(),
@@ -96,5 +97,14 @@ fn validate_drawable_texture(
             "drawable texture belongs to a different MTLDevice".to_owned(),
         ));
     }
-    Ok(())
+    let width = u32::try_from(texture.width())
+        .map_err(|_| RendererError::NativeMetal("drawable width exceeds UInt32".to_owned()))?;
+    let height = u32::try_from(texture.height())
+        .map_err(|_| RendererError::NativeMetal("drawable height exceeds UInt32".to_owned()))?;
+    if (width, height) != (expected_width, expected_height) {
+        return Err(RendererError::NativeMetal(format!(
+            "drawable texture is {width}x{height}, expected {expected_width}x{expected_height}"
+        )));
+    }
+    Ok((width, height))
 }

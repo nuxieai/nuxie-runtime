@@ -2557,12 +2557,37 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("apple-presentation boundary debt spread", result.stderr)
 
+    def test_rejects_layer_ownership_and_drawable_acquisition_in_renderer(self) -> None:
+        package = self.create_package(
+            "crates/nuxie-renderer", "nuxie-renderer", ""
+        )
+        (package / "src/product_surface.rs").write_text(
+            "fn acquire(layer: CAMetalLayer) { layer.nextDrawable(); }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("apple-presentation boundary debt spread", result.stderr)
+
     def test_allows_apple_presentation_mechanics_in_exact_approved_files(self) -> None:
         renderer = self.create_package(
             "crates/nuxie-renderer", "nuxie-renderer", ""
         )
         (renderer / "src/apple_surface.rs").write_text(
             "pub struct AppleSurface;\n"
+        )
+        capi = self.create_package("crates/nux-capi", "nux-capi", "")
+        (capi / "tests").mkdir()
+        (capi / "tests/apple_metal.rs").write_text(
+            "fn configure(layer: CAMetalLayer) { layer.nextDrawable(); }\n"
+        )
+        replay = self.create_package(
+            "tools/renderer-replay", "renderer-replay", ""
+        )
+        (replay / "src/bin").mkdir()
+        (replay / "src/bin/native-metal-product-root.rs").write_text(
+            "fn configure(layer: CAMetalLayer) { layer.nextDrawable(); }\n"
         )
 
         result = self.run_check()

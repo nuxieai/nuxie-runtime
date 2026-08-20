@@ -53,12 +53,17 @@ impl<'a> NativeMetalDrawableFrame<'a> {
             state: NativeMetalRenderState::default(),
             state_stack: Vec::new(),
             solid_draws: Vec::new(),
-            atomic_path_draw: None,
+            atomic_path_inputs: Vec::new(),
             gradient_draws: Vec::new(),
             atlas_requests: Vec::new(),
             resource_lease: None,
             collect_work_metrics: false,
             backend_work: crate::BackendWorkMetrics::default(),
+            atomic_draw_count: 0,
+            atomic_draw_group_count: 0,
+            atomic_barrier_count: 0,
+            atomic_memory_barrier_count: 0,
+            atomic_render_pass_break_count: 0,
             unsupported: None,
         };
         Ok(Self { frame, drawable })

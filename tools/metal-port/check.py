@@ -109,6 +109,27 @@ RENDER_CONTEXT_CONFIGURATION_MAP_SOURCES = {
     "renderer/src/metal/background_shader_compiler.h",
     "renderer/src/metal/background_shader_compiler.mm",
 }
+TRANSLATION_CONVENTION_COLUMNS = (
+    "version",
+    "convention",
+    "cpp_shape",
+    "rust_rule",
+    "invariant",
+    "forbidden",
+    "status",
+    "evidence",
+)
+TRANSLATION_CONVENTION_STATUSES = {"review-needed", "frozen", "verified"}
+TRANSLATION_CONVENTION_IDS = {
+    "objc-retained-nullable",
+    "intrusive-reference-counting",
+    "byte-ranges-and-alignment",
+    "enums-flags-slots-formats",
+    "assertions-and-errors",
+    "callbacks-workers-completion",
+    "preprocessor-configurations",
+    "destruction-and-drop-order",
+}
 RENDER_CONTEXT_FIELD_DECLARATION_SPANS = (
     (
         "renderer/include/rive/renderer/metal/render_context_metal_impl.h",
@@ -786,6 +807,74 @@ def validate_render_context_configuration_map(
             validate_evidence_citation(citation, repo_root, upstream_root, errors)
 
 
+def compare_translation_convention_ids(ids: list[str], errors: list[str]) -> None:
+    actual_ids = set(ids)
+    missing = sorted(TRANSLATION_CONVENTION_IDS - actual_ids)
+    extra = sorted(actual_ids - TRANSLATION_CONVENTION_IDS)
+    if len(ids) != len(actual_ids):
+        errors.append("Metal translation conventions contain duplicate IDs")
+    if missing:
+        errors.append("Metal translation conventions omit: " + ", ".join(missing))
+    if extra:
+        errors.append("Metal translation conventions invent: " + ", ".join(extra))
+
+
+def validate_translation_conventions(
+    manifest: dict[str, Any],
+    repo_root: pathlib.Path,
+    upstream_root: pathlib.Path,
+    errors: list[str],
+) -> None:
+    relative = str(manifest.get("translation_conventions", ""))
+    path = repo_root / relative
+    if not relative or not path.is_file():
+        errors.append(f"missing Metal translation conventions {relative}")
+        return
+    if not git_tracked_file(repo_root, relative):
+        errors.append(f"untracked Metal translation conventions {relative}")
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            reader = csv.DictReader(source, delimiter="\t")
+            fieldnames = tuple(reader.fieldnames or ())
+            rows = [
+                {str(key): str(value or "") for key, value in row.items() if key is not None}
+                for row in reader
+            ]
+    except (OSError, csv.Error) as error:
+        errors.append(f"cannot read Metal translation conventions {relative}: {error}")
+        return
+    if fieldnames != TRANSLATION_CONVENTION_COLUMNS:
+        errors.append(
+            "Metal translation convention schema must be: "
+            + "\t".join(TRANSLATION_CONVENTION_COLUMNS)
+        )
+        return
+    compare_translation_convention_ids(
+        [row["convention"] for row in rows], errors
+    )
+    for line_number, row in enumerate(rows, 2):
+        if row["version"] != "1":
+            errors.append(
+                f"Metal translation convention line {line_number} has invalid version"
+            )
+        if row["status"] not in TRANSLATION_CONVENTION_STATUSES:
+            errors.append(
+                f"Metal translation convention line {line_number} has invalid status `{row['status']}`"
+            )
+        for column in ("cpp_shape", "rust_rule", "invariant", "forbidden"):
+            if not row[column].strip():
+                errors.append(
+                    f"Metal translation convention line {line_number} has empty {column}"
+                )
+        evidence = [value.strip() for value in row["evidence"].split(";") if value.strip()]
+        if row["status"] in {"frozen", "verified"} and not evidence:
+            errors.append(
+                f"Metal translation convention line {line_number} is {row['status']} without evidence"
+            )
+        for citation in evidence:
+            validate_evidence_citation(citation, repo_root, upstream_root, errors)
+
+
 def validate_citation(
     citation: str,
     repo_root: pathlib.Path,
@@ -1316,6 +1405,7 @@ def check(
     validate_render_context_configuration_map(
         manifest, repo_root, upstream_root, errors
     )
+    validate_translation_conventions(manifest, repo_root, upstream_root, errors)
     units = validate_translation_units(manifest, errors)
     validate_lifetime_ledger(manifest, repo_root, upstream_root, errors)
     validate_reference_provenance(manifest, repo_root, errors)

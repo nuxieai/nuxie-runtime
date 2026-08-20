@@ -586,6 +586,21 @@ class MetalPortCheckTests(unittest.TestCase):
         CHECK.compare_render_context_configuration_rows(rows, blocks, errors)
         self.assertIn("invalid range", "\n".join(errors))
 
+    def test_translation_convention_ids_are_exhaustive_and_unique(self) -> None:
+        ids = sorted(CHECK.TRANSLATION_CONVENTION_IDS)
+        errors: list[str] = []
+        CHECK.compare_translation_convention_ids(ids, errors)
+        self.assertEqual(errors, [])
+
+        CHECK.compare_translation_convention_ids(ids[:-1], errors)
+        self.assertIn("omit", "\n".join(errors))
+
+        errors.clear()
+        CHECK.compare_translation_convention_ids(ids + [ids[0], "invented"], errors)
+        joined = "\n".join(errors)
+        self.assertIn("duplicate", joined)
+        self.assertIn("invent", joined)
+
     def test_missing_upstream_source_and_unproved_port_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

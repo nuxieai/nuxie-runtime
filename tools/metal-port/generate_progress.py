@@ -23,6 +23,7 @@ STATUS_LABEL = {
     "amber": "Attention",
     "active": "Active",
     "queued": "Queued",
+    "frozen": "Frozen",
 }
 
 
@@ -150,6 +151,19 @@ def configuration_summary(rows: list[dict[str, str]]) -> str:
             """
         )
     return "".join(cards)
+
+
+def convention_summary(rows: list[dict[str, str]]) -> str:
+    return "".join(
+        f"""
+        <article class="field-card">
+          <div class="source-card-head"><h3>{escape(row['convention'].replace('-', ' ').title())}</h3>{status_chip(row['status'])}</div>
+          <p class="convention-shape">{escape(row['cpp_shape'])}</p>
+          <p>{escape(row['invariant'])}</p>
+        </article>
+        """
+        for row in rows
+    )
 
 
 def phase_rail(phases: list[dict]) -> str:
@@ -292,6 +306,7 @@ def render(repo_root: Path) -> str:
     configuration_rows = parse_tsv(
         repo_root / manifest["render_context_configuration_map"]
     )
+    convention_rows = parse_tsv(repo_root / manifest["translation_conventions"])
     metal_sources = [
         source
         for source in manifest.get("source", [])
@@ -315,6 +330,9 @@ def render(repo_root: Path) -> str:
     )
     prepared_configurations = sum(
         row["status"] in {"prepared", "verified"} for row in configuration_rows
+    )
+    frozen_conventions = sum(
+        row["status"] in {"frozen", "verified"} for row in convention_rows
     )
     corpus_config = progress["corpus"]
     corpus = load_toml(repo_root / corpus_config["manifest"])
@@ -369,7 +387,8 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
 .stacked-bar {{ display:flex; width:100%; height:18px; overflow:hidden; margin:22px 0 13px; background:var(--line); }} .bar-part {{ display:block; }} .bar-ported {{ background:var(--green); }} .bar-partial {{ background:var(--amber); }} .bar-missing {{ background:var(--red); }}
 .bar-legend {{ display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:.84rem; }} .dot {{ display:inline-block; width:9px; height:9px; margin-right:6px; }} .dot-ported {{ background:var(--green); }} .dot-partial {{ background:var(--amber); }} .dot-missing {{ background:var(--red); }}
 .phases {{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:0; }} .phase {{ position:relative; padding:32px 16px 0 0; border-top:2px solid var(--line); }} .phase-marker {{ position:absolute; top:-7px; left:0; width:12px; height:12px; border-radius:50%; background:var(--queued); }} .phase-active {{ border-color:var(--green); }} .phase-active .phase-marker {{ background:var(--green); box-shadow:0 0 0 5px var(--green-soft); }} .phase strong {{ display:block; margin-bottom:8px; }} .phase p {{ color:var(--muted); font-size:.82rem; line-height:1.45; margin:9px 0 0; }}
-.status {{ display:inline-block; padding:3px 7px; margin-left:6px; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border:1px solid currentColor; }} .status-ported,.status-verified,.status-exact,.status-green,.status-active {{ color:var(--green); background:var(--green-soft); }} .status-partial,.status-in-progress,.status-amber {{ color:var(--amber); background:var(--amber-soft); }} .status-missing,.status-pending {{ color:var(--red); background:var(--red-soft); }} .status-queued {{ color:var(--queued); }}
+.status {{ display:inline-block; padding:3px 7px; margin-left:6px; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border:1px solid currentColor; }} .status-ported,.status-verified,.status-exact,.status-green,.status-active,.status-frozen {{ color:var(--green); background:var(--green-soft); }} .status-partial,.status-in-progress,.status-amber {{ color:var(--amber); background:var(--amber-soft); }} .status-missing,.status-pending {{ color:var(--red); background:var(--red-soft); }} .status-queued {{ color:var(--queued); }}
+.convention-shape {{ color:var(--muted); font-size:.84rem; }} .field-card>p:last-child {{ line-height:1.45; }}
 .owner-list {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }} .owner {{ min-width:0; background:var(--panel); border:1px solid var(--line); }} .owner summary {{ min-width:0; cursor:pointer; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:14px 16px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }} .owner summary>span:first-child {{ min-width:0; overflow-wrap:anywhere; word-break:break-word; }} .owner p,.owner-meta {{ min-width:0; margin:0; padding:0 16px 15px; color:var(--muted); line-height:1.45; overflow-wrap:anywhere; }} .owner-meta {{ display:grid; gap:5px; font-size:.82rem; }}
 .filters {{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }} .filters button {{ appearance:none; background:transparent; color:var(--ink); border:1px solid var(--line); padding:7px 10px; cursor:pointer; }} .filters button[aria-pressed="true"] {{ border-color:var(--green); color:var(--green); background:var(--green-soft); }}
 .table-wrap {{ overflow-x:auto; border:1px solid var(--line); background:var(--panel); }} table {{ width:100%; border-collapse:collapse; min-width:920px; }} th,td {{ padding:11px 13px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }} th {{ color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; }} td small {{ color:var(--muted); }} td:nth-child(1) {{ width:220px; }} td:nth-child(3) {{ width:120px; }} td:nth-child(5) {{ max-width:340px; overflow-wrap:anywhere; }} tr:last-child td {{ border-bottom:0; }}
@@ -396,6 +415,7 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
       <div class="metric"><strong>{missing_lines:,}</strong><span>missing source lines with no Rust owner</span></div>
       <div class="metric"><strong>{prepared_fields}/{len(field_rows)}</strong><span>state-bearing fields prepared</span></div>
       <div class="metric"><strong>{prepared_configurations}/{len(configuration_rows)}</strong><span>conditional blocks prepared</span></div>
+      <div class="metric"><strong>{frozen_conventions}/{len(convention_rows)}</strong><span>translation conventions frozen</span></div>
     </div>
     <div class="source-grid">{source_summary(rows)}</div>
   </section>
@@ -410,6 +430,11 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
   <section class="section">
     <div class="section-head"><h2>Conditional-configuration closure</h2><p>The checker extracts every preprocessor block and branch line from the pinned context and compiler units. Missing platform, tools, canvas, simulator, or header modes stay red.</p></div>
     <div class="field-grid">{configuration_summary(configuration_rows)}</div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Frozen translation conventions</h2><p>These mappings govern the literal source pass. They prevent a convenient Rust rewrite from silently changing ownership, bytes, failure order, configuration behavior, or destruction.</p></div>
+    <div class="field-grid">{convention_summary(convention_rows)}</div>
   </section>
 
   <section class="section">

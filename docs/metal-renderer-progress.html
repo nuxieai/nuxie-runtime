@@ -26,7 +26,8 @@ h2 { margin:0; font-size:1.45rem; letter-spacing:-.025em; } .section-head p { ma
 .stacked-bar { display:flex; width:100%; height:18px; overflow:hidden; margin:22px 0 13px; background:var(--line); } .bar-part { display:block; } .bar-ported { background:var(--green); } .bar-partial { background:var(--amber); } .bar-missing { background:var(--red); }
 .bar-legend { display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:.84rem; } .dot { display:inline-block; width:9px; height:9px; margin-right:6px; } .dot-ported { background:var(--green); } .dot-partial { background:var(--amber); } .dot-missing { background:var(--red); }
 .phases { list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:0; } .phase { position:relative; padding:32px 16px 0 0; border-top:2px solid var(--line); } .phase-marker { position:absolute; top:-7px; left:0; width:12px; height:12px; border-radius:50%; background:var(--queued); } .phase-active { border-color:var(--green); } .phase-active .phase-marker { background:var(--green); box-shadow:0 0 0 5px var(--green-soft); } .phase strong { display:block; margin-bottom:8px; } .phase p { color:var(--muted); font-size:.82rem; line-height:1.45; margin:9px 0 0; }
-.status { display:inline-block; padding:3px 7px; margin-left:6px; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border:1px solid currentColor; } .status-ported,.status-verified,.status-exact,.status-green,.status-active { color:var(--green); background:var(--green-soft); } .status-partial,.status-in-progress,.status-amber { color:var(--amber); background:var(--amber-soft); } .status-missing,.status-pending { color:var(--red); background:var(--red-soft); } .status-queued { color:var(--queued); }
+.status { display:inline-block; padding:3px 7px; margin-left:6px; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border:1px solid currentColor; } .status-ported,.status-verified,.status-exact,.status-green,.status-active,.status-frozen { color:var(--green); background:var(--green-soft); } .status-partial,.status-in-progress,.status-amber { color:var(--amber); background:var(--amber-soft); } .status-missing,.status-pending { color:var(--red); background:var(--red-soft); } .status-queued { color:var(--queued); }
+.convention-shape { color:var(--muted); font-size:.84rem; } .field-card>p:last-child { line-height:1.45; }
 .owner-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; } .owner { min-width:0; background:var(--panel); border:1px solid var(--line); } .owner summary { min-width:0; cursor:pointer; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:14px 16px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; } .owner summary>span:first-child { min-width:0; overflow-wrap:anywhere; word-break:break-word; } .owner p,.owner-meta { min-width:0; margin:0; padding:0 16px 15px; color:var(--muted); line-height:1.45; overflow-wrap:anywhere; } .owner-meta { display:grid; gap:5px; font-size:.82rem; }
 .filters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; } .filters button { appearance:none; background:transparent; color:var(--ink); border:1px solid var(--line); padding:7px 10px; cursor:pointer; } .filters button[aria-pressed="true"] { border-color:var(--green); color:var(--green); background:var(--green-soft); }
 .table-wrap { overflow-x:auto; border:1px solid var(--line); background:var(--panel); } table { width:100%; border-collapse:collapse; min-width:920px; } th,td { padding:11px 13px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; } td small { color:var(--muted); } td:nth-child(1) { width:220px; } td:nth-child(3) { width:120px; } td:nth-child(5) { max-width:340px; overflow-wrap:anywhere; } tr:last-child td { border-bottom:0; }
@@ -53,6 +54,7 @@ h2 { margin:0; font-size:1.45rem; letter-spacing:-.025em; } .section-head p { ma
       <div class="metric"><strong>100</strong><span>missing source lines with no Rust owner</span></div>
       <div class="metric"><strong>36/37</strong><span>state-bearing fields prepared</span></div>
       <div class="metric"><strong>13/30</strong><span>conditional blocks prepared</span></div>
+      <div class="metric"><strong>8/8</strong><span>translation conventions frozen</span></div>
     </div>
     <div class="source-grid">
             <article class="source-card">
@@ -171,6 +173,59 @@ h2 { margin:0; font-size:1.45rem; letter-spacing:-.025em; } .section-head p { ma
               <p class="field-review">Open branches: <code>atomic-source-include, image-rect-platform, initialize-platform, resolve-platform, atomic-source-append, metal-language-version</code></p>
             </article>
             </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Frozen translation conventions</h2><p>These mappings govern the literal source pass. They prevent a convenient Rust rewrite from silently changing ownership, bytes, failure order, configuration behavior, or destruction.</p></div>
+    <div class="field-grid">
+        <article class="field-card">
+          <div class="source-card-head"><h3>Objc Retained Nullable</h3><span class="status status-frozen">Frozen</span></div>
+          <p class="convention-shape">Objective-C strong fields, nullable id returns, and borrowed selector arguments.</p>
+          <p>Publication occurs only after every required retained object exists; replacement retains the new object before releasing the old one.</p>
+        </article>
+
+        <article class="field-card">
+          <div class="source-card-head"><h3>Intrusive Reference Counting</h3><span class="status status-frozen">Frozen</span></div>
+          <p class="convention-shape">rcp&lt;T&gt;, zero-reference callbacks, pool ownership, and manager purgatory.</p>
+          <p>The final logical release follows the pinned immediate-delete, deferred-purgatory, or pool-recycle branch exactly and concrete payload Drop is preserved.</p>
+        </article>
+
+        <article class="field-card">
+          <div class="source-card-head"><h3>Byte Ranges And Alignment</h3><span class="status status-frozen">Frozen</span></div>
+          <p class="convention-shape">Span, pointer-plus-length, typed upload rings, offsets, and C++ size arithmetic.</p>
+          <p>Exact byte length, element count, alignment, sentinel placement, and offset growth match the pinned producer and consumer.</p>
+        </article>
+
+        <article class="field-card">
+          <div class="source-card-head"><h3>Enums Flags Slots Formats</h3><span class="status status-frozen">Frozen</span></div>
+          <p class="convention-shape">C++ enum discriminants, bit flags, generated binding indices, absent sentinels, and Metal pixel formats.</p>
+          <p>Every upstream value maps one-to-one or fails closed before mutation; shader keys and native indices are never derived from Rust declaration order.</p>
+        </article>
+
+        <article class="field-card">
+          <div class="source-card-head"><h3>Assertions And Errors</h3><span class="status status-frozen">Frozen</span></div>
+          <p class="convention-shape">assert, RIVE_UNREACHABLE, nullable native failures, NSError, and recoverable factory returns.</p>
+          <p>Failure decision order and caller-visible observability match pinned behavior unless a documented safe-Rust correction deliberately strengthens it.</p>
+        </article>
+
+        <article class="field-card">
+          <div class="source-card-head"><h3>Callbacks Workers Completion</h3><span class="status status-frozen">Frozen</span></div>
+          <p class="convention-shape">Background compiler thread, condition variables, command-buffer completion blocks, ring transfer, and context destruction.</p>
+          <p>Pending work cannot strand waiters; command success and failure both release transferred resources; context drop cannot release in-flight storage early.</p>
+        </article>
+
+        <article class="field-card">
+          <div class="source-card-head"><h3>Preprocessor Configurations</h3><span class="status status-frozen">Frozen</span></div>
+          <p class="convention-shape">Apple platform macros, simulator branches, WITH_RIVE_TOOLS, RIVE_CANVAS, TARGET_OS_IPHONE, and Objective-C header modes.</p>
+          <p>Each pinned branch compiles and behaves under its declared configuration, or remains visibly review-needed with a documented exclusion.</p>
+        </article>
+
+        <article class="field-card">
+          <div class="source-card-head"><h3>Destruction And Drop Order</h3><span class="status status-frozen">Frozen</span></div>
+          <p class="convention-shape">Reverse C++ member destruction, derived-before-base destruction, autorelease scopes, and native command retention.</p>
+          <p>Every dependent owner remains alive through its final destructor/callback use; autoreleased native references are measured only after the pool drains.</p>
+        </article>
+        </div>
   </section>
 
   <section class="section">
@@ -824,6 +879,14 @@ h2 { margin:0; font-size:1.45rem; letter-spacing:-.025em; } .section-head p { ma
   </section>
 
   <section class="section"><div class="section-head"><h2>Progress reports and verification logs</h2><p>Checkpoint results are preserved without using them to define translation scope.</p></div><div class="reports">
+            <article class="report report-green">
+              <div class="report-head"><time>2026-08-20</time><span class="status status-green">Green</span></div>
+              <h3>Mechanical translation conventions frozen</h3>
+              <p>Eight source-to-Rust mappings now govern the whole-file pass: native retention and nullability, intrusive ownership, bytes and alignment, enums and generated slots, errors, callbacks and completion, preprocessor configurations, and destruction order.</p>
+              <div class="runs"><div class="run"><code></code><span>8/8 convention categories frozen</span></div><div class="run"><code></code><span>checker rejects omissions, inventions, duplicates, and empty invariants</span></div><div class="run"><code></code><span>fixture-specific Unsupported paths and fallback remain prohibited</span></div></div>
+              <footer><a href="../docs/metal-translation-conventions.tsv">Open evidence</a></footer>
+            </article>
+
             <article class="report report-amber">
               <div class="report-head"><time>2026-08-20</time><span class="status status-amber">Attention</span></div>
               <h3>Conditional configuration surface made exhaustive</h3>

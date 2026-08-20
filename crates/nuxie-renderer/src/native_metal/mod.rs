@@ -8,6 +8,7 @@
 mod background_shader_compiler;
 mod buffer;
 mod capabilities;
+mod context;
 #[allow(dead_code)]
 mod draw_combinations;
 #[allow(dead_code)]
@@ -30,7 +31,7 @@ use buffer::NativeMetalBuffer;
 use capabilities::{
     select_capabilities, ApplePlatform, MetalCapabilitySelection, MetalDeviceCapabilities,
 };
-use draw_shader::DrawShaderLibrary;
+use context::NativeMetalContext;
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
     RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
@@ -40,15 +41,17 @@ use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{msg_send, rc::Retained};
 use objc2_foundation::{NSError, NSString};
 use objc2_metal::{
-    MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandBufferStatus, MTLCommandEncoder,
-    MTLCommandQueue, MTLCreateSystemDefaultDevice, MTLDevice, MTLGPUFamily, MTLLibrary,
-    MTLLoadAction, MTLOrigin, MTLPixelFormat, MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder,
-    MTLRenderPassDescriptor, MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLSize,
-    MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
+    MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder,
+    MTLCreateSystemDefaultDevice, MTLDevice, MTLGPUFamily, MTLLibrary, MTLLoadAction, MTLOrigin,
+    MTLPixelFormat, MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder, MTLRenderPassDescriptor,
+    MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLSize, MTLStorageMode, MTLStoreAction,
+    MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
 };
-use samplers::NativeMetalSamplers;
+use render_target::RenderTargetMetal;
+use std::cell::RefCell;
 use std::ffi::c_void;
 use std::ptr::NonNull;
+use std::rc::Rc;
 use std::sync::Arc;
 
 const TRACER_METALLIB: &[u8] =
@@ -66,20 +69,10 @@ extern "C" {
     fn dispatch_release(object: *mut AnyObject);
 }
 
-struct NativeMetalContext {
-    device: Retained<ProtocolObject<dyn MTLDevice>>,
-    queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
-    solid_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
-    _draw_shader_library: DrawShaderLibrary,
-    _samplers: NativeMetalSamplers,
-    capabilities: MetalCapabilitySelection,
-}
-
 /// Explicitly selected native Metal renderer domain.
 pub struct NativeMetalFactory {
     context: Arc<NativeMetalContext>,
-    width: u32,
-    height: u32,
+    target: Rc<RefCell<RenderTargetMetal>>,
 }
 
 impl NativeMetalFactory {
@@ -87,57 +80,55 @@ impl NativeMetalFactory {
         let device = MTLCreateSystemDefaultDevice()
             .ok_or_else(|| RendererError::NativeMetal("no system Metal device".to_owned()))?;
         let capabilities = select_device_capabilities(&device);
+        // Preserve the established failure order: invalid target dimensions
+        // are rejected immediately after the capability probe, before queue,
+        // library, sampler, pipeline, or target allocation can mask them.
         validate_extent(width, height, capabilities.max_texture_size)?;
-        let queue = device.newCommandQueue().ok_or_else(|| {
-            RendererError::NativeMetal("MTLDevice returned no command queue".to_owned())
-        })?;
-        let draw_shader_library = DrawShaderLibrary::load(&device)
-            .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
-        let samplers = NativeMetalSamplers::new(&device)?;
-        let solid_pipeline = make_solid_pipeline(&device)?;
-        Ok(Self {
-            context: Arc::new(NativeMetalContext {
-                device,
-                queue,
-                solid_pipeline,
-                _draw_shader_library: draw_shader_library,
-                _samplers: samplers,
-                capabilities,
-            }),
-            width,
-            height,
-        })
+        let context = Arc::new(NativeMetalContext::new(device, capabilities)?);
+        let target = Rc::new(RefCell::new(make_tracer_target(&context, width, height)?));
+        Ok(Self { context, target })
     }
 
     pub fn dimensions(&self) -> (u32, u32) {
-        (self.width, self.height)
+        let target = self.target.borrow();
+        (target.width(), target.height())
     }
 
     pub fn adapter_name(&self) -> String {
-        self.context.device.name().to_string()
+        self.context.device().name().to_string()
     }
 
     /// Replaces the dimensions used by subsequently created frames. Frames
     /// already handed to a caller retain their original size, matching the
     /// upstream target-owner boundary during an in-flight resize.
     pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
-        validate_extent(width, height, self.context.capabilities.max_texture_size)?;
-        self.width = width;
-        self.height = height;
+        validate_extent(width, height, self.context.capabilities().max_texture_size)?;
+        // Construct every size-dependent Metal owner before replacement. If
+        // any allocation fails, the current generation remains intact.
+        let replacement = Rc::new(RefCell::new(make_tracer_target(
+            &self.context,
+            width,
+            height,
+        )?));
+        self.target = replacement;
         Ok(())
     }
 
-    pub fn begin_frame(&self, clear_color: u32) -> NativeMetalFrame {
-        NativeMetalFrame {
+    pub fn begin_frame(&self, clear_color: u32) -> Result<NativeMetalFrame, RendererError> {
+        // Acquisition happens here, once. The resulting concrete Metal owner
+        // moves into the frame and is either committed by `finish` or released
+        // uncommitted when the frame is abandoned.
+        let command_buffer = self.context.make_command_buffer()?;
+        Ok(NativeMetalFrame {
             context: Arc::clone(&self.context),
-            width: self.width,
-            height: self.height,
+            target: Rc::clone(&self.target),
+            command_buffer,
             clear_color,
             state: NativeMetalRenderState::default(),
             state_stack: Vec::new(),
             solid_draws: Vec::new(),
             unsupported: None,
-        }
+        })
     }
 }
 
@@ -153,7 +144,7 @@ impl Factory for NativeMetalFactory {
         // CPU buffer or the wgpu backend would conceal the selected renderer
         // and violate the native Metal fail-closed contract.
         Box::new(
-            NativeMetalBuffer::new(&self.context.device, buffer_type, flags, size_in_bytes)
+            NativeMetalBuffer::new(self.context.device(), buffer_type, flags, size_in_bytes)
                 .unwrap_or_else(|error| {
                     panic!("native Metal render-buffer allocation failed: {error}")
                 }),
@@ -226,8 +217,8 @@ impl Factory for NativeMetalFactory {
 /// One native Metal frame retained until submission and deterministic readback.
 pub struct NativeMetalFrame {
     context: Arc<NativeMetalContext>,
-    width: u32,
-    height: u32,
+    target: Rc<RefCell<RenderTargetMetal>>,
+    command_buffer: Retained<ProtocolObject<dyn MTLCommandBuffer>>,
     clear_color: u32,
     state: NativeMetalRenderState,
     state_stack: Vec<NativeMetalRenderState>,
@@ -358,24 +349,11 @@ impl NativeMetalFrame {
         if let Some(reason) = self.unsupported {
             return Err(RendererError::Unsupported(reason));
         }
-        let descriptor = unsafe {
-            MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
-                MTLPixelFormat::RGBA8Unorm,
-                self.width as usize,
-                self.height as usize,
-                false,
-            )
-        };
-        descriptor.setStorageMode(MTLStorageMode::Shared);
-        descriptor.setUsage(MTLTextureUsage::RenderTarget);
-        let texture = self
-            .context
-            .device
-            .newTextureWithDescriptor(&descriptor)
-            .ok_or_else(|| RendererError::NativeMetal("failed to allocate render target".into()))?;
-
-        let command_buffer = self.context.queue.commandBuffer().ok_or_else(|| {
-            RendererError::NativeMetal("MTLCommandQueue returned no command buffer".into())
+        let target = self.target.borrow();
+        let width = target.width();
+        let height = target.height();
+        let texture = target.target_texture().ok_or_else(|| {
+            RendererError::NativeMetal("native Metal target has no readback texture".into())
         })?;
         let pass = MTLRenderPassDescriptor::renderPassDescriptor();
         let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
@@ -383,14 +361,15 @@ impl NativeMetalFrame {
         attachment.setLoadAction(MTLLoadAction::Clear);
         attachment.setStoreAction(MTLStoreAction::Store);
         attachment.setClearColor(clear_color(self.clear_color));
-        let encoder = command_buffer
+        let encoder = self
+            .command_buffer
             .renderCommandEncoderWithDescriptor(&pass)
             .ok_or_else(|| {
                 RendererError::NativeMetal("failed to create render command encoder".into())
             })?;
         if !self.solid_draws.is_empty() {
-            encoder.setRenderPipelineState(&self.context.solid_pipeline);
-            let viewport = [self.width as f32, self.height as f32];
+            encoder.setRenderPipelineState(self.context.solid_pipeline());
+            let viewport = [width as f32, height as f32];
             let viewport_pointer = NonNull::from(&viewport).cast::<c_void>();
             unsafe {
                 encoder.setVertexBytes_length_atIndex(
@@ -424,24 +403,14 @@ impl NativeMetalFrame {
             }
         }
         encoder.endEncoding();
-        command_buffer.commit();
-        command_buffer.waitUntilCompleted();
-        if command_buffer.status() != MTLCommandBufferStatus::Completed {
-            let detail = command_buffer
-                .error()
-                .map(|error| format!("{error:?}"))
-                .unwrap_or_else(|| format!("status {:?}", command_buffer.status()));
-            return Err(RendererError::NativeMetal(format!(
-                "command buffer failed: {detail}"
-            )));
-        }
+        NativeMetalContext::commit_and_wait(&self.command_buffer)?;
 
-        let row_bytes = usize::try_from(self.width)
+        let row_bytes = usize::try_from(width)
             .ok()
             .and_then(|width| width.checked_mul(4))
             .ok_or_else(|| RendererError::NativeMetal("readback row size overflow".into()))?;
         let byte_len = row_bytes
-            .checked_mul(self.height as usize)
+            .checked_mul(height as usize)
             .ok_or_else(|| RendererError::NativeMetal("readback size overflow".into()))?;
         let mut pixels = vec![0; byte_len];
         let pointer = NonNull::new(pixels.as_mut_ptr().cast::<c_void>())
@@ -449,8 +418,8 @@ impl NativeMetalFrame {
         let region = MTLRegion {
             origin: MTLOrigin { x: 0, y: 0, z: 0 },
             size: MTLSize {
-                width: self.width as usize,
-                height: self.height as usize,
+                width: width as usize,
+                height: height as usize,
                 depth: 1,
             },
         };
@@ -459,6 +428,45 @@ impl NativeMetalFrame {
         };
         Ok(pixels)
     }
+}
+
+/// Creates one complete size-dependent target generation for the diagnostic
+/// adapter. Upstream constructs `RenderTargetMetal` as one owner and attaches
+/// the product-supplied texture later; this headless tracer creates and
+/// attaches its shared readback texture at the same boundary.
+fn make_tracer_target(
+    context: &NativeMetalContext,
+    width: u32,
+    height: u32,
+) -> Result<RenderTargetMetal, RendererError> {
+    let mut target = RenderTargetMetal::new(
+        context.retained_device(),
+        MTLPixelFormat::RGBA8Unorm,
+        width,
+        height,
+        context.capabilities(),
+    )?;
+    // SAFETY: `NativeMetalFactory::{new,resize}` validate both dimensions
+    // against the selected device limit before this helper is called, and
+    // `RenderTargetMetal::new` above independently rejects zero dimensions.
+    // Both values widen losslessly from `u32` to `usize`; Metal receives no
+    // borrowed Rust storage from this convenience constructor.
+    let descriptor = unsafe {
+        MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
+            MTLPixelFormat::RGBA8Unorm,
+            width as usize,
+            height as usize,
+            false,
+        )
+    };
+    descriptor.setStorageMode(MTLStorageMode::Shared);
+    descriptor.setUsage(MTLTextureUsage::RenderTarget);
+    let texture = context
+        .device()
+        .newTextureWithDescriptor(&descriptor)
+        .ok_or_else(|| RendererError::NativeMetal("failed to allocate render target".into()))?;
+    target.set_target_texture(Some(texture))?;
+    Ok(target)
 }
 
 fn clear_color(color: u32) -> MTLClearColor {
@@ -723,6 +731,73 @@ fn new_library_from_metallib_bytes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[test]
+    fn begin_frame_owns_one_uncommitted_buffer_and_one_target_generation() {
+        let mut factory = NativeMetalFactory::new(2, 2).expect("create native Metal factory");
+        let first_generation = Rc::clone(&factory.target);
+        let frame = factory
+            .begin_frame(0)
+            .expect("acquire frame-owned command buffer");
+
+        assert_eq!(
+            frame.command_buffer.status(),
+            objc2_metal::MTLCommandBufferStatus::NotEnqueued
+        );
+        assert!(Rc::ptr_eq(&frame.target, &first_generation));
+
+        // Upstream mutates a reference-counted target after construction: the
+        // product attaches its drawable texture and the atomic path lazily
+        // realizes storage. Prove the shared Rust generation preserves both
+        // mutations even while a frame retains it.
+        let retained_texture = first_generation
+            .borrow()
+            .retained_target_texture()
+            .expect("tracer target owns its attached texture");
+        {
+            let mut target = first_generation.borrow_mut();
+            let first_atomic = NonNull::from(
+                target
+                    .color_atomic_buffer()
+                    .expect("allocate shared generation atomic buffer"),
+            );
+            let second_atomic = NonNull::from(
+                target
+                    .color_atomic_buffer()
+                    .expect("reuse shared generation atomic buffer"),
+            );
+            assert_eq!(first_atomic, second_atomic);
+
+            target
+                .set_target_texture(None)
+                .expect("detach product texture from shared generation");
+            assert!(target.target_texture().is_none());
+            target
+                .set_target_texture(Some(retained_texture))
+                .expect("reattach product texture to shared generation");
+        }
+
+        factory.resize(3, 1).expect("replace target generation");
+        assert!(!Rc::ptr_eq(&factory.target, &first_generation));
+        let old_target = frame.target.borrow();
+        assert_eq!((old_target.width(), old_target.height()), (2, 2));
+        assert_eq!(factory.dimensions(), (3, 1));
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[test]
+    fn factory_rejects_invalid_extent_before_context_resource_creation() {
+        assert!(matches!(
+            NativeMetalFactory::new(0, 1),
+            Err(RendererError::InvalidTextureExtent {
+                label: "render target",
+                width: 0,
+                height: 1,
+                ..
+            })
+        ));
+    }
 
     #[test]
     fn polygon_filter_accepts_both_convex_windings() {

@@ -239,6 +239,12 @@ impl RenderTargetMetal {
         self.target_texture.as_deref()
     }
 
+    pub(crate) fn retained_target_texture(
+        &self,
+    ) -> Option<Retained<ProtocolObject<dyn MTLTexture>>> {
+        self.target_texture.clone()
+    }
+
     pub(crate) fn coverage_memoryless_texture(&self) -> Option<&ProtocolObject<dyn MTLTexture>> {
         self.coverage_memoryless_texture.as_deref()
     }

@@ -36,19 +36,30 @@ upstream = "renderer/include/rive/renderer/metal/render_context_metal_impl.h"
 lane = "renderer-platform"
 issue = "UNIV-2086"
 status = "in-progress"
+# Adaptation: the upstream context permits a nil queue until the product sets
+# it. The explicitly selected Rust factory creates its retained queue during
+# context construction, then `begin_frame` fails closed if that queue cannot
+# return the one concrete command buffer owned by the frame. Context policy
+# tests cover missing acquisition and completion errors; the live tracer test
+# covers successful completion and abandoned-frame reuse.
 rust_modules = [
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/tests/native_metal_tracer.rs",
 ]
 [[source]]
 upstream = "renderer/src/metal/background_shader_compiler.h"
@@ -131,13 +142,20 @@ upstream = "renderer/src/metal/render_context_metal_impl.mm"
 lane = "renderer-platform"
 issue = "UNIV-2086"
 status = "in-progress"
+# Adaptation: upstream attaches a product-supplied target texture after target
+# construction. The headless tracer creates and attaches a shared readback
+# texture while building the same complete `RenderTargetMetal` owner. Resize
+# constructs a replacement before assignment; the integration test proves an
+# in-flight frame retains the previous generation and the new target renders.
 rust_modules = [
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
@@ -145,14 +163,17 @@ rust_modules = [
 evidence = [
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
   # The image-texture tests record the intentional ASTC enum-gap correction.
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/tests/native_metal_tracer.rs",
 ]
 
 [[source]]

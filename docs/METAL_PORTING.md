@@ -3,7 +3,8 @@
 This document is the operating contract for UNIV-1643 and its Apple Metal
 children, UNIV-2086 through UNIV-2092. It supplements `docs/PORTING.md`; where
 this guide is stricter for renderer-platform or ORE Metal work, this guide
-wins.
+wins. `docs/PARITY_WORKFLOW.md` defines the backend-neutral execution and
+promotion workflow; this guide is its Metal-specific specialization.
 
 The authoritative upstream checkout is `rive-app/rive-runtime` at
 `4ac7b32798da0482e441ef09304dc3b480ed3ee5`. The executable source inventory is
@@ -144,12 +145,20 @@ set enumerated in the source manifest, and
 The render-context header and implementation rows remain `in-progress`. Their
 coverage now also includes retained Metal buffer rings, image-texture upload
 and mip generation, the complete sampler permutation table, and construction
-of retained offline draw-library and sampler owners. Image decode/upload is not
-wired into product behavior yet. The existing tracer solid pipeline remains
-the selected diagnostic pipeline. Because the public `Factory` render-buffer
-constructor is infallible, a native Metal allocation failure deliberately
-terminates at that backend boundary; it never substitutes CPU storage or the
-wgpu renderer.
+of retained offline draw-library and sampler owners. The third wave adds the
+concrete context/frame boundary: a frame acquires one command buffer at
+`begin_frame`, retains that exact owner until consuming `finish` or
+abandonment, and a resize constructs a complete target generation before
+replacing the factory's current one. Target generations use controlled
+single-thread interior mutation because pinned upstream attaches product
+textures and lazily realizes atomic storage after the reference-counted target
+is shared. Both related ownership rows remain `in-progress` until native
+retain/drop observation and a live injected command-buffer failure are checked
+in. Image decode/upload is not wired into product behavior yet. The existing
+tracer solid pipeline remains the selected diagnostic pipeline. Because the
+public `Factory` render-buffer constructor is infallible, a native Metal
+allocation failure deliberately terminates at that backend boundary; it never
+substitutes CPU storage or the wgpu renderer.
 
 The image-texture leaf records one intent-preserving correction to pinned C++:
 the upstream ASTC calculation adds a footprint index to

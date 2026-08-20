@@ -15,6 +15,9 @@ apple-authored-msl = ["dep:wgpu-hal"]
 # Builds the dormant native Metal adapter while the Apple product continues to
 # select the established wgpu renderer by default.
 native-metal-experimental = []
+# Wires the pinned RIVE_CANVAS ORE constructor to the exact native renderer
+# device and queue. This stays opt-in until the native renderer cutover.
+native-ore-metal-experimental = ["native-metal-experimental", "dep:nuxie-ore-metal"]
 perf-diagnostics = []
 perf-counters = []
 # Exposes a deliberately narrow, doc-hidden seam into production-compiled
@@ -44,6 +47,7 @@ objc2 = "0.6.4"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSError", "NSString"] }
 objc2-metal = { version = "0.3.2", default-features = false, features = ["block2", "MTLAllocation", "MTLBlitCommandEncoder", "MTLBuffer", "MTLCommandBuffer", "MTLCommandEncoder", "MTLCommandQueue", "MTLDevice", "MTLDrawable", "MTLLibrary", "MTLPixelFormat", "MTLRenderCommandEncoder", "MTLRenderPass", "MTLRenderPipeline", "MTLResource", "MTLSampler", "MTLTexture", "MTLTypes"] }
 objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["std", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
+nuxie-ore-metal = { path = "../nuxie-ore-metal", optional = true }
 wgpu-hal = { version = "=30.0.0", path = "../../vendor/wgpu-hal-30.0.0", optional = true }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dev-dependencies]

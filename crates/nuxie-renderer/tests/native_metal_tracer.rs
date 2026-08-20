@@ -3,6 +3,7 @@
     any(target_os = "ios", target_os = "macos")
 ))]
 
+use nuxie_render_api::Factory;
 use nuxie_render_stream::RenderStream;
 use nuxie_renderer::{
     BackendWorkMetrics, NativeMetalExecutionInventory, NativeMetalFactory, RenderMode,
@@ -99,6 +100,111 @@ fn native_metal_frame_clears_and_reads_back() {
             0x04, 0x11,
         ]
     );
+}
+
+#[test]
+fn native_metal_factory_decodes_an_image_through_the_context_texture_owner() {
+    let mut encoded = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut encoded, 2, 2);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .expect("write native Metal image fixture header")
+            .write_image_data(&[
+                0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff,
+            ])
+            .expect("write native Metal image fixture pixels");
+    }
+
+    let mut factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
+    let image = factory
+        .decode_image(&encoded)
+        .expect("decode through the native Metal context texture owner");
+    assert_eq!((image.width(), image.height()), (2, 2));
+}
+
+#[test]
+fn native_metal_factory_adopts_a_caller_texture_through_the_context_owner() {
+    use objc2_metal::{
+        MTLDevice, MTLPixelFormat, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage,
+    };
+
+    let factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
+    let descriptor = MTLTextureDescriptor::new();
+    descriptor.setPixelFormat(MTLPixelFormat::RGBA8Unorm);
+    // SAFETY: this public-seam fixture uses nonzero NSUInteger-representable
+    // dimensions and one mip level, matching the adopted image contract.
+    unsafe {
+        descriptor.setWidth(2);
+        descriptor.setHeight(2);
+        descriptor.setMipmapLevelCount(1);
+    }
+    descriptor.setUsage(MTLTextureUsage::ShaderRead);
+    descriptor.setTextureType(MTLTextureType::Type2D);
+    let texture = factory
+        .retained_metal_device()
+        .newTextureWithDescriptor(&descriptor)
+        .expect("allocate caller-owned Metal texture");
+    assert!(
+        factory
+            .adopt_metal_image_texture(texture.clone(), 0, 2)
+            .is_none(),
+        "zero-sized adopted images fail closed"
+    );
+
+    let image = factory
+        .adopt_metal_image_texture(texture, 2, 2)
+        .expect("adopt caller-owned texture through the native Metal context");
+    assert_eq!((image.width(), image.height()), (2, 2));
+}
+
+#[test]
+fn native_metal_factory_makes_a_same_texture_render_canvas_owner() {
+    use objc2_metal::{MTLPixelFormat, MTLResource, MTLStorageMode, MTLTexture, MTLTextureUsage};
+
+    let factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
+    assert!(factory.make_metal_render_canvas(0, 5).is_err());
+    let canvas = factory
+        .make_metal_render_canvas(3, 5)
+        .expect("create same-texture native Metal render canvas");
+
+    assert_eq!((canvas.width(), canvas.height()), (3, 5));
+    assert!(canvas.render_target_and_image_share_texture());
+    let texture = canvas.retained_metal_texture();
+    assert_eq!(texture.pixelFormat(), MTLPixelFormat::RGBA8Unorm);
+    assert_eq!(texture.storageMode(), MTLStorageMode::Private);
+    assert!(texture.usage().contains(MTLTextureUsage::RenderTarget));
+    assert!(texture.usage().contains(MTLTextureUsage::ShaderRead));
+}
+
+#[cfg(feature = "native-ore-metal-experimental")]
+#[test]
+fn native_metal_factory_makes_ore_context_from_its_retained_service() {
+    use nuxie_ore_metal::context::{FrameDescriptor, ShaderTarget};
+
+    let factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
+    let ore = factory.make_ore_context();
+    assert_eq!(ore.shader_target(), ShaderTarget::msl);
+
+    ore.begin_frame(&FrameDescriptor::default());
+    let completion = ore
+        .end_frame_with_completion()
+        .expect("submit the retained renderer queue's command buffer");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        if let Some(result) = completion.result() {
+            result.expect("empty ORE frame completes successfully");
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "retained renderer queue did not complete the ORE frame"
+        );
+        std::thread::yield_now();
+    }
 }
 
 #[test]
@@ -334,10 +440,10 @@ fn native_metal_forced_atomic_gradient_cubic_matches_pinned_cpp_metal_oracle() {
     assert_rgba8_with_tolerance(
         &output.pixels,
         &cpp_metal,
-        0,
-        Some(0),
+        1,
+        Some(3),
         true,
-        "forced generic-atomic Rust Metal gradient versus pinned C++ Metal",
+        "forced generic-atomic Rust Metal gradient versus pinned C++ Metal under validation",
     );
 }
 

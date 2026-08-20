@@ -866,7 +866,8 @@ pub use metal::{WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuMetalPresen
 ))]
 pub use native_metal::{
     NativeMetalContextOptions, NativeMetalDrawableFrame, NativeMetalExecutionInventory,
-    NativeMetalFactory, NativeMetalFrame, NativeMetalFrameOutput, ShaderCompilationMode,
+    NativeMetalFactory, NativeMetalFrame, NativeMetalFrameOutput, NativeMetalRenderCanvas,
+    ShaderCompilationMode,
 };
 pub use work_metrics::BackendWorkMetrics;
 

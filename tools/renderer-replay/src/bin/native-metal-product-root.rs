@@ -32,6 +32,11 @@ fn main() {
         // thread; it does not retain or dereference Rust storage.
         assert_eq!(unsafe { pthread_main_np() }, 1);
         let mut factory = NativeMetalFactory::new(64, 64).expect("create native Metal tracer");
+        let render_canvas = factory
+            .make_metal_render_canvas(8, 8)
+            .expect("create same-texture native Metal render canvas");
+        assert_eq!((render_canvas.width(), render_canvas.height()), (8, 8));
+        assert!(render_canvas.render_target_and_image_share_texture());
         let mut path = RawPath::new();
         path.move_to(8.0, 8.0);
         path.line_to(56.0, 8.0);

@@ -51,6 +51,7 @@ impl FeatherAtlasResourceDescriptor {
 }
 
 /// Retained owner of the optional feather-atlas texture.
+#[derive(Clone)]
 pub(crate) struct FeatherAtlasResource {
     descriptor: Option<FeatherAtlasResourceDescriptor>,
     texture: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
@@ -86,9 +87,23 @@ impl FeatherAtlasResource {
             self.texture = None;
             return Ok(None);
         };
-        // Allocate first. If Metal rejects the replacement, the current
-        // descriptor and texture remain intact.
-        let replacement = make_texture(device, descriptor)?;
+        self.replace_with(descriptor, |descriptor| make_texture(device, descriptor))
+    }
+
+    /// Replace a texture transactionally using the supplied allocator. The
+    /// allocator runs before either owner is changed, so an allocation error
+    /// leaves the current descriptor and texture identity untouched.
+    fn replace_with<F>(
+        &mut self,
+        descriptor: FeatherAtlasResourceDescriptor,
+        allocate: F,
+    ) -> Result<Option<&ProtocolObject<dyn MTLTexture>>, RendererError>
+    where
+        F: FnOnce(
+            FeatherAtlasResourceDescriptor,
+        ) -> Result<Retained<ProtocolObject<dyn MTLTexture>>, RendererError>,
+    {
+        let replacement = allocate(descriptor)?;
         self.descriptor = Some(descriptor);
         self.texture = Some(replacement);
         Ok(self.texture.as_deref())
@@ -250,5 +265,42 @@ mod tests {
         assert_eq!(retained.height(), 7);
         assert_eq!(retained.pixelFormat(), MTLPixelFormat::R16Float);
         drop(retained);
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[test]
+    fn failed_feather_atlas_replace_preserves_identity_and_real_retry_succeeds() {
+        let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            return;
+        };
+        let mut resource = FeatherAtlasResource::new(&device, 37, 19).unwrap().unwrap();
+        let clone = resource.clone();
+        let before = resource.texture().unwrap() as *const ProtocolObject<dyn MTLTexture>;
+        assert!(std::ptr::eq(
+            before,
+            clone.texture().unwrap() as *const ProtocolObject<dyn MTLTexture>
+        ));
+        let before_descriptor = resource.descriptor();
+        let replacement = FeatherAtlasResourceDescriptor::new(41, 23).unwrap();
+
+        let failed = resource.replace_with(replacement, |_| {
+            Err(RendererError::NativeMetal(
+                "injected allocation failure".to_owned(),
+            ))
+        });
+        assert!(failed.is_err());
+        assert_eq!(resource.descriptor(), before_descriptor);
+        assert!(std::ptr::eq(
+            before,
+            resource.texture().unwrap() as *const ProtocolObject<dyn MTLTexture>
+        ));
+
+        let retained_before_retry = resource.retained_texture().unwrap();
+        let after = resource.replace(&device, 41, 23).unwrap().unwrap()
+            as *const ProtocolObject<dyn MTLTexture>;
+        assert!(!std::ptr::eq(before, after));
+        assert_eq!(retained_before_retry.width(), 37);
+        assert_eq!(resource.descriptor().unwrap().width, 41);
+        assert_eq!(resource.descriptor().unwrap().height, 23);
     }
 }

@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 6, in-progress = 5, ported = 3, verified = 0 }
+expected_status_counts = { pending = 6, in-progress = 4, ported = 4, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -139,12 +139,17 @@ issue = "UNIV-2087"
 # fill/stroke mask pipelines, and a live atlas blit. The same-flush checkpoint
 # adds joint packing, flush-wide tessellation relocation, pinned mask-batch
 # ordering/coalescing, and lazy specialized AtlasBlit + dither realization.
-# Multiple simultaneously in-flight concrete texture pairs and injected device
-# failure remain before this combined owner can be ported.
-status = "in-progress"
+# The generation closeout now publishes gradient, tessellation, atlas, paired
+# mask, and specialized draw owners as one transaction. Overlapping prepared
+# leases retain distinct concrete generations, while injected texture and real
+# synthesized compiler failures publish nothing and leave the coordinator
+# reusable. The final static ImageRect vertex/index buffers are retained with
+# byte-exact upstream contents. Public asynchronous scheduling remains outside
+# this ownership row and does not own these resource identities.
+status = "ported"
 rule = "Gradient, Gaussian, tessellation, feather-atlas, sampler, path-patch, and image-rect resources remain context-owned and are resized or recreated at the same lifecycle points as upstream."
-citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:244-275", "cpp:renderer/src/metal/render_context_metal_impl.mm:100-175"]
-required_tests = ["gradient resize and reuse", "eight upload rings rotate and release exactly once", "deterministic narrow-slice work counters", "atlas resize and preservation rules", "same-flush atlas ordering and batching", "live atlas mask and final blit", "sampler permutation completeness"]
+citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:244-275", "cpp:renderer/src/metal/render_context_metal_impl.mm:100-175", "cpp:renderer/src/metal/render_context_metal_impl.mm:717-725", "cpp:renderer/src/metal/render_context_metal_impl.mm:1041-1224", "cpp:renderer/src/render_context.cpp:2472-2817"]
+required_tests = ["gradient resize and reuse", "eight upload rings rotate and release exactly once", "deterministic narrow-slice work counters", "atlas resize and preservation rules", "same-flush atlas ordering and batching", "live atlas mask and final blit", "overlapping concrete resource generations release with their prepared leases", "later texture and specialized compiler failures publish no partial generation and allow retry", "byte-exact shared ImageRect buffers release with their context", "sampler permutation completeness"]
 evidence_paths = [
   "crates/nuxie-renderer/build.rs",
   "crates/nuxie-renderer/src/lib.rs",

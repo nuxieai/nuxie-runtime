@@ -263,6 +263,7 @@ fn apply_attachment_policy(descriptor: &MTLRenderPipelineDescriptor, policy: Att
 }
 
 /// A pair of Metal draw states specialized for RGBA and BGRA framebuffer data.
+#[derive(Clone)]
 pub(crate) struct DrawPipeline {
     pipeline_state_rgba8: Option<Retained<ProtocolObject<dyn MTLRenderPipelineState>>>,
     pipeline_state_bgra8: Option<Retained<ProtocolObject<dyn MTLRenderPipelineState>>>,

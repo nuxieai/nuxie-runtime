@@ -51,6 +51,7 @@ impl GradientResourceDescriptor {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct GradientResource {
     descriptor: Option<GradientResourceDescriptor>,
     texture: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
@@ -90,9 +91,23 @@ impl GradientResource {
             return Ok(self.texture.as_deref());
         }
 
-        // Allocate first. If Metal rejects the replacement, the current
-        // descriptor and texture remain intact.
-        let replacement = make_texture(device, descriptor)?;
+        self.resize_with(descriptor, |descriptor| make_texture(device, descriptor))
+    }
+
+    /// Replace a resized texture transactionally using the supplied allocator.
+    /// The allocator runs before either owner is changed, so an allocation
+    /// error leaves the current descriptor and texture identity untouched.
+    fn resize_with<F>(
+        &mut self,
+        descriptor: GradientResourceDescriptor,
+        allocate: F,
+    ) -> Result<Option<&ProtocolObject<dyn MTLTexture>>, RendererError>
+    where
+        F: FnOnce(
+            GradientResourceDescriptor,
+        ) -> Result<Retained<ProtocolObject<dyn MTLTexture>>, RendererError>,
+    {
+        let replacement = allocate(descriptor)?;
         self.descriptor = Some(descriptor);
         self.texture = Some(replacement);
         Ok(self.texture.as_deref())
@@ -201,5 +216,45 @@ mod tests {
             .is_none());
         assert!(resource.texture().is_none());
         assert!(resource.descriptor().is_none());
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[test]
+    fn failed_gradient_resize_preserves_identity_and_real_retry_succeeds() {
+        let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            return;
+        };
+        let mut resource = GradientResource::new(&device, GRADIENT_TEXTURE_WIDTH, 3)
+            .unwrap()
+            .unwrap();
+        let clone = resource.clone();
+        let before = resource.texture().unwrap() as *const ProtocolObject<dyn MTLTexture>;
+        assert!(std::ptr::eq(
+            before,
+            clone.texture().unwrap() as *const ProtocolObject<dyn MTLTexture>
+        ));
+        let before_descriptor = resource.descriptor();
+        let replacement = GradientResourceDescriptor::new(GRADIENT_TEXTURE_WIDTH, 4).unwrap();
+
+        let failed = resource.resize_with(replacement, |_| {
+            Err(RendererError::NativeMetal(
+                "injected allocation failure".to_owned(),
+            ))
+        });
+        assert!(failed.is_err());
+        assert_eq!(resource.descriptor(), before_descriptor);
+        assert!(std::ptr::eq(
+            before,
+            resource.texture().unwrap() as *const ProtocolObject<dyn MTLTexture>
+        ));
+
+        let retained_before_retry = resource.retained_texture().unwrap();
+        let after = resource
+            .resize(&device, GRADIENT_TEXTURE_WIDTH, 4)
+            .unwrap()
+            .unwrap() as *const ProtocolObject<dyn MTLTexture>;
+        assert!(!std::ptr::eq(before, after));
+        assert_eq!(retained_before_retry.width(), 512);
+        assert_eq!(resource.descriptor().unwrap().height, 4);
     }
 }

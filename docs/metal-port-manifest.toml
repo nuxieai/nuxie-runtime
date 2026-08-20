@@ -260,6 +260,14 @@ status = "in-progress"
 # Same-flush atlas resources additionally port the pinned fill/stroke and
 # scissor ordering, unscissored batch coalescing, flush-wide tessellation
 # relocation, and synchronous specialized AtlasBlit selection.
+# Resource preparation now stages gradient, tessellation, atlas, mask-pair, and
+# specialized draw owners as one retained candidate generation and publishes it
+# only after every fallible realization and upload step succeeds. This is a
+# Rust typed-error adaptation: focused tests inject later allocation and the
+# upstream-shaped synthesized compiler failure, verify no partial publication,
+# retain overlapping concrete generations, and retry on the same coordinator.
+# The context also retains byte-exact shared ImageRect vertex/index buffers from
+# the pinned constructor; drawing them remains a later atomic-encoder slice.
 rust_modules = [
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/gpu.rs",

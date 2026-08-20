@@ -6,7 +6,7 @@ porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 6, in-progress = 3, ported = 33, verified = 0 }
+expected_status_counts = { pending = 0, in-progress = 2, ported = 40, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -505,8 +505,7 @@ evidence = ["crates/nuxie-ore-metal/src/binding_map.rs"]
 # proves the copied payload and checked Metal backend identity;
 # `pre_first_frame_release_waits_even_when_frame_zero_is_caught_up` proves the
 # shared manager retains a zero-reference payload until its safe frame.
-# Group-range validation and context error publication remain assigned to the
-# pending `ore-context-metal` unit.
+# `ContextMetal` now owns group-range validation and context error publication.
 [[source]]
 upstream = "renderer/src/ore/ore_bind_group_layout.cpp"
 lane = "ore-metal"
@@ -519,18 +518,20 @@ evidence = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
 # accepted layout/buffer/view/sampler logical resource exactly once. Metal
 # buffer records replace the source raw `BufferMetal*` with a stable index into
 # that owned buffer vector and resolve the live orphanable MTLBuffer only when
-# the pending render-pass unit encodes it. Texture and sampler records retain
-# the native handles copied by the C++ adapter. Constructors remain
-# crate-private because `ore_context_metal.mm:850-977` still owns descriptor
-# validation, accepted-entry selection, error publication, and the unresolved
-# Lua-GC context/deferred-destroy seam. The focused owner, ordering,
+# the render-pass unit encodes it. Texture and sampler records retain the
+# native handles copied by the C++ adapter. Constructors remain crate-private;
+# `ContextMetal` owns descriptor validation, source-compatible skipped-entry
+# selection, and last-error-wins publication. The pinned tree contains no
+# writer for its declared deferred-bind-group vector, so Rust omits the dead
+# raw context back-pointer instead of inventing a Lua-GC route. The owner,
+# ordering,
 # late-backing, native-retain, and wrong-resource tests are in the two Rust
 # modules below.
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_bind_group.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "in-progress"
+status = "ported"
 rust_modules = ["crates/nuxie-ore-metal/src/bind_group.rs"]
 evidence = ["crates/nuxie-ore-metal/src/bind_group.rs", "crates/nuxie-ore-metal/src/metal/bind_group.rs"]
 
@@ -562,17 +563,31 @@ evidence = ["crates/nuxie-ore-metal/src/buffer.rs", "crates/nuxie-ore-metal/src/
 upstream = "renderer/include/rive/renderer/ore/ore_context.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/context.rs", "crates/nuxie-ore-metal/src/render_pass.rs"]
+evidence = ["crates/nuxie-ore-metal/src/context.rs", "crates/nuxie-ore-metal/src/render_pass.rs", "crates/nuxie-ore-metal/src/metal/context.rs"]
 
+# Rust adaptation for the context/render-pass closure: raw context/pass
+# back-pointers become ContextMetal -> Arc<ContextState> -> Weak active token,
+# while each pass holds Weak<ContextState>; no retain cycle or dangling active
+# pointer is representable. Checked backend downcasts fail closed where C++
+# asserts. The declared deferred-bind-group vector is intentionally omitted
+# because the pinned tree has no writer. Host canvas/Rive wrappers converge on
+# one retained native-texture seam because their C++ host types live outside
+# this isolated crate. Pinned Metal quirks remain observable: beginFrame ignores
+# FrameDescriptor and preserves lastError, waitForGPU only sees the current
+# recording buffer, invalid bind entries are skipped, and native pipeline
+# errors route only to outError when supplied. Live context/render-pass tests
+# cover factory publication, frame completion after context drop, exact
+# compatibility/error order, stale-pass auto-finish, dynamic bindings, and all
+# draw commands.
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_context_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/context.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/src/metal/buffer.rs"]
 
 # Rust adaptation for the file-local pipeline closure: `PipelineSnapshot`
 # deep-copies strings, vertex layouts/attributes, and scalar state while
@@ -580,9 +595,8 @@ evidence = []
 # owner for upstream's strong `m_layouts`; the shallow descriptor's layout
 # pointers become views of that same array, avoiding an extra logical owner.
 # The Metal leaf can retain an already-created render state and optional depth
-# state, but descriptor conversion, layout/module validation, native creation,
-# and error publication remain assigned to the pending
-# `ore-context-render-pass` unit and `ore_context_metal.mm` source row.
+# state; descriptor conversion, layout/module validation, native creation, and
+# error publication now live in the compiled context/render-pass unit.
 # `pipeline_snapshot_owns_nested_descriptor_values_and_handles` and
 # `pipeline_retains_only_the_first_four_layouts_once` prove the deep snapshot
 # and exact logical refcounts. The live Metal
@@ -604,9 +618,9 @@ evidence = ["crates/nuxie-ore-metal/src/pipeline.rs"]
 upstream = "renderer/include/rive/renderer/ore/ore_render_pass.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/render_pass.rs"]
+evidence = ["crates/nuxie-ore-metal/src/render_pass.rs", "crates/nuxie-ore-metal/src/metal/render_pass.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp"
@@ -666,7 +680,7 @@ evidence = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
 
 # Rust adaptation for the Metal buffer pair: instead of retaining the
 # upstream raw `ContextMetal*`, each buffer retains the exact native device and
-# an Arc-backed serial/error state shared with the pending context unit. This
+# an Arc-backed serial/error state shared with ContextMetal. This
 # preserves completion-thread serial publication without a context/resource
 # cycle. `buffer_resource_retains_manager_and_rejects_wrong_backend` proves
 # deferred payload/state ownership, while
@@ -694,9 +708,9 @@ evidence = ["crates/nuxie-ore-metal/src/metal/buffer.rs"]
 upstream = "renderer/src/ore/metal/ore_context_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/context.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/src/metal/render_pass.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_pipeline_metal.hpp"
@@ -718,17 +732,17 @@ evidence = ["crates/nuxie-ore-metal/src/metal/pipeline.rs"]
 upstream = "renderer/src/ore/metal/ore_render_pass_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/render_pass.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/render_pass.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_render_pass_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/render_pass.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/render_pass.rs", "crates/nuxie-ore-metal/src/metal/context.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_sampler_metal.hpp"
@@ -1006,13 +1020,13 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "pending"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]
 id = "ore-context-render-pass"
 phase = "bulk"
-worker_claim = "unclaimed"
+worker_claim = "sol-ore-context-render-pass"
 sources = [
   "renderer/include/rive/renderer/ore/ore_context.hpp",
   "renderer/include/rive/renderer/ore/ore_context_metal.hpp",
@@ -1044,5 +1058,5 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "pending"
+status = "compiled"
 requires_lifetime_rows = true

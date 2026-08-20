@@ -11,7 +11,9 @@ use std::any::Any;
 
 use crate::gpu_resource::{GpuResourceManager, ResourceHandle};
 use crate::pipeline::Pipeline;
-use crate::types::{BackendId, Pipeline as PipelineResource, PipelineDesc};
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+use crate::types::PipelineDesc;
+use crate::types::{BackendId, Pipeline as PipelineResource};
 
 use super::MetalBackend;
 
@@ -48,7 +50,7 @@ unsafe impl Sync for RetainedMetalDepthStencil {}
 /// depth/stencil states.
 ///
 /// The type cannot be constructed or published without a render state. The
-/// pending `ContextMetal` factory must validate shader entry points and create
+/// `ContextMetal` validates shader entry points and creates
 /// the native states before calling [`PipelineMetal::with_native_states`];
 /// this leaf intentionally does not recreate
 /// `ore_context_metal.mm`'s descriptor translation or error publication.
@@ -61,20 +63,13 @@ pub struct PipelineMetal {
 }
 
 impl PipelineMetal {
-    /// Narrow native-state publication seam for the pending context unit.
+    /// Narrow native-state publication seam for the context unit.
     ///
     /// `ore_context_metal.mm` owns shader validation, render-pipeline
     /// descriptor construction, NSError/exception handling, and depth/stencil
     /// descriptor construction. This constructor only transfers the already
     /// successful retained states into the Metal pipeline payload.
     #[cfg(any(target_os = "ios", target_os = "macos"))]
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the pending ore-context-metal unit publishes native states"
-        )
-    )]
     pub(crate) fn with_native_states(
         desc: &PipelineDesc<'_>,
         pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
@@ -92,33 +87,19 @@ impl PipelineMetal {
     }
 
     #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the pending context unit publishes the completed native pipeline"
-        )
+        not(any(target_os = "ios", target_os = "macos")),
+        expect(dead_code, reason = "the ContextMetal factory is Apple-only")
     )]
     pub(crate) fn into_resource(self, manager: Option<GpuResourceManager>) -> ResourceHandle<Self> {
         ResourceHandle::new(manager, self)
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the pending render-pass unit binds this state")
-    )]
     pub(crate) fn mtl_pipeline(&self) -> &ProtocolObject<dyn MTLRenderPipelineState> {
         self.m_mtlPipeline.0.as_ref()
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the pending render-pass unit binds this optional state"
-        )
-    )]
     pub(crate) fn mtl_depth_stencil(&self) -> Option<&ProtocolObject<dyn MTLDepthStencilState>> {
         self.m_mtlDepthStencil
             .as_ref()

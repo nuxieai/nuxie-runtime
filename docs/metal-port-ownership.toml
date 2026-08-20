@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 6, in-progress = 5, ported = 4, verified = 0 }
+expected_status_counts = { pending = 4, in-progress = 6, ported = 5, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -255,10 +255,14 @@ required_tests = ["completion releases buffer-ring lock", "context drop before c
 [[owner]]
 id = "ore.context_frame_serials"
 issue = "UNIV-2091"
-status = "pending"
-rule = "ORE owns one device, queue, current command buffer, monotonically increasing current serial, and independently retained atomic completion serial."
+status = "in-progress"
+rule = "ORE Metal retains one device, queue, and current recording command buffer. beginFrame replaces the recording buffer and advances a monotonic serial; endFrame commits once and clears that slot. The completion block owns shared serial state independently of ContextMetal and publishes the maximum finished serial regardless of command status."
 citations = ["cpp:renderer/include/rive/renderer/ore/ore_context_metal.hpp:21-103", "cpp:renderer/src/ore/metal/ore_context_metal.mm:1141-1194"]
-required_tests = ["begin/end pairing", "completion after context drop", "waitForGPU", "malformed or abandoned authored pass"]
+required_tests = ["device queue and current-buffer retention", "begin/end serial monotonicity", "completion after context drop", "out-of-order completion publishes max", "failed completion advances reuse safety", "source-exact waitForGPU current-buffer behavior", "abandoned recording releases uncommitted"]
+evidence_paths = [
+  "crates/nuxie-ore-metal/src/metal/context.rs",
+  "crates/nuxie-ore-metal/src/metal/buffer.rs",
+]
 
 [[owner]]
 id = "ore.buffer_backing_versions"
@@ -279,7 +283,12 @@ required_tests = ["exact artifact trust", "multi-group and vertex-map slots", "u
 [[owner]]
 id = "ore.render_pass_retention"
 issue = "UNIV-2091"
-status = "pending"
-rule = "Render passes retain every buffer, texture, sampler, pipeline, and bind group needed until command-buffer completion; occurrence recreation cannot reuse stale native objects."
+status = "ported"
+rule = "Before finish, RenderPassMetal owns its encoder, command buffer, native index buffer, current pipeline, and one logical bind group per slot. Buffer bindings resolve and mark the current backing at encode time. finish ends the encoder exactly once and releases logical groups and pipeline; post-finish encoded native lifetime is delegated to Metal, because the pinned sources contain no logical owner packet through completion."
 citations = ["cpp:renderer/src/ore/metal/ore_render_pass_metal.mm:1-314", "cpp:renderer/include/rive/renderer/ore/ore_context_metal.hpp:94-102"]
-required_tests = ["resource retention through completion", "occurrence recreation", "compute and render pass ordering", "context loss and malformed pass cleanup"]
+required_tests = ["destructor auto-finish", "finish idempotence", "group and pipeline replacement ownership", "late buffer-backing resolution", "sorted dynamic offsets", "index byte-offset calculation", "absent-stage binding emission", "stale-pass auto-finish without context cycle"]
+evidence_paths = [
+  "crates/nuxie-ore-metal/src/render_pass.rs",
+  "crates/nuxie-ore-metal/src/metal/render_pass.rs",
+  "crates/nuxie-ore-metal/src/metal/context.rs",
+]

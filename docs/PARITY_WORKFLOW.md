@@ -163,6 +163,61 @@ is the exception pattern, not permission to redesign nearby code.
 
 ## Parallelism and model assignment
 
+### File-first mechanical translation phase
+
+When a complete pinned upstream subsystem is already present, source files —
+not product features — drive the translation queue. This follows the process
+described in [Bun's Rust rewrite](https://bun.com/blog/bun-in-rust): prepare a
+translation guide and lifetime ledger, mechanically translate the complete
+source inventory, review the translations in separate contexts, then use
+compiler errors and the language-independent test suite as later work queues.
+
+For C++ backends, one **ownership unit** is the smallest independently owned
+class closure. It may contain an interface header plus a platform header and
+implementation file because C++ splits one owner across those files. Every
+upstream file remains individually accounted for in the source manifest even
+when several files form one ownership unit.
+
+The phases are deliberately separate:
+
+1. **Preparation:** pin the source inventory; write the C++→Rust convention
+   table; record every state-bearing field in the lifetime ledger; partition
+   every source into a dependency-ordered ownership unit with one exclusive
+   Rust target set. The manifest records the base snapshot, worker claim,
+   reviewer/fixer roles, and state of every unit before translation begins.
+2. **Three-unit trial:** one Luna extra-high implementer translates each unit;
+   two Sol high reviewers independently compare source and translation; one
+   fixer applies accepted findings. Revise the workflow, not just the trial
+   code, when a repeated failure pattern appears.
+3. **Bulk translation:** only after the lifetime ledger covers the entire
+   subsystem, translate every remaining source unit mechanically.
+   Translation workers do not run Cargo, Git, generators, broad formatting, or
+   tests and do not wire shared modules. They edit only their assigned files.
+4. **Compiler work queue:** the integrator wires the translated modules, runs
+   `cargo check` once per crate, saves and groups diagnostics by Rust file, and
+   assigns non-overlapping fixes. Stubs, `todo!`, swallowed errors, and no-op
+   implementations are rejected.
+5. **Behavior work queue:** after compilation, existing language-independent
+   oracles, structural harnesses, and product roots validate the translated
+   subsystem. Feature fixtures are acceptance evidence; they do not dictate
+   the source module structure.
+6. **Refactoring:** idiomatic cleanup and shared-HAL extraction wait until the
+   complete concrete backend is at parity.
+
+The three-unit trial is integrated into a private module and must compile and
+run focused structural tests before the workflow is approved for bulk use.
+Later bulk translations may remain unwired until the compiler-queue phase, but
+the trial is specifically where imports, trait shapes, native-handle types,
+and `Send`/`Sync` assumptions are proven.
+
+The implementer never reviews its own output. Reviewers receive the upstream
+source set, the Rust diff, the porting guide, and the lifetime rows, but not the
+implementer's reasoning. One reviewer attacks behavioral/source
+correspondence; the other attacks ownership, unsafe interop, and repository
+standards. These two mechanical-translation reviews establish source fidelity;
+they are distinct from the single optional, time-boxed behavioral review
+allowed by `PORTING.md` after the implementation-independent tests have run.
+
 Parallelize independent leaf closures, not shared architecture:
 
 - keep two or three implementation lanes active when independent closures

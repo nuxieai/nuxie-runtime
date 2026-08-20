@@ -4,17 +4,23 @@ upstream_repository = "rive-app/rive-runtime"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
+lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 28, in-progress = 2, ported = 7, verified = 0 }
+expected_status_counts = { pending = 33, in-progress = 2, ported = 7, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
 # Metal, the ORE Metal adapter, and the checked-in Metal shader sources.
 source_globs = [
+  "include/rive/refcnt.hpp",
   "renderer/include/rive/renderer/buffer_ring.hpp",
+  "renderer/include/rive/renderer/gpu_resource.hpp",
   "renderer/include/rive/renderer/metal/*",
+  "renderer/src/gpu_resource.cpp",
   "renderer/src/metal/*",
   "renderer/include/rive/renderer/ore/ore_*.hpp",
+  "renderer/src/ore/ore_binding_map.cpp",
+  "renderer/src/ore/ore_bind_group_layout.cpp",
   "renderer/src/ore/metal/*",
   "renderer/src/shaders/metal/*",
 ]
@@ -461,6 +467,46 @@ evidence = [
 ]
 
 [[source]]
+upstream = "include/rive/refcnt.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/include/rive/renderer/gpu_resource.hpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/gpu_resource.cpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/ore_binding_map.cpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
+upstream = "renderer/src/ore/ore_bind_group_layout.cpp"
+lane = "ore-metal"
+issue = "UNIV-2091"
+status = "pending"
+rust_modules = []
+evidence = []
+
+[[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_bind_group.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
@@ -683,3 +729,272 @@ issue = "UNIV-2091"
 status = "pending"
 rust_modules = []
 evidence = []
+
+[[translation_unit]]
+id = "ore-types"
+phase = "trial"
+worker_claim = "trial-ore-types"
+sources = ["renderer/include/rive/renderer/ore/ore_types.hpp"]
+dependencies = []
+rust_targets = ["crates/nuxie-ore-metal/src/types.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "ready"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-rstb-container"
+phase = "trial"
+worker_claim = "trial-ore-rstb-container"
+sources = ["renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp"]
+dependencies = []
+rust_targets = ["crates/nuxie-ore-metal/src/rstb_entry_container.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "ready"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-binding-map"
+phase = "trial"
+worker_claim = "trial-ore-binding-map"
+sources = [
+  "renderer/include/rive/renderer/ore/ore_binding_map.hpp",
+  "renderer/src/ore/ore_binding_map.cpp",
+]
+dependencies = []
+rust_targets = ["crates/nuxie-ore-metal/src/binding_map.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "ready"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "gpu-resource"
+phase = "bulk"
+worker_claim = "unclaimed"
+sources = [
+  "include/rive/refcnt.hpp",
+  "renderer/include/rive/renderer/gpu_resource.hpp",
+  "renderer/src/gpu_resource.cpp",
+]
+dependencies = []
+rust_targets = ["crates/nuxie-ore-metal/src/gpu_resource.rs"]
+worker_role = "sol-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "pending"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-bind-group-layout"
+phase = "bulk"
+worker_claim = "unclaimed"
+sources = [
+  "renderer/include/rive/renderer/ore/ore_bind_group_layout.hpp",
+  "renderer/src/ore/ore_bind_group_layout.cpp",
+]
+dependencies = ["ore-types", "ore-binding-map", "gpu-resource"]
+rust_targets = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "pending"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-buffer"
+phase = "bulk"
+worker_claim = "unclaimed"
+sources = [
+  "renderer/include/rive/renderer/ore/ore_buffer.hpp",
+  "renderer/src/ore/metal/ore_buffer_metal.hpp",
+  "renderer/src/ore/metal/ore_buffer_metal.mm",
+]
+dependencies = ["ore-types", "gpu-resource"]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/buffer.rs",
+  "crates/nuxie-ore-metal/src/metal/buffer.rs",
+]
+worker_role = "sol-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "pending"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-texture"
+phase = "bulk"
+worker_claim = "unclaimed"
+sources = [
+  "renderer/include/rive/renderer/ore/ore_texture.hpp",
+  "renderer/src/ore/metal/ore_texture_metal.hpp",
+  "renderer/src/ore/metal/ore_texture_metal.mm",
+]
+dependencies = ["ore-types", "gpu-resource"]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/texture.rs",
+  "crates/nuxie-ore-metal/src/metal/texture.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "pending"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-sampler"
+phase = "bulk"
+worker_claim = "unclaimed"
+sources = [
+  "renderer/include/rive/renderer/ore/ore_sampler.hpp",
+  "renderer/src/ore/metal/ore_sampler_metal.hpp",
+  "renderer/src/ore/metal/ore_sampler_metal.mm",
+]
+dependencies = ["ore-types", "gpu-resource"]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/sampler.rs",
+  "crates/nuxie-ore-metal/src/metal/sampler.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "pending"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-shader-module"
+phase = "bulk"
+worker_claim = "unclaimed"
+sources = [
+  "renderer/include/rive/renderer/ore/ore_shader_module.hpp",
+  "renderer/src/ore/metal/ore_shader_module_metal.hpp",
+  "renderer/src/ore/metal/ore_shader_module_metal.mm",
+]
+dependencies = ["ore-types", "ore-binding-map", "gpu-resource"]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/shader_module.rs",
+  "crates/nuxie-ore-metal/src/metal/shader_module.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "pending"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-pipeline"
+phase = "bulk"
+worker_claim = "unclaimed"
+sources = [
+  "renderer/include/rive/renderer/ore/ore_pipeline.hpp",
+  "renderer/src/ore/metal/ore_pipeline_metal.hpp",
+  "renderer/src/ore/metal/ore_pipeline_metal.mm",
+]
+dependencies = [
+  "ore-types",
+  "ore-binding-map",
+  "gpu-resource",
+  "ore-bind-group-layout",
+  "ore-shader-module",
+]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/pipeline.rs",
+  "crates/nuxie-ore-metal/src/metal/pipeline.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "pending"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-bind-group"
+phase = "bulk"
+worker_claim = "unclaimed"
+sources = [
+  "renderer/include/rive/renderer/ore/ore_bind_group.hpp",
+  "renderer/src/ore/metal/ore_bind_group_metal.hpp",
+  "renderer/src/ore/metal/ore_bind_group_metal.mm",
+]
+dependencies = [
+  "ore-types",
+  "ore-binding-map",
+  "gpu-resource",
+  "ore-bind-group-layout",
+  "ore-buffer",
+  "ore-texture",
+  "ore-sampler",
+]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/bind_group.rs",
+  "crates/nuxie-ore-metal/src/metal/bind_group.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "pending"
+requires_lifetime_rows = true
+
+[[translation_unit]]
+id = "ore-context-render-pass"
+phase = "bulk"
+worker_claim = "unclaimed"
+sources = [
+  "renderer/include/rive/renderer/ore/ore_context.hpp",
+  "renderer/include/rive/renderer/ore/ore_context_metal.hpp",
+  "renderer/include/rive/renderer/ore/ore_render_pass.hpp",
+  "renderer/src/ore/metal/ore_context_metal.mm",
+  "renderer/src/ore/metal/ore_render_pass_metal.hpp",
+  "renderer/src/ore/metal/ore_render_pass_metal.mm",
+]
+dependencies = [
+  "ore-types",
+  "ore-binding-map",
+  "gpu-resource",
+  "ore-bind-group-layout",
+  "ore-buffer",
+  "ore-texture",
+  "ore-sampler",
+  "ore-shader-module",
+  "ore-pipeline",
+  "ore-bind-group",
+]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/context.rs",
+  "crates/nuxie-ore-metal/src/render_pass.rs",
+  "crates/nuxie-ore-metal/src/metal/context.rs",
+  "crates/nuxie-ore-metal/src/metal/render_pass.rs",
+]
+worker_role = "sol-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "pending"
+requires_lifetime_rows = true

@@ -172,6 +172,64 @@ public `Factory` render-buffer constructor is infallible, a native Metal
 allocation failure deliberately terminates at that backend boundary; it never
 substitutes CPU storage or the wgpu renderer.
 
+## ORE file-oriented translation phase
+
+The remaining source inventory is the backend-neutral ORE interface, its
+shared GPU-resource lifetime foundation, and the ORE Metal adapter. From this
+point those source files, rather than individual rendering features, drive
+implementation. This phase applies
+the Bun-style workflow recorded in `docs/PARITY_WORKFLOW.md`:
+
+- `docs/metal-port-manifest.toml` is the exhaustive, non-overlapping file and
+  ownership-unit queue;
+- `docs/ore-port-lifetimes.tsv` records every state-bearing field before bulk
+  translation starts;
+- Luna extra-high mechanically translates exclusive ownership units;
+- two Sol high reviewers adversarially compare every unit before a fixer pass;
+- translation workers run no Cargo, Git, generator, or broad formatting
+  commands;
+- the integrator alone wires modules and turns compiler diagnostics into the
+  next queue;
+- existing ORE/C++ fixtures and Metal product roots validate batches after
+  compilation instead of shaping one-off implementations.
+
+A C++ ownership unit can span a header and implementation file, but every
+source file retains a separate manifest row. Native construction that upstream
+centralizes in `ore_context_metal.mm` belongs to the context unit; leaf units
+may not claim that shared implementation file or pretend an empty leaf `.mm`
+is the behavioral closure. The initial three-unit trial therefore exercises
+dependency-complete foundations instead of the tempting sampler, shader, and
+texture shells:
+
+| Ownership unit | Upstream closure | Rust targets |
+| --- | --- | --- |
+| ORE types | `ore_types.hpp` | `crates/nuxie-ore-metal/src/types.rs` |
+| RSTB entry container | `ore_rstb_entry_container.hpp` | `crates/nuxie-ore-metal/src/rstb_entry_container.rs` |
+| Binding map | `ore_binding_map.hpp`, `ore_binding_map.cpp` | `crates/nuxie-ore-metal/src/binding_map.rs` |
+
+The integrator privately wires and compiles these trial modules and runs their
+focused structural tests before approving bulk translation. That trial is the
+proof for imports, trait/object shapes, checked parsing, release semantics, and
+threading assumptions. After it is accepted, remaining ORE files are translated
+in dependency-ordered shards and may remain unwired until the compiler-error
+phase. An unwired translation is `in-progress`, never `ported` or parity
+evidence.
+
+These trial units are intentionally mechanical. The shared GPU-resource
+lifetime unit is assigned to Sol high rather than Luna because translating an
+intrusive zero-reference callback into Rust ownership requires design judgment,
+not source conversion.
+
+The lifetime translation is behavior, not syntax. In particular, a managed
+`GPUResource` transfers its zero-ref allocation into manager purgatory only
+before the first advanced frame or while `currentFrameNumber >
+safeFrameNumber`; caught-up and shutdown releases delete immediately. Metal
+constructs these resources without that manager and relies on retained native
+objects plus command-buffer retention. Likewise, a Metal texture view must
+retain a concrete texture owner and expose a checked native-handle seam: the
+upstream `nil` view falls back to the source `TextureMetal` handle, while a
+successfully returned texture or shader module owns a non-null native handle.
+
 The image-texture leaf records one intent-preserving correction to pinned C++:
 the upstream ASTC calculation adds a footprint index to
 `MTLPixelFormatASTC_4x4_LDR`, but Metal reserves enum value 209 between the

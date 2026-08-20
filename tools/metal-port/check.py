@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import csv
 import hashlib
 import pathlib
 import re
@@ -17,6 +18,53 @@ from typing import Any, Iterable
 SOURCE_STATUSES = {"pending", "in-progress", "ported", "verified"}
 OWNER_STATUSES = {"pending", "in-progress", "ported", "verified"}
 VERIFIED_STATUSES = {"ported", "verified"}
+TRANSLATION_STATUSES = {
+    "pending",
+    "ready",
+    "in-progress",
+    "translated",
+    "reviewed",
+    "fixed",
+    "compiled",
+    "verified",
+}
+TRANSLATION_PHASES = {"trial", "bulk"}
+TRANSLATION_WORKER_ROLES = {"luna-extra-high", "sol-high"}
+TRANSLATION_REVIEWER_ROLES = {"sol-high"}
+TRANSLATION_FIXER_ROLES = {"sol-high"}
+LIFETIME_STATUSES = {"review-needed", "prepared", "verified"}
+LIFETIME_COLUMNS = (
+    "schema_version",
+    "upstream_ref",
+    "unit",
+    "upstream_path",
+    "field",
+    "cpp_ownership",
+    "rust_shape",
+    "threading",
+    "concrete_native_downcast_seam",
+    "release_invariant",
+    "failure_invariant",
+    "status",
+    "evidence",
+)
+FOUNDATION_TRIAL_UNITS = {
+    "ore-types": {"renderer/include/rive/renderer/ore/ore_types.hpp"},
+    "ore-rstb-container": {
+        "renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp"
+    },
+    "ore-binding-map": {
+        "renderer/include/rive/renderer/ore/ore_binding_map.hpp",
+        "renderer/src/ore/ore_binding_map.cpp",
+    },
+}
+FOUNDATION_TRIAL_TARGETS = {
+    "ore-types": {"crates/nuxie-ore-metal/src/types.rs"},
+    "ore-rstb-container": {
+        "crates/nuxie-ore-metal/src/rstb_entry_container.rs"
+    },
+    "ore-binding-map": {"crates/nuxie-ore-metal/src/binding_map.rs"},
+}
 CITATION_RE = re.compile(r"^(cpp|rust):(.+):(\d+)(?:-(\d+))?$")
 
 
@@ -195,6 +243,23 @@ def validate_citation(
         )
 
 
+def validate_evidence_citation(
+    citation: str,
+    repo_root: pathlib.Path,
+    upstream_root: pathlib.Path,
+    errors: list[str],
+) -> None:
+    head, separator, ranges = citation.rpartition(":")
+    parts = ranges.split(",") if separator else []
+    if len(parts) > 1 and all(re.fullmatch(r"\d+(?:-\d+)?", part) for part in parts):
+        for line_range in parts:
+            validate_citation(
+                f"{head}:{line_range}", repo_root, upstream_root, errors
+            )
+        return
+    validate_citation(citation, repo_root, upstream_root, errors)
+
+
 def validate_source_rows(
     manifest: dict[str, Any],
     repo_root: pathlib.Path,
@@ -260,6 +325,339 @@ def validate_source_rows(
                 elif not git_tracked_file(repo_root, relative):
                     errors.append(f"{path} names untracked parity evidence path {relative}")
     return counts
+
+
+def validate_translation_units(
+    manifest: dict[str, Any], errors: list[str]
+) -> list[dict[str, Any]]:
+    units = list(manifest.get("translation_unit", []))
+    unit_ids = [str(unit.get("id", "")) for unit in units]
+    duplicates = duplicate_values(unit_ids)
+    if duplicates:
+        errors.append(f"duplicate translation-unit ids: {', '.join(duplicates)}")
+
+    source_rows = list(manifest.get("source", []))
+    ore_sources = {
+        str(row.get("upstream", ""))
+        for row in source_rows
+        if row.get("lane") == "ore-metal"
+    }
+    pending_ore_sources = {
+        str(row.get("upstream", ""))
+        for row in source_rows
+        if row.get("lane") == "ore-metal" and row.get("status") == "pending"
+    }
+    assigned_sources = [
+        str(source)
+        for unit in units
+        for source in list(unit.get("sources", []))
+    ]
+    overlapping_sources = duplicate_values(assigned_sources)
+    if overlapping_sources:
+        errors.append(
+            "overlapping translation-unit sources: "
+            + ", ".join(overlapping_sources)
+        )
+    missing_sources = sorted(pending_ore_sources - set(assigned_sources))
+    if missing_sources:
+        errors.append("missing pending ORE sources: " + ", ".join(missing_sources))
+    outside_sources = sorted(set(assigned_sources) - ore_sources)
+    if outside_sources:
+        errors.append(
+            "translation-unit sources outside the ORE lane: "
+            + ", ".join(outside_sources)
+        )
+
+    upstream_ref = str(manifest.get("upstream_ref", ""))
+    rust_target_owners: dict[str, list[str]] = collections.defaultdict(list)
+    worker_claims: list[str] = []
+    unit_by_id = {str(unit.get("id", "")): unit for unit in units}
+    dependency_graph: dict[str, list[str]] = {}
+    for unit in units:
+        unit_id = str(unit.get("id", ""))
+        sources = [str(source) for source in unit.get("sources", [])]
+        dependencies = [str(value) for value in unit.get("dependencies", [])]
+        rust_targets = [str(value) for value in unit.get("rust_targets", [])]
+        phase = str(unit.get("phase", ""))
+        status = str(unit.get("status", ""))
+        worker_claim = str(unit.get("worker_claim", ""))
+        if not re.fullmatch(r"[a-z][a-z0-9-]*", unit_id):
+            errors.append(f"translation unit has invalid id `{unit_id}`")
+        if not sources:
+            errors.append(f"translation unit {unit_id} has no sources")
+        if duplicate_values(sources):
+            errors.append(f"translation unit {unit_id} repeats a source")
+        if phase not in TRANSLATION_PHASES:
+            errors.append(f"translation unit {unit_id} has invalid phase `{phase}`")
+        if status not in TRANSLATION_STATUSES:
+            errors.append(f"translation unit {unit_id} has invalid status `{status}`")
+        if str(unit.get("base_ref", "")) != upstream_ref:
+            errors.append(
+                f"translation unit {unit_id} base_ref does not match upstream_ref"
+            )
+        if unit.get("worker_role") not in TRANSLATION_WORKER_ROLES:
+            errors.append(f"translation unit {unit_id} has invalid worker role")
+        if worker_claim != "unclaimed" and not re.fullmatch(
+            r"[a-z][a-z0-9-]*", worker_claim
+        ):
+            errors.append(f"translation unit {unit_id} has invalid worker claim")
+        if status != "pending" and worker_claim == "unclaimed":
+            errors.append(
+                f"translation unit {unit_id} is {status} without a worker claim"
+            )
+        if worker_claim and worker_claim != "unclaimed":
+            worker_claims.append(worker_claim)
+        for field in ("source_reviewer_role", "ownership_reviewer_role"):
+            if unit.get(field) not in TRANSLATION_REVIEWER_ROLES:
+                errors.append(
+                    f"translation unit {unit_id} has invalid {field.replace('_', ' ')}"
+                )
+        if unit.get("fixer_role") not in TRANSLATION_FIXER_ROLES:
+            errors.append(f"translation unit {unit_id} has invalid fixer role")
+        if unit.get("requires_lifetime_rows") is not True:
+            errors.append(
+                f"translation unit {unit_id} must require lifetime rows"
+            )
+        if not rust_targets:
+            errors.append(f"translation unit {unit_id} has no Rust targets")
+        for target in rust_targets:
+            path = pathlib.PurePosixPath(target)
+            canonical_target = path.as_posix()
+            if (
+                path.is_absolute()
+                or ".." in path.parts
+                or target in {"", "."}
+                or canonical_target != target
+                or path.suffix != ".rs"
+            ):
+                errors.append(
+                    f"translation unit {unit_id} Rust target must be a canonical .rs file: {target}"
+                )
+            if not target.startswith("crates/nuxie-ore-metal/src/"):
+                errors.append(
+                    f"translation unit {unit_id} Rust target is outside "
+                    f"crates/nuxie-ore-metal/src: {target}"
+                )
+            rust_target_owners[canonical_target].append(unit_id)
+        if duplicate_values(dependencies):
+            errors.append(f"translation unit {unit_id} repeats a dependency")
+        if unit_id in dependencies:
+            errors.append(f"translation unit {unit_id} depends on itself")
+        dependency_graph[unit_id] = dependencies
+
+    for target, owners in sorted(rust_target_owners.items()):
+        if len(owners) > 1:
+            errors.append(
+                f"Rust target {target} is owned by multiple translation units: "
+                + ", ".join(owners)
+            )
+    duplicate_claims = duplicate_values(worker_claims)
+    if duplicate_claims:
+        errors.append("duplicate worker claims: " + ", ".join(duplicate_claims))
+    for unit_id, dependencies in dependency_graph.items():
+        missing_dependencies = sorted(set(dependencies) - set(unit_by_id))
+        if missing_dependencies:
+            errors.append(
+                f"translation unit {unit_id} has unknown dependencies: "
+                + ", ".join(missing_dependencies)
+            )
+
+    visit_state: dict[str, int] = {}
+
+    def visit(unit_id: str, trail: list[str]) -> None:
+        state = visit_state.get(unit_id, 0)
+        if state == 2:
+            return
+        if state == 1:
+            cycle_start = trail.index(unit_id) if unit_id in trail else 0
+            cycle = trail[cycle_start:] + [unit_id]
+            errors.append("translation-unit dependency cycle: " + " -> ".join(cycle))
+            return
+        visit_state[unit_id] = 1
+        for dependency in dependency_graph.get(unit_id, []):
+            if dependency in dependency_graph:
+                visit(dependency, trail + [unit_id])
+        visit_state[unit_id] = 2
+
+    for unit_id in unit_ids:
+        visit(unit_id, [])
+
+    trial_units = {
+        str(unit.get("id", "")): {str(source) for source in unit.get("sources", [])}
+        for unit in units
+        if unit.get("phase") == "trial"
+    }
+    if trial_units != FOUNDATION_TRIAL_UNITS:
+        errors.append(
+            "trial translation units must be the compileable ore-types, "
+            "ore-rstb-container, and ore-binding-map foundations"
+        )
+    for unit_id in FOUNDATION_TRIAL_UNITS:
+        unit = unit_by_id.get(unit_id)
+        if unit is not None:
+            if unit.get("dependencies"):
+                errors.append(
+                    f"foundation trial unit {unit_id} must have no dependencies"
+                )
+            if unit.get("worker_role") != "luna-extra-high":
+                errors.append(
+                    f"foundation trial unit {unit_id} must use luna-extra-high"
+                )
+            targets = {str(target) for target in unit.get("rust_targets", [])}
+            if targets != FOUNDATION_TRIAL_TARGETS[unit_id]:
+                errors.append(
+                    f"foundation trial unit {unit_id} has drifted Rust targets"
+                )
+    gpu_resource = unit_by_id.get("gpu-resource")
+    if gpu_resource is not None and gpu_resource.get("worker_role") != "sol-high":
+        errors.append("gpu-resource must use sol-high for purgatory adaptation")
+    return units
+
+
+def validate_lifetime_ledger(
+    manifest: dict[str, Any],
+    repo_root: pathlib.Path,
+    upstream_root: pathlib.Path,
+    errors: list[str],
+) -> list[dict[str, str]]:
+    relative = str(manifest.get("lifetime_ledger", ""))
+    path = repo_root / relative
+    if not relative or not path.is_file():
+        errors.append(f"missing lifetime ledger {relative}")
+        return []
+    if not git_tracked_file(repo_root, relative):
+        errors.append(f"untracked lifetime ledger {relative}")
+
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            reader = csv.DictReader(source, delimiter="\t")
+            fieldnames = tuple(reader.fieldnames or ())
+            rows = []
+            for line_number, row in enumerate(reader, 2):
+                if None in row:
+                    errors.append(
+                        f"lifetime ledger line {line_number} has surplus columns"
+                    )
+                rows.append(
+                    {
+                        str(key): str(value or "")
+                        for key, value in row.items()
+                        if key is not None
+                    }
+                )
+    except (OSError, csv.Error) as error:
+        errors.append(f"cannot read lifetime ledger {relative}: {error}")
+        return []
+    if fieldnames != LIFETIME_COLUMNS:
+        errors.append(
+            "lifetime ledger schema must be: " + "\t".join(LIFETIME_COLUMNS)
+        )
+        return rows
+
+    units = list(manifest.get("translation_unit", []))
+    units_by_id = {str(unit.get("id", "")): unit for unit in units}
+    source_rows = list(manifest.get("source", []))
+    ore_sources = {
+        str(row.get("upstream", ""))
+        for row in source_rows
+        if row.get("lane") == "ore-metal"
+    }
+    upstream_ref = str(manifest.get("upstream_ref", ""))
+    ledger_keys: list[str] = []
+    rows_by_unit: dict[str, list[dict[str, str]]] = collections.defaultdict(list)
+    for line_number, row in enumerate(rows, 2):
+        unit_id = row["unit"].strip()
+        upstream_path = row["upstream_path"].strip()
+        field = row["field"].strip()
+        status = row["status"].strip()
+        row_key = f"{unit_id}:{upstream_path}:{field}"
+        ledger_keys.append(row_key)
+        if row["schema_version"].strip() != "1":
+            errors.append(f"lifetime ledger line {line_number} has invalid schema version")
+        if row["upstream_ref"].strip() != upstream_ref:
+            errors.append(f"lifetime ledger line {line_number} pin does not match upstream_ref")
+        unit = units_by_id.get(unit_id)
+        if unit is None:
+            errors.append(f"lifetime ledger line {line_number} names unknown unit {unit_id}")
+        else:
+            rows_by_unit[unit_id].append(row)
+            unit_sources = {str(source) for source in unit.get("sources", [])}
+            if upstream_path not in unit_sources:
+                errors.append(
+                    f"lifetime ledger line {line_number} source is not owned by unit {unit_id}: {upstream_path}"
+                )
+        if upstream_path not in ore_sources:
+            errors.append(
+                f"lifetime ledger line {line_number} source is not in the ORE manifest: {upstream_path}"
+            )
+        if not field:
+            errors.append(f"lifetime ledger line {line_number} has an empty field")
+        for column in (
+            "cpp_ownership",
+            "rust_shape",
+            "threading",
+            "concrete_native_downcast_seam",
+            "release_invariant",
+            "failure_invariant",
+        ):
+            if not row[column].strip():
+                errors.append(
+                    f"lifetime ledger line {line_number} has an empty {column}"
+                )
+        if status not in LIFETIME_STATUSES:
+            errors.append(
+                f"lifetime ledger line {line_number} has invalid status `{status}`"
+            )
+        evidence = [
+            value.strip() for value in row["evidence"].split(";") if value.strip()
+        ]
+        if status in {"prepared", "verified"} and not evidence:
+            errors.append(
+                f"lifetime ledger line {line_number} is {status} without evidence"
+            )
+        for citation in evidence:
+            validate_evidence_citation(citation, repo_root, upstream_root, errors)
+            head, _, _ = citation.rpartition(":")
+            root_kind, separator, cited_path = head.partition(":")
+            if (
+                separator
+                and root_kind == "rust"
+                and not git_tracked_file(repo_root, cited_path)
+            ):
+                errors.append(
+                    f"lifetime ledger line {line_number} cites untracked Rust evidence {cited_path}"
+                )
+
+    duplicates = duplicate_values(ledger_keys)
+    if duplicates:
+        errors.append("duplicate lifetime ledger rows: " + ", ".join(duplicates))
+    for unit in units:
+        unit_id = str(unit.get("id", ""))
+        unit_rows = rows_by_unit.get(unit_id, [])
+        if not unit_rows:
+            errors.append(f"translation unit {unit_id} has no lifetime rows")
+            continue
+        covered_sources = {row["upstream_path"] for row in unit_rows}
+        missing_sources = sorted(
+            {str(source) for source in unit.get("sources", [])} - covered_sources
+        )
+        if missing_sources:
+            errors.append(
+                f"translation unit {unit_id} has sources without lifetime rows: "
+                + ", ".join(missing_sources)
+            )
+        if unit.get("status") != "pending":
+            unprepared = [
+                row["field"]
+                for row in unit_rows
+                if row["status"] not in {"prepared", "verified"}
+            ]
+            if unprepared:
+                errors.append(
+                    f"translation unit {unit_id} advanced before lifetime preparation: "
+                    + ", ".join(unprepared)
+                )
+    return rows
 
 
 def validate_owner_rows(
@@ -344,6 +742,8 @@ def check(
         errors.append(f"Metal porting guide does not exist: {guide}")
 
     source_counts = validate_source_rows(manifest, repo_root, upstream_root, errors)
+    units = validate_translation_units(manifest, errors)
+    validate_lifetime_ledger(manifest, repo_root, upstream_root, errors)
     validate_reference_provenance(manifest, repo_root, errors)
     expected_counts = {
         str(key): int(value)
@@ -377,7 +777,8 @@ def check(
         f"pending={source_counts['pending']} "
         f"in-progress={source_counts['in-progress']} "
         f"ported={source_counts['ported']} "
-        f"verified={source_counts['verified']} owners={len(owners)}"
+        f"verified={source_counts['verified']} owners={len(owners)} "
+        f"translation-units={len(units)}"
     )
 
 

@@ -249,10 +249,39 @@ shown up to 59 LSB on the antialiased edge.
 
 This checkpoint deliberately does not claim the whole issue. General flush
 topology, atlas resources, image draws, clip updates, more than one concurrent
-resource generation, deterministic physical-work counters, and injected live
-device failure remain for later UNIV-2087 slices. The combined ownership row
-therefore stays `in-progress` even though both shader-source rows are
+resource generation, and injected live device failure remain for later
+UNIV-2087 slices. The combined ownership row therefore stays `in-progress`
+even though both shader-source rows and the buffer-ring source row are
 `ported`. The shipping renderer remains wgpu-selected.
+
+## UNIV-2087 upload-ring slice
+
+The second resource checkpoint ports the distinct RenderContext upload and
+uniform `BufferRingMetalImpl`; it does not modify the user-facing
+`RiveRenderBuffer` implementation in `native_metal/buffer.rs`. The concrete
+context now owns seven independent three-buffer shared-storage rings for flush
+uniforms, gradient spans, tessellation spans, paths, paints, paint auxiliary
+data, and contours. Capacities are passed to Metal verbatim and grow only when
+the typed payload exceeds the current allocation. Every ring begins with the
+pinned physical order 1, 2, 0. Path base-instance remains an inline binding
+because that is also upstream's intentional ABI.
+
+A pure blocking coordinator separates pre-submit ownership from submitted GPU
+ownership. Dropping an unsubmitted lease abandons and wakes; submission moves
+release responsibility to an exact-once completion owner. The current public
+frame waits synchronously for Metal, then completes that owner. This proves the
+ownership protocol without claiming that the public renderer already supports
+multiple asynchronous in-flight frames or multiple concrete resource-texture
+generations.
+
+The live gradient oracle remains pixel-identical to the first checkpoint's
+pinned C++ bounds under `MTL_DEBUG_LAYER=1`. Its Rust physical-work contract is
+one command buffer, three render passes, seven buffer uploads totaling 944
+bytes, one queue submission, three draw calls, eleven draw instances, six
+tessellation spans, and four path patches. Pinned C++ defines the topology and
+pixels but exposes no numeric counter API, so these values are explicitly a
+deterministic Rust regression oracle rather than a claim of C++ counter
+equality.
 
 ## Compiler and commit workflow
 

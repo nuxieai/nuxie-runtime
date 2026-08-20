@@ -4,7 +4,7 @@
 ))]
 
 use nuxie_render_stream::RenderStream;
-use nuxie_renderer::{NativeMetalFactory, WgpuFactory};
+use nuxie_renderer::{BackendWorkMetrics, NativeMetalFactory, WgpuFactory};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -141,12 +141,31 @@ fn native_metal_gradient_cubic_matches_cpp_metal_and_rust_wgpu_oracles() {
 
     let mut factory = NativeMetalFactory::new(width, height).expect("create native Metal renderer");
     let mut frame = factory
-        .begin_frame(stream.clear_color.unwrap_or(0))
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
         .expect("acquire native Metal gradient frame");
     stream
         .replay_frame(0, &mut factory, &mut frame)
         .expect("replay gradient cubic through Factory/Renderer seam");
-    let actual = frame.finish().expect("finish native Metal gradient frame");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish native Metal gradient frame");
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 3,
+            buffer_upload_calls: 7,
+            buffer_upload_bytes: 944,
+            queue_submissions: 1,
+            gpu_draw_calls: 3,
+            gpu_draw_instances: 11,
+            tessellation_spans: 6,
+            path_patches: 4,
+            ..BackendWorkMetrics::default()
+        },
+        "native Metal counters pin this Rust command topology; pinned C++ is the structural, not numeric, oracle"
+    );
+    let actual = output.pixels;
 
     let cpp_metal = read_png(fixture_root.join("reference/metal/first-light-gradient-cubic.png"));
     assert_rgba8_with_tolerance(
@@ -166,6 +185,23 @@ fn native_metal_gradient_cubic_matches_cpp_metal_and_rust_wgpu_oracles() {
         false,
         "native Rust Metal versus Rust-wgpu",
     );
+
+    // Exercise the complete physical 1,2,0,1 upload-ring rollover through the
+    // public synchronous frame seam. Every completion must make the next slot
+    // reusable without changing the pinned same-backend output.
+    for cycle in 2..=4 {
+        let mut frame = factory
+            .begin_frame(stream.clear_color.unwrap_or(0))
+            .expect("acquire repeated native Metal gradient frame");
+        stream
+            .replay_frame(0, &mut factory, &mut frame)
+            .expect("replay repeated gradient frame");
+        assert_eq!(
+            frame.finish().expect("finish repeated gradient frame"),
+            actual,
+            "native Metal gradient changed on ring cycle {cycle}"
+        );
+    }
 }
 
 #[test]

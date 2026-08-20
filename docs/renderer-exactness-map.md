@@ -104,8 +104,9 @@ UNIV-2088 adds a separate `rust-metal-atomic` backend and the checked-in
 `tools/metal-port/tracer-corpus-atomic.toml`; `make
 renderer-metal-atomic-oracle-tracer` compares a forced generic-atomic triangle,
 linear-gradient cubic, four-draw `gm/overfill_opaque` flush, and nested-clip
-outer-curve/interior slice against the pinned C++ Metal replay on the same
-adapter. The triangle contract remains
+outer-curve/interior slice, plus the three-draw `riv/deterministic_mode`
+solid/simple-linear-gradient/solid flush against the pinned C++ Metal replay
+on the same adapter. The triangle contract remains
 max-channel 2 and at most 32 differing pixels. The forced C++ atomic gradient
 is byte-identical to the existing checked-in gradient PNG, so its atomic row is
 0/0 with exact occupancy. The multi-draw row retains its pre-existing 2/48
@@ -117,6 +118,11 @@ The nested-clip row retains its pre-existing byte-exact 0/0 contract and exact
 occupancy; its public inventory also requires the clipped pipeline set, outer
 curves, interior triangulation, three authored draws, five physical groups,
 and six semantic barriers.
+The deterministic-mode row retains its checked-in 2/32 contract and exact
+occupancy. Its public inventory requires three authored draws, four physical
+groups, five semantic barriers, ramp/tessellation resources, and the unclipped
+initialize/midpoint/outer-curve/interior/resolve family; the same-runner M5 Max
+measurement was byte-identical.
 The existing `rust-metal` candidate rows remain capability-driven and retain
 their original labels and budgets.
 

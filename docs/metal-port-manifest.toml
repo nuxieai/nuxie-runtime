@@ -279,8 +279,14 @@ status = "in-progress"
 # midpoint plus outer-curve/interior geometry, flush-wide clipped pipeline
 # keys, dynamic replacement/parent IDs, and the exact five-group/six-barrier
 # schedule from render_context.cpp:1689-1802, 3033-3054, 3948-3971,
-# gpu.hpp:807-825, and Metal 1763-1925. This full source row remains
-# in-progress: clip rectangles and clip mutation after content, gradients in the same flush, radial/complex gradients,
+# gpu.hpp:807-825, and Metal 1763-1925. The fifth ports one same-flush simple
+# linear gradient between two solid fills, including its outer-curve/interior
+# split, ramp/tessellation resources, exact four-group/five-barrier schedule,
+# and unclipped combined pipeline keys from render_context.cpp:500-663,
+# 1104-1473, 1680-1808, 1953-1965, 2223-2241, 3029-3059, and Metal
+# 1298-1450, 1759-1925, 1989-1997. This full source row remains in-progress:
+# clip rectangles and clip mutation after content, gradients in clipped
+# flushes, more than one gradient in a flush, radial/complex gradients,
 # atlas, images, strokes, advanced blends, multi-flush/general scheduling,
 # simulator coverage, and fallback remain.
 rust_modules = [
@@ -343,6 +349,8 @@ evidence = [
   "fixtures/renderer/streams/gm/overfill_opaque.rive-stream",
   "fixtures/renderer/reference/metal/first-light-nested-clip-probe-clockwise-atomic.png",
   "fixtures/renderer/streams/first-light-nested-clip-probe.rive-stream",
+  "fixtures/renderer/reference/metal/riv/deterministic_mode-frame-0-clockwise-atomic.png",
+  "fixtures/renderer/streams/riv/deterministic_mode.rive-stream",
   "tools/metal-port/tracer-corpus-atomic.toml",
   "tools/metal-port/tracer-corpus.toml",
   "tools/metal-port/tracer-corpus-wgpu-secondary.toml",

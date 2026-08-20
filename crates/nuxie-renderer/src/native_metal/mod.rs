@@ -236,6 +236,7 @@ impl NativeMetalFactory {
             atomic_barrier_count: 0,
             atomic_memory_barrier_count: 0,
             atomic_render_pass_break_count: 0,
+            atomic_uses_clipping: false,
             unsupported: None,
         })
     }
@@ -369,6 +370,7 @@ pub struct NativeMetalFrame {
     atomic_barrier_count: usize,
     atomic_memory_barrier_count: usize,
     atomic_render_pass_break_count: usize,
+    atomic_uses_clipping: bool,
     unsupported: Option<&'static str>,
 }
 
@@ -879,9 +881,10 @@ impl NativeMetalFrame {
                     .atomic_path_inputs
                     .iter()
                     .any(|draw| draw.paint.shader.is_some()));
-        let clipped_path_pipeline_set = atomic_pipelines.is_some_and(|pipelines| {
-            pipelines.outer_curve.is_some() && pipelines.interior.is_some()
-        });
+        let clipped_path_pipeline_set = self.atomic_uses_clipping
+            && atomic_pipelines.is_some_and(|pipelines| {
+                pipelines.outer_curve.is_some() && pipelines.interior.is_some()
+            });
         let execution_inventory = NativeMetalExecutionInventory {
             mode: self.mode,
             color_ramp_pipeline,
@@ -995,13 +998,15 @@ impl NativeMetalFrame {
             .map_err(RendererError::Unsupported)?;
             if let Some(flush) = flush {
                 if flush.gradient_batch.is_some()
-                    && (flush.draws.len() != 1
-                        || !is_single_closed_cubic_contour(
-                            &self.atomic_path_inputs[flush.draws[0].input_index].path,
-                        ))
+                    && self
+                        .atomic_path_inputs
+                        .iter()
+                        .filter(|input| input.paint.shader.is_some())
+                        .count()
+                        != 1
                 {
                     return Err(RendererError::Unsupported(
-                        "native Metal atomic gradient tracer requires one visible closed cubic fill",
+                        "native Metal atomic gradient tracer supports one gradient draw per flush",
                     ));
                 }
                 if flush
@@ -1018,6 +1023,10 @@ impl NativeMetalFrame {
                 let tessellation_height = super::draw::tessellation_texture_height(&flush.spans);
                 let upload_data =
                     AtomicPathUploadData::new(width, height, self.clear_color, &flush);
+                let uses_interior_geometry = flush.draws.iter().any(|draw| {
+                    draw.patch_kind == PreparedAtomicPatchKind::OuterCurve
+                        || !draw.triangle_range.is_empty()
+                });
                 let lease = self.context.prepare_atomic_path_resources(
                     flush
                         .gradient_batch
@@ -1026,6 +1035,7 @@ impl NativeMetalFrame {
                     tessellation_height as usize,
                     pixel_format,
                     flush.uses_clipping,
+                    uses_interior_geometry,
                     upload_data.batch(&flush),
                 )?;
                 if self.collect_work_metrics {
@@ -1075,6 +1085,7 @@ impl NativeMetalFrame {
                 self.atomic_barrier_count = barriers.semantic;
                 self.atomic_memory_barrier_count = barriers.memory;
                 self.atomic_render_pass_break_count = barriers.render_pass_breaks;
+                self.atomic_uses_clipping = flush.uses_clipping;
                 if self.collect_work_metrics {
                     let gradient_passes = u64::from(flush.gradient_batch.is_some());
                     self.backend_work.render_passes = 1 + atomic_render_passes + gradient_passes;
@@ -1582,7 +1593,7 @@ fn encode_atomic_main_pass(
                 PreparedAtomicPatchKind::OuterCurve => (
                     pipelines.outer_curve.as_ref().ok_or_else(|| {
                         RendererError::NativeMetal(
-                            "atomic clipped outer-curve pipeline is absent".to_owned(),
+                            "atomic outer-curve pipeline is absent".to_owned(),
                         )
                     })?,
                     gpu::OUTER_CURVE_PATCH_INDEX_COUNT,
@@ -1610,7 +1621,7 @@ fn encode_atomic_main_pass(
             }
         } else {
             let pipeline = pipelines.interior.as_ref().ok_or_else(|| {
-                RendererError::NativeMetal("atomic clipped interior pipeline is absent".to_owned())
+                RendererError::NativeMetal("atomic interior pipeline is absent".to_owned())
             })?;
             let triangles = lease.triangles.as_deref().ok_or_else(|| {
                 RendererError::NativeMetal("atomic interior triangle upload is absent".to_owned())

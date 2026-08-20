@@ -41,3 +41,15 @@ backend = "metal"
 status = "exact"
 max_channel_delta = 0
 max_different_pixels = 0
+
+[[entry]]
+id = "native-metal-riv-deterministic-mode-mixed-gradient-generic-atomic"
+kind = "riv-stream"
+stream = "fixtures/renderer/streams/riv/deterministic_mode.rive-stream"
+reference = "fixtures/renderer/reference/metal/riv/deterministic_mode-frame-0-clockwise-atomic.png"
+mode = "clockwise-atomic"
+backend = "metal"
+frame = 0
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 32

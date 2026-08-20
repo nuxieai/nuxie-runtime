@@ -334,6 +334,80 @@ fn native_metal_forced_atomic_gradient_cubic_matches_pinned_cpp_metal_oracle() {
 }
 
 #[test]
+fn native_metal_forced_atomic_mixed_gradient_flush_matches_pinned_cpp_metal_oracle() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(fixture_root.join("streams/riv/deterministic_mode.rive-stream"))
+            .expect("read deterministic-mode stream"),
+    )
+    .expect("parse deterministic-mode stream");
+    let (width, height) = stream.frame_size.expect("deterministic-mode frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire forced-atomic native Metal mixed-gradient frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay mixed gradient through the public Factory/Renderer seam");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish forced-atomic native Metal mixed-gradient flush");
+    assert_eq!(
+        output.execution_inventory,
+        NativeMetalExecutionInventory {
+            mode: RenderMode::ClockwiseAtomic,
+            color_ramp_pipeline: true,
+            gradient_texture: true,
+            atomic_color_plane: false,
+            atomic_clip_plane: true,
+            atomic_coverage_plane: true,
+            render_pass_initialize_pipeline: true,
+            midpoint_fan_pipeline: true,
+            render_pass_resolve_pipeline: true,
+            clipped_path_pipeline_set: false,
+            outer_curve_pipeline: true,
+            interior_triangulation_pipeline: true,
+            atomic_draws: 3,
+            atomic_draw_groups: 4,
+            atomic_barriers: 5,
+            atomic_memory_barriers: 0,
+            atomic_render_pass_breaks: 0,
+        },
+        "mixed-gradient SrcOver must keep fixed-function color while exercising unclipped interior geometry"
+    );
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 3,
+            buffer_upload_calls: 8,
+            buffer_upload_bytes: 1_896,
+            queue_submissions: 1,
+            gpu_draw_calls: 8,
+            gpu_draw_instances: 31,
+            tessellation_spans: 15,
+            path_patches: 12,
+            ..BackendWorkMetrics::default()
+        },
+        "one color-ramp pass, one tessellation pass, and four grouped path commands between initialize and resolve"
+    );
+
+    let cpp_metal = read_png(
+        fixture_root.join("reference/metal/riv/deterministic_mode-frame-0-clockwise-atomic.png"),
+    );
+    assert_rgba8_with_tolerance(
+        &output.pixels,
+        &cpp_metal,
+        2,
+        Some(32),
+        true,
+        "forced generic-atomic Rust Metal mixed gradient versus pinned C++ Metal",
+    );
+}
+
+#[test]
 fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() {
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
     let stream = RenderStream::parse(
@@ -501,6 +575,38 @@ fn native_metal_forced_atomic_nested_clip_rejects_restore_after_content() {
         frame.finish(),
         Err(RendererError::Unsupported(
             "native Metal atomic clip tracer does not support state mutation after content"
+        ))
+    ));
+}
+
+#[test]
+fn native_metal_forced_atomic_nested_clip_rejects_gradient_content() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream_text = std::fs::read_to_string(
+        fixture_root.join("streams/first-light-nested-clip-probe.rive-stream"),
+    )
+    .expect("read nested clip stream");
+    let stream_text = stream_text
+        .replace(
+            "clearColor value=0x00000000\n",
+            "clearColor value=0x00000000\nmakeLinearGradient id=1 start=(0,0) end=(640,640) stops=[{color=0xffffffff,stop=0},{color=0xff000000,stop=1}]\n",
+        )
+        .replacen("shader=0}\nframe", "shader=1}\nframe", 1);
+    let stream = RenderStream::parse(&stream_text).expect("parse clipped-gradient stream");
+    let (width, height) = stream.frame_size.expect("nested clip frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+    let mut frame = factory
+        .begin_frame(stream.clear_color.unwrap_or(0))
+        .expect("acquire forced-atomic clipped-gradient frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay clipped gradient through the public seam");
+
+    assert!(matches!(
+        frame.finish(),
+        Err(RendererError::Unsupported(
+            "atomic clipped path flush does not support gradients"
         ))
     ));
 }

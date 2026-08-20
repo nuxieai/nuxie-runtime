@@ -664,8 +664,35 @@ The public tracer and same-runner row preserve the existing byte-exact 0/0
 contract and exact occupancy. The rooted Mach-O executes the real clipped
 midpoint, outer-curve, and interior-triangulation pipeline family.
 
+The fifth slice replays the checked-in `riv/deterministic_mode` stream as one
+unclipped flush containing three authored draws: an opaque solid background,
+one opaque two-stop simple linear gradient, and an opaque solid foreground.
+They become four physical groups because the gradient's tall geometry emits
+both outer-curve patches and interior triangles. The exact generic-atomic
+inventory is five semantic barriers; unclipped initialize, midpoint,
+outer-curve, interior, and resolve pipelines; one ramp pass and one gradient
+texture; three render passes; eight GPU draws; 31 submitted instances; eight
+uploads totaling 1,896 bytes; 15 tessellation spans; and 12 path patches. The
+fixed-function SrcOver path retains only the clip and coverage atomic planes:
+it does not allocate the generic color atomic plane or compile clipped keys.
+On an Apple M5 Max, all five semantic barriers remain raster-order-group no-ops
+with no fragment memory barriers or render-pass breaks.
+
+Pinned resource allocation and simple-gradient layout are
+`render_context.cpp:500-663` and `1450-1473`; fixed-function selection and the
+final path/paint/auxiliary records are `1104-1378` and `3029-3059`; disjoint
+grouping and barriers are `1680-1808`, `1953-1965`, and `2223-2241`. Metal
+binds gradient/atomic resources at `render_context_metal_impl.mm:1298-1385`,
+runs the ramp pass at `1404-1450`, specializes the combined feature keys at
+`1759-1812`, and realizes the path/barrier and initialize/resolve topology at
+`1857-1925` and `1989-1997`. The public replay, independent canonical typed-slot
+test, and product-root path all require the same three-draw/four-group/five-
+barrier inventory. The same-runner corpus preserves the checked-in 2-LSB and
+32-pixel budget; the measured Rust and pinned C++ Metal frames are byte-exact.
+
 This is not general atomic-flush parity. Clip rectangles, clip-stack mutation
-after content, gradients in the same flush, radial or complex gradients,
+after content, gradients in clipped flushes, more than one gradient in a flush,
+radial or complex gradients,
 feather atlas, images, strokes, advanced blends,
 multiple logical flushes, the general scheduler, MSAA, fallback, and
 simulator/old-hardware matrices remain deferred. Encountering one of those

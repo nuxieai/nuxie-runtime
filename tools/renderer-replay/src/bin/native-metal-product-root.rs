@@ -170,6 +170,68 @@ fn main() {
         assert!(multi_output.execution_inventory.atomic_clip_plane);
         assert!(multi_output.execution_inventory.atomic_coverage_plane);
 
+        // Root one fixed-function flush that mixes solid and gradient paints.
+        // The tall gradient path deliberately crosses the canonical interior
+        // threshold so the unclipped outer/interior specialization cannot be
+        // dead-stripped from the Apple product artifact.
+        let mut mixed_background = RawPath::new();
+        mixed_background.move_to(0.0, 0.0);
+        mixed_background.line_to(64.0, 0.0);
+        mixed_background.line_to(64.0, 64.0);
+        mixed_background.line_to(0.0, 64.0);
+        mixed_background.close();
+        let mixed_background = atomic_factory.make_render_path(mixed_background, FillRule::NonZero);
+        let mut mixed_background_paint = atomic_factory.make_render_paint();
+        mixed_background_paint.color(0xff31_3131);
+        let mut mixed_gradient_path = RawPath::new();
+        mixed_gradient_path.move_to(0.0, 16.0);
+        mixed_gradient_path.line_to(64.0, 16.0);
+        mixed_gradient_path.line_to(64.0, 5_016.0);
+        mixed_gradient_path.line_to(0.0, 5_016.0);
+        mixed_gradient_path.close();
+        let mixed_gradient_path =
+            atomic_factory.make_render_path(mixed_gradient_path, FillRule::NonZero);
+        let mixed_gradient = atomic_factory.make_linear_gradient(
+            32.0,
+            16.0,
+            32.0,
+            64.0,
+            &[0xffff_ffff, 0xff00_0000],
+            &[0.0, 1.0],
+        );
+        let mut mixed_gradient_paint = atomic_factory.make_render_paint();
+        mixed_gradient_paint.shader(Some(mixed_gradient.as_ref()));
+        let mut mixed_foreground = RawPath::new();
+        mixed_foreground.move_to(0.0, 0.0);
+        mixed_foreground.line_to(64.0, 0.0);
+        mixed_foreground.line_to(64.0, 16.0);
+        mixed_foreground.line_to(0.0, 16.0);
+        mixed_foreground.close();
+        let mixed_foreground = atomic_factory.make_render_path(mixed_foreground, FillRule::NonZero);
+        let mut mixed_foreground_paint = atomic_factory.make_render_paint();
+        mixed_foreground_paint.color(0xffff_0000);
+        let mut mixed_frame = atomic_factory
+            .begin_frame(0)
+            .expect("acquire forced-atomic native Metal mixed-gradient command buffer");
+        mixed_frame.draw_path(mixed_background.as_ref(), mixed_background_paint.as_ref());
+        mixed_frame.draw_path(mixed_gradient_path.as_ref(), mixed_gradient_paint.as_ref());
+        mixed_frame.draw_path(mixed_foreground.as_ref(), mixed_foreground_paint.as_ref());
+        let mixed_output = mixed_frame
+            .finish_for_benchmark()
+            .expect("finish forced-atomic native Metal mixed-gradient flush");
+        assert_eq!(mixed_output.execution_inventory.atomic_draws, 3);
+        assert_eq!(mixed_output.execution_inventory.atomic_draw_groups, 4);
+        assert_eq!(mixed_output.execution_inventory.atomic_barriers, 5);
+        assert!(mixed_output.execution_inventory.color_ramp_pipeline);
+        assert!(!mixed_output.execution_inventory.clipped_path_pipeline_set);
+        assert!(mixed_output.execution_inventory.outer_curve_pipeline);
+        assert!(
+            mixed_output
+                .execution_inventory
+                .interior_triangulation_pipeline
+        );
+        assert!(!mixed_output.execution_inventory.atomic_color_plane);
+
         // Root flush-wide generic-atomic clipping plus both physical geometry
         // families. This is the checked-in nested-clip tracer shape: the
         // outer clip and content require outer curves plus interior triangles,

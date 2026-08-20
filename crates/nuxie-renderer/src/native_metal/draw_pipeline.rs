@@ -21,6 +21,7 @@ use std::error::Error;
 use std::fmt;
 
 use super::super::gpu::DrawType;
+use super::pipeline_names::FIXED_FUNCTION_COLOR_OUTPUT;
 
 /// The Metal interlock modes realized by the translated draw pipeline.
 ///
@@ -32,9 +33,6 @@ pub(crate) enum MetalInterlockMode {
     RasterOrdering,
     Atomics,
 }
-
-/// `ShaderMiscFlags::fixedFunctionColorOutput` from upstream `gpu.hpp`.
-pub(crate) const FIXED_FUNCTION_COLOR_OUTPUT: u32 = 1 << 0;
 
 /// A typed failure from Metal function lookup or pipeline realization.
 #[derive(Clone, Debug, PartialEq, Eq)]

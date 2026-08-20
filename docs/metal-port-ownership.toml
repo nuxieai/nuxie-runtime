@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 4, in-progress = 5, ported = 6, verified = 0 }
+expected_status_counts = { pending = 3, in-progress = 6, ported = 6, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -78,14 +78,16 @@ status = "ported"
 # The concrete context owns seven independent Metal rings. Pure coordination
 # tests hold three submitted reservations, prove a fourth blocks, and exercise
 # completion and abandonment wakeups. Production headless and drawable frames
-# transfer the pre-submit lease only after successful encoding, wait for Metal,
-# and complete it exactly once. This promotion does not claim a public async
+# transfer the pre-submit lease only after successful encoding; a copied Metal
+# completion block releases it after success or failure, independently of the
+# context and caller wait token. This promotion does not claim a public async
 # frame API or multiple in-flight resource-texture generations.
 rule = "Uniform, storage, and vertex rings rotate only after the corresponding GPU frame is safe; CPU writes never race an in-flight frame."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:193-212", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:277-280", "cpp:renderer/src/metal/render_context_metal_impl.mm:1255-1276"]
 required_tests = ["physical ring rollover 1,2,0", "three outstanding reservations block the fourth", "completion unblocks reuse", "abandonment does not permanently lock a ring", "live Metal frame preserves pixel output"]
 evidence_paths = [
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
+  "crates/nuxie-renderer/src/native_metal/command_submission.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
@@ -251,10 +253,22 @@ required_tests = ["deterministic physical-work counters", "MSAA pass topology", 
 [[owner]]
 id = "renderer.completion_and_deferred_release"
 issue = "UNIV-2090"
-status = "pending"
+# The exact ring-lock handoff and callback release are source-closed. Keep the
+# broader cross-cutting owner in-progress until a live driver-failed command
+# buffer proves concrete bound resources and the slot both survive context
+# drop and release in the failure callback; the pure status/release oracle is
+# not promoted as a substitute for that hardware path.
+status = "in-progress"
 rule = "Resources held for a flush remain alive through GPU completion, after which locks and deferred owners are released exactly once even if the context has already been dropped."
-citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:2016-2030"]
+citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:1238-1265", "cpp:renderer/src/metal/render_context_metal_impl.mm:2016-2030"]
 required_tests = ["completion releases buffer-ring lock", "context drop before completion", "command failure completion", "no retain cycle under repeated frames"]
+evidence_paths = [
+  "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
+  "crates/nuxie-renderer/src/native_metal/command_submission.rs",
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/drawable.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
+]
 
 [[owner]]
 id = "ore.context_frame_serials"

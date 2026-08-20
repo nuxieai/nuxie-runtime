@@ -14,6 +14,7 @@ use super::buffer_ring_coordinator::{
     BufferRingCompletion, BufferRingCoordinator, BufferRingLease,
 };
 use super::capabilities::{ApplePlatform, MetalCapabilitySelection};
+use super::command_submission::NativeMetalSubmissionCompletion;
 use super::draw_pipeline::DrawPipeline;
 use super::draw_shader::DrawShaderLibrary;
 use super::feather_atlas_pipeline::FeatherAtlasPipelines;
@@ -42,11 +43,12 @@ use crate::RendererError;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_foundation::NSString;
+#[cfg(test)]
+use objc2_metal::MTLCommandBufferStatus;
 use objc2_metal::{
-    MTLBuffer, MTLCommandBuffer, MTLCommandBufferStatus, MTLCommandQueue, MTLDevice, MTLDrawable,
-    MTLLibrary, MTLOrigin, MTLPixelFormat, MTLRegion, MTLRenderPipelineDescriptor,
-    MTLRenderPipelineState, MTLResourceOptions, MTLSize, MTLTexture, MTLTextureDescriptor,
-    MTLTextureType, MTLTextureUsage,
+    MTLBuffer, MTLCommandBuffer, MTLCommandQueue, MTLDevice, MTLDrawable, MTLLibrary, MTLOrigin,
+    MTLPixelFormat, MTLRegion, MTLRenderPipelineDescriptor, MTLRenderPipelineState,
+    MTLResourceOptions, MTLSize, MTLTexture, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage,
 };
 use std::ffi::c_void;
 use std::ptr::NonNull;
@@ -907,16 +909,13 @@ impl NativeMetalContext {
         require_command_buffer(self.queue.commandBuffer())
     }
 
-    /// Commits the frame-owned command buffer and propagates Metal completion.
-    pub(crate) fn commit_and_wait(
+    /// Commits without waiting and transfers the ring slot into Metal's
+    /// completion handler. The returned token owns only caller wait policy.
+    pub(crate) fn commit_with_upload_completion(
         command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
-    ) -> Result<(), RendererError> {
-        command_buffer.commit();
-        command_buffer.waitUntilCompleted();
-        command_buffer_completion_result(
-            command_buffer.status(),
-            command_buffer.error().map(|error| format!("{error:?}")),
-        )
+        upload_completion: Option<BufferRingCompletion>,
+    ) -> NativeMetalSubmissionCompletion {
+        NativeMetalSubmissionCompletion::commit(command_buffer, upload_completion)
     }
 
     /// Commits renderer work, then schedules the product drawable on the next
@@ -926,39 +925,22 @@ impl NativeMetalContext {
         &self,
         render_command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
         drawable: &ProtocolObject<dyn MTLDrawable>,
+        upload_completion: Option<BufferRingCompletion>,
     ) -> Result<(), RendererError> {
-        render_command_buffer.commit();
+        let render_submission =
+            Self::commit_with_upload_completion(render_command_buffer, upload_completion);
         let presentation_command_buffer = match self.make_command_buffer() {
             Ok(command_buffer) => command_buffer,
             Err(presentation_error) => {
-                render_command_buffer.waitUntilCompleted();
-                let render_result = command_buffer_completion_result(
-                    render_command_buffer.status(),
-                    render_command_buffer
-                        .error()
-                        .map(|error| format!("{error:?}")),
-                );
+                let render_result = render_submission.wait();
                 return render_result.and(Err(presentation_error));
             }
         };
         presentation_command_buffer.presentDrawable(drawable);
-        presentation_command_buffer.commit();
+        let presentation_submission =
+            Self::commit_with_upload_completion(&presentation_command_buffer, None);
 
-        render_command_buffer.waitUntilCompleted();
-        let render_result = command_buffer_completion_result(
-            render_command_buffer.status(),
-            render_command_buffer
-                .error()
-                .map(|error| format!("{error:?}")),
-        );
-        presentation_command_buffer.waitUntilCompleted();
-        let presentation_result = command_buffer_completion_result(
-            presentation_command_buffer.status(),
-            presentation_command_buffer
-                .error()
-                .map(|error| format!("{error:?}")),
-        );
-        render_result.and(presentation_result)
+        render_submission.wait().and(presentation_submission.wait())
     }
 }
 
@@ -1500,6 +1482,7 @@ fn require_command_buffer(
     })
 }
 
+#[cfg(test)]
 fn command_buffer_completion_result(
     status: MTLCommandBufferStatus,
     error: Option<String>,
@@ -2301,6 +2284,61 @@ mod tests {
             Err(RendererError::NativeMetal(message))
                 if message.starts_with("command buffer failed: status ")
         ));
+    }
+
+    #[test]
+    fn submitted_ring_slot_releases_after_context_drop() {
+        let Some(context) = live_context() else {
+            return;
+        };
+        let coordinator = context.upload_coordinator.clone();
+        let mut first = coordinator.prepare_to_flush();
+        let second = coordinator.prepare_to_flush();
+        let third = coordinator.prepare_to_flush();
+        let completion = first
+            .transfer_to_completion()
+            .expect("transfer first upload slot to GPU completion");
+        let command_buffer = context
+            .make_command_buffer()
+            .expect("create empty Metal command buffer");
+
+        let submission =
+            NativeMetalContext::commit_with_upload_completion(&command_buffer, Some(completion));
+        drop(first);
+        drop(second);
+        drop(third);
+        drop(context);
+
+        submission
+            .wait()
+            .expect("empty command buffer completes after context drop");
+        let next = coordinator.prepare_to_flush();
+        assert_eq!(next.slot(), 1);
+    }
+
+    #[test]
+    fn repeated_async_submissions_reuse_all_ring_slots_without_a_cycle() {
+        let Some(context) = live_context() else {
+            return;
+        };
+        for expected_slot in (0..12).map(|reservation| (reservation + 1) % 3) {
+            let mut lease = context.upload_coordinator.prepare_to_flush();
+            assert_eq!(lease.slot(), expected_slot);
+            let completion = lease
+                .transfer_to_completion()
+                .expect("transfer upload slot to Metal completion");
+            let command_buffer = context
+                .make_command_buffer()
+                .expect("create empty Metal command buffer");
+            let submission = NativeMetalContext::commit_with_upload_completion(
+                &command_buffer,
+                Some(completion),
+            );
+            drop(lease);
+            submission
+                .wait()
+                .expect("empty Metal submission completes and releases its slot");
+        }
     }
 
     #[test]

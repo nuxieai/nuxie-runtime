@@ -78,24 +78,12 @@ impl<'a> NativeMetalDrawableFrame<'a> {
     /// command buffer from the same queue, matching the pinned product oracle.
     pub fn finish(mut self) -> Result<(), RendererError> {
         self.frame.encode()?;
-        let mut upload_completion = self.frame.transfer_upload_ownership()?;
-        let completion = self
-            .frame
-            .context
-            .commit_and_present(&self.frame.command_buffer, self.drawable);
-        let release = upload_completion
-            .as_mut()
-            .map(|completion| {
-                completion.complete().map_err(|error| {
-                    RendererError::NativeMetal(format!(
-                        "complete native Metal upload-ring ownership: {error:?}"
-                    ))
-                })
-            })
-            .transpose();
-        completion?;
-        release?;
-        Ok(())
+        let upload_completion = self.frame.transfer_upload_ownership()?;
+        self.frame.context.commit_and_present(
+            &self.frame.command_buffer,
+            self.drawable,
+            upload_completion,
+        )
     }
 }
 

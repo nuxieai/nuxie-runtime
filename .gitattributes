@@ -3,3 +3,7 @@
 vendor/wgpu-30.0.0/README.md -text -diff
 vendor/wgpu-core-30.0.0/src/timestamp_normalization/common.wgsl -text -diff
 vendor/wgpu-hal-30.0.0/src/vulkan/descriptor.rs -text -diff
+
+# Preserve the exact captured upstream generator emission, including its final
+# empty line, so the Rust byte oracle remains faithful to the pinned artifact.
+crates/nuxie-renderer/tests/fixtures/native_metal/draw_combinations-4ac7b327-9f33bdcd.metal whitespace=-blank-at-eof

@@ -5,7 +5,7 @@ upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 34, in-progress = 2, ported = 0, verified = 0 }
+expected_status_counts = { pending = 33, in-progress = 2, ported = 1, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -36,8 +36,8 @@ upstream = "renderer/include/rive/renderer/metal/render_context_metal_impl.h"
 lane = "renderer-platform"
 issue = "UNIV-2086"
 status = "in-progress"
-rust_modules = []
-evidence = []
+rust_modules = ["crates/nuxie-renderer/src/native_metal/render_target.rs"]
+evidence = ["crates/nuxie-renderer/src/native_metal/render_target.rs"]
 [[source]]
 upstream = "renderer/src/metal/background_shader_compiler.h"
 lane = "renderer-platform"
@@ -59,8 +59,18 @@ upstream = "renderer/src/metal/render_context_metal_impl.mm"
 lane = "renderer-platform"
 issue = "UNIV-2086"
 status = "in-progress"
-rust_modules = []
-evidence = []
+rust_modules = [
+  "crates/nuxie-renderer/src/gpu.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/render_target.rs",
+]
+evidence = [
+  "crates/nuxie-renderer/src/gpu.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/render_target.rs",
+]
 
 [[source]]
 upstream = "renderer/src/shaders/metal/color_ramp.metal"
@@ -82,9 +92,9 @@ evidence = []
 upstream = "renderer/src/shaders/metal/generate_draw_combinations.py"
 lane = "platform-shaders"
 issue = "UNIV-2086"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-renderer/src/native_metal/draw_combinations.rs"]
+evidence = ["crates/nuxie-renderer/src/native_metal/draw_combinations.rs"]
 
 [[source]]
 upstream = "renderer/src/shaders/metal/tessellate.metal"

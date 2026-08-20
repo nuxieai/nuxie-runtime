@@ -22,6 +22,8 @@ pub(crate) const ENABLE_EVEN_ODD: u32 = 1 << 4;
 pub(crate) const ENABLE_NESTED_CLIPPING: u32 = 1 << 5;
 pub(crate) const ENABLE_HSL_BLEND_MODES: u32 = 1 << 6;
 pub(crate) const ENABLE_DITHER: u32 = 1 << 7;
+pub(crate) const DRAW_INTERIOR_TRIANGLES: u32 = 1 << 8;
+pub(crate) const FEATHER_ATLAS_BLIT: u32 = 1 << 9;
 
 /// Upstream `ShaderMiscFlags::clockwiseFill`.
 pub(crate) const CLOCKWISE_FILL: u32 = 1 << 1;
@@ -66,6 +68,7 @@ pub(crate) fn precompiled_function_name(
         | DrawType::MsaaMidpointFanBorrowedCoverage
         | DrawType::MsaaMidpointFans
         | DrawType::MsaaMidpointFanStencilReset
+        | DrawType::MsaaDynamicMidpointFans
         | DrawType::MsaaMidpointFanPathsStencil
         | DrawType::MsaaMidpointFanPathsCover
         | DrawType::MsaaOuterCubics
@@ -75,8 +78,10 @@ pub(crate) fn precompiled_function_name(
     };
 
     if draw_type == DrawType::InteriorTriangulation {
+        debug_assert_eq!(DRAW_INTERIOR_TRIANGLES, 1 << SHADER_FEATURE_COUNT);
         namespace_id[SHADER_FEATURE_COUNT] = '1';
     } else if draw_type == DrawType::AtlasBlit {
+        debug_assert_eq!(FEATHER_ATLAS_BLIT, 1 << (SHADER_FEATURE_COUNT + 1));
         namespace_id[SHADER_FEATURE_COUNT] = '1';
         namespace_id[SHADER_FEATURE_COUNT + 1] = '1';
     }
@@ -161,6 +166,10 @@ mod tests {
 
     #[test]
     fn unsupported_draw_types_do_not_claim_precompiled_functions() {
+        assert_eq!(
+            precompiled_function_name(DrawType::MsaaDynamicMidpointFans, 0, 0, "drawPath"),
+            None
+        );
         assert_eq!(
             precompiled_function_name(DrawType::RenderPassResolve, 0, 0, "resolve"),
             None

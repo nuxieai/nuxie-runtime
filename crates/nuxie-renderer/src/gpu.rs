@@ -450,6 +450,7 @@ pub(crate) enum DrawType {
     MsaaMidpointFanBorrowedCoverage,
     MsaaMidpointFans,
     MsaaMidpointFanStencilReset,
+    MsaaDynamicMidpointFans,
     MsaaMidpointFanPathsStencil,
     MsaaMidpointFanPathsCover,
     MsaaOuterCubics,
@@ -887,6 +888,34 @@ mod tests {
         assert_eq!(offset_of!(ImageDrawInstance, clip_rect_inverse_matrix), 16);
         assert_eq!(offset_of!(ImageDrawInstance, translates), 32);
         assert_eq!(offset_of!(ImageDrawInstance, packed), 48);
+    }
+
+    #[test]
+    fn draw_type_discriminants_match_pinned_upstream_order() {
+        let draw_types = [
+            DrawType::MidpointFanPatches,
+            DrawType::MidpointFanCenterAaPatches,
+            DrawType::OuterCurvePatches,
+            DrawType::InteriorTriangulation,
+            DrawType::AtlasBlit,
+            DrawType::ImageRect,
+            DrawType::ImageMesh,
+            DrawType::MsaaStrokes,
+            DrawType::MsaaMidpointFanBorrowedCoverage,
+            DrawType::MsaaMidpointFans,
+            DrawType::MsaaMidpointFanStencilReset,
+            DrawType::MsaaDynamicMidpointFans,
+            DrawType::MsaaMidpointFanPathsStencil,
+            DrawType::MsaaMidpointFanPathsCover,
+            DrawType::MsaaOuterCubics,
+            DrawType::ClipReset,
+            DrawType::RenderPassInitialize,
+            DrawType::RenderPassResolve,
+        ];
+
+        for (expected, draw_type) in draw_types.into_iter().enumerate() {
+            assert_eq!(draw_type as u8, expected as u8);
+        }
     }
 
     #[test]

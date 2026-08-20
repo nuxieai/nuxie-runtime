@@ -124,6 +124,13 @@ checked-in file paths. `verified` additionally requires checked-in
 can improve confidence in unobservable lifetime behavior, but it is not a
 promotion requirement.
 
+The first mechanical wave records the complete
+`generate_draw_combinations.py` translation with its focused byte oracle as
+`ported`. The render-context header and implementation remain `in-progress`:
+only draw-pipeline policy, render-target/lazy atomic resources, and the shared
+exact `DrawType` discriminants are present. A separate
+`shader_compile_plan.rs` is not integrated evidence for those rows.
+
 ## Trial translation: UNIV-2086
 
 UNIV-2086 is the process trial as well as the solid-render tracer. It must prove

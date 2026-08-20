@@ -5,5 +5,6 @@
 //! from the built-in renderer-platform implementation.
 
 pub mod binding_map;
+pub mod gpu_resource;
 pub mod rstb_entry_container;
 pub mod types;

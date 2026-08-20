@@ -107,6 +107,25 @@ def phase_rail(phases: list[dict]) -> str:
     )
 
 
+def validation_suites(suites: list[dict]) -> str:
+    return "".join(
+        f"""
+        <article class="suite suite-{escape(suite['status'])}">
+          <div class="suite-head"><code>{escape(suite['id'])}</code>{status_chip(suite['status'])}</div>
+          <h3>{escape(suite['label'])}</h3>
+          <p>{escape(suite['current'])}</p>
+          <dl>
+            <dt>Authority</dt><dd>{escape(suite['authority'])}</dd>
+            <dt>Scope</dt><dd>{escape(suite['scope'])}</dd>
+            <dt>Command</dt><dd><code>{escape(suite['command'])}</code></dd>
+            <dt>Green when</dt><dd>{escape(suite['acceptance'])}</dd>
+          </dl>
+        </article>
+        """
+        for suite in suites
+    )
+
+
 def line_map_table(rows: list[dict[str, object]]) -> str:
     body = []
     for row in rows:
@@ -230,6 +249,27 @@ def render(repo_root: Path) -> str:
     ported_lines = sum(int(row["length"]) for row in rows if row["status"] == "ported")
     partial_lines = sum(int(row["length"]) for row in rows if row["status"] == "partial")
     missing_lines = sum(int(row["length"]) for row in rows if row["status"] == "missing")
+    corpus_config = progress["corpus"]
+    corpus = load_toml(repo_root / corpus_config["manifest"])
+    corpus_entries = corpus.get("entry", [])
+    corpus_ids = [entry["id"] for entry in corpus_entries]
+    if len(corpus_ids) != len(set(corpus_ids)):
+        raise ValueError("renderer corpus entry IDs are not unique")
+    mode_counts = Counter(entry.get("mode") for entry in corpus_entries)
+    expected_counts = {
+        "total": int(corpus_config["expected_total_rows"]),
+        "clockwise-atomic": int(corpus_config["expected_clockwise_atomic_rows"]),
+        "msaa": int(corpus_config["expected_msaa_rows"]),
+    }
+    actual_counts = {
+        "total": len(corpus_entries),
+        "clockwise-atomic": mode_counts["clockwise-atomic"],
+        "msaa": mode_counts["msaa"],
+    }
+    if actual_counts != expected_counts:
+        raise ValueError(
+            f"renderer corpus inventory drifted: expected {expected_counts}, got {actual_counts}"
+        )
     corpus_paths = [
         repo_root / "tools/metal-port/tracer-corpus-atomic.toml",
         repo_root / "tools/metal-port/tracer-corpus.toml",
@@ -265,10 +305,11 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
 .owner-list {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }} .owner {{ background:var(--panel); border:1px solid var(--line); }} .owner summary {{ cursor:pointer; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:14px 16px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }} .owner p,.owner-meta {{ margin:0; padding:0 16px 15px; color:var(--muted); line-height:1.45; }} .owner-meta {{ display:grid; gap:5px; font-size:.82rem; }}
 .filters {{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }} .filters button {{ appearance:none; background:transparent; color:var(--ink); border:1px solid var(--line); padding:7px 10px; cursor:pointer; }} .filters button[aria-pressed="true"] {{ border-color:var(--green); color:var(--green); background:var(--green-soft); }}
 .table-wrap {{ overflow-x:auto; border:1px solid var(--line); background:var(--panel); }} table {{ width:100%; border-collapse:collapse; min-width:920px; }} th,td {{ padding:11px 13px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }} th {{ color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; }} td small {{ color:var(--muted); }} td:nth-child(1) {{ width:220px; }} td:nth-child(3) {{ width:120px; }} td:nth-child(5) {{ max-width:340px; overflow-wrap:anywhere; }} tr:last-child td {{ border-bottom:0; }}
-.reports {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }} .report {{ background:var(--panel); border:1px solid var(--line); border-top:4px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .report-green {{ border-top-color:var(--green); }} .report-amber {{ border-top-color:var(--amber); }} .report-head,.report footer {{ display:flex; justify-content:space-between; gap:10px; align-items:center; }} .report time {{ color:var(--muted); }} .report h3 {{ margin:15px 0 8px; }} .report p {{ color:var(--muted); line-height:1.5; }} .report footer {{ margin-top:16px; }} .runs {{ display:grid; gap:8px; margin-top:14px; }} .run {{ border-left:2px solid var(--line); padding-left:10px; }} .run code,.run span {{ display:block; overflow-wrap:anywhere; }} .run span {{ color:var(--muted); margin-top:3px; font-size:.82rem; }}
+	.reports {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }} .report {{ background:var(--panel); border:1px solid var(--line); border-top:4px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .report-green {{ border-top-color:var(--green); }} .report-amber {{ border-top-color:var(--amber); }} .report-head,.report footer {{ display:flex; justify-content:space-between; gap:10px; align-items:center; }} .report time {{ color:var(--muted); }} .report h3 {{ margin:15px 0 8px; }} .report p {{ color:var(--muted); line-height:1.5; }} .report footer {{ margin-top:16px; }} .runs {{ display:grid; gap:8px; margin-top:14px; }} .run {{ border-left:2px solid var(--line); padding-left:10px; }} .run code,.run span {{ display:block; overflow-wrap:anywhere; }} .run span {{ color:var(--muted); margin-top:3px; font-size:.82rem; }}
+	.suites {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }} .suite {{ background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--queued); padding:18px; box-shadow:var(--shadow); }} .suite-green {{ border-left-color:var(--green); }} .suite-active {{ border-left-color:var(--green); }} .suite-amber {{ border-left-color:var(--amber); }} .suite-head {{ display:flex; align-items:center; justify-content:space-between; gap:12px; }} .suite h3 {{ margin:12px 0 7px; }} .suite>p {{ color:var(--muted); line-height:1.5; }} .suite dl {{ display:grid; grid-template-columns:90px 1fr; gap:8px 12px; margin:16px 0 0; font-size:.84rem; }} .suite dt {{ color:var(--muted); font-weight:700; }} .suite dd {{ margin:0; overflow-wrap:anywhere; }}
 .gallery {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }} .gallery-card {{ margin:0; background:var(--panel); border:1px solid var(--line); overflow:hidden; }} .gallery-card>a {{ display:grid; place-items:center; aspect-ratio:1/1; background:repeating-conic-gradient(from 45deg,var(--line) 0 25%,transparent 0 50%) 50%/18px 18px; }} .gallery-card img {{ display:block; width:100%; height:100%; object-fit:contain; image-rendering:auto; }} .gallery-card figcaption {{ padding:12px; display:grid; gap:8px; }} .gallery-card figcaption>span {{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }} .gallery-card .status {{ margin-left:0; }} .gallery-card figcaption>a {{ font-size:.82rem; }}
 .contract {{ border-left:4px solid var(--green); padding:5px 0 5px 18px; color:var(--muted); line-height:1.55; }}
-@media (max-width:900px) {{ .hero {{ grid-template-columns:1fr; }} .hero-meta {{ border-left:0; border-top:3px solid var(--green); padding-left:0; }} .overview,.reports {{ grid-template-columns:1fr; }} .source-grid,.owner-list {{ grid-template-columns:1fr; }} .phases {{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 0; }} .gallery {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
+	@media (max-width:900px) {{ .hero {{ grid-template-columns:1fr; }} .hero-meta {{ border-left:0; border-top:3px solid var(--green); padding-left:0; }} .overview,.reports,.suites {{ grid-template-columns:1fr; }} .source-grid,.owner-list {{ grid-template-columns:1fr; }} .phases {{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 0; }} .gallery {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
 @media (max-width:520px) {{ .shell {{ padding:28px 15px 60px; }} .section-head {{ display:block; }} .section-head p {{ margin-top:8px; }} .phases,.gallery {{ grid-template-columns:1fr; }} .source-card-head {{ display:block; }} .source-card-head strong {{ display:block; margin-top:10px; }} }}
 </style>
 </head>
@@ -290,6 +331,11 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
   </section>
 
   <section class="section"><div class="section-head"><h2>Campaign phases</h2><p>Translation completes before compiler diagnostics and behavior fixtures become work queues.</p></div><ol class="phases">{phase_rail(progress['phase'])}</ol></section>
+
+  <section class="section">
+    <div class="section-head"><h2>Validation exit gates</h2><p>Pinned C++ Metal proves source parity. Rust-WGPU is a separate product-behavior differential, and its current 4/736 coverage remains amber.</p></div>
+    <div class="suites">{validation_suites(progress.get('suite', []))}</div>
+  </section>
 
   <section class="section">
     <div class="section-head"><h2>Whole-owner state</h2><p>{len(metal_sources)} pinned Metal source/support files: {source_statuses['ported']} ported, {source_statuses['in-progress']} in progress. Renderer ownership contracts: {owner_statuses['ported']} ported, {owner_statuses['in-progress']} in progress, {owner_statuses['pending']} pending.</p></div>

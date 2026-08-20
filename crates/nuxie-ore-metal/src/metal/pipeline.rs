@@ -150,7 +150,7 @@ mod tests {
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     #[test]
-    fn native_states_publish_together_and_release_with_portable_owners() {
+    fn native_states_publish_together_and_own_portable_dependencies() {
         use objc2_foundation::NSString;
         use objc2_metal::{
             MTLCreateSystemDefaultDevice, MTLDepthStencilDescriptor, MTLDevice, MTLLibrary,
@@ -218,6 +218,8 @@ mod tests {
                     std::ptr::from_ref(pipeline.mtl_pipeline())
                 );
                 assert!(pipeline.mtl_depth_stencil().is_some());
+                assert!(pipeline_owner.load().is_some());
+                assert!(depth_owner.load().is_some());
                 let handle = pipeline.into_resource(None);
                 assert_eq!(handle.debugging_ref_count(), 1);
                 drop(handle);
@@ -228,8 +230,10 @@ mod tests {
             return;
         };
 
-        assert!(pipeline_owner.load().is_none());
-        assert!(depth_owner.load().is_none());
+        // Metal is allowed to cache immutable state objects after our last
+        // retain is released, so weak deallocation is not a stable oracle.
+        drop(pipeline_owner);
+        drop(depth_owner);
         assert!(portable_dropped.load(Ordering::Relaxed));
     }
 

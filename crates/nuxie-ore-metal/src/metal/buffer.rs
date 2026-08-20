@@ -306,10 +306,6 @@ impl BufferMetal {
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the pending render-pass unit binds this owner")
-    )]
     #[expect(
         clippy::indexing_slicing,
         reason = "current_index always names an owned backing in the nonempty pool"

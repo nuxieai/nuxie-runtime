@@ -77,6 +77,14 @@ Use this loop for every slice:
 10. **Promote and checkpoint.** Update manifests, ownership records, issue
     tracker, and the merge checkpoint only after the evidence exists.
 
+For Objective-C lifetime evidence, put the operation under an explicit
+autorelease pool and inspect weak references only after that pool drains. A
+Rust `Retained<T>` owner can be gone while an autoreleased native reference is
+still alive, so checking immediately after Rust `drop` does not prove native
+deallocation. Conversely, a layer may recycle drawable slots without
+deallocating the drawable object; test the product-visible lifecycle event
+rather than assuming pointer death is the contract.
+
 ## What parity means
 
 For each slice, explicitly consider these dimensions:

@@ -15,6 +15,7 @@ mod draw_combinations;
 mod draw_pipeline;
 #[allow(dead_code)]
 mod draw_shader;
+mod drawable;
 #[allow(dead_code)]
 mod image_texture;
 #[allow(dead_code)]
@@ -53,6 +54,8 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::Arc;
+
+pub use drawable::NativeMetalDrawableFrame;
 
 const TRACER_METALLIB: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/native_metal_tracer.metallib"));
@@ -129,6 +132,21 @@ impl NativeMetalFactory {
             solid_draws: Vec::new(),
             unsupported: None,
         })
+    }
+
+    /// Copies the selected device so the platform caller can configure its
+    /// presentation owner without transferring that policy to the renderer.
+    pub fn retained_metal_device(&self) -> Retained<ProtocolObject<dyn MTLDevice>> {
+        self.context.retained_device()
+    }
+
+    pub(crate) fn begin_drawable_frame_parts<'a>(
+        &self,
+        drawable: &'a ProtocolObject<dyn objc2_metal::MTLDrawable>,
+        texture: Retained<ProtocolObject<dyn MTLTexture>>,
+        clear_color: u32,
+    ) -> Result<NativeMetalDrawableFrame<'a>, RendererError> {
+        NativeMetalDrawableFrame::new(Arc::clone(&self.context), drawable, texture, clear_color)
     }
 }
 
@@ -346,13 +364,43 @@ impl Renderer for NativeMetalFrame {
 
 impl NativeMetalFrame {
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
+        let (width, height, texture) = self.encode()?;
+        NativeMetalContext::commit_and_wait(&self.command_buffer)?;
+
+        let row_bytes = usize::try_from(width)
+            .ok()
+            .and_then(|width| width.checked_mul(4))
+            .ok_or_else(|| RendererError::NativeMetal("readback row size overflow".into()))?;
+        let byte_len = row_bytes
+            .checked_mul(height as usize)
+            .ok_or_else(|| RendererError::NativeMetal("readback size overflow".into()))?;
+        let mut pixels = vec![0; byte_len];
+        let pointer = NonNull::new(pixels.as_mut_ptr().cast::<c_void>())
+            .ok_or_else(|| RendererError::NativeMetal("readback buffer is null".into()))?;
+        let region = MTLRegion {
+            origin: MTLOrigin { x: 0, y: 0, z: 0 },
+            size: MTLSize {
+                width: width as usize,
+                height: height as usize,
+                depth: 1,
+            },
+        };
+        unsafe {
+            texture.getBytes_bytesPerRow_fromRegion_mipmapLevel(pointer, row_bytes, region, 0)
+        };
+        Ok(pixels)
+    }
+
+    fn encode(
+        &self,
+    ) -> Result<(u32, u32, Retained<ProtocolObject<dyn MTLTexture>>), RendererError> {
         if let Some(reason) = self.unsupported {
             return Err(RendererError::Unsupported(reason));
         }
         let target = self.target.borrow();
         let width = target.width();
         let height = target.height();
-        let texture = target.target_texture().ok_or_else(|| {
+        let texture = target.retained_target_texture().ok_or_else(|| {
             RendererError::NativeMetal("native Metal target has no readback texture".into())
         })?;
         let pass = MTLRenderPassDescriptor::renderPassDescriptor();
@@ -368,7 +416,7 @@ impl NativeMetalFrame {
                 RendererError::NativeMetal("failed to create render command encoder".into())
             })?;
         if !self.solid_draws.is_empty() {
-            encoder.setRenderPipelineState(self.context.solid_pipeline());
+            encoder.setRenderPipelineState(self.context.solid_pipeline(target.pixel_format())?);
             let viewport = [width as f32, height as f32];
             let viewport_pointer = NonNull::from(&viewport).cast::<c_void>();
             unsafe {
@@ -403,30 +451,7 @@ impl NativeMetalFrame {
             }
         }
         encoder.endEncoding();
-        NativeMetalContext::commit_and_wait(&self.command_buffer)?;
-
-        let row_bytes = usize::try_from(width)
-            .ok()
-            .and_then(|width| width.checked_mul(4))
-            .ok_or_else(|| RendererError::NativeMetal("readback row size overflow".into()))?;
-        let byte_len = row_bytes
-            .checked_mul(height as usize)
-            .ok_or_else(|| RendererError::NativeMetal("readback size overflow".into()))?;
-        let mut pixels = vec![0; byte_len];
-        let pointer = NonNull::new(pixels.as_mut_ptr().cast::<c_void>())
-            .ok_or_else(|| RendererError::NativeMetal("readback buffer is null".into()))?;
-        let region = MTLRegion {
-            origin: MTLOrigin { x: 0, y: 0, z: 0 },
-            size: MTLSize {
-                width: width as usize,
-                height: height as usize,
-                depth: 1,
-            },
-        };
-        unsafe {
-            texture.getBytes_bytesPerRow_fromRegion_mipmapLevel(pointer, row_bytes, region, 0)
-        };
-        Ok(pixels)
+        Ok((width, height, texture))
     }
 }
 
@@ -687,6 +712,7 @@ fn premultiplied_color(color: ColorInt, opacity: f32) -> [f32; 4] {
 
 fn make_solid_pipeline(
     device: &ProtocolObject<dyn MTLDevice>,
+    pixel_format: MTLPixelFormat,
 ) -> Result<Retained<ProtocolObject<dyn MTLRenderPipelineState>>, RendererError> {
     let library = new_library_from_metallib_bytes(device, TRACER_METALLIB)?;
     let vertex = library
@@ -699,7 +725,7 @@ fn make_solid_pipeline(
     descriptor.setVertexFunction(Some(&vertex));
     descriptor.setFragmentFunction(Some(&fragment));
     let attachment = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
-    attachment.setPixelFormat(MTLPixelFormat::RGBA8Unorm);
+    attachment.setPixelFormat(pixel_format);
     attachment.setBlendingEnabled(true);
     attachment.setSourceRGBBlendFactor(MTLBlendFactor::One);
     attachment.setDestinationRGBBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
@@ -783,6 +809,71 @@ mod tests {
         let old_target = frame.target.borrow();
         assert_eq!((old_target.width(), old_target.height()), (2, 2));
         assert_eq!(factory.dimensions(), (3, 1));
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[test]
+    fn abandoned_frame_releases_its_native_command_buffer_and_target_generation() {
+        use objc2::rc::Weak;
+        use objc2_metal::{MTLBuffer, MTLTexture};
+
+        let mut factory = NativeMetalFactory::new(2, 2).expect("create native Metal factory");
+        let (command_buffer, texture_owners, atomic_buffer_owners) =
+            objc2::rc::autoreleasepool(|_| {
+                let frame = factory
+                    .begin_frame(0)
+                    .expect("acquire frame-owned command buffer");
+                let command_buffer = Weak::new(&*frame.command_buffer);
+
+                let texture_owners: Vec<Weak<ProtocolObject<dyn MTLTexture>>> = {
+                    let target = frame.target.borrow();
+                    [
+                        target.target_texture(),
+                        target.coverage_memoryless_texture(),
+                        target.clip_memoryless_texture(),
+                        target.scratch_color_memoryless_texture(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .map(Weak::new)
+                    .collect()
+                };
+                let atomic_buffer_owners: Vec<Weak<ProtocolObject<dyn MTLBuffer>>> = {
+                    let mut target = frame.target.borrow_mut();
+                    vec![
+                        Weak::new(
+                            target
+                                .color_atomic_buffer()
+                                .expect("allocate color atomic buffer"),
+                        ),
+                        Weak::new(
+                            target
+                                .coverage_atomic_buffer()
+                                .expect("allocate coverage atomic buffer"),
+                        ),
+                        Weak::new(
+                            target
+                                .clip_atomic_buffer()
+                                .expect("allocate clip atomic buffer"),
+                        ),
+                    ]
+                };
+
+                factory.resize(3, 1).expect("replace target generation");
+                assert!(command_buffer.load().is_some());
+                assert!(texture_owners.iter().all(|owner| owner.load().is_some()));
+                assert!(atomic_buffer_owners
+                    .iter()
+                    .all(|owner| owner.load().is_some()));
+
+                drop(frame);
+                (command_buffer, texture_owners, atomic_buffer_owners)
+            });
+        assert!(command_buffer.load().is_none());
+        assert!(texture_owners.iter().all(|owner| owner.load().is_none()));
+        assert!(atomic_buffer_owners
+            .iter()
+            .all(|owner| owner.load().is_none()));
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]

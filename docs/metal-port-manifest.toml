@@ -42,7 +42,15 @@ status = "in-progress"
 # return the one concrete command buffer owned by the frame. Context policy
 # tests cover missing acquisition and completion errors; the live tracer test
 # covers successful completion and abandoned-frame reuse.
+# Wave four additionally adapts the upstream product-supplied target-texture
+# seam to a caller-acquired drawable: the native renderer validates its BGRA
+# texture, borrows its presentation owner, commits rendering, then uses the
+# next command buffer from the same queue for presentation, matching
+# `renderer/path_fiddle/fiddle_context_metal.mm:65-84,100-120,186-191`. The
+# live layer test covers the real drawable path; product selection remains
+# deferred to UNIV-2092.
 rust_modules = [
+  "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
@@ -50,8 +58,10 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/drawable.rs",
 ]
 evidence = [
+  "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
@@ -59,6 +69,7 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/drawable.rs",
   "crates/nuxie-renderer/tests/native_metal_tracer.rs",
 ]
 [[source]]
@@ -147,7 +158,11 @@ status = "in-progress"
 # texture while building the same complete `RenderTargetMetal` owner. Resize
 # constructs a replacement before assignment; the integration test proves an
 # in-flight frame retains the previous generation and the new target renders.
+# The dormant presentation adapter uses that same setter for a retained BGRA
+# texture from a caller-acquired drawable, then presents the borrowed drawable
+# on the next command buffer from the same queue.
 rust_modules = [
+  "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
@@ -159,8 +174,10 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/drawable.rs",
 ]
 evidence = [
+  "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
@@ -173,6 +190,7 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/drawable.rs",
   "crates/nuxie-renderer/tests/native_metal_tracer.rs",
 ]
 

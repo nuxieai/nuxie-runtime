@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 8, in-progress = 5, ported = 0, verified = 0 }
+expected_status_counts = { pending = 8, in-progress = 5, ported = 1, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -12,11 +12,10 @@ expected_status_counts = { pending = 8, in-progress = 5, ported = 0, verified = 
 [[owner]]
 id = "renderer.target_textures_and_atomic_storage"
 issue = "UNIV-2086"
-status = "in-progress"
-# Wave three now constructs and atomically replaces a complete target owner;
-# already-created frames retain the old generation. This remains in-progress
-# until a checked-in retain/drop observation proves every old Metal attachment
-# and lazy atomic buffer is released after the last frame drops.
+status = "ported"
+# Wave four's native Weak observations execute after an explicit autorelease
+# pool drains and prove the replaced generation releases every attachment and
+# realized atomic buffer after its last frame drops.
 rule = "The render target retains its target texture, memoryless attachments, and lazily allocated private atomic buffers; resize replaces the complete size-dependent owner set."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:21-87", "cpp:renderer/src/metal/render_context_metal_impl.mm:735-781"]
 required_tests = ["target compatibility and replacement", "lazy atomic allocation", "resize invalidates size-dependent storage", "drop releases all retained Metal objects"]
@@ -31,10 +30,11 @@ id = "renderer.device_queue_and_command_buffer"
 issue = "UNIV-2086"
 status = "in-progress"
 # Wave three moves acquisition to begin_frame and makes the consuming frame own
-# that concrete command buffer through commit or abandonment. This remains
-# in-progress until a live, injected Metal command-buffer failure and native
-# retain/drop observation cover error completion and uncommitted release; the
-# checked-in status-policy test alone is not sufficient for promotion.
+# that concrete command buffer through commit or abandonment. Wave four's
+# native Weak observation proves uncommitted release after the autorelease pool
+# drains. This remains in-progress until a safe live Metal command-buffer
+# failure covers error completion; the checked-in status-policy test alone is
+# not sufficient for promotion.
 rule = "The context retains the device and queue. Each frame acquires exactly one concrete Metal command buffer at begin_frame; finish consumes and commits it once, while abandonment releases it uncommitted."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:112-133", "cpp:renderer/src/metal/render_context_metal_impl.mm:1227-1249"]
 required_tests = ["queue required before product submission", "one command buffer per flush", "completion and error status propagation", "abandoned frame releases uncommitted resources"]
@@ -42,6 +42,18 @@ evidence_paths = [
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/tests/native_metal_tracer.rs",
+]
+
+[[owner]]
+id = "renderer.surface_drawable_presentation"
+issue = "UNIV-2086"
+status = "in-progress"
+rule = "The platform caller owns layer configuration, actor scheduling, and drawable acquisition; each renderer frame borrows exactly one compatible drawable, retains its texture, renders on the frame command buffer, and presents on the next command buffer from the same queue."
+citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:735-781", "cpp:renderer/path_fiddle/fiddle_context_metal.mm:65-84", "cpp:renderer/path_fiddle/fiddle_context_metal.mm:100-120", "cpp:renderer/path_fiddle/fiddle_context_metal.mm:186-191"]
+required_tests = ["caller layer device and BGRA configuration", "caller handles no-drawable outcome", "same drawable is target and presentation owner", "completion leaves the layer reusable", "product-main-actor resize and abandonment"]
+evidence_paths = [
+  "crates/nuxie-renderer/src/apple_surface.rs",
+  "crates/nuxie-renderer/src/native_metal/drawable.rs",
 ]
 
 [[owner]]

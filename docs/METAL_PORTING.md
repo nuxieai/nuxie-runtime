@@ -152,10 +152,22 @@ abandonment, and a resize constructs a complete target generation before
 replacing the factory's current one. Target generations use controlled
 single-thread interior mutation because pinned upstream attaches product
 textures and lazily realizes atomic storage after the reference-counted target
-is shared. Both related ownership rows remain `in-progress` until native
-retain/drop observation and a live injected command-buffer failure are checked
-in. Image decode/upload is not wired into product behavior yet. The existing
-tracer solid pipeline remains the selected diagnostic pipeline. Because the
+is shared. The fourth wave adds native weak-reference observation after an
+explicit Objective-C autorelease pool drains; this proves an abandoned frame
+releases its uncommitted command buffer, old target texture, and all realized
+atomic storage. It also adds the dormant caller-supplied drawable seam: the
+Apple caller retains layer configuration, main-actor acquisition, and frame
+scheduling. One borrowed drawable becomes the frame's BGRA target; renderer work commits on the frame's
+command buffer, and presentation commits on the next command buffer from the
+same queue, matching the pinned product oracle. The drawable remains retained
+until synchronous completion. The target
+ownership row is therefore `ported`; the command-buffer row remains
+`in-progress` only because a safe live Metal error has not yet been produced.
+The presentation adapter remains `in-progress` until product-main-actor resize
+and no-drawable behavior are exercised through the actual Apple boundary. Image
+decode/upload is not wired into product behavior yet. The tracer retains
+format-compatible RGBA and BGRA solid pipelines for headless and drawable
+targets respectively. Because the
 public `Factory` render-buffer constructor is infallible, a native Metal
 allocation failure deliberately terminates at that backend boundary; it never
 substitutes CPU storage or the wgpu renderer.

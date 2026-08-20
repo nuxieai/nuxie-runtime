@@ -337,9 +337,65 @@ secondary contract and observed 804 pixels at one LSB. The bound was selected
 from frame geometry before promotion rather than copied from either candidate
 count. Multiple atlas draws or logical flushes, relocated
 flush-wide batching, atlas fills, clip/scissor overlap, gradient or image atlas
-paints, advanced/HSL blends, direct feathers, atomic scheduling, background
-pipeline selection, and asynchronous presentation remain explicit later
-slices. The combined resource owner therefore remains `in-progress`.
+paints, advanced/HSL blends, direct feathers, atomic scheduling, general
+per-batch background pipeline selection, and asynchronous presentation remain
+explicit later slices. The combined resource owner therefore remains
+`in-progress`.
+
+## UNIV-2087 same-flush atlas batching slice
+
+The next checkpoint admits multiple same-style solid atlas draws in one logical
+flush. One backend-neutral planner jointly packs every placement, preserves
+authored path/paint/final-blit order, and emits atlas-mask resources in the
+pinned C++ order: fill before stroke, then unscissored before scissored. It
+relocates all midpoint tessellation into one flush-wide range. Contiguous
+unscissored patches coalesce into one `AtlasDrawBatch`; each scissored draw
+remains separate. The Metal adapter consumes these exact batches instead of
+inventing a second scheduler.
+
+The live two-stroke fixture exercises two scissored stroke batches, twelve final
+atlas-blit vertices, and seven concrete upload rings under one shared
+coordinator reservation; the gradient-span ring is intentionally inactive
+because the paints are solid. Its deterministic Rust topology is one command
+buffer, three render passes, seven nonempty buffer uploads totaling 1,544 bytes,
+four draw calls, twenty-two submitted instances, eleven tessellation spans, and
+ten path patches. The primary pinned C++ Metal
+comparison observes 503 differing pixels at one RGBA8 LSB with exact coverage
+occupancy. The secondary Rust-wgpu comparison observes 583 pixels at no more
+than two LSB. Both remain inside the independently selected 2,048-pixel ceiling;
+the ceiling was not changed to promote the implementation.
+
+This slice exposed an important oracle rule. The first candidate used the
+precompiled fully featured AtlasBlit ubershader and produced the correct
+geometry, topology, and occupancy, but 3,676 pixels differed by up to two LSB.
+The pinned C++ replay forces synchronous specialization and enables default
+interleaved-gradient-noise dithering. Compiling the exact
+`AtlasBlit + ENABLE_DITHER + rasterOrdering` key reduced the difference to the
+accepted result. Target format, render mode, compilation policy, feature mask,
+miscellaneous flags, and function family are therefore all part of renderer
+oracle identity. A compatible fallback pipeline is not a parity oracle even
+when every pixel is geometrically correct. When a preselected tolerance fails,
+trace the pipeline key before considering fixture or threshold changes.
+
+Specialized AtlasBlit compilation remains lazy: creating a factory that never
+uses a feather atlas does not start the compiler or realize these pipeline
+states. First atlas allocation builds the mask pair and the specialized final
+pipeline as one fail-closed replacement before publishing the resource
+generation. The headless tracer now uses the same `BGRA8Unorm` target format as
+the pinned C++ replay and real Apple drawables, then normalizes readback bytes
+to the harness's RGBA contract.
+
+The rooted no-WGPU Mach-O is 719,088 bytes and contains no WGPU, Naga, or WGSL
+markers. This is 83,248 bytes larger than the prior single-atlas checkpoint
+because the exact upstream runtime MSL specialization path is now reachable.
+Keep that delta visible: parity comes first, but a later size pass should
+compare this lazy source compiler with ahead-of-time specialization of the
+actually reachable Apple pipeline keys instead of assuming runtime compilation
+is free.
+
+This checkpoint still deliberately excludes multiple logical flushes,
+fill/stroke mixing in one native flush, gradient or image atlas paints,
+non-rectangular clips, advanced/HSL blends, and general draw scheduling.
 
 ## Compiler and commit workflow
 

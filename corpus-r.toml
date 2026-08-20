@@ -46,6 +46,17 @@ max_channel_delta = 2
 max_different_pixels = 128
 
 [[entry]]
+id = "first-light-two-atlas-feather-strokes-clockwise-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/first-light-two-atlas-feather-strokes.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-two-atlas-feather-strokes-clockwise-atomic.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 2
+max_different_pixels = 2048
+
+[[entry]]
 id = "first-light-nested-clip-probe-clockwise-atomic"
 kind = "gm-stream"
 stream = "fixtures/renderer/streams/first-light-nested-clip-probe.rive-stream"

@@ -43,6 +43,23 @@ frame_height = 64
 mode = "clockwise-atomic"
 sample_count = 1
 
+[[reference_provenance]]
+id = "first-light-two-atlas-feather-strokes-clockwise-atomic"
+path = "fixtures/renderer/reference/metal/first-light-two-atlas-feather-strokes-clockwise-atomic.provenance"
+stream = "fixtures/renderer/streams/first-light-two-atlas-feather-strokes.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-two-atlas-feather-strokes-clockwise-atomic.png"
+renderer_implementation = "cpp-native-metal"
+capture_tool = "renderer-replay-ffi-metal"
+backend = "metal"
+adapter_device = "Apple M5 Max"
+replay_sha256 = "3a3b15eb2d8bef627e9bb8a857442f6bcd393059c36bb47918fc9179a954dadf"
+reference_input_manifest_sha256 = "827971d0d828bab9a8afa0546bce522517e573f0def0aaedb981712691dc0025"
+frame = 0
+frame_width = 128
+frame_height = 64
+mode = "clockwise-atomic"
+sample_count = 1
+
 # A row changes to ported only when its Rust owner and focused `evidence` are
 # checked-in files and the evidence is green. It changes to verified only after
 # checked-in `parity_evidence` records the issue-level parity gates. A
@@ -68,8 +85,13 @@ status = "in-progress"
 # live layer test covers the real drawable path. The rooted tracer executable
 # explicitly selects this adapter and executes both readback and the Apple
 # presentation seam; the shipping C-ABI cutover remains deferred to UNIV-2092.
+# The same-flush atlas checkpoint lazily compiles the exact synchronous
+# AtlasBlit + ENABLE_DITHER key selected by the pinned oracle; compatible
+# precompiled ubershaders remain fallback inventory, not parity evidence.
 rust_modules = [
   "crates/nuxie-renderer/src/apple_surface.rs",
+  "crates/nuxie-renderer/src/logical_frame.rs",
+  "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
@@ -82,13 +104,17 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/src/native_metal/tessellation_resource.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/src/apple_surface.rs",
+  "crates/nuxie-renderer/src/lib.rs",
+  "crates/nuxie-renderer/src/logical_frame.rs",
   "tools/renderer-replay/src/bin/native-metal-product-root.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
@@ -100,6 +126,7 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/src/native_metal/tessellation_resource.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
   "crates/nuxie-renderer/tests/native_metal_resource_shaders.rs",
@@ -107,8 +134,11 @@ evidence = [
   "fixtures/renderer/reference/metal/first-light-gradient-cubic.png",
   "fixtures/renderer/reference/metal/first-light-atlas-feather-stroke-clockwise-atomic.png",
   "fixtures/renderer/reference/metal/first-light-atlas-feather-stroke-clockwise-atomic.provenance",
+  "fixtures/renderer/reference/metal/first-light-two-atlas-feather-strokes-clockwise-atomic.png",
+  "fixtures/renderer/reference/metal/first-light-two-atlas-feather-strokes-clockwise-atomic.provenance",
   "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream",
   "fixtures/renderer/streams/first-light-atlas-feather-stroke.rive-stream",
+  "fixtures/renderer/streams/first-light-two-atlas-feather-strokes.rive-stream",
   "tools/check-native-metal-tracer-binary.sh",
   "tools/metal-port/tracer-corpus.toml",
   "tools/metal-port/tracer-corpus-wgpu-secondary.toml",
@@ -227,9 +257,14 @@ status = "in-progress"
 # The dormant presentation adapter uses that same setter for a retained BGRA
 # texture from a caller-acquired drawable, then presents the borrowed drawable
 # on the next command buffer from the same queue.
+# Same-flush atlas resources additionally port the pinned fill/stroke and
+# scissor ordering, unscissored batch coalescing, flush-wide tessellation
+# relocation, and synchronous specialized AtlasBlit selection.
 rust_modules = [
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/gpu.rs",
+  "crates/nuxie-renderer/src/logical_frame.rs",
+  "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
@@ -243,12 +278,16 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/gpu.rs",
+  "crates/nuxie-renderer/src/lib.rs",
+  "crates/nuxie-renderer/src/logical_frame.rs",
+  "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
@@ -263,12 +302,16 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
   "crates/nuxie-renderer/tests/native_metal_tracer.rs",
   "fixtures/renderer/reference/metal/first-light-atlas-feather-stroke-clockwise-atomic.png",
   "fixtures/renderer/reference/metal/first-light-atlas-feather-stroke-clockwise-atomic.provenance",
+  "fixtures/renderer/reference/metal/first-light-two-atlas-feather-strokes-clockwise-atomic.png",
+  "fixtures/renderer/reference/metal/first-light-two-atlas-feather-strokes-clockwise-atomic.provenance",
   "fixtures/renderer/streams/first-light-atlas-feather-stroke.rive-stream",
+  "fixtures/renderer/streams/first-light-two-atlas-feather-strokes.rive-stream",
   "tools/metal-port/tracer-corpus.toml",
   "tools/metal-port/tracer-corpus-wgpu-secondary.toml",
 ]

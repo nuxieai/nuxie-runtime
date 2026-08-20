@@ -1516,14 +1516,6 @@ struct PreparedTypedDrawSlot {
 
 #[derive(Clone)]
 pub(crate) struct PreparedTypedDrawResources {
-    /// Finalized feather-atlas placement for this draw, including logical
-    /// flush packing. Platform backends consume this instead of independently
-    /// repeating atlas layout or translating the authored draw a second time.
-    #[cfg_attr(
-        not(any(test, feature = "native-metal-experimental")),
-        allow(dead_code)
-    )]
-    pub(crate) atlas_placement: Option<super::AtlasPlacement>,
     pub(crate) contour_base: u32,
     pub(crate) path: gpu::PathData,
     pub(crate) paint: gpu::PaintData,
@@ -1543,6 +1535,52 @@ pub(crate) struct PreparedTypedDrawResources {
     // 1..=contours.len(). Stroke tessellation skips empty butt-cap contours,
     // so consumers must not infer density from the contour count.
     pub(crate) local_contour_ids_are_dense: bool,
+}
+
+#[derive(Clone, Copy)]
+#[cfg(any(test, feature = "native-metal-experimental"))]
+pub(crate) struct RasterOrderingAtlasInput<'a> {
+    pub(crate) path: &'a LogicalPath,
+    pub(crate) paint: &'a LogicalPaint,
+    pub(crate) state: DrawState,
+}
+
+#[cfg(any(test, feature = "native-metal-experimental"))]
+pub(crate) struct PreparedRasterOrderingAtlasDraw {
+    /// Index in the caller's authored input slice. Atlas resource emission can
+    /// reorder draws while path/paint records and final blits stay authored.
+    #[cfg(test)]
+    pub(crate) input_index: usize,
+    #[cfg(test)]
+    pub(crate) path_id: u16,
+    #[cfg(test)]
+    pub(crate) atlas_placement: super::AtlasPlacement,
+    pub(crate) is_stroke: bool,
+    #[cfg(test)]
+    pub(crate) scissor: [u16; 4],
+    #[cfg(test)]
+    pub(crate) base_patch: u32,
+    #[cfg(test)]
+    pub(crate) patch_count: u32,
+    #[cfg(test)]
+    pub(crate) blit_vertex_range: std::ops::Range<usize>,
+}
+
+#[cfg(any(test, feature = "native-metal-experimental"))]
+pub(crate) struct PreparedRasterOrderingAtlasFlush {
+    pub(crate) paths: Vec<gpu::PathData>,
+    pub(crate) paints: Vec<gpu::PaintData>,
+    pub(crate) paint_aux: Vec<gpu::PaintAuxData>,
+    pub(crate) spans: Vec<gpu::TessVertexSpan>,
+    pub(crate) contours: Vec<gpu::ContourData>,
+    pub(crate) triangles: Vec<gpu::TriangleVertex>,
+    /// C++ atlas-pass order: fill before stroke, and unscissored before
+    /// scissored within each style. Authored identity is retained explicitly.
+    pub(crate) draws: Vec<PreparedRasterOrderingAtlasDraw>,
+    pub(crate) fill_batches: Vec<gpu::AtlasDrawBatch>,
+    pub(crate) stroke_batches: Vec<gpu::AtlasDrawBatch>,
+    pub(crate) content_extent: [u32; 2],
+    pub(crate) physical_extent: [u32; 2],
 }
 
 pub(crate) struct PreparedTypedDrawSelection<'a> {
@@ -2357,7 +2395,6 @@ fn write_resources(
                         .with(|copies| copies.set(copies.get() + 1));
                 }
                 PreparedTypedDrawResources {
-                    atlas_placement,
                     contour_base: u32::try_from(contour_start).expect("contour base overflow"),
                     path: buffers.paths[path_start],
                     paint: paint.paint,
@@ -3107,104 +3144,332 @@ pub(crate) fn admit_path_draw(
     }))
 }
 
-/// Admit and materialize backend-neutral typed resources for the one-draw
-/// raster-ordering feather-atlas seam used by platform renderers.
+/// Admit and materialize one same-logical-flush set of solid
+/// raster-ordering feather-atlas draws without constructing `SolidDraw`.
 ///
-/// The returned value and every temporary contain no backend-owned image
-/// resources. This is intentional: platform-only binaries must not retain the
-/// WGPU-bearing `SolidDraw` ownership graph merely to consume the narrow
-/// serializer. A focused byte-level test pins this serializer to the canonical
-/// writer for the admitted solid-atlas fixture.
+/// Path, paint, and final atlas-blit records remain in authored order. Atlas
+/// tessellation follows pinned C++ `LogicalFlush::writeResources`: fills then
+/// strokes, with unscissored draws before scissored draws in each style. The
+/// midpoint tessellation is compacted into one flush-wide patch range with a
+/// single pre-padding and tail-padding sequence.
+///
+/// Pinned upstream source: `renderer/src/render_context.cpp:1412-1439,
+/// 2239-2329` at `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
 #[cfg(any(test, feature = "native-metal-experimental"))]
-pub(crate) fn prepare_single_raster_ordering_atlas_draw(
+pub(crate) fn prepare_raster_ordering_atlas_flush(
     config: LogicalFrameConfig,
-    state: DrawState,
-    path: &LogicalPath,
-    paint: &LogicalPaint,
-) -> Result<Option<(PreparedTypedDrawResources, bool)>, &'static str> {
-    if config.mode != RenderMode::RasterOrdering
-        || paint.feather == 0.0
-        || !draw::feather_requires_atlas(paint.feather, state.transform, false)
-    {
-        return Err("single feather-atlas preparation requires raster-ordering atlas routing");
+    inputs: &[RasterOrderingAtlasInput<'_>],
+) -> Result<Option<PreparedRasterOrderingAtlasFlush>, &'static str> {
+    if config.mode != RenderMode::RasterOrdering {
+        return Err("feather-atlas flush preparation requires raster ordering");
     }
-    if !path_draw_has_valid_parameters(path, paint) {
-        return Ok(None);
+
+    struct PendingAtlasDraw {
+        #[cfg(test)]
+        input_index: usize,
+        path_id: u16,
+        placement: super::AtlasPlacement,
+        is_stroke: bool,
+        scissored: bool,
+        buffers: ShadowBuffers,
+        base_patch: u32,
+        patch_count: u32,
+        local_contour_ids_are_dense: bool,
     }
-    let Some(pixel_bounds) = path_draw_pixel_bounds(path, paint, state.transform) else {
-        return Ok(None);
-    };
-    let clipped_pixel_bounds =
-        intersect_pixel_bounds(pixel_bounds, state.overall_clip_pixel_bounds);
-    if pixel_bounds_are_outside_frame(clipped_pixel_bounds, config.width, config.height) {
-        return Ok(None);
-    }
-    let Some(preparation) = prepare_path_draw_with_pixel_bounds(
-        path,
-        paint,
-        state,
-        Some(pixel_bounds),
-        config.mode,
-        config.width,
-        config.height,
-    ) else {
-        return Ok(None);
-    };
-    let prepared_feather = preparation
-        .prepared_feather
-        .as_deref()
-        .ok_or("logical preparation omitted feather geometry")?;
-    let placement = feather_atlas_placement(
-        &path.raw_path,
-        state.transform,
-        paint.feather,
-        paint.effective_stroke(),
-        config.width,
-        config.height,
-    )
-    .ok_or("logical preparation omitted feather-atlas placement")?;
-    let atlas_placement =
-        pack_raster_ordering_feather_atlas_placements(config, vec![Some(placement)])
-            .into_iter()
-            .next()
-            .flatten()
-            .ok_or("logical preparation omitted packed feather-atlas placement")?;
-    let mut buffers = ShadowBuffers::default();
-    let local_contour_ids_are_dense = write_raster_ordering_atlas_resources(
-        &mut buffers,
+
+    let frame_bounds = [
         0,
-        path,
-        paint,
-        state,
-        prepared_feather,
-        atlas_placement,
-    );
-    if buffers.paths.len() != 1 || buffers.paints.len() != 1 {
-        return Err("narrow logical serializer omitted feather-atlas resources");
+        0,
+        i32::try_from(config.width).unwrap_or(i32::MAX),
+        i32::try_from(config.height).unwrap_or(i32::MAX),
+    ];
+    let mut admitted = Vec::with_capacity(inputs.len());
+    let mut placements = Vec::with_capacity(inputs.len());
+    for (input_index, input) in inputs.iter().copied().enumerate() {
+        if input.paint.shader.is_some() || input.paint.invalid_shader {
+            return Err("feather-atlas flush preparation requires solid paints");
+        }
+        if input.paint.feather == 0.0
+            || !draw::feather_requires_atlas(input.paint.feather, input.state.transform, false)
+        {
+            return Err("feather-atlas flush input does not route through the atlas");
+        }
+        if !input.path.valid || !path_draw_has_valid_parameters(input.path, input.paint) {
+            continue;
+        }
+        let Some(pixel_bounds) =
+            path_draw_pixel_bounds(input.path, input.paint, input.state.transform)
+        else {
+            continue;
+        };
+        let clipped_pixel_bounds =
+            intersect_pixel_bounds(pixel_bounds, input.state.overall_clip_pixel_bounds);
+        if pixel_bounds_are_outside_frame(clipped_pixel_bounds, config.width, config.height) {
+            continue;
+        }
+        let Some(preparation) = prepare_path_draw_with_pixel_bounds(
+            input.path,
+            input.paint,
+            input.state,
+            Some(pixel_bounds),
+            config.mode,
+            config.width,
+            config.height,
+        ) else {
+            continue;
+        };
+        let prepared_feather = preparation
+            .prepared_feather
+            .ok_or("logical preparation omitted feather geometry")?;
+        let placement = feather_atlas_placement(
+            &input.path.raw_path,
+            input.state.transform,
+            input.paint.feather,
+            input.paint.effective_stroke(),
+            config.width,
+            config.height,
+        )
+        .ok_or("logical preparation omitted feather-atlas placement")?;
+        let admitted_index = admitted.len();
+        let path_id = u16::try_from(admitted_index + 1).map_err(|_| "logical path ID overflow")?;
+        let is_stroke = input.paint.style == RenderPaintStyle::Stroke;
+        let scissored = intersect_pixel_bounds(pixel_bounds, frame_bounds) != pixel_bounds;
+        admitted.push((
+            input_index,
+            path_id,
+            input,
+            prepared_feather,
+            is_stroke,
+            scissored,
+        ));
+        placements.push(Some(placement));
     }
-    let paint_record = buffers.paints[0];
-    let tessellation = &prepared_feather.tessellation;
-    Ok(Some((
-        PreparedTypedDrawResources {
-            atlas_placement: Some(atlas_placement),
-            contour_base: 0,
-            path: buffers.paths[0],
-            paint: paint_record.paint,
-            paint_aux: paint_record.aux,
-            spans: buffers.tessellations,
-            contours: buffers.contours,
-            triangles: buffers.triangles,
-            base_instance: tessellation.base_instance,
-            instance_count: tessellation.instance_count,
-            triangle_count: 0,
-            borrowed_triangle_count: 0,
-            main_triangle_batches: Vec::new(),
-            has_interior_triangles: false,
-            uses_interior: false,
-            local_contour_ids_are_dense,
-        },
-        paint.style == RenderPaintStyle::Stroke,
-    )))
+    if admitted.is_empty() {
+        return Ok(None);
+    }
+
+    let packed = pack_raster_ordering_feather_atlas_placements(config, placements);
+    let mut pending = Vec::with_capacity(admitted.len());
+    let mut paths = Vec::with_capacity(admitted.len());
+    let mut paints = Vec::with_capacity(admitted.len());
+    let mut paint_aux = Vec::with_capacity(admitted.len());
+    let mut triangles = Vec::with_capacity(admitted.len().saturating_mul(6));
+    for (
+        admitted_index,
+        ((input_index, path_id, input, prepared_feather, is_stroke, scissored), placement),
+    ) in admitted.into_iter().zip(packed).enumerate()
+    {
+        #[cfg(not(test))]
+        let _ = input_index;
+        let placement = placement.ok_or("packed feather atlas omitted an admitted draw")?;
+        let mut buffers = ShadowBuffers::default();
+        write_raster_ordering_atlas_resources(
+            &mut buffers,
+            admitted_index,
+            input.path,
+            input.paint,
+            input.state,
+            &prepared_feather,
+            placement,
+        );
+        if buffers.paths.len() != 1 || buffers.paints.len() != 1 || buffers.triangles.len() != 6 {
+            return Err("logical atlas serializer omitted canonical draw resources");
+        }
+        paths.push(buffers.paths[0]);
+        paints.push(buffers.paints[0].paint);
+        paint_aux.push(buffers.paints[0].aux);
+        triangles.extend_from_slice(&buffers.triangles);
+        pending.push(PendingAtlasDraw {
+            #[cfg(test)]
+            input_index,
+            path_id,
+            placement,
+            is_stroke,
+            scissored,
+            base_patch: prepared_feather.tessellation.base_instance,
+            patch_count: prepared_feather.tessellation.instance_count,
+            local_contour_ids_are_dense: prepared_feather.local_contour_ids_are_dense,
+            buffers,
+        });
+    }
+
+    let content_extent = pending
+        .iter()
+        .try_fold([0_u32; 2], |extent, draw| {
+            Some([
+                extent[0].max(draw.placement.origin[0].checked_add(draw.placement.width)?),
+                extent[1].max(draw.placement.origin[1].checked_add(draw.placement.height)?),
+            ])
+        })
+        .ok_or("feather atlas content extent overflow")?;
+    let physical_extent = super::cpp_webgpu_atlas_physical_size(
+        content_extent,
+        [config.width, config.height],
+        config.max_texture_dimension_2d,
+    );
+    let full_scissor = [
+        0,
+        0,
+        u16::try_from(content_extent[0]).map_err(|_| "feather atlas width exceeds UInt16")?,
+        u16::try_from(content_extent[1]).map_err(|_| "feather atlas height exceeds UInt16")?,
+    ];
+
+    let midpoint_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+    let mut spans = Vec::new();
+    super::append_tessellation_padding_span(&mut spans, 0, midpoint_span);
+    let mut contours = Vec::new();
+    let mut local_contour_ids = Vec::new();
+    let mut draws = Vec::with_capacity(pending.len());
+    let mut fill_batches = Vec::new();
+    let mut stroke_batches = Vec::new();
+    let mut next_base_patch = 1_u32;
+    for is_stroke in [false, true] {
+        for scissored in [false, true] {
+            for draw in pending
+                .iter_mut()
+                .filter(|draw| draw.is_stroke == is_stroke && draw.scissored == scissored)
+            {
+                let mut draw_spans = std::mem::take(&mut draw.buffers.tessellations);
+                draw_spans.retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+                let mut base_patch = draw.base_patch;
+                let relocation = next_base_patch
+                    .checked_sub(base_patch)
+                    .and_then(|patches| patches.checked_mul(midpoint_span))
+                    .ok_or("feather atlas tessellation relocation overflow")?;
+                let contour_offset = super::append_relocated_midpoint_contours_to_flush(
+                    &draw_spans,
+                    &draw.buffers.contours,
+                    0,
+                    draw.local_contour_ids_are_dense,
+                    u32::from(draw.path_id),
+                    relocation,
+                    &mut contours,
+                    &mut local_contour_ids,
+                );
+                for span in &mut draw_spans {
+                    super::globalize_midpoint_span_contour_id(span, 0, contour_offset);
+                }
+                super::relocate_tessellation_logically(
+                    &mut draw_spans,
+                    &mut base_patch,
+                    &mut [],
+                    next_base_patch,
+                    midpoint_span,
+                );
+                #[cfg(test)]
+                let blit_vertex_range = {
+                    let start = draw
+                        .path_id
+                        .checked_sub(1)
+                        .and_then(|index| usize::from(index).checked_mul(6))
+                        .ok_or("atlas blit vertex range overflow")?;
+                    let end = start
+                        .checked_add(6)
+                        .ok_or("atlas blit vertex range overflow")?;
+                    start..end
+                };
+                let scissor = if scissored {
+                    let right = draw.placement.origin[0]
+                        .checked_add(draw.placement.width)
+                        .ok_or("feather atlas scissor overflow")?;
+                    let bottom = draw.placement.origin[1]
+                        .checked_add(draw.placement.height)
+                        .ok_or("feather atlas scissor overflow")?;
+                    [
+                        u16::try_from(draw.placement.origin[0])
+                            .map_err(|_| "feather atlas scissor exceeds UInt16")?,
+                        u16::try_from(draw.placement.origin[1])
+                            .map_err(|_| "feather atlas scissor exceeds UInt16")?,
+                        u16::try_from(right).map_err(|_| "feather atlas scissor exceeds UInt16")?,
+                        u16::try_from(bottom)
+                            .map_err(|_| "feather atlas scissor exceeds UInt16")?,
+                    ]
+                } else {
+                    full_scissor
+                };
+                spans.append(&mut draw_spans);
+                let batches = if is_stroke {
+                    &mut stroke_batches
+                } else {
+                    &mut fill_batches
+                };
+                if scissored {
+                    batches.push(gpu::AtlasDrawBatch {
+                        scissor,
+                        base_patch,
+                        patch_count: draw.patch_count,
+                    });
+                } else if let Some(batch) = batches.last_mut() {
+                    debug_assert_eq!(batch.scissor, scissor);
+                    debug_assert_eq!(batch.base_patch + batch.patch_count, base_patch);
+                    batch.patch_count = batch
+                        .patch_count
+                        .checked_add(draw.patch_count)
+                        .ok_or("feather atlas batch patch count overflow")?;
+                } else {
+                    batches.push(gpu::AtlasDrawBatch {
+                        scissor,
+                        base_patch,
+                        patch_count: draw.patch_count,
+                    });
+                }
+                draws.push(PreparedRasterOrderingAtlasDraw {
+                    #[cfg(test)]
+                    input_index: draw.input_index,
+                    #[cfg(test)]
+                    path_id: draw.path_id,
+                    #[cfg(test)]
+                    atlas_placement: draw.placement,
+                    is_stroke,
+                    #[cfg(test)]
+                    scissor,
+                    #[cfg(test)]
+                    base_patch,
+                    #[cfg(test)]
+                    patch_count: draw.patch_count,
+                    #[cfg(test)]
+                    blit_vertex_range,
+                });
+                next_base_patch = next_base_patch
+                    .checked_add(draw.patch_count)
+                    .ok_or("feather atlas patch range overflow")?;
+            }
+        }
+    }
+
+    let geometry_end = next_base_patch
+        .checked_mul(midpoint_span)
+        .ok_or("feather atlas tessellation range overflow")?;
+    let outer_start = super::align_to(geometry_end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32);
+    super::append_tessellation_padding_span(&mut spans, geometry_end, outer_start);
+    super::append_tessellation_padding_span(
+        &mut spans,
+        outer_start,
+        outer_start
+            .checked_add(1)
+            .ok_or("feather atlas tessellation range overflow")?,
+    );
+    let tessellation_height = outer_start
+        .checked_add(1)
+        .ok_or("feather atlas tessellation range overflow")?
+        .div_ceil(gpu::TESS_TEXTURE_WIDTH as u32);
+    if tessellation_height > config.max_texture_dimension_2d {
+        return Err("feather atlas tessellation texture exceeds device limit");
+    }
+
+    Ok(Some(PreparedRasterOrderingAtlasFlush {
+        paths,
+        paints,
+        paint_aux,
+        spans,
+        contours,
+        triangles,
+        draws,
+        fill_batches,
+        stroke_batches,
+        content_extent,
+        physical_extent,
+    }))
 }
 
 struct NullFrame {

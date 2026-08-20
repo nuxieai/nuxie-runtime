@@ -353,6 +353,25 @@ impl DrawPipeline {
                 .ok_or(DrawPipelineError::PipelineUnavailable),
         }
     }
+
+    pub(crate) fn retained_pipeline_state(
+        &self,
+        pixel_format: MTLPixelFormat,
+    ) -> Result<Retained<ProtocolObject<dyn MTLRenderPipelineState>>, DrawPipelineError> {
+        if !self.valid() {
+            return Err(DrawPipelineError::PipelineUnavailable);
+        }
+        match pipeline_slot_for_pixel_format(pixel_format)? {
+            PipelineSlot::Rgba8 => self
+                .pipeline_state_rgba8
+                .clone()
+                .ok_or(DrawPipelineError::PipelineUnavailable),
+            PipelineSlot::Bgra8 => self
+                .pipeline_state_bgra8
+                .clone()
+                .ok_or(DrawPipelineError::PipelineUnavailable),
+        }
+    }
 }
 
 #[cfg(test)]

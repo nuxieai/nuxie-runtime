@@ -9,10 +9,13 @@
 //! Pinned upstream source: `rive-runtime` at
 //! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
 
+use super::background_shader_compiler::{
+    BackgroundShaderCompileError, NativeBackgroundShaderCompiler,
+};
 use super::buffer_ring_coordinator::{
     BufferRingCompletion, BufferRingCoordinator, BufferRingLease,
 };
-use super::capabilities::MetalCapabilitySelection;
+use super::capabilities::{ApplePlatform, MetalCapabilitySelection};
 use super::draw_pipeline::{DrawPipeline, MetalInterlockMode};
 use super::draw_shader::DrawShaderLibrary;
 use super::feather_atlas_pipeline::FeatherAtlasPipelines;
@@ -25,6 +28,9 @@ use super::tessellation_resource::{
 use super::upload_buffer_ring::UploadBufferRing;
 use super::{make_solid_pipeline, new_library_from_metallib_bytes};
 use crate::gpu::{self, DrawType};
+use crate::native_metal::shader_compile_plan::{
+    BackgroundCompileJob, InterlockMode, MetalFeatures, ENABLE_DITHER,
+};
 use crate::RendererError;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
@@ -48,14 +54,15 @@ const TESSELLATE_VERTEX_MAIN: &str = "WF";
 const TESSELLATE_FRAGMENT_MAIN: &str = "XF";
 const UBER_PATH_VERTEX_MAIN: &str = "p1111000000::GC";
 const UBER_PATH_FRAGMENT_MAIN: &str = "p1111111100::JB";
-const ATLAS_BLIT_VERTEX_MAIN: &str = "p1110000011::GC";
-const ATLAS_BLIT_FRAGMENT_MAIN: &str = "p1110001111::JB";
+const SPECIALIZED_DRAW_VERTEX_MAIN: &str = "GC";
+const SPECIALIZED_DRAW_FRAGMENT_MAIN: &str = "JB";
 
 struct ResourceState {
     gradient: GradientResource,
     tessellation: TessellationResource,
     feather_atlas: Option<FeatherAtlasResource>,
     feather_atlas_pipelines: Option<FeatherAtlasPipelines>,
+    specialized_atlas_blit_pipeline: Option<DrawPipeline>,
     uploads: UploadRings,
 }
 
@@ -118,6 +125,7 @@ pub(crate) struct NativeMetalContext {
     device: Retained<ProtocolObject<dyn MTLDevice>>,
     queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
     capabilities: MetalCapabilitySelection,
+    platform: ApplePlatform,
     solid_rgba_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     solid_bgra_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     _draw_shader_library: DrawShaderLibrary,
@@ -125,7 +133,6 @@ pub(crate) struct NativeMetalContext {
     color_ramp_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     tessellate_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     midpoint_draw_pipeline: DrawPipeline,
-    atlas_blit_pipeline: DrawPipeline,
     tess_span_index_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
     path_patch_vertex_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
     path_patch_index_buffer: Retained<ProtocolObject<dyn MTLBuffer>>,
@@ -139,6 +146,7 @@ impl NativeMetalContext {
     pub(crate) fn new(
         device: Retained<ProtocolObject<dyn MTLDevice>>,
         capabilities: MetalCapabilitySelection,
+        platform: ApplePlatform,
     ) -> Result<Self, RendererError> {
         let queue = device.newCommandQueue().ok_or_else(|| {
             RendererError::NativeMetal("MTLDevice returned no command queue".to_owned())
@@ -170,16 +178,6 @@ impl NativeMetalContext {
             0,
         )
         .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
-        let atlas_blit_pipeline = DrawPipeline::new(
-            &device,
-            Some(draw_shader_library.library()),
-            &NSString::from_str(ATLAS_BLIT_VERTEX_MAIN),
-            &NSString::from_str(ATLAS_BLIT_FRAGMENT_MAIN),
-            DrawType::AtlasBlit,
-            MetalInterlockMode::RasterOrdering,
-            0,
-        )
-        .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
         let tess_span_index_buffer = make_buffer(&device, &K_TESS_SPAN_INDICES)?;
         let (patch_vertices, patch_indices) = gpu::generate_patch_buffer_data();
         let path_patch_vertex_buffer = make_buffer(&device, &patch_vertices)?;
@@ -194,6 +192,7 @@ impl NativeMetalContext {
             tessellation,
             feather_atlas: None,
             feather_atlas_pipelines: None,
+            specialized_atlas_blit_pipeline: None,
             uploads: UploadRings::default(),
         });
         let samplers = NativeMetalSamplers::new(&device)?;
@@ -205,6 +204,7 @@ impl NativeMetalContext {
             device,
             queue,
             capabilities,
+            platform,
             solid_rgba_pipeline,
             solid_bgra_pipeline,
             _draw_shader_library: draw_shader_library,
@@ -212,7 +212,6 @@ impl NativeMetalContext {
             color_ramp_pipeline,
             tessellate_pipeline,
             midpoint_draw_pipeline,
-            atlas_blit_pipeline,
             tess_span_index_buffer,
             path_patch_vertex_buffer,
             path_patch_index_buffer,
@@ -241,7 +240,9 @@ impl NativeMetalContext {
             .resources
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        state.feather_atlas.is_some() && state.feather_atlas_pipelines.is_some()
+        state.feather_atlas.is_some()
+            && state.feather_atlas_pipelines.is_some()
+            && state.specialized_atlas_blit_pipeline.is_some()
     }
 
     pub(crate) fn solid_pipeline(
@@ -279,9 +280,19 @@ impl NativeMetalContext {
     pub(crate) fn atlas_blit_pipeline(
         &self,
         pixel_format: MTLPixelFormat,
-    ) -> Result<&ProtocolObject<dyn MTLRenderPipelineState>, RendererError> {
-        self.atlas_blit_pipeline
-            .pipeline_state(pixel_format)
+    ) -> Result<Retained<ProtocolObject<dyn MTLRenderPipelineState>>, RendererError> {
+        let state = self.resources.lock().map_err(|_| {
+            RendererError::NativeMetal("native Metal resource ring is poisoned".to_owned())
+        })?;
+        state
+            .specialized_atlas_blit_pipeline
+            .as_ref()
+            .ok_or_else(|| {
+                RendererError::NativeMetal(
+                    "specialized AtlasBlit pipeline was not prepared".to_owned(),
+                )
+            })?
+            .retained_pipeline_state(pixel_format)
             .map_err(|error| RendererError::NativeMetal(error.to_string()))
     }
 
@@ -339,8 +350,14 @@ impl NativeMetalContext {
                 let pipelines =
                     FeatherAtlasPipelines::new(self.device(), self._draw_shader_library.library())
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
+                let atlas_blit_pipeline = compile_specialized_atlas_blit_pipeline(
+                    &self.device,
+                    self.capabilities,
+                    self.platform,
+                )?;
                 state.feather_atlas = replacement;
                 state.feather_atlas_pipelines = Some(pipelines);
+                state.specialized_atlas_blit_pipeline = Some(atlas_blit_pipeline);
             } else if let Some(resource) = state.feather_atlas.as_mut() {
                 resource.ensure_capacity(self.device(), width, height)?;
             }
@@ -584,6 +601,55 @@ impl UploadRings {
                 .transpose()?,
         })
     }
+}
+
+fn compile_specialized_atlas_blit_pipeline(
+    device: &Retained<ProtocolObject<dyn MTLDevice>>,
+    capabilities: MetalCapabilitySelection,
+    platform: ApplePlatform,
+) -> Result<DrawPipeline, RendererError> {
+    let compiler = NativeBackgroundShaderCompiler::new_metal(
+        device.clone(),
+        MetalFeatures {
+            atomic_barrier_type: capabilities.atomic_barrier_type,
+        },
+        platform,
+    );
+    let job = BackgroundCompileJob::new(
+        DrawType::AtlasBlit,
+        ENABLE_DITHER,
+        InterlockMode::RasterOrdering,
+        0,
+    );
+    compiler.push_job(job);
+    let finished = compiler.pop_finished_job(true).ok_or_else(|| {
+        RendererError::NativeMetal(
+            "specialized AtlasBlit compiler returned no completed job".to_owned(),
+        )
+    })?;
+    debug_assert_eq!(finished.job, job);
+    let library = finished.result.map_err(|error| {
+        let detail = match error {
+            BackgroundShaderCompileError::MetalCompilation {
+                localized_description,
+                ..
+            } => localized_description.unwrap_or_else(|| "Metal returned no diagnostic".to_owned()),
+            other => format!("{other:?}"),
+        };
+        RendererError::NativeMetal(format!(
+            "compile specialized AtlasBlit shader synchronously: {detail}"
+        ))
+    })?;
+    DrawPipeline::new(
+        device,
+        Some(&library),
+        &NSString::from_str(SPECIALIZED_DRAW_VERTEX_MAIN),
+        &NSString::from_str(SPECIALIZED_DRAW_FRAGMENT_MAIN),
+        DrawType::AtlasBlit,
+        MetalInterlockMode::RasterOrdering,
+        0,
+    )
+    .map_err(|error| RendererError::NativeMetal(error.to_string()))
 }
 
 fn upload_byte_len<T>(values: &[T]) -> Result<usize, RendererError> {

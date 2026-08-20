@@ -282,8 +282,9 @@ fn native_metal_atlas_feather_stroke_matches_cpp_metal_and_rust_wgpu_oracles() {
     );
 
     // Exercise the new triangle upload ring through the complete physical
-    // 1,2,0,1 rollover. Each synchronous completion releases all eight ring
-    // slots before the next frame and preserves the same visible result.
+    // 1,2,0,1 rollover. Each frame advances seven active upload rings under one
+    // shared reservation; synchronous completion releases that reservation
+    // before the next frame. The solid fixture leaves gradient spans inactive.
     for cycle in 2..=4 {
         let mut frame = factory
             .begin_frame(stream.clear_color.unwrap_or(0))
@@ -297,6 +298,75 @@ fn native_metal_atlas_feather_stroke_matches_cpp_metal_and_rust_wgpu_oracles() {
             "native Metal atlas changed on triangle-ring cycle {cycle}"
         );
     }
+}
+
+#[test]
+fn native_metal_two_atlas_feather_strokes_match_cpp_metal_and_rust_wgpu_oracles() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(
+            fixture_root.join("streams/first-light-two-atlas-feather-strokes.rive-stream"),
+        )
+        .expect("read two-atlas-stroke stream"),
+    )
+    .expect("parse two-atlas-stroke stream");
+    let (width, height) = stream.frame_size.expect("two-atlas-stroke frame size");
+
+    let mut factory = NativeMetalFactory::new(width, height).expect("create native Metal renderer");
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire native Metal two-atlas-stroke frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay two atlas strokes through native Metal");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish native Metal two-atlas-stroke frame");
+
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 3,
+            buffer_upload_calls: 7,
+            buffer_upload_bytes: 1_544,
+            queue_submissions: 1,
+            gpu_draw_calls: 4,
+            gpu_draw_instances: 22,
+            tessellation_spans: 11,
+            path_patches: 10,
+            ..BackendWorkMetrics::default()
+        },
+        "native Metal keeps both clipped stroke masks in separate upstream batches"
+    );
+
+    let cpp_metal = read_png(
+        fixture_root
+            .join("reference/metal/first-light-two-atlas-feather-strokes-clockwise-atomic.png"),
+    );
+    assert_rgba8_with_tolerance(
+        &output.pixels,
+        &cpp_metal,
+        2,
+        Some(2_048),
+        true,
+        "native Rust Metal two-atlas-stroke versus pinned C++ Metal",
+    );
+
+    let mut wgpu_factory = WgpuFactory::new(width, height).expect("create Rust-wgpu oracle");
+    let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
+    stream
+        .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
+        .expect("replay two atlas strokes through Rust-wgpu oracle");
+    let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
+    assert_rgba8_with_tolerance(
+        &output.pixels,
+        &wgpu_pixels,
+        2,
+        Some(2_048),
+        true,
+        "native Rust Metal two-atlas-stroke versus Rust-wgpu",
+    );
 }
 
 #[test]

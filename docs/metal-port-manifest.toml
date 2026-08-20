@@ -323,8 +323,10 @@ status = "in-progress"
 # schedule-once placeholders, LIFO completion routing, cached failures, and
 # recursive ubershader fallback. Selected family clones are refreshed on each
 # preparation, so an asynchronous fallback cannot become a permanent family
-# cache. The exact context queue is retainable for later same-context
-# RenderCanvas/ORE factory rows.
+# cache. The following contiguous file-first resource-factory block wires raw
+# and encoded image creation, retained adoption, one same-texture RenderCanvas
+# owner, and the RIVE_CANVAS-equivalent ORE constructor from the exact retained
+# context device and queue. Image draw admission remains in the flush rows.
 # This full source row remains in-progress:
 # divergent path-clip stacks and general clip mutation/restores after content,
 # gradients in clipped flushes, radial gradients, atlas, images, strokes,
@@ -349,6 +351,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_cache.rs",
+  "crates/nuxie-renderer/src/native_metal/render_canvas.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
@@ -375,6 +378,7 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_cache.rs",
+  "crates/nuxie-renderer/src/native_metal/render_canvas.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",

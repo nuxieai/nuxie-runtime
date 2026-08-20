@@ -1444,6 +1444,7 @@ dependencies = [
  "nuxie-binary",
  "nuxie-graph",
  "nuxie-image-codec",
+ "nuxie-ore-metal",
  "nuxie-render-api",
  "nuxie-render-stream",
  "nuxie-runtime",

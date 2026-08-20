@@ -457,6 +457,7 @@ feature-compile-gate-apple:
 		"nuxie-size-report-roots" "cargo check -p nuxie-size-report-roots --lib" \
 		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets" \
 		"nuxie --features apple-authored-msl" "cargo check -p nuxie --features apple-authored-msl --lib" \
+		"nuxie-renderer --features native-ore-metal-experimental" "cargo check -p nuxie-renderer --features native-ore-metal-experimental --lib" \
 		"nuxie --features ore-metal-authored-msl" "cargo check -p nuxie --no-default-features --features ore-metal-authored-msl --lib" \
 		"Darwin renderer measurement seam" "$(MAKE) --no-print-directory crate-seams-apple-check"
 

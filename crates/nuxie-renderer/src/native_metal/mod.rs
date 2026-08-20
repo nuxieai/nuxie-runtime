@@ -25,6 +25,7 @@ mod image_texture;
 mod pipeline_cache;
 #[allow(dead_code)]
 mod pipeline_names;
+mod render_canvas;
 #[allow(dead_code)]
 mod render_target;
 #[allow(dead_code)]
@@ -51,6 +52,8 @@ use capabilities::{
     MetalDeviceCapabilities,
 };
 use context::NativeMetalContext;
+use image_texture::NativeMetalTextureFormat;
+use nuxie_image_codec::{decode_image_rgba, preflight_encoded_image};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
     RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
@@ -67,6 +70,7 @@ use objc2_metal::{
     MTLScissorRect, MTLSize, MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor,
     MTLTextureUsage, MTLViewport,
 };
+pub use render_canvas::NativeMetalRenderCanvas;
 use render_target::RenderTargetMetal;
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -299,6 +303,41 @@ impl NativeMetalFactory {
         self.context.retained_queue()
     }
 
+    /// Wraps a caller-created Metal texture as a retained renderer image
+    /// without allocating storage or uploading bytes.
+    pub fn adopt_metal_image_texture(
+        &self,
+        texture: Retained<ProtocolObject<dyn MTLTexture>>,
+        width: u32,
+        height: u32,
+    ) -> Option<Box<dyn RenderImage>> {
+        self.context
+            .adopt_image_texture(texture, width, height)
+            .map(|image| Box::new(image) as Box<dyn RenderImage>)
+    }
+
+    /// Creates a private texture shared by a render-target owner and a
+    /// sampleable-image owner, matching the pinned Metal RenderCanvas factory.
+    pub fn make_metal_render_canvas(
+        &self,
+        width: u32,
+        height: u32,
+    ) -> Result<NativeMetalRenderCanvas, RendererError> {
+        validate_extent(width, height, self.context.capabilities().max_texture_size)?;
+        self.context.make_render_canvas(width, height)
+    }
+
+    /// Constructs ORE from the exact retained device and queue owned by this
+    /// renderer context. The opt-in feature corresponds to upstream's
+    /// `RIVE_CANVAS` build and cannot select a second Metal service.
+    #[cfg(feature = "native-ore-metal-experimental")]
+    pub fn make_ore_context(&self) -> nuxie_ore_metal::metal::context::ContextMetal {
+        nuxie_ore_metal::metal::context::ContextMetal::make(
+            self.context.retained_device(),
+            self.context.retained_queue(),
+        )
+    }
+
     pub(crate) fn begin_drawable_frame_parts<'a>(
         &self,
         drawable: &'a ProtocolObject<dyn objc2_metal::MTLDrawable>,
@@ -395,8 +434,36 @@ impl Factory for NativeMetalFactory {
         Box::new(LogicalPaint::default())
     }
 
-    fn decode_image(&mut self, _data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
-        Err(ImageDecodeError)
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        let dimensions = preflight_encoded_image(data).ok_or(ImageDecodeError)?;
+        let max_texture_size = self.context.capabilities().max_texture_size;
+        if dimensions.width == 0
+            || dimensions.height == 0
+            || dimensions.width > max_texture_size
+            || dimensions.height > max_texture_size
+        {
+            return Err(ImageDecodeError);
+        }
+        let decoded = decode_image_rgba(data).ok_or(ImageDecodeError)?;
+        if (decoded.width, decoded.height) != (dimensions.width, dimensions.height) {
+            return Err(ImageDecodeError);
+        }
+        let mip_level_count = u32::BITS - (decoded.width | decoded.height).leading_zeros();
+        let texture = self
+            .context
+            .make_image_texture(
+                decoded.width,
+                decoded.height,
+                mip_level_count,
+                NativeMetalTextureFormat::Rgba32,
+                &decoded.pixels,
+                1,
+                1,
+                false,
+                true,
+            )
+            .map_err(|_| ImageDecodeError)?;
+        Ok(Box::new(texture))
     }
 }
 

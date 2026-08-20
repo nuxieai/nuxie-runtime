@@ -764,10 +764,13 @@ The checked-in same-runner manifest preserves the independently selected C++
 Metal triangle budget: maximum channel delta 2 and at most 32 differing
 pixels. Its second row dynamically compares the forced `rust-metal-atomic`
 candidate with pinned `ffi-metal --mode clockwise-atomic`. That forced C++
-capture is byte-identical to the already checked-in gradient PNG, so the new
-atomic gradient row and focused integration test require zero channel delta,
-zero differing pixels, and exact occupancy without changing the older
-capability-driven raster-gradient row. Test-only canonical oracles prove every
+capture is byte-identical to the already checked-in gradient PNG, so the
+authoritative atomic gradient row requires zero channel delta, zero differing
+pixels, and exact occupancy without changing the older capability-driven
+raster-gradient row. Metal GPU Validation can perturb three dithered edge
+pixels by one LSB in the focused in-process test; that diagnostic keeps exact
+occupancy and a separate 1-LSB/3-pixel bound while the same-runner gate remains
+0/0. Test-only canonical oracles prove every
 prepared field, the gradient span/transform records, and the canonical
 exactly-once consumption report. Production uses the equivalent lightweight
 admitted record so the rooted product Mach-O does not retain WGPU through the
@@ -934,6 +937,31 @@ combined with gradients or clipping, advanced outer-curve/interior geometry,
 multiple logical flushes, the general scheduler, MSAA, fallback, and
 simulator/old-hardware matrices remain deferred. Encountering one of those
 families is a stop condition, not grounds to widen this slice or its tolerance.
+
+### File-first Metal resource factories
+
+The contiguous `render_context_metal_impl.mm:735-1040` factory block is
+accounted for as a source unit rather than as image feature slices. Render
+targets and buffers retain their existing typed owners. `makeImageTexture`
+now enters the same context owner through `Factory::decode_image`: encoded
+input is preflighted, decoded to canonical RGBA, checked against the selected
+device limit, uploaded at mip zero, and leaves the remaining mip chain dirty
+for the source-ordered image-mipmap pass. The raw owner still preserves the
+pinned RGBA, BC7, ASTC, ETC2, block-layout, and adopt behavior; encoded RGBA is
+an explicit Factory-boundary adaptation.
+
+`makeRenderCanvas` is represented by one deep owner holding a private
+RGBA8Unorm, render-target|shader-read texture through both a
+`RenderTargetMetal` and an adopted image wrapper. Its live public test proves
+the two views retain the exact same native object. This closes construction,
+not compositing: image admission, bindings, ImageRect/ImageMesh draws, and the
+general flush remain separately partial in the file map.
+
+The upstream `RIVE_CANVAS`-guarded `makeOreContext` is mirrored by the opt-in
+`native-ore-metal-experimental` feature. It constructs ORE from retained
+copies of the renderer context's exact device and queue and submits a validated
+empty command buffer through that queue. It cannot select a second Metal
+service, and ordinary native builds do not link ORE.
 
 ## ORE-specific fail-closed rules
 

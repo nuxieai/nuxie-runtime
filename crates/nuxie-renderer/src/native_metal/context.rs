@@ -19,11 +19,13 @@ use super::draw_shader::DrawShaderLibrary;
 use super::feather_atlas_pipeline::FeatherAtlasPipelines;
 use super::feather_atlas_resource::FeatherAtlasResource;
 use super::gradient_resource::{GradientResource, GRADIENT_TEXTURE_WIDTH};
+use super::image_texture::{NativeMetalImageTexture, NativeMetalTextureFormat};
 use super::pipeline_cache::{
     shader_features_mask_for, CompatibleDrawPipelineCache, MetalPipelineCacheBackend,
     NativeCompatibleDrawPipelineCache, NativeMetalContextOptions, PipelineFailureInjection,
     PipelinePlatformFeatures, PipelineRequest, PipelineSelection,
 };
+use super::render_canvas::NativeMetalRenderCanvas;
 use super::samplers::NativeMetalSamplers;
 use super::tessellation_resource::{
     TessellationResource, K_TESS_SPAN_INDICES, TESSELLATION_TEXTURE_WIDTH,
@@ -519,6 +521,49 @@ impl NativeMetalContext {
         sampler: nuxie_render_api::ImageSampler,
     ) -> &ProtocolObject<dyn objc2_metal::MTLSamplerState> {
         self.samplers.sampler(sampler)
+    }
+
+    pub(crate) fn make_image_texture(
+        &self,
+        width: u32,
+        height: u32,
+        mip_level_count: u32,
+        format: NativeMetalTextureFormat,
+        image_data: &[u8],
+        block_width: u8,
+        block_height: u8,
+        srgb: bool,
+        generate_remaining_mips: bool,
+    ) -> Result<NativeMetalImageTexture, RendererError> {
+        NativeMetalImageTexture::new(
+            self.device(),
+            width,
+            height,
+            mip_level_count,
+            format,
+            image_data,
+            block_width,
+            block_height,
+            srgb,
+            generate_remaining_mips,
+        )
+    }
+
+    pub(crate) fn adopt_image_texture(
+        &self,
+        texture: Retained<ProtocolObject<dyn MTLTexture>>,
+        width: u32,
+        height: u32,
+    ) -> Option<NativeMetalImageTexture> {
+        NativeMetalImageTexture::adopt(Some(texture), width, height)
+    }
+
+    pub(crate) fn make_render_canvas(
+        &self,
+        width: u32,
+        height: u32,
+    ) -> Result<NativeMetalRenderCanvas, RendererError> {
+        NativeMetalRenderCanvas::new(self.retained_device(), self.capabilities, width, height)
     }
 
     pub(crate) fn prepare_resources(

@@ -16,7 +16,8 @@ use crate::RendererError;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_metal::{
-    MTLCommandBuffer, MTLCommandBufferStatus, MTLCommandQueue, MTLDevice, MTLRenderPipelineState,
+    MTLCommandBuffer, MTLCommandBufferStatus, MTLCommandQueue, MTLDevice, MTLDrawable,
+    MTLRenderPipelineState,
 };
 
 /// Long-lived resources shared by every frame from one native Metal factory.
@@ -27,7 +28,8 @@ pub(crate) struct NativeMetalContext {
     device: Retained<ProtocolObject<dyn MTLDevice>>,
     queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
     capabilities: MetalCapabilitySelection,
-    solid_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
+    solid_rgba_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
+    solid_bgra_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     // The offline draw library and sampler table are retained now even though
     // the diagnostic draw encoder does not consume them yet. Upstream owns
     // both for the complete context lifetime.
@@ -46,12 +48,16 @@ impl NativeMetalContext {
         let draw_shader_library = DrawShaderLibrary::load(&device)
             .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
         let samplers = NativeMetalSamplers::new(&device)?;
-        let solid_pipeline = make_solid_pipeline(&device)?;
+        let solid_rgba_pipeline =
+            make_solid_pipeline(&device, objc2_metal::MTLPixelFormat::RGBA8Unorm)?;
+        let solid_bgra_pipeline =
+            make_solid_pipeline(&device, objc2_metal::MTLPixelFormat::BGRA8Unorm)?;
         Ok(Self {
             device,
             queue,
             capabilities,
-            solid_pipeline,
+            solid_rgba_pipeline,
+            solid_bgra_pipeline,
             _draw_shader_library: draw_shader_library,
             _samplers: samplers,
         })
@@ -69,8 +75,19 @@ impl NativeMetalContext {
         self.capabilities
     }
 
-    pub(crate) fn solid_pipeline(&self) -> &ProtocolObject<dyn MTLRenderPipelineState> {
-        &self.solid_pipeline
+    pub(crate) fn solid_pipeline(
+        &self,
+        pixel_format: objc2_metal::MTLPixelFormat,
+    ) -> Result<&ProtocolObject<dyn MTLRenderPipelineState>, RendererError> {
+        if pixel_format == objc2_metal::MTLPixelFormat::RGBA8Unorm {
+            Ok(&self.solid_rgba_pipeline)
+        } else if pixel_format == objc2_metal::MTLPixelFormat::BGRA8Unorm {
+            Ok(&self.solid_bgra_pipeline)
+        } else {
+            Err(RendererError::NativeMetal(format!(
+                "native Metal tracer does not support target pixel format {pixel_format:?}"
+            )))
+        }
     }
 
     /// Acquires the one command buffer that a frame owns until finish or drop.
@@ -90,6 +107,48 @@ impl NativeMetalContext {
             command_buffer.status(),
             command_buffer.error().map(|error| format!("{error:?}")),
         )
+    }
+
+    /// Commits renderer work, then schedules the product drawable on the next
+    /// command buffer from the same queue. This preserves the pinned product
+    /// boundary in `fiddle_context_metal.mm:114-121,186-190`.
+    pub(crate) fn commit_and_present(
+        &self,
+        render_command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+        drawable: &ProtocolObject<dyn MTLDrawable>,
+    ) -> Result<(), RendererError> {
+        render_command_buffer.commit();
+        let presentation_command_buffer = match self.make_command_buffer() {
+            Ok(command_buffer) => command_buffer,
+            Err(presentation_error) => {
+                render_command_buffer.waitUntilCompleted();
+                let render_result = command_buffer_completion_result(
+                    render_command_buffer.status(),
+                    render_command_buffer
+                        .error()
+                        .map(|error| format!("{error:?}")),
+                );
+                return render_result.and(Err(presentation_error));
+            }
+        };
+        presentation_command_buffer.presentDrawable(drawable);
+        presentation_command_buffer.commit();
+
+        render_command_buffer.waitUntilCompleted();
+        let render_result = command_buffer_completion_result(
+            render_command_buffer.status(),
+            render_command_buffer
+                .error()
+                .map(|error| format!("{error:?}")),
+        );
+        presentation_command_buffer.waitUntilCompleted();
+        let presentation_result = command_buffer_completion_result(
+            presentation_command_buffer.status(),
+            presentation_command_buffer
+                .error()
+                .map(|error| format!("{error:?}")),
+        );
+        render_result.and(presentation_result)
     }
 }
 

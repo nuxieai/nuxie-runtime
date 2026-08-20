@@ -1,0 +1,100 @@
+//! Caller-supplied Metal drawable validation, rendering, and presentation.
+//!
+//! This adapts the external target-texture seam in
+//! `renderer/src/metal/render_context_metal_impl.mm:735-781` and the product
+//! ordering oracle in
+//! `renderer/path_fiddle/fiddle_context_metal.mm:65-84,100-120,186-191`, all
+//! pinned at `4ac7b32798da0482e441ef09304dc3b480ed3ee5`. The platform caller
+//! retains ownership of acquisition, actor scheduling, and layer policy.
+
+use super::{NativeMetalContext, NativeMetalFrame, NativeMetalRenderState, RenderTargetMetal};
+use crate::RendererError;
+use objc2::rc::Retained;
+use objc2::runtime::ProtocolObject;
+use objc2_metal::{MTLDevice, MTLDrawable, MTLPixelFormat, MTLResource, MTLTexture};
+use std::cell::RefCell;
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
+use std::sync::Arc;
+
+/// One renderer frame borrowing the platform caller's presentation owner.
+pub struct NativeMetalDrawableFrame<'a> {
+    frame: NativeMetalFrame,
+    drawable: &'a ProtocolObject<dyn MTLDrawable>,
+}
+
+impl<'a> NativeMetalDrawableFrame<'a> {
+    pub(crate) fn new(
+        context: Arc<NativeMetalContext>,
+        drawable: &'a ProtocolObject<dyn MTLDrawable>,
+        texture: Retained<ProtocolObject<dyn MTLTexture>>,
+        clear_color: u32,
+    ) -> Result<Self, RendererError> {
+        validate_drawable_texture(&texture, context.device())?;
+        let width = u32::try_from(texture.width())
+            .map_err(|_| RendererError::NativeMetal("drawable width exceeds UInt32".to_owned()))?;
+        let height = u32::try_from(texture.height())
+            .map_err(|_| RendererError::NativeMetal("drawable height exceeds UInt32".to_owned()))?;
+        let mut target = RenderTargetMetal::new(
+            context.retained_device(),
+            MTLPixelFormat::BGRA8Unorm,
+            width,
+            height,
+            context.capabilities(),
+        )?;
+        target.set_target_texture(Some(texture))?;
+        let command_buffer = context.make_command_buffer()?;
+        let frame = NativeMetalFrame {
+            context,
+            target: Rc::new(RefCell::new(target)),
+            command_buffer,
+            clear_color,
+            state: NativeMetalRenderState::default(),
+            state_stack: Vec::new(),
+            solid_draws: Vec::new(),
+            unsupported: None,
+        };
+        Ok(Self { frame, drawable })
+    }
+
+    /// Commits renderer work, then presents the borrowed drawable on the next
+    /// command buffer from the same queue, matching the pinned product oracle.
+    pub fn finish(self) -> Result<(), RendererError> {
+        self.frame.encode()?;
+        self.frame
+            .context
+            .commit_and_present(&self.frame.command_buffer, self.drawable)
+    }
+}
+
+impl Deref for NativeMetalDrawableFrame<'_> {
+    type Target = NativeMetalFrame;
+
+    fn deref(&self) -> &Self::Target {
+        &self.frame
+    }
+}
+
+impl DerefMut for NativeMetalDrawableFrame<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.frame
+    }
+}
+
+fn validate_drawable_texture(
+    texture: &ProtocolObject<dyn MTLTexture>,
+    context_device: &ProtocolObject<dyn MTLDevice>,
+) -> Result<(), RendererError> {
+    if texture.pixelFormat() != MTLPixelFormat::BGRA8Unorm {
+        return Err(RendererError::NativeMetal(
+            "drawable texture is not BGRA8Unorm".to_owned(),
+        ));
+    }
+    let texture_device = texture.device();
+    if Retained::as_ptr(&texture_device) != std::ptr::from_ref(context_device) {
+        return Err(RendererError::NativeMetal(
+            "drawable texture belongs to a different MTLDevice".to_owned(),
+        ));
+    }
+    Ok(())
+}

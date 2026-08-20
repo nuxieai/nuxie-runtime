@@ -127,6 +127,20 @@ pub struct AppleSurface {
     attached: bool,
 }
 
+#[cfg(feature = "native-metal-experimental")]
+impl crate::NativeMetalFactory {
+    /// Begins a native Metal frame from one caller-acquired drawable. The
+    /// texture is derived from that same object so rendering and presentation
+    /// cannot accidentally target different native owners.
+    pub fn begin_drawable_frame<'a>(
+        &self,
+        drawable: &'a ProtocolObject<dyn CAMetalDrawable>,
+        clear_color: u32,
+    ) -> Result<crate::NativeMetalDrawableFrame<'a>, RendererError> {
+        self.begin_drawable_frame_parts(drawable.as_ref(), drawable.texture(), clear_color)
+    }
+}
+
 /// One Objective-C +1 `MTLDevice` copy whose ownership has not yet crossed an
 /// FFI boundary. Dropping it releases the copy; `into_raw` transfers it.
 pub struct AppleMetalDevice {
@@ -431,6 +445,8 @@ fn metal_failure_kind(error_code: Option<isize>) -> WgpuExternalDeviceFailureKin
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "native-metal-experimental")]
+    use nuxie_render_stream::RenderStream;
     use objc2::rc::{autoreleasepool, Retained};
     use objc2_core_foundation::CGSize;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -448,6 +464,56 @@ mod tests {
         layer.setMaximumDrawableCount(2);
         layer.setAllowsNextDrawableTimeout(true);
         layer
+    }
+
+    #[cfg(feature = "native-metal-experimental")]
+    #[test]
+    fn native_metal_caller_acquired_drawables_present_beyond_layer_capacity() {
+        autoreleasepool(|_| {
+            let fixture_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../fixtures/renderer");
+            let stream = RenderStream::parse(
+                &std::fs::read_to_string(
+                    fixture_root.join("streams/first-light-rectangle.rive-stream"),
+                )
+                .expect("read rectangle stream"),
+            )
+            .expect("parse rectangle stream");
+            let (width, height) = stream.frame_size.expect("rectangle frame size");
+            let mut factory = crate::NativeMetalFactory::new(width, height)
+                .expect("create native Metal renderer");
+            let layer = CAMetalLayer::new();
+            let device = factory.retained_metal_device();
+            layer.setDevice(Some(&device));
+            layer.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+            layer.setFramebufferOnly(true);
+            layer.setDrawableSize(CGSize::new(width.into(), height.into()));
+            layer.setMaximumDrawableCount(2);
+            layer.setAllowsNextDrawableTimeout(true);
+
+            let completed_frame_count = layer.maximumDrawableCount() * 3 + 1;
+            for _ in 0..completed_frame_count {
+                autoreleasepool(|_| {
+                    let drawable = layer
+                        .nextDrawable()
+                        .expect("caller acquires a drawable on its platform boundary");
+                    let mut frame = factory
+                        .begin_drawable_frame(&drawable, stream.clear_color.unwrap_or(0))
+                        .expect("renderer validates caller-acquired drawable");
+                    stream
+                        .replay_frame(0, &mut factory, &mut *frame)
+                        .expect("replay rectangle into caller-acquired drawable");
+                    frame
+                        .finish()
+                        .expect("render and present caller-acquired drawable");
+                });
+            }
+
+            assert!(
+                layer.nextDrawable().is_some(),
+                "more completed frames than capacity must leave the layer reusable"
+            );
+        });
     }
 
     fn wait_for_metal_queue(surface: &AppleSurface) {

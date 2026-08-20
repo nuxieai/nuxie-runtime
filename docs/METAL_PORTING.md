@@ -126,12 +126,39 @@ promotion requirement.
 
 The first mechanical wave records the complete
 `generate_draw_combinations.py` translation with its focused byte oracle as
-`ported`. The background compiler and render-context rows remain
-`in-progress`: background compilation includes job inputs and the deterministic
-macro/source plan, but not the compiler thread or `newLibraryWithSource`;
-render-context coverage includes only precompiled-function naming,
-draw-pipeline policy, render-target/lazy atomic resources, and the shared exact
-`DrawType` discriminants.
+`ported`. The second wave adds the complete background compiler worker and
+native `newLibraryWithSource` adapter, and the offline `draw.metal` source
+closure and metallib loader; those source rows are `ported` after the focused
+crate tests execute the real Metal compiler and library loader. The promotion
+evidence must come from a run with a system Metal device: the portability guard
+that skips a live test when no device exists is not sufficient promotion
+evidence by itself. For this wave, both live tests executed and passed on the
+macOS Metal host, and all macOS, iOS-device, and iOS-simulator target builds
+produced both offline metallibs. Their exact offline fixtures are
+`crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_macros.txt`,
+every file under the pinned
+`crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/`
+set enumerated in the source manifest, and
+`crates/nuxie-renderer/tests/fixtures/native_metal/offline_draw_shader/source_inventory.txt`.
+
+The render-context header and implementation rows remain `in-progress`. Their
+coverage now also includes retained Metal buffer rings, image-texture upload
+and mip generation, the complete sampler permutation table, and construction
+of retained offline draw-library and sampler owners. Image decode/upload is not
+wired into product behavior yet. The existing tracer solid pipeline remains
+the selected diagnostic pipeline. Because the public `Factory` render-buffer
+constructor is infallible, a native Metal allocation failure deliberately
+terminates at that backend boundary; it never substitutes CPU storage or the
+wgpu renderer.
+
+The image-texture leaf records one intent-preserving correction to pinned C++:
+the upstream ASTC calculation adds a footprint index to
+`MTLPixelFormatASTC_4x4_LDR`, but Metal reserves enum value 209 between the
+6x6 and 8x5 formats. Rust uses an explicit 14-entry `MTLPixelFormat` table so
+8x5 and every later footprint cross that enum gap without selecting the wrong
+format. The focused
+`astc_footprints_use_their_exact_metal_pixel_formats_across_enum_gap` test is
+the evidence for this adaptation.
 
 ## Trial translation: UNIV-2086
 

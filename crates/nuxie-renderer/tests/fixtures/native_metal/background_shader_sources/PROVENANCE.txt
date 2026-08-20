@@ -1,0 +1,4 @@
+upstream_sha=4ac7b32798da0482e441ef09304dc3b480ed3ee5
+source_directory=tests/out/release/include/generated/shaders
+metal_exports_sha256=b415a51a8f22f1485be7c8ec4c033609288652a4396add1129a3df4f54ebd8b7
+assembly=metal + each subsequent selected fragment followed by LF

@@ -42,7 +42,7 @@ pollster = "0.4"
 block2 = "0.6.2"
 objc2 = "0.6.4"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSError", "NSString"] }
-objc2-metal = { version = "0.3.2", default-features = false, features = ["block2", "MTLAllocation", "MTLCommandBuffer", "MTLCommandEncoder", "MTLCommandQueue", "MTLDevice", "MTLDrawable", "MTLLibrary", "MTLPixelFormat", "MTLRenderCommandEncoder", "MTLRenderPass", "MTLRenderPipeline", "MTLResource", "MTLTexture", "MTLTypes"] }
+objc2-metal = { version = "0.3.2", default-features = false, features = ["block2", "MTLAllocation", "MTLBlitCommandEncoder", "MTLBuffer", "MTLCommandBuffer", "MTLCommandEncoder", "MTLCommandQueue", "MTLDevice", "MTLDrawable", "MTLLibrary", "MTLPixelFormat", "MTLRenderCommandEncoder", "MTLRenderPass", "MTLRenderPipeline", "MTLResource", "MTLSampler", "MTLTexture", "MTLTypes"] }
 objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["std", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
 wgpu-hal = { version = "=30.0.0", path = "../../vendor/wgpu-hal-30.0.0", optional = true }
 

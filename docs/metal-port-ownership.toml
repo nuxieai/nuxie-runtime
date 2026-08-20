@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 8, in-progress = 4, ported = 0, verified = 0 }
+expected_status_counts = { pending = 8, in-progress = 5, ported = 0, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -25,6 +25,16 @@ status = "in-progress"
 rule = "The context retains the device and optional queue. Each flush receives exactly one command buffer, and commit/abandon paths cannot double-submit or leak it."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:112-133", "cpp:renderer/src/metal/render_context_metal_impl.mm:1227-1246"]
 required_tests = ["queue required before product submission", "one command buffer per flush", "completion and error status propagation", "abandoned frame releases uncommitted resources"]
+evidence_paths = ["crates/nuxie-renderer/src/native_metal/mod.rs"]
+
+[[owner]]
+id = "renderer.background_shader_compiler_lifecycle"
+issue = "UNIV-2086"
+status = "in-progress"
+rule = "The compiler retains metal_features and platform beside shared.pending_jobs, shared.finished_jobs, shared.should_quit, both condition variables, the one-shot compiler callback, and at most one lazily started worker handle; pending work is FIFO, completion publication is LIFO, and drop signals quit and joins before releasing the native callback and its retained device."
+citations = ["cpp:renderer/src/metal/background_shader_compiler.h:17-61", "cpp:renderer/src/metal/background_shader_compiler.mm:28-93", "cpp:renderer/src/metal/background_shader_compiler.mm:277-344"]
+required_tests = ["construction does not start the worker", "FIFO pending compile and LIFO completion publication", "drop during active compilation signals quit and joins before pending work", "compiler panic publishes a failure and preserves later work", "device-backed native callback compiles source while retaining its device"]
+evidence_paths = ["crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs"]
 
 [[owner]]
 id = "renderer.buffer_ring_reuse"
@@ -33,6 +43,7 @@ status = "pending"
 rule = "Uniform, storage, and vertex rings rotate only after the corresponding GPU frame is safe; CPU writes never race an in-flight frame."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:193-212", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:277-280", "cpp:renderer/src/metal/render_context_metal_impl.mm:1255-1276"]
 required_tests = ["ring rollover", "more than kBufferRingSize concurrent submissions", "completion unblocks reuse", "abandonment does not permanently lock a ring"]
+evidence_paths = ["crates/nuxie-renderer/src/native_metal/buffer.rs"]
 
 [[owner]]
 id = "renderer.offline_library_and_pipeline_cache"
@@ -45,10 +56,13 @@ evidence_paths = [
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_macros.txt",
   "crates/nuxie-renderer/tests/fixtures/native_metal/draw_combinations-4ac7b327-9f33bdcd.metal",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/offline_draw_shader/source_inventory.txt",
 ]
 
 [[owner]]
@@ -66,6 +80,10 @@ status = "pending"
 rule = "Gradient, Gaussian, tessellation, feather-atlas, sampler, path-patch, and image-rect resources remain context-owned and are resized or recreated at the same lifecycle points as upstream."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:244-275", "cpp:renderer/src/metal/render_context_metal_impl.mm:100-175"]
 required_tests = ["gradient resize and reuse", "tessellation span upload and rollover", "atlas resize and preservation rules", "sampler permutation completeness"]
+evidence_paths = [
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/samplers.rs",
+]
 
 [[owner]]
 id = "renderer.flush_encoding"

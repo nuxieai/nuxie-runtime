@@ -13,6 +13,7 @@ mod command_submission;
 mod context;
 #[allow(dead_code)]
 mod draw_combinations;
+mod draw_pass;
 #[allow(dead_code)]
 mod draw_pipeline;
 #[allow(dead_code)]
@@ -1249,7 +1250,7 @@ impl NativeMetalFrame {
             super::logical_frame::prepare_raster_ordering_atlas_flush(config, &inputs)
                 .map_err(RendererError::Unsupported)?
         };
-        let target = self.target.borrow();
+        let mut target = self.target.borrow_mut();
         let width = target.width();
         let height = target.height();
         let texture = target.retained_target_texture().ok_or_else(|| {
@@ -1324,36 +1325,69 @@ impl NativeMetalFrame {
         if !self.gradient_draws.is_empty() || atlas_flush.is_some() {
             configure_raster_order_attachments(&pass, &target)?;
         }
-        let encoder = self
-            .command_buffer
-            .renderCommandEncoderWithDescriptor(&pass)
-            .ok_or_else(|| {
-                RendererError::NativeMetal("failed to create render command encoder".into())
-            })?;
+        let encoder = if let Some(flush) = atlas_flush.as_ref() {
+            draw_pass::make_render_pass_for_draws(
+                &self.context,
+                &self.command_buffer,
+                &pass,
+                &mut target,
+                self.resource_lease
+                    .as_ref()
+                    .expect("atlas resource passes prepared a lease"),
+                draw_pass::DrawPassDescriptor {
+                    width,
+                    height,
+                    binding_plan: draw_pass::DrawPassPlanInput {
+                        interlock_mode: shader_compile_plan::InterlockMode::RasterOrdering,
+                        baseline_shader_misc_flags:
+                            shader_compile_plan::FIXED_FUNCTION_COLOR_OUTPUT,
+                        path_count: flush.draws.len(),
+                        contour_count: flush.contours.len(),
+                    },
+                    wireframe: false,
+                },
+            )?
+        } else if let Some(draw) = self.gradient_draws.first() {
+            draw_pass::make_render_pass_for_draws(
+                &self.context,
+                &self.command_buffer,
+                &pass,
+                &mut target,
+                self.resource_lease
+                    .as_ref()
+                    .expect("gradient resource passes prepared a lease"),
+                draw_pass::DrawPassDescriptor {
+                    width,
+                    height,
+                    binding_plan: draw_pass::DrawPassPlanInput {
+                        interlock_mode: shader_compile_plan::InterlockMode::RasterOrdering,
+                        baseline_shader_misc_flags:
+                            shader_compile_plan::FIXED_FUNCTION_COLOR_OUTPUT,
+                        path_count: 1,
+                        contour_count: draw.tessellation.contours.len(),
+                    },
+                    wireframe: false,
+                },
+            )?
+        } else {
+            self.command_buffer
+                .renderCommandEncoderWithDescriptor(&pass)
+                .ok_or_else(|| {
+                    RendererError::NativeMetal("failed to create render command encoder".into())
+                })?
+        };
         if let Some(flush) = atlas_flush.as_ref() {
             encode_atlas_final_draw(
                 &self.context,
                 &encoder,
                 target.pixel_format(),
-                width,
-                height,
                 flush,
                 self.resource_lease
                     .as_ref()
                     .expect("atlas resource passes prepared a lease"),
             )?;
         } else if let Some(draw) = self.gradient_draws.first() {
-            encode_gradient_final_draw(
-                &self.context,
-                &encoder,
-                target.pixel_format(),
-                width,
-                height,
-                draw,
-                self.resource_lease
-                    .as_ref()
-                    .expect("gradient resource passes prepared a lease"),
-            )?;
+            encode_gradient_final_draw(&self.context, &encoder, target.pixel_format(), draw)?;
         } else if !self.solid_draws.is_empty() {
             encoder.setRenderPipelineState(self.context.solid_pipeline(target.pixel_format())?);
             let viewport = [width as f32, height as f32];
@@ -1518,10 +1552,6 @@ fn encode_atomic_tessellation_pass(
     Ok(())
 }
 
-const ATOMIC_COLOR_BUFFER_INDEX: usize = 16;
-const ATOMIC_CLIP_BUFFER_INDEX: usize = 17;
-const ATOMIC_COVERAGE_BUFFER_INDEX: usize = 19;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct AtomicBarrierInventory {
     semantic: usize,
@@ -1550,59 +1580,39 @@ fn make_atomic_main_encoder(
     width: u32,
     height: u32,
     lease: &context::PreparedResourceLease,
-    uses_color_plane: bool,
+    flush: &PreparedAtomicPathFlush,
 ) -> Result<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>, RendererError> {
-    let encoder = command_buffer
-        .renderCommandEncoderWithDescriptor(pass)
-        .ok_or_else(|| {
-            RendererError::NativeMetal("failed to create atomic path encoder".to_owned())
-        })?;
-    encoder.setViewport(MTLViewport {
-        originX: 0.0,
-        originY: 0.0,
-        width: width as f64,
-        height: height as f64,
-        znear: 0.0,
-        zfar: 1.0,
-    });
-    bind_vertex_buffer(&encoder, &lease.flush_uniforms, 3);
-    bind_fragment_buffer(&encoder, &lease.flush_uniforms, 3);
-    bind_vertex_buffer(&encoder, &lease.paths, 5);
-    bind_fragment_buffer(&encoder, &lease.paints, 6);
-    bind_fragment_buffer(&encoder, &lease.paint_aux, 7);
-    bind_vertex_buffer(&encoder, &lease.contours, 8);
-    // SAFETY: 7, 8, 9, 11, 16, 17, and 19 are generated Metal binding indices
-    // for tessellation, gradient ramp, Gaussian LUT, linear-clamp sampler,
-    // color atomics, clip atomics, and coverage atomics. Every object/buffer is
-    // retained by the context, resource lease, or render target until
-    // command-buffer completion.
+    let encoder = draw_pass::make_render_pass_for_draws(
+        context,
+        command_buffer,
+        pass,
+        target,
+        lease,
+        draw_pass::DrawPassDescriptor {
+            width,
+            height,
+            binding_plan: draw_pass::DrawPassPlanInput {
+                interlock_mode: shader_compile_plan::InterlockMode::Atomics,
+                baseline_shader_misc_flags: if flush.uses_advanced_blend {
+                    0
+                } else {
+                    shader_compile_plan::FIXED_FUNCTION_COLOR_OUTPUT
+                },
+                path_count: flush.paths.len(),
+                contour_count: flush.contours.len(),
+            },
+            wireframe: false,
+        },
+    )?;
+    // Upstream binds the selected image sampler per draw batch after creating
+    // the common pass. Current atomic batches carry no images, so every batch
+    // selects the same linear-clamp fallback at the generated image slot.
+    // SAFETY: slot 11 is the generated image-sampler ABI, and the context
+    // retains the sampler through command completion.
     unsafe {
-        encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
-        if let Some(gradient) = lease.gradient.as_deref() {
-            encoder.setFragmentTexture_atIndex(Some(gradient), 8);
-        }
-        encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
-        encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
         encoder.setFragmentSamplerState_atIndex(
             Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
             11,
-        );
-        if uses_color_plane {
-            encoder.setFragmentBuffer_offset_atIndex(
-                Some(target.color_atomic_buffer()?),
-                0,
-                ATOMIC_COLOR_BUFFER_INDEX,
-            );
-        }
-        encoder.setFragmentBuffer_offset_atIndex(
-            Some(target.clip_atomic_buffer()?),
-            0,
-            ATOMIC_CLIP_BUFFER_INDEX,
-        );
-        encoder.setFragmentBuffer_offset_atIndex(
-            Some(target.coverage_atomic_buffer()?),
-            0,
-            ATOMIC_COVERAGE_BUFFER_INDEX,
         );
     }
     Ok(encoder)
@@ -1616,7 +1626,7 @@ fn apply_atomic_barrier(
     width: u32,
     height: u32,
     lease: &context::PreparedResourceLease,
-    uses_color_plane: bool,
+    flush: &PreparedAtomicPathFlush,
     encoder: Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>,
     render_passes: &mut u64,
 ) -> Result<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>, RendererError> {
@@ -1645,7 +1655,7 @@ fn apply_atomic_barrier(
                 width,
                 height,
                 lease,
-                uses_color_plane,
+                flush,
             )
         }
     }
@@ -1661,7 +1671,6 @@ fn encode_atomic_main_pass(
     flush: &PreparedAtomicPathFlush,
     lease: &context::PreparedResourceLease,
 ) -> Result<u64, RendererError> {
-    target.prepare_atomic_planes(flush.uses_advanced_blend)?;
     let pipelines = lease
         .atomic_path_pipelines
         .as_ref()
@@ -1689,7 +1698,7 @@ fn encode_atomic_main_pass(
         width,
         height,
         lease,
-        flush.uses_advanced_blend,
+        flush,
     )?;
     let full_scissor = MTLScissorRect {
         x: 0,
@@ -1712,7 +1721,7 @@ fn encode_atomic_main_pass(
         width,
         height,
         lease,
-        flush.uses_advanced_blend,
+        flush,
         encoder,
         &mut render_passes,
     )?;
@@ -1728,7 +1737,7 @@ fn encode_atomic_main_pass(
                 width,
                 height,
                 lease,
-                flush.uses_advanced_blend,
+                flush,
                 encoder,
                 &mut render_passes,
             )?;
@@ -1812,7 +1821,7 @@ fn encode_atomic_main_pass(
         width,
         height,
         lease,
-        flush.uses_advanced_blend,
+        flush,
         encoder,
         &mut render_passes,
     )?;
@@ -2172,43 +2181,22 @@ fn encode_atlas_final_draw(
     context: &NativeMetalContext,
     encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
     pixel_format: MTLPixelFormat,
-    width: u32,
-    height: u32,
     flush: &super::logical_frame::PreparedRasterOrderingAtlasFlush,
     lease: &context::PreparedResourceLease,
 ) -> Result<(), RendererError> {
-    encoder.setViewport(MTLViewport {
-        originX: 0.0,
-        originY: 0.0,
-        width: width as f64,
-        height: height as f64,
-        znear: 0.0,
-        zfar: 1.0,
-    });
     let atlas_blit_pipeline = context.atlas_blit_pipeline(pixel_format)?;
     encoder.setRenderPipelineState(&atlas_blit_pipeline);
     let triangles = lease.triangles.as_deref().ok_or_else(|| {
         RendererError::NativeMetal("atlas blit triangle upload is absent".to_owned())
     })?;
     bind_vertex_buffer(encoder, triangles, 0);
-    bind_vertex_buffer(encoder, &lease.flush_uniforms, 3);
-    bind_fragment_buffer(encoder, &lease.flush_uniforms, 3);
-    bind_vertex_buffer(encoder, &lease.paths, 5);
-    bind_vertex_buffer(encoder, &lease.paints, 6);
-    bind_vertex_buffer(encoder, &lease.paint_aux, 7);
-    bind_vertex_buffer(encoder, &lease.contours, 8);
-    let atlas_texture = lease.feather_atlas.as_deref().ok_or_else(|| {
+    lease.feather_atlas.as_deref().ok_or_else(|| {
         RendererError::NativeMetal("feather atlas texture is absent for final blit".to_owned())
     })?;
-    // SAFETY: slots 7-11 are the pinned compatible AtlasBlit ubershader ABI;
-    // all objects are retained by the context or resource lease until the
-    // synchronous command-buffer completion point.
+    // SAFETY: slot 11 is the generated image-sampler ABI. Common textures and
+    // buffers were bound once by `make_render_pass_for_draws`, and the context
+    // retains this per-batch default sampler through command completion.
     unsafe {
-        encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
-        encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
-        encoder.setFragmentTexture_atIndex(lease.gradient.as_deref(), 8);
-        encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
-        encoder.setFragmentTexture_atIndex(Some(atlas_texture), 10);
         encoder.setFragmentSamplerState_atIndex(
             Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
             11,
@@ -2231,19 +2219,8 @@ fn encode_gradient_final_draw(
     context: &NativeMetalContext,
     encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
     pixel_format: MTLPixelFormat,
-    width: u32,
-    height: u32,
     draw: &GradientDraw,
-    lease: &context::PreparedResourceLease,
 ) -> Result<(), RendererError> {
-    encoder.setViewport(MTLViewport {
-        originX: 0.0,
-        originY: 0.0,
-        width: width as f64,
-        height: height as f64,
-        znear: 0.0,
-        zfar: 1.0,
-    });
     let midpoint_pipeline = context.midpoint_draw_pipeline(pixel_format)?;
     encoder.setRenderPipelineState(&midpoint_pipeline);
     // SAFETY: buffer slot zero is the pinned path-patch vertex ABI, offset zero
@@ -2256,20 +2233,10 @@ fn encode_gradient_final_draw(
     // so instance zero starts at `base_instance == 1`, rather than joining the
     // zero-filled padding texel at the origin to the authored contour.
     set_vertex_bytes(encoder, &draw.tessellation.base_instance, 4)?;
-    bind_vertex_buffer(encoder, &lease.flush_uniforms, 3);
-    bind_fragment_buffer(encoder, &lease.flush_uniforms, 3);
-    bind_vertex_buffer(encoder, &lease.paths, 5);
-    bind_vertex_buffer(encoder, &lease.paints, 6);
-    bind_vertex_buffer(encoder, &lease.paint_aux, 7);
-    bind_vertex_buffer(encoder, &lease.contours, 8);
-    // SAFETY: slots 7, 8, 9, and 11 are the exact pinned ubershader ABI. The
-    // lease and context retain every texture and sampler until synchronous
-    // command-buffer completion, so no bound Objective-C object can dangle.
+    // SAFETY: slot 11 is the generated image-sampler ABI. Common textures and
+    // buffers were bound once by `make_render_pass_for_draws`, and the context
+    // retains this per-batch default sampler through command completion.
     unsafe {
-        encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
-        encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
-        encoder.setFragmentTexture_atIndex(lease.gradient.as_deref(), 8);
-        encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
         encoder.setFragmentSamplerState_atIndex(
             Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
             11,

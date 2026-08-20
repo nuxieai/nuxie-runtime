@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 8, in-progress = 5, ported = 1, verified = 0 }
+expected_status_counts = { pending = 8, in-progress = 4, ported = 2, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -47,13 +47,19 @@ evidence_paths = [
 [[owner]]
 id = "renderer.surface_drawable_presentation"
 issue = "UNIV-2086"
-status = "in-progress"
+# The real layer tests cover matching/stale dimensions, repeated completion,
+# and repeated abandonment beyond the drawable-count limit. The final Mach-O
+# root executes on Darwin's main thread, handles a missing caller drawable,
+# resizes factory and layer together, presents, and proves subsequent reuse.
+status = "ported"
 rule = "The platform caller owns layer configuration, actor scheduling, and drawable acquisition; each renderer frame borrows exactly one compatible drawable, retains its texture, renders on the frame command buffer, and presents on the next command buffer from the same queue."
 citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:735-781", "cpp:renderer/path_fiddle/fiddle_context_metal.mm:65-84", "cpp:renderer/path_fiddle/fiddle_context_metal.mm:100-120", "cpp:renderer/path_fiddle/fiddle_context_metal.mm:186-191"]
-required_tests = ["caller layer device and BGRA configuration", "caller handles no-drawable outcome", "same drawable is target and presentation owner", "completion leaves the layer reusable", "product-main-actor resize and abandonment"]
+required_tests = ["caller layer device and BGRA configuration", "caller handles no-drawable outcome", "same drawable is target and presentation owner", "completion leaves the layer reusable", "rooted Mach-O executes explicit selection and presentation", "product-main-actor resize and abandonment"]
 evidence_paths = [
   "crates/nuxie-renderer/src/apple_surface.rs",
+  "tools/renderer-replay/src/bin/native-metal-product-root.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
+  "tools/check-native-metal-tracer-binary.sh",
 ]
 
 [[owner]]

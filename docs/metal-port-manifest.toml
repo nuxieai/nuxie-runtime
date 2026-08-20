@@ -47,8 +47,9 @@ status = "in-progress"
 # texture, borrows its presentation owner, commits rendering, then uses the
 # next command buffer from the same queue for presentation, matching
 # `renderer/path_fiddle/fiddle_context_metal.mm:65-84,100-120,186-191`. The
-# live layer test covers the real drawable path; product selection remains
-# deferred to UNIV-2092.
+# live layer test covers the real drawable path. The rooted tracer executable
+# explicitly selects this adapter and executes both readback and the Apple
+# presentation seam; the shipping C-ABI cutover remains deferred to UNIV-2092.
 rust_modules = [
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
@@ -62,6 +63,7 @@ rust_modules = [
 ]
 evidence = [
   "crates/nuxie-renderer/src/apple_surface.rs",
+  "tools/renderer-replay/src/bin/native-metal-product-root.rs",
   "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
@@ -71,6 +73,7 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
   "crates/nuxie-renderer/tests/native_metal_tracer.rs",
+  "tools/check-native-metal-tracer-binary.sh",
 ]
 [[source]]
 upstream = "renderer/src/metal/background_shader_compiler.h"

@@ -7,14 +7,15 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-artifact="$repo_root/target/release-size/examples/native_metal_tracer_root"
+artifact="$repo_root/target/release-size/native-metal-product-root"
 
 cargo build \
   --manifest-path "$repo_root/Cargo.toml" \
   --profile release-size \
-  -p nuxie-renderer \
-  --example native_metal_tracer_root \
-  --features native-metal-experimental
+  -p renderer-replay \
+  --no-default-features \
+  --features native-metal \
+  --bin native-metal-product-root
 "$artifact"
 
 if ! file "$artifact" | grep -q 'Mach-O'; then
@@ -34,6 +35,13 @@ if grep -Eiq "$forbidden" "$symbols" "$strings_file"; then
   grep -Ei "$forbidden" "$symbols" "$strings_file" | head -40 >&2
   exit 1
 fi
+
+for required_product_symbol in CAMetalLayer nextDrawable presentDrawable:; do
+  if ! grep -Fq "$required_product_symbol" "$strings_file"; then
+    echo "error: rooted native Metal tracer does not retain Apple product-surface marker: $required_product_symbol" >&2
+    exit 1
+  fi
+done
 
 bytes="$(stat -f '%z' "$artifact")"
 digest="$(shasum -a 256 "$artifact" | awk '{print $1}')"

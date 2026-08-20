@@ -77,6 +77,12 @@ Use this loop for every slice:
 10. **Promote and checkpoint.** Update manifests, ownership records, issue
     tracker, and the merge checkpoint only after the evidence exists.
 
+Root the highest public seam named by the claim. A headless renderer executable
+can prove pixel output and forbidden-dependency absence while dead stripping
+the platform presentation adapter entirely. When the claimed slice includes a
+product surface, the measured executable must also acquire the caller-owned
+target and execute presentation through that public boundary.
+
 For Objective-C lifetime evidence, put the operation under an explicit
 autorelease pool and inspect weak references only after that pool drains. A
 Rust `Retained<T>` owner can be gone while an autoreleased native reference is

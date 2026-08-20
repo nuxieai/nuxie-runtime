@@ -303,7 +303,7 @@ INTERNAL_DEBT_MARKERS = {
     ),
     "apple-presentation": re.compile(
         r"\bApple(?:PresentationCompletion|Surface)\b|"
-        r"\bSurfaceDisposition\b|\bCAMetalDrawable\b"
+        r"\bSurfaceDisposition\b|\bCAMetal(?:Drawable|Layer)\b|\bnextDrawable\b"
     ),
     "binary-authoring": re.compile(
         r"\bAuthoring(?:Property|Record|Value)\b|\bfrom_authoring_records\b"
@@ -323,9 +323,11 @@ INTERNAL_DEBT_MARKERS = {
 # mechanics in every other protected source file.
 APPROVED_NEUTRAL_MECHANICS_FILES = {
     "apple-presentation": {
+        "crates/nux-capi/tests/apple_metal.rs",
         "crates/nux-capi/src/apple_metal.rs",
         "crates/nuxie-renderer/src/apple_surface.rs",
         "crates/nuxie-renderer/src/lib.rs",
+        "tools/renderer-replay/src/bin/native-metal-product-root.rs",
     },
 }
 

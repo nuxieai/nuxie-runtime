@@ -146,7 +146,15 @@ impl NativeMetalFactory {
         texture: Retained<ProtocolObject<dyn MTLTexture>>,
         clear_color: u32,
     ) -> Result<NativeMetalDrawableFrame<'a>, RendererError> {
-        NativeMetalDrawableFrame::new(Arc::clone(&self.context), drawable, texture, clear_color)
+        let (expected_width, expected_height) = self.dimensions();
+        NativeMetalDrawableFrame::new(
+            Arc::clone(&self.context),
+            drawable,
+            texture,
+            expected_width,
+            expected_height,
+            clear_color,
+        )
     }
 }
 

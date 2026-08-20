@@ -516,6 +516,73 @@ mod tests {
         });
     }
 
+    #[cfg(feature = "native-metal-experimental")]
+    #[test]
+    fn native_metal_resize_rejects_stale_drawable_dimensions_before_encoding() {
+        autoreleasepool(|_| {
+            let mut factory =
+                crate::NativeMetalFactory::new(4, 3).expect("create native Metal renderer");
+            let layer = CAMetalLayer::new();
+            let device = factory.retained_metal_device();
+            layer.setDevice(Some(&device));
+            layer.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+            layer.setFramebufferOnly(true);
+            layer.setDrawableSize(CGSize::new(4.0, 3.0));
+            layer.setMaximumDrawableCount(2);
+            layer.setAllowsNextDrawableTimeout(true);
+            let stale_drawable = layer.nextDrawable().expect("original-size drawable");
+
+            factory.resize(6, 5).expect("resize native Metal target");
+            assert!(matches!(
+                factory.begin_drawable_frame(&stale_drawable, 0),
+                Err(RendererError::NativeMetal(message))
+                    if message == "drawable texture is 4x3, expected 6x5"
+            ));
+            drop(stale_drawable);
+
+            layer.setDrawableSize(CGSize::new(6.0, 5.0));
+            let current_drawable = layer.nextDrawable().expect("resized drawable");
+            factory
+                .begin_drawable_frame(&current_drawable, 0)
+                .expect("matching resized drawable")
+                .finish()
+                .expect("present resized drawable");
+        });
+    }
+
+    #[cfg(feature = "native-metal-experimental")]
+    #[test]
+    fn abandoned_native_metal_drawable_frames_release_their_layer_slots() {
+        autoreleasepool(|_| {
+            let factory =
+                crate::NativeMetalFactory::new(4, 3).expect("create native Metal renderer");
+            let layer = CAMetalLayer::new();
+            let device = factory.retained_metal_device();
+            layer.setDevice(Some(&device));
+            layer.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+            layer.setFramebufferOnly(true);
+            layer.setDrawableSize(CGSize::new(4.0, 3.0));
+            layer.setMaximumDrawableCount(2);
+            layer.setAllowsNextDrawableTimeout(true);
+
+            for _ in 0..(layer.maximumDrawableCount() * 3 + 1) {
+                autoreleasepool(|_| {
+                    let drawable = layer.nextDrawable().expect("abandonment drawable");
+                    let frame = factory
+                        .begin_drawable_frame(&drawable, 0)
+                        .expect("begin abandoned drawable frame");
+                    drop(frame);
+                    drop(drawable);
+                });
+            }
+
+            assert!(
+                layer.nextDrawable().is_some(),
+                "abandoned unsubmitted frames must not exhaust caller-owned drawable slots"
+            );
+        });
+    }
+
     fn wait_for_metal_queue(surface: &AppleSurface) {
         let command_buffer = surface
             .queue

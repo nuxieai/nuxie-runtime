@@ -47,6 +47,11 @@ def parse_line_map(path: Path) -> list[dict[str, object]]:
     return parsed
 
 
+def parse_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as source:
+        return [dict(row) for row in csv.DictReader(source, delimiter="\t")]
+
+
 def source_label(path: str) -> str:
     return Path(path).name
 
@@ -93,6 +98,30 @@ def source_summary(rows: list[dict[str, object]]) -> str:
             """
         )
     return "".join(sections)
+
+
+def field_summary(rows: list[dict[str, str]]) -> str:
+    cards = []
+    for cpp_type in dict.fromkeys(row["cpp_type"] for row in rows):
+        type_rows = [row for row in rows if row["cpp_type"] == cpp_type]
+        prepared = sum(row["status"] in {"prepared", "verified"} for row in type_rows)
+        review = [row["cpp_field"] for row in type_rows if row["status"] == "review-needed"]
+        percent = prepared / len(type_rows) * 100
+        review_text = (
+            f'<p class="field-review">Review needed: <code>{escape(", ".join(review))}</code></p>'
+            if review
+            else '<p class="field-ready">Every declared field is prepared.</p>'
+        )
+        cards.append(
+            f"""
+            <article class="field-card">
+              <div class="source-card-head"><div><h3>{escape(cpp_type)}</h3><code>{len(type_rows)} declared fields</code></div><strong>{prepared}/{len(type_rows)} prepared</strong></div>
+              <div class="stacked-bar" aria-label="{escape(cpp_type)} field preparation"><span class="bar-part bar-ported" style="width:{percent:.5f}%"></span><span class="bar-part bar-missing" style="width:{100 - percent:.5f}%"></span></div>
+              {review_text}
+            </article>
+            """
+        )
+    return "".join(cards)
 
 
 def phase_rail(phases: list[dict]) -> str:
@@ -231,6 +260,7 @@ def render(repo_root: Path) -> str:
     rows = parse_line_map(repo_root / "docs/render-context-metal-file-map.tsv")
     ownership = load_toml(repo_root / "docs/metal-port-ownership.toml")
     manifest = load_toml(repo_root / "docs/metal-port-manifest.toml")
+    field_rows = parse_tsv(repo_root / manifest["render_context_field_map"])
     metal_sources = [
         source
         for source in manifest.get("source", [])
@@ -249,6 +279,9 @@ def render(repo_root: Path) -> str:
     ported_lines = sum(int(row["length"]) for row in rows if row["status"] == "ported")
     partial_lines = sum(int(row["length"]) for row in rows if row["status"] == "partial")
     missing_lines = sum(int(row["length"]) for row in rows if row["status"] == "missing")
+    prepared_fields = sum(
+        row["status"] in {"prepared", "verified"} for row in field_rows
+    )
     corpus_config = progress["corpus"]
     corpus = load_toml(repo_root / corpus_config["manifest"])
     corpus_entries = corpus.get("entry", [])
@@ -294,10 +327,11 @@ h1 {{ margin:0; max-width:820px; font-size:clamp(2rem,5vw,4.8rem); line-height:.
 .hero-meta {{ border-left:3px solid var(--green); padding:14px 0 14px 18px; }} .hero-meta span,.hero-meta strong {{ display:block; }} .hero-meta span {{ color:var(--muted); font-size:.85rem; margin-top:5px; }}
 .section {{ margin-top:44px; }} .section-head {{ display:flex; justify-content:space-between; gap:20px; align-items:end; margin-bottom:18px; }}
 h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{ margin:0; color:var(--muted); max-width:680px; line-height:1.45; }}
-.overview {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }}
+.overview {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }}
 .metric {{ background:var(--panel); border:1px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .metric strong {{ font-size:2rem; display:block; }} .metric span {{ color:var(--muted); }}
 .source-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:18px; }}
 .source-card {{ background:var(--panel); border:1px solid var(--line); padding:20px; box-shadow:var(--shadow); }} .source-card-head {{ display:flex; justify-content:space-between; gap:12px; align-items:start; }} .source-card h3 {{ margin:0 0 5px; }}
+.field-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }} .field-card {{ background:var(--panel); border:1px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .field-card h3 {{ margin:0 0 5px; }} .field-review {{ color:var(--red); margin:0; }} .field-ready {{ color:var(--green); margin:0; }}
 .stacked-bar {{ display:flex; width:100%; height:18px; overflow:hidden; margin:22px 0 13px; background:var(--line); }} .bar-part {{ display:block; }} .bar-ported {{ background:var(--green); }} .bar-partial {{ background:var(--amber); }} .bar-missing {{ background:var(--red); }}
 .bar-legend {{ display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:.84rem; }} .dot {{ display:inline-block; width:9px; height:9px; margin-right:6px; }} .dot-ported {{ background:var(--green); }} .dot-partial {{ background:var(--amber); }} .dot-missing {{ background:var(--red); }}
 .phases {{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:0; }} .phase {{ position:relative; padding:32px 16px 0 0; border-top:2px solid var(--line); }} .phase-marker {{ position:absolute; top:-7px; left:0; width:12px; height:12px; border-radius:50%; background:var(--queued); }} .phase-active {{ border-color:var(--green); }} .phase-active .phase-marker {{ background:var(--green); box-shadow:0 0 0 5px var(--green-soft); }} .phase strong {{ display:block; margin-bottom:8px; }} .phase p {{ color:var(--muted); font-size:.82rem; line-height:1.45; margin:9px 0 0; }}
@@ -309,7 +343,7 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
 	.suites {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }} .suite {{ background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--queued); padding:18px; box-shadow:var(--shadow); }} .suite-green {{ border-left-color:var(--green); }} .suite-active {{ border-left-color:var(--green); }} .suite-amber {{ border-left-color:var(--amber); }} .suite-head {{ display:flex; align-items:center; justify-content:space-between; gap:12px; }} .suite h3 {{ margin:12px 0 7px; }} .suite>p {{ color:var(--muted); line-height:1.5; }} .suite dl {{ display:grid; grid-template-columns:90px 1fr; gap:8px 12px; margin:16px 0 0; font-size:.84rem; }} .suite dt {{ color:var(--muted); font-weight:700; }} .suite dd {{ margin:0; overflow-wrap:anywhere; }}
 .gallery {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }} .gallery-card {{ margin:0; background:var(--panel); border:1px solid var(--line); overflow:hidden; }} .gallery-card>a {{ display:grid; place-items:center; aspect-ratio:1/1; background:repeating-conic-gradient(from 45deg,var(--line) 0 25%,transparent 0 50%) 50%/18px 18px; }} .gallery-card img {{ display:block; width:100%; height:100%; object-fit:contain; image-rendering:auto; }} .gallery-card figcaption {{ padding:12px; display:grid; gap:8px; }} .gallery-card figcaption>span {{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }} .gallery-card .status {{ margin-left:0; }} .gallery-card figcaption>a {{ font-size:.82rem; }}
 .contract {{ border-left:4px solid var(--green); padding:5px 0 5px 18px; color:var(--muted); line-height:1.55; }}
-	@media (max-width:900px) {{ .hero {{ grid-template-columns:1fr; }} .hero-meta {{ border-left:0; border-top:3px solid var(--green); padding-left:0; }} .overview,.reports,.suites {{ grid-template-columns:1fr; }} .source-grid,.owner-list {{ grid-template-columns:1fr; }} .phases {{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 0; }} .gallery {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
+@media (max-width:900px) {{ .hero {{ grid-template-columns:1fr; }} .hero-meta {{ border-left:0; border-top:3px solid var(--green); padding-left:0; }} .overview,.reports,.suites {{ grid-template-columns:1fr; }} .source-grid,.owner-list,.field-grid {{ grid-template-columns:1fr; }} .phases {{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 0; }} .gallery {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
 @media (max-width:520px) {{ .shell {{ padding:28px 15px 60px; }} .section-head {{ display:block; }} .section-head p {{ margin-top:8px; }} .phases,.gallery {{ grid-template-columns:1fr; }} .source-card-head {{ display:block; }} .source-card-head strong {{ display:block; margin-top:10px; }} }}
 </style>
 </head>
@@ -326,11 +360,17 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
       <div class="metric"><strong>{ported_lines / total_lines * 100:.1f}%</strong><span>{ported_lines:,} of {total_lines:,} pinned lines ported</span></div>
       <div class="metric"><strong>{partial_lines:,}</strong><span>partial source lines still under translation</span></div>
       <div class="metric"><strong>{missing_lines:,}</strong><span>missing source lines with no Rust owner</span></div>
+      <div class="metric"><strong>{prepared_fields}/{len(field_rows)}</strong><span>state-bearing fields prepared</span></div>
     </div>
     <div class="source-grid">{source_summary(rows)}</div>
   </section>
 
   <section class="section"><div class="section-head"><h2>Campaign phases</h2><p>Translation completes before compiler diagnostics and behavior fixtures become work queues.</p></div><ol class="phases">{phase_rail(progress['phase'])}</ol></section>
+
+  <section class="section">
+    <div class="section-head"><h2>State-bearing field closure</h2><p>The checker derives all 37 declarations from the pinned header and implementation. Any omitted or invented ledger row fails the campaign gate.</p></div>
+    <div class="field-grid">{field_summary(field_rows)}</div>
+  </section>
 
   <section class="section">
     <div class="section-head"><h2>Validation exit gates</h2><p>Pinned C++ Metal proves source parity. Rust-WGPU is a separate product-behavior differential, and its current 4/736 coverage remains amber.</p></div>

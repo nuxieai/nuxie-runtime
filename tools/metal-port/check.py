@@ -63,6 +63,58 @@ RENDER_CONTEXT_FILE_MAP_SOURCES = {
     "renderer/include/rive/renderer/metal/render_context_metal_impl.h",
     "renderer/src/metal/render_context_metal_impl.mm",
 }
+RENDER_CONTEXT_FIELD_MAP_COLUMNS = (
+    "version",
+    "upstream_sha",
+    "upstream_file",
+    "cpp_type",
+    "cpp_field",
+    "declaration_line",
+    "configuration",
+    "rust_owner",
+    "rust_field",
+    "construction_and_publication",
+    "mutation_thread",
+    "submission_and_completion",
+    "destruction_order",
+    "null_and_failure",
+    "safe_rust_adaptation",
+    "status",
+    "evidence",
+)
+RENDER_CONTEXT_FIELD_MAP_STATUSES = {"review-needed", "prepared", "verified"}
+RENDER_CONTEXT_FIELD_DECLARATION_SPANS = (
+    (
+        "renderer/include/rive/renderer/metal/render_context_metal_impl.h",
+        "RenderTargetMetal",
+        75,
+        86,
+        re.compile(r"\b(m_[A-Za-z0-9_]+)\b"),
+    ),
+    (
+        "renderer/include/rive/renderer/metal/render_context_metal_impl.h",
+        "RenderContextMetalImpl::ContextOptions",
+        98,
+        108,
+        re.compile(
+            r"\b(shaderCompilationMode|disableFramebufferReads|synthesizedFailureType)\b"
+        ),
+    ),
+    (
+        "renderer/src/metal/render_context_metal_impl.mm",
+        "RenderContextMetalImpl::DrawPipeline",
+        399,
+        400,
+        re.compile(r"\b(m_[A-Za-z0-9_]+)\b"),
+    ),
+    (
+        "renderer/include/rive/renderer/metal/render_context_metal_impl.h",
+        "RenderContextMetalImpl",
+        235,
+        280,
+        re.compile(r"\b(m_[A-Za-z0-9_]+)\b"),
+    ),
+)
 FOUNDATION_TRIAL_UNITS = {
     "ore-types": {"renderer/include/rive/renderer/ore/ore_types.hpp"},
     "ore-rstb-container": {
@@ -367,6 +419,166 @@ def validate_render_context_file_map(
                 "render-context file map does not reach the end of "
                 f"{upstream_file}: stopped at {expected_start - 1}, expected {line_count}"
             )
+
+
+def extract_render_context_field_declarations(
+    upstream_root: pathlib.Path,
+    errors: list[str],
+) -> dict[tuple[str, str, str], int]:
+    declarations: dict[tuple[str, str, str], int] = {}
+    source_lines: dict[str, list[str]] = {}
+    for upstream_file, cpp_type, start, end, pattern in RENDER_CONTEXT_FIELD_DECLARATION_SPANS:
+        if upstream_file not in source_lines:
+            path = upstream_root / upstream_file
+            try:
+                source_lines[upstream_file] = path.read_text(encoding="utf-8").splitlines()
+            except OSError as error:
+                errors.append(
+                    f"cannot read render-context field source {upstream_file}: {error}"
+                )
+                continue
+        lines = source_lines[upstream_file]
+        if end > len(lines):
+            errors.append(
+                f"render-context field span {upstream_file}:{start}-{end} exceeds source EOF"
+            )
+            continue
+        for line_number in range(start, end + 1):
+            for match in pattern.finditer(lines[line_number - 1]):
+                key = (upstream_file, cpp_type, match.group(1))
+                if key in declarations:
+                    errors.append(
+                        "render-context field declaration appears more than once: "
+                        + ":".join(key)
+                    )
+                declarations[key] = line_number
+    return declarations
+
+
+def compare_render_context_field_rows(
+    rows: list[dict[str, str]],
+    declarations: dict[tuple[str, str, str], int],
+    errors: list[str],
+) -> None:
+    ledger: dict[tuple[str, str, str], tuple[int, int]] = {}
+    for line_number, row in enumerate(rows, 2):
+        key = (row["upstream_file"], row["cpp_type"], row["cpp_field"])
+        try:
+            declaration_line = int(row["declaration_line"])
+        except ValueError:
+            errors.append(
+                f"render-context field map line {line_number} has invalid declaration line"
+            )
+            continue
+        if key in ledger:
+            errors.append("duplicate render-context field row: " + ":".join(key))
+        ledger[key] = (line_number, declaration_line)
+
+    missing = sorted(set(declarations) - set(ledger))
+    extra = sorted(set(ledger) - set(declarations))
+    if missing:
+        errors.append(
+            "render-context field map omits declarations: "
+            + ", ".join(":".join(key) for key in missing)
+        )
+    if extra:
+        errors.append(
+            "render-context field map invents declarations: "
+            + ", ".join(":".join(key) for key in extra)
+        )
+    for key in sorted(set(declarations) & set(ledger)):
+        line_number, actual_line = ledger[key]
+        expected_line = declarations[key]
+        if actual_line != expected_line:
+            errors.append(
+                f"render-context field map line {line_number} locates "
+                f"{':'.join(key)} at {actual_line}, expected {expected_line}"
+            )
+
+
+def validate_render_context_field_map(
+    manifest: dict[str, Any],
+    repo_root: pathlib.Path,
+    upstream_root: pathlib.Path,
+    errors: list[str],
+) -> None:
+    relative = str(manifest.get("render_context_field_map", ""))
+    path = repo_root / relative
+    if not relative or not path.is_file():
+        errors.append(f"missing render-context field map {relative}")
+        return
+    if not git_tracked_file(repo_root, relative):
+        errors.append(f"untracked render-context field map {relative}")
+
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            reader = csv.DictReader(source, delimiter="\t")
+            fieldnames = tuple(reader.fieldnames or ())
+            rows = [
+                {str(key): str(value or "") for key, value in row.items() if key is not None}
+                for row in reader
+            ]
+    except (OSError, csv.Error) as error:
+        errors.append(f"cannot read render-context field map {relative}: {error}")
+        return
+    if fieldnames != RENDER_CONTEXT_FIELD_MAP_COLUMNS:
+        errors.append(
+            "render-context field map schema must be: "
+            + "\t".join(RENDER_CONTEXT_FIELD_MAP_COLUMNS)
+        )
+        return
+
+    declarations = extract_render_context_field_declarations(upstream_root, errors)
+    compare_render_context_field_rows(rows, declarations, errors)
+    upstream_ref = str(manifest.get("upstream_ref", ""))
+    required_prose = (
+        "configuration",
+        "rust_field",
+        "construction_and_publication",
+        "mutation_thread",
+        "submission_and_completion",
+        "destruction_order",
+        "null_and_failure",
+        "safe_rust_adaptation",
+    )
+    for line_number, row in enumerate(rows, 2):
+        if row["version"] != "1":
+            errors.append(f"render-context field map line {line_number} has invalid version")
+        if row["upstream_sha"] != upstream_ref:
+            errors.append(
+                f"render-context field map line {line_number} pin does not match upstream_ref"
+            )
+        status = row["status"]
+        if status not in RENDER_CONTEXT_FIELD_MAP_STATUSES:
+            errors.append(
+                f"render-context field map line {line_number} has invalid status `{status}`"
+            )
+        for column in required_prose:
+            if not row[column].strip():
+                errors.append(
+                    f"render-context field map line {line_number} has empty {column}"
+                )
+        rust_owner = row["rust_owner"]
+        if rust_owner == "-":
+            if status != "review-needed":
+                errors.append(
+                    f"render-context field map line {line_number} lacks a Rust owner but is {status}"
+                )
+        elif not (repo_root / rust_owner).is_file():
+            errors.append(
+                f"render-context field map line {line_number} names missing Rust owner {rust_owner}"
+            )
+        elif not git_tracked_file(repo_root, rust_owner):
+            errors.append(
+                f"render-context field map line {line_number} names untracked Rust owner {rust_owner}"
+            )
+        evidence = [value.strip() for value in row["evidence"].split(";") if value.strip()]
+        if status in {"prepared", "verified"} and not evidence:
+            errors.append(
+                f"render-context field map line {line_number} is {status} without evidence"
+            )
+        for citation in evidence:
+            validate_evidence_citation(citation, repo_root, upstream_root, errors)
 
 
 def validate_citation(
@@ -895,6 +1107,7 @@ def check(
 
     source_counts = validate_source_rows(manifest, repo_root, upstream_root, errors)
     validate_render_context_file_map(manifest, repo_root, upstream_root, errors)
+    validate_render_context_field_map(manifest, repo_root, upstream_root, errors)
     units = validate_translation_units(manifest, errors)
     validate_lifetime_ledger(manifest, repo_root, upstream_root, errors)
     validate_reference_provenance(manifest, repo_root, errors)

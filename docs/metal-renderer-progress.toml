@@ -65,7 +65,7 @@ authority = "Pinned C++/Objective-C++ source"
 scope = "Complete header, implementation, fields, configs, and directly owned supporting units"
 command = "make metal-port-check"
 acceptance = "Zero partial/missing primary ranges and no incomplete required owner."
-current = "Preparation audit active; source ledger remains 51.2% line-weighted ported."
+current = "Preparation audit active: 36/37 state-bearing fields are prepared; tools-only ContextOptions.synthesizedFailureType still needs an explicit owner or configuration exclusion."
 
 [[suite]]
 id = "V2"
@@ -146,6 +146,19 @@ scope = "Complete translated owner and all retained evidence"
 command = "Run both independent reviews after V0-V8 are green"
 acceptance = "Every accepted finding is fixed and affected suites are rerun."
 current = "Not started."
+
+[[report]]
+date = "2026-08-20"
+title = "State-bearing field inventory made exhaustive"
+status = "amber"
+summary = "The campaign checker now extracts all 37 fields from the pinned RenderTargetMetal, ContextOptions, DrawPipeline, and RenderContextMetalImpl declarations and rejects omissions, inventions, duplicates, or declaration-line drift."
+results = [
+  "RenderTargetMetal: 9/9 prepared",
+  "ContextOptions: 2/3 prepared; synthesizedFailureType review-needed",
+  "DrawPipeline: 2/2 prepared",
+  "RenderContextMetalImpl: 23/23 prepared",
+]
+evidence = "docs/render-context-metal-fields.tsv"
 
 [[report]]
 date = "2026-08-20"

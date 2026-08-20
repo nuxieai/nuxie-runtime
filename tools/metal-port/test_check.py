@@ -503,6 +503,53 @@ class MetalPortCheckTests(unittest.TestCase):
             self.assertIn("expected 3", joined)
             self.assertIn("ends outside", joined)
 
+    def test_render_context_field_rows_must_exactly_cover_extracted_declarations(self) -> None:
+        declarations = {
+            ("renderer/header.h", "Owner", "m_device"): 10,
+            ("renderer/header.h", "Owner", "m_queue"): 11,
+        }
+        rows = [
+            {
+                "upstream_file": "renderer/header.h",
+                "cpp_type": "Owner",
+                "cpp_field": "m_device",
+                "declaration_line": "10",
+            },
+            {
+                "upstream_file": "renderer/header.h",
+                "cpp_type": "Owner",
+                "cpp_field": "m_queue",
+                "declaration_line": "11",
+            },
+        ]
+        errors: list[str] = []
+        CHECK.compare_render_context_field_rows(rows, declarations, errors)
+        self.assertEqual(errors, [])
+
+        rows.pop()
+        errors.clear()
+        CHECK.compare_render_context_field_rows(rows, declarations, errors)
+        self.assertIn("omits declarations", "\n".join(errors))
+
+        rows.append(
+            {
+                "upstream_file": "renderer/header.h",
+                "cpp_type": "Owner",
+                "cpp_field": "m_invented",
+                "declaration_line": "12",
+            }
+        )
+        errors.clear()
+        CHECK.compare_render_context_field_rows(rows, declarations, errors)
+        joined = "\n".join(errors)
+        self.assertIn("omits declarations", joined)
+        self.assertIn("invents declarations", joined)
+
+        rows[0]["declaration_line"] = "99"
+        errors.clear()
+        CHECK.compare_render_context_field_rows(rows[:1], {next(iter(declarations)): 10}, errors)
+        self.assertIn("expected 10", "\n".join(errors))
+
     def test_missing_upstream_source_and_unproved_port_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

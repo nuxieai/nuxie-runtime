@@ -710,7 +710,7 @@ lane = "ore-metal"
 issue = "UNIV-2091"
 status = "ported"
 rust_modules = ["crates/nuxie-ore-metal/src/metal/context.rs"]
-evidence = ["crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/src/metal/render_pass.rs", "crates/nuxie-ore-metal/tests/ore_binding_witness.rs", "tools/check-ore-metal-binding-witness.sh"]
+evidence = ["crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/src/metal/render_pass.rs", "crates/nuxie-ore-metal/tests/ore_binding_witness.rs", "tools/check-ore-metal-binding-witness.sh", "crates/nuxie/src/ore_metal_gpu_canvas.rs", "crates/nuxie/tests/ore_metal_authored_gpu_canvas.rs", "tools/check-ore-metal-authenticated-gpu-canvas.sh"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_pipeline_metal.hpp"

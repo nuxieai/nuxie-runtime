@@ -35,6 +35,12 @@ use nuxie_runtime::{
 
 pub mod command_queue;
 pub mod command_server;
+#[cfg(all(
+    feature = "ore-metal-authored-msl",
+    any(target_os = "ios", target_os = "macos")
+))]
+#[doc(hidden)]
+pub mod ore_metal_gpu_canvas;
 mod raw_text;
 #[cfg(all(test, feature = "scripting"))]
 mod scripted_interpolator_tests;
@@ -625,7 +631,10 @@ struct FileScriptAsset {
     is_external_data_converter: bool,
 }
 
-#[cfg(all(feature = "scripting", feature = "apple-authored-msl"))]
+#[cfg(all(
+    feature = "scripting",
+    any(feature = "apple-authored-msl", feature = "ore-metal-authored-msl")
+))]
 fn mint_shader_provenance(
     native_shaders_are_authorized: bool,
     type_name: &str,
@@ -651,7 +660,10 @@ fn mint_shader_provenance(
     })
 }
 
-#[cfg(all(feature = "scripting", not(feature = "apple-authored-msl")))]
+#[cfg(all(
+    feature = "scripting",
+    not(any(feature = "apple-authored-msl", feature = "ore-metal-authored-msl"))
+))]
 fn mint_shader_provenance(
     _native_shaders_are_authorized: bool,
     _type_name: &str,
@@ -8341,7 +8353,7 @@ mod inert_script_import_tests {
         assert_eq!(assets[0].payload.as_deref(), Some([0, 1, 2, 3].as_slice()));
     }
 
-    #[cfg(feature = "apple-authored-msl")]
+    #[cfg(any(feature = "apple-authored-msl", feature = "ore-metal-authored-msl"))]
     #[test]
     fn only_trusted_exporter_exact_artifacts_mint_shader_provenance() {
         let shader_payload = [0, 1, 2, 3];

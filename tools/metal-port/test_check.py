@@ -550,6 +550,42 @@ class MetalPortCheckTests(unittest.TestCase):
         CHECK.compare_render_context_field_rows(rows[:1], {next(iter(declarations)): 10}, errors)
         self.assertIn("expected 10", "\n".join(errors))
 
+    def test_render_context_configuration_rows_cover_blocks_and_branches(self) -> None:
+        blocks = {
+            ("renderer/source.mm", 3, 9): (3, 5, 7),
+            ("renderer/source.mm", 12, 14): (12,),
+        }
+        rows = [
+            {
+                "upstream_file": "renderer/source.mm",
+                "lines": "3-9",
+                "branch_lines": "3,5,7",
+            },
+            {
+                "upstream_file": "renderer/source.mm",
+                "lines": "12-14",
+                "branch_lines": "12",
+            },
+        ]
+        errors: list[str] = []
+        CHECK.compare_render_context_configuration_rows(rows, blocks, errors)
+        self.assertEqual(errors, [])
+
+        rows.pop()
+        errors.clear()
+        CHECK.compare_render_context_configuration_rows(rows, blocks, errors)
+        self.assertIn("omits blocks", "\n".join(errors))
+
+        rows[0]["branch_lines"] = "3,7"
+        errors.clear()
+        CHECK.compare_render_context_configuration_rows(rows, {next(iter(blocks)): (3, 5, 7)}, errors)
+        self.assertIn("expected (3, 5, 7)", "\n".join(errors))
+
+        rows[0]["lines"] = "bad"
+        errors.clear()
+        CHECK.compare_render_context_configuration_rows(rows, blocks, errors)
+        self.assertIn("invalid range", "\n".join(errors))
+
     def test_missing_upstream_source_and_unproved_port_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

@@ -329,7 +329,10 @@ status = "in-progress"
 # context device and queue. The next file-first lifecycle unit commits without
 # waiting and transfers each submitted ring slot into a copied Metal completion
 # block; caller readback/presentation waits are separate policy. Image draw
-# admission remains in the flush rows.
+# admission remains in the flush rows. The contiguous common draw-pass block
+# now has one typed binding plan shared by generic atomics and the admitted
+# raster-order gradient/atlas paths; per-batch pipelines, samplers, scissors,
+# barriers, and draws remain in their following source ranges.
 # This full source row remains in-progress:
 # divergent path-clip stacks and general clip mutation/restores after content,
 # gradients in clipped flushes, radial gradients, atlas, images, strokes,
@@ -346,6 +349,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
   "crates/nuxie-renderer/src/native_metal/command_submission.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_pass.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
@@ -373,6 +377,7 @@ evidence = [
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
   "crates/nuxie-renderer/src/native_metal/command_submission.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_pass.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",

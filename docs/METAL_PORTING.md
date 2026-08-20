@@ -404,6 +404,23 @@ pixels but exposes no numeric counter API, so these values are explicitly a
 deterministic Rust regression oracle rather than a claim of C++ counter
 equality.
 
+## File-first common Metal draw pass
+
+Pinned `RenderContextMetalImpl::makeRenderPassForDraws` at
+`render_context_metal_impl.mm:1298-1393` is owned by one typed Rust binding
+plan. It sets the full-target viewport, common textures, conditional path and
+contour tables, the interlock-dependent paint stages, generic-atomic planes,
+and wireframe mode in source order. Generic atomics and the admitted
+raster-order gradient/atlas paths both call this owner; their formerly
+duplicated common bindings have been removed.
+
+Rust upload rings are flush-local, so their retained buffers already begin at
+the selected first path, paint, auxiliary-paint, and contour records. Binding
+offset zero is therefore the explicit typed-owner adaptation of the source
+descriptor's byte offsets. Per-batch pipeline, sampler, scissor, barrier, and
+draw selection remains in the following flush ranges and is not claimed by
+this checkpoint.
+
 ## UNIV-2087 feather-atlas slice
 
 The third resource checkpoint ports one complete, naturally selected feather

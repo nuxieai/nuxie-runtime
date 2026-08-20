@@ -1396,6 +1396,10 @@ dependencies = [
 [[package]]
 name = "nuxie-ore-metal"
 version = "0.1.0"
+dependencies = [
+ "objc2",
+ "objc2-metal",
+]
 
 [[package]]
 name = "nuxie-project-data"

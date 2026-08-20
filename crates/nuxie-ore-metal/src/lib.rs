@@ -6,5 +6,9 @@
 
 pub mod binding_map;
 pub mod gpu_resource;
+pub mod metal;
 pub mod rstb_entry_container;
+pub mod sampler;
+pub mod shader_module;
+pub mod texture;
 pub mod types;

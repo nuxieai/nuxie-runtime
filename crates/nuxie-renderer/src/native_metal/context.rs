@@ -387,13 +387,14 @@ impl NativeMetalContext {
 
     pub(crate) fn prepare_atomic_path_resources(
         &self,
+        gradient_height: usize,
         tessellation_height: usize,
         pixel_format: MTLPixelFormat,
         uploads: UploadBatch<'_>,
     ) -> Result<PreparedResourceLease, RendererError> {
         let mut allow_all = |_| Ok(());
         self.prepare_resources_core(
-            0,
+            gradient_height,
             tessellation_height,
             None,
             None,

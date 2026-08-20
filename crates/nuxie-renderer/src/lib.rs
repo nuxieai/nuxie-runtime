@@ -12035,6 +12035,8 @@ mod tests {
             logical_frame::prepare_single_atomic_path_draw(config, &path, &paint, state)
                 .unwrap()
                 .unwrap();
+        assert!(lightweight.gradient_batch.is_none());
+        let lightweight = &lightweight.resources;
 
         let admitted = logical_frame::admit_path_draw(config, state, &path, &paint)
             .unwrap()
@@ -12054,6 +12056,136 @@ mod tests {
             .cloned()
             .unwrap();
 
+        assert_eq!(
+            bytemuck::bytes_of(&lightweight.path),
+            bytemuck::bytes_of(&canonical.path)
+        );
+        assert_eq!(
+            bytemuck::bytes_of(&lightweight.paint),
+            bytemuck::bytes_of(&canonical.paint)
+        );
+        assert_eq!(
+            bytemuck::bytes_of(&lightweight.paint_aux),
+            bytemuck::bytes_of(&canonical.paint_aux)
+        );
+        assert_eq!(pod_slice(&lightweight.spans), pod_slice(&canonical.spans));
+        assert_eq!(
+            pod_slice(&lightweight.contours),
+            pod_slice(&canonical.contours)
+        );
+        assert_eq!(
+            pod_slice(&lightweight.triangles),
+            pod_slice(&canonical.triangles)
+        );
+        assert_eq!(lightweight.contour_base, canonical.contour_base);
+        assert_eq!(lightweight.base_instance, canonical.base_instance);
+        assert_eq!(lightweight.instance_count, canonical.instance_count);
+        assert_eq!(lightweight.triangle_count, canonical.triangle_count);
+        assert_eq!(
+            lightweight.borrowed_triangle_count,
+            canonical.borrowed_triangle_count
+        );
+        assert_eq!(
+            lightweight.main_triangle_batches,
+            canonical.main_triangle_batches
+        );
+        assert_eq!(
+            lightweight.has_interior_triangles,
+            canonical.has_interior_triangles
+        );
+        assert_eq!(lightweight.uses_interior, canonical.uses_interior);
+        assert_eq!(
+            lightweight.local_contour_ids_are_dense,
+            canonical.local_contour_ids_are_dense
+        );
+
+        let report = canonical_prepared.into_report();
+        assert_eq!(report.production_typed_output_eligible_draws, 1);
+        assert_eq!(report.production_typed_output_consumed_draws, 1);
+        assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
+    fn native_metal_atomic_gradient_matches_the_exactly_once_canonical_slot() {
+        fn pod_slice<T: bytemuck::Pod>(values: &[T]) -> &[u8] {
+            bytemuck::cast_slice(values)
+        }
+
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 16_384,
+            msaa_atlas_supports_clip_rect: false,
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(8.0, 32.0);
+        raw_path.cubic_to(8.0, 8.0, 56.0, 8.0, 56.0, 32.0);
+        raw_path.line_to(56.0, 40.0);
+        raw_path.cubic_to(56.0, 56.0, 8.0, 56.0, 8.0, 32.0);
+        raw_path.close();
+        let path = LogicalPath {
+            raw_path: Arc::new(raw_path),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let paint = LogicalPaint {
+            shader: Some(LogicalShader::Linear {
+                start: (8.0, 32.0),
+                end: (56.0, 32.0),
+                colors: vec![0xffff_0000, 0xff00_00ff],
+                stops: vec![0.0, 1.0],
+            }),
+            ..LogicalPaint::default()
+        };
+        let state = DrawState::default();
+        let lightweight =
+            logical_frame::prepare_single_atomic_path_draw(config, &path, &paint, state)
+                .unwrap()
+                .unwrap();
+
+        let admitted = logical_frame::admit_path_draw(config, state, &path, &paint)
+            .unwrap()
+            .unwrap();
+        let mut scratch = draw::StrokePreparationScratch::default();
+        let draw = admitted.finish(0, &mut scratch).unwrap();
+        let mut frame = logical_frame::LogicalFrame::new(config);
+        frame.push_content_batch(Vec::new(), draw).unwrap();
+        let mut board =
+            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+        frame.finalize_for_production(&mut board).unwrap();
+        let canonical_store = logical_frame::LogicalResourceStore::default();
+        let canonical_prepared = canonical_store.prepare_for_production(&frame).unwrap();
+        let canonical_gradient_batch = canonical_prepared.gradient_batch(&frame.draws);
+        let canonical_gradient = canonical_gradient_batch.draw(0).unwrap();
+        let canonical = canonical_prepared
+            .typed_draws(&frame.draws)
+            .draw(0)
+            .cloned()
+            .unwrap();
+
+        let lightweight_gradient_batch = lightweight.gradient_batch.as_ref().unwrap();
+        let lightweight_gradient = lightweight_gradient_batch.draw(0).unwrap();
+        assert_eq!(
+            pod_slice(&lightweight_gradient_batch.spans),
+            pod_slice(canonical_gradient_batch.spans())
+        );
+        assert_eq!(
+            lightweight_gradient_batch.height,
+            canonical_gradient_batch.height()
+        );
+        assert_eq!(
+            lightweight_gradient.paint_type,
+            canonical_gradient.paint_type
+        );
+        assert_eq!(lightweight_gradient.texture_y, canonical_gradient.texture_y);
+        assert_eq!(lightweight_gradient.matrix.0, canonical_gradient.matrix.0);
+        assert_eq!(
+            lightweight_gradient.texture_span,
+            canonical_gradient.texture_span
+        );
+
+        let lightweight = &lightweight.resources;
         assert_eq!(
             bytemuck::bytes_of(&lightweight.path),
             bytemuck::bytes_of(&canonical.path)

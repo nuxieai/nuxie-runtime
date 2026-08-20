@@ -132,14 +132,17 @@ id = "renderer.generic_atomic_path_execution"
 issue = "UNIV-2088"
 status = "in-progress"
 # The first vertical slice is one unclipped opaque SrcOver midpoint-fan fill.
-# It proves real generic-atomic selection, fixed-function color output,
-# clip/coverage buffer ownership, initialize/path/resolve execution, and the
-# selected device's exact barrier policy. Remaining clips, gradients, atlas,
-# images, strokes, advanced blends, multiple draws/flushes, and scheduler
-# integration remain explicitly outside this promotion.
+# The second adds one linear-gradient cubic, the retained color-ramp resource
+# pass, and generated fragment texture-8 binding while preserving fixed-function
+# color output and the absence of the generic color plane. Together they prove
+# real generic-atomic selection, clip/coverage ownership,
+# initialize/path/resolve execution, and the selected device's exact barrier
+# policy. Remaining clips, radial/complex gradients, atlas, images, strokes,
+# advanced blends, multiple draws/flushes, and scheduler integration remain
+# explicitly outside this promotion.
 rule = "A capability-selected or explicitly forced generic-atomic frame realizes the same fixed-function pipeline keys, PLS buffer bindings, barriers, and initialize/path/resolve topology as upstream Metal."
-citations = ["cpp:renderer/src/render_context.cpp:1067-1083", "cpp:renderer/src/metal/render_context_metal_impl.mm:1363-1385", "cpp:renderer/src/metal/render_context_metal_impl.mm:1759-1812", "cpp:renderer/src/metal/render_context_metal_impl.mm:1857-1925", "cpp:renderer/src/metal/render_context_metal_impl.mm:1989-1997"]
-required_tests = ["capability-driven selection and explicit generic-atomic forcing", "canonical typed midpoint resource equivalence and exactly-once consumption", "real clip and coverage atomic planes", "initialize, midpoint-fan, and resolve pipeline inventory", "unchanged 2/32 pinned C++ Metal pixel oracle with exact occupancy", "forced-atomic product Mach-O contains no WGPU"]
+citations = ["cpp:renderer/src/render_context.cpp:578-627", "cpp:renderer/src/render_context.cpp:1067-1083", "cpp:renderer/src/render_context.cpp:1450-1473", "cpp:renderer/src/metal/render_context_metal_impl.mm:1041-1058", "cpp:renderer/src/metal/render_context_metal_impl.mm:1298-1450", "cpp:renderer/src/metal/render_context_metal_impl.mm:1759-1812", "cpp:renderer/src/metal/render_context_metal_impl.mm:1857-1925", "cpp:renderer/src/metal/render_context_metal_impl.mm:1989-1997"]
+required_tests = ["capability-driven selection and explicit generic-atomic forcing", "canonical typed midpoint and gradient resource equivalence with exactly-once consumption", "retained color-ramp pass and generated gradient texture binding", "real clip and coverage atomic planes with no fixed-function color plane", "initialize, midpoint-fan, and resolve pipeline inventory", "unchanged triangle 2/32 oracle and byte-exact forced-atomic gradient oracle with exact occupancy", "forced-atomic solid and gradient product Mach-O contains no WGPU"]
 evidence_paths = [
   "crates/nuxie-renderer/src/lib.rs",
   "crates/nuxie-renderer/src/logical_frame.rs",
@@ -149,6 +152,8 @@ evidence_paths = [
   "crates/nuxie-renderer/tests/native_metal_tracer.rs",
   "fixtures/renderer/reference/metal/first-light-triangle-clockwise-atomic.png",
   "fixtures/renderer/streams/first-light-triangle.rive-stream",
+  "fixtures/renderer/reference/metal/first-light-gradient-cubic.png",
+  "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream",
   "tools/check-native-metal-tracer-binary.sh",
   "tools/metal-port/tracer-corpus-atomic.toml",
   "tools/renderer-replay/src/bin/native-metal-product-root.rs",

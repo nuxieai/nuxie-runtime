@@ -8,3 +8,14 @@ backend = "metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry]]
+id = "native-metal-first-light-gradient-cubic-generic-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-gradient-cubic.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 0
+max_different_pixels = 0

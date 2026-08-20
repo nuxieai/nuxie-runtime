@@ -157,6 +157,8 @@ fn native_metal_forced_atomic_triangle_matches_pinned_cpp_metal_oracle() {
         output.execution_inventory,
         NativeMetalExecutionInventory {
             mode: RenderMode::ClockwiseAtomic,
+            color_ramp_pipeline: false,
+            gradient_texture: false,
             atomic_color_plane: false,
             atomic_clip_plane: true,
             atomic_coverage_plane: true,
@@ -192,6 +194,72 @@ fn native_metal_forced_atomic_triangle_matches_pinned_cpp_metal_oracle() {
         Some(32),
         true,
         "forced generic-atomic Rust Metal triangle versus pinned C++ Metal",
+    );
+}
+
+#[test]
+fn native_metal_forced_atomic_gradient_cubic_matches_pinned_cpp_metal_oracle() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(
+            fixture_root.join("streams/first-light-gradient-cubic.rive-stream"),
+        )
+        .expect("read gradient cubic stream"),
+    )
+    .expect("parse gradient cubic stream");
+    let (width, height) = stream.frame_size.expect("gradient cubic frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire forced-atomic native Metal gradient frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay gradient cubic through the public Factory/Renderer seam");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish forced-atomic native Metal gradient cubic");
+    assert_eq!(
+        output.execution_inventory,
+        NativeMetalExecutionInventory {
+            mode: RenderMode::ClockwiseAtomic,
+            color_ramp_pipeline: true,
+            gradient_texture: true,
+            atomic_color_plane: false,
+            atomic_clip_plane: true,
+            atomic_coverage_plane: true,
+            render_pass_initialize_pipeline: true,
+            midpoint_fan_pipeline: true,
+            render_pass_resolve_pipeline: true,
+        },
+        "gradient SrcOver must execute the real fixed-function generic-atomic branch"
+    );
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 3,
+            buffer_upload_calls: 7,
+            buffer_upload_bytes: 944,
+            queue_submissions: 1,
+            gpu_draw_calls: 5,
+            gpu_draw_instances: 17,
+            tessellation_spans: 6,
+            path_patches: 8,
+            ..BackendWorkMetrics::default()
+        },
+        "one color-ramp draw, one tessellation draw, and atomic initialize/path/resolve"
+    );
+
+    let cpp_metal = read_png(fixture_root.join("reference/metal/first-light-gradient-cubic.png"));
+    assert_rgba8_with_tolerance(
+        &output.pixels,
+        &cpp_metal,
+        0,
+        Some(0),
+        true,
+        "forced generic-atomic Rust Metal gradient versus pinned C++ Metal",
     );
 }
 

@@ -105,6 +105,8 @@ pub struct NativeMetalFrameOutput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NativeMetalExecutionInventory {
     pub mode: RenderMode,
+    pub color_ramp_pipeline: bool,
+    pub gradient_texture: bool,
     /// Fixed-function atomic SrcOver does not use the offscreen color plane.
     pub atomic_color_plane: bool,
     pub atomic_clip_plane: bool,
@@ -366,6 +368,7 @@ struct SolidTracerDraw {
 
 struct AtomicPathDraw {
     resources: super::logical_frame::PreparedTypedDrawResources,
+    gradient_batch: Option<super::logical_frame::GradientBatch>,
 }
 
 struct GradientDraw {
@@ -409,6 +412,9 @@ impl AtomicPathUploadData {
         flush_uniforms.coverage_clear_value = 0;
         flush_uniforms.max_path_id = 1;
         flush_uniforms.render_target_update_bounds = [0, 0, width as i32, height as i32];
+        if let Some(gradient_batch) = draw.gradient_batch.as_ref() {
+            flush_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height.max(1) as f32;
+        }
         Self {
             flush_uniforms,
             paths: [gpu::PathData::zeroed(), draw.resources.path],
@@ -423,7 +429,10 @@ impl AtomicPathUploadData {
     fn batch<'a>(&'a self, draw: &'a AtomicPathDraw) -> context::UploadBatch<'a> {
         context::UploadBatch {
             flush_uniforms: &self.flush_uniforms,
-            gradient_spans: &[],
+            gradient_spans: draw
+                .gradient_batch
+                .as_ref()
+                .map_or(&[], |batch| batch.spans.as_slice()),
             tessellation_spans: &draw.resources.spans,
             paths: &self.paths,
             paints: &self.paints,
@@ -599,6 +608,59 @@ impl Renderer for NativeMetalFrame {
             return;
         }
 
+        if self.mode == RenderMode::ClockwiseAtomic {
+            if !self.solid_draws.is_empty()
+                || self.atomic_path_draw.is_some()
+                || !self.gradient_draws.is_empty()
+                || !self.atlas_requests.is_empty()
+            {
+                self.unsupported
+                    .get_or_insert("native Metal atomic tracer supports one path draw");
+                return;
+            }
+            if paint.shader.is_none() && paint.color >> 24 != 0xff {
+                self.unsupported
+                    .get_or_insert("native Metal atomic tracer requires opaque solid color");
+                return;
+            }
+            if paint.shader.is_some() && !is_single_closed_cubic_contour(path) {
+                self.unsupported.get_or_insert(
+                    "native Metal atomic gradient tracer requires one closed cubic fill",
+                );
+                return;
+            }
+            let state = super::DrawState {
+                transform: self.state.transform,
+                opacity: self.state.opacity,
+                ..Default::default()
+            };
+            let prepared =
+                prepare_single_atomic_path_draw(self.logical_frame_config(), path, paint, state);
+            match prepared {
+                Ok(Some(prepared))
+                    if !prepared.resources.uses_interior
+                        && prepared.resources.triangles.is_empty()
+                        && !prepared.resources.spans.is_empty()
+                        && prepared.resources.instance_count != 0 =>
+                {
+                    self.atomic_path_draw = Some(AtomicPathDraw {
+                        resources: prepared.resources,
+                        gradient_batch: prepared.gradient_batch,
+                    });
+                }
+                Ok(Some(_)) => {
+                    self.unsupported.get_or_insert(
+                        "native Metal atomic tracer only supports midpoint-fan path resources",
+                    );
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    self.unsupported.get_or_insert(error);
+                }
+            }
+            return;
+        }
+
         if let Some(shader @ LogicalShader::Linear { .. }) = paint.shader.as_ref() {
             if !self.solid_draws.is_empty()
                 || !self.gradient_draws.is_empty()
@@ -648,44 +710,6 @@ impl Renderer for NativeMetalFrame {
         if paint.color >> 24 != 0xff || !self.gradient_draws.is_empty() {
             self.unsupported
                 .get_or_insert("native Metal tracer only supports opaque solid SrcOver fills");
-            return;
-        }
-        if self.mode == RenderMode::ClockwiseAtomic {
-            if !self.solid_draws.is_empty()
-                || self.atomic_path_draw.is_some()
-                || !self.gradient_draws.is_empty()
-                || !self.atlas_requests.is_empty()
-            {
-                self.unsupported
-                    .get_or_insert("native Metal atomic tracer supports one solid path draw");
-                return;
-            }
-            let state = super::DrawState {
-                transform: self.state.transform,
-                opacity: self.state.opacity,
-                ..Default::default()
-            };
-            let prepared =
-                prepare_single_atomic_path_draw(self.logical_frame_config(), path, paint, state);
-            match prepared {
-                Ok(Some(resources))
-                    if !resources.uses_interior
-                        && resources.triangles.is_empty()
-                        && !resources.spans.is_empty()
-                        && resources.instance_count != 0 =>
-                {
-                    self.atomic_path_draw = Some(AtomicPathDraw { resources });
-                }
-                Ok(Some(_)) => {
-                    self.unsupported.get_or_insert(
-                        "native Metal atomic tracer only supports midpoint-fan path resources",
-                    );
-                }
-                Ok(None) => {}
-                Err(error) => {
-                    self.unsupported.get_or_insert(error);
-                }
-            }
             return;
         }
         let Some(vertices) = solid_triangle_fan(path, self.state.transform) else {
@@ -775,8 +799,20 @@ impl NativeMetalFrame {
             .resource_lease
             .as_ref()
             .and_then(|lease| lease.atomic_path_pipelines.as_ref());
+        let gradient_texture = self
+            .resource_lease
+            .as_ref()
+            .is_some_and(|lease| lease.gradient.is_some());
+        let color_ramp_pipeline = gradient_texture
+            && (!self.gradient_draws.is_empty()
+                || self
+                    .atomic_path_draw
+                    .as_ref()
+                    .is_some_and(|draw| draw.gradient_batch.is_some()));
         let execution_inventory = NativeMetalExecutionInventory {
             mode: self.mode,
+            color_ramp_pipeline,
+            gradient_texture,
             atomic_color_plane,
             atomic_clip_plane,
             atomic_coverage_plane,
@@ -860,6 +896,9 @@ impl NativeMetalFrame {
                 super::draw::tessellation_texture_height(&draw.resources.spans);
             let upload_data = AtomicPathUploadData::new(width, height, self.clear_color, draw);
             let lease = self.context.prepare_atomic_path_resources(
+                draw.gradient_batch
+                    .as_ref()
+                    .map_or(0, |batch| batch.height as usize),
                 tessellation_height as usize,
                 pixel_format,
                 upload_data.batch(draw),
@@ -869,6 +908,16 @@ impl NativeMetalFrame {
                 self.backend_work.buffer_upload_bytes = lease.upload_bytes;
             }
             self.resource_lease = Some(lease);
+            if let Some(gradient_batch) = draw.gradient_batch.as_ref() {
+                encode_color_ramp_pass(
+                    &self.context,
+                    &self.command_buffer,
+                    gradient_batch,
+                    self.resource_lease
+                        .as_ref()
+                        .expect("atomic gradient reservation retained by the frame"),
+                )?;
+            }
             encode_atomic_tessellation_pass(
                 &self.context,
                 &self.command_buffer,
@@ -893,10 +942,16 @@ impl NativeMetalFrame {
                 )?
             };
             if self.collect_work_metrics {
-                self.backend_work.render_passes = 1 + atomic_render_passes;
-                self.backend_work.gpu_draw_calls = 4;
+                let gradient_passes = u64::from(draw.gradient_batch.is_some());
+                self.backend_work.render_passes = 1 + atomic_render_passes + gradient_passes;
+                self.backend_work.gpu_draw_calls = 4 + gradient_passes;
                 self.backend_work.gpu_draw_instances = u64::try_from(
-                    draw.resources.spans.len() + draw.resources.instance_count as usize + 2,
+                    draw.gradient_batch
+                        .as_ref()
+                        .map_or(0, |batch| batch.spans.len())
+                        + draw.resources.spans.len()
+                        + draw.resources.instance_count as usize
+                        + 2,
                 )
                 .unwrap_or(u64::MAX);
                 self.backend_work.tessellation_spans =
@@ -1221,12 +1276,16 @@ fn make_atomic_main_encoder(
     bind_fragment_buffer(&encoder, &lease.paints, 6);
     bind_fragment_buffer(&encoder, &lease.paint_aux, 7);
     bind_vertex_buffer(&encoder, &lease.contours, 8);
-    // SAFETY: 7, 9, 11, 17, and 19 are generated Metal binding indices for
-    // tessellation, Gaussian LUT, linear-clamp sampler, clip atomics, and
-    // coverage atomics. Every object/buffer is retained by the context,
-    // resource lease, or render target until command-buffer completion.
+    // SAFETY: 7, 8, 9, 11, 17, and 19 are generated Metal binding indices for
+    // tessellation, gradient ramp, Gaussian LUT, linear-clamp sampler, clip
+    // atomics, and coverage atomics. Every object/buffer is retained by the
+    // context, resource lease, or render target until command-buffer
+    // completion.
     unsafe {
         encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
+        if let Some(gradient) = lease.gradient.as_deref() {
+            encoder.setFragmentTexture_atIndex(Some(gradient), 8);
+        }
         encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
         encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
         encoder.setFragmentSamplerState_atIndex(
@@ -1429,54 +1488,7 @@ fn encode_gradient_resource_passes(
 ) -> Result<(), RendererError> {
     let tessellation_height = super::draw::tessellation_texture_height(&draw.tessellation.spans);
 
-    let gradient_pass = MTLRenderPassDescriptor::renderPassDescriptor();
-    gradient_pass.setRenderTargetWidth(gradient_resource::GRADIENT_TEXTURE_WIDTH);
-    gradient_pass.setRenderTargetHeight(draw.gradient_batch.height as usize);
-    // SAFETY: every Metal render-pass descriptor exposes color attachment zero,
-    // which upstream uses for the RGBA8 color-ramp texture.
-    let gradient_attachment =
-        unsafe { gradient_pass.colorAttachments().objectAtIndexedSubscript(0) };
-    let gradient_texture = lease.gradient.as_deref().ok_or_else(|| {
-        RendererError::NativeMetal("gradient resource texture is absent".to_owned())
-    })?;
-    gradient_attachment.setTexture(Some(gradient_texture));
-    gradient_attachment.setLoadAction(MTLLoadAction::DontCare);
-    gradient_attachment.setStoreAction(MTLStoreAction::Store);
-    let gradient_encoder = command_buffer
-        .renderCommandEncoderWithDescriptor(&gradient_pass)
-        .ok_or_else(|| {
-            RendererError::NativeMetal("failed to create color-ramp encoder".to_owned())
-        })?;
-    gradient_encoder.setViewport(MTLViewport {
-        originX: 0.0,
-        originY: 0.0,
-        width: gradient_resource::GRADIENT_TEXTURE_WIDTH as f64,
-        height: draw.gradient_batch.height as f64,
-        znear: 0.0,
-        zfar: 1.0,
-    });
-    gradient_encoder.setRenderPipelineState(context.color_ramp_pipeline());
-    bind_vertex_buffer(&gradient_encoder, &lease.flush_uniforms, 3);
-    bind_vertex_buffer(
-        &gradient_encoder,
-        lease.gradient_spans.as_deref().ok_or_else(|| {
-            RendererError::NativeMetal("gradient span upload is absent".to_owned())
-        })?,
-        0,
-    );
-    gradient_encoder.setCullMode(MTLCullMode::Back);
-    // SAFETY: the compiled color-ramp ABI consumes exactly eight vertices per
-    // span; the retained shared upload buffer contains every initialized Pod
-    // span, and the instance count is the same slice length.
-    unsafe {
-        gradient_encoder.drawPrimitives_vertexStart_vertexCount_instanceCount(
-            MTLPrimitiveType::TriangleStrip,
-            0,
-            gpu::GRAD_SPAN_TRI_STRIP_VERTEX_COUNT,
-            draw.gradient_batch.spans.len(),
-        );
-    }
-    gradient_encoder.endEncoding();
+    encode_color_ramp_pass(context, command_buffer, &draw.gradient_batch, lease)?;
 
     let tessellation_pass = MTLRenderPassDescriptor::renderPassDescriptor();
     tessellation_pass.setRenderTargetWidth(tessellation_resource::TESSELLATION_TEXTURE_WIDTH);
@@ -1531,6 +1543,63 @@ fn encode_gradient_resource_passes(
             );
     }
     tessellation_encoder.endEncoding();
+    Ok(())
+}
+
+fn encode_color_ramp_pass(
+    context: &NativeMetalContext,
+    command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    gradient_batch: &super::logical_frame::GradientBatch,
+    lease: &context::PreparedResourceLease,
+) -> Result<(), RendererError> {
+    let gradient_pass = MTLRenderPassDescriptor::renderPassDescriptor();
+    gradient_pass.setRenderTargetWidth(gradient_resource::GRADIENT_TEXTURE_WIDTH);
+    gradient_pass.setRenderTargetHeight(gradient_batch.height as usize);
+    // SAFETY: every Metal render-pass descriptor exposes color attachment zero,
+    // which upstream uses for the RGBA8 color-ramp texture.
+    let gradient_attachment =
+        unsafe { gradient_pass.colorAttachments().objectAtIndexedSubscript(0) };
+    let gradient_texture = lease.gradient.as_deref().ok_or_else(|| {
+        RendererError::NativeMetal("gradient resource texture is absent".to_owned())
+    })?;
+    gradient_attachment.setTexture(Some(gradient_texture));
+    gradient_attachment.setLoadAction(MTLLoadAction::DontCare);
+    gradient_attachment.setStoreAction(MTLStoreAction::Store);
+    let gradient_encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(&gradient_pass)
+        .ok_or_else(|| {
+            RendererError::NativeMetal("failed to create color-ramp encoder".to_owned())
+        })?;
+    gradient_encoder.setViewport(MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: gradient_resource::GRADIENT_TEXTURE_WIDTH as f64,
+        height: gradient_batch.height as f64,
+        znear: 0.0,
+        zfar: 1.0,
+    });
+    gradient_encoder.setRenderPipelineState(context.color_ramp_pipeline());
+    bind_vertex_buffer(&gradient_encoder, &lease.flush_uniforms, 3);
+    bind_vertex_buffer(
+        &gradient_encoder,
+        lease.gradient_spans.as_deref().ok_or_else(|| {
+            RendererError::NativeMetal("gradient span upload is absent".to_owned())
+        })?,
+        0,
+    );
+    gradient_encoder.setCullMode(MTLCullMode::Back);
+    // SAFETY: the compiled color-ramp ABI consumes exactly eight vertices per
+    // span; the retained shared upload buffer contains every initialized Pod
+    // span, and the instance count is the same slice length.
+    unsafe {
+        gradient_encoder.drawPrimitives_vertexStart_vertexCount_instanceCount(
+            MTLPrimitiveType::TriangleStrip,
+            0,
+            gpu::GRAD_SPAN_TRI_STRIP_VERTEX_COUNT,
+            gradient_batch.spans.len(),
+        );
+    }
+    gradient_encoder.endEncoding();
     Ok(())
 }
 

@@ -247,6 +247,7 @@ impl ShaderAsset {
                 source,
                 entries,
                 bindings,
+                std::sync::Arc::from(binding_map),
                 entry_reflection,
                 binding_reflection,
             )
@@ -1194,6 +1195,7 @@ mod tests {
         assert!(shader.source().contains("metal_stdlib"));
         assert_eq!(shader.entries().len(), 3);
         assert_eq!(shader.bindings().len(), 3);
+        assert_eq!(shader.binding_map_bytes(), native_binding_map());
         assert_eq!(shader.bindings()[0].backend_slots, [Some(0), Some(0), None]);
         assert_eq!(shader.bindings()[1].backend_space, 1);
         assert_eq!(shader.binding_reflection()[0].min_buffer_size, 64);
@@ -1211,6 +1213,47 @@ mod tests {
                 sampling: Some(GpuCanvasShaderSampling::Center),
             },
         );
+    }
+
+    #[test]
+    fn trusted_apple_metal_retains_exact_append_only_target_10_bytes() {
+        let source = source_container(
+            &[
+                (0, "vertex", "vs_native"),
+                (1, "fragment", "fs_native"),
+                (2, "compute", "cs_native"),
+            ],
+            "#include <metal_stdlib>\nusing namespace metal;",
+        );
+        let original = native_binding_map();
+        let mut extended = original[..8].to_vec();
+        extended[2..4].copy_from_slice(&15u16.to_le_bytes());
+        for (index, row) in original[8..].chunks_exact(14).enumerate() {
+            extended.extend_from_slice(row);
+            extended.push(0xa0 + index as u8);
+        }
+        extended.extend_from_slice(&[0xa5, 0x5a]);
+        let reflection = native_reflection(&source, &extended);
+        let payload = rstb_payload_with_sections(
+            &[
+                (APPLE_METAL_SOURCE_TARGET, source),
+                (APPLE_METAL_BINDING_MAP_TARGET, extended.clone()),
+            ],
+            &[(SUPPLEMENTAL_REFLECTION_SECTION, reflection)],
+        );
+        let asset = ShaderAsset::decode("extended-native", &payload).unwrap();
+        let artifact = asset
+            .decode_for_profile(
+                "extended-native",
+                GpuCanvasShaderProfile::TrustedAppleMetal,
+                Some(provenance(&payload)),
+            )
+            .unwrap();
+        let GpuCanvasShaderArtifact::TrustedAppleMetal(shader) = artifact else {
+            panic!("Metal profile must return the native artifact");
+        };
+        assert_eq!(shader.binding_map_bytes(), extended);
+        assert_eq!(shader.bindings().len(), 3);
     }
 
     #[test]

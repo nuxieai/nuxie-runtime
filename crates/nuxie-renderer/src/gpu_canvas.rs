@@ -4535,8 +4535,29 @@ mod tests {
                 123, digest,
             )
         };
+        let mut binding_map = vec![2, 1];
+        binding_map.extend_from_slice(&14u16.to_le_bytes());
+        binding_map.extend_from_slice(&(bindings.len() as u32).to_le_bytes());
+        for binding in &bindings {
+            binding_map.extend_from_slice(&[
+                binding.group,
+                binding.binding,
+                binding.kind as u8,
+                binding.stage_mask,
+                binding.backend_space,
+            ]);
+            for slot in binding.backend_slots {
+                binding_map.extend_from_slice(&slot.unwrap_or(u16::MAX).to_le_bytes());
+            }
+            binding_map.extend_from_slice(&[
+                binding.texture_view_dimension as u8,
+                binding.texture_sample_type as u8,
+                u8::from(binding.texture_multisampled),
+            ]);
+        }
         // SAFETY: the helper never submits this synthetic shader to a device;
-        // it exercises only the target-10/reflection validator.
+        // its decoded bindings and exact v2 target-10 bytes are constructed
+        // together above for the target-10/reflection validator.
         unsafe {
             nuxie_render_api::GpuCanvasAppleMetalShader::from_verified_parts(
                 provenance,
@@ -4545,6 +4566,7 @@ mod tests {
                 "synthetic MSL".into(),
                 Vec::new(),
                 bindings,
+                binding_map.into(),
                 Vec::new(),
                 binding_reflection,
             )

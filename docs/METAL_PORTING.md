@@ -172,6 +172,14 @@ public `Factory` render-buffer constructor is infallible, a native Metal
 allocation failure deliberately terminates at that backend boundary; it never
 substitutes CPU storage or the wgpu renderer.
 
+## Main renderer whole-file translation phase
+
+The main native renderer follows the durable whole-owner campaign in
+[`METAL_RENDERER_PORT_PLAN.md`](METAL_RENDERER_PORT_PLAN.md). That plan
+explicitly excludes feature/tracer-bullet implementation: the complete pinned
+Metal header and implementation are translated before compiler diagnostics and
+renderer fixtures become work queues.
+
 ## ORE file-oriented translation phase
 
 The remaining source inventory is the backend-neutral ORE interface, its

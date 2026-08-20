@@ -256,13 +256,14 @@ required_tests = ["completion releases buffer-ring lock", "context drop before c
 id = "ore.context_frame_serials"
 issue = "UNIV-2091"
 status = "in-progress"
-rule = "ORE Metal retains one device, queue, and current recording command buffer. beginFrame replaces the recording buffer and advances a monotonic serial; endFrame commits once and clears that slot. The completion block owns shared serial state independently of ContextMetal and publishes the maximum finished serial regardless of command status."
+rule = "ORE Metal retains one device, queue, and current recording command buffer. beginFrame replaces the recording buffer and advances a monotonic serial; endFrame commits once and clears that slot. The completion block owns shared serial state independently of ContextMetal and publishes the maximum finished serial regardless of command status. A narrow optional product token records native success or failure before that serial publication so authenticated pixels are never published from a failed command buffer."
 citations = ["cpp:renderer/include/rive/renderer/ore/ore_context_metal.hpp:21-103", "cpp:renderer/src/ore/metal/ore_context_metal.mm:1141-1194"]
-required_tests = ["device queue and current-buffer retention", "begin/end serial monotonicity", "completion after context drop", "out-of-order completion publishes max", "failed completion advances reuse safety", "source-exact waitForGPU current-buffer behavior", "abandoned recording releases uncommitted"]
+required_tests = ["device queue and current-buffer retention", "begin/end serial monotonicity", "completion after context drop", "out-of-order completion publishes max", "failed completion advances reuse safety", "optional product completion distinguishes native success and failure", "source-exact waitForGPU current-buffer behavior", "abandoned recording releases uncommitted"]
 evidence_paths = [
   "crates/nuxie-ore-metal/src/metal/context.rs",
   "crates/nuxie-ore-metal/src/metal/buffer.rs",
   "crates/nuxie-ore-metal/tests/ore_binding_witness.rs",
+  "crates/nuxie/tests/ore_metal_authored_gpu_canvas.rs",
 ]
 
 [[owner]]

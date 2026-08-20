@@ -261,6 +261,44 @@ reflection, scripting occurrence identity, texture/sampler plans, and the
 shipping backend selector remain UNIV-2091 follow-up work. No default changes
 before UNIV-2092.
 
+### Authenticated ORE Factory checkpoint: UNIV-2091
+
+The next file-first checkpoint connects the already-ported ORE context to the
+existing product `Factory` seam without introducing a cross-backend HAL.
+`crates/nuxie/src/ore_metal_gpu_canvas.rs` accepts only the opaque
+`GpuCanvasAppleMetalShader` minted from an exact trusted `.riv` import. The
+concrete Factory supplies its retained Metal device and queue; the adapter
+never selects a second service. It passes the authenticated target-2 MSL and
+exact target-10 bytes directly to ORE, derives positional bind-group layouts
+(including group gaps) from the decoded target-10 rows, materializes a fresh
+physical occurrence, records one render pass, requires successful native
+command-buffer completion, and retains both the native texture and its logical
+ORE view in the returned image.
+
+This checkpoint is deliberately narrow: one combined module, one pipeline,
+one clear/store RGBA8 pass, one fullscreen non-indexed triangle, and uniform
+buffers only. Scripting's validated dynamic UBO offsets are normalized into
+the immutable uniform snapshots consumed here. Separate stage modules,
+vertex/index buffers, textures, samplers, other dynamic state, depth,
+blending, MSAA, multiple
+pipelines/passes/draws, compute, and native-renderer compositing fail closed.
+Ordinary imports and generic script authority never mint native-shader
+provenance and therefore make zero ORE shader calls.
+
+`make ore-metal-authenticated-gpu-canvas` imports an executable ShaderAsset
+and script through `File::import_with_execution_capability`, exercises the
+trusted profile, prepared module plus a distinct freshly compiled occurrence,
+sparse groups 0 and 2, a normalized 256-byte dynamic UBO offset, two immutable
+UBO snapshots, ORE submission, retained readback, and exact
+`[64, 128, 191, 255]` pixels under Metal API and shader validation. The same
+host target is used for Cargo graph resolution, test compilation, execution,
+and Mach-O inspection. The graph and rooted artifact reject `wgpu`,
+`wgpu-hal`, Naga, `nuxie-renderer`, and `apple-msl-catalog`; direct
+Dawn/WebGPU dynamic links are also rejected. The scripting crate still owns
+its product-neutral WGSL decoder, so WGSL parser strings are not misreported
+as a reachable WebGPU backend. The orthogonal
+`ore-metal-authored-msl` feature leaves shipping defaults unchanged.
+
 ## Trial translation: UNIV-2086
 
 UNIV-2086 is the process trial as well as the solid-render tracer. It must prove

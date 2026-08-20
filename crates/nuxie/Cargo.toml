@@ -16,6 +16,13 @@ apple-authored-msl = [
     "nuxie-renderer/apple-authored-msl",
     "nuxie-scripting/apple-authored-msl",
 ]
+ore-metal-authored-msl = [
+    "scripting",
+    "nuxie-scripting/apple-authored-msl",
+    "dep:nuxie-ore-metal",
+    "dep:objc2",
+    "dep:objc2-metal",
+]
 threading = ["nuxie-runtime/threading"]
 test-support = []
 scripting = [
@@ -33,6 +40,11 @@ nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 nuxie-schema = { path = "../nuxie-schema" }
 nuxie-scripting = { path = "../nuxie-scripting", optional = true, default-features = false }
 sha2 = "0.10"
+
+[target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
+nuxie-ore-metal = { path = "../nuxie-ore-metal", optional = true }
+objc2 = { version = "0.6.4", optional = true }
+objc2-metal = { version = "0.3.2", optional = true, default-features = false, features = ["MTLAllocation", "MTLCommandQueue", "MTLDevice", "MTLPixelFormat", "MTLResource", "MTLTexture", "MTLTypes"] }
 
 [dev-dependencies]
 luaur-common = "=0.1.8"

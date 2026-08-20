@@ -68,12 +68,13 @@ use objc2_foundation::{NSRange, NSString};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 use objc2_metal::{
     MTLBlendFactor, MTLBlendOperation, MTLClearColor, MTLColorWriteMask, MTLCommandBuffer,
-    MTLCommandEncoder, MTLCommandQueue, MTLCompareFunction, MTLDepthStencilDescriptor, MTLDevice,
-    MTLLibrary, MTLLoadAction, MTLPixelFormat, MTLRenderPassDescriptor,
-    MTLRenderPipelineDescriptor, MTLResource, MTLResourceOptions, MTLSamplerAddressMode,
-    MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLStencilDescriptor,
-    MTLStencilOperation, MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor,
-    MTLTextureType, MTLTextureUsage, MTLVertexDescriptor, MTLVertexFormat, MTLVertexStepFunction,
+    MTLCommandBufferStatus, MTLCommandEncoder, MTLCommandQueue, MTLCompareFunction,
+    MTLDepthStencilDescriptor, MTLDevice, MTLLibrary, MTLLoadAction, MTLPixelFormat,
+    MTLRenderPassDescriptor, MTLRenderPipelineDescriptor, MTLResource, MTLResourceOptions,
+    MTLSamplerAddressMode, MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSamplerMipFilter,
+    MTLStencilDescriptor, MTLStencilOperation, MTLStorageMode, MTLStoreAction, MTLTexture,
+    MTLTextureDescriptor, MTLTextureType, MTLTextureUsage, MTLVertexDescriptor, MTLVertexFormat,
+    MTLVertexStepFunction,
 };
 
 const MAX_BINDINGS_PER_KIND: usize = 8;
@@ -87,6 +88,45 @@ struct RetainedMetalQueue(Retained<ProtocolObject<dyn MTLCommandQueue>>);
 
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 struct RetainedMetalCommandBuffer(Retained<ProtocolObject<dyn MTLCommandBuffer>>);
+
+/// Product-facing completion token for one submitted Metal command buffer.
+///
+/// Pinned ORE publishes only a completed serial. The authenticated product
+/// adapter additionally needs to distinguish successful completion from a
+/// driver-reported command-buffer failure before publishing rendered pixels.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[derive(Clone)]
+pub struct MetalSubmissionCompletion {
+    result: Arc<Mutex<Option<Result<(), String>>>>,
+}
+
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+impl MetalSubmissionCompletion {
+    pub fn result(&self) -> Option<Result<(), String>> {
+        self.result
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    fn complete(&self, result: Result<(), String>) {
+        *self
+            .result
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(result);
+    }
+}
+
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+fn command_buffer_completion_result(
+    status: MTLCommandBufferStatus,
+    error: Option<String>,
+) -> Result<(), String> {
+    if status == MTLCommandBufferStatus::Completed {
+        return Ok(());
+    }
+    Err(error.unwrap_or_else(|| format!("Metal command buffer completed with status {status:?}")))
+}
 
 /// Concrete Metal ORE context.
 ///
@@ -232,13 +272,36 @@ impl ContextMetal {
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     pub fn end_frame(&self) {
+        let _ = self.end_frame_with_completion();
+    }
+
+    /// Commit the current frame and return a token that reports native success.
+    ///
+    /// This is a narrow corrective product seam over pinned ORE's serial-only
+    /// completion callback. It does not change `end_frame`'s submission order.
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    pub fn end_frame_with_completion(&self) -> Option<MetalSubmissionCompletion> {
         let Some(command_buffer) = self.lock_command_buffer().take() else {
-            return;
+            return None;
         };
         let finished_serial = self.current_serial();
         let completion_state = Arc::clone(&self.buffer_state);
+        let submission = MetalSubmissionCompletion {
+            result: Arc::new(Mutex::new(None)),
+        };
+        let submission_for_handler = submission.clone();
         let completion = block2::RcBlock::new(
-            move |_buffer: std::ptr::NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
+            move |buffer: std::ptr::NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
+                // SAFETY: Metal invokes the copied completion block with the
+                // non-null command buffer retained for the callback duration.
+                let buffer = unsafe { buffer.as_ref() };
+                let result = command_buffer_completion_result(
+                    buffer.status(),
+                    buffer
+                        .error()
+                        .map(|error| format!("Metal command buffer failed: {error:?}")),
+                );
+                submission_for_handler.complete(result);
                 completion_state.complete_serial(finished_serial);
             },
         );
@@ -251,6 +314,7 @@ impl ContextMetal {
                 .addCompletedHandler(std::ptr::from_ref(&*completion).cast_mut());
         }
         command_buffer.0.commit();
+        Some(submission)
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -1630,10 +1694,20 @@ mod tests {
             .current_command_buffer()
             .expect("beginFrame creates command buffer");
         let completion = Arc::clone(&context.buffer_state);
-        context.end_frame();
+        let submission = context
+            .end_frame_with_completion()
+            .expect("current command buffer");
         drop(context);
         command_buffer.waitUntilCompleted();
         assert_eq!(completion.completed_serial(), 1);
+        assert_eq!(submission.result(), Some(Ok(())));
+        assert!(
+            command_buffer_completion_result(
+                MTLCommandBufferStatus::Error,
+                Some("injected Metal failure".to_owned())
+            )
+            .is_err()
+        );
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]

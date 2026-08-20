@@ -9,6 +9,7 @@ pub mod binding_map;
 pub mod buffer;
 pub mod gpu_resource;
 pub mod metal;
+pub mod pipeline;
 pub mod rstb_entry_container;
 pub mod sampler;
 pub mod shader_module;

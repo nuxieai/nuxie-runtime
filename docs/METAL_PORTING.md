@@ -283,6 +283,64 @@ pixels but exposes no numeric counter API, so these values are explicitly a
 deterministic Rust regression oracle rather than a claim of C++ counter
 equality.
 
+## UNIV-2087 feather-atlas slice
+
+The third resource checkpoint ports one complete, naturally selected feather
+atlas stroke through the public `Factory`/`Renderer` seam. The context owns a
+nullable private `R16Float` render-target/shader-read texture, the exact `RF`
+atlas vertex function with `UE` fill/Add and `VE` stroke/Max fragment
+pipelines, and the final raster-order atlas-blit permutation. Canonical logical
+admission, feather preparation, and atlas packing supply the geometry and
+placement. A backend-neutral, solid-only serializer produces the narrow
+path/paint/aux/contour records, tessellation spans, patch range, and six final
+`TriangleVertex` values without constructing the WGPU-bearing general draw
+owner; a focused byte-level test keeps that output equal to the canonical
+writer for this admitted fixture. The Metal adapter asserts this checkpoint's
+deliberate boundary of one logical flush and one atlas draw instead of
+inventing a parallel general scheduler.
+
+The upload owner now contains the upstream eighth triangle ring. This fixture
+performs seven nonempty uploads totaling 1,064 bytes because the solid paint
+has no gradient-span payload; the eighth owned ring still carries the six
+atlas-blit vertices. Its deterministic topology is one command buffer, three
+render passes, one submission, three draw calls, thirteen submitted
+instances, seven tessellation spans, and five path patches. The selected
+placement is a 33x33 content extent in a 41x41 physical allocation.
+
+The platform seam stores only `PreparedTypedDrawResources`-derived records.
+An earlier version retained `SolidDraw` until Metal encoding; although its
+image field was `None`, Rust's unwind/drop glue still made the WGPU image owner
+reachable and grew the rooted product binary. The release-size gate caught
+this when pixel tests did not. The reusable rule is that a platform root must
+be backend-neutral across values, ownership, destruction, and failure paths.
+Shared planners should expose narrow typed outputs instead of making a native
+backend retain a sum type that contains another backend's resources. The same
+rule also led the single-gradient seam to consume normalized gradient inputs
+without constructing `SolidDraw`. The resulting rooted Mach-O is 635,840
+bytes and contains no WGPU, Naga, or WGSL markers.
+
+The historical fixture called `first-light-atlas-feather-stroke` used feather
+20 at identity scale. Pinned C++ selects the atlas only when
+`16 / (feather * 1.5 * matrixScale) <= 0.5`, so that input actually exercised
+direct feathering. This checkpoint corrects it to feather 24, captures a fresh
+native-Metal reference from pinned revision
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`, and adds an explicit threshold and
+extent test. This is a reusable workflow rule: names and expected topology are
+not routing evidence; every parity fixture must assert that it crossed the
+intended upstream branch before its pixels can promote a port.
+
+The primary C++ Metal comparison requires identical coverage occupancy, at
+most two RGBA8 LSB, and an independently selected ceiling of one quarter of
+the 64x64 frame (1,024 differing pixels); the observed run was 838 pixels at
+one LSB. Rust wgpu uses the same power-of-two ceiling as a separately audited
+secondary contract and observed 804 pixels at one LSB. The bound was selected
+from frame geometry before promotion rather than copied from either candidate
+count. Multiple atlas draws or logical flushes, relocated
+flush-wide batching, atlas fills, clip/scissor overlap, gradient or image atlas
+paints, advanced/HSL blends, direct feathers, atomic scheduling, background
+pipeline selection, and asynchronous presentation remain explicit later
+slices. The combined resource owner therefore remains `in-progress`.
+
 ## Compiler and commit workflow
 
 Use compiler errors as the work queue within one upstream source group:

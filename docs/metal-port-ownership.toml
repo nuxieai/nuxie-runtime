@@ -128,19 +128,22 @@ issue = "UNIV-2087"
 # gradient/tessellation texture pair, the complete resource metallib, Gaussian
 # LUT, and one live linear-gradient midpoint-fan draw. Seven context-owned
 # upload/uniform rings now preserve upstream's verbatim capacities and 1,2,0
-# rotation behind a blocking abandon/completion coordinator. The live oracle
-# pins deterministic Rust work counters. Multiple simultaneously in-flight
-# concrete texture pairs, atlas ownership, and injected device failure remain
-# before this combined owner can be ported.
+# rotation behind a blocking abandon/completion coordinator. The third slice
+# adds the eighth triangle ring, the retained R16Float feather atlas, exact
+# fill/stroke mask pipelines, and a live atlas blit. Multiple simultaneously
+# in-flight concrete texture pairs and injected device failure remain before
+# this combined owner can be ported.
 status = "in-progress"
 rule = "Gradient, Gaussian, tessellation, feather-atlas, sampler, path-patch, and image-rect resources remain context-owned and are resized or recreated at the same lifecycle points as upstream."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:244-275", "cpp:renderer/src/metal/render_context_metal_impl.mm:100-175"]
-required_tests = ["gradient resize and reuse", "seven upload rings rotate and release exactly once", "deterministic narrow-slice work counters", "atlas resize and preservation rules", "sampler permutation completeness"]
+required_tests = ["gradient resize and reuse", "eight upload rings rotate and release exactly once", "deterministic narrow-slice work counters", "atlas resize and preservation rules", "live atlas mask and final blit", "sampler permutation completeness"]
 evidence_paths = [
   "crates/nuxie-renderer/build.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
   "crates/nuxie-renderer/src/native_metal/gradient_resource.rs",
+  "crates/nuxie-renderer/src/native_metal/feather_atlas_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/feather_atlas_resource.rs",
   "crates/nuxie-renderer/src/native_metal/image_texture.rs",
   "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
   "crates/nuxie-renderer/src/native_metal/samplers.rs",
@@ -149,7 +152,10 @@ evidence_paths = [
   "crates/nuxie-renderer/tests/native_metal_resource_shaders.rs",
   "crates/nuxie-renderer/tests/native_metal_tracer.rs",
   "fixtures/renderer/reference/metal/first-light-gradient-cubic.png",
+  "fixtures/renderer/reference/metal/first-light-atlas-feather-stroke-clockwise-atomic.png",
+  "fixtures/renderer/reference/metal/first-light-atlas-feather-stroke-clockwise-atomic.provenance",
   "fixtures/renderer/streams/first-light-gradient-cubic.rive-stream",
+  "fixtures/renderer/streams/first-light-atlas-feather-stroke.rive-stream",
   "tools/metal-port/tracer-corpus.toml",
   "tools/metal-port/tracer-corpus-wgpu-secondary.toml",
 ]

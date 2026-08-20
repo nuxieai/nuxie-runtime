@@ -15,6 +15,85 @@ SPEC.loader.exec_module(CHECK)
 
 
 class MetalPortCheckTests(unittest.TestCase):
+    def test_reference_provenance_is_bound_to_manifest_and_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            stream = root / "fixtures/scene.rive-stream"
+            reference = root / "fixtures/scene.png"
+            provenance = root / "fixtures/scene.provenance"
+            stream.parent.mkdir(parents=True)
+            stream.write_bytes(b"stream")
+            reference.write_bytes(b"png")
+            runtime_revision = "a" * 40
+            input_manifest_sha256 = "b" * 64
+            replay_sha256 = "c" * 64
+            provenance.write_text(
+                "\n".join(
+                    [
+                        "provenance_schema=1",
+                        "renderer_implementation=cpp-native-metal",
+                        "capture_tool=renderer-replay-ffi-metal",
+                        "backend=metal",
+                        "adapter_device=Test Metal Device",
+                        "case_id=scene",
+                        f"stream_sha256={CHECK.sha256_file(stream)}",
+                        f"runtime_revision={runtime_revision}",
+                        f"reference_input_manifest_sha256={input_manifest_sha256}",
+                        f"replay_sha256={replay_sha256}",
+                        f"png_sha256={CHECK.sha256_file(reference)}",
+                        "frame=0",
+                        "frame_width=64",
+                        "frame_height=64",
+                        "mode=clockwise-atomic",
+                        "sample_count=1",
+                    ]
+                )
+                + "\n"
+            )
+            subprocess.run(["git", "-C", str(root), "add", "fixtures"], check=True)
+            manifest = {
+                "upstream_ref": runtime_revision,
+                "reference_provenance": [
+                    {
+                        "id": "scene",
+                        "path": "fixtures/scene.provenance",
+                        "stream": "fixtures/scene.rive-stream",
+                        "reference": "fixtures/scene.png",
+                        "renderer_implementation": "cpp-native-metal",
+                        "capture_tool": "renderer-replay-ffi-metal",
+                        "backend": "metal",
+                        "adapter_device": "Test Metal Device",
+                        "replay_sha256": replay_sha256,
+                        "reference_input_manifest_sha256": input_manifest_sha256,
+                        "frame": 0,
+                        "frame_width": 64,
+                        "frame_height": 64,
+                        "mode": "clockwise-atomic",
+                        "sample_count": 1,
+                    }
+                ],
+            }
+
+            errors: list[str] = []
+            CHECK.validate_reference_provenance(manifest, root, errors)
+            self.assertEqual(errors, [])
+
+            stream.write_bytes(b"drifted stream")
+            errors.clear()
+            CHECK.validate_reference_provenance(manifest, root, errors)
+            self.assertIn("stream_sha256", "\n".join(errors))
+
+            stream.write_bytes(b"stream")
+            provenance.write_text(
+                provenance.read_text().replace(
+                    f"replay_sha256={replay_sha256}", f"replay_sha256={'0' * 64}"
+                )
+            )
+            errors.clear()
+            CHECK.validate_reference_provenance(manifest, root, errors)
+            self.assertIn("replay_sha256", "\n".join(errors))
+
     def test_scope_expansion_is_exhaustive_and_honors_exclusions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

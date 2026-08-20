@@ -1968,13 +1968,13 @@ struct LogicalPaint {
 }
 
 #[derive(Clone, Copy)]
-struct AtlasPlacement {
-    scale: f32,
-    translate: [f32; 2],
-    bounds: [f32; 4],
-    origin: [u32; 2],
-    width: u32,
-    height: u32,
+pub(crate) struct AtlasPlacement {
+    pub(crate) scale: f32,
+    pub(crate) translate: [f32; 2],
+    pub(crate) bounds: [f32; 4],
+    pub(crate) origin: [u32; 2],
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 impl Default for LogicalPaint {
@@ -11694,6 +11694,112 @@ mod tests {
                 ]
             );
         }
+    }
+
+    #[test]
+    fn native_metal_single_atlas_serializer_matches_the_canonical_writer() {
+        fn pod_slice<T: bytemuck::Pod>(values: &[T]) -> &[u8] {
+            bytemuck::cast_slice(values)
+        }
+
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::RasterOrdering,
+            max_texture_dimension_2d: 16_384,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(16.0, 16.0);
+        raw_path.line_to(48.0, 16.0);
+        raw_path.line_to(48.0, 48.0);
+        raw_path.line_to(16.0, 48.0);
+        raw_path.close();
+        let path = LogicalPath {
+            raw_path: Arc::new(raw_path),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let paint = LogicalPaint {
+            style: RenderPaintStyle::Stroke,
+            thickness: 8.0,
+            feather: 24.0,
+            ..LogicalPaint::default()
+        };
+        let state = DrawState::default();
+
+        let narrow =
+            logical_frame::prepare_single_raster_ordering_atlas_draw(config, state, &path, &paint)
+                .unwrap()
+                .unwrap()
+                .0;
+
+        let admitted = logical_frame::admit_path_draw(config, state, &path, &paint)
+            .unwrap()
+            .unwrap();
+        let mut scratch = draw::StrokePreparationScratch::default();
+        let draw = admitted.finish(0, &mut scratch).unwrap();
+        let mut frame = logical_frame::LogicalFrame::new(config);
+        frame.push_content_batch(Vec::new(), draw).unwrap();
+        let mut board =
+            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+        frame.finalize(&mut board).unwrap();
+        let prepared = logical_frame::LogicalResourceStore::default()
+            .prepare_for_production(&frame)
+            .unwrap();
+        let selection = prepared.typed_draws(&frame.draws);
+        let canonical = selection.draw(0).unwrap();
+
+        let narrow_atlas = narrow.atlas_placement.unwrap();
+        let canonical_atlas = canonical.atlas_placement.unwrap();
+        assert_eq!(
+            narrow_atlas.scale.to_bits(),
+            canonical_atlas.scale.to_bits()
+        );
+        assert_eq!(narrow_atlas.translate, canonical_atlas.translate);
+        assert_eq!(narrow_atlas.bounds, canonical_atlas.bounds);
+        assert_eq!(narrow_atlas.origin, canonical_atlas.origin);
+        assert_eq!(narrow_atlas.width, canonical_atlas.width);
+        assert_eq!(narrow_atlas.height, canonical_atlas.height);
+        assert_eq!(
+            bytemuck::bytes_of(&narrow.path),
+            bytemuck::bytes_of(&canonical.path)
+        );
+        assert_eq!(
+            bytemuck::bytes_of(&narrow.paint),
+            bytemuck::bytes_of(&canonical.paint)
+        );
+        assert_eq!(
+            bytemuck::bytes_of(&narrow.paint_aux),
+            bytemuck::bytes_of(&canonical.paint_aux)
+        );
+        assert_eq!(pod_slice(&narrow.spans), pod_slice(&canonical.spans));
+        assert_eq!(pod_slice(&narrow.contours), pod_slice(&canonical.contours));
+        assert_eq!(
+            pod_slice(&narrow.triangles),
+            pod_slice(&canonical.triangles)
+        );
+        assert_eq!(narrow.contour_base, canonical.contour_base);
+        assert_eq!(narrow.base_instance, canonical.base_instance);
+        assert_eq!(narrow.instance_count, canonical.instance_count);
+        assert_eq!(narrow.triangle_count, canonical.triangle_count);
+        assert_eq!(
+            narrow.borrowed_triangle_count,
+            canonical.borrowed_triangle_count
+        );
+        assert_eq!(
+            narrow.main_triangle_batches.len(),
+            canonical.main_triangle_batches.len()
+        );
+        assert_eq!(
+            narrow.has_interior_triangles,
+            canonical.has_interior_triangles
+        );
+        assert_eq!(narrow.uses_interior, canonical.uses_interior);
+        assert_eq!(
+            narrow.local_contour_ids_are_dense,
+            canonical.local_contour_ids_are_dense
+        );
     }
 
     #[test]

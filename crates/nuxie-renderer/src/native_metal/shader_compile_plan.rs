@@ -1,15 +1,14 @@
-//! Mechanical source-plan translation of the upstream Metal background shader
-//! compiler.
+//! Deterministic source-plan translation of the upstream Metal background
+//! shader compiler.
 //!
 //! The source citations are `renderer/src/metal/background_shader_compiler.h:17-30`
 //! and `renderer/src/metal/background_shader_compiler.mm:94-275` at pinned
 //! upstream SHA `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
 //!
-//! This module ports the `BackgroundCompileJob` inputs and the deterministic
-//! macro/source-fragment assembly only. It deliberately does not port the
-//! compiler thread or call `newLibraryWithSource`; a successful plan is an
-//! ordered symbolic description of the source that the upstream compiler
-//! would have submitted to Metal.
+//! This module owns the `BackgroundCompileJob` inputs, deterministic
+//! macro/source-fragment assembly, and the exact generated source payloads.
+//! The worker lifecycle and `newLibraryWithSource` adapter live in
+//! `background_shader_compiler`.
 
 pub(crate) use super::capabilities::{ApplePlatform, AtomicBarrierType};
 pub(crate) use super::pipeline_names::{
@@ -66,6 +65,16 @@ pub(crate) struct BackgroundCompileJob {
     pub(crate) shader_features: ShaderFeatures,
     pub(crate) interlock_mode: InterlockMode,
     pub(crate) shader_misc_flags: ShaderMiscFlags,
+    pub(crate) synthesized_failure_type: SynthesizedFailureType,
+}
+
+/// Test/tool failure injection corresponding to upstream
+/// `gpu::SynthesizedFailureType` under `WITH_RIVE_TOOLS`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum SynthesizedFailureType {
+    #[default]
+    None,
+    ShaderCompilation,
 }
 
 impl BackgroundCompileJob {
@@ -80,7 +89,16 @@ impl BackgroundCompileJob {
             shader_features,
             interlock_mode,
             shader_misc_flags,
+            synthesized_failure_type: SynthesizedFailureType::None,
         }
+    }
+
+    pub(crate) const fn with_synthesized_failure(
+        mut self,
+        synthesized_failure_type: SynthesizedFailureType,
+    ) -> Self {
+        self.synthesized_failure_type = synthesized_failure_type;
+        self
     }
 }
 
@@ -97,6 +115,17 @@ pub(crate) enum MacroValue {
     Empty,
     One,
     True,
+}
+
+impl MacroValue {
+    /// The exact NSString value inserted into `preprocessorMacros` upstream.
+    pub(crate) const fn metal_value(self) -> &'static str {
+        match self {
+            Self::Empty => "",
+            Self::One => "1",
+            Self::True => "true",
+        }
+    }
 }
 
 /// Generated shader macro names used by `background_shader_compiler.mm`.
@@ -225,6 +254,56 @@ impl SourceFragment {
             Self::DrawMeshFragment => "gpu::glsl::draw_mesh_frag",
         }
     }
+
+    /// The exact minified UTF-8 payload of the generated C++ source object.
+    pub(crate) const fn source(self) -> &'static str {
+        match self {
+            Self::Metal => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/metal.glsl"
+            )),
+            Self::Constants => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/constants.glsl"
+            )),
+            Self::FlushUniforms => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/flush_uniforms.glsl"
+            )),
+            Self::Common => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/common.glsl"
+            )),
+            Self::AdvancedBlend => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/advanced_blend.glsl"
+            )),
+            Self::DrawPathCommon => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/draw_path_common.glsl"
+            )),
+            Self::DrawPathVertex => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/draw_path.vert"
+            )),
+            Self::DrawRasterOrderPathFragment => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/draw_raster_order_path.frag"
+            )),
+            Self::AtomicDraw => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/atomic_draw.glsl"
+            )),
+            Self::DrawImageMeshVertex => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/draw_image_mesh.vert"
+            )),
+            Self::DrawMeshFragment => include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/native_metal/background_shader_sources/draw_mesh.frag"
+            )),
+        }
+    }
 }
 
 /// The complete deterministic result of the source-assembly portion of the
@@ -233,6 +312,28 @@ impl SourceFragment {
 pub(crate) struct BackgroundCompilePlan {
     pub(crate) defines: Vec<MacroDefinition>,
     pub(crate) source_fragments: Vec<SourceFragment>,
+}
+
+impl BackgroundCompilePlan {
+    /// Reproduce the `NSMutableString` construction in the pinned Objective-C++
+    /// implementation. `metal` initializes the string; every later selected
+    /// fragment is appended with exactly one additional line feed.
+    pub(crate) fn materialize_source(&self) -> String {
+        let byte_len = self
+            .source_fragments
+            .iter()
+            .map(|fragment| fragment.source().len())
+            .sum::<usize>()
+            + self.source_fragments.len().saturating_sub(1);
+        let mut source = String::with_capacity(byte_len);
+        for (index, fragment) in self.source_fragments.iter().enumerate() {
+            source.push_str(fragment.source());
+            if index != 0 {
+                source.push('\n');
+            }
+        }
+        source
+    }
 }
 
 /// A typed representation of every `RIVE_UNREACHABLE` or asserted combination
@@ -576,6 +677,38 @@ mod tests {
 
     fn default_job(draw_type: DrawType, interlock_mode: InterlockMode) -> BackgroundCompileJob {
         BackgroundCompileJob::new(draw_type, 0, interlock_mode, 0)
+    }
+
+    #[test]
+    fn materialized_request_parts_match_the_pinned_generated_sources() {
+        assert_eq!(MacroValue::Empty.metal_value(), "");
+        assert_eq!(MacroValue::One.metal_value(), "1");
+        assert_eq!(MacroValue::True.metal_value(), "true");
+
+        let plan = build_shader_compile_plan(
+            default_job(DrawType::ImageMesh, InterlockMode::RasterOrdering),
+            MetalFeatures::default(),
+            MAC,
+        )
+        .expect("image mesh plan");
+        let expected = [
+            SourceFragment::Metal.source(),
+            SourceFragment::Constants.source(),
+            SourceFragment::FlushUniforms.source(),
+            SourceFragment::Common.source(),
+            SourceFragment::DrawImageMeshVertex.source(),
+            SourceFragment::DrawMeshFragment.source(),
+        ]
+        .into_iter()
+        .enumerate()
+        .fold(String::new(), |mut source, (index, fragment)| {
+            source.push_str(fragment);
+            if index != 0 {
+                source.push('\n');
+            }
+            source
+        });
+        assert_eq!(plan.materialize_source(), expected);
     }
 
     fn assert_plan(

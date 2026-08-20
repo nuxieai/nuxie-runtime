@@ -5,7 +5,7 @@ upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 31, in-progress = 4, ported = 1, verified = 0 }
+expected_status_counts = { pending = 30, in-progress = 2, ported = 4, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -36,28 +36,94 @@ upstream = "renderer/include/rive/renderer/metal/render_context_metal_impl.h"
 lane = "renderer-platform"
 issue = "UNIV-2086"
 status = "in-progress"
-rust_modules = ["crates/nuxie-renderer/src/native_metal/render_target.rs"]
-evidence = ["crates/nuxie-renderer/src/native_metal/render_target.rs"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/render_target.rs",
+  "crates/nuxie-renderer/src/native_metal/samplers.rs",
+]
+evidence = [
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/render_target.rs",
+  "crates/nuxie-renderer/src/native_metal/samplers.rs",
+]
 [[source]]
 upstream = "renderer/src/metal/background_shader_compiler.h"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "in-progress"
-rust_modules = ["crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs"]
+status = "ported"
+# Rust makes the upstream nil-library/assert failure observable as a typed,
+# fail-closed result while preserving the submitted source. The focused
+# `reports_backend_plan_and_synthesized_failures_without_stopping_worker` and
+# `failure_source_listing_matches_upstream_line_numbers` tests cover it.
+# The injected callback is an observability seam; `new_metal` still retains the
+# device and executes `newLibraryWithSource`. The focused
+# `live_metal_compiles_the_materialized_image_mesh_source` test covers it.
+# Promotion requires that device-backed test to execute and pass; a no-device
+# skip alone is insufficient. It executed on the macOS Metal host for this wave.
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
+  "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
+]
 evidence = [
+  "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_macros.txt",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/PROVENANCE.txt",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/advanced_blend.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/atomic_draw.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/common.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/constants.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_image_mesh.vert",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_mesh.frag",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_path.vert",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_path_common.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_raster_order_path.frag",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/flush_uniforms.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/image_mesh_raster.metal",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/metal.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/path_atomics.metal",
 ]
 
 [[source]]
 upstream = "renderer/src/metal/background_shader_compiler.mm"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "in-progress"
-rust_modules = ["crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs"]
+status = "ported"
+# Rust makes the upstream nil-library/assert failure observable as a typed,
+# fail-closed result while preserving the submitted source. The focused
+# `reports_backend_plan_and_synthesized_failures_without_stopping_worker` and
+# `failure_source_listing_matches_upstream_line_numbers` tests cover it.
+# The injected callback is an observability seam; `new_metal` still retains the
+# device and executes `newLibraryWithSource`. The focused
+# `live_metal_compiles_the_materialized_image_mesh_source` test covers it.
+# Promotion requires that device-backed test to execute and pass; a no-device
+# skip alone is insufficient. It executed on the macOS Metal host for this wave.
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
+  "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
+]
 evidence = [
+  "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_macros.txt",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/PROVENANCE.txt",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/advanced_blend.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/atomic_draw.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/common.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/constants.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_image_mesh.vert",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_mesh.frag",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_path.vert",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_path_common.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/draw_raster_order_path.frag",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/flush_uniforms.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/image_mesh_raster.metal",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/metal.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/path_atomics.metal",
 ]
 
 [[source]]
@@ -67,17 +133,26 @@ issue = "UNIV-2086"
 status = "in-progress"
 rust_modules = [
   "crates/nuxie-renderer/src/gpu.rs",
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
+  "crates/nuxie-renderer/src/native_metal/samplers.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/src/gpu.rs",
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
+  # The image-texture tests record the intentional ASTC enum-gap correction.
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
   "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
   "crates/nuxie-renderer/src/native_metal/render_target.rs",
+  "crates/nuxie-renderer/src/native_metal/samplers.rs",
 ]
 
 [[source]]
@@ -92,9 +167,26 @@ evidence = []
 upstream = "renderer/src/shaders/metal/draw.metal"
 lane = "platform-shaders"
 issue = "UNIV-2086"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-renderer/src/native_metal/draw_shader.rs"]
+evidence = [
+  "crates/nuxie-renderer/build.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
+  "crates/nuxie-renderer/src/native_metal/shaders/advanced_blend.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/common.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/constants.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw.metal",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_combinations.metal",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_image_mesh.minified.vert",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_mesh.minified.frag",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_path.minified.vert",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_path_common.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_raster_order_path.minified.frag",
+  "crates/nuxie-renderer/src/native_metal/shaders/flush_uniforms.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/metal.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/render_atlas.minified.glsl",
+  "crates/nuxie-renderer/tests/fixtures/native_metal/offline_draw_shader/source_inventory.txt",
+]
 
 [[source]]
 upstream = "renderer/src/shaders/metal/generate_draw_combinations.py"

@@ -4,6 +4,9 @@ use std::process::{Command, Output};
 
 fn main() {
     println!("cargo:rerun-if-changed=src/native_metal/tracer.metal");
+    for source in DRAW_SHADER_SOURCES {
+        println!("cargo:rerun-if-changed={source}");
+    }
     if env::var_os("CARGO_FEATURE_NATIVE_METAL_EXPERIMENTAL").is_none() {
         return;
     }
@@ -13,13 +16,17 @@ fn main() {
         return;
     }
 
-    let (sdk, deployment_target) = match (
+    let (sdk, deployment_target, metal_standard) = match (
         target_os.as_str(),
         env::var("CARGO_CFG_TARGET_ABI").as_deref(),
     ) {
-        ("ios", Ok("sim")) => ("iphonesimulator", "-mios-version-min=15.0"),
-        ("ios", _) => ("iphoneos", "-mios-version-min=15.0"),
-        ("macos", _) => ("macosx", "-mmacosx-version-min=12.0"),
+        ("ios", Ok("sim")) => (
+            "iphonesimulator",
+            "-miphonesimulator-version-min=15.0",
+            "-std=ios-metal2.2",
+        ),
+        ("ios", _) => ("iphoneos", "-mios-version-min=15.0", "-std=ios-metal2.2"),
+        ("macos", _) => ("macosx", "-mmacosx-version-min=12.0", "-std=macos-metal2.3"),
         _ => unreachable!(),
     };
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
@@ -47,7 +54,57 @@ fn main() {
             .output(),
         "link native Metal tracer library",
     );
+
+    let draw_source = manifest.join("src/native_metal/shaders/draw.metal");
+    let draw_include_dir = manifest.join("src/native_metal/shaders");
+    let draw_air = output.join("native_metal_draw.air");
+    let draw_metallib = output.join("native_metal_draw.metallib");
+
+    checked(
+        Command::new("xcrun")
+            .args(["-sdk", sdk, "metal", "-c"])
+            .arg(deployment_target)
+            .arg(metal_standard)
+            .arg("-I")
+            .arg(&draw_include_dir)
+            .args([
+                "-ffast-math",
+                "-ffp-contract=fast",
+                "-fpreserve-invariance",
+                "-fvisibility=hidden",
+            ])
+            .arg(&draw_source)
+            .arg("-o")
+            .arg(&draw_air)
+            .output(),
+        "compile native Metal offline draw shader",
+    );
+    checked(
+        Command::new("xcrun")
+            .args(["-sdk", sdk, "metallib"])
+            .arg(&draw_air)
+            .arg("-o")
+            .arg(&draw_metallib)
+            .output(),
+        "link native Metal offline draw shader library",
+    );
 }
+
+const DRAW_SHADER_SOURCES: &[&str] = &[
+    "src/native_metal/shaders/draw.metal",
+    "src/native_metal/shaders/metal.minified.glsl",
+    "src/native_metal/shaders/constants.minified.glsl",
+    "src/native_metal/shaders/flush_uniforms.minified.glsl",
+    "src/native_metal/shaders/common.minified.glsl",
+    "src/native_metal/shaders/draw_path_common.minified.glsl",
+    "src/native_metal/shaders/render_atlas.minified.glsl",
+    "src/native_metal/shaders/advanced_blend.minified.glsl",
+    "src/native_metal/shaders/draw_combinations.metal",
+    "src/native_metal/shaders/draw_path.minified.vert",
+    "src/native_metal/shaders/draw_raster_order_path.minified.frag",
+    "src/native_metal/shaders/draw_mesh.minified.frag",
+    "src/native_metal/shaders/draw_image_mesh.minified.vert",
+];
 
 fn checked(output: std::io::Result<Output>, operation: &str) {
     let output = output.unwrap_or_else(|error| panic!("{operation}: {error}"));

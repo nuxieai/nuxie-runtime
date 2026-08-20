@@ -4,6 +4,8 @@
 //! begins as the UNIV-2086 tracer and grows by mechanically porting the pinned
 //! upstream Metal implementation behind the existing renderer seam.
 
+#[allow(dead_code)]
+mod background_shader_compiler;
 mod buffer;
 mod capabilities;
 #[allow(dead_code)]
@@ -11,9 +13,15 @@ mod draw_combinations;
 #[allow(dead_code)]
 mod draw_pipeline;
 #[allow(dead_code)]
+mod draw_shader;
+#[allow(dead_code)]
+mod image_texture;
+#[allow(dead_code)]
 mod pipeline_names;
 #[allow(dead_code)]
 mod render_target;
+#[allow(dead_code)]
+mod samplers;
 #[allow(dead_code)]
 mod shader_compile_plan;
 
@@ -22,6 +30,7 @@ use buffer::NativeMetalBuffer;
 use capabilities::{
     select_capabilities, ApplePlatform, MetalCapabilitySelection, MetalDeviceCapabilities,
 };
+use draw_shader::DrawShaderLibrary;
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
     RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
@@ -37,6 +46,7 @@ use objc2_metal::{
     MTLRenderPassDescriptor, MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLSize,
     MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
 };
+use samplers::NativeMetalSamplers;
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::Arc;
@@ -60,6 +70,8 @@ struct NativeMetalContext {
     device: Retained<ProtocolObject<dyn MTLDevice>>,
     queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
     solid_pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
+    _draw_shader_library: DrawShaderLibrary,
+    _samplers: NativeMetalSamplers,
     capabilities: MetalCapabilitySelection,
 }
 
@@ -79,12 +91,17 @@ impl NativeMetalFactory {
         let queue = device.newCommandQueue().ok_or_else(|| {
             RendererError::NativeMetal("MTLDevice returned no command queue".to_owned())
         })?;
+        let draw_shader_library = DrawShaderLibrary::load(&device)
+            .map_err(|error| RendererError::NativeMetal(error.to_string()))?;
+        let samplers = NativeMetalSamplers::new(&device)?;
         let solid_pipeline = make_solid_pipeline(&device)?;
         Ok(Self {
             context: Arc::new(NativeMetalContext {
                 device,
                 queue,
                 solid_pipeline,
+                _draw_shader_library: draw_shader_library,
+                _samplers: samplers,
                 capabilities,
             }),
             width,
@@ -131,7 +148,16 @@ impl Factory for NativeMetalFactory {
         flags: RenderBufferFlags,
         size_in_bytes: usize,
     ) -> Box<dyn RenderBuffer> {
-        Box::new(NativeMetalBuffer::new(buffer_type, flags, size_in_bytes))
+        // The established Factory seam is infallible, while Metal allocation
+        // can fail. Terminate at this explicit backend boundary: substituting a
+        // CPU buffer or the wgpu backend would conceal the selected renderer
+        // and violate the native Metal fail-closed contract.
+        Box::new(
+            NativeMetalBuffer::new(&self.context.device, buffer_type, flags, size_in_bytes)
+                .unwrap_or_else(|error| {
+                    panic!("native Metal render-buffer allocation failed: {error}")
+                }),
+        )
     }
 
     fn make_linear_gradient(

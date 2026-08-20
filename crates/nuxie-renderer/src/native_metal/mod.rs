@@ -35,13 +35,15 @@ mod upload_buffer_ring;
 
 use super::gpu;
 use super::{
-    logical_frame::prepare_single_gradient_batch, BackendWorkMetrics, LogicalFrameConfig,
-    LogicalPaint, LogicalPath, LogicalShader, RenderMode, RendererError,
+    logical_frame::{prepare_single_atomic_path_draw, prepare_single_gradient_batch},
+    BackendWorkMetrics, LogicalFrameConfig, LogicalPaint, LogicalPath, LogicalShader, RenderMode,
+    RendererError,
 };
 use buffer::NativeMetalBuffer;
 use bytemuck::{Pod, Zeroable};
 use capabilities::{
-    select_capabilities, ApplePlatform, MetalCapabilitySelection, MetalDeviceCapabilities,
+    select_capabilities, ApplePlatform, AtomicBarrierType, MetalCapabilitySelection,
+    MetalDeviceCapabilities,
 };
 use context::NativeMetalContext;
 use nuxie_render_api::{
@@ -53,12 +55,12 @@ use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{msg_send, rc::Retained};
 use objc2_foundation::{NSError, NSString};
 use objc2_metal::{
-    MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder,
+    MTLBarrierScope, MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder,
     MTLCreateSystemDefaultDevice, MTLCullMode, MTLDevice, MTLGPUFamily, MTLIndexType, MTLLibrary,
     MTLLoadAction, MTLOrigin, MTLPixelFormat, MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder,
-    MTLRenderPassDescriptor, MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLScissorRect,
-    MTLSize, MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
-    MTLViewport,
+    MTLRenderPassDescriptor, MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLRenderStages,
+    MTLScissorRect, MTLSize, MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor,
+    MTLTextureUsage, MTLViewport,
 };
 use render_target::RenderTargetMetal;
 use std::cell::RefCell;
@@ -88,6 +90,7 @@ extern "C" {
 pub struct NativeMetalFactory {
     context: Arc<NativeMetalContext>,
     target: Rc<RefCell<RenderTargetMetal>>,
+    mode: RenderMode,
 }
 
 /// Concrete native-Metal frame result used by parity and performance oracles.
@@ -95,10 +98,36 @@ pub struct NativeMetalFactory {
 pub struct NativeMetalFrameOutput {
     pub pixels: Vec<u8>,
     pub backend_work: BackendWorkMetrics,
+    pub execution_inventory: NativeMetalExecutionInventory,
+}
+
+/// Concrete native execution selected and realized by one completed frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NativeMetalExecutionInventory {
+    pub mode: RenderMode,
+    /// Fixed-function atomic SrcOver does not use the offscreen color plane.
+    pub atomic_color_plane: bool,
+    pub atomic_clip_plane: bool,
+    pub atomic_coverage_plane: bool,
+    pub render_pass_initialize_pipeline: bool,
+    pub midpoint_fan_pipeline: bool,
+    pub render_pass_resolve_pipeline: bool,
 }
 
 impl NativeMetalFactory {
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
+        Self::new_impl(width, height, None)
+    }
+
+    pub fn new_with_mode(width: u32, height: u32, mode: RenderMode) -> Result<Self, RendererError> {
+        Self::new_impl(width, height, Some(mode))
+    }
+
+    fn new_impl(
+        width: u32,
+        height: u32,
+        requested_mode: Option<RenderMode>,
+    ) -> Result<Self, RendererError> {
         let device = MTLCreateSystemDefaultDevice()
             .ok_or_else(|| RendererError::NativeMetal("no system Metal device".to_owned()))?;
         let platform = select_apple_platform(&device);
@@ -107,9 +136,14 @@ impl NativeMetalFactory {
         // are rejected immediately after the capability probe, before queue,
         // library, sampler, pipeline, or target allocation can mask them.
         validate_extent(width, height, capabilities.max_texture_size)?;
+        let mode = select_native_metal_mode(capabilities, requested_mode)?;
         let context = Arc::new(NativeMetalContext::new(device, capabilities, platform)?);
         let target = Rc::new(RefCell::new(make_tracer_target(&context, width, height)?));
-        Ok(Self { context, target })
+        Ok(Self {
+            context,
+            target,
+            mode,
+        })
     }
 
     pub fn dimensions(&self) -> (u32, u32) {
@@ -119,6 +153,10 @@ impl NativeMetalFactory {
 
     pub fn adapter_name(&self) -> String {
         self.context.device().name().to_string()
+    }
+
+    pub fn render_mode(&self) -> RenderMode {
+        self.mode
     }
 
     /// Replaces the dimensions used by subsequently created frames. Frames
@@ -161,11 +199,13 @@ impl NativeMetalFactory {
         Ok(NativeMetalFrame {
             context: Arc::clone(&self.context),
             target: Rc::clone(&self.target),
+            mode: self.mode,
             command_buffer,
             clear_color,
             state: NativeMetalRenderState::default(),
             state_stack: Vec::new(),
             solid_draws: Vec::new(),
+            atomic_path_draw: None,
             gradient_draws: Vec::new(),
             atlas_requests: Vec::new(),
             resource_lease: None,
@@ -193,6 +233,7 @@ impl NativeMetalFactory {
         let (expected_width, expected_height) = self.dimensions();
         NativeMetalDrawableFrame::new(
             Arc::clone(&self.context),
+            self.mode,
             drawable,
             texture,
             expected_width,
@@ -288,11 +329,13 @@ impl Factory for NativeMetalFactory {
 pub struct NativeMetalFrame {
     context: Arc<NativeMetalContext>,
     target: Rc<RefCell<RenderTargetMetal>>,
+    mode: RenderMode,
     command_buffer: Retained<ProtocolObject<dyn MTLCommandBuffer>>,
     clear_color: u32,
     state: NativeMetalRenderState,
     state_stack: Vec<NativeMetalRenderState>,
     solid_draws: Vec<SolidTracerDraw>,
+    atomic_path_draw: Option<AtomicPathDraw>,
     gradient_draws: Vec<GradientDraw>,
     atlas_requests: Vec<AtlasRequest>,
     resource_lease: Option<context::PreparedResourceLease>,
@@ -321,6 +364,10 @@ struct SolidTracerDraw {
     premultiplied_color: [f32; 4],
 }
 
+struct AtomicPathDraw {
+    resources: super::logical_frame::PreparedTypedDrawResources,
+}
+
 struct GradientDraw {
     gradient_batch: super::logical_frame::GradientBatch,
     gradient: super::logical_frame::PreparedGradient,
@@ -345,6 +392,46 @@ struct AtlasUploadData {
     paths: Vec<gpu::PathData>,
     paints: Vec<gpu::PaintData>,
     paint_aux: Vec<gpu::PaintAuxData>,
+}
+
+struct AtomicPathUploadData {
+    flush_uniforms: gpu::FlushUniforms,
+    paths: [gpu::PathData; 2],
+    paints: [gpu::PaintData; 2],
+    paint_aux: [gpu::PaintAuxData; 2],
+}
+
+impl AtomicPathUploadData {
+    fn new(width: u32, height: u32, clear_color: u32, draw: &AtomicPathDraw) -> Self {
+        let tessellation_height = super::draw::tessellation_texture_height(&draw.resources.spans);
+        let mut flush_uniforms = super::analytic_uniforms(width, height, tessellation_height);
+        flush_uniforms.color_clear_value = gpu::swizzle_rive_color_to_rgba_premul(clear_color);
+        flush_uniforms.coverage_clear_value = 0;
+        flush_uniforms.max_path_id = 1;
+        flush_uniforms.render_target_update_bounds = [0, 0, width as i32, height as i32];
+        Self {
+            flush_uniforms,
+            paths: [gpu::PathData::zeroed(), draw.resources.path],
+            paints: [
+                gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
+                draw.resources.paint,
+            ],
+            paint_aux: [gpu::PaintAuxData::zeroed(), draw.resources.paint_aux],
+        }
+    }
+
+    fn batch<'a>(&'a self, draw: &'a AtomicPathDraw) -> context::UploadBatch<'a> {
+        context::UploadBatch {
+            flush_uniforms: &self.flush_uniforms,
+            gradient_spans: &[],
+            tessellation_spans: &draw.resources.spans,
+            paths: &self.paths,
+            paints: &self.paints,
+            paint_aux: &self.paint_aux,
+            contours: &draw.resources.contours,
+            triangles: &draw.resources.triangles,
+        }
+    }
 }
 
 impl AtlasUploadData {
@@ -563,6 +650,44 @@ impl Renderer for NativeMetalFrame {
                 .get_or_insert("native Metal tracer only supports opaque solid SrcOver fills");
             return;
         }
+        if self.mode == RenderMode::ClockwiseAtomic {
+            if !self.solid_draws.is_empty()
+                || self.atomic_path_draw.is_some()
+                || !self.gradient_draws.is_empty()
+                || !self.atlas_requests.is_empty()
+            {
+                self.unsupported
+                    .get_or_insert("native Metal atomic tracer supports one solid path draw");
+                return;
+            }
+            let state = super::DrawState {
+                transform: self.state.transform,
+                opacity: self.state.opacity,
+                ..Default::default()
+            };
+            let prepared =
+                prepare_single_atomic_path_draw(self.logical_frame_config(), path, paint, state);
+            match prepared {
+                Ok(Some(resources))
+                    if !resources.uses_interior
+                        && resources.triangles.is_empty()
+                        && !resources.spans.is_empty()
+                        && resources.instance_count != 0 =>
+                {
+                    self.atomic_path_draw = Some(AtomicPathDraw { resources });
+                }
+                Ok(Some(_)) => {
+                    self.unsupported.get_or_insert(
+                        "native Metal atomic tracer only supports midpoint-fan path resources",
+                    );
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    self.unsupported.get_or_insert(error);
+                }
+            }
+            return;
+        }
         let Some(vertices) = solid_triangle_fan(path, self.state.transform) else {
             self.unsupported.get_or_insert(
                 "native Metal tracer requires one pixel-aligned axis-aligned rectangle",
@@ -628,7 +753,7 @@ impl NativeMetalFrame {
         LogicalFrameConfig {
             width: target.width(),
             height: target.height(),
-            mode: RenderMode::RasterOrdering,
+            mode: self.mode,
             max_texture_dimension_2d: self.context.capabilities().max_texture_size,
             msaa_atlas_supports_clip_rect: false,
         }
@@ -643,6 +768,21 @@ impl NativeMetalFrame {
         let (width, height, texture) = match encoded {
             Ok(encoded) => encoded,
             Err(error) => return Err(error),
+        };
+        let [atomic_color_plane, atomic_clip_plane, atomic_coverage_plane] =
+            self.target.borrow().atomic_plane_inventory();
+        let atomic_pipelines = self
+            .resource_lease
+            .as_ref()
+            .and_then(|lease| lease.atomic_path_pipelines.as_ref());
+        let execution_inventory = NativeMetalExecutionInventory {
+            mode: self.mode,
+            atomic_color_plane,
+            atomic_clip_plane,
+            atomic_coverage_plane,
+            render_pass_initialize_pipeline: atomic_pipelines.is_some(),
+            midpoint_fan_pipeline: atomic_pipelines.is_some(),
+            render_pass_resolve_pipeline: atomic_pipelines.is_some(),
         };
         let mut upload_completion = self.transfer_upload_ownership()?;
         let completion = NativeMetalContext::commit_and_wait(&self.command_buffer);
@@ -691,6 +831,7 @@ impl NativeMetalFrame {
         Ok(NativeMetalFrameOutput {
             pixels,
             backend_work: self.backend_work,
+            execution_inventory,
         })
     }
 
@@ -699,6 +840,70 @@ impl NativeMetalFrame {
     ) -> Result<(u32, u32, Retained<ProtocolObject<dyn MTLTexture>>), RendererError> {
         if let Some(reason) = self.unsupported {
             return Err(RendererError::Unsupported(reason));
+        }
+        if let Some(draw) = self.atomic_path_draw.as_ref() {
+            let (width, height, pixel_format, texture) = {
+                let target = self.target.borrow();
+                let texture = target.retained_target_texture().ok_or_else(|| {
+                    RendererError::NativeMetal(
+                        "native Metal target has no readback texture".to_owned(),
+                    )
+                })?;
+                (
+                    target.width(),
+                    target.height(),
+                    target.pixel_format(),
+                    texture,
+                )
+            };
+            let tessellation_height =
+                super::draw::tessellation_texture_height(&draw.resources.spans);
+            let upload_data = AtomicPathUploadData::new(width, height, self.clear_color, draw);
+            let lease = self.context.prepare_atomic_path_resources(
+                tessellation_height as usize,
+                pixel_format,
+                upload_data.batch(draw),
+            )?;
+            if self.collect_work_metrics {
+                self.backend_work.buffer_upload_calls = lease.upload_calls;
+                self.backend_work.buffer_upload_bytes = lease.upload_bytes;
+            }
+            self.resource_lease = Some(lease);
+            encode_atomic_tessellation_pass(
+                &self.context,
+                &self.command_buffer,
+                draw,
+                self.resource_lease
+                    .as_ref()
+                    .expect("atomic path resource reservation retained by the frame"),
+            )?;
+            let atomic_render_passes = {
+                let mut target = self.target.borrow_mut();
+                encode_atomic_main_pass(
+                    &self.context,
+                    &self.command_buffer,
+                    &mut target,
+                    width,
+                    height,
+                    self.clear_color,
+                    draw,
+                    self.resource_lease
+                        .as_ref()
+                        .expect("atomic path resource reservation retained by the frame"),
+                )?
+            };
+            if self.collect_work_metrics {
+                self.backend_work.render_passes = 1 + atomic_render_passes;
+                self.backend_work.gpu_draw_calls = 4;
+                self.backend_work.gpu_draw_instances = u64::try_from(
+                    draw.resources.spans.len() + draw.resources.instance_count as usize + 2,
+                )
+                .unwrap_or(u64::MAX);
+                self.backend_work.tessellation_spans =
+                    u64::try_from(draw.resources.spans.len()).unwrap_or(u64::MAX);
+                self.backend_work.path_patches = u64::from(draw.resources.instance_count);
+            }
+            return Ok((width, height, texture));
         }
         let atlas_flush = if self.atlas_requests.is_empty() {
             None
@@ -923,6 +1128,245 @@ impl NativeMetalFrame {
             .map(context::PreparedResourceLease::transfer_to_completion)
             .transpose()
     }
+}
+
+fn encode_atomic_tessellation_pass(
+    context: &NativeMetalContext,
+    command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    draw: &AtomicPathDraw,
+    lease: &context::PreparedResourceLease,
+) -> Result<(), RendererError> {
+    let tessellation_height = super::draw::tessellation_texture_height(&draw.resources.spans);
+    let pass = MTLRenderPassDescriptor::renderPassDescriptor();
+    pass.setRenderTargetWidth(tessellation_resource::TESSELLATION_TEXTURE_WIDTH);
+    pass.setRenderTargetHeight(tessellation_height as usize);
+    // SAFETY: Metal render-pass descriptors always expose color attachment
+    // slot zero; this pass declares exactly that one tessellation target.
+    let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+    attachment.setTexture(Some(&lease.tessellation));
+    attachment.setLoadAction(MTLLoadAction::DontCare);
+    attachment.setStoreAction(MTLStoreAction::Store);
+    let encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(&pass)
+        .ok_or_else(|| {
+            RendererError::NativeMetal(
+                "failed to create atomic path tessellation encoder".to_owned(),
+            )
+        })?;
+    encoder.setViewport(MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: tessellation_resource::TESSELLATION_TEXTURE_WIDTH as f64,
+        height: tessellation_height as f64,
+        znear: 0.0,
+        zfar: 1.0,
+    });
+    encoder.setRenderPipelineState(context.tessellate_pipeline());
+    // SAFETY: slot 9 is the generated `gaussianIntegralTexture` vertex binding
+    // and the context retains the texture through command-buffer completion.
+    unsafe {
+        encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+    }
+    bind_vertex_buffer(&encoder, &lease.flush_uniforms, 3);
+    bind_vertex_buffer(&encoder, &lease.tessellation_spans, 0);
+    bind_vertex_buffer(&encoder, &lease.paths, 5);
+    bind_vertex_buffer(&encoder, &lease.contours, 8);
+    encoder.setCullMode(MTLCullMode::Back);
+    // SAFETY: the shared index buffer contains the complete generated
+    // K_TESS_SPAN_INDICES table, and the instance count is the number of
+    // initialized canonical tessellation-span records retained by the lease.
+    unsafe {
+        encoder
+            .drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
+                MTLPrimitiveType::Triangle,
+                tessellation_resource::K_TESS_SPAN_INDICES.len(),
+                MTLIndexType::UInt16,
+                context.tess_span_index_buffer(),
+                0,
+                draw.resources.spans.len(),
+            );
+    }
+    encoder.endEncoding();
+    Ok(())
+}
+
+const ATOMIC_CLIP_BUFFER_INDEX: usize = 17;
+const ATOMIC_COVERAGE_BUFFER_INDEX: usize = 19;
+
+fn make_atomic_main_encoder(
+    context: &NativeMetalContext,
+    command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    pass: &MTLRenderPassDescriptor,
+    target: &mut RenderTargetMetal,
+    width: u32,
+    height: u32,
+    lease: &context::PreparedResourceLease,
+) -> Result<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>, RendererError> {
+    let encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(pass)
+        .ok_or_else(|| {
+            RendererError::NativeMetal("failed to create atomic path encoder".to_owned())
+        })?;
+    encoder.setViewport(MTLViewport {
+        originX: 0.0,
+        originY: 0.0,
+        width: width as f64,
+        height: height as f64,
+        znear: 0.0,
+        zfar: 1.0,
+    });
+    bind_vertex_buffer(&encoder, &lease.flush_uniforms, 3);
+    bind_fragment_buffer(&encoder, &lease.flush_uniforms, 3);
+    bind_vertex_buffer(&encoder, &lease.paths, 5);
+    bind_fragment_buffer(&encoder, &lease.paints, 6);
+    bind_fragment_buffer(&encoder, &lease.paint_aux, 7);
+    bind_vertex_buffer(&encoder, &lease.contours, 8);
+    // SAFETY: 7, 9, 11, 17, and 19 are generated Metal binding indices for
+    // tessellation, Gaussian LUT, linear-clamp sampler, clip atomics, and
+    // coverage atomics. Every object/buffer is retained by the context,
+    // resource lease, or render target until command-buffer completion.
+    unsafe {
+        encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
+        encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        encoder.setFragmentSamplerState_atIndex(
+            Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
+            11,
+        );
+        encoder.setFragmentBuffer_offset_atIndex(
+            Some(target.clip_atomic_buffer()?),
+            0,
+            ATOMIC_CLIP_BUFFER_INDEX,
+        );
+        encoder.setFragmentBuffer_offset_atIndex(
+            Some(target.coverage_atomic_buffer()?),
+            0,
+            ATOMIC_COVERAGE_BUFFER_INDEX,
+        );
+    }
+    Ok(encoder)
+}
+
+fn apply_atomic_barrier(
+    context: &NativeMetalContext,
+    command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    pass: &MTLRenderPassDescriptor,
+    target: &mut RenderTargetMetal,
+    width: u32,
+    height: u32,
+    lease: &context::PreparedResourceLease,
+    encoder: Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>,
+    render_passes: &mut u64,
+) -> Result<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>, RendererError> {
+    match context.capabilities().atomic_barrier_type {
+        AtomicBarrierType::RasterOrderGroup => Ok(encoder),
+        AtomicBarrierType::MemoryBarrier => {
+            encoder.memoryBarrierWithScope_afterStages_beforeStages(
+                MTLBarrierScope::Buffers | MTLBarrierScope::RenderTargets,
+                MTLRenderStages::Fragment,
+                MTLRenderStages::Fragment,
+            );
+            Ok(encoder)
+        }
+        AtomicBarrierType::RenderPassBreak => {
+            encoder.endEncoding();
+            // SAFETY: the atomic main pass declares color attachment slot zero;
+            // only its load action changes before the replacement encoder.
+            let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+            attachment.setLoadAction(MTLLoadAction::Load);
+            *render_passes = render_passes.saturating_add(1);
+            make_atomic_main_encoder(context, command_buffer, pass, target, width, height, lease)
+        }
+    }
+}
+
+fn encode_atomic_main_pass(
+    context: &NativeMetalContext,
+    command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
+    target: &mut RenderTargetMetal,
+    width: u32,
+    height: u32,
+    clear: u32,
+    draw: &AtomicPathDraw,
+    lease: &context::PreparedResourceLease,
+) -> Result<u64, RendererError> {
+    let pipelines = lease
+        .atomic_path_pipelines
+        .as_ref()
+        .ok_or_else(|| RendererError::NativeMetal("atomic path pipelines are absent".to_owned()))?;
+    let texture = target.target_texture().ok_or_else(|| {
+        RendererError::NativeMetal("native Metal target has no attached texture".to_owned())
+    })?;
+    let pass = MTLRenderPassDescriptor::renderPassDescriptor();
+    pass.setRenderTargetWidth(width as usize);
+    pass.setRenderTargetHeight(height as usize);
+    // SAFETY: Metal render-pass descriptors always expose color attachment
+    // slot zero; this pass declares exactly the retained target texture there.
+    let attachment = unsafe { pass.colorAttachments().objectAtIndexedSubscript(0) };
+    attachment.setTexture(Some(texture));
+    attachment.setLoadAction(MTLLoadAction::Clear);
+    attachment.setStoreAction(MTLStoreAction::Store);
+    attachment.setClearColor(clear_color(clear));
+
+    let mut render_passes = 1;
+    let mut encoder =
+        make_atomic_main_encoder(context, command_buffer, &pass, target, width, height, lease)?;
+    encoder.setRenderPipelineState(&pipelines.initialize);
+    // SAFETY: the generated initialize shader consumes the four implicit
+    // triangle-strip vertices and requires no caller-provided vertex buffer.
+    unsafe {
+        encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::TriangleStrip, 0, 4);
+    }
+    encoder = apply_atomic_barrier(
+        context,
+        command_buffer,
+        &pass,
+        target,
+        width,
+        height,
+        lease,
+        encoder,
+        &mut render_passes,
+    )?;
+
+    encoder.setRenderPipelineState(&pipelines.midpoint);
+    bind_vertex_buffer(&encoder, context.path_patch_vertex_buffer(), 0);
+    set_vertex_bytes(&encoder, &draw.resources.base_instance, 4)?;
+    encoder.setCullMode(MTLCullMode::Back);
+    // SAFETY: the context retains a complete 72-index midpoint patch and its
+    // matching vertex buffer, while `instance_count` names initialized
+    // canonical patches retained in the tessellation texture and upload lease.
+    unsafe {
+        encoder
+            .drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
+                MTLPrimitiveType::Triangle,
+                gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT,
+                MTLIndexType::UInt16,
+                context.path_patch_index_buffer(),
+                0,
+                draw.resources.instance_count as usize,
+            );
+    }
+    encoder = apply_atomic_barrier(
+        context,
+        command_buffer,
+        &pass,
+        target,
+        width,
+        height,
+        lease,
+        encoder,
+        &mut render_passes,
+    )?;
+
+    encoder.setRenderPipelineState(&pipelines.resolve);
+    // SAFETY: the generated resolve shader consumes the four implicit
+    // triangle-strip vertices and requires no caller-provided vertex buffer.
+    unsafe {
+        encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::TriangleStrip, 0, 4);
+    }
+    encoder.endEncoding();
+    Ok(render_passes)
 }
 
 fn is_single_closed_cubic_contour(path: &LogicalPath) -> bool {
@@ -1488,6 +1932,29 @@ fn validate_extent(width: u32, height: u32, max_texture_size: u32) -> Result<(),
     Ok(())
 }
 
+fn select_native_metal_mode(
+    capabilities: MetalCapabilitySelection,
+    requested: Option<RenderMode>,
+) -> Result<RenderMode, RendererError> {
+    match requested {
+        Some(RenderMode::Msaa) => Err(RendererError::Unsupported(
+            "native Metal does not implement WebGPU MSAA",
+        )),
+        Some(RenderMode::RasterOrdering) if !capabilities.supports_raster_ordering => Err(
+            RendererError::Unsupported("native Metal device does not support raster ordering"),
+        ),
+        Some(RenderMode::ClockwiseAtomic) if !capabilities.supports_atomic_mode => Err(
+            RendererError::Unsupported("native Metal device does not support atomic mode"),
+        ),
+        Some(mode) => Ok(mode),
+        None if capabilities.supports_raster_ordering => Ok(RenderMode::RasterOrdering),
+        None if capabilities.supports_atomic_mode => Ok(RenderMode::ClockwiseAtomic),
+        None => Err(RendererError::Unsupported(
+            "native Metal device exposes neither raster-order nor atomic execution",
+        )),
+    }
+}
+
 fn solid_triangle_fan(path: &LogicalPath, transform: Mat2D) -> Option<Vec<[f32; 2]>> {
     let verbs = path.raw_path.verbs();
     let line_count = verbs.iter().filter(|verb| **verb == PathVerb::Line).count();
@@ -1870,6 +2337,54 @@ mod tests {
                 height: 1,
                 ..
             })
+        ));
+        assert!(matches!(
+            NativeMetalFactory::new_with_mode(0, 1, RenderMode::Msaa),
+            Err(RendererError::InvalidTextureExtent {
+                label: "render target",
+                width: 0,
+                height: 1,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn mode_selection_prefers_raster_and_maps_the_explicit_atomic_request() {
+        let both = MetalCapabilitySelection {
+            max_texture_size: 16_384,
+            supports_raster_ordering: true,
+            supports_atomic_mode: true,
+            path_id_granularity: 1,
+            supports_texture_compression_etc2: false,
+            supports_texture_compression_astc: true,
+            supports_texture_compression_bc: true,
+            atomic_barrier_type: AtomicBarrierType::RasterOrderGroup,
+        };
+        assert_eq!(
+            select_native_metal_mode(both, None).unwrap(),
+            RenderMode::RasterOrdering
+        );
+        assert_eq!(
+            select_native_metal_mode(both, Some(RenderMode::ClockwiseAtomic)).unwrap(),
+            RenderMode::ClockwiseAtomic
+        );
+        assert!(matches!(
+            select_native_metal_mode(both, Some(RenderMode::Msaa)),
+            Err(RendererError::Unsupported(_))
+        ));
+
+        let atomic_only = MetalCapabilitySelection {
+            supports_raster_ordering: false,
+            ..both
+        };
+        assert_eq!(
+            select_native_metal_mode(atomic_only, None).unwrap(),
+            RenderMode::ClockwiseAtomic
+        );
+        assert!(matches!(
+            select_native_metal_mode(atomic_only, Some(RenderMode::RasterOrdering)),
+            Err(RendererError::Unsupported(_))
         ));
     }
 

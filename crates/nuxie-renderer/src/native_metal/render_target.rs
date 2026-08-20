@@ -304,6 +304,14 @@ impl RenderTargetMetal {
             .expect("atomic buffer initialized above"))
     }
 
+    pub(crate) fn atomic_plane_inventory(&self) -> [bool; 3] {
+        [
+            self.color_atomic_buffer.is_some(),
+            self.clip_atomic_buffer.is_some(),
+            self.coverage_atomic_buffer.is_some(),
+        ]
+    }
+
     #[cfg(test)]
     fn atomic_buffers_are_unallocated(&self) -> bool {
         self.color_atomic_buffer.is_none()

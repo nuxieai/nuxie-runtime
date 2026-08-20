@@ -1,7 +1,7 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 6, in-progress = 4, ported = 4, verified = 0 }
+expected_status_counts = { pending = 6, in-progress = 5, ported = 4, verified = 0 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
@@ -126,6 +126,34 @@ status = "in-progress"
 rule = "Raster ordering, fragment barriers, and render-pass breaks are selected from the same device capabilities and workarounds as the pinned upstream Metal implementation."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:161-188"]
 required_tests = ["Apple Silicon raster-order selection", "discrete Mac barrier selection", "oldest supported Mac fallback", "forced framebuffer-read disable path"]
+
+[[owner]]
+id = "renderer.generic_atomic_path_execution"
+issue = "UNIV-2088"
+status = "in-progress"
+# The first vertical slice is one unclipped opaque SrcOver midpoint-fan fill.
+# It proves real generic-atomic selection, fixed-function color output,
+# clip/coverage buffer ownership, initialize/path/resolve execution, and the
+# selected device's exact barrier policy. Remaining clips, gradients, atlas,
+# images, strokes, advanced blends, multiple draws/flushes, and scheduler
+# integration remain explicitly outside this promotion.
+rule = "A capability-selected or explicitly forced generic-atomic frame realizes the same fixed-function pipeline keys, PLS buffer bindings, barriers, and initialize/path/resolve topology as upstream Metal."
+citations = ["cpp:renderer/src/render_context.cpp:1067-1083", "cpp:renderer/src/metal/render_context_metal_impl.mm:1363-1385", "cpp:renderer/src/metal/render_context_metal_impl.mm:1759-1812", "cpp:renderer/src/metal/render_context_metal_impl.mm:1857-1925", "cpp:renderer/src/metal/render_context_metal_impl.mm:1989-1997"]
+required_tests = ["capability-driven selection and explicit generic-atomic forcing", "canonical typed midpoint resource equivalence and exactly-once consumption", "real clip and coverage atomic planes", "initialize, midpoint-fan, and resolve pipeline inventory", "unchanged 2/32 pinned C++ Metal pixel oracle with exact occupancy", "forced-atomic product Mach-O contains no WGPU"]
+evidence_paths = [
+  "crates/nuxie-renderer/src/lib.rs",
+  "crates/nuxie-renderer/src/logical_frame.rs",
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/native_metal/render_target.rs",
+  "crates/nuxie-renderer/tests/native_metal_tracer.rs",
+  "fixtures/renderer/reference/metal/first-light-triangle-clockwise-atomic.png",
+  "fixtures/renderer/streams/first-light-triangle.rive-stream",
+  "tools/check-native-metal-tracer-binary.sh",
+  "tools/metal-port/tracer-corpus-atomic.toml",
+  "tools/renderer-replay/src/bin/native-metal-product-root.rs",
+  "tools/renderer-replay/src/main.rs",
+]
 
 [[owner]]
 id = "renderer.gradient_tessellation_and_atlas_resources"

@@ -524,6 +524,9 @@ different class of translation error.
    - `make renderer-metal-reference-replay`
    - `make renderer-metal-reference-check`
    - `make renderer-metal-oracle-tracers`
+   - `make renderer-metal-atomic-oracle-tracer` runs the one-row forced
+     generic-atomic lane without changing the capability-driven `rust-metal`
+     backend used by the established rectangle, gradient, and atlas corpus;
    - `make renderer-metal-msaa-contract` is a green negative contract proving
      that the native Metal oracle rejects the WebGPU-only MSAA mode before
      pipeline construction;
@@ -531,6 +534,7 @@ different class of translation error.
    - same-runner Rust Metal versus C++ Metal is the primary comparison;
    - current Rust wgpu is recorded independently;
    - resize, abandonment, error, and completion paths are exercised.
+
 5. **Pipeline-family corpus**
    - gradient/tessellation, raster-order, clockwise, atomic, image, clipping,
      blend, text-facing resources, and mipmaps; keep MSAA coverage in the
@@ -574,6 +578,39 @@ different class of translation error.
      threshold to compressed bundles;
    - release performance is recorded against the pre-cutover baseline and the
      pinned C++ comparator.
+
+### UNIV-2088 first generic-atomic slice
+
+The first slice is intentionally one public replay: an unclipped opaque green
+SrcOver triangle whose admitted geometry remains a midpoint fan. `rust-metal`
+continues to call `NativeMetalFactory::new` and therefore follows device
+capabilities. The separate `rust-metal-atomic` harness backend calls
+`new_with_mode(ClockwiseAtomic)` only for this diagnostic lane.
+
+At pinned upstream `4ac7b32798da0482e441ef09304dc3b480ed3ee5`, fixed-function
+color selection is `render_context.cpp:1067-1083`; generic-atomic clip and
+coverage bindings (and the omitted color plane) are
+`render_context_metal_impl.mm:1363-1385`; pipeline-key filtering is
+`1759-1812`; barrier selection and midpoint drawing are `1857-1925`; and the
+four-vertex initialize/resolve draws are `1989-1997`. Rust specializes all
+three pipelines with `ENABLE_DITHER | FIXED_FUNCTION_COLOR_OUTPUT`, binds the
+retained clip and coverage planes, and applies the selected raster-order-group,
+fragment memory-barrier, or render-pass-break topology.
+
+The checked-in same-runner manifest preserves the independently selected C++
+Metal numerical budget: maximum channel delta 2 and at most 32 differing
+pixels. The focused native-Metal integration test independently requires exact
+occupancy against the same checked-in pinned-C++ image. The test-only canonical
+oracle proves every prepared field and the canonical exactly-once consumption
+report. Production uses the equivalent lightweight admitted record so the
+rooted product Mach-O does not retain WGPU through the backend-bearing
+`SolidDraw` envelope.
+
+This is not general atomic-flush parity. Clips, gradients, feather atlas,
+images, strokes, advanced blends, multiple draws, multiple logical flushes,
+general scheduling, MSAA, fallback, and simulator/old-hardware matrices remain
+deferred. Encountering any of those families is a stop condition, not grounds
+to widen the slice or its tolerance.
 
 ## ORE-specific fail-closed rules
 

@@ -4,7 +4,9 @@
 ))]
 
 use nuxie_render_stream::RenderStream;
-use nuxie_renderer::{BackendWorkMetrics, NativeMetalFactory, WgpuFactory};
+use nuxie_renderer::{
+    BackendWorkMetrics, NativeMetalExecutionInventory, NativeMetalFactory, RenderMode, WgpuFactory,
+};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -127,6 +129,70 @@ fn native_metal_solid_rectangle_matches_pinned_cpp_metal_oracle() {
         "native Rust Metal versus pinned C++ Metal"
     );
     assert_eq!(actual, wgpu_pixels, "native Rust Metal versus Rust-wgpu");
+}
+
+#[test]
+fn native_metal_forced_atomic_triangle_matches_pinned_cpp_metal_oracle() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(fixture_root.join("streams/first-light-triangle.rive-stream"))
+            .expect("read triangle stream"),
+    )
+    .expect("parse triangle stream");
+    let (width, height) = stream.frame_size.expect("triangle frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+    assert_eq!(factory.render_mode(), RenderMode::ClockwiseAtomic);
+
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire forced-atomic native Metal frame");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay triangle through the public Factory/Renderer seam");
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish forced-atomic native Metal triangle");
+    assert_eq!(
+        output.execution_inventory,
+        NativeMetalExecutionInventory {
+            mode: RenderMode::ClockwiseAtomic,
+            atomic_color_plane: false,
+            atomic_clip_plane: true,
+            atomic_coverage_plane: true,
+            render_pass_initialize_pipeline: true,
+            midpoint_fan_pipeline: true,
+            render_pass_resolve_pipeline: true,
+        },
+        "opaque SrcOver must execute the real fixed-function generic-atomic branch"
+    );
+    assert_eq!(
+        output.backend_work,
+        BackendWorkMetrics {
+            command_encoders: 1,
+            render_passes: 2,
+            buffer_upload_calls: 6,
+            buffer_upload_bytes: 928,
+            queue_submissions: 1,
+            gpu_draw_calls: 4,
+            gpu_draw_instances: 10,
+            tessellation_spans: 6,
+            path_patches: 2,
+            ..BackendWorkMetrics::default()
+        },
+        "one tessellation draw plus atomic initialize/path/resolve"
+    );
+
+    let cpp_metal =
+        read_png(fixture_root.join("reference/metal/first-light-triangle-clockwise-atomic.png"));
+    assert_rgba8_with_tolerance(
+        &output.pixels,
+        &cpp_metal,
+        2,
+        Some(32),
+        true,
+        "forced generic-atomic Rust Metal triangle versus pinned C++ Metal",
+    );
 }
 
 #[test]

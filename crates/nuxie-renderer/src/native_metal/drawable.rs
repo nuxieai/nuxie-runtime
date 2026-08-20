@@ -8,7 +8,7 @@
 //! retains ownership of acquisition, actor scheduling, and layer policy.
 
 use super::{NativeMetalContext, NativeMetalFrame, NativeMetalRenderState, RenderTargetMetal};
-use crate::RendererError;
+use crate::{RenderMode, RendererError};
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_metal::{MTLDevice, MTLDrawable, MTLPixelFormat, MTLResource, MTLTexture};
@@ -26,6 +26,7 @@ pub struct NativeMetalDrawableFrame<'a> {
 impl<'a> NativeMetalDrawableFrame<'a> {
     pub(crate) fn new(
         context: Arc<NativeMetalContext>,
+        mode: RenderMode,
         drawable: &'a ProtocolObject<dyn MTLDrawable>,
         texture: Retained<ProtocolObject<dyn MTLTexture>>,
         expected_width: u32,
@@ -46,11 +47,13 @@ impl<'a> NativeMetalDrawableFrame<'a> {
         let frame = NativeMetalFrame {
             context,
             target: Rc::new(RefCell::new(target)),
+            mode,
             command_buffer,
             clear_color,
             state: NativeMetalRenderState::default(),
             state_stack: Vec::new(),
             solid_draws: Vec::new(),
+            atomic_path_draw: None,
             gradient_draws: Vec::new(),
             atlas_requests: Vec::new(),
             resource_lease: None,

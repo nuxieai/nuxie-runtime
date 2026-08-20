@@ -1,7 +1,7 @@
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 use nuxie_render_api::{Factory, FillRule, RawPath, Renderer};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
-use nuxie_renderer::NativeMetalFactory;
+use nuxie_renderer::{NativeMetalExecutionInventory, NativeMetalFactory, RenderMode};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 use objc2::rc::autoreleasepool;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -47,6 +47,43 @@ fn main() {
         frame.draw_path(path.as_ref(), paint.as_ref());
         let pixels = frame.finish().expect("finish native Metal tracer");
         assert_eq!(pixels[(32 * 64 + 32) * 4..][..4], [0, 255, 0, 255]);
+
+        // Root successful forced generic-atomic execution in the final
+        // product-shaped Mach-O so size/no-WGPU checks cannot dead-strip it.
+        let mut atomic_factory =
+            NativeMetalFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic)
+                .expect("create forced-atomic native Metal tracer");
+        let mut atomic_path = RawPath::new();
+        atomic_path.move_to(4.0, 4.0);
+        atomic_path.line_to(60.0, 4.0);
+        atomic_path.line_to(32.0, 60.0);
+        atomic_path.close();
+        let atomic_path = atomic_factory.make_render_path(atomic_path, FillRule::NonZero);
+        let mut atomic_paint = atomic_factory.make_render_paint();
+        atomic_paint.color(0xff00_ff00);
+        let mut atomic_frame = atomic_factory
+            .begin_frame(0)
+            .expect("acquire forced-atomic native Metal command buffer");
+        atomic_frame.draw_path(atomic_path.as_ref(), atomic_paint.as_ref());
+        let atomic_output = atomic_frame
+            .finish_for_benchmark()
+            .expect("finish forced-atomic native Metal triangle");
+        assert_eq!(
+            atomic_output.execution_inventory,
+            NativeMetalExecutionInventory {
+                mode: RenderMode::ClockwiseAtomic,
+                atomic_color_plane: false,
+                atomic_clip_plane: true,
+                atomic_coverage_plane: true,
+                render_pass_initialize_pipeline: true,
+                midpoint_fan_pipeline: true,
+                render_pass_resolve_pipeline: true,
+            }
+        );
+        assert_eq!(
+            atomic_output.pixels[(24 * 64 + 32) * 4..][..4],
+            [0, 255, 0, 255]
+        );
 
         factory
             .resize(32, 32)

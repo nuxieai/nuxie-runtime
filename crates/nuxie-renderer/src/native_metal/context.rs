@@ -30,7 +30,7 @@ use super::upload_buffer_ring::UploadBufferRing;
 use super::{make_solid_pipeline, new_library_from_metallib_bytes};
 use crate::gpu::{self, DrawType};
 use crate::native_metal::shader_compile_plan::{
-    BackgroundCompileJob, InterlockMode, MetalFeatures, ENABLE_DITHER,
+    BackgroundCompileJob, InterlockMode, MetalFeatures, ENABLE_DITHER, FIXED_FUNCTION_COLOR_OUTPUT,
 };
 use crate::RendererError;
 use objc2::rc::Retained;
@@ -71,6 +71,20 @@ struct ResourceGeneration {
     feather_atlas: Option<FeatherAtlasResource>,
     feather_atlas_pipelines: Option<FeatherAtlasPipelines>,
     specialized_atlas_blit_pipeline: Option<DrawPipeline>,
+    atomic_path_pipelines: Option<AtomicPathPipelines>,
+}
+
+#[derive(Clone)]
+struct AtomicPathPipelines {
+    initialize: DrawPipeline,
+    midpoint: DrawPipeline,
+    resolve: DrawPipeline,
+}
+
+pub(crate) struct AtomicPathPipelineStates {
+    pub(crate) initialize: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
+    pub(crate) midpoint: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
+    pub(crate) resolve: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
 }
 
 struct ResourceState {
@@ -91,6 +105,7 @@ pub(crate) struct PreparedResourceLease {
     pub(crate) tessellation: Retained<ProtocolObject<dyn MTLTexture>>,
     pub(crate) feather_atlas: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
     pub(crate) feather_atlas_pipeline: Option<Retained<ProtocolObject<dyn MTLRenderPipelineState>>>,
+    pub(crate) atomic_path_pipelines: Option<AtomicPathPipelineStates>,
     pub(crate) flush_uniforms: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) gradient_spans: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
     pub(crate) tessellation_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
@@ -219,6 +234,7 @@ impl NativeMetalContext {
                 feather_atlas: None,
                 feather_atlas_pipelines: None,
                 specialized_atlas_blit_pipeline: None,
+                atomic_path_pipelines: None,
             },
             uploads: UploadRings::default(),
         });
@@ -369,6 +385,25 @@ impl NativeMetalContext {
         )
     }
 
+    pub(crate) fn prepare_atomic_path_resources(
+        &self,
+        tessellation_height: usize,
+        pixel_format: MTLPixelFormat,
+        uploads: UploadBatch<'_>,
+    ) -> Result<PreparedResourceLease, RendererError> {
+        let mut allow_all = |_| Ok(());
+        self.prepare_resources_core(
+            0,
+            tessellation_height,
+            None,
+            None,
+            uploads,
+            specialized_atlas_blit_job(),
+            Some(pixel_format),
+            &mut allow_all,
+        )
+    }
+
     fn prepare_resources_with_control(
         &self,
         gradient_height: usize,
@@ -377,6 +412,29 @@ impl NativeMetalContext {
         feather_atlas_is_stroke: Option<bool>,
         uploads: UploadBatch<'_>,
         specialized_job: BackgroundCompileJob,
+        before: &mut impl FnMut(ResourcePreparationStage) -> Result<(), RendererError>,
+    ) -> Result<PreparedResourceLease, RendererError> {
+        self.prepare_resources_core(
+            gradient_height,
+            tessellation_height,
+            feather_atlas_extent,
+            feather_atlas_is_stroke,
+            uploads,
+            specialized_job,
+            None,
+            before,
+        )
+    }
+
+    fn prepare_resources_core(
+        &self,
+        gradient_height: usize,
+        tessellation_height: usize,
+        feather_atlas_extent: Option<[usize; 2]>,
+        feather_atlas_is_stroke: Option<bool>,
+        uploads: UploadBatch<'_>,
+        specialized_job: BackgroundCompileJob,
+        atomic_path_pixel_format: Option<MTLPixelFormat>,
         before: &mut impl FnMut(ResourcePreparationStage) -> Result<(), RendererError>,
     ) -> Result<PreparedResourceLease, RendererError> {
         let ownership = self.upload_coordinator.prepare_to_flush();
@@ -394,6 +452,13 @@ impl NativeMetalContext {
             TESSELLATION_TEXTURE_WIDTH,
             tessellation_height,
         )?;
+        if atomic_path_pixel_format.is_some() && generation.atomic_path_pipelines.is_none() {
+            generation.atomic_path_pipelines = Some(compile_atomic_path_pipelines(
+                &self.device,
+                self.capabilities,
+                self.platform,
+            )?);
+        }
         if feather_atlas_extent.is_some() != feather_atlas_is_stroke.is_some() {
             return Err(RendererError::NativeMetal(
                 "feather atlas extent and pipeline selection must be supplied together".to_owned(),
@@ -452,6 +517,27 @@ impl NativeMetalContext {
         } else {
             None
         };
+        let atomic_path_pipelines = atomic_path_pixel_format
+            .map(|pixel_format| {
+                let pipelines = generation.atomic_path_pipelines.as_ref().ok_or_else(|| {
+                    RendererError::NativeMetal("atomic path pipeline set is absent".to_owned())
+                })?;
+                Ok(AtomicPathPipelineStates {
+                    initialize: pipelines
+                        .initialize
+                        .retained_pipeline_state(pixel_format)
+                        .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
+                    midpoint: pipelines
+                        .midpoint
+                        .retained_pipeline_state(pixel_format)
+                        .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
+                    resolve: pipelines
+                        .resolve
+                        .retained_pipeline_state(pixel_format)
+                        .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
+                })
+            })
+            .transpose()?;
         // Publish every concrete texture and paired pipeline together only
         // after all fallible realization, upload preparation, and lease-owner
         // extraction has succeeded.
@@ -462,6 +548,7 @@ impl NativeMetalContext {
             tessellation,
             feather_atlas,
             feather_atlas_pipeline,
+            atomic_path_pipelines,
             flush_uniforms: uploaded.flush_uniforms,
             gradient_spans: uploaded.gradient_spans,
             tessellation_spans: uploaded.tessellation_spans,
@@ -691,7 +778,52 @@ const fn specialized_atlas_blit_job() -> BackgroundCompileJob {
     )
 }
 
+const fn atomic_path_jobs() -> [BackgroundCompileJob; 3] {
+    [
+        BackgroundCompileJob::new(
+            DrawType::RenderPassInitialize,
+            ENABLE_DITHER,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::MidpointFanPatches,
+            ENABLE_DITHER,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::RenderPassResolve,
+            ENABLE_DITHER,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+    ]
+}
+
+fn compile_atomic_path_pipelines(
+    device: &Retained<ProtocolObject<dyn MTLDevice>>,
+    capabilities: MetalCapabilitySelection,
+    platform: ApplePlatform,
+) -> Result<AtomicPathPipelines, RendererError> {
+    let [initialize, midpoint, resolve] = atomic_path_jobs();
+    Ok(AtomicPathPipelines {
+        initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
+        midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
+        resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
+    })
+}
+
 fn compile_specialized_atlas_blit_pipeline(
+    device: &Retained<ProtocolObject<dyn MTLDevice>>,
+    capabilities: MetalCapabilitySelection,
+    platform: ApplePlatform,
+    job: BackgroundCompileJob,
+) -> Result<DrawPipeline, RendererError> {
+    compile_specialized_draw_pipeline(device, capabilities, platform, job)
+}
+
+fn compile_specialized_draw_pipeline(
     device: &Retained<ProtocolObject<dyn MTLDevice>>,
     capabilities: MetalCapabilitySelection,
     platform: ApplePlatform,
@@ -707,7 +839,7 @@ fn compile_specialized_atlas_blit_pipeline(
     compiler.push_job(job);
     let finished = compiler.pop_finished_job(true).ok_or_else(|| {
         RendererError::NativeMetal(
-            "specialized AtlasBlit compiler returned no completed job".to_owned(),
+            "specialized Metal compiler returned no completed job".to_owned(),
         )
     })?;
     debug_assert_eq!(finished.job, job);
@@ -720,17 +852,28 @@ fn compile_specialized_atlas_blit_pipeline(
             other => format!("{other:?}"),
         };
         RendererError::NativeMetal(format!(
-            "compile specialized AtlasBlit shader synchronously: {detail}"
+            "compile specialized {:?} shader synchronously: {detail}",
+            job.draw_type
         ))
     })?;
+    let interlock_mode = match job.interlock_mode {
+        InterlockMode::RasterOrdering => MetalInterlockMode::RasterOrdering,
+        InterlockMode::Atomics => MetalInterlockMode::Atomics,
+        _ => {
+            return Err(RendererError::NativeMetal(format!(
+                "native Metal cannot realize {:?} interlock",
+                job.interlock_mode
+            )))
+        }
+    };
     DrawPipeline::new(
         device,
         Some(&library),
         &NSString::from_str(SPECIALIZED_DRAW_VERTEX_MAIN),
         &NSString::from_str(SPECIALIZED_DRAW_FRAGMENT_MAIN),
-        DrawType::AtlasBlit,
-        MetalInterlockMode::RasterOrdering,
-        0,
+        job.draw_type,
+        interlock_mode,
+        job.shader_misc_flags,
     )
     .map_err(|error| RendererError::NativeMetal(error.to_string()))
 }

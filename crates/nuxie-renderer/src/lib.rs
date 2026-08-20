@@ -10648,8 +10648,8 @@ mod tests {
         );
         assert_eq!(
             logical_frame::take_gradient_batch_preparations(),
-            1,
-            "the encoder must reuse the production writer's prepared batch"
+            0,
+            "the encoder must reuse the already-normalized prepared batch"
         );
         let center_alpha = pixels[((32 * 64 + 32) * 4 + 3) as usize];
         assert_ne!(center_alpha, 0);
@@ -12345,7 +12345,7 @@ mod tests {
             lightweight_gradient_batch.height,
             canonical_gradient_batch.height()
         );
-        let lightweight_gradient = lightweight_gradient_batch.draw(0).unwrap();
+        let lightweight_gradient = lightweight_gradient_batch.draw(1).unwrap();
         let canonical_gradient = canonical_gradient_batch.draw(1).unwrap();
         assert_eq!(
             lightweight_gradient.paint_type,
@@ -12543,6 +12543,409 @@ mod tests {
         assert_eq!(report.production_typed_output_eligible_draws, 3);
         assert_eq!(report.production_typed_output_consumed_draws, 3);
         assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
+    fn native_metal_atomic_rect_grad_deduplicates_and_matches_final_canonical_planes_once() {
+        let config = LogicalFrameConfig {
+            width: 220,
+            height: 220,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 16_384,
+            msaa_atlas_supports_clip_rect: false,
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(0.0, 0.0);
+        raw_path.line_to(100.0, 0.0);
+        raw_path.line_to(100.0, 100.0);
+        raw_path.line_to(0.0, 100.0);
+        raw_path.close();
+        let path = LogicalPath {
+            raw_path: Arc::new(raw_path),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let complex_colors = vec![0xffff_0000, 0xff00_ff00, 0xff00_00ff];
+        let complex_stops = vec![0.0, 0.5, 1.0];
+        let simple_colors = vec![0xff00_0000, 0xffff_ffff];
+        let simple_stops = vec![0.0, 1.0];
+        let paints = [
+            LogicalPaint {
+                shader: Some(LogicalShader::Linear {
+                    start: (0.0, 0.0),
+                    end: (100.0, 100.0),
+                    colors: complex_colors.clone(),
+                    stops: complex_stops.clone(),
+                }),
+                ..LogicalPaint::default()
+            },
+            LogicalPaint {
+                shader: Some(LogicalShader::Linear {
+                    start: (100.0, 0.0),
+                    end: (0.0, 100.0),
+                    colors: complex_colors,
+                    stops: complex_stops,
+                }),
+                ..LogicalPaint::default()
+            },
+            LogicalPaint {
+                shader: Some(LogicalShader::Linear {
+                    start: (100.0, 0.0),
+                    end: (0.0, 100.0),
+                    colors: simple_colors.clone(),
+                    stops: simple_stops.clone(),
+                }),
+                ..LogicalPaint::default()
+            },
+            LogicalPaint {
+                shader: Some(LogicalShader::Linear {
+                    start: (0.0, 0.0),
+                    end: (100.0, 100.0),
+                    colors: simple_colors,
+                    stops: simple_stops,
+                }),
+                ..LogicalPaint::default()
+            },
+        ];
+        let states =
+            [(10.0, 10.0), (110.0, 10.0), (10.0, 110.0), (110.0, 110.0)].map(|(x, y)| DrawState {
+                transform: Mat2D([1.0, 0.0, 0.0, 1.0, x, y]),
+                ..DrawState::default()
+            });
+        let inputs = (0..4)
+            .map(|index| logical_frame::AtomicPathFlushInput {
+                path: &path,
+                paint: &paints[index],
+                state: states[index],
+            })
+            .collect::<Vec<_>>();
+
+        let _ = logical_frame::take_gradient_batch_preparations();
+        let prepared = logical_frame::prepare_atomic_path_flush(config, &inputs)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            logical_frame::take_gradient_batch_preparations(),
+            1,
+            "the lightweight multi-draw path must build exactly one flush-wide batch"
+        );
+        assert_eq!(prepared.authored_draw_count, 4);
+        assert_eq!(prepared.draw_group_starts, [0, 1, 2, 3]);
+        assert_eq!(prepared.draws.len(), 4);
+        let lightweight_gradient_batch = prepared.gradient_batch.as_ref().unwrap();
+        assert_eq!(lightweight_gradient_batch.height, 2);
+        assert_eq!(lightweight_gradient_batch.spans.len(), 3);
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&lightweight_gradient_batch.spans),
+            bytemuck::cast_slice::<_, u8>(&[
+                gpu::GradientSpan {
+                    horizontal_span: 0x0080_0080,
+                    y_with_flags: 0xc000_0000,
+                    color0: 0xff00_0000,
+                    color1: 0xffff_ffff,
+                },
+                gpu::GradientSpan {
+                    horizontal_span: 0x8000_0040,
+                    y_with_flags: 0xa000_0001,
+                    color0: 0xffff_0000,
+                    color1: 0xff00_ff00,
+                },
+                gpu::GradientSpan {
+                    horizontal_span: 0xffc0_8000,
+                    y_with_flags: 0x6000_0001,
+                    color0: 0xff00_ff00,
+                    color1: 0xff00_00ff,
+                },
+            ])
+        );
+        let gradients = (0..4)
+            .map(|index| lightweight_gradient_batch.draw(index).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(gradients[0].texture_y, gradients[1].texture_y);
+        assert_eq!(gradients[2].texture_y, gradients[3].texture_y);
+        assert_eq!(
+            gradients[0].matrix.0,
+            [0.005, 0.0, 0.005, 0.0, -0.099_999_994, 0.0]
+        );
+        assert_eq!(gradients[1].matrix.0, [-0.005, 0.0, 0.005, 0.0, 1.0, 0.0]);
+        assert_eq!(gradients[2].matrix.0, [-0.005, 0.0, 0.005, 0.0, 0.0, 0.0]);
+        assert_eq!(gradients[3].matrix.0, [0.005, 0.0, 0.005, 0.0, -1.1, 0.0]);
+
+        let mut frame = logical_frame::LogicalFrame::new(config);
+        let mut scratch = draw::StrokePreparationScratch::default();
+        for index in 0..4 {
+            let admitted =
+                logical_frame::admit_path_draw(config, states[index], &path, &paints[index])
+                    .unwrap()
+                    .unwrap();
+            frame
+                .push_content_batch(Vec::new(), admitted.finish(0, &mut scratch).unwrap())
+                .unwrap();
+        }
+        let mut board =
+            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+        frame.finalize_for_production(&mut board).unwrap();
+        let store = logical_frame::LogicalResourceStore::default();
+        let canonical_prepared = store.prepare_for_production(&frame).unwrap();
+        assert_eq!(logical_frame::take_gradient_batch_preparations(), 1);
+        let canonical_gradient_batch = canonical_prepared.gradient_batch(&frame.draws);
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&lightweight_gradient_batch.spans),
+            bytemuck::cast_slice::<_, u8>(canonical_gradient_batch.spans())
+        );
+        assert_eq!(
+            lightweight_gradient_batch.height,
+            canonical_gradient_batch.height()
+        );
+
+        let canonical_typed = canonical_prepared.typed_draws(&frame.draws);
+        let mut canonical_draws = Vec::new();
+        for index in 0..4 {
+            let lightweight = &prepared.canonical_draw_resources[index];
+            let canonical = canonical_typed.draw(index).unwrap();
+            assert_eq!(
+                bytemuck::bytes_of(&lightweight.path),
+                bytemuck::bytes_of(&canonical.path)
+            );
+            assert_eq!(
+                bytemuck::bytes_of(&lightweight.paint),
+                bytemuck::bytes_of(&canonical.paint)
+            );
+            assert_eq!(
+                bytemuck::bytes_of(&lightweight.paint_aux),
+                bytemuck::bytes_of(&canonical.paint_aux)
+            );
+            assert_eq!(
+                bytemuck::cast_slice::<_, u8>(&lightweight.spans),
+                bytemuck::cast_slice::<_, u8>(&canonical.spans)
+            );
+            assert_eq!(
+                bytemuck::cast_slice::<_, u8>(&lightweight.contours),
+                bytemuck::cast_slice::<_, u8>(&canonical.contours)
+            );
+            assert_eq!(lightweight.base_instance, canonical.base_instance);
+            assert_eq!(lightweight.instance_count, canonical.instance_count);
+            assert!(!canonical.uses_interior);
+            canonical_draws.push(canonical.clone());
+        }
+
+        let midpoint_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let mut expected_paths = Vec::new();
+        let mut expected_paints = Vec::new();
+        let mut expected_paint_aux = Vec::new();
+        let mut expected_spans = Vec::new();
+        append_tessellation_padding_span(&mut expected_spans, 0, midpoint_span);
+        let mut expected_contours = Vec::new();
+        let mut local_contour_ids = Vec::new();
+        let mut next_base_instance = 1_u32;
+        for (index, mut canonical) in canonical_draws.into_iter().enumerate() {
+            let scheduled = prepared
+                .draws
+                .iter()
+                .find(|draw| draw.input_index == index)
+                .unwrap();
+            canonical.path.z_index = scheduled.draw_group;
+            expected_paths.push(canonical.path);
+            expected_paints.push(canonical.paint);
+            expected_paint_aux.push(canonical.paint_aux);
+            let mut spans = canonical.spans;
+            spans.retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+            let relocation = next_base_instance
+                .checked_sub(canonical.base_instance)
+                .and_then(|patches| patches.checked_mul(midpoint_span))
+                .unwrap();
+            let contour_offset = append_relocated_midpoint_contours_to_flush(
+                &spans,
+                &canonical.contours,
+                canonical.contour_base,
+                canonical.local_contour_ids_are_dense,
+                u32::try_from(index + 1).unwrap(),
+                relocation,
+                &mut expected_contours,
+                &mut local_contour_ids,
+            );
+            for span in &mut spans {
+                globalize_midpoint_span_contour_id(span, canonical.contour_base, contour_offset);
+            }
+            let mut base_instance = canonical.base_instance;
+            relocate_tessellation_logically(
+                &mut spans,
+                &mut base_instance,
+                &mut [],
+                next_base_instance,
+                midpoint_span,
+            );
+            assert_eq!(scheduled.base_instance, base_instance);
+            expected_spans.append(&mut spans);
+            next_base_instance += canonical.instance_count;
+        }
+        let geometry_end = next_base_instance * midpoint_span;
+        let outer_start = align_to(geometry_end, gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32);
+        append_tessellation_padding_span(&mut expected_spans, geometry_end, outer_start);
+        append_tessellation_padding_span(&mut expected_spans, outer_start, outer_start + 1);
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.paths),
+            bytemuck::cast_slice::<_, u8>(&expected_paths)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.paints),
+            bytemuck::cast_slice::<_, u8>(&expected_paints)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.paint_aux),
+            bytemuck::cast_slice::<_, u8>(&expected_paint_aux)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.spans),
+            bytemuck::cast_slice::<_, u8>(&expected_spans)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.contours),
+            bytemuck::cast_slice::<_, u8>(&expected_contours)
+        );
+
+        let report = canonical_prepared.into_report();
+        assert_eq!(report.production_typed_output_eligible_draws, 4);
+        assert_eq!(report.production_typed_output_consumed_draws, 4);
+        assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
+    fn native_metal_atomic_multi_gradient_height_limit_uses_deduplicated_rows() {
+        let config = LogicalFrameConfig {
+            width: 8,
+            height: 8,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 1,
+            msaa_atlas_supports_clip_rect: false,
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(1.0, 1.0);
+        raw_path.line_to(7.0, 1.0);
+        raw_path.line_to(7.0, 7.0);
+        raw_path.line_to(1.0, 7.0);
+        raw_path.close();
+        let path = LogicalPath {
+            raw_path: Arc::new(raw_path),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let paint = |middle| LogicalPaint {
+            shader: Some(LogicalShader::Linear {
+                start: (0.0, 0.0),
+                end: (8.0, 8.0),
+                colors: vec![0xffff_0000, middle, 0xff00_00ff],
+                stops: vec![0.0, 0.5, 1.0],
+            }),
+            ..LogicalPaint::default()
+        };
+        let paints = [paint(0xff00_ff00), paint(0xffff_ffff)];
+        let inputs = paints
+            .iter()
+            .map(|paint| logical_frame::AtomicPathFlushInput {
+                path: &path,
+                paint,
+                state: DrawState::default(),
+            })
+            .collect::<Vec<_>>();
+
+        assert!(matches!(
+            logical_frame::prepare_atomic_path_flush(config, &inputs),
+            Err("draw batch exceeds logical flush gradient texture limit")
+        ));
+    }
+
+    #[test]
+    fn native_metal_atomic_gradient_layout_uses_only_canonically_admitted_draws() {
+        let config = LogicalFrameConfig {
+            width: 32,
+            height: 32,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 1,
+            msaa_atlas_supports_clip_rect: false,
+        };
+        let mut collinear_raw = RawPath::new();
+        collinear_raw.move_to(2.0, 2.0);
+        collinear_raw.line_to(12.0, 12.0);
+        collinear_raw.line_to(22.0, 22.0);
+        collinear_raw.close();
+        let collinear = LogicalPath {
+            raw_path: Arc::new(collinear_raw),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let mut valid_raw = RawPath::new();
+        valid_raw.move_to(2.0, 2.0);
+        valid_raw.line_to(22.0, 2.0);
+        valid_raw.line_to(22.0, 22.0);
+        valid_raw.line_to(2.0, 22.0);
+        valid_raw.close();
+        let valid = LogicalPath {
+            raw_path: Arc::new(valid_raw),
+            fill_rule: FillRule::NonZero,
+            valid: true,
+        };
+        let paints = [
+            LogicalPaint {
+                shader: Some(LogicalShader::Radial {
+                    center: (12.0, 12.0),
+                    radius: 10.0,
+                    colors: vec![0xffff_0000, 0xff00_00ff],
+                    stops: vec![0.0, 1.0],
+                }),
+                ..LogicalPaint::default()
+            },
+            LogicalPaint {
+                shader: Some(LogicalShader::Linear {
+                    start: (2.0, 2.0),
+                    end: (22.0, 22.0),
+                    colors: vec![0xffff_0000, 0xff00_00ff],
+                    stops: vec![0.0],
+                }),
+                ..LogicalPaint::default()
+            },
+            LogicalPaint {
+                shader: Some(LogicalShader::Linear {
+                    start: (2.0, 2.0),
+                    end: (22.0, 22.0),
+                    colors: vec![0xffff_0000, 0xff00_ff00, 0xff00_00ff],
+                    stops: vec![0.0, 0.5, 1.0],
+                }),
+                ..LogicalPaint::default()
+            },
+            LogicalPaint {
+                shader: Some(LogicalShader::Linear {
+                    start: (2.0, 2.0),
+                    end: (22.0, 22.0),
+                    colors: vec![0xff00_0000, 0xffff_ffff],
+                    stops: vec![0.0, 1.0],
+                }),
+                ..LogicalPaint::default()
+            },
+        ];
+        let paths = [&collinear, &collinear, &collinear, &valid];
+        let inputs = (0..4)
+            .map(|index| logical_frame::AtomicPathFlushInput {
+                path: paths[index],
+                paint: &paints[index],
+                state: DrawState::default(),
+            })
+            .collect::<Vec<_>>();
+
+        let _ = logical_frame::take_path_draw_admission_evaluations();
+        let _ = logical_frame::take_gradient_batch_preparations();
+        let prepared = logical_frame::prepare_atomic_path_flush(config, &inputs)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(logical_frame::take_path_draw_admission_evaluations(), 4);
+        assert_eq!(logical_frame::take_gradient_batch_preparations(), 1);
+        assert_eq!(prepared.authored_draw_count, 1);
+        assert_eq!(prepared.draws.len(), 1);
+        assert_eq!(prepared.draws[0].input_index, 3);
+        let gradient_batch = prepared.gradient_batch.as_ref().unwrap();
+        assert_eq!(gradient_batch.height, 1);
+        assert_eq!(gradient_batch.spans.len(), 1);
     }
 
     #[test]
@@ -13988,6 +14391,128 @@ mod tests {
     }
 
     #[test]
+    fn gradient_batch_deduplicates_ramp_content_but_preserves_occurrence_transforms() {
+        let draw = |occurrence_id, shader, translation| SolidDraw {
+            logical_occurrence_id: occurrence_id,
+            path: LogicalPath {
+                valid: true,
+                raw_path: Arc::new(RawPath::new()),
+                fill_rule: FillRule::NonZero,
+            },
+            paint: LogicalPaint {
+                shader: Some(shader),
+                ..Default::default()
+            },
+            state: DrawState {
+                transform: Mat2D([1.0, 0.0, 0.0, 1.0, translation, 0.0]),
+                ..Default::default()
+            },
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+            prepared_pixel_bounds: None,
+            prepared_fill: None,
+            prepared_stroke: None,
+            prepared_feather: None,
+        };
+        let complex = || LogicalShader::Linear {
+            start: (0.0, 0.0),
+            end: (10.0, 0.0),
+            colors: vec![0xffff0000, 0xff00ff00, 0xff0000ff],
+            stops: vec![0.0, 0.5, 1.0],
+        };
+        let simple = || LogicalShader::Linear {
+            start: (0.0, 0.0),
+            end: (10.0, 0.0),
+            colors: vec![0xff000000, 0xffffffff],
+            stops: vec![0.0, 1.0],
+        };
+        let batch = prepare_gradient_batch(&[
+            draw(10, complex(), 0.0),
+            draw(11, complex(), 12.0),
+            draw(12, simple(), 24.0),
+            draw(13, simple(), 36.0),
+        ]);
+
+        assert_eq!(batch.height, 2, "one simple row plus one complex row");
+        assert_eq!(
+            batch.spans.len(),
+            3,
+            "one shared simple span plus two shared complex spans"
+        );
+        assert_eq!(batch.spans[0].y_with_flags & 0x1fff_ffff, 0);
+        assert_eq!(batch.spans[1].y_with_flags & 0x1fff_ffff, 1);
+        assert_eq!(batch.spans[2].y_with_flags & 0x1fff_ffff, 1);
+
+        let complex_first = batch.draw(0).unwrap();
+        let complex_second = batch.draw(1).unwrap();
+        assert_eq!(complex_first.texture_y, complex_second.texture_y);
+        assert_eq!(complex_first.texture_span, complex_second.texture_span);
+        assert_ne!(complex_first.matrix.0, complex_second.matrix.0);
+
+        let simple_first = batch.draw(2).unwrap();
+        let simple_second = batch.draw(3).unwrap();
+        assert_eq!(simple_first.texture_y, simple_second.texture_y);
+        assert_eq!(simple_first.texture_span, simple_second.texture_span);
+        assert_ne!(simple_first.matrix.0, simple_second.matrix.0);
+    }
+
+    #[test]
+    fn gradient_content_keys_preserve_complex_signed_zero_but_ignore_simple_stop_bits() {
+        let draw = |shader| SolidDraw {
+            logical_occurrence_id: 0,
+            path: LogicalPath {
+                valid: true,
+                raw_path: Arc::new(RawPath::new()),
+                fill_rule: FillRule::NonZero,
+            },
+            paint: LogicalPaint {
+                shader: Some(shader),
+                ..Default::default()
+            },
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+            prepared_pixel_bounds: None,
+            prepared_fill: None,
+            prepared_stroke: None,
+            prepared_feather: None,
+        };
+        let complex = |first_stop| LogicalShader::Linear {
+            start: (0.0, 0.0),
+            end: (10.0, 0.0),
+            colors: vec![0xffff_0000, 0xff00_ff00, 0xff00_00ff],
+            stops: vec![first_stop, 0.5, 1.0],
+        };
+        let simple = |first_stop| LogicalShader::Linear {
+            start: (0.0, 0.0),
+            end: (10.0, 0.0),
+            colors: vec![0xff00_0000, 0xffff_ffff],
+            stops: vec![first_stop, 1.0],
+        };
+        let batch = prepare_gradient_batch(&[
+            draw(complex(0.0)),
+            draw(complex(-0.0)),
+            draw(simple(0.0)),
+            draw(simple(-0.0)),
+        ]);
+
+        assert_eq!(batch.height, 3);
+        assert_eq!(batch.spans.len(), 5);
+        assert_ne!(
+            batch.draw(0).unwrap().texture_y,
+            batch.draw(1).unwrap().texture_y
+        );
+        assert_eq!(
+            batch.draw(2).unwrap().texture_y,
+            batch.draw(3).unwrap().texture_y
+        );
+        assert_eq!(
+            batch.draw(2).unwrap().texture_span,
+            batch.draw(3).unwrap().texture_span
+        );
+    }
+
+    #[test]
     fn prepared_gradients_are_owned_by_exact_flushes_and_reused_for_encoder_views() {
         let gradient = || LogicalShader::Linear {
             start: (0.0, 0.0),
@@ -14038,14 +14563,14 @@ mod tests {
         let first = first_flush.draw(0).unwrap();
         let second = first_flush.draw(1).unwrap();
         assert_eq!(first_flush.height(), 1);
-        assert_eq!(first_flush.spans().len(), 2);
+        assert_eq!(first_flush.spans().len(), 1);
         drop(first_flush);
 
         let second_flush = prepared.gradient_batch(&frame.draws[2..]);
         let third = second_flush.draw(0).unwrap();
         let fourth = second_flush.draw(1).unwrap();
         assert_eq!(second_flush.height(), 1);
-        assert_eq!(second_flush.spans().len(), 2);
+        assert_eq!(second_flush.spans().len(), 1);
         drop(second_flush);
 
         let reordered = vec![frame.draws[1].clone(), frame.draws[0].clone()];
@@ -14126,10 +14651,13 @@ mod tests {
                 None,
             );
             let mut frame = logical_frame::LogicalFrame::new(config);
-            for _ in 0..draw_count {
-                frame
-                    .push_content_batch(Vec::new(), prototype.clone())
-                    .unwrap();
+            for index in 0..draw_count {
+                let mut draw = prototype.clone();
+                let Some(LogicalShader::Linear { colors, .. }) = draw.paint.shader.as_mut() else {
+                    unreachable!();
+                };
+                colors[0] = 0xff00_0000 | u32::try_from(index).unwrap();
+                frame.push_content_batch(Vec::new(), draw).unwrap();
             }
             let mut board = intersection_board::IntersectionBoard::new(
                 intersection_board::GroupingType::Disjoint,
@@ -23544,17 +24072,67 @@ mod tests {
                 colors: vec![0xff00_0000 | index, 0xff00_ff00, 0xff00_00ff],
                 stops: vec![0.0, 0.5, 1.0],
             });
-            allocations = allocations
-                .with_batch(config, std::slice::from_ref(&draw))
+            allocations
+                .try_add_draws(config, std::slice::from_ref(&draw))
                 .unwrap();
         }
         assert_eq!(allocations.complex_gradient_count, 2048);
+        allocations
+            .try_add_draws(config, std::slice::from_ref(&draw))
+            .unwrap();
+        assert_eq!(allocations.complex_gradient_count, 2048);
+        draw.paint.shader = Some(LogicalShader::Linear {
+            start: (0.0, 0.0),
+            end: (64.0, 64.0),
+            colors: vec![0xff00_0800, 0xff00_ff00, 0xff00_00ff],
+            stops: vec![0.0, 0.5, 1.0],
+        });
         assert!(allocations
-            .with_batch(config, std::slice::from_ref(&draw))
+            .try_add_draws(config, std::slice::from_ref(&draw))
             .is_err());
-        assert!(LogicalFlushAllocations::default()
-            .with_batch(config, std::slice::from_ref(&draw))
+        let mut fresh = LogicalFlushAllocations::default();
+        assert!(fresh
+            .try_add_draws(config, std::slice::from_ref(&draw))
             .is_ok());
+    }
+
+    #[test]
+    fn logical_flush_gradient_dedup_retains_storage_only_for_unique_content() {
+        let config = LogicalFrameConfig {
+            width: 64,
+            height: 64,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 8_192,
+            msaa_atlas_supports_clip_rect: true,
+        };
+        let draw = SolidDraw {
+            logical_occurrence_id: 0,
+            path: rect_path([4.0, 4.0, 60.0, 60.0], FillRule::NonZero),
+            paint: LogicalPaint {
+                shader: Some(LogicalShader::Linear {
+                    start: (0.0, 0.0),
+                    end: (64.0, 64.0),
+                    colors: vec![0xffff_0000, 0xff00_ff00, 0xff00_00ff],
+                    stops: vec![0.0, 0.5, 1.0],
+                }),
+                ..LogicalPaint::default()
+            },
+            state: DrawState::default(),
+            role: DrawRole::Content { clip_id: 0 },
+            image: None,
+            prepared_pixel_bounds: None,
+            prepared_fill: None,
+            prepared_stroke: None,
+            prepared_feather: None,
+        };
+        let mut allocations = LogicalFlushAllocations::default();
+        for _ in 0..4_096 {
+            allocations
+                .try_add_draws(config, std::slice::from_ref(&draw))
+                .unwrap();
+        }
+        assert_eq!(allocations.complex_gradient_count, 1);
+        assert_eq!(allocations.retained_gradient_key_count(), 1);
     }
 
     #[test]
@@ -23581,17 +24159,19 @@ mod tests {
             let mut atlas = LogicalFlushAllocations::default();
             let atlas_count = (1..10_000)
                 .find(|_| {
-                    let Ok(next) = atlas.with_batch(config, std::slice::from_ref(&atlas_draw))
-                    else {
+                    if atlas
+                        .try_add_draws(config, std::slice::from_ref(&atlas_draw))
+                        .is_err()
+                    {
                         return true;
-                    };
-                    atlas = next;
+                    }
                     false
                 })
                 .expect("atlas allocation must reach the device texture limit");
             assert!(atlas_count > 1, "{mode:?} rolled before one atlas draw");
-            assert!(LogicalFlushAllocations::default()
-                .with_batch(config, std::slice::from_ref(&atlas_draw))
+            let mut fresh = LogicalFlushAllocations::default();
+            assert!(fresh
+                .try_add_draws(config, std::slice::from_ref(&atlas_draw))
                 .is_ok());
         }
     }

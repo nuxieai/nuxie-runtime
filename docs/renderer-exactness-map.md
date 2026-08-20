@@ -106,7 +106,8 @@ renderer-metal-atomic-oracle-tracer` compares a forced generic-atomic triangle,
 linear-gradient cubic, four-draw `gm/overfill_opaque` flush, and nested-clip
 outer-curve/interior slice, plus the three-draw `riv/deterministic_mode`
 solid/simple-linear-gradient/solid flush and the four-draw
-`gm/overfill_blendmodes` advanced/HSL flush against the pinned C++ Metal replay
+`gm/overfill_blendmodes` advanced/HSL flush, plus the four-gradient
+`gm/rect_grad` dedup slice, against the pinned C++ Metal replay
 on the same adapter. The triangle contract remains
 max-channel 2 and at most 32 differing pixels. The forced C++ atomic gradient
 is byte-identical to the existing checked-in gradient PNG, so its atomic row is
@@ -129,6 +130,12 @@ occupancy. Its public inventory requires non-fixed output, the color, clip, and
 coverage atomic planes, advanced and HSL feature families, four authored
 midpoint draws, four physical groups, and five semantic barriers. The
 same-runner M5 Max measurement was byte-identical.
+The rect-grad row retains its checked-in 2/32 contract and exact occupancy.
+Its public inventory requires four midpoint draws, four physical groups, five
+semantic barriers, a 512x2 ramp texture, and seven uploads totaling 2,264
+bytes. A structural oracle separately pins three simple-first ramp spans and
+four occurrence-specific matrices because the wrong non-deduplicated layout
+can still produce a byte-identical image.
 The existing `rust-metal` candidate rows remain capability-driven and retain
 their original labels and budgets.
 

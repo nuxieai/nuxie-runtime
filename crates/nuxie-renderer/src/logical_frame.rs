@@ -5,7 +5,9 @@
 //! behind it so a backend cannot accidentally benchmark a shallower seam.
 
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -110,6 +112,51 @@ pub(crate) struct GradientDefinition {
     pub(crate) colors: Vec<ColorInt>,
     pub(crate) stops: Vec<f32>,
     pub(crate) coeffs: [f32; 3],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ComplexGradientContentKey {
+    colors: Vec<ColorInt>,
+    stop_bits: Vec<u32>,
+}
+
+impl ComplexGradientContentKey {
+    fn new(gradient: &GradientDefinition) -> Self {
+        Self {
+            colors: gradient.colors.clone(),
+            stop_bits: gradient.stops.iter().map(|stop| stop.to_bits()).collect(),
+        }
+    }
+
+    fn matches(&self, gradient: &GradientDefinition) -> bool {
+        self.colors == gradient.colors
+            && self.stop_bits.len() == gradient.stops.len()
+            && self
+                .stop_bits
+                .iter()
+                .zip(&gradient.stops)
+                .all(|(bits, stop)| *bits == stop.to_bits())
+    }
+}
+
+fn complex_gradient_content_hash(gradient: &GradientDefinition) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    gradient.colors.hash(&mut hasher);
+    gradient.stops.len().hash(&mut hasher);
+    for stop in &gradient.stops {
+        stop.to_bits().hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+fn complex_gradient_content_matches(left: &GradientDefinition, right: &GradientDefinition) -> bool {
+    left.colors == right.colors
+        && left.stops.len() == right.stops.len()
+        && left
+            .stops
+            .iter()
+            .zip(&right.stops)
+            .all(|(left, right)| left.to_bits() == right.to_bits())
 }
 
 #[derive(Clone, Copy)]
@@ -526,6 +573,8 @@ impl LogicalFrame {
         self.logical_flush.rewind();
         self.logical_flush_allocations.simple_gradient_count = 0;
         self.logical_flush_allocations.complex_gradient_count = 0;
+        self.logical_flush_allocations.simple_gradient_keys.clear();
+        self.logical_flush_allocations.complex_gradient_keys.clear();
         self.logical_flush_allocations.atlas_draw_sizes.clear();
         self.logical_flush_starts.clear();
         self.logical_flush_starts.push(0);
@@ -713,11 +762,14 @@ impl LogicalFrame {
         draws: impl IntoIterator<Item = &'a SolidDraw>,
     ) -> Result<(), &'static str> {
         let config = self.config;
-        let allocations = self.logical_flush_allocations.with_draws(config, draws)?;
+        let previous_flush = self.logical_flush;
         if !self.logical_flush.push_draws(planned.total) {
             return Err("draw batch exceeds logical flush resource counters");
         }
-        self.logical_flush_allocations = allocations;
+        if let Err(error) = self.logical_flush_allocations.try_add_draws(config, draws) {
+            self.logical_flush = previous_flush;
+            return Err(error);
+        }
         self.draw_resources
             .extend_from_slice(planned.draws.as_slice());
         self.note_retained_frame_growth();
@@ -903,28 +955,33 @@ pub struct LogicalDrawState {
 pub(crate) struct LogicalFlushAllocations {
     pub(crate) simple_gradient_count: usize,
     pub(crate) complex_gradient_count: usize,
+    simple_gradient_keys: HashSet<[ColorInt; 2]>,
+    complex_gradient_keys: HashMap<u64, Vec<ComplexGradientContentKey>>,
     pub(crate) atlas_draw_sizes: Vec<(u32, u32)>,
 }
 
 impl LogicalFlushAllocations {
     #[cfg(test)]
-    pub(crate) fn with_batch(
-        &self,
-        config: LogicalFrameConfig,
-        draws: &[SolidDraw],
-    ) -> Result<Self, &'static str> {
-        self.with_draws(config, draws)
+    pub(crate) fn retained_gradient_key_count(&self) -> usize {
+        self.simple_gradient_keys.len()
+            + self
+                .complex_gradient_keys
+                .values()
+                .map(Vec::len)
+                .sum::<usize>()
     }
 
-    pub(crate) fn with_draws<'a>(
-        &self,
+    pub(crate) fn try_add_draws<'a>(
+        &mut self,
         config: LogicalFrameConfig,
         draws: impl IntoIterator<Item = &'a SolidDraw>,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<(), &'static str> {
         const MAX_GRADIENT_HEIGHT: usize = 2048;
         const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
 
-        let mut next = self.clone();
+        let mut new_simple_keys = HashSet::new();
+        let mut new_complex_keys = HashMap::<u64, Vec<ComplexGradientContentKey>>::new();
+        let mut new_atlas_sizes = Vec::new();
         for draw in draws {
             if let Some(gradient) = draw
                 .paint
@@ -937,15 +994,26 @@ impl LogicalFlushAllocations {
                         && gradient.stops[0] == 0.0
                         && gradient.stops[1] == 1.0);
                 if simple {
-                    next.simple_gradient_count = next
-                        .simple_gradient_count
-                        .checked_add(1)
-                        .ok_or("logical flush gradient count overflow")?;
+                    let color0 = gradient.colors[0];
+                    let key = [color0, gradient.colors.get(1).copied().unwrap_or(color0)];
+                    if !self.simple_gradient_keys.contains(&key) {
+                        new_simple_keys.insert(key);
+                    }
                 } else {
-                    next.complex_gradient_count = next
-                        .complex_gradient_count
-                        .checked_add(1)
-                        .ok_or("logical flush gradient count overflow")?;
+                    let hash = complex_gradient_content_hash(&gradient);
+                    let already_present = self
+                        .complex_gradient_keys
+                        .get(&hash)
+                        .into_iter()
+                        .flatten()
+                        .chain(new_complex_keys.get(&hash).into_iter().flatten())
+                        .any(|key| key.matches(&gradient));
+                    if !already_present {
+                        new_complex_keys
+                            .entry(hash)
+                            .or_default()
+                            .push(ComplexGradientContentKey::new(&gradient));
+                    }
                 }
             }
 
@@ -968,29 +1036,45 @@ impl LogicalFlushAllocations {
                     config.height,
                 )
                 .ok_or("draw has invalid feather atlas placement")?;
-                next.atlas_draw_sizes.push((
+                new_atlas_sizes.push((
                     placement.width - FEATHER_ATLAS_PADDING * 2,
                     placement.height - FEATHER_ATLAS_PADDING * 2,
                 ));
             }
         }
 
-        let gradient_height = next
+        let simple_gradient_count = self
             .simple_gradient_count
+            .checked_add(new_simple_keys.len())
+            .ok_or("logical flush gradient count overflow")?;
+        let complex_gradient_count = self
+            .complex_gradient_count
+            .checked_add(new_complex_keys.values().map(Vec::len).sum::<usize>())
+            .ok_or("logical flush gradient count overflow")?;
+        let gradient_height = simple_gradient_count
             .div_ceil(RAMPS_PER_SIMPLE_ROW)
-            .checked_add(next.complex_gradient_count)
+            .checked_add(complex_gradient_count)
             .ok_or("logical flush gradient height overflow")?;
         if gradient_height > MAX_GRADIENT_HEIGHT.min(config.max_texture_dimension_2d as usize) {
             return Err("draw batch exceeds logical flush gradient texture limit");
         }
-        if !next.atlas_draw_sizes.is_empty() {
-            pack_logical_feather_atlas_for_cpp(
-                config.max_texture_dimension_2d,
-                &next.atlas_draw_sizes,
-            )
-            .map_err(|_| "draw batch exceeds logical flush feather atlas texture limit")?;
+        let mut atlas_draw_sizes = self.atlas_draw_sizes.clone();
+        atlas_draw_sizes.extend_from_slice(&new_atlas_sizes);
+        if !atlas_draw_sizes.is_empty() {
+            pack_logical_feather_atlas_for_cpp(config.max_texture_dimension_2d, &atlas_draw_sizes)
+                .map_err(|_| "draw batch exceeds logical flush feather atlas texture limit")?;
         }
-        Ok(next)
+        self.simple_gradient_count = simple_gradient_count;
+        self.complex_gradient_count = complex_gradient_count;
+        self.simple_gradient_keys.extend(new_simple_keys);
+        for (hash, keys) in new_complex_keys {
+            self.complex_gradient_keys
+                .entry(hash)
+                .or_default()
+                .extend(keys);
+        }
+        self.atlas_draw_sizes = atlas_draw_sizes;
+        Ok(())
     }
 }
 
@@ -1978,9 +2062,6 @@ impl LogicalResourceStore {
 }
 
 pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
-    #[cfg(test)]
-    GRADIENT_BATCH_PREPARATIONS.with(|preparations| preparations.set(preparations.get() + 1));
-
     // Preserve C++'s sparse solid-paint shape: allocate the per-draw table
     // only after the first authored gradient appears.
     let mut definitions = Vec::new();
@@ -2019,7 +2100,7 @@ pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
     prepare_normalized_gradient_batch(definitions)
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(feature = "native-metal-experimental")]
 pub(crate) fn prepare_single_gradient_batch(
     shader: &super::LogicalShader,
     opacity: f32,
@@ -2036,6 +2117,9 @@ pub(crate) fn prepare_single_gradient_batch(
 fn prepare_normalized_gradient_batch(
     definitions: Vec<(u64, Mat2D, Option<GradientDefinition>)>,
 ) -> GradientBatch {
+    #[cfg(test)]
+    GRADIENT_BATCH_PREPARATIONS.with(|preparations| preparations.set(preparations.get() + 1));
+
     const RAMPS_PER_SIMPLE_ROW: usize = gradient_pipeline::TEXTURE_WIDTH as usize / 2;
     const ONE_TEXEL_FIXED: u32 = 65_536 / gradient_pipeline::TEXTURE_WIDTH;
     const LEFT_BORDER: u32 = 0x8000_0000;
@@ -2046,23 +2130,101 @@ fn prepare_normalized_gradient_batch(
         gradient.stops.len() == 1
             || (gradient.stops.len() == 2 && gradient.stops[0] == 0.0 && gradient.stops[1] == 1.0)
     };
-    let simple_count = definitions
-        .iter()
-        .filter_map(|(_, _, gradient)| gradient.as_ref())
-        .filter(|gradient| is_simple(gradient))
-        .count();
-    let complex_count = definitions
-        .iter()
-        .filter_map(|(_, _, gradient)| gradient.as_ref())
-        .filter(|gradient| !is_simple(gradient))
-        .count();
-    let simple_height = simple_count.div_ceil(RAMPS_PER_SIMPLE_ROW) as u32;
-    let height = simple_height + complex_count as u32;
-    let mut simple_index = 0usize;
-    let mut complex_index = 0u32;
+
+    #[derive(Clone, Copy)]
+    enum RampLocation {
+        Simple(usize),
+        Complex(usize),
+    }
+
+    // C++ keys color-ramp allocations by content, independently of each
+    // occurrence's gradient geometry and world transform. Retain one ramp per
+    // distinct byte-equivalent payload while preserving authored occurrence
+    // order for the per-draw matrices below.
+    let mut simple_indices = HashMap::<[ColorInt; 2], usize>::new();
+    let mut unique_simple = Vec::<[ColorInt; 2]>::new();
+    let mut complex_indices = HashMap::<u64, Vec<usize>>::new();
+    let mut unique_complex = Vec::<GradientDefinition>::new();
+    let mut ramp_locations = Vec::with_capacity(definitions.len());
+    for (_, _, gradient) in &definitions {
+        let Some(gradient) = gradient else {
+            ramp_locations.push(None);
+            continue;
+        };
+        if is_simple(gradient) {
+            let color0 = gradient.colors[0];
+            let key = [color0, gradient.colors.get(1).copied().unwrap_or(color0)];
+            let index = *simple_indices.entry(key).or_insert_with(|| {
+                unique_simple.push(key);
+                unique_simple.len() - 1
+            });
+            ramp_locations.push(Some(RampLocation::Simple(index)));
+        } else {
+            let hash = complex_gradient_content_hash(gradient);
+            let index = complex_indices
+                .get(&hash)
+                .into_iter()
+                .flatten()
+                .copied()
+                .find(|index| complex_gradient_content_matches(&unique_complex[*index], gradient))
+                .unwrap_or_else(|| {
+                    let index = unique_complex.len();
+                    unique_complex.push(gradient.clone());
+                    complex_indices.entry(hash).or_default().push(index);
+                    index
+                });
+            ramp_locations.push(Some(RampLocation::Complex(index)));
+        }
+    }
+
+    let simple_height = unique_simple.len().div_ceil(RAMPS_PER_SIMPLE_ROW) as u32;
+    let height = simple_height + unique_complex.len() as u32;
     let mut spans = Vec::new();
+    for (simple_index, [color0, color1]) in unique_simple.iter().copied().enumerate() {
+        let row = (simple_index / RAMPS_PER_SIMPLE_ROW) as u32;
+        let left = ((simple_index % RAMPS_PER_SIMPLE_ROW) * 2) as u32;
+        let center_fixed = (left + 1) * ONE_TEXEL_FIXED;
+        spans.push(gpu::GradientSpan::new(
+            center_fixed,
+            center_fixed,
+            row,
+            LEFT_BORDER | RIGHT_BORDER,
+            color0,
+            color1,
+        ));
+    }
+    for (complex_index, gradient) in unique_complex.iter().enumerate() {
+        let row = simple_height + complex_index as u32;
+        let scale = (gradient_pipeline::TEXTURE_WIDTH - 1) as f32 * ONE_TEXEL_FIXED as f32;
+        let bias = 0.5 * ONE_TEXEL_FIXED as f32;
+        let mut last_x = (gradient.stops[0] * scale + bias) as u32;
+        let mut last_color = gradient.colors[0];
+        for index in 1..gradient.stops.len() {
+            let x = (gradient.stops[index] * scale + bias) as u32;
+            let mut flags = COMPLEX_BORDER;
+            if index == 1 {
+                flags |= LEFT_BORDER;
+            }
+            if index + 1 == gradient.stops.len() {
+                flags |= RIGHT_BORDER;
+            }
+            spans.push(gpu::GradientSpan::new(
+                last_x,
+                x,
+                row,
+                flags,
+                last_color,
+                gradient.colors[index],
+            ));
+            last_x = x;
+            last_color = gradient.colors[index];
+        }
+    }
+
     let mut prepared = Vec::with_capacity(definitions.len());
-    for (occurrence_id, transform, gradient) in definitions {
+    for ((occurrence_id, transform, gradient), ramp_location) in
+        definitions.into_iter().zip(ramp_locations)
+    {
         let Some(gradient) = gradient else {
             prepared.push(PreparedGradientDraw {
                 occurrence_id,
@@ -2070,63 +2232,26 @@ fn prepare_normalized_gradient_batch(
             });
             continue;
         };
-        let (row, texture_span) = if is_simple(&gradient) {
-            let row = (simple_index / RAMPS_PER_SIMPLE_ROW) as u32;
-            let left = ((simple_index % RAMPS_PER_SIMPLE_ROW) * 2) as u32;
-            let center_fixed = (left + 1) * ONE_TEXEL_FIXED;
-            let color0 = gradient.colors[0];
-            let color1 = gradient.colors.get(1).copied().unwrap_or(color0);
-            spans.push(gpu::GradientSpan::new(
-                center_fixed,
-                center_fixed,
-                row,
-                LEFT_BORDER | RIGHT_BORDER,
-                color0,
-                color1,
-            ));
-            simple_index += 1;
-            (
-                row,
-                [
-                    1.0 / gradient_pipeline::TEXTURE_WIDTH as f32,
-                    (left as f32 + 0.5) / gradient_pipeline::TEXTURE_WIDTH as f32,
-                ],
-            )
-        } else {
-            let row = simple_height + complex_index;
-            let scale = (gradient_pipeline::TEXTURE_WIDTH - 1) as f32 * ONE_TEXEL_FIXED as f32;
-            let bias = 0.5 * ONE_TEXEL_FIXED as f32;
-            let mut last_x = (gradient.stops[0] * scale + bias) as u32;
-            let mut last_color = gradient.colors[0];
-            for index in 1..gradient.stops.len() {
-                let x = (gradient.stops[index] * scale + bias) as u32;
-                let mut flags = COMPLEX_BORDER;
-                if index == 1 {
-                    flags |= LEFT_BORDER;
-                }
-                if index + 1 == gradient.stops.len() {
-                    flags |= RIGHT_BORDER;
-                }
-                spans.push(gpu::GradientSpan::new(
-                    last_x,
-                    x,
+        let (row, texture_span) = match ramp_location.expect("gradient ramp location") {
+            RampLocation::Simple(simple_index) => {
+                let row = (simple_index / RAMPS_PER_SIMPLE_ROW) as u32;
+                let left = ((simple_index % RAMPS_PER_SIMPLE_ROW) * 2) as u32;
+                (
                     row,
-                    flags,
-                    last_color,
-                    gradient.colors[index],
-                ));
-                last_x = x;
-                last_color = gradient.colors[index];
+                    [
+                        1.0 / gradient_pipeline::TEXTURE_WIDTH as f32,
+                        (left as f32 + 0.5) / gradient_pipeline::TEXTURE_WIDTH as f32,
+                    ],
+                )
             }
-            complex_index += 1;
-            (
-                row,
+            RampLocation::Complex(complex_index) => (
+                simple_height + complex_index as u32,
                 [
                     (gradient_pipeline::TEXTURE_WIDTH - 1) as f32
                         / gradient_pipeline::TEXTURE_WIDTH as f32,
                     0.5 / gradient_pipeline::TEXTURE_WIDTH as f32,
                 ],
-            )
+            ),
         };
         let inverse = super::invert(transform).unwrap_or(Mat2D([0.0; 6]));
         let gradient_matrix = match gradient.paint_type {
@@ -3149,7 +3274,9 @@ pub(crate) fn admit_path_draw(
 #[cfg(any(test, feature = "native-metal-experimental"))]
 pub(crate) struct PreparedSingleAtomicPathDraw {
     pub(crate) resources: PreparedTypedDrawResources,
+    #[cfg(test)]
     pub(crate) gradient_batch: Option<GradientBatch>,
+    gradient_definition: Option<GradientDefinition>,
 }
 
 /// Borrowed input for one path in the bounded native-Metal generic-atomic
@@ -3214,7 +3341,8 @@ struct PendingAtomicPath {
     input_index: usize,
     bounds: [i32; 4],
     resources: PreparedTypedDrawResources,
-    gradient_batch: Option<GradientBatch>,
+    gradient_definition: Option<GradientDefinition>,
+    gradient_transform: Mat2D,
     blend_mode: BlendMode,
     is_translucent: bool,
 }
@@ -3301,23 +3429,11 @@ fn prepare_atomic_path_draw_resources(
     state: DrawState,
     prepared: &PreparedFillGeometry,
     role: DrawRole,
+    gradient_definition: Option<GradientDefinition>,
 ) -> Result<PreparedSingleAtomicPathDraw, &'static str> {
     if paint.style != RenderPaintStyle::Fill || paint.feather != 0.0 || state.clip_rect.is_some() {
         return Err("atomic path preparation requires a non-feathered fill without a clip rect");
     }
-    if let Some(shader) = paint.shader.as_ref() {
-        match shader {
-            super::LogicalShader::Linear { colors, stops, .. }
-                if colors.len() == 2 && stops.as_slice() == [0.0, 1.0] => {}
-            super::LogicalShader::Linear { .. } => {
-                return Err("atomic path preparation only supports simple linear gradients");
-            }
-            super::LogicalShader::Radial { .. } => {
-                return Err("atomic path preparation only supports linear gradients");
-            }
-        }
-    }
-
     let (mut path_data, spans, contours, triangles, base_instance, instance_count, uses_interior) =
         if prepared.should_use_interior(path, state.transform) {
             let interior = prepared
@@ -3364,22 +3480,14 @@ fn prepare_atomic_path_draw_resources(
     // this particular path happens to use contiguous local IDs.
     let local_contour_ids_are_dense =
         !uses_interior && contours.len() <= gpu::CONTOUR_ID_MASK as usize;
-    let gradient_batch = paint
-        .shader
-        .as_ref()
-        .map(|shader| {
-            prepare_single_gradient_batch(shader, state.opacity, state.transform)
-                .ok_or("atomic path has invalid gradient parameters")
-        })
-        .transpose()?;
-    let gradient = gradient_batch.as_ref().and_then(|batch| batch.draw(0));
     let fill_rule = atomic_paint_fill_rule(path.fill_rule, true);
     let paint_data = match role {
         DrawRole::ClipUpdate {
             replacement_id,
             parent_id,
         } => gpu::PaintData::clip_update(replacement_id, parent_id, fill_rule),
-        DrawRole::Content { clip_id } => gradient
+        DrawRole::Content { clip_id } => gradient_definition
+            .as_ref()
             .map_or_else(
                 || {
                     gpu::PaintData::solid(
@@ -3389,29 +3497,20 @@ fn prepare_atomic_path_draw_resources(
                     )
                 },
                 |gradient| {
-                    gpu::PaintData::gradient(
-                        gradient.paint_type,
-                        gradient.texture_y,
-                        fill_rule,
-                        paint.blend_mode,
-                    )
+                    gpu::PaintData::gradient(gradient.paint_type, 0.0, fill_rule, paint.blend_mode)
                 },
             )
             .with_clip_id(clip_id),
         DrawRole::ClipReset { .. } => return Err("atomic clip reset is outside the native slice"),
     }
     .with_generic_clockwise_fill();
-    let paint_aux = gradient.map_or_else(
-        || clip_rect_paint_aux(None),
-        |gradient| gradient_paint_aux(None, gradient),
-    );
     let triangle_count = triangles.len();
     Ok(PreparedSingleAtomicPathDraw {
         resources: PreparedTypedDrawResources {
             contour_base: 0,
             path: path_data,
             paint: paint_data,
-            paint_aux,
+            paint_aux: clip_rect_paint_aux(None),
             spans,
             contours,
             triangles,
@@ -3424,8 +3523,28 @@ fn prepare_atomic_path_draw_resources(
             uses_interior,
             local_contour_ids_are_dense,
         },
-        gradient_batch,
+        #[cfg(test)]
+        gradient_batch: None,
+        gradient_definition,
     })
+}
+
+#[cfg(any(test, feature = "native-metal-experimental"))]
+fn normalize_atomic_linear_gradient(
+    paint: &LogicalPaint,
+    opacity: f32,
+) -> Result<Option<GradientDefinition>, &'static str> {
+    paint
+        .shader
+        .as_ref()
+        .map(|shader| match shader {
+            super::LogicalShader::Linear { .. } => normalize_gradient(shader, opacity)
+                .ok_or("atomic path has invalid gradient parameters"),
+            super::LogicalShader::Radial { .. } => {
+                Err("atomic path preparation only supports linear gradients")
+            }
+        })
+        .transpose()
 }
 
 /// Prepares one unclipped solid or linear-gradient path through the canonical
@@ -3439,7 +3558,7 @@ fn prepare_atomic_path_draw_resources(
 /// single-draw fixtures.
 /// Scheduling, clipping, multiple draws, and multiple logical flushes
 /// deliberately remain outside this helper.
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) fn prepare_single_atomic_path_draw(
     config: LogicalFrameConfig,
     path: &LogicalPath,
@@ -3457,19 +3576,40 @@ pub(crate) fn prepare_single_atomic_path_draw(
         .prepared_fill
         .as_deref()
         .ok_or("single atomic path omitted prepared fill geometry")?;
-    prepare_atomic_path_draw_resources(
+    let gradient_definition =
+        normalize_atomic_linear_gradient(&admitted.paint, admitted.state.opacity)?;
+    let mut prepared = prepare_atomic_path_draw_resources(
         config,
         &admitted.path,
         &admitted.paint,
         admitted.state,
         prepared,
         DrawRole::Content { clip_id: 0 },
-    )
-    .map(Some)
+        gradient_definition,
+    )?;
+    for contour in &mut prepared.resources.contours {
+        contour.path_id = 1;
+    }
+    for triangle in &mut prepared.resources.triangles {
+        triangle.weight_path_id = (triangle.weight_path_id & !0xffff) | 1;
+    }
+    #[cfg(test)]
+    if let Some(gradient_definition) = prepared.gradient_definition.clone() {
+        let gradient_batch = prepare_normalized_gradient_batch(vec![(
+            0,
+            admitted.state.transform,
+            Some(gradient_definition),
+        )]);
+        let gradient = gradient_batch.draw(0).expect("single gradient draw");
+        prepared.resources.paint.value = gradient.texture_y.to_bits();
+        prepared.resources.paint_aux = gradient_paint_aux(None, gradient);
+        prepared.gradient_batch = Some(gradient_batch);
+    }
+    Ok(Some(prepared))
 }
 
-/// Prepares one bounded same-logical-flush set of unclipped solid fills and at
-/// most one simple linear-gradient fill for native Metal's generic-atomic
+/// Prepares one bounded same-logical-flush set of unclipped solid and linear-
+/// gradient fills for native Metal's generic-atomic
 /// path. Each authored input crosses canonical admission/preparation exactly
 /// once. Path IDs remain authored; execution order follows C++'s disjoint
 /// `IntersectionBoard` draw groups.
@@ -3484,20 +3624,67 @@ pub(crate) fn prepare_atomic_path_flush(
     if inputs.is_empty() {
         return Ok(None);
     }
-    let mut pending = Vec::<PendingAtomicPath>::with_capacity(inputs.len());
-    let mut next_contour_base = 0_u32;
+    // Canonical admission is the source of truth for both path work and the
+    // flush-wide ramp layout. Retaining each admitted record avoids a weaker
+    // visibility prepass admitting gradients whose geometry is later culled,
+    // and guarantees tessellation/admission is evaluated exactly once.
+    let mut admitted_inputs = Vec::with_capacity(inputs.len());
     for (input_index, input) in inputs.iter().enumerate() {
-        let Some(prepared) =
-            prepare_single_atomic_path_draw(config, input.path, input.paint, input.state)?
-        else {
+        let Some(admitted) = admit_path_draw(config, input.state, input.path, input.paint)? else {
             continue;
         };
+        let gradient_definition =
+            normalize_atomic_linear_gradient(&admitted.paint, admitted.state.opacity)?;
+        admitted_inputs.push((input_index, admitted, gradient_definition));
+    }
+    if admitted_inputs.is_empty() {
+        return Ok(None);
+    }
+    let gradient_definitions = admitted_inputs
+        .iter()
+        .map(|(input_index, admitted, gradient)| {
+            (
+                *input_index as u64,
+                admitted.state.transform,
+                gradient.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let gradient_batch = gradient_definitions
+        .iter()
+        .any(|(_, _, gradient)| gradient.is_some())
+        .then(|| prepare_normalized_gradient_batch(gradient_definitions));
+    if gradient_batch
+        .as_ref()
+        .is_some_and(|batch| batch.height > 2_048.min(config.max_texture_dimension_2d))
+    {
+        return Err("draw batch exceeds logical flush gradient texture limit");
+    }
+    let mut pending = Vec::<PendingAtomicPath>::with_capacity(inputs.len());
+    let mut next_contour_base = 0_u32;
+    for (input_index, admitted, gradient_definition) in admitted_inputs {
+        let prepared_fill = admitted
+            .preparation
+            .prepared_fill
+            .as_deref()
+            .ok_or("atomic path omitted prepared fill geometry")?;
+        let prepared = prepare_atomic_path_draw_resources(
+            config,
+            &admitted.path,
+            &admitted.paint,
+            admitted.state,
+            prepared_fill,
+            DrawRole::Content { clip_id: 0 },
+            gradient_definition,
+        )?;
         let admitted_path_count = pending
             .len()
             .checked_add(1)
             .ok_or("atomic path count overflow")?;
         validate_atomic_path_flush_limits(admitted_path_count, 0)?;
-        let bounds = path_draw_pixel_bounds(input.path, input.paint, input.state.transform)
+        let bounds = admitted
+            .preparation
+            .pixel_bounds
             .ok_or("admitted atomic path omitted pixel bounds")?;
         let mut resources = prepared.resources;
         let path_id =
@@ -3512,13 +3699,15 @@ pub(crate) fn prepare_atomic_path_flush(
             input_index,
             bounds,
             resources,
-            gradient_batch: prepared.gradient_batch,
-            blend_mode: input.paint.blend_mode,
-            is_translucent: modulate_color_alpha(input.paint.color, input.state.opacity) >> 24
+            gradient_definition: prepared.gradient_definition,
+            gradient_transform: admitted.state.transform,
+            blend_mode: admitted.paint.blend_mode,
+            is_translucent: modulate_color_alpha(admitted.paint.color, admitted.state.opacity)
+                >> 24
                 != 0xff,
         });
     }
-    assemble_atomic_path_flush(config, pending, false)
+    assemble_atomic_path_flush(config, pending, false, gradient_batch)
 }
 
 /// Prepares the bounded native-Metal generic-atomic nested-clip tracer without
@@ -3589,6 +3778,7 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
                 replacement_id,
                 parent_id,
             },
+            None,
         )?;
         let contour_base = next_contour_base;
         next_contour_base =
@@ -3605,7 +3795,8 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
             input_index: usize::MAX,
             bounds: clip_bounds,
             resources: prepared.resources,
-            gradient_batch: None,
+            gradient_definition: None,
+            gradient_transform: clip_state.transform,
             blend_mode: BlendMode::SrcOver,
             is_translucent: false,
         });
@@ -3618,6 +3809,8 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
         .prepared_fill
         .as_deref()
         .ok_or("atomic clipped content omitted prepared fill geometry")?;
+    let gradient_definition =
+        normalize_atomic_linear_gradient(&admitted.paint, admitted.state.opacity)?;
     let mut content = prepare_atomic_path_draw_resources(
         config,
         &admitted.path,
@@ -3625,6 +3818,7 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
         admitted.state,
         prepared_fill,
         DrawRole::Content { clip_id: parent_id },
+        gradient_definition,
     )?;
     let content_contour_base = next_contour_base;
     next_contour_base =
@@ -3652,13 +3846,14 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
         input_index: 0,
         bounds: content_bounds,
         resources: content.resources,
-        gradient_batch: content.gradient_batch,
+        gradient_definition: content.gradient_definition,
+        gradient_transform: admitted.state.transform,
         blend_mode: admitted.paint.blend_mode,
         is_translucent: modulate_color_alpha(admitted.paint.color, admitted.state.opacity) >> 24
             != 0xff,
     });
     logical_state.commit_generic_atomic_path_clip(config, parent_id, true);
-    assemble_atomic_path_flush(config, pending, true)
+    assemble_atomic_path_flush(config, pending, true, None)
 }
 
 #[cfg(any(test, feature = "native-metal-experimental"))]
@@ -3666,19 +3861,17 @@ fn assemble_atomic_path_flush(
     config: LogicalFrameConfig,
     mut pending: Vec<PendingAtomicPath>,
     uses_clipping: bool,
+    prepared_gradient_batch: Option<GradientBatch>,
 ) -> Result<Option<PreparedAtomicPathFlush>, &'static str> {
     if pending.is_empty() {
         return Ok(None);
     }
     let gradient_count = pending
         .iter()
-        .filter(|draw| draw.gradient_batch.is_some())
+        .filter(|draw| draw.gradient_definition.is_some())
         .count();
     if uses_clipping && gradient_count != 0 {
         return Err("atomic clipped path flush does not support gradients");
-    }
-    if gradient_count > 1 {
-        return Err("atomic path flush supports one gradient draw");
     }
     let uses_advanced_blend = pending
         .iter()
@@ -3697,6 +3890,52 @@ fn assemble_atomic_path_flush(
     }
     if !uses_advanced_blend && pending.iter().any(|draw| draw.is_translucent) {
         return Err("atomic fixed-function SrcOver flush requires opaque solid color");
+    }
+
+    let gradient_batch = if gradient_count == 0 {
+        None
+    } else if prepared_gradient_batch.is_some() {
+        prepared_gradient_batch
+    } else {
+        let batch = prepare_normalized_gradient_batch(
+            pending
+                .iter()
+                .enumerate()
+                .map(|(index, draw)| {
+                    (
+                        if draw.input_index == usize::MAX {
+                            index as u64
+                        } else {
+                            draw.input_index as u64
+                        },
+                        draw.gradient_transform,
+                        draw.gradient_definition.clone(),
+                    )
+                })
+                .collect(),
+        );
+        if batch.height > 2_048.min(config.max_texture_dimension_2d) {
+            return Err("draw batch exceeds logical flush gradient texture limit");
+        }
+        Some(batch)
+    };
+    if let Some(batch) = gradient_batch.as_ref() {
+        for (index, draw) in pending.iter_mut().enumerate() {
+            let expected_occurrence_id = if draw.input_index == usize::MAX {
+                index
+            } else {
+                draw.input_index
+            } as u64;
+            debug_assert_eq!(
+                batch.draws.get(index).map(|draw| draw.occurrence_id),
+                Some(expected_occurrence_id),
+                "atomic gradient batch order diverged from admitted draw order"
+            );
+            if let Some(gradient) = batch.draw(index) {
+                draw.resources.paint.value = gradient.texture_y.to_bits();
+                draw.resources.paint_aux = gradient_paint_aux(None, gradient);
+            }
+        }
     }
 
     let mut board = super::intersection_board::IntersectionBoard::new(
@@ -3893,9 +4132,6 @@ fn assemble_atomic_path_flush(
         draw_group_starts.push(draws.len());
         draws.extend(group.into_iter().map(|index| authored_draws[index].clone()));
     }
-    let gradient_batch = pending
-        .iter_mut()
-        .find_map(|draw| draw.gradient_batch.take());
     let authored_draw_count = paths.len();
 
     Ok(Some(PreparedAtomicPathFlush {

@@ -720,9 +720,31 @@ uploads, and exactly-once consumption. The sixth same-runner row retains its
 checked-in 2-LSB/32-pixel contract; the measured Apple M5 Max Rust and pinned
 C++ Metal frames are byte-exact.
 
+The seventh slice replays `gm/rect_grad` as one fixed-function SrcOver flush
+of four midpoint rectangles. Two authored complex red-green-blue gradients
+and two authored simple black-white gradients vary their geometry and world
+transforms but repeat their ramp content. Matching pinned
+`render_context.cpp:93-129` and `578-663` therefore require byte-exact
+content-key allocation and deep hashing, not
+one allocation per occurrence: modulated color bytes plus exact stop bits
+produce one shared simple ramp on row 0 and one shared complex ramp on row 1.
+The physical color-ramp upload is exactly three `GradientSpan` records in
+simple-first order, while each occurrence retains its own paint matrix.
+
+This distinction is a structural oracle: a non-deduplicated 512x3 texture with
+six spans can produce a byte-identical PNG. The canonical typed-slot test pins
+the 512x2/three-span layout, exact span bytes, four distinct matrices, final
+relocated path/paint/auxiliary/tessellation/contour planes, and exactly-once
+consumption. The public replay pins four draw groups, five semantic barriers,
+three render passes, seven uploads totaling 2,264 bytes, eight GPU calls, 32
+submitted instances, 19 tessellation spans, and eight path patches. The same-
+runner row retains the checked-in 2-LSB/32-pixel contract, and the rooted Apple
+product path executes repeated simple and complex gradients without retaining
+WGPU.
+
 This is not general atomic-flush parity. Clip rectangles, clip-stack mutation
-after content, gradients in clipped flushes, more than one gradient in a flush,
-radial or complex gradients, feather atlas, images, strokes, advanced blends
+after content, gradients in clipped flushes, radial gradients, feather atlas,
+images, strokes, advanced blends
 combined with gradients or clipping, advanced outer-curve/interior geometry,
 multiple logical flushes, the general scheduler, MSAA, fallback, and
 simulator/old-hardware matrices remain deferred. Encountering one of those

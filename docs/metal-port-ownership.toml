@@ -143,16 +143,16 @@ status = "in-progress"
 # resources, unclipped outer-curve/interior keys, and the exact four-group/
 # five-barrier schedule. The sixth adds one four-solid advanced/HSL blend
 # flush, non-fixed output with all three atomic planes, exact whole-flush
-# shader keys, and the exact four-group/five-barrier schedule. Remaining clip
-# rectangles or clip mutation after
-# content, gradients in clipped flushes, more than one gradient in a flush,
-# radial/complex gradients, atlas, images, strokes,
-# advanced blends with gradients/clips or non-midpoint geometry, multiple
+# shader keys, and the exact four-group/five-barrier schedule. The seventh adds
+# one four-linear-gradient flush with byte-keyed simple/complex ramp dedup,
+# simple-first rows, and per-occurrence matrices. Remaining clip
+# rectangles or clip mutation after content, gradients in clipped flushes,
+# atlas, images, strokes, advanced blends with gradients/clips or non-midpoint geometry, radial gradients, multiple
 # logical flushes, and the general scheduler remain
 # explicitly outside this promotion.
 rule = "A capability-selected or explicitly forced generic-atomic frame realizes the same fixed-function or advanced/HSL pipeline keys, PLS buffer bindings, barriers, and initialize/path/resolve topology as upstream Metal."
-citations = ["cpp:renderer/include/rive/renderer/gpu.hpp:780-925", "cpp:renderer/src/render_context.cpp:578-627", "cpp:renderer/src/render_context.cpp:1067-1083", "cpp:renderer/src/render_context.cpp:1450-1473", "cpp:renderer/src/render_context.cpp:1680-1808", "cpp:renderer/src/render_context.cpp:1953-1965", "cpp:renderer/src/render_context.cpp:2223-2241", "cpp:renderer/src/render_context.cpp:3033-3054", "cpp:renderer/src/render_context.cpp:3948-4010", "cpp:renderer/src/metal/render_context_metal_impl.mm:1041-1058", "cpp:renderer/src/metal/render_context_metal_impl.mm:1298-1450", "cpp:renderer/src/metal/render_context_metal_impl.mm:1759-1812", "cpp:renderer/src/metal/render_context_metal_impl.mm:1857-1925", "cpp:renderer/src/metal/render_context_metal_impl.mm:1989-1997"]
-required_tests = ["capability-driven selection and explicit generic-atomic forcing", "canonical typed midpoint, gradient, same-flush multi-draw, nested-clip, mixed solid/simple-gradient, and advanced/HSL blend equivalence with independent exactly-once canonical consumption plus byte-exact final relocated upload planes", "retained color-ramp pass and generated gradient texture binding", "real clip and coverage atomic planes for fixed output plus transactional color/clip/coverage planes for advanced output", "flush-wide clipped, unclipped, fixed, advanced, and HSL initialize/midpoint/outer-curve/interior/resolve pipeline inventories", "exact disjoint grouping and ROG/memory/render-pass-break barrier policy", "unchanged triangle 2/32, byte-exact forced-atomic gradient, unchanged overfill 2/48, byte-exact nested clip 0/0, deterministic-mode mixed-gradient 2/32, and overfill-blendmodes 2/32 oracles with exact occupancy", "forced-atomic solid, gradient, multi-draw, nested-clip, mixed-gradient, and advanced/HSL product Mach-O contains no WGPU"]
+citations = ["cpp:renderer/include/rive/renderer/gpu.hpp:780-925", "cpp:renderer/src/render_context.cpp:93-129", "cpp:renderer/src/render_context.cpp:578-663", "cpp:renderer/src/render_context.cpp:1067-1083", "cpp:renderer/src/render_context.cpp:1450-1515", "cpp:renderer/src/render_context.cpp:1680-1808", "cpp:renderer/src/render_context.cpp:1953-1965", "cpp:renderer/src/render_context.cpp:2223-2241", "cpp:renderer/src/render_context.cpp:3033-3054", "cpp:renderer/src/render_context.cpp:3948-4010", "cpp:renderer/src/metal/render_context_metal_impl.mm:1041-1058", "cpp:renderer/src/metal/render_context_metal_impl.mm:1298-1450", "cpp:renderer/src/metal/render_context_metal_impl.mm:1759-1812", "cpp:renderer/src/metal/render_context_metal_impl.mm:1857-1925", "cpp:renderer/src/metal/render_context_metal_impl.mm:1989-1997"]
+required_tests = ["capability-driven selection and explicit generic-atomic forcing", "canonical typed midpoint, gradient, same-flush multi-draw, nested-clip, mixed solid/simple-gradient, repeated simple/complex-gradient, and advanced/HSL blend equivalence with independent exactly-once canonical consumption plus byte-exact final relocated upload planes", "retained color-ramp pass and generated gradient texture binding", "content-key gradient-ramp dedup with simple-first physical rows, exact span bytes, and per-occurrence matrices", "real clip and coverage atomic planes for fixed output plus transactional color/clip/coverage planes for advanced output", "flush-wide clipped, unclipped, fixed, advanced, and HSL initialize/midpoint/outer-curve/interior/resolve pipeline inventories", "exact disjoint grouping and ROG/memory/render-pass-break barrier policy", "unchanged triangle 2/32, byte-exact forced-atomic gradient, rect-grad 2/32, unchanged overfill 2/48, byte-exact nested clip 0/0, deterministic-mode mixed-gradient 2/32, and overfill-blendmodes 2/32 oracles with exact occupancy", "forced-atomic solid, gradient, multi-draw, nested-clip, mixed-gradient, repeated simple/complex-gradient, and advanced/HSL product Mach-O contains no WGPU"]
 evidence_paths = [
   "crates/nuxie-renderer/src/lib.rs",
   "crates/nuxie-renderer/src/logical_frame.rs",
@@ -172,6 +172,8 @@ evidence_paths = [
   "fixtures/renderer/streams/riv/deterministic_mode.rive-stream",
   "fixtures/renderer/reference/metal/gm/overfill_blendmodes-clockwise-atomic.png",
   "fixtures/renderer/streams/gm/overfill_blendmodes.rive-stream",
+  "fixtures/renderer/reference/metal/gm/rect_grad-clockwise-atomic.png",
+  "fixtures/renderer/streams/gm/rect_grad.rive-stream",
   "tools/check-native-metal-tracer-binary.sh",
   "tools/metal-port/tracer-corpus-atomic.toml",
   "tools/renderer-replay/src/bin/native-metal-product-root.rs",

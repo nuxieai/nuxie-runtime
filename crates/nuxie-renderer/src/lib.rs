@@ -12473,6 +12473,362 @@ mod tests {
     }
 
     #[test]
+    fn native_metal_nested_clip_matches_canonical_slots_and_relocated_planes() {
+        fn assert_resources_equal(
+            actual: &logical_frame::PreparedTypedDrawResources,
+            expected: &logical_frame::PreparedTypedDrawResources,
+        ) {
+            assert_eq!(
+                bytemuck::bytes_of(&actual.path),
+                bytemuck::bytes_of(&expected.path)
+            );
+            assert_eq!(
+                bytemuck::bytes_of(&actual.paint),
+                bytemuck::bytes_of(&expected.paint)
+            );
+            assert_eq!(
+                bytemuck::bytes_of(&actual.paint_aux),
+                bytemuck::bytes_of(&expected.paint_aux)
+            );
+            assert_eq!(
+                bytemuck::cast_slice::<_, u8>(&actual.spans),
+                bytemuck::cast_slice::<_, u8>(&expected.spans)
+            );
+            assert_eq!(
+                bytemuck::cast_slice::<_, u8>(&actual.contours),
+                bytemuck::cast_slice::<_, u8>(&expected.contours)
+            );
+            assert_eq!(
+                bytemuck::cast_slice::<_, u8>(&actual.triangles),
+                bytemuck::cast_slice::<_, u8>(&expected.triangles)
+            );
+            assert_eq!(actual.contour_base, expected.contour_base);
+            assert_eq!(actual.base_instance, expected.base_instance);
+            assert_eq!(actual.instance_count, expected.instance_count);
+            assert_eq!(actual.triangle_count, expected.triangle_count);
+            assert_eq!(
+                actual.borrowed_triangle_count,
+                expected.borrowed_triangle_count
+            );
+            assert_eq!(actual.main_triangle_batches, expected.main_triangle_batches);
+            assert_eq!(
+                actual.has_interior_triangles,
+                expected.has_interior_triangles
+            );
+            assert_eq!(actual.uses_interior, expected.uses_interior);
+            assert_eq!(
+                actual.local_contour_ids_are_dense,
+                expected.local_contour_ids_are_dense
+            );
+        }
+
+        fn finish_path(mut raw_path: RawPath) -> LogicalPath {
+            raw_path.close();
+            LogicalPath {
+                raw_path: Arc::new(raw_path),
+                fill_rule: FillRule::Clockwise,
+                valid: true,
+            }
+        }
+
+        let config = LogicalFrameConfig {
+            width: 640,
+            height: 640,
+            mode: RenderMode::ClockwiseAtomic,
+            max_texture_dimension_2d: 16_384,
+            msaa_atlas_supports_clip_rect: false,
+        };
+        let mut outer = RawPath::new();
+        outer.move_to(40.0, 60.0);
+        outer.line_to(600.0, 60.0);
+        outer.line_to(600.0, 280.0);
+        outer.line_to(380.0, 280.0);
+        outer.line_to(380.0, 600.0);
+        outer.line_to(40.0, 600.0);
+        outer.close();
+        outer.move_to(420.0, 420.0);
+        outer.line_to(580.0, 420.0);
+        outer.line_to(580.0, 580.0);
+        outer.line_to(420.0, 580.0);
+        let outer = finish_path(outer);
+
+        let mut nested = RawPath::new();
+        nested.move_to(140.0, 160.0);
+        nested.line_to(520.0, 160.0);
+        nested.line_to(520.0, 520.0);
+        nested.line_to(440.0, 520.0);
+        nested.line_to(440.0, 320.0);
+        nested.line_to(300.0, 320.0);
+        nested.line_to(300.0, 520.0);
+        nested.line_to(140.0, 520.0);
+        let nested = finish_path(nested);
+
+        let mut content = RawPath::new();
+        content.move_to(0.0, 0.0);
+        content.line_to(640.0, 0.0);
+        content.line_to(640.0, 640.0);
+        content.line_to(0.0, 640.0);
+        let content = finish_path(content);
+        let paint = LogicalPaint {
+            color: 0xffff_ffff,
+            ..LogicalPaint::default()
+        };
+
+        let mut lightweight_state = logical_frame::LogicalDrawState::default();
+        lightweight_state.clip_path(config, &outer).unwrap();
+        lightweight_state.clip_path(config, &nested).unwrap();
+        let input = logical_frame::AtomicPathFlushInput {
+            path: &content,
+            paint: &paint,
+            state: lightweight_state.state,
+        };
+        let prepared =
+            logical_frame::prepare_atomic_clipped_path_flush(config, &mut lightweight_state, input)
+                .unwrap()
+                .unwrap();
+
+        let mut canonical_state = logical_frame::LogicalDrawState::default();
+        canonical_state.clip_path(config, &outer).unwrap();
+        canonical_state.clip_path(config, &nested).unwrap();
+        let admitted =
+            logical_frame::admit_path_draw(config, canonical_state.state, &content, &paint)
+                .unwrap()
+                .unwrap();
+        let (clip_updates, clip_id) = canonical_state
+            .prepare_scheduled_clip_updates(config)
+            .unwrap();
+        let mut scratch = draw::StrokePreparationScratch::default();
+        let content_draw = admitted.finish(clip_id, &mut scratch).unwrap();
+        let mut frame = logical_frame::LogicalFrame::new(config);
+        frame.logical_state = canonical_state;
+        frame
+            .push_content_batch(clip_updates, content_draw)
+            .unwrap();
+        let mut board =
+            intersection_board::IntersectionBoard::new(intersection_board::GroupingType::Disjoint);
+        frame.finalize_for_production(&mut board).unwrap();
+        let store = logical_frame::LogicalResourceStore::default();
+        let canonical_prepared = store.prepare_for_production(&frame).unwrap();
+        let typed = canonical_prepared.typed_draws(&frame.draws);
+        let mut canonical_draws = Vec::new();
+        for index in 0..3 {
+            let canonical = typed.draw(index).unwrap();
+            assert_resources_equal(&prepared.canonical_draw_resources[index], canonical);
+            canonical_draws.push(canonical.clone());
+        }
+
+        assert!(prepared.uses_clipping);
+        assert_eq!(prepared.authored_draw_count, 3);
+        assert_eq!(prepared.draw_group_starts, [0, 1, 2, 3, 4]);
+        assert_eq!(
+            prepared
+                .draws
+                .iter()
+                .map(|draw| (
+                    draw.path_id,
+                    draw.draw_group,
+                    draw.patch_kind,
+                    draw.triangle_range.clone()
+                ))
+                .collect::<Vec<_>>(),
+            [
+                (
+                    1,
+                    1,
+                    logical_frame::PreparedAtomicPatchKind::OuterCurve,
+                    0..0
+                ),
+                (
+                    1,
+                    2,
+                    logical_frame::PreparedAtomicPatchKind::OuterCurve,
+                    0..18
+                ),
+                (
+                    2,
+                    3,
+                    logical_frame::PreparedAtomicPatchKind::Midpoint,
+                    18..18
+                ),
+                (
+                    3,
+                    4,
+                    logical_frame::PreparedAtomicPatchKind::OuterCurve,
+                    18..18
+                ),
+                (
+                    3,
+                    5,
+                    logical_frame::PreparedAtomicPatchKind::OuterCurve,
+                    18..24
+                ),
+            ]
+        );
+        assert_eq!(
+            prepared
+                .paths
+                .iter()
+                .map(|path| path.z_index)
+                .collect::<Vec<_>>(),
+            [1, 3, 4]
+        );
+        assert_eq!(
+            prepared
+                .paints
+                .iter()
+                .map(|paint| (paint.params, paint.value))
+                .collect::<Vec<_>>(),
+            [
+                (0, 0x0001_0000),
+                (0x0001_0000, 0x0002_0000),
+                (0x0002_0001, 0xffff_ffff)
+            ]
+        );
+        assert_eq!(
+            prepared
+                .contours
+                .iter()
+                .map(|contour| contour.path_id)
+                .collect::<Vec<_>>(),
+            [1, 1, 2, 3]
+        );
+        assert_eq!(prepared.spans.len(), 25);
+        assert_eq!(prepared.triangles.len(), 24);
+
+        // Independently aggregate the consumed canonical slots. Contour IDs
+        // are allocated in authored order before the physical tessellation
+        // shelf is reordered midpoint-first, matching LogicalFlush ownership.
+        let midpoint_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let outer_span = gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32;
+        let mut expected_paths = Vec::new();
+        let mut expected_paints = Vec::new();
+        let mut expected_paint_aux = Vec::new();
+        let mut expected_contours = Vec::new();
+        let mut contour_offsets = Vec::new();
+        let mut contour_ranges = Vec::new();
+        let mut local_contour_ids = Vec::new();
+        for (index, canonical) in canonical_draws.iter().enumerate() {
+            let start = expected_contours.len();
+            let offset = append_relocated_midpoint_contours_to_flush(
+                &canonical.spans,
+                &canonical.contours,
+                canonical.contour_base,
+                canonical.local_contour_ids_are_dense,
+                u32::try_from(index + 1).unwrap(),
+                0,
+                &mut expected_contours,
+                &mut local_contour_ids,
+            );
+            contour_offsets.push(offset);
+            contour_ranges.push(start..expected_contours.len());
+            let mut path = canonical.path;
+            path.z_index = [1, 3, 4][index];
+            expected_paths.push(path);
+            expected_paints.push(canonical.paint);
+            expected_paint_aux.push(canonical.paint_aux);
+        }
+        let mut expected_spans = Vec::new();
+        append_tessellation_padding_span(&mut expected_spans, 0, midpoint_span);
+        let mut expected_bases = vec![0; 3];
+        let mut next_midpoint = 1_u32;
+        for index in 0..3 {
+            if canonical_draws[index].uses_interior {
+                continue;
+            }
+            let mut spans = canonical_draws[index].spans.clone();
+            spans.retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+            for span in &mut spans {
+                globalize_midpoint_span_contour_id(
+                    span,
+                    canonical_draws[index].contour_base,
+                    contour_offsets[index],
+                );
+            }
+            let mut base = canonical_draws[index].base_instance;
+            relocate_tessellation_logically(
+                &mut spans,
+                &mut base,
+                &mut expected_contours[contour_ranges[index].clone()],
+                next_midpoint,
+                midpoint_span,
+            );
+            expected_bases[index] = base;
+            expected_spans.append(&mut spans);
+            next_midpoint += canonical_draws[index].instance_count;
+        }
+        let midpoint_end = next_midpoint * midpoint_span;
+        let outer_start = align_to(midpoint_end, outer_span);
+        append_tessellation_padding_span(&mut expected_spans, midpoint_end, outer_start);
+        let mut next_outer = outer_start / outer_span;
+        for index in 0..3 {
+            if !canonical_draws[index].uses_interior {
+                continue;
+            }
+            let mut spans = canonical_draws[index].spans.clone();
+            spans.retain(|span| span.contour_id_with_flags & gpu::CONTOUR_ID_MASK != 0);
+            for span in &mut spans {
+                globalize_midpoint_span_contour_id(
+                    span,
+                    canonical_draws[index].contour_base,
+                    contour_offsets[index],
+                );
+            }
+            let mut base = canonical_draws[index].base_instance;
+            relocate_tessellation_logically(
+                &mut spans,
+                &mut base,
+                &mut expected_contours[contour_ranges[index].clone()],
+                next_outer,
+                outer_span,
+            );
+            expected_bases[index] = base;
+            expected_spans.append(&mut spans);
+            next_outer += canonical_draws[index].instance_count;
+        }
+        let outer_end = next_outer * outer_span;
+        append_tessellation_padding_span(&mut expected_spans, outer_end, outer_end + 1);
+        let mut expected_triangles = Vec::new();
+        for (index, canonical) in canonical_draws.iter().enumerate() {
+            expected_triangles.extend(canonical.triangles.iter().copied().map(|mut triangle| {
+                triangle.weight_path_id =
+                    (triangle.weight_path_id & !0xffff) | i32::try_from(index + 1).unwrap();
+                triangle
+            }));
+        }
+
+        assert_eq!(expected_bases, [3, 1, 23]);
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.paths),
+            bytemuck::cast_slice::<_, u8>(&expected_paths)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.paints),
+            bytemuck::cast_slice::<_, u8>(&expected_paints)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.paint_aux),
+            bytemuck::cast_slice::<_, u8>(&expected_paint_aux)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.spans),
+            bytemuck::cast_slice::<_, u8>(&expected_spans)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.contours),
+            bytemuck::cast_slice::<_, u8>(&expected_contours)
+        );
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&prepared.triangles),
+            bytemuck::cast_slice::<_, u8>(&expected_triangles)
+        );
+
+        let report = canonical_prepared.into_report();
+        assert_eq!(report.production_typed_output_eligible_draws, 3);
+        assert_eq!(report.production_typed_output_consumed_draws, 3);
+        assert!(report.production_typed_output_consumed);
+    }
+
+    #[test]
     fn native_metal_atomic_flush_limits_fail_closed_at_the_canonical_boundaries() {
         assert_eq!(
             logical_frame::validate_atomic_path_flush_limits(

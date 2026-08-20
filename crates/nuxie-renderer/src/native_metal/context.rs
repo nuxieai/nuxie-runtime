@@ -30,7 +30,8 @@ use super::upload_buffer_ring::UploadBufferRing;
 use super::{make_solid_pipeline, new_library_from_metallib_bytes};
 use crate::gpu::{self, DrawType};
 use crate::native_metal::shader_compile_plan::{
-    BackgroundCompileJob, InterlockMode, MetalFeatures, ENABLE_DITHER, FIXED_FUNCTION_COLOR_OUTPUT,
+    BackgroundCompileJob, InterlockMode, MetalFeatures, ENABLE_CLIPPING, ENABLE_DITHER,
+    FIXED_FUNCTION_COLOR_OUTPUT,
 };
 use crate::RendererError;
 use objc2::rc::Retained;
@@ -79,11 +80,23 @@ struct AtomicPathPipelines {
     initialize: DrawPipeline,
     midpoint: DrawPipeline,
     resolve: DrawPipeline,
+    clipped: Option<AtomicClippedPathPipelines>,
+}
+
+#[derive(Clone)]
+struct AtomicClippedPathPipelines {
+    initialize: DrawPipeline,
+    midpoint: DrawPipeline,
+    outer_curve: DrawPipeline,
+    interior: DrawPipeline,
+    resolve: DrawPipeline,
 }
 
 pub(crate) struct AtomicPathPipelineStates {
     pub(crate) initialize: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     pub(crate) midpoint: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
+    pub(crate) outer_curve: Option<Retained<ProtocolObject<dyn MTLRenderPipelineState>>>,
+    pub(crate) interior: Option<Retained<ProtocolObject<dyn MTLRenderPipelineState>>>,
     pub(crate) resolve: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
 }
 
@@ -390,6 +403,7 @@ impl NativeMetalContext {
         gradient_height: usize,
         tessellation_height: usize,
         pixel_format: MTLPixelFormat,
+        uses_clipping: bool,
         uploads: UploadBatch<'_>,
     ) -> Result<PreparedResourceLease, RendererError> {
         let mut allow_all = |_| Ok(());
@@ -400,7 +414,7 @@ impl NativeMetalContext {
             None,
             uploads,
             specialized_atlas_blit_job(),
-            Some(pixel_format),
+            Some((pixel_format, uses_clipping)),
             &mut allow_all,
         )
     }
@@ -435,7 +449,7 @@ impl NativeMetalContext {
         feather_atlas_is_stroke: Option<bool>,
         uploads: UploadBatch<'_>,
         specialized_job: BackgroundCompileJob,
-        atomic_path_pixel_format: Option<MTLPixelFormat>,
+        atomic_path: Option<(MTLPixelFormat, bool)>,
         before: &mut impl FnMut(ResourcePreparationStage) -> Result<(), RendererError>,
     ) -> Result<PreparedResourceLease, RendererError> {
         let ownership = self.upload_coordinator.prepare_to_flush();
@@ -453,8 +467,24 @@ impl NativeMetalContext {
             TESSELLATION_TEXTURE_WIDTH,
             tessellation_height,
         )?;
-        if atomic_path_pixel_format.is_some() && generation.atomic_path_pipelines.is_none() {
+        if atomic_path.is_some() && generation.atomic_path_pipelines.is_none() {
             generation.atomic_path_pipelines = Some(compile_atomic_path_pipelines(
+                &self.device,
+                self.capabilities,
+                self.platform,
+            )?);
+        }
+        if atomic_path.is_some_and(|(_, uses_clipping)| uses_clipping)
+            && generation
+                .atomic_path_pipelines
+                .as_ref()
+                .is_some_and(|pipelines| pipelines.clipped.is_none())
+        {
+            generation
+                .atomic_path_pipelines
+                .as_mut()
+                .expect("atomic path pipeline set created above")
+                .clipped = Some(compile_atomic_clipped_path_pipelines(
                 &self.device,
                 self.capabilities,
                 self.platform,
@@ -518,22 +548,41 @@ impl NativeMetalContext {
         } else {
             None
         };
-        let atomic_path_pipelines = atomic_path_pixel_format
-            .map(|pixel_format| {
+        let atomic_path_pipelines = atomic_path
+            .map(|(pixel_format, uses_clipping)| {
                 let pipelines = generation.atomic_path_pipelines.as_ref().ok_or_else(|| {
                     RendererError::NativeMetal("atomic path pipeline set is absent".to_owned())
                 })?;
+                let clipped = uses_clipping
+                    .then(|| {
+                        pipelines.clipped.as_ref().ok_or_else(|| {
+                            RendererError::NativeMetal(
+                                "atomic clipped path pipeline set is absent".to_owned(),
+                            )
+                        })
+                    })
+                    .transpose()?;
                 Ok(AtomicPathPipelineStates {
-                    initialize: pipelines
-                        .initialize
+                    initialize: clipped
+                        .map_or(&pipelines.initialize, |pipelines| &pipelines.initialize)
                         .retained_pipeline_state(pixel_format)
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
-                    midpoint: pipelines
-                        .midpoint
+                    midpoint: clipped
+                        .map_or(&pipelines.midpoint, |pipelines| &pipelines.midpoint)
                         .retained_pipeline_state(pixel_format)
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
-                    resolve: pipelines
-                        .resolve
+                    outer_curve: clipped
+                        .map(|pipelines| {
+                            pipelines.outer_curve.retained_pipeline_state(pixel_format)
+                        })
+                        .transpose()
+                        .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
+                    interior: clipped
+                        .map(|pipelines| pipelines.interior.retained_pipeline_state(pixel_format))
+                        .transpose()
+                        .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
+                    resolve: clipped
+                        .map_or(&pipelines.resolve, |pipelines| &pipelines.resolve)
                         .retained_pipeline_state(pixel_format)
                         .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
                 })
@@ -812,6 +861,63 @@ fn compile_atomic_path_pipelines(
         initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
         midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
         resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
+        clipped: None,
+    })
+}
+
+const fn atomic_clipped_path_jobs() -> [BackgroundCompileJob; 5] {
+    let features = ENABLE_DITHER | ENABLE_CLIPPING;
+    [
+        BackgroundCompileJob::new(
+            DrawType::RenderPassInitialize,
+            features,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::MidpointFanPatches,
+            features,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::OuterCurvePatches,
+            features,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::InteriorTriangulation,
+            features,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+        BackgroundCompileJob::new(
+            DrawType::RenderPassResolve,
+            features,
+            InterlockMode::Atomics,
+            FIXED_FUNCTION_COLOR_OUTPUT,
+        ),
+    ]
+}
+
+fn compile_atomic_clipped_path_pipelines(
+    device: &Retained<ProtocolObject<dyn MTLDevice>>,
+    capabilities: MetalCapabilitySelection,
+    platform: ApplePlatform,
+) -> Result<AtomicClippedPathPipelines, RendererError> {
+    let [initialize, midpoint, outer_curve, interior, resolve] = atomic_clipped_path_jobs();
+    Ok(AtomicClippedPathPipelines {
+        initialize: compile_specialized_draw_pipeline(device, capabilities, platform, initialize)?,
+        midpoint: compile_specialized_draw_pipeline(device, capabilities, platform, midpoint)?,
+        outer_curve: compile_specialized_draw_pipeline(
+            device,
+            capabilities,
+            platform,
+            outer_curve,
+        )?,
+        interior: compile_specialized_draw_pipeline(device, capabilities, platform, interior)?,
+        resolve: compile_specialized_draw_pipeline(device, capabilities, platform, resolve)?,
     })
 }
 
@@ -1089,6 +1195,66 @@ mod tests {
     use bytemuck::Zeroable;
     use objc2::rc::{Retained, Weak};
     use objc2_metal::{MTLCreateSystemDefaultDevice, MTLTexture};
+
+    #[test]
+    fn generic_atomic_clipping_is_flush_wide_on_every_metal_path_batch() {
+        let plain = atomic_path_jobs();
+        assert_eq!(
+            plain.map(|job| (job.draw_type, job.shader_features, job.shader_misc_flags)),
+            [
+                (
+                    DrawType::RenderPassInitialize,
+                    ENABLE_DITHER,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+                (
+                    DrawType::MidpointFanPatches,
+                    ENABLE_DITHER,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+                (
+                    DrawType::RenderPassResolve,
+                    ENABLE_DITHER,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+            ]
+        );
+
+        let clipped_features = ENABLE_DITHER | ENABLE_CLIPPING;
+        assert_eq!(
+            atomic_clipped_path_jobs().map(|job| {
+                assert_eq!(job.interlock_mode, InterlockMode::Atomics);
+                (job.draw_type, job.shader_features, job.shader_misc_flags)
+            }),
+            [
+                (
+                    DrawType::RenderPassInitialize,
+                    clipped_features,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+                (
+                    DrawType::MidpointFanPatches,
+                    clipped_features,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+                (
+                    DrawType::OuterCurvePatches,
+                    clipped_features,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+                (
+                    DrawType::InteriorTriangulation,
+                    clipped_features,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+                (
+                    DrawType::RenderPassResolve,
+                    clipped_features,
+                    FIXED_FUNCTION_COLOR_OUTPUT
+                ),
+            ]
+        );
+    }
 
     struct UploadFixture {
         flush_uniforms: gpu::FlushUniforms,

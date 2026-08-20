@@ -30,3 +30,14 @@ backend = "metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 48
+
+[[entry]]
+id = "native-metal-first-light-nested-clip-generic-atomic"
+kind = "gm-stream"
+stream = "fixtures/renderer/streams/first-light-nested-clip-probe.rive-stream"
+reference = "fixtures/renderer/reference/metal/first-light-nested-clip-probe-clockwise-atomic.png"
+mode = "clockwise-atomic"
+backend = "metal"
+status = "exact"
+max_channel_delta = 0
+max_different_pixels = 0

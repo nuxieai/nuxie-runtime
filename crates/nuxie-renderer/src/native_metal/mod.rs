@@ -7,7 +7,13 @@
 mod buffer;
 mod capabilities;
 #[allow(dead_code)]
+mod draw_combinations;
+#[allow(dead_code)]
+mod draw_pipeline;
+#[allow(dead_code)]
 mod pipeline_names;
+#[allow(dead_code)]
+mod render_target;
 
 use super::{LogicalPaint, LogicalPath, LogicalShader, RendererError};
 use buffer::NativeMetalBuffer;

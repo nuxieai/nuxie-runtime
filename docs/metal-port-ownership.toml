@@ -16,6 +16,7 @@ status = "in-progress"
 rule = "The render target retains its target texture, memoryless attachments, and lazily allocated private atomic buffers; resize replaces the complete size-dependent owner set."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:21-87"]
 required_tests = ["target compatibility and replacement", "lazy atomic allocation", "resize invalidates size-dependent storage", "drop releases all retained Metal objects"]
+evidence_paths = ["crates/nuxie-renderer/src/native_metal/render_target.rs"]
 
 [[owner]]
 id = "renderer.device_queue_and_command_buffer"
@@ -40,6 +41,11 @@ status = "in-progress"
 rule = "Platform-specific offline metallibs are the shipping shader source. Pipeline specialization and fallback selection preserve the upstream feature-key mapping without runtime Naga or WGSL."
 citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:29-56", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:240-266", "cpp:renderer/src/metal/render_context_metal_impl.mm:177-240"]
 required_tests = ["metallib provenance per Apple slice", "every runtime-reachable pipeline key resolves", "pipeline creation failure is fail-closed", "final Mach-O has no runtime shader translation"]
+evidence_paths = [
+  "crates/nuxie-renderer/src/gpu.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_pipeline.rs",
+]
 
 [[owner]]
 id = "renderer.capability_and_barrier_selection"

@@ -6,7 +6,7 @@ porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 12, in-progress = 2, ported = 28, verified = 0 }
+expected_status_counts = { pending = 9, in-progress = 2, ported = 31, verified = 0 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
@@ -563,13 +563,29 @@ status = "pending"
 rust_modules = []
 evidence = []
 
+# Rust adaptation for the file-local pipeline closure: `PipelineSnapshot`
+# deep-copies strings, vertex layouts/attributes, and scalar state while
+# retaining module/layout resource handles. Its fixed layout array is the sole
+# owner for upstream's strong `m_layouts`; the shallow descriptor's layout
+# pointers become views of that same array, avoiding an extra logical owner.
+# The Metal leaf can retain an already-created render state and optional depth
+# state, but descriptor conversion, layout/module validation, native creation,
+# and error publication remain assigned to the pending
+# `ore-context-render-pass` unit and `ore_context_metal.mm` source row.
+# `pipeline_snapshot_owns_nested_descriptor_values_and_handles` and
+# `pipeline_retains_only_the_first_four_layouts_once` prove the deep snapshot
+# and exact logical refcounts. The live Metal
+# `native_states_publish_together_and_release_with_portable_owners` proves
+# all-or-nothing publication plus native and portable release after an
+# explicit autorelease-pool drain. Field declaration order separately encodes
+# C++'s depth-state, render-state, then portable-base destruction order.
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_pipeline.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/pipeline.rs"]
+evidence = ["crates/nuxie-ore-metal/src/pipeline.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_render_pass.hpp"
@@ -673,17 +689,17 @@ evidence = []
 upstream = "renderer/src/ore/metal/ore_pipeline_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/pipeline.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/pipeline.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_pipeline_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "pending"
-rust_modules = []
-evidence = []
+status = "ported"
+rust_modules = ["crates/nuxie-ore-metal/src/metal/pipeline.rs"]
+evidence = ["crates/nuxie-ore-metal/src/metal/pipeline.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_render_pass_metal.hpp"
@@ -925,7 +941,7 @@ requires_lifetime_rows = true
 [[translation_unit]]
 id = "ore-pipeline"
 phase = "bulk"
-worker_claim = "unclaimed"
+worker_claim = "luna-ore-pipeline"
 sources = [
   "renderer/include/rive/renderer/ore/ore_pipeline.hpp",
   "renderer/src/ore/metal/ore_pipeline_metal.hpp",
@@ -947,7 +963,7 @@ source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "pending"
+status = "compiled"
 requires_lifetime_rows = true
 
 [[translation_unit]]

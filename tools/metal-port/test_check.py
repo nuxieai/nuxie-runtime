@@ -418,6 +418,91 @@ class MetalPortCheckTests(unittest.TestCase):
                 {"renderer/src/metal/a.mm"},
             )
 
+    def test_render_context_file_map_is_pinned_contiguous_and_nonoverlapping(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            repo = root / "repo"
+            upstream = root / "upstream"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            source = upstream / "renderer/src/metal/render_context_metal_impl.mm"
+            header = (
+                upstream
+                / "renderer/include/rive/renderer/metal/render_context_metal_impl.h"
+            )
+            source.parent.mkdir(parents=True)
+            header.parent.mkdir(parents=True)
+            source.write_text("one\ntwo\nthree\n")
+            header.write_text("one\ntwo\n")
+            rust_owner = repo / "owner.rs"
+            rust_owner.write_text("owner\n")
+            file_map = repo / "docs/render-context-metal-file-map.tsv"
+            file_map.parent.mkdir(parents=True)
+            columns = "\t".join(CHECK.RENDER_CONTEXT_FILE_MAP_COLUMNS)
+            upstream_ref = "a" * 40
+            rows = [
+                [
+                    "1",
+                    upstream_ref,
+                    "renderer/src/metal/render_context_metal_impl.mm",
+                    "1-2",
+                    "first",
+                    "ported",
+                    "owner.rs",
+                    "-",
+                ],
+                [
+                    "1",
+                    upstream_ref,
+                    "renderer/src/metal/render_context_metal_impl.mm",
+                    "3-3",
+                    "second",
+                    "missing",
+                    "-",
+                    "not ported",
+                ],
+                [
+                    "1",
+                    upstream_ref,
+                    "renderer/include/rive/renderer/metal/render_context_metal_impl.h",
+                    "1-2",
+                    "header",
+                    "partial",
+                    "owner.rs",
+                    "remaining",
+                ],
+            ]
+
+            def write_map() -> None:
+                file_map.write_text(
+                    columns + "\n" + "\n".join("\t".join(row) for row in rows) + "\n"
+                )
+
+            write_map()
+            subprocess.run(
+                ["git", "-C", str(repo), "add", "owner.rs", "docs"], check=True
+            )
+            manifest = {
+                "upstream_ref": upstream_ref,
+                "render_context_file_map": "docs/render-context-metal-file-map.tsv",
+            }
+            errors: list[str] = []
+            CHECK.validate_render_context_file_map(manifest, repo, upstream, errors)
+            self.assertEqual(errors, [])
+
+            rows[1][3] = "2-3"
+            write_map()
+            errors.clear()
+            CHECK.validate_render_context_file_map(manifest, repo, upstream, errors)
+            self.assertIn("expected 3", "\n".join(errors))
+
+            rows[1][3] = "4-4"
+            write_map()
+            errors.clear()
+            CHECK.validate_render_context_file_map(manifest, repo, upstream, errors)
+            joined = "\n".join(errors)
+            self.assertIn("expected 3", joined)
+            self.assertIn("ends outside", joined)
+
     def test_missing_upstream_source_and_unproved_port_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

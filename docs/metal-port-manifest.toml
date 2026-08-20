@@ -5,6 +5,7 @@ upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_guide = "docs/METAL_PORTING.md"
 ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
+render_context_file_map = "docs/render-context-metal-file-map.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
 expected_status_counts = { pending = 0, in-progress = 2, ported = 40, verified = 0 }
 
@@ -94,6 +95,10 @@ status = "in-progress"
 # The same-flush atlas checkpoint lazily compiles the exact synchronous
 # AtlasBlit + ENABLE_DITHER key selected by the pinned oracle; compatible
 # precompiled ubershaders remain fallback inventory, not parity evidence.
+# The file-first constructor checkpoint moves that compiler from a transient
+# per-pipeline helper into the context, preserves lazy worker startup and join,
+# and exposes retained copies of the context's exact ordered queue and device.
+# Public ContextOptions and the complete compatible-pipeline cache remain open.
 rust_modules = [
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/logical_frame.rs",
@@ -115,6 +120,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
 ]
 evidence = [
+  "docs/render-context-metal-file-map.tsv",
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/lib.rs",
   "crates/nuxie-renderer/src/logical_frame.rs",
@@ -304,6 +310,10 @@ status = "in-progress"
 # ENABLE_CLIP_RECT pipeline keys, exact scissor transitions, and full-target
 # resolve restoration from rive_renderer.cpp:204-309, render_context.cpp:81-91,
 # 2083-2088, 3024-3059, 3947-3961, and Metal 1753-1895.
+# The following file-first constructor checkpoint retains one lazy background
+# compiler for the complete context lifetime and routes every currently
+# realized specialized family through it. It also makes the exact context queue
+# retainable for the later same-context RenderCanvas/ORE factory rows.
 # This full source row remains in-progress:
 # divergent path-clip stacks and general clip mutation/restores after content,
 # gradients in clipped flushes, radial gradients, atlas, images, strokes,
@@ -333,6 +343,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
 ]
 evidence = [
+  "docs/render-context-metal-file-map.tsv",
   "crates/nuxie-renderer/src/apple_surface.rs",
   "crates/nuxie-renderer/src/gpu.rs",
   "crates/nuxie-renderer/src/lib.rs",

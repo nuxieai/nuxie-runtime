@@ -1,6 +1,6 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_queue = "translation-admission"
+active_queue = "vulkan-translation"
 preparation_status = "green"
 ignored_skills = ["implement", "tdd"]
 translation_receipt_directory = "docs/backend-port-receipts"
@@ -57,7 +57,7 @@ upstream_name = "Rive Vulkan renderer and ORE Vulkan"
 product_disposition = "exact-backend-selection-after-closeout"
 primary_oracle = "pinned C++ Vulkan on the same reported adapter and driver"
 secondary_oracles = ["Rust native Metal", "Rust WebGPU"]
-translation_status = "pending"
+translation_status = "active"
 preparation_status = "green"
 source_roots = [
   "renderer/include/rive/renderer/vulkan",

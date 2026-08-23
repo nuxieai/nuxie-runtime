@@ -29,6 +29,12 @@ QUEUE_CAMPAIGNS = {
         "webgl2",
     },
 }
+PRIOR_CAMPAIGNS = {
+    "translation-admission": set(),
+    "vulkan-translation": {"shader-build-authority"},
+    "webgpu-translation": {"shader-build-authority", "vulkan"},
+    "webgl2-translation": {"shader-build-authority", "vulkan", "webgpu"},
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -145,17 +151,17 @@ def main() -> int:
         row = unit_order[unit]
         dependencies = {value for value in row["dependency_units"].split(";") if value}
         require(dependencies <= completed_units, f"translated before dependencies: {unit}")
-    if completed_units:
-        highest_group = max(int(unit_order[unit]["order_group"]) for unit in completed_units)
-        unfinished_earlier = {
+    for prior_campaign in PRIOR_CAMPAIGNS[manifest["active_queue"]]:
+        incomplete = {
             unit
-            for unit, row in unit_order.items()
-            if int(row["order_group"]) < highest_group
-            and unit in sources_by_unit
-            and row["campaign"] in QUEUE_CAMPAIGNS[manifest["active_queue"]]
-            and unit not in completed_units
+            for unit, source_paths in sources_by_unit.items()
+            if unit_order[unit]["campaign"] == prior_campaign
+            and not source_paths <= completed_sources
         }
-        require(not unfinished_earlier, "translation skipped an earlier dependency group")
+        require(
+            not incomplete,
+            f"active queue opened before {prior_campaign} closed",
+        )
 
     print(
         "backend translation receipts clean: "

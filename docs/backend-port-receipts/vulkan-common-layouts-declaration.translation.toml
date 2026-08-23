@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:common_layouts"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/vulkan/common_layouts.hpp"
+source_sha256 = "c2f0e3dbe79c0361e290a8b6e2cf9066787f011e900244ea8885c8921109de57"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_common_layouts_hpp__decl.rs"
+target_sha256 = "793d34c2da514444f9c32f4d001dbad63990d8cf0c84a5459094a6948a61b5ad"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_vulkan_common_layouts.hpp"
+source_snapshot_sha256 = "c2f0e3dbe79c0361e290a8b6e2cf9066787f011e900244ea8885c8921109de57"
+dependency_units = ["shader:source:constants", "vulkan:renderer:vkutil"]
+source_lines = 281
+source_bytes = 11302
+configuration_authorities = 32
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-vulkan-experimental mechanical_port::vulkan::common_layouts_decl --lib"
+scope_note = "Preserves the complete common Vulkan descriptor denominator: render-pass attachment maximum; path, interior-triangle, image-rectangle, image-mesh, and empty vertex layouts; shader-authoritative image attribute concatenation; triangle assemblies; viewport, rasterization, multisample, blend, dynamic-state, attachment-reference, and subpass states. LazyLock provides stable 'static Ash pointers for source constexpr structs whose Rust builders are not const, without adding policy or fallback."

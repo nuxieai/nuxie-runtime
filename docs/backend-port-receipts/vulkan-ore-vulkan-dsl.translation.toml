@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:ore:vulkan_dsl"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/vulkan/ore_vulkan_dsl.hpp"
+source_sha256 = "5f75e1cce3b43bbd34dc99af668be50848ff7c07288ad556f7856cbac25ade54"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs"
+target_sha256 = "7283256474428fc092acd811f5d129fe6ee728c42a1859423b3cb5af64b903cc"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_ore_vulkan_ore_vulkan_dsl.hpp"
+source_snapshot_sha256 = "5f75e1cce3b43bbd34dc99af668be50848ff7c07288ad556f7856cbac25ade54"
+dependency_units = []
+source_lines = 112
+source_bytes = 4137
+configuration_authorities = 11
+lifecycle_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features --features native-vulkan-experimental"
+scope_note = "Preserves exact ORE-to-Vulkan descriptor type, stage visibility, native-slot compaction, fixed-capacity truncation, create-call, and source ignored-result behavior; it performs no product selection or fallback."

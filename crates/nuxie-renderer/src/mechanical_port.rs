@@ -18,6 +18,15 @@
 )]
 
 #[doc(hidden)]
+#[cfg(all(
+    feature = "native-metal-experimental",
+    any(
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "tvos",
+        target_os = "visionos"
+    )
+))]
 mod target_inventory;
 
 #[doc(hidden)]
@@ -50,6 +59,21 @@ pub(crate) mod backend_port_spirv_header_generator;
 #[path = "mechanical_port/shader-build-authority/renderer_src_shaders_wgsl_to_header_py__generator.rs"]
 pub(crate) mod backend_port_wgsl_header_generator;
 
+#[cfg(feature = "native-vulkan-experimental")]
+pub(crate) mod vulkan {
+    #[path = "renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs"]
+    pub(crate) mod ore_vulkan_dsl;
+}
+
+#[cfg(all(
+    feature = "native-metal-experimental",
+    any(
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "tvos",
+        target_os = "visionos"
+    )
+))]
 pub(crate) mod source {
     pub(crate) mod decoders {
         pub(crate) mod include {

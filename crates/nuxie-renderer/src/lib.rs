@@ -60,13 +60,16 @@ mod native_apple_surface;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod apple_wgpu_policy;
 mod logical_flush;
-#[cfg(all(
-    feature = "native-metal-experimental",
-    any(
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "tvos",
-        target_os = "visionos"
+#[cfg(any(
+    feature = "native-vulkan-experimental",
+    all(
+        feature = "native-metal-experimental",
+        any(
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "tvos",
+            target_os = "visionos"
+        )
     )
 ))]
 mod mechanical_port;

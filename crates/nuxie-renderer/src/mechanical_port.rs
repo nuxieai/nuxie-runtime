@@ -87,6 +87,10 @@ pub(crate) mod vulkan {
     pub(crate) mod ore_vulkan_dsl;
     #[path = "renderer_src_vulkan_common_layouts_hpp__decl.rs"]
     pub(crate) mod common_layouts_decl;
+    #[path = "renderer_src_vulkan_draw_shader_vulkan_hpp__decl.rs"]
+    pub(crate) mod draw_shader_vulkan_decl;
+    #[path = "renderer_src_vulkan_draw_shader_vulkan_cpp__impl.rs"]
+    pub(crate) mod draw_shader_vulkan_impl;
     #[path = "renderer_src_vulkan_vulkan_shaders_hpp__decl.rs"]
     pub(crate) mod vulkan_shaders_decl;
     #[path = "renderer_src_vulkan_vulkan_shaders_cpp__impl.rs"]

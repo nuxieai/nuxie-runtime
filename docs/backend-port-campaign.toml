@@ -12,7 +12,7 @@ source_review_status = "complete"
 ownership_review_plan = "docs/backend-port-ownership-review-plan.toml"
 ownership_review_schema = "docs/backend-port-ownership-review-schema.md"
 ownership_review_receipt_directory = "docs/backend-port-ownership-reviews"
-ownership_review_launch_ref = "pending"
+ownership_review_launch_ref = "7c16f5977dfcc001586add9a27a6f10e4e823dbd"
 ownership_review_status = "active"
 queue_order = [
   "audit",

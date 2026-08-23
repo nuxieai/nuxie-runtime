@@ -156,6 +156,7 @@ def resolve_file(upstream_root: Path, source_path: str, token: str) -> Path | No
         upstream_root / "renderer/src/shaders" / token,
         upstream_root / "renderer/glad" / token,
         upstream_root / "renderer/src/webgpu/wagyu-port/include" / token,
+        upstream_root / "decoders/include" / token,
     )
     for candidate in candidates:
         try:
@@ -303,9 +304,9 @@ def render(
             raise ValueError(f"pinned source drift: {source_path}")
         for line, syntax, token, quoted in dependencies(source_file):
             resolved = resolve_file(upstream_root, source_path, token)
-            resolved_path = ""
-            resolved_sha = ""
-            dependency_unit = ""
+            resolved_path = "-"
+            resolved_sha = "-"
+            dependency_unit = "-"
             if resolved is None:
                 kind = unresolved_kind(syntax, quoted, token)
                 if kind == "generated-output":

@@ -1,0 +1,59 @@
+schema_version = 1
+
+[[profile]]
+id = "vulkan"
+campaign = "vulkan"
+defines = ["RIVE_VULKAN", "ORE_BACKEND_VK", "RIVE_ORE", "RIVE_CANVAS", "WITH_RIVE_TOOLS"]
+include_roots = [
+  ".",
+  "include",
+  "renderer/include",
+  "renderer/src",
+  "renderer/src/shaders/out",
+  "decoders/include",
+  "renderer/dependencies/dawn/third_party/vulkan-headers/src/include",
+]
+
+[[profile]]
+id = "webgpu-wagyu-v1"
+campaign = "webgpu"
+defines = ["RIVE_WEBGPU=1", "ORE_BACKEND_WGPU", "RIVE_ORE", "RIVE_CANVAS", "WITH_RIVE_TOOLS"]
+include_roots = [
+  ".",
+  "include",
+  "renderer/include",
+  "renderer/src",
+  "renderer/src/shaders/out",
+  "decoders/include",
+  "renderer/src/webgpu/wagyu-port/include",
+]
+
+[[profile]]
+id = "webgpu-dawn-v2"
+campaign = "webgpu"
+defines = ["RIVE_WEBGPU=2", "RIVE_DAWN", "ORE_BACKEND_WGPU", "RIVE_ORE", "RIVE_CANVAS", "WITH_RIVE_TOOLS"]
+include_roots = [
+  ".",
+  "include",
+  "renderer/include",
+  "renderer/src",
+  "renderer/src/shaders/out",
+  "decoders/include",
+  "renderer/dependencies/dawn/include",
+  "renderer/dependencies/dawn/out/release/gen/include",
+]
+
+[[profile]]
+id = "webgl2-emscripten"
+campaign = "webgl2"
+defines = ["RIVE_WEBGL", "__EMSCRIPTEN__", "ORE_BACKEND_GL", "RIVE_ORE", "RIVE_CANVAS", "WITH_RIVE_TOOLS"]
+include_roots = [
+  ".",
+  "include",
+  "renderer/include",
+  "renderer/src",
+  "renderer/src/shaders/out",
+  "decoders/include",
+  "renderer/dependencies/dawn/third_party/angle/include",
+]
+stub_headers = ["webgl/webgl2_ext.h", "emscripten.h"]

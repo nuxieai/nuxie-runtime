@@ -1,0 +1,36 @@
+schema_version = 1
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+shader_directory = "renderer/src/shaders"
+ply_source = "renderer/dependencies/dabeaz_ply_3.11/ply"
+ply_tree_sha256 = "d1079d2c4d63403cd16649875cd06fcb561e0ddb29994e622124c383558e6676"
+make_flags = "-p /Users/levi/dev/oss/rive-runtime/renderer/dependencies/dabeaz_ply_3.11"
+regeneration_command = "PATH=/Users/levi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/naga-cli-30.0.0/target/release:$PATH make FLAGS='-p /Users/levi/dev/oss/rive-runtime/renderer/dependencies/dabeaz_ply_3.11' minify spirv wgsl"
+hermetic_bootstrap_status = "pending"
+
+[[tool]]
+id = "python"
+path = "/opt/homebrew/bin/python3"
+sha256 = "4f00ea2ad53d62437a6a3946b73c73614a97e8accdc5b96dc095ea1a0d9c6a56"
+version_args = ["--version"]
+version_contains = "Python 3.14.6"
+
+[[tool]]
+id = "glslang-validator"
+path = "/opt/homebrew/bin/glslangValidator"
+sha256 = "59c0bfe1e93b4a3290046cbffd4855d3f29d80477e5ccb47803e6f8c90ef3db1"
+version_args = ["--version"]
+version_contains = "Glslang Version: 11:16.2.0"
+
+[[tool]]
+id = "spirv-opt"
+path = "/opt/homebrew/bin/spirv-opt"
+sha256 = "e43af8abaaa87c7fc2ba8505214a292401b0dedf0c7c424e9ee9e50606e35852"
+version_args = ["--version"]
+version_contains = "SPIRV-Tools v2026.1"
+
+[[tool]]
+id = "naga"
+path = "/Users/levi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/naga-cli-30.0.0/target/release/naga"
+sha256 = "dc78b02b60ed6d364b3d5e5dabda0a7dee3371c29835ea0413409bd331f83a6d"
+version_args = ["--version"]
+version_contains = "30.0.0"

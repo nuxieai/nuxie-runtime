@@ -26,6 +26,12 @@ source_inventory = "docs/backend-port-source-inventory.tsv"
 ownership_inventory = "docs/backend-port-source-ownership.tsv"
 dependency_inventory = "docs/backend-port-dependency-edges.tsv"
 ownership_unit_order = "docs/backend-port-ownership-order.tsv"
+toolchain_authority = "docs/backend-port-toolchain.toml"
+generated_artifact_inventory = "docs/backend-port-generated-artifacts.tsv"
+configuration_inventory = "docs/backend-port-configurations.tsv"
+field_profiles = "docs/backend-port-field-profiles.toml"
+field_inventory = "docs/backend-port-fields.tsv"
+lifecycle_inventory = "docs/backend-port-lifecycle-events.tsv"
 
 [[backend]]
 id = "vulkan"

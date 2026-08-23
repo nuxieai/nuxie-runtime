@@ -63,6 +63,10 @@ pub(crate) mod backend_port_wgsl_header_generator;
 pub(crate) mod webgpu {
     #[path = "renderer_src_ore_wgpu_ore_bind_group_layout_wgpu_hpp__decl.rs"]
     pub(crate) mod ore_bind_group_layout_wgpu_decl;
+    #[path = "renderer_src_ore_wgpu_ore_pipeline_wgpu_hpp__decl.rs"]
+    pub(crate) mod ore_pipeline_wgpu_decl;
+    #[path = "renderer_src_ore_wgpu_ore_pipeline_wgpu_cpp__impl.rs"]
+    pub(crate) mod ore_pipeline_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs"]
     pub(crate) mod ore_sampler_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_sampler_wgpu_cpp__impl.rs"]

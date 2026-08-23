@@ -1,0 +1,21 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:pipeline"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_pipeline_wgpu.cpp"
+source_sha256 = "61012b812bff65f5e852ea8fd4c1c4ed7cd3aa4e4f841f6ea234de9539708757"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_pipeline_wgpu_cpp__impl.rs"
+target_sha256 = "941ea439601eac51a3dbca9b345d2c0b773b6b6f987f52b9f6cf506ffe077a9a"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_pipeline_wgpu.cpp"
+source_snapshot_sha256 = "61012b812bff65f5e852ea8fd4c1c4ed7cd3aa4e4f841f6ea234de9539708757"
+dependency_units = ["webgpu:ore:bind_group_layout", "webgpu:wagyu:webgpu_cpp"]
+dependency_artifacts = [
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_pipeline_wgpu_hpp__decl.rs", sha256 = "345339dc174783816ec7df668bac64f2d35beaaf9d4444cbf0edfee10259e65a" },
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_bind_group_layout_wgpu_hpp__decl.rs", sha256 = "5e8830e9c5c3e75af0542f16b10fa7ada913fdbb42ed7967b302d34b23aaaf8a" },
+]
+source_lines = 6
+source_bytes = 106
+configuration_authorities = 2
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_pipeline_wgpu"
+scope_note = "Preserves the complete intentionally include-only implementation owner: the pipeline declaration and concrete WebGPU bind-group-layout declaration are both retained as explicit dependencies, with zero out-of-line definitions invented."

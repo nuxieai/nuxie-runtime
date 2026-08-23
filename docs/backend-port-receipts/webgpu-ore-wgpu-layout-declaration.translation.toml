@@ -1,0 +1,20 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:wgpu_layout"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_wgpu_layout.hpp"
+source_sha256 = "56de4177e8cf574ed40ff297f2c29de6c3ed5ff0daafaa3f33053bf242bba680"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_wgpu_layout_hpp__decl.rs"
+target_sha256 = "caa701c38cfbc6172c729a691229932885026fe8423657f0fe6d2b27fd904a67"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_wgpu_layout.hpp"
+source_snapshot_sha256 = "56de4177e8cf574ed40ff297f2c29de6c3ed5ff0daafaa3f33053bf242bba680"
+dependency_units = ["webgpu:wagyu:webgpu_cpp"]
+dependency_artifacts = [
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs", sha256 = "55f62f7b418155379a88a36674c08140ef16ace16203cb6d35e0e39eb8f79def" },
+]
+source_lines = 283
+source_bytes = 11573
+configuration_authorities = 3
+lifecycle_authorities = 2
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_wgpu_layout"
+scope_note = "Preserves the complete inline WebGPU layout authority: the central max-group alias; every reflection and public-API dimension/sample/resource mapping including both fallback rules; dynamic-offset, minimum-size, visibility-mask, multisampling, storage-format, and sampler semantics; the fixed 16-entry cap; empty-label and zero-entry pointer behavior; and the sole Device.CreateBindGroupLayout construction call. Exact-length Rust string views are the safe adaptation for labels that need not be NUL terminated."

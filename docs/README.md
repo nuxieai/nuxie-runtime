@@ -18,6 +18,7 @@ two ongoing workflows, and every document here supports one of them:
 | `PORTING.md` | The C++→Rust translation manual (idioms, float exactness, invalidation fences, adaptation ceilings). Read before porting any upstream change. |
 | `METAL_PORTING.md` | Native Metal renderer-platform and ORE mechanical-port guide: source correspondence, lifetime rules, oracle hierarchy, validation ladder, and product decisions. |
 | `METAL_RENDERER_PORT_POSTMORTEM.md` | Process postmortem for the 39-hour native Metal port: false start, whole-owner reset, review findings, closeout, and follow-up actions. |
+| `NEXT_RENDERER_PORTS_PLAN.md` | Ordered source-owner campaign for the Vulkan, WebGPU, and reference-only WebGL2 ports. |
 | `ore-port-lifetimes.tsv` | Field-level C++→Rust ownership ledger for the file-oriented ORE/Metal translation queue. |
 | `upstream-sync-map.md` | The recurring Upstream Sync cycle: triage, approval gate, porting order, pin advance. Cycle outputs land in `sync/`. |
 | `parity-gap-register.md` | The gap queue: every known difference vs upstream — verification gaps (V), missing features (F), API surface (A), coverage holes (C), deliberate divergences (D), housekeeping (H), upstream-blocked watches (W). |

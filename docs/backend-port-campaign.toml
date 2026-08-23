@@ -1,0 +1,87 @@
+schema_version = 1
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+active_queue = "audit"
+preparation_status = "red"
+ignored_skills = ["implement", "tdd"]
+queue_order = [
+  "audit",
+  "preparation",
+  "translation-admission",
+  "vulkan-translation",
+  "webgpu-correspondence",
+  "webgl2-translation",
+  "source-review",
+  "ownership-review",
+  "correction",
+  "compiler",
+  "rooted-execution",
+  "behavior-platform",
+  "frozen-byte-closeout",
+  "post-green",
+]
+shared_generic_authority = "docs/metal-port-manifest.toml"
+shared_ownership_authority = "docs/metal-port-ownership.toml"
+source_inventory = "docs/backend-port-source-inventory.tsv"
+
+[[backend]]
+id = "vulkan"
+upstream_name = "Rive Vulkan renderer and ORE Vulkan"
+product_disposition = "experimental-nonshipping"
+primary_oracle = "pinned C++ Vulkan on the same reported adapter and driver"
+secondary_oracles = ["Rust native Metal", "Rust WebGPU"]
+translation_status = "pending"
+preparation_status = "red"
+source_roots = [
+  "renderer/include/rive/renderer/vulkan",
+  "renderer/src/vulkan",
+  "renderer/src/ore/vulkan",
+]
+extra_sources = ["renderer/include/rive/renderer/ore/ore_context_vulkan.hpp"]
+
+[[backend]]
+id = "webgpu"
+upstream_name = "Rive WebGPU renderer, Wagyu browser port, and ORE WGPU"
+product_disposition = "shipping-browser"
+primary_oracle = "pinned C++ Dawn WebGPU on the same reported adapter"
+secondary_oracles = ["Rust native Metal", "future Rust Vulkan"]
+translation_status = "pending"
+preparation_status = "red"
+source_roots = [
+  "renderer/include/rive/renderer/webgpu",
+  "renderer/src/webgpu",
+  "renderer/src/ore/wgpu",
+]
+extra_sources = ["renderer/include/rive/renderer/ore/ore_context_wgpu.hpp"]
+
+[[backend]]
+id = "webgl2"
+upstream_name = "Rive GL renderer WebGL2 configuration and ORE GL"
+product_disposition = "reference-only-no-product-surface"
+primary_oracle = "pinned C++ WebGL2 in the same browser and reported GPU"
+secondary_oracles = ["Rust WebGPU", "pinned C++ native GL where applicable"]
+translation_status = "pending"
+preparation_status = "red"
+source_roots = [
+  "renderer/include/rive/renderer/gl",
+  "renderer/src/gl",
+  "renderer/src/ore/gl",
+]
+extra_sources = ["renderer/include/rive/renderer/ore/ore_context_gl.hpp"]
+
+[[shared_source_set]]
+id = "shader-build-authority"
+roots = ["renderer/src/shaders/spirv"]
+top_level_root = "renderer/src/shaders"
+top_level_extensions = ["glsl", "vert", "frag"]
+extra_sources = [
+  "renderer/src/shaders/Makefile",
+  "renderer/src/shaders/minify.py",
+  "renderer/src/shaders/spirv_binary_to_header.py",
+  "renderer/src/shaders/wgsl_to_header.py",
+  "renderer/premake5.lua",
+  "renderer/premake5_pls_renderer.lua",
+  "renderer/make_dawn.sh",
+  "renderer/make_moltenvk.sh",
+  "renderer/make_swiftshader.sh",
+]
+classification_status = "pending"

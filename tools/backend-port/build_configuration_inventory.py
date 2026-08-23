@@ -16,6 +16,8 @@ HEADER = (
     "campaign",
     "source_path",
     "line",
+    "occurrence_count",
+    "occurrence_lines",
     "authority_kind",
     "token",
     "enclosing_condition",
@@ -36,6 +38,8 @@ class Row:
     campaign: str
     source_path: str
     line: int
+    occurrence_count: int
+    occurrence_lines: str
     authority_kind: str
     token: str
     enclosing_condition: str
@@ -68,6 +72,7 @@ def render(upstream_root: Path, ownership_inventory: Path) -> str:
     with ownership_inventory.open(newline="") as handle:
         sources = list(csv.DictReader(handle, delimiter="\t"))
     rows: list[Row] = []
+    symbols: dict[tuple[str, str, str, str], list[tuple[int, str]]] = {}
     for source in sources:
         path = upstream_root / source["source_path"]
         if digest(path) != source["source_sha256"]:
@@ -83,6 +88,8 @@ def render(upstream_root: Path, ownership_inventory: Path) -> str:
                         source["campaign"],
                         source["source_path"],
                         line_number,
+                        1,
+                        str(line_number),
                         f"preprocessor-{directive}",
                         expression,
                         condition(stack),
@@ -103,20 +110,32 @@ def render(upstream_root: Path, ownership_inventory: Path) -> str:
                         raise ValueError(f"orphan #endif: {source['source_path']}:{line_number}")
                     stack.pop()
             for token in sorted(set(CAPABILITY.findall(line))):
-                rows.append(
-                    Row(
-                        source["campaign"],
-                        source["source_path"],
-                        line_number,
-                        "configuration-or-capability-symbol",
-                        token,
-                        condition(stack),
-                        source["ownership_unit"],
-                        "review-required",
-                    )
+                key = (
+                    source["campaign"],
+                    source["source_path"],
+                    token,
+                    source["ownership_unit"],
                 )
+                symbols.setdefault(key, []).append((line_number, condition(stack)))
         if stack:
             raise ValueError(f"unterminated preprocessor branch: {source['source_path']}")
+    for (campaign, source_path, token, unit), occurrences in symbols.items():
+        lines = [line for line, _ in occurrences]
+        enclosing = ";".join(sorted(set(value for _, value in occurrences)))
+        rows.append(
+            Row(
+                campaign,
+                source_path,
+                min(lines),
+                len(lines),
+                ",".join(str(line) for line in lines),
+                "configuration-or-capability-symbol",
+                token,
+                enclosing,
+                unit,
+                "review-required",
+            )
+        )
     rows.sort()
     return "\n".join(("\t".join(HEADER), *(row.tsv() for row in rows))) + "\n"
 

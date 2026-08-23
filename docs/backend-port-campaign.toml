@@ -1,6 +1,6 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_queue = "audit"
+active_queue = "preparation"
 preparation_status = "red"
 ignored_skills = ["implement", "tdd"]
 queue_order = [
@@ -32,6 +32,20 @@ configuration_inventory = "docs/backend-port-configurations.tsv"
 field_profiles = "docs/backend-port-field-profiles.toml"
 field_inventory = "docs/backend-port-fields.tsv"
 lifecycle_inventory = "docs/backend-port-lifecycle-events.tsv"
+oracle_contract = "docs/backend-port-oracle-contract.toml"
+legacy_wgpu_inventory = "docs/backend-port-legacy-wgpu.tsv"
+
+[denominator]
+sources = 200
+ownership_rows = 200
+dependency_edges = 924
+ownership_units = 135
+generated_artifacts = 520
+configuration_rows = 5409
+fields = 907
+lifecycle_events = 2431
+legacy_wgpu_files = 103
+corpus_entries = 1469
 
 [[backend]]
 id = "vulkan"

@@ -1,0 +1,156 @@
+schema_version = 1
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+corpus = "corpus-r.toml"
+corpus_sha256 = "25c33c77c76de1427f85b0951c38ba40dc1bd53a25ca4d07c91e619a0b125634"
+corpus_entries = 1469
+corpus_exclusions = []
+comparison = "fresh-primary-source-frame-versus-candidate-frame"
+adapter_contract = "both runners must report the same nonempty backend, adapter/device, driver where available, browser build where applicable, mode, dimensions, stream SHA, generated-artifact identity, and source revision"
+tolerance_authority = "two independent primary-source reruns before candidate translation"
+tolerance_status = "pending-source-repeatability-capture"
+candidate_derived_tolerances = false
+static_cross_backend_pngs = "diagnostic-only"
+structural_oracles = "exact"
+physical_work_oracles = "candidate-excess-zero"
+performance_verdict = "five independent counterbalanced completion-scoped reports; median candidate/source ratio <= 1.0 per backend and mode"
+
+[[backend]]
+id = "vulkan"
+candidate_backend_id = "rust-vulkan-exact"
+primary_backend_id = "ffi-vulkan"
+primary_oracle = "pinned C++ Vulkan on the same reported Vulkan adapter and driver"
+secondary_oracles = ["rust-metal", "rust-webgpu-exact"]
+required_modes = ["msaa", "clockwise-atomic"]
+corpus_entries = 1469
+rooted_native_runner = "tools/renderer-replay"
+root_status = "pending"
+
+[[backend]]
+id = "webgpu"
+candidate_backend_id = "rust-webgpu-exact"
+primary_backend_id = "ffi-dawn"
+primary_oracle = "pinned C++ Dawn WebGPU on the same reported adapter, device profile, and browser/native environment"
+secondary_oracles = ["legacy-rust-wgpu", "rust-metal", "rust-vulkan-exact"]
+required_modes = ["msaa", "clockwise-atomic"]
+corpus_entries = 1469
+rooted_native_runner = "tools/renderer-replay"
+rooted_browser_runner = "tools/browser-renderer-smoke"
+web_editor_selection = "webgpu"
+root_status = "pending"
+
+[[backend]]
+id = "webgl2"
+candidate_backend_id = "rust-webgl2-exact"
+primary_backend_id = "ffi-webgl2"
+primary_oracle = "pinned C++ WebGL2 in the same browser build on the same reported GPU"
+secondary_oracles = ["rust-webgpu-exact", "legacy-rust-wgpu"]
+required_modes = ["msaa", "clockwise-atomic"]
+corpus_entries = 1469
+rooted_browser_runner = "tools/browser-renderer-smoke"
+web_editor_selection = "webgl2"
+root_status = "pending"
+
+[[platform]]
+id = "vulkan-macos-moltenvk-apple-m5-max"
+backend = "vulkan"
+environment = "macOS Apple M5 Max through pinned MoltenVK"
+requirement = "local-blocking"
+status = "available-unrun"
+
+[[platform]]
+id = "vulkan-linux-amd"
+backend = "vulkan"
+environment = "Linux AMD Vulkan"
+requirement = "closeout-blocking"
+status = "hardware-not-yet-provisioned"
+
+[[platform]]
+id = "vulkan-linux-nvidia"
+backend = "vulkan"
+environment = "Linux NVIDIA Vulkan"
+requirement = "closeout-blocking"
+status = "hardware-not-yet-provisioned"
+
+[[platform]]
+id = "vulkan-linux-intel"
+backend = "vulkan"
+environment = "Linux Intel Vulkan"
+requirement = "closeout-blocking"
+status = "hardware-not-yet-provisioned"
+
+[[platform]]
+id = "webgpu-native-dawn-macos-apple-m5-max"
+backend = "webgpu"
+environment = "native Dawn Metal on macOS Apple M5 Max"
+requirement = "local-blocking"
+status = "available-existing-oracle-needs-new-candidate"
+
+[[platform]]
+id = "webgpu-chromium-macos"
+backend = "webgpu"
+environment = "current pinned Chromium browser build on macOS"
+requirement = "closeout-blocking"
+status = "pending"
+
+[[platform]]
+id = "webgpu-firefox-macos"
+backend = "webgpu"
+environment = "current pinned Firefox browser build on macOS"
+requirement = "closeout-blocking"
+status = "pending"
+
+[[platform]]
+id = "webgpu-safari-macos"
+backend = "webgpu"
+environment = "current pinned Safari/WebKit build on macOS"
+requirement = "closeout-blocking"
+status = "pending"
+
+[[platform]]
+id = "webgl2-chromium-macos"
+backend = "webgl2"
+environment = "current pinned Chromium browser build on macOS"
+requirement = "local-blocking"
+status = "available-unrun"
+
+[[platform]]
+id = "webgl2-firefox-macos"
+backend = "webgl2"
+environment = "current pinned Firefox browser build on macOS"
+requirement = "closeout-blocking"
+status = "pending"
+
+[[platform]]
+id = "webgl2-safari-macos"
+backend = "webgl2"
+environment = "current pinned Safari/WebKit build on macOS"
+requirement = "closeout-blocking"
+status = "pending"
+
+[[cross_platform_family]]
+id = "browser-windows"
+backends = ["webgpu", "webgl2"]
+browsers = ["chromium", "firefox"]
+requirement = "closeout-blocking"
+status = "host-not-yet-provisioned"
+
+[[cross_platform_family]]
+id = "browser-linux"
+backends = ["webgpu", "webgl2"]
+browsers = ["chromium", "firefox"]
+requirement = "closeout-blocking"
+status = "host-not-yet-provisioned"
+
+[cutover]
+begins_after = "vulkan, webgpu, and webgl2 frozen-byte closeout green"
+web_editor_public_selection = ["webgpu", "webgl2"]
+automatic_failure_fallback = false
+legacy_backend_id = "rust-wgpu"
+legacy_deletion_status = "pending"
+required_proofs = [
+  "explicit selection reports selected backend identity",
+  "WebGPU selection roots rust-webgpu-exact and never legacy-rust-wgpu",
+  "WebGL2 selection roots rust-webgl2-exact and never either WebGPU route",
+  "legacy Rust-WGPU implementation and exclusive dependencies are deleted",
+  "rooted native and browser artifacts contain no legacy backend route",
+]

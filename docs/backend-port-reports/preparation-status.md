@@ -25,8 +25,9 @@ Result: **RED; translation is not admitted**
   514 retained artifacts have exact SHA-256 identities and six ephemeral WGSL
   intermediates are bound by retained final headers. All 197 directly included
   generated artifacts are covered.
-- 11,675 derived preprocessor and configuration/capability rows across the
-  complete pinned source set.
+- 5,409 derived preprocessor and configuration/capability rows across the
+  complete pinned source set. Repeated symbol occurrences are grouped by
+  source with exact line and enclosing-condition sets.
 - 907 Clang-derived state fields across Vulkan, WebGPU Wagyu v1, WebGPU Dawn
   v2, and WebGL2/Emscripten configurations. Field order and declared types are
   frozen independently of any Rust target.
@@ -36,6 +37,10 @@ Result: **RED; translation is not admitted**
 - Product intent: exact Vulkan, WebGPU, and WebGL2 ports; explicit WebGPU/WebGL2
   selection in the web editor; legacy Rust-WGPU deletion only after all three
   exact ports pass frozen closeout.
+- The oracle and product contract admits all 1,469 frozen corpus entries for
+  every backend with no exclusions, names distinct backend identities, freezes
+  local and cross-platform requirements, and forbids candidate-derived
+  tolerances.
 
 The source, ownership, dependency, and unit-order ledgers are generated from
 the pinned upstream checkout. Their checks fail on source drift, stale output,
@@ -52,8 +57,9 @@ an incomplete unit graph.
 3. Review every derived preprocessor branch and backend extension/feature or
    shader-specialization symbol; bind each to an admitted configuration or an
    explicit source exclusion.
-4. Freeze exact primary-oracle builds, corpus membership and exclusions,
-   adapter/device/browser identity, and the platform/hardware matrix.
+4. Build the missing Vulkan and WebGL2 primary replay roots, capture two
+   independent source-only repeatability runs for each primary platform, and
+   freeze the resulting comparison budgets without viewing candidate output.
 5. Freeze rooted product artifacts, explicit editor selection, forbidden
    unselected routes, and the legacy Rust-WGPU deletion contract.
 6. Add one fail-closed preparation check that joins every independent ledger

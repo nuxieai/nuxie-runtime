@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:ore:bind_group"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/vulkan/ore_bind_group_vulkan.cpp"
+source_sha256 = "08371ecffdaffb2d668e0dbe260d14f3c13cd7997a55e4f368cf4382ce579a7b"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_bind_group_vulkan_cpp__impl.rs"
+target_sha256 = "cda858d2e6a167bb6038cbab1904d4ebf65007d478e8d43b2163987babc83b2b"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_ore_vulkan_ore_bind_group_vulkan.cpp"
+source_snapshot_sha256 = "08371ecffdaffb2d668e0dbe260d14f3c13cd7997a55e4f368cf4382ce579a7b"
+dependency_units = ["vulkan:ore:buffer","vulkan:ore:context"]
+source_lines = 106
+source_bytes = 3138
+configuration_authorities = 2
+lifecycle_authorities = 2
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan ORE bind-group declaration and implementation: source field order, descriptor writes, layout identity, retained resource owners, dynamic offsets, lazy descriptor resolution, validation failures, and destruction semantics."

@@ -23,6 +23,9 @@ track-rive-shader-id = ["nuxie-ore-metal?/track-rive-shader-id"]
 # Wires the pinned RIVE_CANVAS ORE constructor to the exact native renderer
 # device and queue. This stays opt-in until the native renderer cutover.
 native-ore-metal-experimental = ["native-metal-experimental", "dep:nuxie-ore-metal"]
+# Exact pinned `RIVE_CANVAS` branch for the Vulkan renderer, including the
+# texture-backed RenderCanvas target and the Vulkan ORE context constructor.
+native-ore-vulkan-experimental = ["native-vulkan-experimental"]
 # Exact mechanical predicates for the pinned renderer's optional source paths.
 rive-generate-feather-lut = []
 rive-ktx2 = []

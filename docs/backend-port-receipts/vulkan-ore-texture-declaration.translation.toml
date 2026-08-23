@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:ore:texture"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/vulkan/ore_texture_vulkan.hpp"
+source_sha256 = "ee5cb5071865fcc72e23a165fa02d4cc5a14ccf5f8d6d89e54b2ea4152296f2f"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_texture_vulkan_hpp__decl.rs"
+target_sha256 = "3b2fe1112cd99d612e78fc00509613e618c711b915f1f49356ddfa57180204fa"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_ore_vulkan_ore_texture_vulkan.hpp"
+source_snapshot_sha256 = "ee5cb5071865fcc72e23a165fa02d4cc5a14ccf5f8d6d89e54b2ea4152296f2f"
+dependency_units = ["vulkan:ore:buffer","vulkan:ore:context","vulkan:renderer:render_target","vulkan:renderer:vulkan_context"]
+source_lines = 52
+source_bytes = 1738
+configuration_authorities = 3
+lifecycle_authorities = 2
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan ORE texture and view owners: dimensions and formats, VMA/native image ownership, uploads, layouts, subresources, Canvas borrowing, view construction, validation, and reverse destruction."

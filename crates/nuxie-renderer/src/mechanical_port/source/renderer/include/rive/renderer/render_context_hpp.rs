@@ -2183,7 +2183,7 @@ impl RenderContextImplOwner {
 pub struct RenderContextMembers {
     pub(crate) m_impl: RenderContextImplOwner,
     pub(crate) m_max_path_id: usize,
-    #[cfg(feature = "native-ore-metal-experimental")]
+    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     pub(crate) m_ore_context: Option<Box<OreContext>>,
     pub(crate) m_current_resource_allocations: ResourceAllocationCounts,
     pub(crate) m_max_recent_resource_requirements: ResourceAllocationCounts,
@@ -2263,7 +2263,7 @@ mod render_context_layout_tests {
             offset_of!(RenderContextMembers, m_impl),
             offset_of!(RenderContextMembers, m_max_path_id),
         ];
-        #[cfg(feature = "native-ore-metal-experimental")]
+        #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
         offsets.push(offset_of!(RenderContextMembers, m_ore_context));
         offsets.extend([
             offset_of!(RenderContextMembers, m_current_resource_allocations),
@@ -2439,9 +2439,9 @@ pub trait RenderContextContract: RiveRenderFactoryContract {
     fn tangentPairsAllocator(&mut self) -> &mut TrivialArrayAllocator<[Vec2D; 2]>;
     fn polarSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16>;
     fn parametricSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16>;
-    #[cfg(feature = "native-ore-metal-experimental")]
+    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas>;
-    #[cfg(feature = "native-ore-metal-experimental")]
+    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     fn getOreContext(&mut self) -> *mut OreContext;
     fn resetContainers(&mut self);
     fn setResourceSizes(&mut self, counts: ResourceAllocationCounts, force_realloc: bool);

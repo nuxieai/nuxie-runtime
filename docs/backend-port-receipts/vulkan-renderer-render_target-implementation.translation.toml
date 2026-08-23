@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:render_target"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/vulkan/render_target_vulkan.cpp"
+source_sha256 = "58f01c640d775669756bd0ba03b9bef67cb0cad0f7fe61dd2a5bb3bf04f41a59"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_target_vulkan_cpp__impl.rs"
+target_sha256 = "b2ab068fd9705d180487136b1042ad9cbf899170863e11a194e84dfd0ea134cd"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_vulkan_render_target_vulkan.cpp"
+source_snapshot_sha256 = "58f01c640d775669756bd0ba03b9bef67cb0cad0f7fe61dd2a5bb3bf04f41a59"
+dependency_units = ["vulkan:renderer:render_context_vulkan_impl","vulkan:renderer:vulkan_context"]
+source_lines = 176
+source_bytes = 6425
+configuration_authorities = 13
+lifecycle_authorities = 3
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan render-target owner: external and texture-backed target polymorphism, image access tracking and barriers, clear/copy operations, lazy offscreen and MSAA resources, dimensions, usage, and reverse destruction."

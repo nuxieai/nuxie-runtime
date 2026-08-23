@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:render_pass"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/vulkan/render_pass_vulkan.cpp"
+source_sha256 = "9c95185c5e653ef0b4a51725fede34642ddea2a62167fc620ddcb3e909149b79"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_pass_vulkan_cpp__impl.rs"
+target_sha256 = "1fa58988a847a05ab50d1bf8ba30aa49dc3afd3517f31ab6dab0b1f9b5ac3270"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_vulkan_render_pass_vulkan.cpp"
+source_snapshot_sha256 = "9c95185c5e653ef0b4a51725fede34642ddea2a62167fc620ddcb3e909149b79"
+dependency_units = ["shader:source:constants","vulkan:renderer:common_layouts","vulkan:renderer:draw_pipeline_layout","vulkan:renderer:pipeline_manager","vulkan:renderer:render_context_vulkan_impl","vulkan:renderer:vulkan_context"]
+source_lines = 896
+source_bytes = 41987
+configuration_authorities = 119
+lifecycle_authorities = 48
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan render-pass owner: attachment/subpass/dependency construction across interlock and load modes, pipeline-layout selection, compatibility properties, debug identity, and destruction."

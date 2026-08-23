@@ -74,6 +74,170 @@ pub fn new_bind_group_layout_backend_base() -> bind_group_layout::BindGroupLayou
     bind_group_layout::BindGroupLayout::new()
 }
 
+/// Backend integration seam for exact concrete ORE pipeline subclasses.
+#[doc(hidden)]
+pub fn new_pipeline_backend_base(
+    manager: gpu_resource::GPUResourceManager,
+    desc: &types::PipelineDesc<'_>,
+) -> Option<pipeline::Pipeline> {
+    use gpu_resource::GpuResourcePayload;
+
+    let mut base = pipeline::Pipeline::new(desc)?;
+    base.gpu_resource_mut().install_manager(Some(manager));
+    Some(base)
+}
+
+/// Exposes the protected source `Context::m_manager` to concrete backend
+/// subclasses implemented in a sibling crate.
+#[doc(hidden)]
+pub fn context_backend_manager(
+    context: &context::Context,
+) -> Option<gpu_resource::GPUResourceManager> {
+    context.state.manager()
+}
+
+#[doc(hidden)]
+pub fn context_backend_domain(context: &context::Context) -> gpu_resource::ResourceDomain {
+    context.state.resourceDomain()
+}
+
+/// Constructs the protected backend-independent Context base for a concrete
+/// backend subclass implemented in a sibling crate.
+#[doc(hidden)]
+pub fn new_context_backend_base(
+    features: types::Features,
+    manager: Option<gpu_resource::GPUResourceManager>,
+) -> context::Context {
+    context::Context::new(features, manager)
+}
+
+/// Backend integration seam for exact concrete ORE texture subclasses.
+#[doc(hidden)]
+pub fn new_texture_backend_base(
+    manager: gpu_resource::GPUResourceManager,
+    desc: &types::TextureDesc<'_>,
+) -> texture::Texture {
+    use gpu_resource::GpuResourcePayload;
+
+    let mut base = texture::Texture::new(desc);
+    base.gpu_resource_mut().install_manager(Some(manager));
+    base
+}
+
+/// Backend integration seam for exact concrete ORE texture-view subclasses.
+#[doc(hidden)]
+pub fn new_texture_view_backend_base(
+    manager: gpu_resource::GPUResourceManager,
+    texture: gpu_resource::AnyResourceHandle,
+    desc: &types::TextureViewDesc<'_>,
+) -> texture::TextureView {
+    use gpu_resource::GpuResourcePayload;
+
+    let mut base = texture::TextureView::new(texture, desc);
+    base.gpu_resource_mut().install_manager(Some(manager));
+    base
+}
+
+/// Backend integration seam for exact concrete ORE bind-group subclasses.
+#[doc(hidden)]
+pub fn new_bind_group_backend_base(
+    manager: gpu_resource::GPUResourceManager,
+) -> bind_group::BindGroup {
+    use gpu_resource::GpuResourcePayload;
+
+    let mut base = bind_group::BindGroup::new();
+    base.gpu_resource_mut().install_manager(Some(manager));
+    base
+}
+
+/// Installs the source-owned resource graph captured by a concrete context.
+#[doc(hidden)]
+pub fn install_bind_group_backend_parts(
+    base: &mut bind_group::BindGroup,
+    dynamic_offset_count: u32,
+    layout: Option<gpu_resource::AnyResourceHandle>,
+    retained_buffers: Vec<gpu_resource::AnyResourceHandle>,
+    retained_views: Vec<gpu_resource::AnyResourceHandle>,
+    retained_samplers: Vec<gpu_resource::AnyResourceHandle>,
+) {
+    base.m_dynamicOffsetCount = dynamic_offset_count;
+    base.m_layoutRef = layout;
+    base.m_retainedBuffers = retained_buffers;
+    base.m_retainedViews = retained_views;
+    base.m_retainedSamplers = retained_samplers;
+}
+
+/// Installs the protected source members authored by
+/// `Context::makeBindGroupLayout`.
+#[doc(hidden)]
+pub fn install_bind_group_layout_backend_parts(
+    base: &mut bind_group_layout::BindGroupLayout,
+    context: &context::Context,
+    group_index: u32,
+    entries: Vec<types::BindGroupLayoutEntry>,
+) {
+    base.m_groupIndex = group_index;
+    base.m_entries = entries;
+    base.m_context = std::sync::Arc::downgrade(&context.state);
+}
+
+/// Backend integration seam for exact concrete ORE render-pass subclasses.
+#[doc(hidden)]
+pub fn new_render_pass_backend_base(context: &context::Context) -> render_pass::RenderPass {
+    render_pass::RenderPass::new(std::sync::Arc::downgrade(&context.state))
+}
+
+/// Protected RenderPass seams used by concrete backends implemented in a
+/// sibling crate. These are direct field/method projections, not alternate
+/// behavior.
+#[doc(hidden)]
+pub fn render_pass_check_pipeline_compat(
+    pass: &render_pass::RenderPass,
+    pipeline: &pipeline::Pipeline,
+) -> bool {
+    pass.checkPipelineCompat(Some(pipeline))
+}
+
+#[doc(hidden)]
+pub fn render_pass_is_finished(pass: &render_pass::RenderPass) -> bool {
+    pass.m_finished
+}
+
+#[doc(hidden)]
+pub fn render_pass_set_finished(pass: &mut render_pass::RenderPass, finished: bool) {
+    pass.m_finished = finished;
+}
+
+#[doc(hidden)]
+pub fn render_pass_depth_format(pass: &render_pass::RenderPass) -> types::TextureFormat {
+    pass.m_depthFormat
+}
+
+#[doc(hidden)]
+pub fn render_pass_retain_bound_group(
+    pass: &mut render_pass::RenderPass,
+    group_index: u32,
+    group: gpu_resource::AnyResourceHandle,
+) {
+    pass.m_boundGroups[group_index as usize] = Some(group);
+}
+
+#[doc(hidden)]
+pub fn render_pass_install_attachment_metadata(
+    pass: &mut render_pass::RenderPass,
+    color_formats: [types::TextureFormat; 4],
+    color_count: u32,
+    depth_format: types::TextureFormat,
+    has_depth: bool,
+    sample_count: u32,
+) {
+    pass.m_colorFormats = color_formats;
+    pass.m_colorCount = color_count;
+    pass.m_depthFormat = depth_format;
+    pass.m_hasDepth = has_depth;
+    pass.m_sampleCount = sample_count;
+}
+
 /// Backend integration seam for exact concrete `GPUResource` subclasses.
 #[doc(hidden)]
 pub fn new_gpu_resource_backend_base() -> gpu_resource::GPUResource {

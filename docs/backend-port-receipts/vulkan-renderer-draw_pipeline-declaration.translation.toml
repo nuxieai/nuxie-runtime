@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:draw_pipeline"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/vulkan/draw_pipeline_vulkan.hpp"
+source_sha256 = "13c76fa90bdeb3713f465ab078d1b1871234dfe94c3ee924b96d23b5abc7d80e"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_vulkan_hpp__decl.rs"
+target_sha256 = "116f7add678f706e4c2fba3a3304283f000188c1311e8a732d2b6974aa09fcec"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_vulkan_draw_pipeline_vulkan.hpp"
+source_snapshot_sha256 = "13c76fa90bdeb3713f465ab078d1b1871234dfe94c3ee924b96d23b5abc7d80e"
+dependency_units = ["shader:source:constants","vulkan:renderer:common_layouts","vulkan:renderer:draw_pipeline_layout","vulkan:renderer:draw_shader","vulkan:renderer:pipeline_manager","vulkan:renderer:render_context_vulkan_impl","vulkan:renderer:render_pass","vulkan:renderer:vulkan_context"]
+source_lines = 74
+source_bytes = 1806
+configuration_authorities = 5
+lifecycle_authorities = 4
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan draw-pipeline owner: shader modules, authored pipeline-state branches, dynamic state, render-pass compatibility, specialization, creation outcomes, accessors, and source-order destruction."

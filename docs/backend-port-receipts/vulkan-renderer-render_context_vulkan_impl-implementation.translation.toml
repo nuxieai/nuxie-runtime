@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:render_context_vulkan_impl"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/vulkan/render_context_vulkan_impl.cpp"
+source_sha256 = "89037c61d58dba7d94a6c8bdce6a0e337e23fdedcd5cc8b6e2b975a470061b38"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs"
+target_sha256 = "ef6f5879ec51f791679f310ce7100996089cfe2d5c0889942dec10c26c5f1684"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_vulkan_render_context_vulkan_impl.cpp"
+source_snapshot_sha256 = "89037c61d58dba7d94a6c8bdce6a0e337e23fdedcd5cc8b6e2b975a470061b38"
+dependency_units = ["shader:source:constants","vulkan:ore:context","vulkan:renderer:common_layouts","vulkan:renderer:draw_pipeline","vulkan:renderer:draw_pipeline_layout","vulkan:renderer:draw_shader","vulkan:renderer:pipeline_manager","vulkan:renderer:render_pass","vulkan:renderer:render_target","vulkan:renderer:vulkan_context","vulkan:renderer:vulkan_shaders"]
+source_lines = 4069
+source_bytes = 167131
+configuration_authorities = 126
+lifecycle_authorities = 243
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan render context including all fields and defaults; buffer, texture, Canvas, and ORE factories; resource prepasses; PLS/MSAA/offscreen flush topology; descriptor allocation; every draw branch; async creation; platform gates; and exact reverse teardown."

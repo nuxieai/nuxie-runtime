@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:draw_pipeline_layout"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/vulkan/draw_pipeline_layout_vulkan.hpp"
+source_sha256 = "eb0d68eb2db0c64680e70ee9c2c223266a182612b26af2e40cde3302ba9261a0"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_layout_vulkan_hpp__decl.rs"
+target_sha256 = "256ec9bbfa1949d7baf11b20ca7457f649d20016331bb06b3ea320fddc181327"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_vulkan_draw_pipeline_layout_vulkan.hpp"
+source_snapshot_sha256 = "eb0d68eb2db0c64680e70ee9c2c223266a182612b26af2e40cde3302ba9261a0"
+dependency_units = ["shader:source:constants","vulkan:renderer:pipeline_manager","vulkan:renderer:render_context_vulkan_impl","vulkan:renderer:render_pass","vulkan:renderer:vulkan_context"]
+source_lines = 56
+source_bytes = 1538
+configuration_authorities = 1
+lifecycle_authorities = 3
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan draw-pipeline-layout owner: descriptor-set layouts, immutable samplers, push and binding topology, PLS variants, pipeline layouts, accessors, and exact reverse destruction."

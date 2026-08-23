@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:ore:context"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/vulkan/ore_context_vulkan.cpp"
+source_sha256 = "4b3241f851fbc7ffddcce0eed366c80431471a8f143500a8d2f26a9133538a5a"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_context_vulkan_cpp__impl.rs"
+target_sha256 = "4c591654ca05e054e9ad7b72c04a07910d356d8830295555f17f8d8a26d28244"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_ore_vulkan_ore_context_vulkan.cpp"
+source_snapshot_sha256 = "4b3241f851fbc7ffddcce0eed366c80431471a8f143500a8d2f26a9133538a5a"
+dependency_units = ["vulkan:ore:bind_group","vulkan:ore:bind_group_layout","vulkan:ore:buffer","vulkan:ore:pipeline","vulkan:ore:render_pass","vulkan:ore:sampler","vulkan:ore:shader_module","vulkan:ore:texture","vulkan:ore:vulkan_dsl","vulkan:renderer:render_target","vulkan:renderer:vulkan_context"]
+source_lines = 1727
+source_bytes = 67705
+configuration_authorities = 128
+lifecycle_authorities = 74
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan ORE context: feature census, native object factories, descriptor generations, frame and command-buffer lifecycle, pending transitions/uploads, render-pass cache, Canvas texture wrapping, exact result policy, and reverse ownership teardown."

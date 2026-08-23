@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:ore:pipeline"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/vulkan/ore_pipeline_vulkan.hpp"
+source_sha256 = "163aedaefc7047fbb16bc02ecfff9d0d059c434eab3a2108bb043076b1a4835c"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_pipeline_vulkan_hpp__decl.rs"
+target_sha256 = "f6563d55386091855aed5c92bc507a0434c047c926415488cf84e89eb4882016"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_ore_vulkan_ore_pipeline_vulkan.hpp"
+source_snapshot_sha256 = "163aedaefc7047fbb16bc02ecfff9d0d059c434eab3a2108bb043076b1a4835c"
+dependency_units = ["vulkan:ore:bind_group","vulkan:ore:bind_group_layout","vulkan:ore:context","vulkan:ore:shader_module","vulkan:ore:vulkan_dsl"]
+source_lines = 31
+source_bytes = 1076
+configuration_authorities = 2
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan ORE pipeline owner: source layouts, shader and bind-group retention, binding-map application, graphics/compute construction, native handles, validation outcomes, and destruction order."

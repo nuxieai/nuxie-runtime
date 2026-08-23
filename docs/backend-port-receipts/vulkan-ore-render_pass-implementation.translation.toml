@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:ore:render_pass"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/vulkan/ore_render_pass_vulkan.cpp"
+source_sha256 = "36fd46d0547dc2d55e0e8c8d2f770cc0de227f1bef3c87dd7a0a203ba1a010b4"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_render_pass_vulkan_cpp__impl.rs"
+target_sha256 = "275a28b22d7435c1d611f6b280540eb499d1cd9695bc70f208f87040bfc6328f"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_ore_vulkan_ore_render_pass_vulkan.cpp"
+source_snapshot_sha256 = "36fd46d0547dc2d55e0e8c8d2f770cc0de227f1bef3c87dd7a0a203ba1a010b4"
+dependency_units = ["vulkan:ore:bind_group","vulkan:ore:buffer","vulkan:ore:context","vulkan:ore:pipeline","vulkan:ore:sampler","vulkan:ore:texture","vulkan:renderer:render_target","vulkan:renderer:vkutil"]
+source_lines = 432
+source_bytes = 17044
+configuration_authorities = 22
+lifecycle_authorities = 38
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan ORE render-pass owner: attachment and resolve state, retained resources, viewport/scissor/pipeline/bind-group dispatch, indexed and non-indexed draws, submission boundaries, and end-of-pass transitions."

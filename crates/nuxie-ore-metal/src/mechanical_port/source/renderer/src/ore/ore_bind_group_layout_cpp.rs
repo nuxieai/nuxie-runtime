@@ -211,6 +211,107 @@ pub fn validateLayoutsAgainstBindingMap(
     true
 }
 
+/// Rust derived-class integration spelling of
+/// `validateLayoutsAgainstBindingMap`.
+///
+/// A C++ `BindGroupLayoutVulkan*` converts implicitly to its
+/// `BindGroupLayout*` base. Rust resource handles retain the concrete payload,
+/// so sibling backend crates perform the downcast and pass these exact base
+/// references through this seam. The validation body and diagnostics remain
+/// identical to the pinned source function above.
+#[doc(hidden)]
+pub fn validateLayoutBasesAgainstBindingMap(
+    bindingMap: &BindingMap,
+    layouts: Option<&[Option<&BindGroupLayout>]>,
+    layoutCount: u32,
+    mut outError: Option<&mut String>,
+) -> bool {
+    let mut fail = |msg: String| {
+        if let Some(error) = outError.as_mut() {
+            **error = msg;
+        }
+        false
+    };
+
+    for i in 0..bindingMap.size() {
+        let shaderEntry: &Entry = bindingMap.at(i);
+        let group: u32 = shaderEntry.group.into();
+        let binding: u32 = shaderEntry.binding.into();
+
+        if group >= layoutCount
+            || layouts.is_none()
+            || layouts
+                .and_then(|allLayouts| allLayouts.get(group as usize))
+                .and_then(|layout| *layout)
+                .is_none()
+        {
+            return fail(format!(
+                "@group({group}) @binding({binding}): shader declares {} but PipelineDesc::bindGroupLayouts has no entry for group {group}",
+                shaderKindName(shaderEntry.kind)
+            ));
+        }
+
+        let layout = layouts
+            .and_then(|allLayouts| allLayouts.get(group as usize))
+            .and_then(|layout| *layout)
+            .expect("layout was checked above");
+        if layout.groupIndex() != group {
+            return fail(format!(
+                "PipelineDesc::bindGroupLayouts[{group}]->groupIndex == {}, expected {group} (positional index must match layout's groupIndex)",
+                layout.groupIndex()
+            ));
+        }
+
+        let layoutEntry: &BindGroupLayoutEntry = match layout.findEntry(binding) {
+            Some(entry) => entry,
+            None => {
+                return fail(format!(
+                    "@group({group}) @binding({binding}): layout has no entry for this binding (shader expects {})",
+                    shaderKindName(shaderEntry.kind)
+                ));
+            }
+        };
+
+        if !kindsMatch(layoutEntry.kind, shaderEntry.kind) {
+            return fail(format!(
+                "@group({group}) @binding({binding}): layout declares {} but shader declares {}",
+                kindName(layoutEntry.kind),
+                shaderKindName(shaderEntry.kind)
+            ));
+        }
+
+        let shaderStageMask: u8 = shaderEntry.stageMask;
+        let layoutVisibility: u8 = layoutEntry.visibility.mask;
+        if (shaderStageMask & !layoutVisibility) != 0 {
+            return fail(format!(
+                "@group({group}) @binding({binding}): layout visibility 0x{:x} missing stages required by shader (stageMask=0x{:x})",
+                layoutVisibility, shaderStageMask
+            ));
+        }
+
+        if matches!(
+            layoutEntry.kind,
+            BindingKind::sampledTexture | BindingKind::storageTexture
+        ) {
+            let dimsMatch = |a: TextureViewDimension, b: TextureViewDim| match a {
+                TextureViewDimension::texture2D => b == TextureViewDim::D2,
+                TextureViewDimension::cube => b == TextureViewDim::Cube,
+                TextureViewDimension::texture3D => b == TextureViewDim::D3,
+                TextureViewDimension::array2D => b == TextureViewDim::D2Array,
+                TextureViewDimension::cubeArray => b == TextureViewDim::CubeArray,
+            };
+            if shaderEntry.textureViewDim != TextureViewDim::Undefined
+                && !dimsMatch(layoutEntry.textureViewDim, shaderEntry.textureViewDim)
+            {
+                return fail(format!(
+                    "@group({group}) @binding({binding}): texture view dimension mismatch"
+                ));
+            }
+        }
+    }
+    true
+}
+
 pub fn validateColorRequiresFragment(
     colorCount: u32,
     hasFragmentModule: bool,

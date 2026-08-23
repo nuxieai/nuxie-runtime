@@ -213,7 +213,7 @@ type BufferUpdateDispatch =
     unsafe fn(NonNull<GPUResource>, &[u8], u32, u32) -> Result<(), BufferUpdateError>;
 type TextureInfoDispatch = unsafe fn(NonNull<GPUResource>) -> TextureInfo;
 type TextureUploadDispatch =
-    for<'a> unsafe fn(NonNull<GPUResource>, &TextureDataDesc<'a>) -> Result<(), TextureUploadError>;
+    for<'a> unsafe fn(&ResourcePointer, &TextureDataDesc<'a>) -> Result<(), TextureUploadError>;
 
 #[derive(Clone, Copy)]
 pub(crate) struct ResourceVTable {
@@ -267,10 +267,14 @@ unsafe fn texture_info<T: GpuResourcePayload + TextureApi>(
 }
 
 unsafe fn dispatch_texture_upload<T: GpuResourcePayload + TextureApi>(
-    base: NonNull<GPUResource>,
+    pointer: &ResourcePointer,
     data: &TextureDataDesc<'_>,
 ) -> Result<(), TextureUploadError> {
-    unsafe { base.cast::<T>().as_ref() }.upload(data)
+    pointer.base().retain();
+    let owner = AnyResourceHandle {
+        pointer: Some(pointer.clone()),
+    };
+    unsafe { pointer.base.cast::<T>().as_ref() }.uploadWithOwner(data, owner)
 }
 
 fn plain_vtable<T: GpuResourcePayload>() -> ResourceVTable {
@@ -558,7 +562,7 @@ impl AnyResourceHandle {
         let Some(dispatch) = pointer.vtable.texture_upload else {
             return Err(TextureUploadError::WrongResourceKind);
         };
-        unsafe { dispatch(pointer.base, data) }
+        unsafe { dispatch(pointer, data) }
     }
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
@@ -856,7 +860,7 @@ impl fmt::Debug for GPUResourceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::panic::{AssertUnwindSafe, catch_unwind};
+    use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::atomic::AtomicUsize;
     use std::sync::{Barrier, Weak};
     use std::thread;

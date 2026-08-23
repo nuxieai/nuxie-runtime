@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:render_target"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/vulkan/render_target_vulkan.hpp"
+source_sha256 = "b9ad83d61ac6c283b24549e6c6f4d8af81fcdb97c0d0dba7e161ddb11c4c871b"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_render_target_vulkan_hpp__decl.rs"
+target_sha256 = "1b2a4a0e1bc2a6c49eed9beb5ea95a2f88fbd95d4da71e70903c382cf0095d39"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_include_rive_renderer_vulkan_render_target_vulkan.hpp"
+source_snapshot_sha256 = "b9ad83d61ac6c283b24549e6c6f4d8af81fcdb97c0d0dba7e161ddb11c4c871b"
+dependency_units = ["vulkan:renderer:render_context_vulkan_impl","vulkan:renderer:vulkan_context"]
+source_lines = 152
+source_bytes = 5221
+configuration_authorities = 2
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-ore-vulkan-experimental,with-rive-tools mechanical_port::vulkan --lib"
+scope_note = "Preserves the complete Vulkan render-target owner: external and texture-backed target polymorphism, image access tracking and barriers, clear/copy operations, lazy offscreen and MSAA resources, dimensions, usage, and reverse destruction."

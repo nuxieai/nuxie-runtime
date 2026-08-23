@@ -106,12 +106,24 @@ use super::renderer_hpp::{
     RenderShader,
 };
 
-/// Typed spelling of the source forward-declared `rive::ore::Context` for the
-/// selected native backend. The unconfigured branch remains an incomplete
-/// typed declaration rather than erasing the pointer to c_void.
-#[cfg(feature = "native-ore-metal-experimental")]
-pub type OreContext = nuxie_ore_metal::metal::context::ContextMetal;
-#[cfg(not(feature = "native-ore-metal-experimental"))]
+/// Owning spelling of the source-polymorphic `rive::ore::Context`. Each
+/// concrete allocation stays boxed at its original address, matching the
+/// source `unique_ptr<ore::Context>` when multiple native backends compile in
+/// the same crate.
+#[cfg(any(
+    feature = "native-ore-metal-experimental",
+    feature = "native-ore-vulkan-experimental"
+))]
+pub enum OreContext {
+    #[cfg(feature = "native-ore-metal-experimental")]
+    Metal(Box<nuxie_ore_metal::metal::context::ContextMetal>),
+    #[cfg(feature = "native-ore-vulkan-experimental")]
+    Vulkan(Box<crate::mechanical_port::vulkan::ore_context_vulkan_decl::ContextVulkan>),
+}
+#[cfg(not(any(
+    feature = "native-ore-metal-experimental",
+    feature = "native-ore-vulkan-experimental"
+)))]
 pub enum OreContext {}
 
 /// Source class identity. Factory has no data members; Rust dispatch lives in

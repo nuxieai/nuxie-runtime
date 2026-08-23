@@ -61,20 +61,42 @@ pub(crate) mod backend_port_wgsl_header_generator;
 
 #[cfg(feature = "native-vulkan-experimental")]
 pub(crate) mod vulkan {
-    #[path = "renderer_include_rive_renderer_vulkan_vulkan_context_hpp__decl.rs"]
-    pub(crate) mod vulkan_context_decl;
-    #[path = "renderer_src_vulkan_vulkan_context_cpp__impl.rs"]
-    pub(crate) mod vulkan_context_impl;
-    #[path = "renderer_include_rive_renderer_vulkan_vkutil_hpp__decl.rs"]
-    pub(crate) mod vkutil_decl;
-    #[path = "renderer_src_vulkan_vkutil_cpp__impl.rs"]
-    pub(crate) mod vkutil_impl;
+    #[path = "renderer_src_vulkan_common_layouts_hpp__decl.rs"]
+    pub(crate) mod common_layouts_decl;
+    #[path = "renderer_src_vulkan_draw_pipeline_layout_vulkan_hpp__decl.rs"]
+    pub(crate) mod draw_pipeline_layout_vulkan_decl;
+    #[path = "renderer_src_vulkan_draw_pipeline_layout_vulkan_cpp__impl.rs"]
+    pub(crate) mod draw_pipeline_layout_vulkan_impl;
+    #[path = "renderer_src_vulkan_draw_pipeline_vulkan_hpp__decl.rs"]
+    pub(crate) mod draw_pipeline_vulkan_decl;
+    #[path = "renderer_src_vulkan_draw_pipeline_vulkan_cpp__impl.rs"]
+    pub(crate) mod draw_pipeline_vulkan_impl;
+    #[path = "renderer_src_vulkan_draw_shader_vulkan_hpp__decl.rs"]
+    pub(crate) mod draw_shader_vulkan_decl;
+    #[path = "renderer_src_vulkan_draw_shader_vulkan_cpp__impl.rs"]
+    pub(crate) mod draw_shader_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_bind_group_layout_vulkan_hpp__decl.rs"]
     pub(crate) mod ore_bind_group_layout_vulkan_decl;
+    #[path = "renderer_src_ore_vulkan_ore_bind_group_vulkan_hpp__decl.rs"]
+    pub(crate) mod ore_bind_group_vulkan_decl;
+    #[path = "renderer_src_ore_vulkan_ore_bind_group_vulkan_cpp__impl.rs"]
+    pub(crate) mod ore_bind_group_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_buffer_vulkan_hpp__decl.rs"]
     pub(crate) mod ore_buffer_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_buffer_vulkan_cpp__impl.rs"]
     pub(crate) mod ore_buffer_vulkan_impl;
+    #[path = "renderer_include_rive_renderer_ore_ore_context_vulkan_hpp__decl.rs"]
+    pub(crate) mod ore_context_vulkan_decl;
+    #[path = "renderer_src_ore_vulkan_ore_context_vulkan_cpp__impl.rs"]
+    pub(crate) mod ore_context_vulkan_impl;
+    #[path = "renderer_src_ore_vulkan_ore_pipeline_vulkan_hpp__decl.rs"]
+    pub(crate) mod ore_pipeline_vulkan_decl;
+    #[path = "renderer_src_ore_vulkan_ore_pipeline_vulkan_cpp__impl.rs"]
+    pub(crate) mod ore_pipeline_vulkan_impl;
+    #[path = "renderer_src_ore_vulkan_ore_render_pass_vulkan_hpp__decl.rs"]
+    pub(crate) mod ore_render_pass_vulkan_decl;
+    #[path = "renderer_src_ore_vulkan_ore_render_pass_vulkan_cpp__impl.rs"]
+    pub(crate) mod ore_render_pass_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs"]
     pub(crate) mod ore_sampler_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs"]
@@ -83,20 +105,42 @@ pub(crate) mod vulkan {
     pub(crate) mod ore_shader_module_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_shader_module_vulkan_cpp__impl.rs"]
     pub(crate) mod ore_shader_module_vulkan_impl;
+    #[path = "renderer_src_ore_vulkan_ore_texture_vulkan_hpp__decl.rs"]
+    pub(crate) mod ore_texture_vulkan_decl;
+    #[path = "renderer_src_ore_vulkan_ore_texture_vulkan_cpp__impl.rs"]
+    pub(crate) mod ore_texture_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs"]
     pub(crate) mod ore_vulkan_dsl;
-    #[path = "renderer_src_vulkan_common_layouts_hpp__decl.rs"]
-    pub(crate) mod common_layouts_decl;
-    #[path = "renderer_src_vulkan_draw_shader_vulkan_hpp__decl.rs"]
-    pub(crate) mod draw_shader_vulkan_decl;
-    #[path = "renderer_src_vulkan_draw_shader_vulkan_cpp__impl.rs"]
-    pub(crate) mod draw_shader_vulkan_impl;
+    #[path = "renderer_src_vulkan_pipeline_manager_vulkan_hpp__decl.rs"]
+    pub(crate) mod pipeline_manager_vulkan_decl;
+    #[path = "renderer_src_vulkan_pipeline_manager_vulkan_cpp__impl.rs"]
+    pub(crate) mod pipeline_manager_vulkan_impl;
+    #[path = "renderer_include_rive_renderer_vulkan_render_context_vulkan_impl_hpp__decl.rs"]
+    pub(crate) mod render_context_vulkan_decl;
+    #[path = "renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs"]
+    pub(crate) mod render_context_vulkan_impl;
+    #[path = "renderer_src_vulkan_render_pass_vulkan_hpp__decl.rs"]
+    pub(crate) mod render_pass_vulkan_decl;
+    #[path = "renderer_src_vulkan_render_pass_vulkan_cpp__impl.rs"]
+    pub(crate) mod render_pass_vulkan_impl;
+    #[path = "renderer_include_rive_renderer_vulkan_render_target_vulkan_hpp__decl.rs"]
+    pub(crate) mod render_target_vulkan_decl;
+    #[path = "renderer_src_vulkan_render_target_vulkan_cpp__impl.rs"]
+    pub(crate) mod render_target_vulkan_impl;
+    #[path = "renderer_include_rive_renderer_vulkan_vkutil_hpp__decl.rs"]
+    pub(crate) mod vkutil_decl;
+    #[path = "renderer_src_vulkan_vkutil_cpp__impl.rs"]
+    pub(crate) mod vkutil_impl;
+    #[path = "renderer_include_rive_renderer_vulkan_vulkan_context_hpp__decl.rs"]
+    pub(crate) mod vulkan_context_decl;
+    #[path = "renderer_src_vulkan_vulkan_context_cpp__impl.rs"]
+    pub(crate) mod vulkan_context_impl;
+    #[path = "renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs"]
+    pub(crate) mod vulkan_memory_allocator_impl;
     #[path = "renderer_src_vulkan_vulkan_shaders_hpp__decl.rs"]
     pub(crate) mod vulkan_shaders_decl;
     #[path = "renderer_src_vulkan_vulkan_shaders_cpp__impl.rs"]
     pub(crate) mod vulkan_shaders_impl;
-    #[path = "renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs"]
-    pub(crate) mod vulkan_memory_allocator_impl;
 }
 
 pub(crate) mod source {

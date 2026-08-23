@@ -4405,7 +4405,7 @@ impl RenderContext {
             members: ManuallyDrop::new(RenderContextMembers {
                 m_impl: owner,
                 m_max_path_id: max_path_id,
-                #[cfg(feature = "native-ore-metal-experimental")]
+                #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
                 m_ore_context: None,
                 m_current_resource_allocations: ResourceAllocationCounts::default(),
                 m_max_recent_resource_requirements: ResourceAllocationCounts::default(),
@@ -4477,7 +4477,7 @@ impl RenderContext {
         unsafe { RiveRenderBufferHandle::from_source(source) }
     }
 
-    #[cfg(feature = "native-ore-metal-experimental")]
+    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     pub fn makeRenderCanvasExecutable(
         &mut self,
         width: u32,
@@ -4486,7 +4486,7 @@ impl RenderContext {
         self.m_impl.contract_mut().makeRenderCanvas(width, height)
     }
 
-    #[cfg(feature = "native-ore-metal-experimental")]
+    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     pub fn oreExecutable(&mut self) -> *mut OreContext {
         if self.m_ore_context.is_none() {
             self.m_ore_context = self.m_impl.contract_mut().makeOreContext();
@@ -5187,7 +5187,7 @@ impl Drop for RenderContext {
             self.m_bitmap_decoder = None;
         }
         self.m_logical_flushes.clear();
-        #[cfg(feature = "native-ore-metal-experimental")]
+        #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
         {
             self.m_ore_context = None;
         }
@@ -5232,9 +5232,9 @@ impl Drop for RenderContext {
             core::ptr::drop_in_place(&mut self.m_intersection_board);
             trace_drop!("indirectDrawList");
             core::ptr::drop_in_place(&mut self.m_indirect_draw_list);
-            #[cfg(feature = "native-ore-metal-experimental")]
+            #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
             trace_drop!("oreContext");
-            #[cfg(feature = "native-ore-metal-experimental")]
+            #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
             core::ptr::drop_in_place(&mut self.m_ore_context);
             trace_drop!("implementation");
             core::ptr::drop_in_place(&mut self.m_impl);
@@ -7489,13 +7489,13 @@ impl FactoryContract for RenderContext {
     }
 
     unsafe fn ore(&mut self) -> *mut OreContext {
-        #[cfg(feature = "native-ore-metal-experimental")]
+        #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
         {
             // SAFETY: the concrete RenderContext owns the configured ORE
             // context for the duration of this source virtual call.
             return self.oreExecutable();
         }
-        #[cfg(not(feature = "native-ore-metal-experimental"))]
+        #[cfg(not(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental")))]
         {
             core::ptr::null_mut()
         }
@@ -7574,11 +7574,11 @@ impl RenderContextContract for RenderContext {
     fn parametricSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16> {
         RenderContext::parametricSegmentCountsAllocator(self)
     }
-    #[cfg(feature = "native-ore-metal-experimental")]
+    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     fn makeRenderCanvas(&mut self,width:u32,height:u32)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>{
         self.makeRenderCanvasExecutable(width, height)
     }
-    #[cfg(feature = "native-ore-metal-experimental")]
+    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     fn getOreContext(&mut self) -> *mut OreContext {
         self.oreExecutable()
     }

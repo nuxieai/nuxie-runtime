@@ -37,6 +37,18 @@ pub trait TextureApi {
     fn sampleCount(&self) -> u32;
     fn isRenderTarget(&self) -> bool;
     fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError>;
+
+    /// Concrete-backend ownership adaptation for source implementations that
+    /// call `ref_rcp(this)` during upload. The type-erased call site supplies
+    /// exactly one retained handle; backends that do not queue the texture use
+    /// the source-default upload path and release it on return.
+    fn uploadWithOwner(
+        &self,
+        data: &TextureDataDesc<'_>,
+        _owner: AnyResourceHandle,
+    ) -> Result<(), TextureUploadError> {
+        self.upload(data)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

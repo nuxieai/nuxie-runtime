@@ -44,6 +44,8 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 #[cfg(feature = "native-ore-metal-experimental")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::OreContext;
+#[cfg(feature = "native-ore-metal-experimental")]
+use nuxie_ore_metal::metal::context::ContextMetal as OreContextMetal;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::{RenderResourceDomain, RiveRenderBufferHandle};
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
@@ -431,7 +433,8 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
         // callback or construct ORE without its required queue.
         let handle = self.metal.make_ore_context(&mut self.execution)?;
         let owner = self.execution.take_ore_context_owner(handle)?;
-        owner.downcast::<OreContext>().ok()
+        let context = owner.downcast::<OreContextMetal>().ok()?;
+        Some(Box::new(OreContext::Metal(context)))
     }
 
     fn resizeFlushUniformBuffer(&mut self, sizeInBytes: usize) {
@@ -1207,7 +1210,7 @@ impl MechanicalRenderContext {
     #[cfg(feature = "native-ore-metal-experimental")]
     pub(super) fn with_ore_context<R>(
         &mut self,
-        callback: impl FnOnce(&mut OreContext) -> R,
+        callback: impl FnOnce(&mut OreContextMetal) -> R,
     ) -> Option<R> {
         if self.active_frame {
             return None;
@@ -1218,7 +1221,14 @@ impl MechanicalRenderContext {
             return None;
         }
         let ore = context.oreExecutable();
-        (!ore.is_null()).then(|| callback(unsafe { &mut *ore }))
+        if ore.is_null() {
+            return None;
+        }
+        match unsafe { &mut *ore } {
+            OreContext::Metal(context) => Some(callback(context)),
+            #[cfg(feature = "native-ore-vulkan-experimental")]
+            OreContext::Vulkan(_) => None,
+        }
     }
 
     pub(super) fn execution_inventory(&self) -> ActualMetalExecutionInventory {

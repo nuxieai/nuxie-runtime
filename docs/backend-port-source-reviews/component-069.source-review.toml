@@ -1,0 +1,39 @@
+schema_version = 1
+component_id = "component-069"
+units = ["shader:spirv_header_generator"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-069-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 1
+
+[[findings]]
+id = "SR-C069-01"
+severity = "P3"
+summary = "The target declares a 28-line pinned source, but the complete source contains 29 logical lines; line 29 is executable and emits the generated header's closing text."
+citations = [
+  "source:renderer/src/shaders/spirv_binary_to_header.py:29-29",
+  "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_binary_to_header_py__generator.rs:9-9",
+]
+
+[[sources]]
+path = "renderer/src/shaders/spirv_binary_to_header.py"
+sha256 = "07f4b6f91bade4af1dcc62024447982e08ce9af671155e047ac1185460dc79d0"
+citation = "source:renderer/src/shaders/spirv_binary_to_header.py:1-29"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_binary_to_header_py__generator.rs"
+sha256 = "95af3822056aacf2178cefa5d024211e2a4dc5c9e3a98de1bc1f9afa9b261cbe"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_binary_to_header_py__generator.rs:1-19"

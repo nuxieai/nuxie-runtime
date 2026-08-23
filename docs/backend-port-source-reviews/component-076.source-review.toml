@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-076"
+units = ["vulkan:ore:sampler"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-076-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_sampler_vulkan.cpp"
+sha256 = "28ab55810848a33d95789ff1f09f73c808ab57d5f3757213fa3c0b0b11e29272"
+citation = "source:renderer/src/ore/vulkan/ore_sampler_vulkan.cpp:1-16"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_sampler_vulkan.hpp"
+sha256 = "9569178cb8c22807af058d0b4449198051da285d36fe54e66a717a66af3bc90e"
+citation = "source:renderer/src/ore/vulkan/ore_sampler_vulkan.hpp:1-24"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs"
+sha256 = "ea5ced40a6fec496b0b03995f9a0af46f0b3c3f34ddea22966d24b80ffbef2c2"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs:1-57"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs"
+sha256 = "b79ce7ebfada2e2f102d5e21ad10a1cab52cd198d2cc46e707aa618bbbdfdd94"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs:1-69"

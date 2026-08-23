@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-075"
+units = ["vulkan:ore:vulkan_dsl"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-075-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_vulkan_dsl.hpp"
+sha256 = "5f75e1cce3b43bbd34dc99af668be50848ff7c07288ad556f7856cbac25ade54"
+citation = "source:renderer/src/ore/vulkan/ore_vulkan_dsl.hpp:1-112"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs"
+sha256 = "7283256474428fc092acd811f5d129fe6ee728c42a1859423b3cb5af64b903cc"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs:1-113"

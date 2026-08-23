@@ -1,0 +1,48 @@
+schema_version = 1
+component_id = "component-083"
+units = ["webgl2:renderer:gles3"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-083-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 2
+
+[[findings]]
+id = "SR-C083-01"
+severity = "P2"
+summary = "The RIVE_DESKTOP_GL branch is absent from the translated constant/call surface, dropping two extension constants and the three source-mandated unreachable extension-call substitutions."
+citations = [
+  "source:renderer/include/rive/renderer/gl/gles3.hpp:10-18",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_gles3_hpp__decl.rs:1497-1554",
+]
+
+[[findings]]
+id = "SR-C083-02"
+severity = "P2"
+summary = "The RIVE_ANDROID extension surface is omitted. The target lacks the Android extension declarations and LoadAndValidateGLESExtensions, whose source contract clears capability flags when extension loading fails."
+citations = [
+  "source:renderer/include/rive/renderer/gl/gles3.hpp:243-277",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_gles3_hpp__decl.rs:1634-1654",
+]
+
+[[sources]]
+path = "renderer/include/rive/renderer/gl/gles3.hpp"
+sha256 = "1a70f796ef53540d2778c0ac5335933c46ddeb9bd6f547bd8802365879d5e27b"
+citation = "source:renderer/include/rive/renderer/gl/gles3.hpp:1-277"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_gles3_hpp__decl.rs"
+sha256 = "99ff1d86a8053e84ce0e6312e46e9e3f49758e1d70aa19ed37e507babe01055b"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_gles3_hpp__decl.rs:1-2452"

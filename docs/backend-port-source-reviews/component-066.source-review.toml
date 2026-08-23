@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-066"
+units = ["shader:source:resolve_atlas"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-066-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/resolve_atlas.glsl"
+sha256 = "a31d945c9b29dd4ba74cff3c9c9010e108f5cd82bb0b82474b199725e59aa04f"
+citation = "source:renderer/src/shaders/resolve_atlas.glsl:1-93"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_resolve_atlas_glsl__generated_input.rs"
+sha256 = "0955fd3142e31584b3fbc4425507e385674f522d35fea5197a6832e0034852ba"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_resolve_atlas_glsl__generated_input.rs:1-17"

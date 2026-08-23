@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-108"
+units = ["webgpu:renderer:webgpu_compat"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-108-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/webgpu/webgpu_compat.h"
+sha256 = "c5ef834542179044710337aae028b35e393b36d5337504843cf3bd8adf75fbbe"
+citation = "source:renderer/src/webgpu/webgpu_compat.h:1-640"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_webgpu_compat_h__decl.rs"
+sha256 = "dbea60a402bb003c8ac943d0537fdc6f3dbc6bed6c8990725876358a170bddcc"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_webgpu_compat_h__decl.rs:1-364"

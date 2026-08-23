@@ -1,0 +1,40 @@
+schema_version = 1
+component_id = "component-100"
+units = ["webgpu:wagyu:webgpu_enum_class_bitmasks"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-100-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 1
+
+[[findings]]
+id = "SR-C100-01"
+severity = "P3"
+summary = "The source binary operators independently enable both operand types and convert the right operand to the left enum's integral type, permitting distinct enabled bitmask enums. The target supplies only same-T lowering and shared-T operators, rejecting those source-valid mixed-type expressions."
+citations = [
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h:83-114",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs:29-37",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs:77-108",
+]
+
+[[sources]]
+path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h"
+sha256 = "cae961820e1d3b4dde5b2b4938d549f587bd0e513857bb018850036b646fe821"
+citation = "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h:1-161"
+disposition = "dependency-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs"
+sha256 = "9bf176b80ae59a38282c6a8a18331927e6d493b7d29bc218d30bd4209200bda8"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs:1-366"

@@ -1,0 +1,64 @@
+schema_version = 1
+component_id = "component-071"
+units = ["vulkan:renderer:vkutil", "vulkan:renderer:vulkan_context"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-071-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/include/rive/renderer/vulkan/vkutil.hpp"
+sha256 = "a953efddf15863a2bd98e4e747581785bd1e852ae1f6491693ee2e30a568115c"
+citation = "source:renderer/include/rive/renderer/vulkan/vkutil.hpp:1-530"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/include/rive/renderer/vulkan/vulkan_context.hpp"
+sha256 = "d1491ee3c8c551e628c1189d8461aa72618e74248380f6b582ac9a9fa7729777"
+citation = "source:renderer/include/rive/renderer/vulkan/vulkan_context.hpp:1-245"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/vkutil.cpp"
+sha256 = "a6f5db5e1190c435a2475cf30fb765219cc114c15adbd7f28f5bf1eddb3d2fd7"
+citation = "source:renderer/src/vulkan/vkutil.cpp:1-593"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/vulkan_context.cpp"
+sha256 = "a2dc876075fadf7a2f04492d8f2cf844bfe4fdf23b4973849c051005966d8bb5"
+citation = "source:renderer/src/vulkan/vulkan_context.cpp:1-418"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_vkutil_hpp__decl.rs"
+sha256 = "87f74e6df20b7c2bce3883f5e5420725b39e947a56117d8a7c6e61a052ecf9fc"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_vkutil_hpp__decl.rs:1-319"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_vulkan_context_hpp__decl.rs"
+sha256 = "f44827a1a4a76da14fdff76741690a387441398068b30453d26624eb2b63bd22"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_vulkan_context_hpp__decl.rs:1-135"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vkutil_cpp__impl.rs"
+sha256 = "fd913adb90d47dbf2a106190b2b4a48a3fbe4d04d8191b47e7374b569dc7f150"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vkutil_cpp__impl.rs:1-479"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_context_cpp__impl.rs"
+sha256 = "f191f7a15e37dab4b7f6829540a04e6dc5d9261c2a42c36b2796f14379bede8f"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_context_cpp__impl.rs:1-312"

@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-025"
+units = ["shader:source:blit_texture_as_draw"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-025-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/blit_texture_as_draw.glsl"
+sha256 = "c9d6ab3c8911900a246d22484ad4dbda0a050ba76d74353c9a514d3ca7da3515"
+citation = "source:renderer/src/shaders/blit_texture_as_draw.glsl:1-72"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_blit_texture_as_draw_glsl__generated_input.rs"
+sha256 = "c32519bbf1c0d032395199e746184c7493d25a5cd13fa26ca31e994e058b4d5d"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_blit_texture_as_draw_glsl__generated_input.rs:1-17"

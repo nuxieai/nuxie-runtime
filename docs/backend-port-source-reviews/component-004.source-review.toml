@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-004"
+units = ["dependency:swiftshader"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-004-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/make_swiftshader.sh"
+sha256 = "c046e447bd6d0753829b69e0824679b07ed4f0329bad7c651b2b917edf1aabe2"
+citation = "source:renderer/make_swiftshader.sh:1-19"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_swiftshader_sh__build_input.rs"
+sha256 = "7624a9d914bb9bbcbda7e28e8b9ca937d64cfad8b2241efc80f13354f39ccdcb"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_swiftshader_sh__build_input.rs:1-32"

@@ -1,0 +1,40 @@
+schema_version = 1
+component_id = "component-000"
+units = ["build:pls_renderer"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-000-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 1
+
+[[findings]]
+id = "SR-C000-01"
+severity = "P2"
+summary = "exact_port_selection(PortBuild::Vulkan) collapses the authored platform/no_gl matrix into a fixed configuration that does not represent the source branches. It always reports RIVE_ORE and only Vulkan ORE sources, while Android native Vulkan obtains RIVE_ORE only through the separately gated GL branch, and Linux Vulkan explicitly selects both Vulkan and GL ORE sources."
+citations = [
+  "source:renderer/premake5_pls_renderer.lua:94-120",
+  "source:renderer/premake5_pls_renderer.lua:488-535",
+  "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_pls_renderer_lua__build_input.rs:113-121",
+]
+
+[[sources]]
+path = "renderer/premake5_pls_renderer.lua"
+sha256 = "e00b0483a6c09608ef3ad8c61f1b30b3ef00e78722bc3e1228db7ee741d22c84"
+citation = "source:renderer/premake5_pls_renderer.lua:1-638"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_pls_renderer_lua__build_input.rs"
+sha256 = "516eba61fa190773a7bc5be5757273bf16a9ff0515ef12b3714688d5f15d88e7"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_pls_renderer_lua__build_input.rs:1-148"

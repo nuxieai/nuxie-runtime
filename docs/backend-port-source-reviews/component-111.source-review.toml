@@ -1,0 +1,27 @@
+schema_version = 1
+component_id = "component-111"
+units = ["webgpu:wagyu:README"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-111-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+targets = []
+
+[[sources]]
+path = "renderer/src/webgpu/wagyu-port/README.md"
+sha256 = "65c7925afd081d69af89b48948a7a6de74d6b90a79da22d5be0bfedbca15f6a0"
+citation = "source:renderer/src/webgpu/wagyu-port/README.md:1-48"
+disposition = "evidence-only"

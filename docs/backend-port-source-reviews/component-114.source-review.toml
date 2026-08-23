@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-114"
+units = ["webgpu:wagyu:webgpu_port"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-114-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/webgpu/wagyu-port/webgpu-port.py"
+sha256 = "5640d11cc4cc069695247c928a7f354dee38328553c2ed56afaeb52bc92f5590"
+citation = "source:renderer/src/webgpu/wagyu-port/webgpu-port.py:1-123"
+disposition = "dependency-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs"
+sha256 = "83f2c686864f7426172d31a7812f2877f16e1664a8d8867895b50d721d6ebebe"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs:1-283"

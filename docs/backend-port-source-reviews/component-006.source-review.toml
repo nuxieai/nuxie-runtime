@@ -1,0 +1,50 @@
+schema_version = 1
+component_id = "component-006"
+units = ["shader:minifier"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-006-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 2
+
+[[findings]]
+id = "SR-C006-01"
+severity = "P2"
+summary = "The target's declared output-stage authority lists only the export and embedded-header stages, while the source defines three outputs and unconditionally writes the offline <root>.minified<ext> artifact after the other two."
+citations = [
+  "source:renderer/src/shaders/minify.py:24-32",
+  "source:renderer/src/shaders/minify.py:621-642",
+  "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs:15-16",
+]
+
+[[findings]]
+id = "SR-C006-02"
+severity = "P2"
+summary = "The delegated executable translation's HLSL-register recognition consumes the first character after t, s, u, or b without verifying that it is numeric. Ordinary identifiers such as uv are consequently treated as reserved and left unrenamed, whereas the source requires every suffix character to be a digit."
+citations = [
+  "source:renderer/src/shaders/minify.py:335-348",
+  "source:renderer/src/shaders/minify.py:399-408",
+  "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs:5-6",
+]
+
+[[sources]]
+path = "renderer/src/shaders/minify.py"
+sha256 = "bf4b9f529a19765c5e6f28b68ef8a73f5bd65433cd87ce723df5df923e6bc22b"
+citation = "source:renderer/src/shaders/minify.py:1-642"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs"
+sha256 = "3fe38bd987afd7d55bafab15da844679fbd2dfef842914537641cf03e707f401"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs:1-18"

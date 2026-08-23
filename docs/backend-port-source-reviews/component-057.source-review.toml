@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-057"
+units = ["shader:source:stencil_draw"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-057-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/stencil_draw.glsl"
+sha256 = "9df944e40e0f66f0a7f4e2114fe2644d426a44bc236eab969e3bdf75bb70c0bd"
+citation = "source:renderer/src/shaders/stencil_draw.glsl:1-31"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_stencil_draw_glsl__generated_input.rs"
+sha256 = "4919a3eef7cc7f54d5a4d42640ed0e4428db35241ad25aaf44b20ae7cee9c938"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_stencil_draw_glsl__generated_input.rs:1-17"

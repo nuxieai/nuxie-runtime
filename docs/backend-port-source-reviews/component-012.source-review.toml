@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-012"
+units = ["shader:source:flush_uniforms"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-012-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/flush_uniforms.glsl"
+sha256 = "1c22659c0e40233b0b06515287e122e06b73a4428d8e78721ca71e3419db961e"
+citation = "source:renderer/src/shaders/flush_uniforms.glsl:1-58"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_flush_uniforms_glsl__generated_input.rs"
+sha256 = "2710c3704f6663c6e6f64d839aef31d4d2abfcb9e8a132529edc905d7b082c09"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_flush_uniforms_glsl__generated_input.rs:1-17"

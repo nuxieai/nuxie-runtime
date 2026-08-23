@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-081"
+units = ["vulkan:renderer:vulkan_memory_allocator"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-081-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/vulkan/vulkan_memory_allocator.cpp"
+sha256 = "56d006a5e6364a6d1bc4c8e1a6b0010c236bf935fd2613b08f07c7336d9a4bc7"
+citation = "source:renderer/src/vulkan/vulkan_memory_allocator.cpp:1-2"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs"
+sha256 = "15adee3fd7453c413e6960639b892e069841adc9cbdec185ef531608a33d0746"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs:1-20"

@@ -1,0 +1,74 @@
+schema_version = 1
+component_id = "component-098"
+units = ["webgpu:wagyu:webgpu", "webgpu:wagyu:webgpu_wagyu"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-098-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 2
+
+[[findings]]
+id = "SR-C098-01"
+severity = "P1"
+summary = "The default !WGPU_SKIP_PROCS source API exports emscripten_webgpu_get_device, but the translated extern surface omits that accessor while retaining only the wgpu declarations."
+citations = [
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu.h:2305-2310",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs:1814-2014",
+]
+
+[[findings]]
+id = "SR-C098-02"
+severity = "P2"
+summary = "Core and Wagyu initializer macros are retained only as source-span metadata, without typed or executable initializers carrying their source defaults. This loses behavior such as WGPU_EXTENT_3D_INIT setting height/depth to 1 and WGPU_WAGYU_TEXTURE_DESCRIPTOR_INIT setting the chained sType and useSurfaceCache = true."
+citations = [
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu.h:1265-1275",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs:69-74",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs:1247-1252",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_wagyu.h:608-615",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs:275-278",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs:782-786",
+]
+
+[[sources]]
+path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu.h"
+sha256 = "026f05a7fc6db460d3fe048c07067b1596c53527c31334ec5386353520b9044b"
+citation = "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu.h:1-2828"
+disposition = "dependency-authority"
+
+[[sources]]
+path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_wagyu.h"
+sha256 = "8828c4bc56f7b616e6ffb2ca8517cf67db203e3eb4e5802b3853e90e8b9faf5c"
+citation = "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_wagyu.h:1-722"
+disposition = "dependency-authority"
+
+[[sources]]
+path = "renderer/src/webgpu/wagyu-port/src/webgpu.c"
+sha256 = "f5a1cef8e2e7661d23e9ba6144426eb0bbbd6c2422ffd3dfce969aa878131937"
+citation = "source:renderer/src/webgpu/wagyu-port/src/webgpu.c:1-22"
+disposition = "dependency-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs"
+sha256 = "a4302afb9975350fa64db22c79e9bb471300c6514d27abc200b7eedf2d26b6e1"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs:1-2051"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs"
+sha256 = "6cd00658959f673268d9d956c3f7042db308b703e05ddd280465fe1966d40fa7"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs:1-1090"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_src_webgpu_c__impl.rs"
+sha256 = "ffe764b09e796067fb9428b1c7eb8a9fbe65e54108bfa2f1b4d7ea47adfcb737"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_src_webgpu_c__impl.rs:1-61"

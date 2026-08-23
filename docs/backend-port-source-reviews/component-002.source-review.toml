@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-002"
+units = ["dependency:dawn"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-002-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/make_dawn.sh"
+sha256 = "d858f043c468c9c256e985b3a8a81f62dbd884d79c9ef7000cbcd7c884da7aa0"
+citation = "source:renderer/make_dawn.sh:1-51"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_dawn_sh__build_input.rs"
+sha256 = "684c911404cefc09eb4eba5eabc4e9ed852dff564ae6cf343626b0d72648fc99"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_dawn_sh__build_input.rs:1-37"

@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-070"
+units = ["shader:wgsl_header_generator"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-070-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/wgsl_to_header.py"
+sha256 = "74d8f360cda602df5dac16664a5175d6ddae35d360728e22905373175857e7e7"
+citation = "source:renderer/src/shaders/wgsl_to_header.py:1-188"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_wgsl_to_header_py__generator.rs"
+sha256 = "46bdc429220ea002552873941fd09f268fbefd84598184a0fc95b46750379698"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_wgsl_to_header_py__generator.rs:1-35"

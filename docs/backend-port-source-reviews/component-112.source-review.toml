@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-112"
+units = ["webgpu:wagyu:library_webgpu_stubs"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-112-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/webgpu/wagyu-port/src/library_webgpu_stubs.js"
+sha256 = "152ce80cf64768e624bb79172469166a6f41dc982f556ac9ef7cadb519755d74"
+citation = "source:renderer/src/webgpu/wagyu-port/src/library_webgpu_stubs.js:1-207"
+disposition = "dependency-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_src_library_webgpu_stubs_js__compat_build_input.rs"
+sha256 = "abdcd950b24dec765d79dd18f7f6b838aaa658e0e8b28686358fd808223d3b28"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_src_library_webgpu_stubs_js__compat_build_input.rs:1-255"

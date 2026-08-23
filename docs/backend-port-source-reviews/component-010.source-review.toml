@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-010"
+units = ["shader:source:constants"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-010-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/constants.glsl"
+sha256 = "eefc0b9115beb4fe87b85431b0c683fdec73244c044278e97fdba0c96014bb56"
+citation = "source:renderer/src/shaders/constants.glsl:1-322"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_constants_glsl__generated_input.rs"
+sha256 = "d39212055c17579a4e22c90fa8b5fd7d4e1efd179ec9c2049743b1f37af3fe86"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_constants_glsl__generated_input.rs:1-17"

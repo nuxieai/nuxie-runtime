@@ -1,0 +1,49 @@
+schema_version = 1
+component_id = "component-001"
+units = ["build:renderer"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-001-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 2
+
+[[findings]]
+id = "SR-C001-01"
+severity = "P1"
+summary = "WebGpuWagyuV2Player returns only the Wagyu port option, dropping the base Emscripten link options applied before RIVE_WAGYU_PORT. The selection loses exported functions, exported runtime methods, and the web,shell environment restriction."
+citations = [
+  "source:renderer/premake5.lua:278-285",
+  "source:renderer/premake5.lua:328-333",
+  "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs:222-226",
+]
+
+[[findings]]
+id = "SR-C001-02"
+severity = "P2"
+summary = "The target's path_fiddle rule claims source lines 13-67 but omits the with_microprofile branch, including its link and include-directory effects."
+citations = [
+  "source:renderer/premake5.lua:27-30",
+  "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs:67-78",
+]
+
+[[sources]]
+path = "renderer/premake5.lua"
+sha256 = "8ae326a887fd81dd76cdc56382497a3a3905e5c92bfe3976aed7e333eb1878a1"
+citation = "source:renderer/premake5.lua:1-335"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs"
+sha256 = "e50ebe6a16da90910d50a10740b21aed4288184b066a9505e7bb3c2d98ba6cb4"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs:1-232"

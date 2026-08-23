@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-074"
+units = ["vulkan:ore:shader_module"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-074-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp"
+sha256 = "787ed42b6ba9108e4ccc09fbca255c7454e2a8702b3938a1745fbd4ba4951bb2"
+citation = "source:renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp:1-19"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp"
+sha256 = "b421cebd8e3c08be85155921f3016403e9dd30f73e9d16005f8764bf667e8435"
+citation = "source:renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp:1-25"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_cpp__impl.rs"
+sha256 = "d1bcbd6c4f46e18e5d37439b1b9c196cd70b93b46e16483cefd17ace8a63bdb7"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_cpp__impl.rs:1-57"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_hpp__decl.rs"
+sha256 = "5db59fad7e8e6866e2bde4e83b6617e5b56a61e57f67a9e1ceb1bcb7ed244358"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_hpp__decl.rs:1-69"

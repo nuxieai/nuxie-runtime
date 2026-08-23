@@ -1,0 +1,27 @@
+schema_version = 1
+component_id = "component-110"
+units = ["webgpu:wagyu:.clang_format"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g0-component-110-20260823"
+review_wave = "g0"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+targets = []
+
+[[sources]]
+path = "renderer/src/webgpu/wagyu-port/.clang-format"
+sha256 = "f8405bf75d1ab2ed2e69b525a538b409b801812a7c71225da7bb46434f7dcc18"
+citation = "source:renderer/src/webgpu/wagyu-port/.clang-format:1-2"
+disposition = "evidence-only"

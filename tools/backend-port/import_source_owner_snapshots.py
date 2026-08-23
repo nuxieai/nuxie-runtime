@@ -29,10 +29,9 @@ def main() -> None:
             row
             for row in csv.DictReader(ledger_file, delimiter="\t")
             if row["ownership_unit"] == args.ownership_unit
-            and row["port_disposition"] == "translate"
         ]
     if not owners:
-        raise SystemExit(f"no translated sources for {args.ownership_unit}")
+        raise SystemExit(f"no frozen sources for {args.ownership_unit}")
 
     outputs: list[str] = []
     for owner in owners:

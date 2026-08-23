@@ -1,0 +1,59 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-114"
+units = ["webgpu:wagyu:webgpu_port"]
+owner_families = ["webgpu-wagyu-dependency-authority"]
+field_profiles = ["webgpu-wagyu-v1", "webgpu-dawn-v2"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-114-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "webgpu-wagyu-dependency-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "webgpu-wagyu-v1", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }, { id = "webgpu-dawn-v2", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 3
+dependency_authority.sha256 = "642d10cd6d70d68edde6aa98f2ed94d1b68c98c0f00c6689b39cf924e87decda"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=python-import\u001fdependency_token=os\u001fdependency_unit=-\u001fline=4\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/webgpu-port.py\u001fsource_unit=webgpu:wagyu:webgpu_port",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=python-import\u001fdependency_token=typing\u001fdependency_unit=-\u001fline=6\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/webgpu-port.py\u001fsource_unit=webgpu:wagyu:webgpu_port",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=python-import\u001fdependency_token=zlib\u001fdependency_unit=-\u001fline=5\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/webgpu-port.py\u001fsource_unit=webgpu:wagyu:webgpu_port",
+]
+authority_record_count = 10
+authority_sha256 = "f1406a30732a4a7989954622725dd99b997032b22edf81df417b737b5286885a"
+authority_keys = [
+  "component:component-114",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=python-import\u001fdependency_token=os\u001fdependency_unit=-\u001fline=4\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/webgpu-port.py\u001fsource_unit=webgpu:wagyu:webgpu_port",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=python-import\u001fdependency_token=typing\u001fdependency_unit=-\u001fline=6\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/webgpu-port.py\u001fsource_unit=webgpu:wagyu:webgpu_port",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=python-import\u001fdependency_token=zlib\u001fdependency_unit=-\u001fline=5\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/webgpu-port.py\u001fsource_unit=webgpu:wagyu:webgpu_port",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-114\u001fprofile_id=webgpu-dawn-v2",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-114\u001fprofile_id=webgpu-wagyu-v1",
+  "owner-family:campaign=webgpu\u001fcomponent_id=component-114\u001ffamily_id=webgpu-wagyu-dependency-authority\u001fownership_unit=webgpu:wagyu:webgpu_port",
+  "source-binding:byte_count=2918\u001fcitation=source:renderer/src/webgpu/wagyu-port/webgpu-port.py:1-123\u001fdisposition=dependency-authority\u001flogical_lines=123\u001fpath=renderer/src/webgpu/wagyu-port/webgpu-port.py\u001fsha256=5640d11cc4cc069695247c928a7f354dee38328553c2ed56afaeb52bc92f5590",
+  "source-review-receipt-binding:byte_count=1147\u001fid=component-114\u001fpath=docs/backend-port-source-reviews/component-114.source-review.toml\u001fsha256=f5756498b6d193c32cee102003a4cbaf195eb128775c6e3f6de9e129c8984a04",
+  "target-binding:byte_count=8962\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs:1-283\u001flogical_lines=283\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs\u001fsha256=83f2c686864f7426172d31a7812f2877f16e1664a8d8867895b50d721d6ebebe",
+]
+source_review_receipts = [{ id = "component-114", path = "docs/backend-port-source-reviews/component-114.source-review.toml", sha256 = "f5756498b6d193c32cee102003a4cbaf195eb128775c6e3f6de9e129c8984a04", byte_count = 1147 }]
+sources = [{ path = "renderer/src/webgpu/wagyu-port/webgpu-port.py", sha256 = "5640d11cc4cc069695247c928a7f354dee38328553c2ed56afaeb52bc92f5590", logical_lines = 123, byte_count = 2918, citation = "source:renderer/src/webgpu/wagyu-port/webgpu-port.py:1-123", disposition = "dependency-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs", sha256 = "83f2c686864f7426172d31a7812f2877f16e1664a8d8867895b50d721d6ebebe", logical_lines = 283, byte_count = 8962, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs:1-283" }]
+findings = [{ id = "OR-C114-01", severity = "P2", summary = "The source delegates get and clear to shared.cache.get_lib and shared.cache.erase_lib, so the shared cache owns build-on-miss, reuse, and eviction of the archive; the target removes that owner and returns only a detached CachedPortRequest or library-name string, leaving no translated operation that acquires or evicts the cached library.", review_domains = ["ownership-transfers", "teardown-and-destruction-order", "configuration-owner-graphs"], citations = ["source:renderer/src/webgpu/wagyu-port/webgpu-port.py:93-108", "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs:149-177"], authority_keys = ["owner-family:campaign=webgpu\u001fcomponent_id=component-114\u001ffamily_id=webgpu-wagyu-dependency-authority\u001fownership_unit=webgpu:wagyu:webgpu_port"] }]
+open_findings = 1
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

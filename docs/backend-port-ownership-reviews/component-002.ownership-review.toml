@@ -1,0 +1,51 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-002"
+units = ["dependency:dawn"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-002-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 5
+authority_sha256 = "262745f33428b4e68b60ddf9da947c2262d67fd5cd96cdbf11653377998b8122"
+authority_keys = [
+  "component:component-002",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-002\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=dependency:dawn",
+  "source-binding:byte_count=1340\u001fcitation=source:renderer/make_dawn.sh:1-51\u001fdisposition=shared-authority\u001flogical_lines=51\u001fpath=renderer/make_dawn.sh\u001fsha256=d858f043c468c9c256e985b3a8a81f62dbd884d79c9ef7000cbcd7c884da7aa0",
+  "source-review-receipt-binding:byte_count=1072\u001fid=component-002\u001fpath=docs/backend-port-source-reviews/component-002.source-review.toml\u001fsha256=349b5fba5130768c71b06be39abc55bbcecb185c53d1bc3cfff926dccecc66df",
+  "target-binding:byte_count=2214\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_dawn_sh__build_input.rs:1-37\u001flogical_lines=37\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_dawn_sh__build_input.rs\u001fsha256=684c911404cefc09eb4eba5eabc4e9ed852dff564ae6cf343626b0d72648fc99",
+]
+source_review_receipts = [{ id = "component-002", path = "docs/backend-port-source-reviews/component-002.source-review.toml", sha256 = "349b5fba5130768c71b06be39abc55bbcecb185c53d1bc3cfff926dccecc66df", byte_count = 1072 }]
+sources = [{ path = "renderer/make_dawn.sh", sha256 = "d858f043c468c9c256e985b3a8a81f62dbd884d79c9ef7000cbcd7c884da7aa0", logical_lines = 51, byte_count = 1340, citation = "source:renderer/make_dawn.sh:1-51", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_dawn_sh__build_input.rs", sha256 = "684c911404cefc09eb4eba5eabc4e9ed852dff564ae6cf343626b0d72648fc99", logical_lines = 37, byte_count = 2214, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_dawn_sh__build_input.rs:1-37" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

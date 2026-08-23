@@ -1,0 +1,63 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-100"
+units = ["webgpu:wagyu:webgpu_enum_class_bitmasks"]
+owner_families = ["webgpu-wagyu-dependency-authority"]
+field_profiles = ["webgpu-wagyu-v1", "webgpu-dawn-v2"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-100-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "webgpu-wagyu-dependency-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "webgpu-wagyu-v1", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }, { id = "webgpu-dawn-v2", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 1
+field_authority.sha256 = "56e68ff2e00409c706e7c78f3af8327149d61805ad283026f7c0f5bd8d02037b"
+field_authority.authority_keys = [
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=73\u001fdeclared_type=Integral\u001ffield_name=value\u001ffield_order=1\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_enum_class_bitmasks\u001fqualified_type=wgpu::BoolConvertible::BoolConvertible\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h",
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 3
+configuration_authority.sha256 = "0fba23140eeecdf0c4130d09be1ff57ef2d05ea6474f7416f30218d76d5c16c7"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=webgpu\u001fenclosing_condition=ifndef WEBGPU_ENUM_CLASS_BITMASKS_H_\u001fline=35\u001foccurrence_count=1\u001foccurrence_lines=35\u001fownership_unit=webgpu:wagyu:webgpu_enum_class_bitmasks\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h\u001ftoken=WGPU_IMPORT_BITMASK_OPERATORS",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=webgpu\u001fenclosing_condition=ifndef WEBGPU_ENUM_CLASS_BITMASKS_H_\u001fline=161\u001foccurrence_count=1\u001foccurrence_lines=161\u001fownership_unit=webgpu:wagyu:webgpu_enum_class_bitmasks\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h\u001ftoken=// WEBGPU_ENUM_CLASS_BITMASKS_H_",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=webgpu\u001fenclosing_condition=all\u001fline=28\u001foccurrence_count=1\u001foccurrence_lines=28\u001fownership_unit=webgpu:wagyu:webgpu_enum_class_bitmasks\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h\u001ftoken=WEBGPU_ENUM_CLASS_BITMASKS_H_",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 1
+dependency_authority.sha256 = "e146753e69c8adeef5129c41ee202cf44238473021c4d46fe382e3f36b3d98a5"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=type_traits\u001fdependency_unit=-\u001fline=31\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h\u001fsource_unit=webgpu:wagyu:webgpu_enum_class_bitmasks",
+]
+authority_record_count = 12
+authority_sha256 = "e24efd677d144b6f8dd2eb676079ad3b66799f61f78edea69184f8d4a401c0c7"
+authority_keys = [
+  "component:component-100",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=webgpu\u001fenclosing_condition=ifndef WEBGPU_ENUM_CLASS_BITMASKS_H_\u001fline=35\u001foccurrence_count=1\u001foccurrence_lines=35\u001fownership_unit=webgpu:wagyu:webgpu_enum_class_bitmasks\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h\u001ftoken=WGPU_IMPORT_BITMASK_OPERATORS",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=webgpu\u001fenclosing_condition=ifndef WEBGPU_ENUM_CLASS_BITMASKS_H_\u001fline=161\u001foccurrence_count=1\u001foccurrence_lines=161\u001fownership_unit=webgpu:wagyu:webgpu_enum_class_bitmasks\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h\u001ftoken=// WEBGPU_ENUM_CLASS_BITMASKS_H_",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=webgpu\u001fenclosing_condition=all\u001fline=28\u001foccurrence_count=1\u001foccurrence_lines=28\u001fownership_unit=webgpu:wagyu:webgpu_enum_class_bitmasks\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h\u001ftoken=WEBGPU_ENUM_CLASS_BITMASKS_H_",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=type_traits\u001fdependency_unit=-\u001fline=31\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h\u001fsource_unit=webgpu:wagyu:webgpu_enum_class_bitmasks",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-100\u001fprofile_id=webgpu-dawn-v2",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-100\u001fprofile_id=webgpu-wagyu-v1",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=73\u001fdeclared_type=Integral\u001ffield_name=value\u001ffield_order=1\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_enum_class_bitmasks\u001fqualified_type=wgpu::BoolConvertible::BoolConvertible\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h",
+  "owner-family:campaign=webgpu\u001fcomponent_id=component-100\u001ffamily_id=webgpu-wagyu-dependency-authority\u001fownership_unit=webgpu:wagyu:webgpu_enum_class_bitmasks",
+  "source-binding:byte_count=6073\u001fcitation=source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h:1-161\u001fdisposition=dependency-authority\u001flogical_lines=161\u001fpath=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h\u001fsha256=cae961820e1d3b4dde5b2b4938d549f587bd0e513857bb018850036b646fe821",
+  "source-review-receipt-binding:byte_count=2020\u001fid=component-100\u001fpath=docs/backend-port-source-reviews/component-100.source-review.toml\u001fsha256=cdb24a245f902ffcc28663b64407e8372cc43e2a3af348fcaa4c070184cc2e87",
+  "target-binding:byte_count=13180\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs:1-366\u001flogical_lines=366\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs\u001fsha256=9bf176b80ae59a38282c6a8a18331927e6d493b7d29bc218d30bd4209200bda8",
+]
+source_review_receipts = [{ id = "component-100", path = "docs/backend-port-source-reviews/component-100.source-review.toml", sha256 = "cdb24a245f902ffcc28663b64407e8372cc43e2a3af348fcaa4c070184cc2e87", byte_count = 2020 }]
+sources = [{ path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h", sha256 = "cae961820e1d3b4dde5b2b4938d549f587bd0e513857bb018850036b646fe821", logical_lines = 161, byte_count = 6073, citation = "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h:1-161", disposition = "dependency-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs", sha256 = "9bf176b80ae59a38282c6a8a18331927e6d493b7d29bc218d30bd4209200bda8", logical_lines = 366, byte_count = 13180, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs:1-366" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

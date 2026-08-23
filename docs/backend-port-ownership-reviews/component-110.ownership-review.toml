@@ -1,0 +1,52 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-110"
+units = ["webgpu:wagyu:.clang_format"]
+owner_families = ["webgpu-wagyu-dependency-authority"]
+field_profiles = ["webgpu-wagyu-v1", "webgpu-dawn-v2"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-110-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "webgpu-wagyu-dependency-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "webgpu-wagyu-v1", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }, { id = "webgpu-dawn-v2", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 6
+authority_sha256 = "d958f20157180ec131533f652cd0a5865f32fef3ec9b7102c70fa000b0ec8f49"
+authority_keys = [
+  "component:component-110",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-110\u001fprofile_id=webgpu-dawn-v2",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-110\u001fprofile_id=webgpu-wagyu-v1",
+  "owner-family:campaign=webgpu\u001fcomponent_id=component-110\u001ffamily_id=webgpu-wagyu-dependency-authority\u001fownership_unit=webgpu:wagyu:.clang_format",
+  "source-binding:byte_count=40\u001fcitation=source:renderer/src/webgpu/wagyu-port/.clang-format:1-2\u001fdisposition=evidence-only\u001flogical_lines=2\u001fpath=renderer/src/webgpu/wagyu-port/.clang-format\u001fsha256=f8405bf75d1ab2ed2e69b525a538b409b801812a7c71225da7bb46434f7dcc18",
+  "source-review-receipt-binding:byte_count=809\u001fid=component-110\u001fpath=docs/backend-port-source-reviews/component-110.source-review.toml\u001fsha256=afe6db8a5d5f74623e34323bd1e934bff4f72c73fb4331672425719cbd5ca4a4",
+]
+source_review_receipts = [{ id = "component-110", path = "docs/backend-port-source-reviews/component-110.source-review.toml", sha256 = "afe6db8a5d5f74623e34323bd1e934bff4f72c73fb4331672425719cbd5ca4a4", byte_count = 809 }]
+sources = [{ path = "renderer/src/webgpu/wagyu-port/.clang-format", sha256 = "f8405bf75d1ab2ed2e69b525a538b409b801812a7c71225da7bb46434f7dcc18", logical_lines = 2, byte_count = 40, citation = "source:renderer/src/webgpu/wagyu-port/.clang-format:1-2", disposition = "evidence-only" }]
+targets = []
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

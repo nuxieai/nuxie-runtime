@@ -1,0 +1,65 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-024"
+units = ["shader:source:bezier_utils"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-024-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 7
+configuration_authority.sha256 = "fe2b272d7bca76569822ea086cd1d29c648801fe5dabaef1d3e0acf772378f7f"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=if 0\u001fline=211\u001foccurrence_count=1\u001foccurrence_lines=211\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=else -\u001fline=244\u001foccurrence_count=1\u001foccurrence_lines=244\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef make_float2\u001fline=22\u001foccurrence_count=1\u001foccurrence_lines=22\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef make_float4\u001fline=19\u001foccurrence_count=1\u001foccurrence_lines=19\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-if\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=195\u001foccurrence_count=1\u001foccurrence_lines=195\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=0",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=17\u001foccurrence_count=1\u001foccurrence_lines=17\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=make_float4",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=20\u001foccurrence_count=1\u001foccurrence_lines=20\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=make_float2",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 12
+authority_sha256 = "85505ce22d72491a727d3c60bad044c47502b70ff9a64b680f096cd39562e542"
+authority_keys = [
+  "component:component-024",
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=if 0\u001fline=211\u001foccurrence_count=1\u001foccurrence_lines=211\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=else -\u001fline=244\u001foccurrence_count=1\u001foccurrence_lines=244\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef make_float2\u001fline=22\u001foccurrence_count=1\u001foccurrence_lines=22\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef make_float4\u001fline=19\u001foccurrence_count=1\u001foccurrence_lines=19\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-if\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=195\u001foccurrence_count=1\u001foccurrence_lines=195\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=0",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=17\u001foccurrence_count=1\u001foccurrence_lines=17\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=make_float4",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=20\u001foccurrence_count=1\u001foccurrence_lines=20\u001fownership_unit=shader:source:bezier_utils\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/bezier_utils.glsl\u001ftoken=make_float2",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-024\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:bezier_utils",
+  "source-binding:byte_count=8281\u001fcitation=source:renderer/src/shaders/bezier_utils.glsl:1-245\u001fdisposition=shared-authority\u001flogical_lines=245\u001fpath=renderer/src/shaders/bezier_utils.glsl\u001fsha256=c18b0d2aac6f33dff72a6f17bdcc4b40ee337651fa0ecdd104e85641701e385f",
+  "source-review-receipt-binding:byte_count=1160\u001fid=component-024\u001fpath=docs/backend-port-source-reviews/component-024.source-review.toml\u001fsha256=d32d0c1ca2e183692fe21c0bd260c2fd514d347a2525a71bb4bfdf2079c7187f",
+  "target-binding:byte_count=929\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_bezier_utils_glsl__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_bezier_utils_glsl__generated_input.rs\u001fsha256=530862d4d32dcbe24ee181ade1c6fc8d3c478db05ac233fd95564dc288d5bd86",
+]
+source_review_receipts = [{ id = "component-024", path = "docs/backend-port-source-reviews/component-024.source-review.toml", sha256 = "d32d0c1ca2e183692fe21c0bd260c2fd514d347a2525a71bb4bfdf2079c7187f", byte_count = 1160 }]
+sources = [{ path = "renderer/src/shaders/bezier_utils.glsl", sha256 = "c18b0d2aac6f33dff72a6f17bdcc4b40ee337651fa0ecdd104e85641701e385f", logical_lines = 245, byte_count = 8281, citation = "source:renderer/src/shaders/bezier_utils.glsl:1-245", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_bezier_utils_glsl__generated_input.rs", sha256 = "530862d4d32dcbe24ee181ade1c6fc8d3c478db05ac233fd95564dc288d5bd86", logical_lines = 17, byte_count = 929, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_bezier_utils_glsl__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

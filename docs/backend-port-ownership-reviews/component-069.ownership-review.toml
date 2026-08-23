@@ -1,0 +1,55 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-069"
+units = ["shader:spirv_header_generator"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-069-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 2
+dependency_authority.sha256 = "ab2b997b6c62168fea22e56207045239a7ae8d4452446c344e18000c3c8e8b28"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=struct\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/spirv_binary_to_header.py\u001fsource_unit=shader:spirv_header_generator",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=sys\u001fdependency_unit=-\u001fline=3\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/spirv_binary_to_header.py\u001fsource_unit=shader:spirv_header_generator",
+]
+authority_record_count = 7
+authority_sha256 = "6d151197524301b1a89fae1e6d3222707bb6700b1d87919f6053ed1c49eaef8b"
+authority_keys = [
+  "component:component-069",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=struct\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/spirv_binary_to_header.py\u001fsource_unit=shader:spirv_header_generator",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=sys\u001fdependency_unit=-\u001fline=3\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/spirv_binary_to_header.py\u001fsource_unit=shader:spirv_header_generator",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-069\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:spirv_header_generator",
+  "source-binding:byte_count=992\u001fcitation=source:renderer/src/shaders/spirv_binary_to_header.py:1-29\u001fdisposition=shared-authority\u001flogical_lines=29\u001fpath=renderer/src/shaders/spirv_binary_to_header.py\u001fsha256=07f4b6f91bade4af1dcc62024447982e08ce9af671155e047ac1185460dc79d0",
+  "source-review-receipt-binding:byte_count=1616\u001fid=component-069\u001fpath=docs/backend-port-source-reviews/component-069.source-review.toml\u001fsha256=e748984bb4d60c1405f6c7bd6c9739f233648c2abe1dd72f6431f31117c8083b",
+  "target-binding:byte_count=1242\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_binary_to_header_py__generator.rs:1-19\u001flogical_lines=19\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_binary_to_header_py__generator.rs\u001fsha256=95af3822056aacf2178cefa5d024211e2a4dc5c9e3a98de1bc1f9afa9b261cbe",
+]
+source_review_receipts = [{ id = "component-069", path = "docs/backend-port-source-reviews/component-069.source-review.toml", sha256 = "e748984bb4d60c1405f6c7bd6c9739f233648c2abe1dd72f6431f31117c8083b", byte_count = 1616 }]
+sources = [{ path = "renderer/src/shaders/spirv_binary_to_header.py", sha256 = "07f4b6f91bade4af1dcc62024447982e08ce9af671155e047ac1185460dc79d0", logical_lines = 29, byte_count = 992, citation = "source:renderer/src/shaders/spirv_binary_to_header.py:1-29", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_binary_to_header_py__generator.rs", sha256 = "95af3822056aacf2178cefa5d024211e2a4dc5c9e3a98de1bc1f9afa9b261cbe", logical_lines = 19, byte_count = 1242, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_binary_to_header_py__generator.rs:1-19" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

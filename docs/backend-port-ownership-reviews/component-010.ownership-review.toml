@@ -1,0 +1,61 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-010"
+units = ["shader:source:constants"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-010-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 5
+configuration_authority.sha256 = "395916934f85b42a13b460ea86c63812dbdf10724a6676e5088699a2cab78280"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=214\u001foccurrence_count=1\u001foccurrence_lines=214\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=RIVE_MITER_LIMIT",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef __cplusplus\u001fline=322\u001foccurrence_count=1\u001foccurrence_lines=322\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef __cplusplus && if __cplusplus >= 201703\u001fline=321\u001foccurrence_count=1\u001foccurrence_lines=321\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-if\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef __cplusplus\u001fline=319\u001foccurrence_count=1\u001foccurrence_lines=319\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=__cplusplus >= 201703",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=318\u001foccurrence_count=1\u001foccurrence_lines=318\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=__cplusplus",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 10
+authority_sha256 = "baf258098161818c2b15d6aac98398ce476c0137b2c34384c18c556ea9ae539f"
+authority_keys = [
+  "component:component-010",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=214\u001foccurrence_count=1\u001foccurrence_lines=214\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=RIVE_MITER_LIMIT",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef __cplusplus\u001fline=322\u001foccurrence_count=1\u001foccurrence_lines=322\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef __cplusplus && if __cplusplus >= 201703\u001fline=321\u001foccurrence_count=1\u001foccurrence_lines=321\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-if\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef __cplusplus\u001fline=319\u001foccurrence_count=1\u001foccurrence_lines=319\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=__cplusplus >= 201703",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=318\u001foccurrence_count=1\u001foccurrence_lines=318\u001fownership_unit=shader:source:constants\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/constants.glsl\u001ftoken=__cplusplus",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-010\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:constants",
+  "source-binding:byte_count=13401\u001fcitation=source:renderer/src/shaders/constants.glsl:1-322\u001fdisposition=shared-authority\u001flogical_lines=322\u001fpath=renderer/src/shaders/constants.glsl\u001fsha256=eefc0b9115beb4fe87b85431b0c683fdec73244c044278e97fdba0c96014bb56",
+  "source-review-receipt-binding:byte_count=1145\u001fid=component-010\u001fpath=docs/backend-port-source-reviews/component-010.source-review.toml\u001fsha256=96460c3bfffbbd0e54e8a7613a292d69dc5c7d98973c53666912638e9685efe0",
+  "target-binding:byte_count=918\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_constants_glsl__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_constants_glsl__generated_input.rs\u001fsha256=d39212055c17579a4e22c90fa8b5fd7d4e1efd179ec9c2049743b1f37af3fe86",
+]
+source_review_receipts = [{ id = "component-010", path = "docs/backend-port-source-reviews/component-010.source-review.toml", sha256 = "96460c3bfffbbd0e54e8a7613a292d69dc5c7d98973c53666912638e9685efe0", byte_count = 1145 }]
+sources = [{ path = "renderer/src/shaders/constants.glsl", sha256 = "eefc0b9115beb4fe87b85431b0c683fdec73244c044278e97fdba0c96014bb56", logical_lines = 322, byte_count = 13401, citation = "source:renderer/src/shaders/constants.glsl:1-322", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_constants_glsl__generated_input.rs", sha256 = "d39212055c17579a4e22c90fa8b5fd7d4e1efd179ec9c2049743b1f37af3fe86", logical_lines = 17, byte_count = 918, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_constants_glsl__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

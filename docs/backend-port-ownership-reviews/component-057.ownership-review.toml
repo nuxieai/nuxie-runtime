@@ -1,0 +1,59 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-057"
+units = ["shader:source:stencil_draw"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-057-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 4
+configuration_authority.sha256 = "03c1728e79fe868378e9f514b220c0a1d30dc22b5d42af1d283fe4973003a051"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT\u001fline=31\u001foccurrence_count=1\u001foccurrence_lines=31\u001fownership_unit=shader:source:stencil_draw\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/stencil_draw.glsl\u001ftoken=// FRAGMENT",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @VERTEX\u001fline=24\u001foccurrence_count=1\u001foccurrence_lines=24\u001fownership_unit=shader:source:stencil_draw\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/stencil_draw.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=26\u001foccurrence_count=1\u001foccurrence_lines=26\u001fownership_unit=shader:source:stencil_draw\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/stencil_draw.glsl\u001ftoken=@FRAGMENT",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=5\u001foccurrence_count=1\u001foccurrence_lines=5\u001fownership_unit=shader:source:stencil_draw\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/stencil_draw.glsl\u001ftoken=@VERTEX",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 9
+authority_sha256 = "d4812513cb39c00121bef162ce5412729b33aa16ebe138b77432f3932c60794b"
+authority_keys = [
+  "component:component-057",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT\u001fline=31\u001foccurrence_count=1\u001foccurrence_lines=31\u001fownership_unit=shader:source:stencil_draw\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/stencil_draw.glsl\u001ftoken=// FRAGMENT",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @VERTEX\u001fline=24\u001foccurrence_count=1\u001foccurrence_lines=24\u001fownership_unit=shader:source:stencil_draw\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/stencil_draw.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=26\u001foccurrence_count=1\u001foccurrence_lines=26\u001fownership_unit=shader:source:stencil_draw\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/stencil_draw.glsl\u001ftoken=@FRAGMENT",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=5\u001foccurrence_count=1\u001foccurrence_lines=5\u001fownership_unit=shader:source:stencil_draw\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/stencil_draw.glsl\u001ftoken=@VERTEX",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-057\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:stencil_draw",
+  "source-binding:byte_count=763\u001fcitation=source:renderer/src/shaders/stencil_draw.glsl:1-31\u001fdisposition=shared-authority\u001flogical_lines=31\u001fpath=renderer/src/shaders/stencil_draw.glsl\u001fsha256=9df944e40e0f66f0a7f4e2114fe2644d426a44bc236eab969e3bdf75bb70c0bd",
+  "source-review-receipt-binding:byte_count=1159\u001fid=component-057\u001fpath=docs/backend-port-source-reviews/component-057.source-review.toml\u001fsha256=7352e9def9adc2a2a5cbe4903e00dc07529cd302d2c1667ffb6e672df20e00a8",
+  "target-binding:byte_count=927\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_stencil_draw_glsl__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_stencil_draw_glsl__generated_input.rs\u001fsha256=4919a3eef7cc7f54d5a4d42640ed0e4428db35241ad25aaf44b20ae7cee9c938",
+]
+source_review_receipts = [{ id = "component-057", path = "docs/backend-port-source-reviews/component-057.source-review.toml", sha256 = "7352e9def9adc2a2a5cbe4903e00dc07529cd302d2c1667ffb6e672df20e00a8", byte_count = 1159 }]
+sources = [{ path = "renderer/src/shaders/stencil_draw.glsl", sha256 = "9df944e40e0f66f0a7f4e2114fe2644d426a44bc236eab969e3bdf75bb70c0bd", logical_lines = 31, byte_count = 763, citation = "source:renderer/src/shaders/stencil_draw.glsl:1-31", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_stencil_draw_glsl__generated_input.rs", sha256 = "4919a3eef7cc7f54d5a4d42640ed0e4428db35241ad25aaf44b20ae7cee9c938", logical_lines = 17, byte_count = 927, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_stencil_draw_glsl__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

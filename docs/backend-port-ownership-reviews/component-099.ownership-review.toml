@@ -1,0 +1,69 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-099"
+units = ["webgpu:wagyu:webgpu_cpp_chained_struct"]
+owner_families = ["webgpu-wagyu-dependency-authority"]
+field_profiles = ["webgpu-wagyu-v1", "webgpu-dawn-v2"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-099-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "webgpu-wagyu-dependency-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "webgpu-wagyu-v1", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }, { id = "webgpu-dawn-v2", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 4
+field_authority.sha256 = "d5a7395001fa1d037ab02dcd4667f8adc35bdfc59e0cfb7848fce2dc9407b08a"
+field_authority.authority_keys = [
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=43\u001fdeclared_type=const ChainedStruct *\u001ffield_name=nextInChain\u001ffield_order=1\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001fqualified_type=wgpu::ChainedStruct\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=44\u001fdeclared_type=SType\u001ffield_name=sType\u001ffield_order=2\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001fqualified_type=wgpu::ChainedStruct\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=48\u001fdeclared_type=ChainedStructOut *\u001ffield_name=nextInChain\u001ffield_order=1\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001fqualified_type=wgpu::ChainedStructOut\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=49\u001fdeclared_type=SType\u001ffield_name=sType\u001ffield_order=2\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001fqualified_type=wgpu::ChainedStructOut\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h",
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 2
+configuration_authority.sha256 = "1bdb78b86f4d4b54098b6fe9a0d08d74cf9192a8dd1c04ace88a91cf96eb2254"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=webgpu\u001fenclosing_condition=ifndef WEBGPU_CPP_CHAINED_STRUCT_H_\u001fline=54\u001foccurrence_count=1\u001foccurrence_lines=54\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h\u001ftoken=// WEBGPU_CPP_CHAINED_STRUCT_H_",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=webgpu\u001fenclosing_condition=all\u001fline=29\u001foccurrence_count=1\u001foccurrence_lines=29\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h\u001ftoken=WEBGPU_CPP_CHAINED_STRUCT_H_",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 2
+dependency_authority.sha256 = "e5ab22ec661dd2a02bb375155d54cfeff13edf1fc06029f608ca40b5a438d7c3"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=cstddef\u001fdependency_unit=-\u001fline=32\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h\u001fsource_unit=webgpu:wagyu:webgpu_cpp_chained_struct",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=cstdint\u001fdependency_unit=-\u001fline=33\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h\u001fsource_unit=webgpu:wagyu:webgpu_cpp_chained_struct",
+]
+authority_record_count = 15
+authority_sha256 = "ae04bbc93ea034f47c952f24519ced8f5ae01c78748052f3d32b0afd52c29b71"
+authority_keys = [
+  "component:component-099",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=webgpu\u001fenclosing_condition=ifndef WEBGPU_CPP_CHAINED_STRUCT_H_\u001fline=54\u001foccurrence_count=1\u001foccurrence_lines=54\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h\u001ftoken=// WEBGPU_CPP_CHAINED_STRUCT_H_",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=webgpu\u001fenclosing_condition=all\u001fline=29\u001foccurrence_count=1\u001foccurrence_lines=29\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001freview_status=authority-recorded\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h\u001ftoken=WEBGPU_CPP_CHAINED_STRUCT_H_",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=cstddef\u001fdependency_unit=-\u001fline=32\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h\u001fsource_unit=webgpu:wagyu:webgpu_cpp_chained_struct",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=cstdint\u001fdependency_unit=-\u001fline=33\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h\u001fsource_unit=webgpu:wagyu:webgpu_cpp_chained_struct",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-099\u001fprofile_id=webgpu-dawn-v2",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-099\u001fprofile_id=webgpu-wagyu-v1",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=43\u001fdeclared_type=const ChainedStruct *\u001ffield_name=nextInChain\u001ffield_order=1\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001fqualified_type=wgpu::ChainedStruct\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=44\u001fdeclared_type=SType\u001ffield_name=sType\u001ffield_order=2\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001fqualified_type=wgpu::ChainedStruct\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=48\u001fdeclared_type=ChainedStructOut *\u001ffield_name=nextInChain\u001ffield_order=1\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001fqualified_type=wgpu::ChainedStructOut\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=49\u001fdeclared_type=SType\u001ffield_name=sType\u001ffield_order=2\u001fownership_review=abi-authority-recorded\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct\u001fqualified_type=wgpu::ChainedStructOut\u001fsource_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h",
+  "owner-family:campaign=webgpu\u001fcomponent_id=component-099\u001ffamily_id=webgpu-wagyu-dependency-authority\u001fownership_unit=webgpu:wagyu:webgpu_cpp_chained_struct",
+  "source-binding:byte_count=2286\u001fcitation=source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h:1-54\u001fdisposition=dependency-authority\u001flogical_lines=54\u001fpath=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h\u001fsha256=582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1",
+  "source-review-receipt-binding:byte_count=1261\u001fid=component-099\u001fpath=docs/backend-port-source-reviews/component-099.source-review.toml\u001fsha256=49d4f418e075cd827e1fadd138596a521d218769c5607063399e1166bfc19392",
+  "target-binding:byte_count=2904\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs:1-93\u001flogical_lines=93\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs\u001fsha256=a473dafb20f8fe4afa632aedc2f8734149570ca3dd15b21d3d4b976f1af892bd",
+]
+source_review_receipts = [{ id = "component-099", path = "docs/backend-port-source-reviews/component-099.source-review.toml", sha256 = "49d4f418e075cd827e1fadd138596a521d218769c5607063399e1166bfc19392", byte_count = 1261 }]
+sources = [{ path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h", sha256 = "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1", logical_lines = 54, byte_count = 2286, citation = "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h:1-54", disposition = "dependency-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs", sha256 = "a473dafb20f8fe4afa632aedc2f8734149570ca3dd15b21d3d4b976f1af892bd", logical_lines = 93, byte_count = 2904, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs:1-93" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

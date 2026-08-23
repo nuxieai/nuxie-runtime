@@ -1,0 +1,55 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-005"
+units = ["shader:build_graph"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-005-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 2
+configuration_authority.sha256 = "e122e388ad68addf2a14ab72129c4deb8bb29dde764d9ce6bd400e4e22aba886"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=169\u001foccurrence_count=3\u001foccurrence_lines=169,187,198\u001fownership_unit=shader:build_graph\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/Makefile\u001ftoken=FIXED_FUNCTION_COLOR_OUTPUT",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=199\u001foccurrence_count=1\u001foccurrence_lines=199\u001fownership_unit=shader:build_graph\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/Makefile\u001ftoken=DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 7
+authority_sha256 = "745257a7156dd5dde06de69d54ae46e27a12d23445a53280c2f00b18d577c405"
+authority_keys = [
+  "component:component-005",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=169\u001foccurrence_count=3\u001foccurrence_lines=169,187,198\u001fownership_unit=shader:build_graph\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/Makefile\u001ftoken=FIXED_FUNCTION_COLOR_OUTPUT",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=199\u001foccurrence_count=1\u001foccurrence_lines=199\u001fownership_unit=shader:build_graph\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/Makefile\u001ftoken=DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-005\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:build_graph",
+  "source-binding:byte_count=22079\u001fcitation=source:renderer/src/shaders/Makefile:1-502\u001fdisposition=shared-authority\u001flogical_lines=502\u001fpath=renderer/src/shaders/Makefile\u001fsha256=ec5d0d98d78051e98cda80f92cd67858cb1fb70be64cddd8ad13bcd4ad5f50fc",
+  "source-review-receipt-binding:byte_count=1108\u001fid=component-005\u001fpath=docs/backend-port-source-reviews/component-005.source-review.toml\u001fsha256=2f8bc5028b06455a3eb4a38271257c12966daf410d710b1f27a828f851a979fe",
+  "target-binding:byte_count=1102\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_makefile__build_input.rs:1-20\u001flogical_lines=20\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_makefile__build_input.rs\u001fsha256=fafa1d5a26af3fa28068b67921a3a6b1563ea20502d69bce1fbbcf924e858a41",
+]
+source_review_receipts = [{ id = "component-005", path = "docs/backend-port-source-reviews/component-005.source-review.toml", sha256 = "2f8bc5028b06455a3eb4a38271257c12966daf410d710b1f27a828f851a979fe", byte_count = 1108 }]
+sources = [{ path = "renderer/src/shaders/Makefile", sha256 = "ec5d0d98d78051e98cda80f92cd67858cb1fb70be64cddd8ad13bcd4ad5f50fc", logical_lines = 502, byte_count = 22079, citation = "source:renderer/src/shaders/Makefile:1-502", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_makefile__build_input.rs", sha256 = "fafa1d5a26af3fa28068b67921a3a6b1563ea20502d69bce1fbbcf924e858a41", logical_lines = 20, byte_count = 1102, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_makefile__build_input.rs:1-20" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

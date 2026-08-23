@@ -1,0 +1,59 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-001"
+units = ["build:renderer"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-001-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 4
+configuration_authority.sha256 = "dbec2244a03616dea96c430ed36cd054f5d66dcb04b40659da2ca02d8575695f"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=330\u001foccurrence_count=3\u001foccurrence_lines=330,331,332\u001fownership_unit=build:renderer\u001freview_status=authority-recorded\u001fsource_path=renderer/premake5.lua\u001ftoken=RIVE_WAGYU_PORT",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=4\u001foccurrence_count=12\u001foccurrence_lines=4,5,6,10,21,23,24,84,85,86,89,195\u001fownership_unit=build:renderer\u001freview_status=authority-recorded\u001fsource_path=renderer/premake5.lua\u001ftoken=RIVE_RUNTIME_DIR",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=88\u001foccurrence_count=1\u001foccurrence_lines=88\u001fownership_unit=build:renderer\u001freview_status=authority-recorded\u001fsource_path=renderer/premake5.lua\u001ftoken=RIVE_SKIA",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=96\u001foccurrence_count=2\u001foccurrence_lines=96,227\u001fownership_unit=build:renderer\u001freview_status=authority-recorded\u001fsource_path=renderer/premake5.lua\u001ftoken=RIVE_WINDOWS",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 9
+authority_sha256 = "4d58b45be0077178afc066dfdac8f227c3f3ea00f2c05df4c9584bd1017871a8"
+authority_keys = [
+  "component:component-001",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=330\u001foccurrence_count=3\u001foccurrence_lines=330,331,332\u001fownership_unit=build:renderer\u001freview_status=authority-recorded\u001fsource_path=renderer/premake5.lua\u001ftoken=RIVE_WAGYU_PORT",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=4\u001foccurrence_count=12\u001foccurrence_lines=4,5,6,10,21,23,24,84,85,86,89,195\u001fownership_unit=build:renderer\u001freview_status=authority-recorded\u001fsource_path=renderer/premake5.lua\u001ftoken=RIVE_RUNTIME_DIR",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=88\u001foccurrence_count=1\u001foccurrence_lines=88\u001fownership_unit=build:renderer\u001freview_status=authority-recorded\u001fsource_path=renderer/premake5.lua\u001ftoken=RIVE_SKIA",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=96\u001foccurrence_count=2\u001foccurrence_lines=96,227\u001fownership_unit=build:renderer\u001freview_status=authority-recorded\u001fsource_path=renderer/premake5.lua\u001ftoken=RIVE_WINDOWS",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-001\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=build:renderer",
+  "source-binding:byte_count=9716\u001fcitation=source:renderer/premake5.lua:1-335\u001fdisposition=shared-authority\u001flogical_lines=335\u001fpath=renderer/premake5.lua\u001fsha256=8ae326a887fd81dd76cdc56382497a3a3905e5c92bfe3976aed7e333eb1878a1",
+  "source-review-receipt-binding:byte_count=1964\u001fid=component-001\u001fpath=docs/backend-port-source-reviews/component-001.source-review.toml\u001fsha256=51bfbf1f65b8b3b3be238a6ffab06e49ddf53e679a9813b9cb0594bf3a9ee4d4",
+  "target-binding:byte_count=8026\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs:1-232\u001flogical_lines=232\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs\u001fsha256=e50ebe6a16da90910d50a10740b21aed4288184b066a9505e7bb3c2d98ba6cb4",
+]
+source_review_receipts = [{ id = "component-001", path = "docs/backend-port-source-reviews/component-001.source-review.toml", sha256 = "51bfbf1f65b8b3b3be238a6ffab06e49ddf53e679a9813b9cb0594bf3a9ee4d4", byte_count = 1964 }]
+sources = [{ path = "renderer/premake5.lua", sha256 = "8ae326a887fd81dd76cdc56382497a3a3905e5c92bfe3976aed7e333eb1878a1", logical_lines = 335, byte_count = 9716, citation = "source:renderer/premake5.lua:1-335", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs", sha256 = "e50ebe6a16da90910d50a10740b21aed4288184b066a9505e7bb3c2d98ba6cb4", logical_lines = 232, byte_count = 8026, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs:1-232" }]
+findings = [{ id = "OR-C001-01", severity = "P1", summary = "The Wagyu root selection retains only RIVE_WAGYU_PORT and drops the base Emscripten export and runtime ABI options for _malloc/_free, ccall/cwrap/HEAPU32, and the web,shell environment.", review_domains = ["unsafe-ffi-and-abi", "configuration-owner-graphs"], citations = ["source:renderer/premake5.lua:278-285", "source:renderer/premake5.lua:328-333", "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs:222-226"], authority_keys = ["component:component-001"] }]
+open_findings = 1
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

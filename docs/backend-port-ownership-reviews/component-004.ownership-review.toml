@@ -1,0 +1,51 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-004"
+units = ["dependency:swiftshader"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-004-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 5
+authority_sha256 = "35026fa50154745f11bacb4848832fb4ba3d63d18166098f0d723fea1d5bdd07"
+authority_keys = [
+  "component:component-004",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-004\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=dependency:swiftshader",
+  "source-binding:byte_count=376\u001fcitation=source:renderer/make_swiftshader.sh:1-19\u001fdisposition=shared-authority\u001flogical_lines=19\u001fpath=renderer/make_swiftshader.sh\u001fsha256=c046e447bd6d0753829b69e0824679b07ed4f0329bad7c651b2b917edf1aabe2",
+  "source-review-receipt-binding:byte_count=1107\u001fid=component-004\u001fpath=docs/backend-port-source-reviews/component-004.source-review.toml\u001fsha256=f56ddb30126d996123744522c15115e82da2e0cc4cdf9bbdc23063763f9fc02b",
+  "target-binding:byte_count=1686\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_swiftshader_sh__build_input.rs:1-32\u001flogical_lines=32\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_swiftshader_sh__build_input.rs\u001fsha256=7624a9d914bb9bbcbda7e28e8b9ca937d64cfad8b2241efc80f13354f39ccdcb",
+]
+source_review_receipts = [{ id = "component-004", path = "docs/backend-port-source-reviews/component-004.source-review.toml", sha256 = "f56ddb30126d996123744522c15115e82da2e0cc4cdf9bbdc23063763f9fc02b", byte_count = 1107 }]
+sources = [{ path = "renderer/make_swiftshader.sh", sha256 = "c046e447bd6d0753829b69e0824679b07ed4f0329bad7c651b2b917edf1aabe2", logical_lines = 19, byte_count = 376, citation = "source:renderer/make_swiftshader.sh:1-19", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_swiftshader_sh__build_input.rs", sha256 = "7624a9d914bb9bbcbda7e28e8b9ca937d64cfad8b2241efc80f13354f39ccdcb", logical_lines = 32, byte_count = 1686, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_swiftshader_sh__build_input.rs:1-32" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

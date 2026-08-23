@@ -1,0 +1,54 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-081"
+units = ["vulkan:renderer:vulkan_memory_allocator"]
+owner_families = ["vulkan-renderer-owners"]
+field_profiles = ["vulkan"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-081-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "vulkan-renderer-owners", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "vulkan", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 1
+dependency_authority.sha256 = "967e1365716e241cd663cafc3253bbd47f93c4d8ccd25cbca86168c30d2c5857"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=vk_mem_alloc.h\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/vulkan/vulkan_memory_allocator.cpp\u001fsource_unit=vulkan:renderer:vulkan_memory_allocator",
+]
+authority_record_count = 7
+authority_sha256 = "0334bbfdf29f9e4b4ac1e97c81a9c4cf734e54dc369dfd0ed37fb42d34127a9f"
+authority_keys = [
+  "component:component-081",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=vk_mem_alloc.h\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/vulkan/vulkan_memory_allocator.cpp\u001fsource_unit=vulkan:renderer:vulkan_memory_allocator",
+  "field-profile:campaign=vulkan\u001fcomponent_id=component-081\u001fprofile_id=vulkan",
+  "owner-family:campaign=vulkan\u001fcomponent_id=component-081\u001ffamily_id=vulkan-renderer-owners\u001fownership_unit=vulkan:renderer:vulkan_memory_allocator",
+  "source-binding:byte_count=53\u001fcitation=source:renderer/src/vulkan/vulkan_memory_allocator.cpp:1-2\u001fdisposition=translate\u001flogical_lines=2\u001fpath=renderer/src/vulkan/vulkan_memory_allocator.cpp\u001fsha256=56d006a5e6364a6d1bc4c8e1a6b0010c236bf935fd2613b08f07c7336d9a4bc7",
+  "source-review-receipt-binding:byte_count=1146\u001fid=component-081\u001fpath=docs/backend-port-source-reviews/component-081.source-review.toml\u001fsha256=bc3f4dfd9f499559c07a3620f1839fcb6bc91d9526597c2d267f3401c5631db3",
+  "target-binding:byte_count=998\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs:1-20\u001flogical_lines=20\u001fpath=crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs\u001fsha256=15adee3fd7453c413e6960639b892e069841adc9cbdec185ef531608a33d0746",
+]
+source_review_receipts = [{ id = "component-081", path = "docs/backend-port-source-reviews/component-081.source-review.toml", sha256 = "bc3f4dfd9f499559c07a3620f1839fcb6bc91d9526597c2d267f3401c5631db3", byte_count = 1146 }]
+sources = [{ path = "renderer/src/vulkan/vulkan_memory_allocator.cpp", sha256 = "56d006a5e6364a6d1bc4c8e1a6b0010c236bf935fd2613b08f07c7336d9a4bc7", logical_lines = 2, byte_count = 53, citation = "source:renderer/src/vulkan/vulkan_memory_allocator.cpp:1-2", disposition = "translate" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs", sha256 = "15adee3fd7453c413e6960639b892e069841adc9cbdec185ef531608a33d0746", logical_lines = 20, byte_count = 998, citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs:1-20" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

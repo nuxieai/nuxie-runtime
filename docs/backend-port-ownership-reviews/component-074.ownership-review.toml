@@ -1,0 +1,74 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-074"
+units = ["vulkan:ore:shader_module"]
+owner_families = ["vulkan-ore-owners"]
+field_profiles = ["vulkan"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-074-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "vulkan-ore-owners", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "vulkan", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 3
+field_authority.sha256 = "b1bf08bd344a7f0b37a273d91be68378c5e2c1efdd61514a70b05b1be9650306"
+field_authority.authority_keys = [
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=21\u001fdeclared_type=VkDevice\u001ffield_name=m_vkDevice\u001ffield_order=1\u001fownership_review=native-handle-review-required\u001fownership_unit=vulkan:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=22\u001fdeclared_type=VkShaderModule\u001ffield_name=m_vkShaderModule\u001ffield_order=2\u001fownership_review=native-handle-review-required\u001fownership_unit=vulkan:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=23\u001fdeclared_type=PFN_vkDestroyShaderModule\u001ffield_name=m_vkDestroyShaderModule\u001ffield_order=3\u001fownership_review=value-lifetime-review-required\u001fownership_unit=vulkan:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp",
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 2
+lifecycle_authority.sha256 = "b8635c5350d013a8de6f5962ffab94b8cce8aad8bb08e932a80a9f44115793fa"
+lifecycle_authority.authority_keys = [
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=destruction-or-release\u001fline=10\u001fmatched_token=~ShaderModuleVulkan(\u001fownership_unit=vulkan:ore:shader_module\u001freview_status=review-required\u001fsource_evidence=ShaderModuleVulkan::~ShaderModuleVulkan()\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp",
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=destruction-or-release\u001fline=16\u001fmatched_token=~ShaderModuleVulkan(\u001fownership_unit=vulkan:ore:shader_module\u001freview_status=review-required\u001fsource_evidence=~ShaderModuleVulkan() override;\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp",
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 2
+configuration_authority.sha256 = "f13fad8abd3b33663c17d0e894b0fe8cdd28a7642382dafc73eeeac5063607ac"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=12\u001foccurrence_count=1\u001foccurrence_lines=12\u001fownership_unit=vulkan:ore:shader_module\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp\u001ftoken=VK_NULL_HANDLE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=21\u001foccurrence_count=2\u001foccurrence_lines=21,22\u001fownership_unit=vulkan:ore:shader_module\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp\u001ftoken=VK_NULL_HANDLE",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 3
+dependency_authority.sha256 = "428484a48f84605481580f9cf39a31287d62847e675dc8b3720e28b62c7ccd5c"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_shader_module_vulkan.hpp\u001fdependency_unit=vulkan:ore:shader_module\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp\u001fresolved_sha256=b421cebd8e3c08be85155921f3016403e9dd30f73e9d16005f8764bf667e8435\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp\u001fsource_unit=vulkan:ore:shader_module",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_shader_module.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_shader_module.hpp\u001fresolved_sha256=7ed17ed2d9adf6ea941b0b53fdac1c96d3e7d2a4f2da3e01495ef16a67a65248\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp\u001fsource_unit=vulkan:ore:shader_module",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=vulkan/vulkan.h\u001fdependency_unit=-\u001fline=3\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp\u001fsource_unit=vulkan:ore:shader_module",
+]
+authority_record_count = 18
+authority_sha256 = "d51439e87d7801d710e15bc509a229f21a73a87007cf6dea3a8965262d25d648"
+authority_keys = [
+  "component:component-074",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=12\u001foccurrence_count=1\u001foccurrence_lines=12\u001fownership_unit=vulkan:ore:shader_module\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp\u001ftoken=VK_NULL_HANDLE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=21\u001foccurrence_count=2\u001foccurrence_lines=21,22\u001fownership_unit=vulkan:ore:shader_module\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp\u001ftoken=VK_NULL_HANDLE",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_shader_module_vulkan.hpp\u001fdependency_unit=vulkan:ore:shader_module\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp\u001fresolved_sha256=b421cebd8e3c08be85155921f3016403e9dd30f73e9d16005f8764bf667e8435\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp\u001fsource_unit=vulkan:ore:shader_module",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_shader_module.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_shader_module.hpp\u001fresolved_sha256=7ed17ed2d9adf6ea941b0b53fdac1c96d3e7d2a4f2da3e01495ef16a67a65248\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp\u001fsource_unit=vulkan:ore:shader_module",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=vulkan/vulkan.h\u001fdependency_unit=-\u001fline=3\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp\u001fsource_unit=vulkan:ore:shader_module",
+  "field-profile:campaign=vulkan\u001fcomponent_id=component-074\u001fprofile_id=vulkan",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=21\u001fdeclared_type=VkDevice\u001ffield_name=m_vkDevice\u001ffield_order=1\u001fownership_review=native-handle-review-required\u001fownership_unit=vulkan:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=22\u001fdeclared_type=VkShaderModule\u001ffield_name=m_vkShaderModule\u001ffield_order=2\u001fownership_review=native-handle-review-required\u001fownership_unit=vulkan:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=23\u001fdeclared_type=PFN_vkDestroyShaderModule\u001ffield_name=m_vkDestroyShaderModule\u001ffield_order=3\u001fownership_review=value-lifetime-review-required\u001fownership_unit=vulkan:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp",
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=destruction-or-release\u001fline=10\u001fmatched_token=~ShaderModuleVulkan(\u001fownership_unit=vulkan:ore:shader_module\u001freview_status=review-required\u001fsource_evidence=ShaderModuleVulkan::~ShaderModuleVulkan()\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp",
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=destruction-or-release\u001fline=16\u001fmatched_token=~ShaderModuleVulkan(\u001fownership_unit=vulkan:ore:shader_module\u001freview_status=review-required\u001fsource_evidence=~ShaderModuleVulkan() override;\u001fsource_path=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp",
+  "owner-family:campaign=vulkan\u001fcomponent_id=component-074\u001ffamily_id=vulkan-ore-owners\u001fownership_unit=vulkan:ore:shader_module",
+  "source-binding:byte_count=341\u001fcitation=source:renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp:1-19\u001fdisposition=translate\u001flogical_lines=19\u001fpath=renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp\u001fsha256=787ed42b6ba9108e4ccc09fbca255c7454e2a8702b3938a1745fbd4ba4951bb2",
+  "source-binding:byte_count=675\u001fcitation=source:renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp:1-25\u001fdisposition=translate\u001flogical_lines=25\u001fpath=renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp\u001fsha256=b421cebd8e3c08be85155921f3016403e9dd30f73e9d16005f8764bf667e8435",
+  "source-review-receipt-binding:byte_count=1752\u001fid=component-074\u001fpath=docs/backend-port-source-reviews/component-074.source-review.toml\u001fsha256=32a288980426ced1a4f2bad19ae1a25f55b22838d057ea51752a09396973b070",
+  "target-binding:byte_count=1675\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_cpp__impl.rs:1-57\u001flogical_lines=57\u001fpath=crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_cpp__impl.rs\u001fsha256=d1bcbd6c4f46e18e5d37439b1b9c196cd70b93b46e16483cefd17ace8a63bdb7",
+  "target-binding:byte_count=2059\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_hpp__decl.rs:1-69\u001flogical_lines=69\u001fpath=crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_hpp__decl.rs\u001fsha256=5db59fad7e8e6866e2bde4e83b6617e5b56a61e57f67a9e1ceb1bcb7ed244358",
+]
+source_review_receipts = [{ id = "component-074", path = "docs/backend-port-source-reviews/component-074.source-review.toml", sha256 = "32a288980426ced1a4f2bad19ae1a25f55b22838d057ea51752a09396973b070", byte_count = 1752 }]
+sources = [{ path = "renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp", sha256 = "787ed42b6ba9108e4ccc09fbca255c7454e2a8702b3938a1745fbd4ba4951bb2", logical_lines = 19, byte_count = 341, citation = "source:renderer/src/ore/vulkan/ore_shader_module_vulkan.cpp:1-19", disposition = "translate" }, { path = "renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp", sha256 = "b421cebd8e3c08be85155921f3016403e9dd30f73e9d16005f8764bf667e8435", logical_lines = 25, byte_count = 675, citation = "source:renderer/src/ore/vulkan/ore_shader_module_vulkan.hpp:1-25", disposition = "translate" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_cpp__impl.rs", sha256 = "d1bcbd6c4f46e18e5d37439b1b9c196cd70b93b46e16483cefd17ace8a63bdb7", logical_lines = 57, byte_count = 1675, citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_cpp__impl.rs:1-57" }, { path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_hpp__decl.rs", sha256 = "5db59fad7e8e6866e2bde4e83b6617e5b56a61e57f67a9e1ceb1bcb7ed244358", logical_lines = 69, byte_count = 2059, citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_shader_module_vulkan_hpp__decl.rs:1-69" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

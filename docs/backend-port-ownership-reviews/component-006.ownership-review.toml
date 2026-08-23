@@ -1,0 +1,67 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-006"
+units = ["shader:minifier"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-006-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 8
+dependency_authority.sha256 = "ae2400c19d3ed33574528819cf3a046e7c2e4e6c38d8a57c64a43a7a36db3255"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=argparse\u001fdependency_unit=-\u001fline=1\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=collections\u001fdependency_unit=-\u001fline=7\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=glob\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=io\u001fdependency_unit=-\u001fline=3\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=os\u001fdependency_unit=-\u001fline=4\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=ply.lex\u001fdependency_unit=-\u001fline=56\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=re\u001fdependency_unit=-\u001fline=5\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=sys\u001fdependency_unit=-\u001fline=6\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+]
+authority_record_count = 13
+authority_sha256 = "7467b45d14e0f18f7f486fd0974871dfbe9b7e0c90e236d48cc22361fa47d202"
+authority_keys = [
+  "component:component-006",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=argparse\u001fdependency_unit=-\u001fline=1\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=collections\u001fdependency_unit=-\u001fline=7\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=glob\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=io\u001fdependency_unit=-\u001fline=3\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=os\u001fdependency_unit=-\u001fline=4\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=ply.lex\u001fdependency_unit=-\u001fline=56\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=re\u001fdependency_unit=-\u001fline=5\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=python-import\u001fdependency_token=sys\u001fdependency_unit=-\u001fline=6\u001fresolution_kind=external-tool-module\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/shaders/minify.py\u001fsource_unit=shader:minifier",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-006\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:minifier",
+  "source-binding:byte_count=33034\u001fcitation=source:renderer/src/shaders/minify.py:1-642\u001fdisposition=shared-authority\u001flogical_lines=642\u001fpath=renderer/src/shaders/minify.py\u001fsha256=bf4b9f529a19765c5e6f28b68ef8a73f5bd65433cd87ce723df5df923e6bc22b",
+  "source-review-receipt-binding:byte_count=2230\u001fid=component-006\u001fpath=docs/backend-port-source-reviews/component-006.source-review.toml\u001fsha256=240795730559a46a57f1ef80be73364b40986ea009513e289687980afb211357",
+  "target-binding:byte_count=1044\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs:1-18\u001flogical_lines=18\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs\u001fsha256=3fe38bd987afd7d55bafab15da844679fbd2dfef842914537641cf03e707f401",
+]
+source_review_receipts = [{ id = "component-006", path = "docs/backend-port-source-reviews/component-006.source-review.toml", sha256 = "240795730559a46a57f1ef80be73364b40986ea009513e289687980afb211357", byte_count = 2230 }]
+sources = [{ path = "renderer/src/shaders/minify.py", sha256 = "bf4b9f529a19765c5e6f28b68ef8a73f5bd65433cd87ce723df5df923e6bc22b", logical_lines = 642, byte_count = 33034, citation = "source:renderer/src/shaders/minify.py:1-642", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs", sha256 = "3fe38bd987afd7d55bafab15da844679fbd2dfef842914537641cf03e707f401", logical_lines = 18, byte_count = 1044, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs:1-18" }]
+findings = [{ id = "OR-C006-01", severity = "P2", summary = "The generated-output ownership declaration names only export and header stages even though the source unconditionally creates a third owned output, <root>.minified<ext>, leaving its generated bytes outside the declared output graph.", review_domains = ["configuration-owner-graphs", "failure-and-loss", "ownership-transfers"], citations = ["source:renderer/src/shaders/minify.py:24-32", "source:renderer/src/shaders/minify.py:621-642", "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs:15-16"], authority_keys = ["component:component-006"] }]
+open_findings = 1
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

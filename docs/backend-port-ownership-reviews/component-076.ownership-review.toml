@@ -1,0 +1,74 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-076"
+units = ["vulkan:ore:sampler"]
+owner_families = ["vulkan-ore-owners"]
+field_profiles = ["vulkan"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-076-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "vulkan-ore-owners", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "vulkan", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 3
+field_authority.sha256 = "d3ef32a5c16db68199737ba4e52788dbe30f7ff778ee15f875719880191b15e7"
+field_authority.authority_keys = [
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=20\u001fdeclared_type=VkDevice\u001ffield_name=m_vkDevice\u001ffield_order=1\u001fownership_review=native-handle-review-required\u001fownership_unit=vulkan:ore:sampler\u001fqualified_type=rive::ore::SamplerVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=21\u001fdeclared_type=VkSampler\u001ffield_name=m_vkSampler\u001ffield_order=2\u001fownership_review=native-handle-review-required\u001fownership_unit=vulkan:ore:sampler\u001fqualified_type=rive::ore::SamplerVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=22\u001fdeclared_type=PFN_vkDestroySampler\u001ffield_name=m_vkDestroySampler\u001ffield_order=3\u001fownership_review=value-lifetime-review-required\u001fownership_unit=vulkan:ore:sampler\u001fqualified_type=rive::ore::SamplerVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp",
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 2
+lifecycle_authority.sha256 = "9b66f4bc19b0857ff78a14d2b8791c7d0586639e04d550d90fb7228ecfd1809c"
+lifecycle_authority.authority_keys = [
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=destruction-or-release\u001fline=10\u001fmatched_token=~SamplerVulkan(\u001fownership_unit=vulkan:ore:sampler\u001freview_status=review-required\u001fsource_evidence=SamplerVulkan::~SamplerVulkan()\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.cpp",
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=destruction-or-release\u001fline=15\u001fmatched_token=~SamplerVulkan(\u001fownership_unit=vulkan:ore:sampler\u001freview_status=review-required\u001fsource_evidence=~SamplerVulkan() override;\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp",
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 2
+configuration_authority.sha256 = "ca21ad20fabea781610906087dbc8f7bf6a9c59e1e3479f167ffe4d4977bc225"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=12\u001foccurrence_count=1\u001foccurrence_lines=12\u001fownership_unit=vulkan:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.cpp\u001ftoken=VK_NULL_HANDLE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=20\u001foccurrence_count=2\u001foccurrence_lines=20,21\u001fownership_unit=vulkan:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp\u001ftoken=VK_NULL_HANDLE",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 3
+dependency_authority.sha256 = "2c43af5041a18459081f121fef9b2ab8dcb192e3f37c5f5203eda8fab8f2f2ae"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_sampler_vulkan.hpp\u001fdependency_unit=vulkan:ore:sampler\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp\u001fresolved_sha256=9569178cb8c22807af058d0b4449198051da285d36fe54e66a717a66af3bc90e\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.cpp\u001fsource_unit=vulkan:ore:sampler",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_sampler.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_sampler.hpp\u001fresolved_sha256=e185a80af7fbe556f56a060b3a075a7727acc74da9048a2327c91ce566e80671\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp\u001fsource_unit=vulkan:ore:sampler",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=vulkan/vulkan.h\u001fdependency_unit=-\u001fline=3\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp\u001fsource_unit=vulkan:ore:sampler",
+]
+authority_record_count = 18
+authority_sha256 = "e56ef9d2f267e2c3e93d993a270cc15fbd9ef132b86abccef854979a60db92a9"
+authority_keys = [
+  "component:component-076",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=12\u001foccurrence_count=1\u001foccurrence_lines=12\u001fownership_unit=vulkan:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.cpp\u001ftoken=VK_NULL_HANDLE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=20\u001foccurrence_count=2\u001foccurrence_lines=20,21\u001fownership_unit=vulkan:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp\u001ftoken=VK_NULL_HANDLE",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_sampler_vulkan.hpp\u001fdependency_unit=vulkan:ore:sampler\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp\u001fresolved_sha256=9569178cb8c22807af058d0b4449198051da285d36fe54e66a717a66af3bc90e\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.cpp\u001fsource_unit=vulkan:ore:sampler",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_sampler.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_sampler.hpp\u001fresolved_sha256=e185a80af7fbe556f56a060b3a075a7727acc74da9048a2327c91ce566e80671\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp\u001fsource_unit=vulkan:ore:sampler",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=vulkan/vulkan.h\u001fdependency_unit=-\u001fline=3\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp\u001fsource_unit=vulkan:ore:sampler",
+  "field-profile:campaign=vulkan\u001fcomponent_id=component-076\u001fprofile_id=vulkan",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=20\u001fdeclared_type=VkDevice\u001ffield_name=m_vkDevice\u001ffield_order=1\u001fownership_review=native-handle-review-required\u001fownership_unit=vulkan:ore:sampler\u001fqualified_type=rive::ore::SamplerVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=21\u001fdeclared_type=VkSampler\u001ffield_name=m_vkSampler\u001ffield_order=2\u001fownership_review=native-handle-review-required\u001fownership_unit=vulkan:ore:sampler\u001fqualified_type=rive::ore::SamplerVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp",
+  "field-raw:campaign=vulkan\u001fconfiguration=vulkan\u001fdeclaration_line=22\u001fdeclared_type=PFN_vkDestroySampler\u001ffield_name=m_vkDestroySampler\u001ffield_order=3\u001fownership_review=value-lifetime-review-required\u001fownership_unit=vulkan:ore:sampler\u001fqualified_type=rive::ore::SamplerVulkan\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp",
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=destruction-or-release\u001fline=10\u001fmatched_token=~SamplerVulkan(\u001fownership_unit=vulkan:ore:sampler\u001freview_status=review-required\u001fsource_evidence=SamplerVulkan::~SamplerVulkan()\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.cpp",
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=destruction-or-release\u001fline=15\u001fmatched_token=~SamplerVulkan(\u001fownership_unit=vulkan:ore:sampler\u001freview_status=review-required\u001fsource_evidence=~SamplerVulkan() override;\u001fsource_path=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp",
+  "owner-family:campaign=vulkan\u001fcomponent_id=component-076\u001ffamily_id=vulkan-ore-owners\u001fownership_unit=vulkan:ore:sampler",
+  "source-binding:byte_count=285\u001fcitation=source:renderer/src/ore/vulkan/ore_sampler_vulkan.cpp:1-16\u001fdisposition=translate\u001flogical_lines=16\u001fpath=renderer/src/ore/vulkan/ore_sampler_vulkan.cpp\u001fsha256=28ab55810848a33d95789ff1f09f73c808ab57d5f3757213fa3c0b0b11e29272",
+  "source-binding:byte_count=620\u001fcitation=source:renderer/src/ore/vulkan/ore_sampler_vulkan.hpp:1-24\u001fdisposition=translate\u001flogical_lines=24\u001fpath=renderer/src/ore/vulkan/ore_sampler_vulkan.hpp\u001fsha256=9569178cb8c22807af058d0b4449198051da285d36fe54e66a717a66af3bc90e",
+  "source-review-receipt-binding:byte_count=1698\u001fid=component-076\u001fpath=docs/backend-port-source-reviews/component-076.source-review.toml\u001fsha256=ea1a920b765d9fd42fa36bb324b4168d5c60e25cfa21fdf38b8642a72d009ae3",
+  "target-binding:byte_count=1594\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs:1-57\u001flogical_lines=57\u001fpath=crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs\u001fsha256=ea5ced40a6fec496b0b03995f9a0af46f0b3c3f34ddea22966d24b80ffbef2c2",
+  "target-binding:byte_count=1907\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs:1-69\u001flogical_lines=69\u001fpath=crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs\u001fsha256=b79ce7ebfada2e2f102d5e21ad10a1cab52cd198d2cc46e707aa618bbbdfdd94",
+]
+source_review_receipts = [{ id = "component-076", path = "docs/backend-port-source-reviews/component-076.source-review.toml", sha256 = "ea1a920b765d9fd42fa36bb324b4168d5c60e25cfa21fdf38b8642a72d009ae3", byte_count = 1698 }]
+sources = [{ path = "renderer/src/ore/vulkan/ore_sampler_vulkan.cpp", sha256 = "28ab55810848a33d95789ff1f09f73c808ab57d5f3757213fa3c0b0b11e29272", logical_lines = 16, byte_count = 285, citation = "source:renderer/src/ore/vulkan/ore_sampler_vulkan.cpp:1-16", disposition = "translate" }, { path = "renderer/src/ore/vulkan/ore_sampler_vulkan.hpp", sha256 = "9569178cb8c22807af058d0b4449198051da285d36fe54e66a717a66af3bc90e", logical_lines = 24, byte_count = 620, citation = "source:renderer/src/ore/vulkan/ore_sampler_vulkan.hpp:1-24", disposition = "translate" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs", sha256 = "ea5ced40a6fec496b0b03995f9a0af46f0b3c3f34ddea22966d24b80ffbef2c2", logical_lines = 57, byte_count = 1594, citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs:1-57" }, { path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs", sha256 = "b79ce7ebfada2e2f102d5e21ad10a1cab52cd198d2cc46e707aa618bbbdfdd94", logical_lines = 69, byte_count = 1907, citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs:1-69" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

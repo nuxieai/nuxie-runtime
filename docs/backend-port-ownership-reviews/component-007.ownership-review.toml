@@ -1,0 +1,77 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-007"
+units = ["shader:source:advanced_blend"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-007-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 13
+configuration_authority.sha256 = "d2136ca7ca4d1973bebc0deba42c539537183d8e66a9c8af4fd5234fcf2d2457"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_KHR_BLEND && ifdef @ENABLE_HSL_BLEND_MODES\u001fline=64\u001foccurrence_count=1\u001foccurrence_lines=64\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT\u001fline=330\u001foccurrence_count=1\u001foccurrence_lines=330\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=// FRAGMENT",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND\u001fline=328\u001foccurrence_count=1\u001foccurrence_lines=328\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=// ENABLE_ADVANCED_BLEND",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND && ifdef @ENABLE_HSL_BLEND_MODES\u001fline=152\u001foccurrence_count=1\u001foccurrence_lines=152\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=// ENABLE_HSL_BLEND_MODES",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND && ifdef @ENABLE_HSL_BLEND_MODES\u001fline=284\u001foccurrence_count=1\u001foccurrence_lines=284\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_KHR_BLEND\u001fline=78\u001foccurrence_count=1\u001foccurrence_lines=78\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=// ENABLE_KHR_BLEND",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_KHR_BLEND && else -\u001fline=76\u001foccurrence_count=1\u001foccurrence_lines=76\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=58\u001foccurrence_count=1\u001foccurrence_lines=58\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@FRAGMENT",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT\u001fline=60\u001foccurrence_count=1\u001foccurrence_lines=60\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_KHR_BLEND",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT\u001fline=80\u001foccurrence_count=1\u001foccurrence_lines=80\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_ADVANCED_BLEND",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND\u001fline=253\u001foccurrence_count=1\u001foccurrence_lines=253\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_HSL_BLEND_MODES",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND\u001fline=81\u001foccurrence_count=1\u001foccurrence_lines=81\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_HSL_BLEND_MODES",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_KHR_BLEND\u001fline=62\u001foccurrence_count=1\u001foccurrence_lines=62\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_HSL_BLEND_MODES",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 18
+authority_sha256 = "e3f67b327f9f501b5b998bd75eab0815b69b32ace5924829899bb94e927faf68"
+authority_keys = [
+  "component:component-007",
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_KHR_BLEND && ifdef @ENABLE_HSL_BLEND_MODES\u001fline=64\u001foccurrence_count=1\u001foccurrence_lines=64\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT\u001fline=330\u001foccurrence_count=1\u001foccurrence_lines=330\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=// FRAGMENT",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND\u001fline=328\u001foccurrence_count=1\u001foccurrence_lines=328\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=// ENABLE_ADVANCED_BLEND",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND && ifdef @ENABLE_HSL_BLEND_MODES\u001fline=152\u001foccurrence_count=1\u001foccurrence_lines=152\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=// ENABLE_HSL_BLEND_MODES",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND && ifdef @ENABLE_HSL_BLEND_MODES\u001fline=284\u001foccurrence_count=1\u001foccurrence_lines=284\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_KHR_BLEND\u001fline=78\u001foccurrence_count=1\u001foccurrence_lines=78\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=// ENABLE_KHR_BLEND",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_KHR_BLEND && else -\u001fline=76\u001foccurrence_count=1\u001foccurrence_lines=76\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=58\u001foccurrence_count=1\u001foccurrence_lines=58\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@FRAGMENT",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT\u001fline=60\u001foccurrence_count=1\u001foccurrence_lines=60\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_KHR_BLEND",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT\u001fline=80\u001foccurrence_count=1\u001foccurrence_lines=80\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_ADVANCED_BLEND",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND\u001fline=253\u001foccurrence_count=1\u001foccurrence_lines=253\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_HSL_BLEND_MODES",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_ADVANCED_BLEND\u001fline=81\u001foccurrence_count=1\u001foccurrence_lines=81\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_HSL_BLEND_MODES",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @FRAGMENT && ifdef @ENABLE_KHR_BLEND\u001fline=62\u001foccurrence_count=1\u001foccurrence_lines=62\u001fownership_unit=shader:source:advanced_blend\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/advanced_blend.glsl\u001ftoken=@ENABLE_HSL_BLEND_MODES",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-007\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:advanced_blend",
+  "source-binding:byte_count=13219\u001fcitation=source:renderer/src/shaders/advanced_blend.glsl:1-330\u001fdisposition=shared-authority\u001flogical_lines=330\u001fpath=renderer/src/shaders/advanced_blend.glsl\u001fsha256=d7f8d9cec8e095c7e6d331a9f3ba48cdb18ea63f961d9223e3dfc509bcd8794b",
+  "source-review-receipt-binding:byte_count=1170\u001fid=component-007\u001fpath=docs/backend-port-source-reviews/component-007.source-review.toml\u001fsha256=c042c4bfab995d3a33f0bdfb413939d40c1bad8b6cd873fd3fd424df80dda2ad",
+  "target-binding:byte_count=938\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_advanced_blend_glsl__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_advanced_blend_glsl__generated_input.rs\u001fsha256=88f594e8845e40d73949ce0e6fcfe1e8162f88aa7e7a9e87e25b4e17ce55dd62",
+]
+source_review_receipts = [{ id = "component-007", path = "docs/backend-port-source-reviews/component-007.source-review.toml", sha256 = "c042c4bfab995d3a33f0bdfb413939d40c1bad8b6cd873fd3fd424df80dda2ad", byte_count = 1170 }]
+sources = [{ path = "renderer/src/shaders/advanced_blend.glsl", sha256 = "d7f8d9cec8e095c7e6d331a9f3ba48cdb18ea63f961d9223e3dfc509bcd8794b", logical_lines = 330, byte_count = 13219, citation = "source:renderer/src/shaders/advanced_blend.glsl:1-330", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_advanced_blend_glsl__generated_input.rs", sha256 = "88f594e8845e40d73949ce0e6fcfe1e8162f88aa7e7a9e87e25b4e17ce55dd62", logical_lines = 17, byte_count = 938, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_advanced_blend_glsl__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

@@ -1,0 +1,75 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-012"
+units = ["shader:source:flush_uniforms"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-012-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 12
+configuration_authority.sha256 = "e0aa85b53d2eddbc6783d5831b4e1d9eb9b81a761961c14f2f007fcc298a60ec"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_FLOAT\u001fline=3\u001foccurrence_count=1\u001foccurrence_lines=3\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_FLOAT2\u001fline=12\u001foccurrence_count=1\u001foccurrence_lines=12\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_FLOAT4\u001fline=15\u001foccurrence_count=1\u001foccurrence_lines=15\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_INT4\u001fline=9\u001foccurrence_count=1\u001foccurrence_lines=9\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_UINT\u001fline=6\u001foccurrence_count=1\u001foccurrence_lines=6\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef FLUSH_UNIFORMS_NAME\u001fline=19\u001foccurrence_count=1\u001foccurrence_lines=19\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=1\u001foccurrence_count=1\u001foccurrence_lines=1\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_FLOAT",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=10\u001foccurrence_count=1\u001foccurrence_lines=10\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_FLOAT2",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=13\u001foccurrence_count=1\u001foccurrence_lines=13\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_FLOAT4",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=17\u001foccurrence_count=1\u001foccurrence_lines=17\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=FLUSH_UNIFORMS_NAME",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=4\u001foccurrence_count=1\u001foccurrence_lines=4\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_UINT",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=7\u001foccurrence_count=1\u001foccurrence_lines=7\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_INT4",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 17
+authority_sha256 = "ce4126dc0cea6a6e93990a49d9bca10c9514b20b56e28887f882514378db6cfd"
+authority_keys = [
+  "component:component-012",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_FLOAT\u001fline=3\u001foccurrence_count=1\u001foccurrence_lines=3\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_FLOAT2\u001fline=12\u001foccurrence_count=1\u001foccurrence_lines=12\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_FLOAT4\u001fline=15\u001foccurrence_count=1\u001foccurrence_lines=15\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_INT4\u001fline=9\u001foccurrence_count=1\u001foccurrence_lines=9\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef DECLARE_UNIFORM_UINT\u001fline=6\u001foccurrence_count=1\u001foccurrence_lines=6\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef FLUSH_UNIFORMS_NAME\u001fline=19\u001foccurrence_count=1\u001foccurrence_lines=19\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=1\u001foccurrence_count=1\u001foccurrence_lines=1\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_FLOAT",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=10\u001foccurrence_count=1\u001foccurrence_lines=10\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_FLOAT2",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=13\u001foccurrence_count=1\u001foccurrence_lines=13\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_FLOAT4",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=17\u001foccurrence_count=1\u001foccurrence_lines=17\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=FLUSH_UNIFORMS_NAME",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=4\u001foccurrence_count=1\u001foccurrence_lines=4\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_UINT",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=7\u001foccurrence_count=1\u001foccurrence_lines=7\u001fownership_unit=shader:source:flush_uniforms\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/flush_uniforms.glsl\u001ftoken=DECLARE_UNIFORM_INT4",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-012\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:flush_uniforms",
+  "source-binding:byte_count=2454\u001fcitation=source:renderer/src/shaders/flush_uniforms.glsl:1-58\u001fdisposition=shared-authority\u001flogical_lines=58\u001fpath=renderer/src/shaders/flush_uniforms.glsl\u001fsha256=1c22659c0e40233b0b06515287e122e06b73a4428d8e78721ca71e3419db961e",
+  "source-review-receipt-binding:byte_count=1169\u001fid=component-012\u001fpath=docs/backend-port-source-reviews/component-012.source-review.toml\u001fsha256=ffe937779b789814f0287208e03638ba38f80e2b181aa4f496eca4c904fb4c60",
+  "target-binding:byte_count=936\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_flush_uniforms_glsl__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_flush_uniforms_glsl__generated_input.rs\u001fsha256=2710c3704f6663c6e6f64d839aef31d4d2abfcb9e8a132529edc905d7b082c09",
+]
+source_review_receipts = [{ id = "component-012", path = "docs/backend-port-source-reviews/component-012.source-review.toml", sha256 = "ffe937779b789814f0287208e03638ba38f80e2b181aa4f496eca4c904fb4c60", byte_count = 1169 }]
+sources = [{ path = "renderer/src/shaders/flush_uniforms.glsl", sha256 = "1c22659c0e40233b0b06515287e122e06b73a4428d8e78721ca71e3419db961e", logical_lines = 58, byte_count = 2454, citation = "source:renderer/src/shaders/flush_uniforms.glsl:1-58", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_flush_uniforms_glsl__generated_input.rs", sha256 = "2710c3704f6663c6e6f64d839aef31d4d2abfcb9e8a132529edc905d7b082c09", logical_lines = 17, byte_count = 936, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_flush_uniforms_glsl__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

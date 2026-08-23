@@ -1,0 +1,81 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-061"
+units = ["shader:source:metal"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-061-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 15
+configuration_authority.sha256 = "52549129ad2804ecc2f61d60fa609f3c14c8e989919449de6aae2665c0325949"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all;ifdef @PLS_IMPL_DEVICE_BUFFER\u001fline=287\u001foccurrence_count=2\u001foccurrence_lines=287,473\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=PLS_IMPL_DEVICE_BUFFER",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER;ifdef @PLS_IMPL_DEVICE_BUFFER && ifdef @PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED\u001fline=292\u001foccurrence_count=2\u001foccurrence_lines=292,321\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED",
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @ENABLE_INSTANCE_INDEX\u001fline=201\u001foccurrence_count=1\u001foccurrence_lines=201\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER\u001fline=382\u001foccurrence_count=1\u001foccurrence_lines=382\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=// Default implementation -- framebuffer reads.",
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER && ifdef @PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED\u001fline=309\u001foccurrence_count=1\u001foccurrence_lines=309\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=else -\u001fline=213\u001foccurrence_count=1\u001foccurrence_lines=213\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=else // Default implementation -- framebuffer reads.\u001fline=473\u001foccurrence_count=1\u001foccurrence_lines=473\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=// PLS_IMPL_DEVICE_BUFFER",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER && else -\u001fline=321\u001foccurrence_count=1\u001foccurrence_lines=321\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=// @PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef $_ARE_TOKEN_NAMES_PRESERVED\u001fline=44\u001foccurrence_count=1\u001foccurrence_lines=44\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef @OPTIONALLY_FLAT\u001fline=88\u001foccurrence_count=1\u001foccurrence_lines=88\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=186\u001foccurrence_count=1\u001foccurrence_lines=186\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=@ENABLE_INSTANCE_INDEX",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=287\u001foccurrence_count=1\u001foccurrence_lines=287\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=@PLS_IMPL_DEVICE_BUFFER",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER\u001fline=292\u001foccurrence_count=1\u001foccurrence_lines=292\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=@PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=12\u001foccurrence_count=1\u001foccurrence_lines=12\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=$_ARE_TOKEN_NAMES_PRESERVED",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=81\u001foccurrence_count=1\u001foccurrence_lines=81\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=@OPTIONALLY_FLAT",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 0
+dependency_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+dependency_authority.authority_keys = [
+]
+authority_record_count = 20
+authority_sha256 = "6677ee4b67c017dbffca57bd76ed166f06e6970f707caa7d3ab0315a39f97734"
+authority_keys = [
+  "component:component-061",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all;ifdef @PLS_IMPL_DEVICE_BUFFER\u001fline=287\u001foccurrence_count=2\u001foccurrence_lines=287,473\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=PLS_IMPL_DEVICE_BUFFER",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER;ifdef @PLS_IMPL_DEVICE_BUFFER && ifdef @PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED\u001fline=292\u001foccurrence_count=2\u001foccurrence_lines=292,321\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED",
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @ENABLE_INSTANCE_INDEX\u001fline=201\u001foccurrence_count=1\u001foccurrence_lines=201\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER\u001fline=382\u001foccurrence_count=1\u001foccurrence_lines=382\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=// Default implementation -- framebuffer reads.",
+  "configuration-raw:authority_kind=preprocessor-else\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER && ifdef @PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED\u001fline=309\u001foccurrence_count=1\u001foccurrence_lines=309\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=else -\u001fline=213\u001foccurrence_count=1\u001foccurrence_lines=213\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=else // Default implementation -- framebuffer reads.\u001fline=473\u001foccurrence_count=1\u001foccurrence_lines=473\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=// PLS_IMPL_DEVICE_BUFFER",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER && else -\u001fline=321\u001foccurrence_count=1\u001foccurrence_lines=321\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=// @PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef $_ARE_TOKEN_NAMES_PRESERVED\u001fline=44\u001foccurrence_count=1\u001foccurrence_lines=44\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifndef @OPTIONALLY_FLAT\u001fline=88\u001foccurrence_count=1\u001foccurrence_lines=88\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=-",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=186\u001foccurrence_count=1\u001foccurrence_lines=186\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=@ENABLE_INSTANCE_INDEX",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=287\u001foccurrence_count=1\u001foccurrence_lines=287\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=@PLS_IMPL_DEVICE_BUFFER",
+  "configuration-raw:authority_kind=preprocessor-ifdef\u001fcampaign=shader-build-authority\u001fenclosing_condition=ifdef @PLS_IMPL_DEVICE_BUFFER\u001fline=292\u001foccurrence_count=1\u001foccurrence_lines=292\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=@PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=12\u001foccurrence_count=1\u001foccurrence_lines=12\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=$_ARE_TOKEN_NAMES_PRESERVED",
+  "configuration-raw:authority_kind=preprocessor-ifndef\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=81\u001foccurrence_count=1\u001foccurrence_lines=81\u001fownership_unit=shader:source:metal\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/metal.glsl\u001ftoken=@OPTIONALLY_FLAT",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-061\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:metal",
+  "source-binding:byte_count=26890\u001fcitation=source:renderer/src/shaders/metal.glsl:1-531\u001fdisposition=shared-authority\u001flogical_lines=531\u001fpath=renderer/src/shaders/metal.glsl\u001fsha256=4a2cc45e01b2fa4d9a5e6428cae8f721f3ce2fe0dc143a326d84f12a9cd38794",
+  "source-review-receipt-binding:byte_count=1125\u001fid=component-061\u001fpath=docs/backend-port-source-reviews/component-061.source-review.toml\u001fsha256=c3eb04ec295e29ec30f572cc9743c62b37f68bd34fb36b36ac68cecd5f2b1d13",
+  "target-binding:byte_count=902\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_metal_glsl__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_metal_glsl__generated_input.rs\u001fsha256=629beab4d8d0193b0cd46924fbe7313f43c2161a750e18d386cf4ccf26c41c6b",
+]
+source_review_receipts = [{ id = "component-061", path = "docs/backend-port-source-reviews/component-061.source-review.toml", sha256 = "c3eb04ec295e29ec30f572cc9743c62b37f68bd34fb36b36ac68cecd5f2b1d13", byte_count = 1125 }]
+sources = [{ path = "renderer/src/shaders/metal.glsl", sha256 = "4a2cc45e01b2fa4d9a5e6428cae8f721f3ce2fe0dc143a326d84f12a9cd38794", logical_lines = 531, byte_count = 26890, citation = "source:renderer/src/shaders/metal.glsl:1-531", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_metal_glsl__generated_input.rs", sha256 = "629beab4d8d0193b0cd46924fbe7313f43c2161a750e18d386cf4ccf26c41c6b", logical_lines = 17, byte_count = 902, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_metal_glsl__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

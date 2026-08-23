@@ -1,0 +1,86 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-075"
+units = ["vulkan:ore:vulkan_dsl"]
+owner_families = ["vulkan-ore-owners"]
+field_profiles = ["vulkan"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g0-component-075-20260823"
+review_wave = "g0"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "vulkan-ore-owners", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "vulkan", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = []
+dependency_ownership_receipts = []
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 2
+lifecycle_authority.sha256 = "3f4e3f40d16ad85e88045dc4738bbbd75ca934529b65e42884e5169ce6d82f81"
+lifecycle_authority.authority_keys = [
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=construction-or-allocation\u001fline=73\u001fmatched_token=createDSLFromLayoutDesc\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_evidence=inline VkDescriptorSetLayout createDSLFromLayoutDesc(\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp",
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=failure-or-loss\u001fline=47\u001fmatched_token=assert\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_evidence=assert(false && \"oreBindingKindToVk: unhandled BindingKind\");\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp",
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 11
+configuration_authority.sha256 = "5ab3312825b0f5e74946bb36e6cc5f6f51d5af85754006968a711fb60c8097bf"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=103\u001foccurrence_count=1\u001foccurrence_lines=103\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=107\u001foccurrence_count=1\u001foccurrence_lines=107\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_NULL_HANDLE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=34\u001foccurrence_count=1\u001foccurrence_lines=34\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=35\u001foccurrence_count=2\u001foccurrence_lines=35,48\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=38\u001foccurrence_count=1\u001foccurrence_lines=38\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=40\u001foccurrence_count=1\u001foccurrence_lines=40\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=42\u001foccurrence_count=1\u001foccurrence_lines=42\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=45\u001foccurrence_count=1\u001foccurrence_lines=45\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_SAMPLER",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=55\u001foccurrence_count=1\u001foccurrence_lines=55\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_SHADER_STAGE_VERTEX_BIT",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=57\u001foccurrence_count=1\u001foccurrence_lines=57\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_SHADER_STAGE_FRAGMENT_BIT",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=59\u001foccurrence_count=1\u001foccurrence_lines=59\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_SHADER_STAGE_COMPUTE_BIT",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 4
+dependency_authority.sha256 = "0b3845ff5de964ec97d11f49ac6856568a86c4807b89c5540837737560fd4639"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=cassert\u001fdependency_unit=-\u001fline=15\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001fsource_unit=vulkan:ore:vulkan_dsl",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=cstdint\u001fdependency_unit=-\u001fline=16\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001fsource_unit=vulkan:ore:vulkan_dsl",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_types.hpp\u001fdependency_unit=-\u001fline=12\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_types.hpp\u001fresolved_sha256=be22ccf441b8556c8b0c7efaf5c709571ac0397a7cfa29ae10b9c56aa3ba9951\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001fsource_unit=vulkan:ore:vulkan_dsl",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=vulkan/vulkan.h\u001fdependency_unit=-\u001fline=14\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001fsource_unit=vulkan:ore:vulkan_dsl",
+]
+authority_record_count = 23
+authority_sha256 = "b8093513611454e9eccaac8b34e287fe8593f54addb0206ff384f90bd125636d"
+authority_keys = [
+  "component:component-075",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=103\u001foccurrence_count=1\u001foccurrence_lines=103\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=107\u001foccurrence_count=1\u001foccurrence_lines=107\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_NULL_HANDLE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=34\u001foccurrence_count=1\u001foccurrence_lines=34\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=35\u001foccurrence_count=2\u001foccurrence_lines=35,48\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=38\u001foccurrence_count=1\u001foccurrence_lines=38\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=40\u001foccurrence_count=1\u001foccurrence_lines=40\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=42\u001foccurrence_count=1\u001foccurrence_lines=42\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=45\u001foccurrence_count=1\u001foccurrence_lines=45\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_DESCRIPTOR_TYPE_SAMPLER",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=55\u001foccurrence_count=1\u001foccurrence_lines=55\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_SHADER_STAGE_VERTEX_BIT",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=57\u001foccurrence_count=1\u001foccurrence_lines=57\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_SHADER_STAGE_FRAGMENT_BIT",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=vulkan\u001fenclosing_condition=all\u001fline=59\u001foccurrence_count=1\u001foccurrence_lines=59\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001ftoken=VK_SHADER_STAGE_COMPUTE_BIT",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=cassert\u001fdependency_unit=-\u001fline=15\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001fsource_unit=vulkan:ore:vulkan_dsl",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=cstdint\u001fdependency_unit=-\u001fline=16\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001fsource_unit=vulkan:ore:vulkan_dsl",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_types.hpp\u001fdependency_unit=-\u001fline=12\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_types.hpp\u001fresolved_sha256=be22ccf441b8556c8b0c7efaf5c709571ac0397a7cfa29ae10b9c56aa3ba9951\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001fsource_unit=vulkan:ore:vulkan_dsl",
+  "dependency-raw:campaign=vulkan\u001fdependency_syntax=cpp-include\u001fdependency_token=vulkan/vulkan.h\u001fdependency_unit=-\u001fline=14\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001fsource_unit=vulkan:ore:vulkan_dsl",
+  "field-profile:campaign=vulkan\u001fcomponent_id=component-075\u001fprofile_id=vulkan",
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=construction-or-allocation\u001fline=73\u001fmatched_token=createDSLFromLayoutDesc\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_evidence=inline VkDescriptorSetLayout createDSLFromLayoutDesc(\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp",
+  "lifecycle-raw:campaign=vulkan\u001fevent_class=failure-or-loss\u001fline=47\u001fmatched_token=assert\u001fownership_unit=vulkan:ore:vulkan_dsl\u001freview_status=review-required\u001fsource_evidence=assert(false && \"oreBindingKindToVk: unhandled BindingKind\");\u001fsource_path=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp",
+  "owner-family:campaign=vulkan\u001fcomponent_id=component-075\u001ffamily_id=vulkan-ore-owners\u001fownership_unit=vulkan:ore:vulkan_dsl",
+  "source-binding:byte_count=4137\u001fcitation=source:renderer/src/ore/vulkan/ore_vulkan_dsl.hpp:1-112\u001fdisposition=translate\u001flogical_lines=112\u001fpath=renderer/src/ore/vulkan/ore_vulkan_dsl.hpp\u001fsha256=5f75e1cce3b43bbd34dc99af668be50848ff7c07288ad556f7856cbac25ade54",
+  "source-review-receipt-binding:byte_count=1111\u001fid=component-075\u001fpath=docs/backend-port-source-reviews/component-075.source-review.toml\u001fsha256=fa20c2341b97f0316e893b80879e656b3d98d55e5537d5cb176418778a4257bd",
+  "target-binding:byte_count=4131\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs:1-113\u001flogical_lines=113\u001fpath=crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs\u001fsha256=7283256474428fc092acd811f5d129fe6ee728c42a1859423b3cb5af64b903cc",
+]
+source_review_receipts = [{ id = "component-075", path = "docs/backend-port-source-reviews/component-075.source-review.toml", sha256 = "fa20c2341b97f0316e893b80879e656b3d98d55e5537d5cb176418778a4257bd", byte_count = 1111 }]
+sources = [{ path = "renderer/src/ore/vulkan/ore_vulkan_dsl.hpp", sha256 = "5f75e1cce3b43bbd34dc99af668be50848ff7c07288ad556f7856cbac25ade54", logical_lines = 112, byte_count = 4137, citation = "source:renderer/src/ore/vulkan/ore_vulkan_dsl.hpp:1-112", disposition = "translate" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs", sha256 = "7283256474428fc092acd811f5d129fe6ee728c42a1859423b3cb5af64b903cc", logical_lines = 113, byte_count = 4131, citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs:1-113" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

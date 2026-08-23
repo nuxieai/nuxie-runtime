@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "build:renderer"
+translation_kind = "complete-source-owner"
+source_path = "renderer/premake5.lua"
+source_sha256 = "8ae326a887fd81dd76cdc56382497a3a3905e5c92bfe3976aed7e333eb1878a1"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs"
+target_sha256 = "e50ebe6a16da90910d50a10740b21aed4288184b066a9505e7bb3c2d98ba6cb4"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_premake5.lua"
+source_snapshot_sha256 = "8ae326a887fd81dd76cdc56382497a3a3905e5c92bfe3976aed7e333eb1878a1"
+dependency_units = []
+source_lines = 335
+source_bytes = 9716
+configuration_authorities = 4
+source_rule_families = 13
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves both rooted demo/player project matrices without choosing a product route or enabling fallback."

@@ -1,8 +1,9 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_queue = "preparation"
+active_queue = "translation-admission"
 preparation_status = "green"
 ignored_skills = ["implement", "tdd"]
+translation_receipt_directory = "docs/backend-port-receipts"
 queue_order = [
   "audit",
   "preparation",

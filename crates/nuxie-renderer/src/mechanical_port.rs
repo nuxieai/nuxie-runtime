@@ -20,6 +20,12 @@
 #[doc(hidden)]
 mod target_inventory;
 
+#[path = "mechanical_port/shader-build-authority/renderer_premake5_pls_renderer_lua__build_input.rs"]
+pub(crate) mod backend_port_build_pls_renderer;
+
+#[path = "mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs"]
+pub(crate) mod backend_port_build_renderer;
+
 pub(crate) mod source {
     pub(crate) mod decoders {
         pub(crate) mod include {

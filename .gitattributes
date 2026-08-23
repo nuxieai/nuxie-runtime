@@ -12,3 +12,7 @@ crates/nuxie-renderer/tests/fixtures/native_metal/draw_combinations-4ac7b327-9f3
 # their final empty line is part of the source-assembly oracle.
 crates/nuxie-renderer/src/native_metal/shaders/draw_combinations.metal whitespace=-blank-at-eof
 crates/nuxie-renderer/tests/fixtures/native_metal/background_shader_sources/*.metal whitespace=-blank-at-eof
+
+# Mechanical renderer-port snapshots preserve the pinned upstream bytes,
+# including authored trailing spaces used by the source-hash authority.
+crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/* whitespace=-blank-at-eol

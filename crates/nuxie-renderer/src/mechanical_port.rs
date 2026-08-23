@@ -67,6 +67,8 @@ pub(crate) mod webgpu {
     pub(crate) mod webgpu_enum_class_bitmasks_decl;
     #[path = "renderer_src_webgpu_webgpu_compat_h__decl.rs"]
     pub(crate) mod webgpu_compat_decl;
+    #[path = "renderer_src_webgpu_wagyu_port_src_library_webgpu_stubs_js__compat_build_input.rs"]
+    pub(crate) mod library_webgpu_stubs_build_input;
 }
 
 #[cfg(feature = "native-vulkan-experimental")]

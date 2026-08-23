@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:wagyu:library_webgpu_stubs"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/wagyu-port/src/library_webgpu_stubs.js"
+source_sha256 = "152ce80cf64768e624bb79172469166a6f41dc982f556ac9ef7cadb519755d74"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_src_library_webgpu_stubs_js__compat_build_input.rs"
+target_sha256 = "abdcd950b24dec765d79dd18f7f6b838aaa658e0e8b28686358fd808223d3b28"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_src_library_webgpu_stubs.js"
+source_snapshot_sha256 = "152ce80cf64768e624bb79172469166a6f41dc982f556ac9ef7cadb519755d74"
+dependency_units = []
+source_lines = 207
+source_bytes = 8989
+configuration_authorities = 0
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::library_webgpu_stubs_build_input"
+scope_note = "Preserves the complete Emscripten WebGPU compatibility link input as dependency authority: all 199 unique host-provided symbols remain explicitly undefined, both deprecated and final instance-feature names remain required, and the single LibraryWebGPU addToLibrary registration is retained without inventing Rust renderer stubs or fallback behavior."

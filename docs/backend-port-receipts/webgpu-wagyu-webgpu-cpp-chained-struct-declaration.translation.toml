@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:wagyu:webgpu_cpp_chained_struct"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h"
+source_sha256 = "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs"
+target_sha256 = "a473dafb20f8fe4afa632aedc2f8734149570ca3dd15b21d3d4b976f1af892bd"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_include_webgpu_webgpu_cpp_chained_struct.h"
+source_snapshot_sha256 = "582e62d371f29391d78a7356c634c6b76e1d58b6257a6f5be51701d15797fce1"
+dependency_units = []
+source_lines = 54
+source_bytes = 2286
+configuration_authorities = 2
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::webgpu_cpp_chained_struct_decl"
+scope_note = "Preserves the complete standalone chained-structure dependency authority: uint32 SType representation without prematurely inventing enumerators, distinct const input and mutable output self-chain pointers, null/zero defaults, and exact C ABI layout."

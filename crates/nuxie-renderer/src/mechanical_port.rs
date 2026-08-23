@@ -59,6 +59,12 @@ pub(crate) mod backend_port_spirv_header_generator;
 #[path = "mechanical_port/shader-build-authority/renderer_src_shaders_wgsl_to_header_py__generator.rs"]
 pub(crate) mod backend_port_wgsl_header_generator;
 
+#[cfg(feature = "native-webgpu-experimental")]
+pub(crate) mod webgpu {
+    #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs"]
+    pub(crate) mod webgpu_cpp_chained_struct_decl;
+}
+
 #[cfg(feature = "native-vulkan-experimental")]
 pub(crate) mod vulkan {
     #[path = "renderer_src_vulkan_common_layouts_hpp__decl.rs"]

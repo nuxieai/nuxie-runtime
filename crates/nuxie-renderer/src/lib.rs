@@ -62,6 +62,7 @@ mod apple_wgpu_policy;
 mod logical_flush;
 #[cfg(any(
     feature = "native-vulkan-experimental",
+    feature = "native-webgpu-experimental",
     all(
         feature = "native-metal-experimental",
         any(

@@ -1,0 +1,66 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-084"
+units = ["webgl2:renderer:load_gles_extensions"]
+owner_families = ["webgl2-renderer-owners"]
+field_profiles = ["webgl2-emscripten"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g1-component-084-20260823"
+review_wave = "g1"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "webgl2-renderer-owners", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "webgl2-emscripten", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = ["component-083"]
+dependency_ownership_receipts = [{ id = "component-083", path = "docs/backend-port-ownership-reviews/component-083.ownership-review.toml", sha256 = "73234dbca3218ad7db1d061ed945b17a1bc77dd4dbbab4a7c50b0ed23689eccf", byte_count = 116045 }]
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 2
+lifecycle_authority.sha256 = "b129e03e2a458f90c11fc49c1e61a06af76884345007a1ec075c91e4bdfbe684"
+lifecycle_authority.authority_keys = [
+  "lifecycle-raw:campaign=webgl2\u001fevent_class=failure-or-loss\u001fline=29\u001fmatched_token=assert\u001fownership_unit=webgl2:renderer:load_gles_extensions\u001freview_status=authority-recorded\u001fsource_evidence=assert(extensions != nullptr);\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp",
+  "lifecycle-raw:campaign=webgl2\u001fevent_class=failure-or-loss\u001fline=8\u001fmatched_token=assert\u001fownership_unit=webgl2:renderer:load_gles_extensions\u001freview_status=authority-recorded\u001fsource_evidence=#include <assert.h>\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp",
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 4
+dependency_authority.sha256 = "7a3a261757bdf3c4ee362212370b23c61ea7bf3519d0b1d0283995ceb96b3cd0"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=EGL/egl.h\u001fdependency_unit=-\u001fline=7\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp\u001fsource_unit=webgl2:renderer:load_gles_extensions",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=assert.h\u001fdependency_unit=-\u001fline=8\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp\u001fsource_unit=webgl2:renderer:load_gles_extensions",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/gl/gles3.hpp\u001fdependency_unit=webgl2:renderer:gles3\u001fline=10\u001fresolution_kind=owned-source\u001fresolved_path=renderer/include/rive/renderer/gl/gles3.hpp\u001fresolved_sha256=1a70f796ef53540d2778c0ac5335933c46ddeb9bd6f547bd8802365879d5e27b\u001fsource_path=renderer/include/rive/renderer/gl/load_gles_extensions.hpp\u001fsource_unit=webgl2:renderer:load_gles_extensions",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/gl/gles3.hpp\u001fdependency_unit=webgl2:renderer:gles3\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/include/rive/renderer/gl/gles3.hpp\u001fresolved_sha256=1a70f796ef53540d2778c0ac5335933c46ddeb9bd6f547bd8802365879d5e27b\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp\u001fsource_unit=webgl2:renderer:load_gles_extensions",
+]
+authority_record_count = 14
+authority_sha256 = "92fcdfce654bdc3d66ca260b43b81a7d3643634c35f4f238f2e42b10d9af157e"
+authority_keys = [
+  "component-dependency:component-084->component-083",
+  "component:component-084",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=EGL/egl.h\u001fdependency_unit=-\u001fline=7\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp\u001fsource_unit=webgl2:renderer:load_gles_extensions",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=assert.h\u001fdependency_unit=-\u001fline=8\u001fresolution_kind=external-sdk-or-system\u001fresolved_path=-\u001fresolved_sha256=-\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp\u001fsource_unit=webgl2:renderer:load_gles_extensions",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/gl/gles3.hpp\u001fdependency_unit=webgl2:renderer:gles3\u001fline=10\u001fresolution_kind=owned-source\u001fresolved_path=renderer/include/rive/renderer/gl/gles3.hpp\u001fresolved_sha256=1a70f796ef53540d2778c0ac5335933c46ddeb9bd6f547bd8802365879d5e27b\u001fsource_path=renderer/include/rive/renderer/gl/load_gles_extensions.hpp\u001fsource_unit=webgl2:renderer:load_gles_extensions",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/gl/gles3.hpp\u001fdependency_unit=webgl2:renderer:gles3\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/include/rive/renderer/gl/gles3.hpp\u001fresolved_sha256=1a70f796ef53540d2778c0ac5335933c46ddeb9bd6f547bd8802365879d5e27b\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp\u001fsource_unit=webgl2:renderer:load_gles_extensions",
+  "field-profile:campaign=webgl2\u001fcomponent_id=component-084\u001fprofile_id=webgl2-emscripten",
+  "lifecycle-raw:campaign=webgl2\u001fevent_class=failure-or-loss\u001fline=29\u001fmatched_token=assert\u001fownership_unit=webgl2:renderer:load_gles_extensions\u001freview_status=authority-recorded\u001fsource_evidence=assert(extensions != nullptr);\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp",
+  "lifecycle-raw:campaign=webgl2\u001fevent_class=failure-or-loss\u001fline=8\u001fmatched_token=assert\u001fownership_unit=webgl2:renderer:load_gles_extensions\u001freview_status=authority-recorded\u001fsource_evidence=#include <assert.h>\u001fsource_path=renderer/src/gl/load_gles_extensions.cpp",
+  "owner-family:campaign=webgl2\u001fcomponent_id=component-084\u001ffamily_id=webgl2-renderer-owners\u001fownership_unit=webgl2:renderer:load_gles_extensions",
+  "source-binding:byte_count=242\u001fcitation=source:renderer/include/rive/renderer/gl/load_gles_extensions.hpp:1-10\u001fdisposition=translate\u001flogical_lines=10\u001fpath=renderer/include/rive/renderer/gl/load_gles_extensions.hpp\u001fsha256=b7b26a500a5bb931c18acf18e68c4821e8ec1cf3e9f6800b959392677e3f6700",
+  "source-binding:byte_count=5286\u001fcitation=source:renderer/src/gl/load_gles_extensions.cpp:1-137\u001fdisposition=source-exclusion-non-webgl2-build\u001flogical_lines=137\u001fpath=renderer/src/gl/load_gles_extensions.cpp\u001fsha256=3f5e89610af7119bc329a837a137ad961452d194e5962243418443d6795265f6",
+  "source-review-receipt-binding:byte_count=1979\u001fid=component-084\u001fpath=docs/backend-port-source-reviews/component-084.source-review.toml\u001fsha256=e7e503a14b2ea08f517b659f42dd12849eb71c5dd6ae95dee2a16a9f68fc3a13",
+  "target-binding:byte_count=695\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs:1-21\u001flogical_lines=21\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs\u001fsha256=6bd6e1836ac046de4e46c645c270b67772fdf719d7d205347f79505e7363018c",
+]
+source_review_receipts = [{ id = "component-084", path = "docs/backend-port-source-reviews/component-084.source-review.toml", sha256 = "e7e503a14b2ea08f517b659f42dd12849eb71c5dd6ae95dee2a16a9f68fc3a13", byte_count = 1979 }]
+sources = [{ path = "renderer/include/rive/renderer/gl/load_gles_extensions.hpp", sha256 = "b7b26a500a5bb931c18acf18e68c4821e8ec1cf3e9f6800b959392677e3f6700", logical_lines = 10, byte_count = 242, citation = "source:renderer/include/rive/renderer/gl/load_gles_extensions.hpp:1-10", disposition = "translate" }, { path = "renderer/src/gl/load_gles_extensions.cpp", sha256 = "3f5e89610af7119bc329a837a137ad961452d194e5962243418443d6795265f6", logical_lines = 137, byte_count = 5286, citation = "source:renderer/src/gl/load_gles_extensions.cpp:1-137", disposition = "source-exclusion-non-webgl2-build" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs", sha256 = "6bd6e1836ac046de4e46c645c270b67772fdf719d7d205347f79505e7363018c", logical_lines = 21, byte_count = 695, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs:1-21" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

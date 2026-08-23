@@ -1,0 +1,70 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-026"
+units = ["shader:source:blit_texture_as_draw_filtered"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g1-component-026-20260823"
+review_wave = "g1"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = ["component-009", "component-010", "component-012", "component-013", "component-025"]
+dependency_ownership_receipts = [{ id = "component-009", path = "docs/backend-port-ownership-reviews/component-009.ownership-review.toml", sha256 = "70488a7788bb906578b64e058177471c8792459c7b45748776470ffeff832f14", byte_count = 31828 }, { id = "component-010", path = "docs/backend-port-ownership-reviews/component-010.ownership-review.toml", sha256 = "fa007368259d1981aeb4f2284f94bc33ccac61ceed55629a46c5bd238a752dcb", byte_count = 7725 }, { id = "component-012", path = "docs/backend-port-ownership-reviews/component-012.ownership-review.toml", sha256 = "bffb0f7135da77995aaab0f71cf19234070b4fa166a9a442eaef72897f0a5c9b", byte_count = 12916 }, { id = "component-013", path = "docs/backend-port-ownership-reviews/component-013.ownership-review.toml", sha256 = "b73e1c0d490632096e63c3ca5d39cfaf214bbaf925630f8d600771ac46efda3f", byte_count = 119128 }, { id = "component-025", path = "docs/backend-port-ownership-reviews/component-025.ownership-review.toml", sha256 = "8104d5fd40e884a0714d196dfe8ed49411b58815a7bf1ef5f98a6905f71af915", byte_count = 17200 }]
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 2
+configuration_authority.sha256 = "cd55414c3298a1f3ea652930620e1cd29ebb4f28824c89a4420d8357a12251c8"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:blit_texture_as_draw_filtered\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001ftoken=GL_GOOGLE_include_directive",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=3\u001foccurrence_count=1\u001foccurrence_lines=3\u001fownership_unit=shader:source:blit_texture_as_draw_filtered\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001ftoken=GL_EXT_samplerless_texture_functions",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 5
+dependency_authority.sha256 = "bb765459ba903bfdc2f0aac762b18c6b328b8139733ade12b63e2fe63bc56238"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=blit_texture_as_draw.minified.glsl\u001fdependency_unit=shader:source:blit_texture_as_draw\u001fline=9\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/blit_texture_as_draw.glsl\u001fresolved_sha256=c9d6ab3c8911900a246d22484ad4dbda0a050ba76d74353c9a514d3ca7da3515\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=common.minified.glsl\u001fdependency_unit=shader:source:common\u001fline=8\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/common.glsl\u001fresolved_sha256=37d9f72c2ec84a9a24b42d8798c56c77e396c7b57a39f24edece8c95fe8b3881\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=constants.minified.glsl\u001fdependency_unit=shader:source:constants\u001fline=6\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/constants.glsl\u001fresolved_sha256=eefc0b9115beb4fe87b85431b0c683fdec73244c044278e97fdba0c96014bb56\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=flush_uniforms.minified.glsl\u001fdependency_unit=shader:source:flush_uniforms\u001fline=7\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/flush_uniforms.glsl\u001fresolved_sha256=1c22659c0e40233b0b06515287e122e06b73a4428d8e78721ca71e3419db961e\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=glsl.minified.glsl\u001fdependency_unit=shader:source:glsl\u001fline=5\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/glsl.glsl\u001fresolved_sha256=d7e3b795badbe6e5108f268ddea4f7c0bb5af4ad1416e41c7304beca89a15523\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+]
+authority_record_count = 17
+authority_sha256 = "6649a87944920a48ab2e741123a561dfac8223806aa8f4856d606d722d5891ce"
+authority_keys = [
+  "component-dependency:component-026->component-009",
+  "component-dependency:component-026->component-010",
+  "component-dependency:component-026->component-012",
+  "component-dependency:component-026->component-013",
+  "component-dependency:component-026->component-025",
+  "component:component-026",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:blit_texture_as_draw_filtered\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001ftoken=GL_GOOGLE_include_directive",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=3\u001foccurrence_count=1\u001foccurrence_lines=3\u001fownership_unit=shader:source:blit_texture_as_draw_filtered\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001ftoken=GL_EXT_samplerless_texture_functions",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=blit_texture_as_draw.minified.glsl\u001fdependency_unit=shader:source:blit_texture_as_draw\u001fline=9\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/blit_texture_as_draw.glsl\u001fresolved_sha256=c9d6ab3c8911900a246d22484ad4dbda0a050ba76d74353c9a514d3ca7da3515\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=common.minified.glsl\u001fdependency_unit=shader:source:common\u001fline=8\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/common.glsl\u001fresolved_sha256=37d9f72c2ec84a9a24b42d8798c56c77e396c7b57a39f24edece8c95fe8b3881\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=constants.minified.glsl\u001fdependency_unit=shader:source:constants\u001fline=6\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/constants.glsl\u001fresolved_sha256=eefc0b9115beb4fe87b85431b0c683fdec73244c044278e97fdba0c96014bb56\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=flush_uniforms.minified.glsl\u001fdependency_unit=shader:source:flush_uniforms\u001fline=7\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/flush_uniforms.glsl\u001fresolved_sha256=1c22659c0e40233b0b06515287e122e06b73a4428d8e78721ca71e3419db961e\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=glsl.minified.glsl\u001fdependency_unit=shader:source:glsl\u001fline=5\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/glsl.glsl\u001fresolved_sha256=d7e3b795badbe6e5108f268ddea4f7c0bb5af4ad1416e41c7304beca89a15523\u001fsource_path=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsource_unit=shader:source:blit_texture_as_draw_filtered",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-026\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:blit_texture_as_draw_filtered",
+  "source-binding:byte_count=325\u001fcitation=source:renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main:1-9\u001fdisposition=shared-authority\u001flogical_lines=9\u001fpath=renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main\u001fsha256=f94fff896ffcde07a3cf5ab06932284a4fa9dc6b87e48bb8256e018939bef0ea",
+  "source-review-receipt-binding:byte_count=1267\u001fid=component-026\u001fpath=docs/backend-port-source-reviews/component-026.source-review.toml\u001fsha256=ef085d7bc9ea08208541c5275d857033a85ffa7ff78c83e85845e2b2c9c5324a",
+  "target-binding:byte_count=1012\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_blit_texture_as_draw_filtered_main__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_blit_texture_as_draw_filtered_main__generated_input.rs\u001fsha256=079f68876bfcef4e7d09d2ea6eecd39204f2b3858b168325cbc96977e5f73b64",
+]
+source_review_receipts = [{ id = "component-026", path = "docs/backend-port-source-reviews/component-026.source-review.toml", sha256 = "ef085d7bc9ea08208541c5275d857033a85ffa7ff78c83e85845e2b2c9c5324a", byte_count = 1267 }]
+sources = [{ path = "renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main", sha256 = "f94fff896ffcde07a3cf5ab06932284a4fa9dc6b87e48bb8256e018939bef0ea", logical_lines = 9, byte_count = 325, citation = "source:renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main:1-9", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_blit_texture_as_draw_filtered_main__generated_input.rs", sha256 = "079f68876bfcef4e7d09d2ea6eecd39204f2b3858b168325cbc96977e5f73b64", logical_lines = 17, byte_count = 1012, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_blit_texture_as_draw_filtered_main__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

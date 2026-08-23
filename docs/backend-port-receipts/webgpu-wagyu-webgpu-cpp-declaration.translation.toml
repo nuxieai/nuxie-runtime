@@ -1,0 +1,24 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:wagyu:webgpu_cpp"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h"
+source_sha256 = "d58a0553dd853995594f2ccac691c7e02228263582ce5202f0fd931d48fc5f13"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs"
+target_sha256 = "55f62f7b418155379a88a36674c08140ef16ace16203cb6d35e0e39eb8f79def"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_include_webgpu_webgpu_cpp.h"
+source_snapshot_sha256 = "d58a0553dd853995594f2ccac691c7e02228263582ce5202f0fd931d48fc5f13"
+dependency_units = ["webgpu:wagyu:webgpu", "webgpu:wagyu:webgpu_cpp_chained_struct", "webgpu:wagyu:webgpu_enum_class_bitmasks"]
+dependency_artifacts = [
+  { path = "tools/backend-port/generate_webgpu_cpp_binding.py", sha256 = "12160fe8d3fb205e14d4d1e3e7f779ca3500815c7f88c870945be0a89c093744" },
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs", sha256 = "a4302afb9975350fa64db22c79e9bb471300c6514d27abc200b7eedf2d26b6e1" },
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs", sha256 = "a473dafb20f8fe4afa632aedc2f8734149570ca3dd15b21d3d4b976f1af892bd" },
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs", sha256 = "9bf176b80ae59a38282c6a8a18331927e6d493b7d29bc218d30bd4209200bda8" },
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_include_webgpu_webgpu.h", sha256 = "026f05a7fc6db460d3fe048c07067b1596c53527c31334ec5386353520b9044b" },
+]
+source_lines = 5833
+source_bytes = 287261
+configuration_authorities = 156
+lifecycle_authorities = 54
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu"
+scope_note = "Preserves the complete generated Wagyu C++ facade without legacy Rust-WGPU authority: all 58 enum classes and enumerators, 156 ABI size/align pairs, 86 exact C aggregate defaults (including nested chain discriminants and nonzero/undefined sentinels), 22 one-word RAII object wrappers with add-reference, release, acquire, move-to-C-handle, and null semantics, five guarded FreeMembers owners, 288 source method definitions, 43 template declarations, 663 static assertions, and all 199 underlying WebGPU entry points partitioned into 189 object-member and 10 free/member-release authorities. Generation fails closed on denominator, field-order, source-size, or raw-ABI drift."

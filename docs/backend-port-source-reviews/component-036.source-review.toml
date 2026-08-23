@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-036"
+units = ["shader:source:draw_clockwise_atomic_borrowed_coverage_interior_triangles"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g3-component-036-20260823"
+review_wave = "g3"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/spirv/draw_clockwise_atomic_borrowed_coverage_interior_triangles.frag"
+sha256 = "e565d01b95b2be36f3e9a0f52ce294d9b7a45240f45a068b7226be070a7625e6"
+citation = "source:renderer/src/shaders/spirv/draw_clockwise_atomic_borrowed_coverage_interior_triangles.frag:1-16"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_borrowed_coverage_interior_triangles_frag__generated_input.rs"
+sha256 = "f0101374f397d3981103a8431690435cc207cc34a8337322b03d06d40e1d22c2"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_borrowed_coverage_interior_triangles_frag__generated_input.rs:1-17"

@@ -1,0 +1,180 @@
+schema_version = 1
+component_id = "component-093"
+units = ["webgl2:ore:context", "webgl2:ore:render_pass", "webgl2:renderer:render_context_gl_impl", "webgl2:renderer:render_target"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g3-component-093-20260823"
+review_wave = "g3"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 5
+
+[[findings]]
+id = "SR-C093-01"
+severity = "P1"
+summary = "The source's generated shader headers provide mutually consistent exported short macro names and minified payload guards. The target emits those short keys but concatenates retained raw .minified.* payloads whose stage and feature guards remain unminified. Requested atlas, stage, clipping, advanced-blend, feather, and draw-mode branches therefore do not activate, causing affected shader compilation or behavior to fail."
+citations = [
+  "source:renderer/src/gl/render_context_gl_impl.cpp:22-37",
+  "source:renderer/src/gl/render_context_gl_impl.cpp:471-567",
+  "source:renderer/src/gl/render_context_gl_impl.cpp:1673-1797",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs:80-153",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs:1714-1782",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs:2011-2207",
+]
+
+[[findings]]
+id = "SR-C093-02"
+severity = "P1"
+summary = "The target's embedded resolve_atlas, blit_texture_as_draw, stencil_draw, and draw_msaa_object.frag literals use a stale internal minifier-symbol namespace inconsistent with the frozen generated headers and surrounding current chunks. Cross-chunk identifiers are undefined or rebound; notably, these literals use B3 as a declaration prefix while the current common payload defines B3 as pi. Atlas, blit, stencil, and MSAA shaders can consequently fail independently of SR-C093-01."
+citations = [
+  "source:renderer/src/gl/render_context_gl_impl.cpp:34-40",
+  "source:renderer/src/gl/render_context_gl_impl.cpp:574-608",
+  "source:renderer/src/gl/render_context_gl_impl.cpp:1849-1876",
+  "source:renderer/src/gl/render_context_gl_impl.cpp:3214-3231",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs:156-277",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs:1788-1802",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs:2174-2193",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs:2957-2976",
+]
+
+[[findings]]
+id = "SR-C093-03"
+severity = "P2"
+summary = "makeShaderModule validates and parses binding-map and GL-fixup sidecars before target shader creation and compilation. The source creates, compiles, and checks the shader first, applying the binding map only after successful compilation. Malformed sidecars therefore change error precedence and suppress source-visible GL creation/compile side effects."
+citations = [
+  "source:renderer/src/ore/gl/ore_context_gl.cpp:558-617",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_context_gl_cpp__impl.rs:618-727",
+]
+
+[[findings]]
+id = "SR-C093-04"
+severity = "P2"
+summary = "The source beginRenderPass finishes a previously registered pass and returns the newly constructed pass without registering it. The target additionally publishes every new pass through setActiveRenderPass. This changes the immediate activeRenderPass result and causes later context operations to implicitly finish passes that source callers did not explicitly register."
+citations = [
+  "source:renderer/src/ore/gl/ore_context_gl.cpp:943-950",
+  "source:renderer/src/ore/gl/ore_context_gl.cpp:1116-1144",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_context_gl_cpp__impl.rs:1344-1350",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_context_gl_cpp__impl.rs:1609-1628",
+]
+
+[[findings]]
+id = "SR-C093-05"
+severity = "P3"
+summary = "Several source-valid omission forms are absent. Source callers may omit outError from makePipeline and beginRenderPass, omit the two optional bindMSAAFramebuffer outputs, and omit authored trailing defaults from six RenderPassGL commands. Target signatures require every Option and scalar argument and provide no corresponding convenience forms."
+citations = [
+  "source:renderer/include/rive/renderer/ore/ore_context_gl.hpp:30-40",
+  "source:renderer/include/rive/renderer/gl/render_target_gl.hpp:59-68",
+  "source:renderer/src/ore/gl/ore_render_pass_gl.hpp:14-45",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_context_gl_cpp__impl.rs:1795-1819",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_render_target_gl_hpp__decl.rs:40-55",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_render_pass_gl_hpp__decl.rs:215-318",
+]
+
+[[sources]]
+path = "renderer/include/rive/renderer/gl/render_context_gl_impl.hpp"
+sha256 = "0463fb7021de6a5cc50a3798138a8494ebbef731535dddfb02a88a375f116414"
+citation = "source:renderer/include/rive/renderer/gl/render_context_gl_impl.hpp:1-580"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/include/rive/renderer/gl/render_target_gl.hpp"
+sha256 = "b4fb2dc670ba5889393b5f5eb1d60960edd30c7461f04a49564ea17b05544887"
+citation = "source:renderer/include/rive/renderer/gl/render_target_gl.hpp:1-210"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/include/rive/renderer/ore/ore_context_gl.hpp"
+sha256 = "850801f25d00820f126752dc557ed3a8cce9cbd94e6c1e7384bbf5a82938193b"
+citation = "source:renderer/include/rive/renderer/ore/ore_context_gl.hpp:1-76"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/gl/render_context_gl_impl.cpp"
+sha256 = "a41d565bb96d0f4308e16f239bc9538be1049947332bfc4273e3fbc2bbcc10c1"
+citation = "source:renderer/src/gl/render_context_gl_impl.cpp:1-3985"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/gl/render_target_gl.cpp"
+sha256 = "5bc3b3868eddb24dd62d628319963e7ecb3e8789da7c4423bba7b21ce9f5456b"
+citation = "source:renderer/src/gl/render_target_gl.cpp:1-373"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_context_gl.cpp"
+sha256 = "3cd5d53b34f159dc6fa5cd54d630c07485e8fa56fda58c001b99e3c0fed0d33d"
+citation = "source:renderer/src/ore/gl/ore_context_gl.cpp:1-1221"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_context_gl.mm"
+sha256 = "47f05e2e92adc3d7c9f283800734dfcaba76206dcb2c563f4f162df697930a34"
+citation = "source:renderer/src/ore/gl/ore_context_gl.mm:1-3"
+disposition = "source-exclusion-non-webgl2-build"
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_render_pass_gl.cpp"
+sha256 = "1c0f9d62dfd86b713967a02f3a5d389632db5e410e8c318c6bb139d37933d8b6"
+citation = "source:renderer/src/ore/gl/ore_render_pass_gl.cpp:1-631"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_render_pass_gl.hpp"
+sha256 = "130be44d0403b69e73d0f979c2b30614a3b86fb5974961d4c5ec851ed0cb6587"
+citation = "source:renderer/src/ore/gl/ore_render_pass_gl.hpp:1-86"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_render_pass_gl.mm"
+sha256 = "973cd79234b06bebb397b28357ab042ca52f3a27dac5f5e4009290c03032cd7d"
+citation = "source:renderer/src/ore/gl/ore_render_pass_gl.mm:1-3"
+disposition = "source-exclusion-non-webgl2-build"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_render_context_gl_impl_hpp__decl.rs"
+sha256 = "9043cc0ea1d8918bebc772daca1e97dbedbb674e254283bd28d36d8d3687bcb8"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_render_context_gl_impl_hpp__decl.rs:1-637"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_render_target_gl_hpp__decl.rs"
+sha256 = "fe3f616de9482508261db5474fc7ed0bac2d27bd87efc18e7fb30a1e2b73d53b"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_render_target_gl_hpp__decl.rs:1-486"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_ore_ore_context_gl_hpp__decl.rs"
+sha256 = "18874248dc1e98f33bf3ff9fdd537afe19cbcf6227a6d6750bc0675041b3c225"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_ore_ore_context_gl_hpp__decl.rs:1-128"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs"
+sha256 = "16d1895829d3104e5a9364e8f07a1bd50432f432c3731f481ae638cd9bea9b09"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs:1-4828"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_target_gl_cpp__impl.rs"
+sha256 = "226d868fa017ec37444c66186261cbff906d57facc790a7acc9cf8973d443ae0"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_target_gl_cpp__impl.rs:1-1010"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_context_gl_cpp__impl.rs"
+sha256 = "806283aae544822b29f63a271dc1a3fe5e401e39d710a0316946e4a0e1f9f32e"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_context_gl_cpp__impl.rs:1-2581"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_render_pass_gl_cpp__impl.rs"
+sha256 = "fe9437a14813357ebefd1d0252960650bca2e874f0ae625cb0184a075460481d"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_render_pass_gl_cpp__impl.rs:1-1030"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_render_pass_gl_hpp__decl.rs"
+sha256 = "e9d43b8d26083f1bcc198bb3d62fa96f39f80fdc29c4262feeeed23bf2bdd7a3"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_render_pass_gl_hpp__decl.rs:1-336"

@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-047"
+units = ["shader:source:draw_clockwise_interior_triangles"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g3-component-047-20260823"
+review_wave = "g3"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/spirv/draw_clockwise_interior_triangles.main"
+sha256 = "91351640c751f6498552fd743f9f1c0ca96ae134102bde8cdccec47b0382b3e7"
+citation = "source:renderer/src/shaders/spirv/draw_clockwise_interior_triangles.main:1-14"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_interior_triangles_main__generated_input.rs"
+sha256 = "9a8b03d3d2b787dbd915794cc35a0bd3189fcc20a813fcf5d8aafb1a97724f6c"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_interior_triangles_main__generated_input.rs:1-17"

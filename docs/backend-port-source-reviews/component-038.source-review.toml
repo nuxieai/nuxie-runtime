@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-038"
+units = ["shader:source:draw_clockwise_atomic_clip_interior_triangles"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g3-component-038-20260823"
+review_wave = "g3"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/spirv/draw_clockwise_atomic_clip_interior_triangles.frag"
+sha256 = "f8d9022ff95749f3df108983687b860b216a03a009bbbd314d4d1fe10ff1a269"
+citation = "source:renderer/src/shaders/spirv/draw_clockwise_atomic_clip_interior_triangles.frag:1-16"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_clip_interior_triangles_frag__generated_input.rs"
+sha256 = "49d5a934185f9b794543ed793930d5dfb9aa4887abd34a9ec778e625ad29096b"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_clip_interior_triangles_frag__generated_input.rs:1-17"

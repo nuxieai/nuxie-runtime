@@ -1,0 +1,22 @@
+schema_version = 1
+unit = "generic-render-context-helper"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-render-context-helper.translation.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/render_context_helper_impl.hpp:1-92",
+    "cpp:renderer/src/render_context_helper_impl.cpp:1-169",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs:1-650",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_helper_impl_cpp.rs:1-365",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs" = "d87dc23922915e6b4f6aacaf53a68873cae02e83004082718309fa0e1717cbae", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_helper_impl_cpp.rs" = "a417f8f208dade2915c39d4129963f3fe65a266d11bd55f5448ee531b95226fc" }
+source_digests = { "renderer/include/rive/renderer/render_context_helper_impl.hpp" = "b2f292aeda3510fddaa360f248fc768e9fc78f30c946ed55f88f58c4d6599761", "renderer/src/render_context_helper_impl.cpp" = "5d492655aeed09f4907b08ad7c74a97574090756b86c47c3f00efa98893cb97e" }

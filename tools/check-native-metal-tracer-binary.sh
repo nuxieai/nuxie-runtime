@@ -8,13 +8,25 @@ fi
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 artifact="$repo_root/target/release-size/native-metal-product-root"
+dependency_tree="$(mktemp)"
+trap 'rm -f "$dependency_tree"' EXIT
+
+cargo tree \
+  --manifest-path "$repo_root/Cargo.toml" \
+  -p renderer-replay \
+  --no-default-features \
+  --features native-ore-metal \
+  -e normal,build \
+  --prefix none \
+  --format '{p}' >"$dependency_tree"
+python3 "$repo_root/tools/check-native-metal-product-dependencies.py" <"$dependency_tree"
 
 cargo build \
   --manifest-path "$repo_root/Cargo.toml" \
   --profile release-size \
   -p renderer-replay \
   --no-default-features \
-  --features native-metal \
+  --features native-ore-metal \
   --bin native-metal-product-root
 "$artifact"
 
@@ -25,14 +37,19 @@ fi
 
 symbols="$(mktemp)"
 strings_file="$(mktemp)"
-trap 'rm -f "$symbols" "$strings_file"' EXIT
+trap 'rm -f "$dependency_tree" "$symbols" "$strings_file"' EXIT
 nm -j "$artifact" >"$symbols"
 strings "$artifact" >"$strings_file"
 
-forbidden='wgpu|naga|wgsl'
-if grep -Eiq "$forbidden" "$symbols" "$strings_file"; then
+forbidden_symbols='wgpu|naga|wgsl'
+# `strings` may concatenate adjacent literals without a separator. Require a
+# token boundary so ordinary pairs such as `overflow` + `GPU resource` do not
+# synthesize the false-positive substring `wGPU`.
+forbidden_strings='(^|[^[:alnum:]_])(wgpu|naga|wgsl)([^[:alnum:]_]|$)'
+if grep -Eiq "$forbidden_symbols" "$symbols" || grep -Eiq "$forbidden_strings" "$strings_file"; then
   echo "error: rooted native Metal tracer Mach-O retains a forbidden renderer dependency" >&2
-  grep -Ei "$forbidden" "$symbols" "$strings_file" | head -40 >&2
+  grep -Ei "$forbidden_symbols" "$symbols" | head -40 >&2 || true
+  grep -Ei "$forbidden_strings" "$strings_file" | head -40 >&2 || true
   exit 1
 fi
 

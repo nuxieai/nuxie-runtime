@@ -52,7 +52,8 @@ impl OreMetalGpuCanvas {
         queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
     ) -> Self {
         Self {
-            context: ContextMetal::make(device.clone(), queue),
+            context: *ContextMetal::MakeChecked(Some(device.clone()), Some(queue))
+                .expect("retained Metal device and queue construct ORE"),
             device,
             domain: Rc::new(()),
         }
@@ -63,7 +64,7 @@ impl OreMetalGpuCanvas {
     }
 
     pub fn make_shader_artifact(
-        &self,
+        &mut self,
         artifact: &GpuCanvasShaderArtifact,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         let GpuCanvasShaderArtifact::TrustedAppleMetal(shader) = artifact else {
@@ -73,7 +74,7 @@ impl OreMetalGpuCanvas {
     }
 
     pub fn make_shader_occurrence(
-        &self,
+        &mut self,
         prepared: &Arc<dyn RenderGpuCanvasShader>,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         let prepared = prepared
@@ -110,14 +111,20 @@ impl OreMetalGpuCanvas {
     }
 
     fn compile_occurrence(
-        &self,
+        &mut self,
         shader: &GpuCanvasAppleMetalShader,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        let code_size = u32::try_from(shader.source().len())
+            .map_err(|_| unsupported("shader source exceeds u32"))?;
+        let binding_map_size = u32::try_from(shader.binding_map_bytes().len())
+            .map_err(|_| unsupported("binding map exceeds u32"))?;
         let module = self
             .context
-            .make_shader_module(&ShaderModuleDesc {
+            .makeShaderModule(&ShaderModuleDesc {
                 code: Some(shader.source().as_bytes()),
+                codeSize: code_size,
                 bindingMapBytes: Some(shader.binding_map_bytes()),
+                bindingMapSize: binding_map_size,
                 label: Some("authenticated GPUCanvas MSL"),
                 ..ShaderModuleDesc::default()
             })
@@ -135,7 +142,7 @@ impl OreMetalGpuCanvas {
     }
 
     pub fn make_image_with_pipelines(
-        &self,
+        &mut self,
         shaders: &[GpuCanvasPipelineShaders],
         plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
@@ -211,10 +218,7 @@ impl OreMetalGpuCanvas {
 
         validate_pipeline_shape(pipeline_plan)?;
         let layouts = self.make_layouts(&shader.artifact)?;
-        let layout_refs = layouts
-            .iter()
-            .map(|layout| layout.as_ref())
-            .collect::<Vec<_>>();
+        let layout_refs = layouts.iter().map(Option::as_ref).collect::<Vec<_>>();
         let vertex_entry = pipeline_plan
             .vertex_entry
             .as_ref()
@@ -227,7 +231,7 @@ impl OreMetalGpuCanvas {
         require_entry(&shader.artifact, fragment_entry, false)?;
         let pipeline = self
             .context
-            .make_pipeline(
+            .makePipeline(
                 &PipelineDesc {
                     vertexModule: Some(&shader.module),
                     vertexEntryPoint: Some(&vertex_entry.physical_entry_point),
@@ -246,6 +250,8 @@ impl OreMetalGpuCanvas {
                         ColorTargetState::default(),
                     ],
                     bindGroupLayouts: Some(&layout_refs),
+                    bindGroupLayoutCount: u32::try_from(layout_refs.len())
+                        .map_err(|_| unsupported("binding-group layout count exceeds u32"))?,
                     label: Some("authenticated GPUCanvas pipeline"),
                     ..PipelineDesc::default()
                 },
@@ -274,7 +280,8 @@ impl OreMetalGpuCanvas {
             .ok_or_else(|| unsupported("render-target allocation failed"))?;
         let view = self
             .context
-            .wrap_native_texture(texture.clone(), plan.width, plan.height, true);
+            .wrap_native_texture(texture.clone(), plan.width, plan.height, true)
+            .ok_or_else(|| unsupported("render target belongs to another Metal device"))?;
 
         let viewport =
             draw.pass_state
@@ -290,10 +297,14 @@ impl OreMetalGpuCanvas {
             ));
         }
 
-        self.context.begin_frame(&FrameDescriptor::default());
-        let pass = self
+        self.context.beginFrame(&FrameDescriptor {
+            externalCommandBuffer: None,
+            safeFrameNumber: 0,
+            currentFrameNumber: 0,
+        });
+        let mut pass = self
             .context
-            .begin_render_pass(
+            .beginRenderPass(
                 &RenderPassDesc {
                     colorAttachments: [
                         ColorAttachment {
@@ -315,15 +326,13 @@ impl OreMetalGpuCanvas {
                 },
                 None,
             )
-            .ok_or_else(|| unsupported(self.context.last_error()))?;
-        pass.setPipeline(&pipeline)
-            .map_err(|error| unsupported(error.to_string()))?;
+            .ok_or_else(|| unsupported(self.context.lastError()))?;
+        pass.setPipeline(Some(&pipeline));
         for (group_index, group) in groups.iter().enumerate() {
             if let Some(group) = group {
                 let group_index = u32::try_from(group_index)
                     .map_err(|_| unsupported("binding-group index exceeds u32"))?;
-                pass.setBindGroup(group_index, group, &[])
-                    .map_err(|error| unsupported(error.to_string()))?;
+                pass.setBindGroup(group_index, Some(group), None, 0);
             }
         }
         pass.setViewport(
@@ -333,15 +342,13 @@ impl OreMetalGpuCanvas {
             viewport_height,
             0.0,
             1.0,
-        )
-        .map_err(|error| unsupported(error.to_string()))?;
+        );
         pass.draw(
             draw.vertex_count,
             draw.instance_count,
             draw.first_vertex,
             draw.first_instance,
-        )
-        .map_err(|error| unsupported(error.to_string()))?;
+        );
         pass.finish();
         let completion = self
             .context
@@ -414,7 +421,7 @@ impl OreMetalGpuCanvas {
     }
 
     fn make_layouts(
-        &self,
+        &mut self,
         shader: &GpuCanvasAppleMetalShader,
     ) -> Result<Vec<Option<AnyResourceHandle>>, GpuCanvasError> {
         let max_group = shader.bindings().iter().map(|binding| binding.group).max();
@@ -462,12 +469,14 @@ impl OreMetalGpuCanvas {
         for (group, entries) in by_group {
             let layout = self
                 .context
-                .make_bind_group_layout(&BindGroupLayoutDesc {
+                .makeBindGroupLayout(&BindGroupLayoutDesc {
                     groupIndex: u32::from(group),
                     entries: &entries,
+                    entryCount: u32::try_from(entries.len())
+                        .map_err(|_| unsupported("binding-group entry count exceeds u32"))?,
                     label: Some("authenticated GPUCanvas group layout"),
                 })
-                .ok_or_else(|| unsupported(self.context.last_error()))?;
+                .ok_or_else(|| unsupported(self.context.lastError()))?;
             let slot = layouts
                 .get_mut(usize::from(group))
                 .ok_or_else(|| unsupported("binding-group layout index is out of range"))?;
@@ -477,7 +486,7 @@ impl OreMetalGpuCanvas {
     }
 
     fn make_groups(
-        &self,
+        &mut self,
         shader: &GpuCanvasAppleMetalShader,
         plan: &GpuCanvasPipelinePlan,
         layouts: &[Option<AnyResourceHandle>],
@@ -509,7 +518,7 @@ impl OreMetalGpuCanvas {
             }
             let buffer = self
                 .context
-                .make_buffer(
+                .makeBuffer(
                     &BufferDesc::initialized(BufferUsage::uniform, &uniform.bytes, true)
                         .map_err(|_| unsupported("uniform snapshot exceeds u32"))?,
                 )
@@ -561,13 +570,15 @@ impl OreMetalGpuCanvas {
             }
             let group = self
                 .context
-                .make_bind_group(&BindGroupDesc {
+                .makeBindGroup(&BindGroupDesc {
                     layout: Some(layout),
                     ubos: &entries,
+                    uboCount: u32::try_from(entries.len())
+                        .map_err(|_| unsupported("uniform binding count exceeds u32"))?,
                     label: Some("authenticated GPUCanvas bind group"),
                     ..BindGroupDesc::default()
                 })
-                .ok_or_else(|| unsupported(self.context.last_error()))?;
+                .ok_or_else(|| unsupported(self.context.lastError()))?;
             let slot = groups
                 .get_mut(group_index)
                 .ok_or_else(|| unsupported("binding-group index is out of range"))?;

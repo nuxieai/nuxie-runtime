@@ -1,0 +1,20 @@
+schema_version = 1
+unit = "generic-lite-rtti"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-lite-rtti.translation.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:include/utils/lite_rtti.hpp:1-93",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/include/utils/lite_rtti_hpp.rs:1-352",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/include/utils/lite_rtti_hpp.rs" = "a66a2d78870a25bdaf7cc6e484a6547552830b64f526fb1939ab995efd850ddd" }
+source_digests = { "include/utils/lite_rtti.hpp" = "590e1b7314acd3f235b9d6600a3d568f07e7be32b61de7e8cb67ab19b002b812" }

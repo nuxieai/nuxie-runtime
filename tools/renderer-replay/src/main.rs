@@ -117,6 +117,7 @@ fn replay_native_metal(
         nuxie_renderer::NativeMetalContextOptions {
             shader_compilation_mode: nuxie_renderer::ShaderCompilationMode::AlwaysSynchronous,
             disable_framebuffer_reads: false,
+            ..Default::default()
         },
     )?;
     let adapter = factory.adapter_name();
@@ -145,6 +146,7 @@ fn replay_native_metal_atomic(
         nuxie_renderer::NativeMetalContextOptions {
             shader_compilation_mode: nuxie_renderer::ShaderCompilationMode::AlwaysSynchronous,
             disable_framebuffer_reads: false,
+            ..Default::default()
         },
     )?;
     let adapter = factory.adapter_name();

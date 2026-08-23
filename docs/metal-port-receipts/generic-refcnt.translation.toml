@@ -1,0 +1,20 @@
+schema_version = 1
+unit = "generic-refcnt"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-refcnt.translation.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:include/rive/refcnt.hpp:1-249",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/include/rive/refcnt_hpp.rs:1-630",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/include/rive/refcnt_hpp.rs" = "2d2e10a952d0d6eac8a2dbd65084a2b67a3ecb7723dc2a0f9721d0c6018e94b5" }
+source_digests = { "include/rive/refcnt.hpp" = "5a3c11ae5b6c5615c9bc8f719b0bcaa770984ef4a18381891e266936b2f2df7d" }

@@ -1,0 +1,38 @@
+schema_version = 1
+unit = "ore-pipeline"
+receipt_kind = "ownership-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-pipeline.ownership-review.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_pipeline.hpp:1-104",
+    "cpp:renderer/src/ore/metal/ore_pipeline_metal.hpp:1-22",
+    "cpp:renderer/src/ore/metal/ore_pipeline_metal.mm:1-8",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_pipeline_hpp.rs:1-355",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_hpp.rs:1-196",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_mm.rs:1-20",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_pipeline_hpp.rs" = "930e012b3bb6de42d1babf30864004e4428dbf3d755211156fa142846f4c4b21", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_hpp.rs" = "780b8c6a8bbbe0123ba8b4500be03168f83e534930479a8dd32f768aba43eaef", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_mm.rs" = "e653e19917be3920161283980d01ad5ac015503e53f277d2007b4a7d19d0c3a1" }
+findings = []
+review_run_id = "sol-v9-ownership-global-20260822-frozen-final-clean-890d85c1"
+coverage = [
+    "fields",
+    "lifetimes",
+    "threads",
+    "retain-release",
+    "drop-order",
+    "unsafe-invariants",
+    "divergences",
+]
+citations = [
+    "cpp:renderer/include/rive/renderer/ore/ore_pipeline.hpp:1-104",
+    "cpp:renderer/src/ore/metal/ore_pipeline_metal.hpp:1-22",
+    "cpp:renderer/src/ore/metal/ore_pipeline_metal.mm:1-8",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_pipeline_hpp.rs:1-355",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_hpp.rs:1-196",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_mm.rs:1-20",
+]

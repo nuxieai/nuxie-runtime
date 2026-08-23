@@ -625,6 +625,17 @@ impl RawPath {
         self.prune_empty_segments_from(initial_verb_count, initial_point_count);
     }
 
+    /// Source `RawPath::pruneEmptySegments()` entry point used by the
+    /// mechanical `RiveRenderPath` owner. The optional starting offsets are
+    /// the exact iterator boundary returned by the C++ append operation.
+    pub fn prune_empty_segments(&mut self) {
+        self.prune_empty_segments_from(0, 0);
+    }
+
+    pub fn prune_empty_segments_from_offsets(&mut self, verb_start: usize, point_start: usize) {
+        self.prune_empty_segments_from(verb_start, point_start);
+    }
+
     fn prune_empty_segments_from(&mut self, verb_start: usize, point_start: usize) {
         let mut source_point = point_start;
         let mut destination_verb = verb_start;
@@ -691,6 +702,22 @@ impl RawPath {
         }
         self.verbs.push(PathVerb::Move);
         self.points.push(last_move);
+    }
+
+    /// Source-owner spelling used by the mechanical renderer path, which must
+    /// inject a contour start without publishing an additional public command.
+    pub fn inject_implicit_move_if_needed_for_owner(&mut self) {
+        self.inject_implicit_move_if_needed();
+    }
+
+    pub fn line(&mut self, point: Vec2D) {
+        self.verbs.push(PathVerb::Line);
+        self.points.push(point);
+    }
+
+    pub fn cubic(&mut self, control0: Vec2D, control1: Vec2D, end: Vec2D) {
+        self.verbs.push(PathVerb::Cubic);
+        self.points.extend([control0, control1, end]);
     }
 
     fn mark_mutated(&mut self) {
@@ -1682,6 +1709,21 @@ impl std::fmt::Display for FontDecodeError {
 
 impl std::error::Error for FontDecodeError {}
 
+/// Backend-independent implementation of pinned `Factory::decodeFont`.
+/// Factories call this shared owner so renderer adapters do not duplicate the
+/// exact HarfRust validation and byte-retention behavior.
+pub fn decode_font_bytes(data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
+    harfrust::FontRef::new(data).map_err(|_| FontDecodeError)?;
+    Ok(DecodedFont {
+        bytes: Arc::from(data),
+    })
+}
+
+/// Backend-independent implementation of pinned `Factory::decodeAudio`.
+pub fn decode_audio_bytes(data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
+    AudioSource::from_encoded(data.to_vec()).map(Arc::new)
+}
+
 pub trait RenderPaint: Any {
     fn as_any(&self) -> &dyn Any;
     fn style(&mut self, style: RenderPaintStyle);
@@ -1885,10 +1927,7 @@ pub trait Factory {
     /// HarfRust is the project's verified HarfBuzz port, and the owned byte
     /// snapshot supplies the backend views that C++ retains through `HBFont`.
     fn decode_font(&mut self, data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
-        harfrust::FontRef::new(data).map_err(|_| FontDecodeError)?;
-        Ok(DecodedFont {
-            bytes: Arc::from(data),
-        })
+        decode_font_bytes(data)
     }
 
     /// Validate and take ownership of encoded audio bytes.
@@ -1896,7 +1935,7 @@ pub trait Factory {
     /// This is the Rust counterpart of C++ `Factory::decodeAudio`: a
     /// non-renderer-specific helper on the Factory seam, not a backend hook.
     fn decode_audio(&mut self, data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
-        AudioSource::from_encoded(data.to_vec()).map(Arc::new)
+        decode_audio_bytes(data)
     }
 
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {

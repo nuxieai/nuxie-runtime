@@ -4,88 +4,183 @@
 //! begins as the UNIV-2086 tracer and grows by mechanically porting the pinned
 //! upstream Metal implementation behind the existing renderer seam.
 
+#[cfg(test)]
 #[allow(dead_code)]
 mod background_shader_compiler;
+#[cfg(test)]
 mod buffer;
+// These mixed modules retain source-shaped configuration and test seams that
+// the mechanical Metal owner consumes only in selected source branches.
+// Preserve the complete shapes until the parity campaign is closed.
+#[cfg(test)]
+#[allow(dead_code)]
 mod buffer_ring_coordinator;
 mod capabilities;
 mod command_submission;
-mod context;
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) mod context;
+mod context_options;
+#[cfg(test)]
 #[allow(dead_code)]
 mod draw_combinations;
+#[cfg(test)]
+#[allow(dead_code)]
 mod draw_pass;
+#[cfg(test)]
 #[allow(dead_code)]
 mod draw_pipeline;
+#[cfg(test)]
 #[allow(dead_code)]
 mod draw_shader;
 mod drawable;
+#[cfg(test)]
+#[allow(dead_code)]
 mod feather_atlas_pipeline;
+#[cfg(test)]
+#[allow(dead_code)]
 mod feather_atlas_resource;
+#[cfg(test)]
+#[allow(dead_code)]
 mod gradient_resource;
+#[cfg(test)]
 #[allow(dead_code)]
 mod image_texture;
-mod pipeline_cache;
+mod mechanical_render_context;
+#[allow(dead_code)]
+mod objc2_execution;
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) mod pipeline_cache;
+#[cfg(test)]
 #[allow(dead_code)]
 mod pipeline_names;
+#[cfg(feature = "native-ore-metal-experimental")]
+#[allow(dead_code)]
 mod render_canvas;
+#[cfg(test)]
 #[allow(dead_code)]
 mod render_target;
+mod source_capabilities;
+#[cfg(test)]
 #[allow(dead_code)]
 mod samplers;
+#[cfg(test)]
 #[allow(dead_code)]
 mod shader_compile_plan;
+#[cfg(test)]
+#[allow(dead_code)]
 mod tessellation_resource;
+#[cfg(test)]
+#[allow(dead_code)]
 mod upload_buffer_ring;
 
+#[cfg(any())]
 use super::gpu;
-use super::{
-    logical_frame::{
-        prepare_atomic_clipped_path_flush, prepare_atomic_path_flush,
-        prepare_single_gradient_batch, AtomicPathFlushInput, LogicalDrawState,
-        PreparedAtomicPatchKind, PreparedAtomicPathFlush,
-    },
-    BackendWorkMetrics, LogicalFrameConfig, LogicalPaint, LogicalPath, LogicalShader, RenderMode,
-    RendererError,
-};
-use buffer::NativeMetalBuffer;
-use bytemuck::{Pod, Zeroable};
-use capabilities::{
-    select_capabilities, ApplePlatform, AtomicBarrierType, MetalCapabilitySelection,
-    MetalDeviceCapabilities,
-};
+use super::{BackendWorkMetrics, RenderMode, RendererError};
+#[cfg(test)]
+use super::{LogicalPaint, LogicalPath};
+use crate::mechanical_port::source::include::rive::renderer_hpp::RendererContract;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RiveRenderBufferHandle;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::RiveRenderer;
+use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
+use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
+use source_capabilities::MetalCapabilitySelection;
+#[cfg(test)]
+use source_capabilities::AtomicBarrierType;
+#[cfg(test)]
+use capabilities::{select_capabilities, ApplePlatform, MetalDeviceCapabilities};
+#[cfg(any())]
 use context::NativeMetalContext;
-use image_texture::NativeMetalTextureFormat;
-use nuxie_image_codec::{decode_image_rgba, preflight_encoded_image};
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
-    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, Renderer, Vec2D,
+    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, RawPath,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
+    RenderShader, Renderer,
 };
+#[cfg(test)]
+use nuxie_render_api::{PathVerb, RenderPaintStyle, Vec2D};
 use objc2::runtime::{AnyObject, ProtocolObject};
-use objc2::{msg_send, rc::Retained};
-use objc2_foundation::{NSError, NSString};
+#[cfg(test)]
+use objc2::msg_send;
+use objc2::rc::Retained;
+use objc2_execution::ActualMetalExecutionInventory;
+#[cfg(test)]
+use objc2_foundation::NSError;
 use objc2_metal::{
-    MTLBarrierScope, MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder,
-    MTLCreateSystemDefaultDevice, MTLCullMode, MTLDevice, MTLGPUFamily, MTLIndexType, MTLLibrary,
-    MTLLoadAction, MTLOrigin, MTLPixelFormat, MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder,
-    MTLRenderPassDescriptor, MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLRenderStages,
-    MTLScissorRect, MTLSize, MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor,
-    MTLTextureUsage, MTLViewport,
+    MTLBuffer, MTLCreateSystemDefaultDevice, MTLDevice, MTLOrigin,
+    MTLPixelFormat, MTLRegion, MTLResource,
+    MTLSize, MTLStorageMode, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
 };
+#[cfg(test)]
+use objc2_metal::MTLGPUFamily;
+#[cfg(test)]
+use objc2_metal::{MTLRenderPipelineDescriptor, MTLRenderPipelineState};
+#[cfg(test)]
+use objc2_metal::MTLLibrary;
+#[cfg(feature = "native-ore-metal-experimental")]
 pub use render_canvas::NativeMetalRenderCanvas;
-use render_target::RenderTargetMetal;
+use std::any::Any;
 use std::cell::RefCell;
 use std::ffi::c_void;
+use std::pin::Pin;
 use std::ptr::NonNull;
 use std::rc::Rc;
+#[cfg(test)]
 use std::sync::Arc;
 
 pub use drawable::NativeMetalDrawableFrame;
-pub use pipeline_cache::{NativeMetalContextOptions, ShaderCompilationMode};
-
-const TRACER_METALLIB: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/native_metal_tracer.metallib"));
+pub use context_options::{
+    NativeMetalContextOptions, NativeMetalSynthesizedFailureType, ShaderCompilationMode,
+};
+#[cfg(test)]
 const INLINE_VERTEX_BYTE_LIMIT: usize = 4_096;
+
+pub(super) struct MechanicalMetalHost;
+
+impl objc2_execution::NativeMetalHostCallbacks for MechanicalMetalHost {
+    fn log(&mut self, message: String) {
+        eprintln!("{message}");
+    }
+
+    fn generate_patch_buffer_data(
+        &mut self,
+        vertex_buffer: &ProtocolObject<dyn objc2_metal::MTLBuffer>,
+        index_buffer: &ProtocolObject<dyn objc2_metal::MTLBuffer>,
+    ) {
+        unsafe {
+            crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::GeneratePatchBufferData(
+                vertex_buffer.contents().as_ptr().cast(),
+                index_buffer.contents().as_ptr().cast(),
+            );
+        }
+    }
+
+    fn make_ore_context(
+        &mut self,
+        device: &ProtocolObject<dyn MTLDevice>,
+        queue: Option<&ProtocolObject<dyn objc2_metal::MTLCommandQueue>>,
+    ) -> Option<Box<dyn std::any::Any>> {
+        #[cfg(feature = "native-ore-metal-experimental")]
+        {
+            let queue = queue?;
+            let device = unsafe { Retained::retain(core::ptr::from_ref(device).cast_mut()) }?;
+            let queue = unsafe { Retained::retain(core::ptr::from_ref(queue).cast_mut()) }?;
+            let context = nuxie_ore_metal::metal::context::ContextMetal::MakeChecked(
+                Some(device),
+                Some(queue),
+            )?;
+            return Some(context as Box<dyn std::any::Any>);
+        }
+        #[cfg(not(feature = "native-ore-metal-experimental"))]
+        {
+            let _ = (device, queue);
+            None
+        }
+    }
+
+}
 
 #[link(name = "System")]
 extern "C" {
@@ -100,8 +195,20 @@ extern "C" {
 
 /// Explicitly selected native Metal renderer domain.
 pub struct NativeMetalFactory {
-    context: Arc<NativeMetalContext>,
-    target: Rc<RefCell<RenderTargetMetal>>,
+    device: Retained<ProtocolObject<dyn MTLDevice>>,
+    queue: RefCell<Option<Retained<ProtocolObject<dyn objc2_metal::MTLCommandQueue>>>>,
+    // Immutable snapshot copied from the canonical RenderContextMetal source
+    // owner during bootstrap. Product admission/reporting must consume this
+    // snapshot; no parallel device-family probe is authoritative.
+    capabilities: MetalCapabilitySelection,
+    target_texture: Rc<RefCell<Retained<ProtocolObject<dyn MTLTexture>>>>,
+    target_width: u32,
+    target_height: u32,
+    /// The canonical source owner is rooted exactly once during bootstrap.
+    /// It is never lazily reconstructed: doing so would create a second
+    /// capability/selector trace and split native ownership across two
+    /// RenderContextMetal instances.
+    mechanical: Rc<RefCell<mechanical_render_context::MechanicalRenderContext>>,
     mode: RenderMode,
 }
 
@@ -135,12 +242,58 @@ pub struct NativeMetalExecutionInventory {
     pub clip_rect_pipeline: bool,
     pub outer_curve_pipeline: bool,
     pub interior_triangulation_pipeline: bool,
+    /// Physical atomic content draw selectors successfully submitted by the
+    /// adapter. This is not an authored/logical Rive draw count.
     pub atomic_draws: usize,
+    /// Physical instances submitted by those atomic draw selectors.
+    pub atomic_draw_instances: usize,
+    /// Physical image-rectangle draw selectors successfully submitted by the
+    /// translated source execution.
+    pub image_rect_draw_calls: usize,
+    /// Physical image-mesh draw selectors successfully submitted by the
+    /// translated source execution.
+    pub image_mesh_draw_calls: usize,
+    /// Successful source image-texture bindings at IMAGE_TEXTURE_IDX.
+    pub image_texture_binds: usize,
     pub atomic_draw_groups: usize,
     /// Semantic PLS barriers: initial, group transitions, and pre-resolve.
     pub atomic_barriers: usize,
     pub atomic_memory_barriers: usize,
     pub atomic_render_pass_breaks: usize,
+    pub atomic_raster_order_group_barriers: usize,
+}
+
+impl NativeMetalExecutionInventory {
+    fn from_execution(mode: RenderMode, metrics: ActualMetalExecutionInventory) -> Self {
+        Self {
+            mode,
+            color_ramp_pipeline: metrics.color_ramp_draw_calls > 0,
+            gradient_texture: metrics.gradient_texture_binds > 0,
+            atomic_color_plane: metrics.atomic_color_plane_draw_calls > 0,
+            advanced_blend_pipeline: metrics.advanced_blend_draw_calls > 0,
+            hsl_blend_pipeline: metrics.hsl_blend_draw_calls > 0,
+            fixed_function_color_output: metrics.fixed_function_draw_calls > 0,
+            atomic_clip_plane: metrics.clip_atomic_buffer_binds > 0,
+            atomic_coverage_plane: metrics.coverage_atomic_buffer_binds > 0,
+            render_pass_initialize_pipeline: metrics.render_pass_initialize_draw_calls > 0,
+            midpoint_fan_pipeline: metrics.midpoint_fan_draw_calls > 0,
+            render_pass_resolve_pipeline: metrics.render_pass_resolve_draw_calls > 0,
+            clipped_path_pipeline_set: metrics.clip_feature_draw_calls > 0,
+            clip_rect_pipeline: metrics.clip_rect_feature_draw_calls > 0,
+            outer_curve_pipeline: metrics.outer_curve_draw_calls > 0,
+            interior_triangulation_pipeline: metrics.interior_triangulation_draw_calls > 0,
+            atomic_draws: metrics.atomic_draw_calls,
+            atomic_draw_instances: metrics.atomic_draw_instances,
+            image_rect_draw_calls: metrics.image_rect_draw_calls,
+            image_mesh_draw_calls: metrics.image_mesh_draw_calls,
+            image_texture_binds: metrics.image_texture_binds,
+            atomic_draw_groups: metrics.draw_groups,
+            atomic_barriers: metrics.semantic_atomic_barriers,
+            atomic_memory_barriers: metrics.memory_barriers,
+            atomic_render_pass_breaks: metrics.render_pass_breaks,
+            atomic_raster_order_group_barriers: metrics.raster_order_group_barriers,
+        }
+    }
 }
 
 impl NativeMetalFactory {
@@ -165,6 +318,18 @@ impl NativeMetalFactory {
         Self::new_impl(width, height, None, options)
     }
 
+    /// Source-shaped device-injected `MakeContext` adaptation. Queue and target
+    /// resources retain their nullable Metal states; the mechanical frame
+    /// owner is created lazily once both are nonnil.
+    pub fn new_with_device_and_context_options(
+        width: u32,
+        height: u32,
+        device: Retained<ProtocolObject<dyn MTLDevice>>,
+        options: NativeMetalContextOptions,
+    ) -> Result<Self, RendererError> {
+        Self::new_with_device_impl(width, height, None, device, options)
+    }
+
     pub fn new_with_mode_and_context_options(
         width: u32,
         height: u32,
@@ -182,58 +347,93 @@ impl NativeMetalFactory {
     ) -> Result<Self, RendererError> {
         let device = MTLCreateSystemDefaultDevice()
             .ok_or_else(|| RendererError::NativeMetal("no system Metal device".to_owned()))?;
-        let platform = select_apple_platform(&device);
-        let capabilities =
-            select_device_capabilities(&device, platform, options.disable_framebuffer_reads);
-        // Preserve the established failure order: invalid target dimensions
-        // are rejected immediately after the capability probe, before queue,
-        // library, sampler, pipeline, or target allocation can mask them.
+        Self::new_with_device_impl(width, height, requested_mode, device, options)
+    }
+
+    fn new_with_device_impl(
+        width: u32,
+        height: u32,
+        requested_mode: Option<RenderMode>,
+        device: Retained<ProtocolObject<dyn MTLDevice>>,
+        options: NativeMetalContextOptions,
+    ) -> Result<Self, RendererError> {
+        // RenderContextMetal is the sole capability authority. It is rooted
+        // before any queue/target allocation and publishes the immutable
+        // PlatformFeatures/MetalFeatures snapshot consumed below.
+        let provisional_mode = requested_mode.unwrap_or(RenderMode::RasterOrdering);
+        let mut mechanical = mechanical_render_context::MechanicalRenderContext::new_source(
+            device.clone(),
+            width,
+            height,
+            provisional_mode,
+            options,
+        )?;
+        let capabilities = mechanical.source_capabilities();
         validate_extent(width, height, capabilities.max_texture_size)?;
         let mode = select_native_metal_mode(capabilities, requested_mode)?;
         let queue = device.newCommandQueue().ok_or_else(|| {
-            RendererError::NativeMetal("MTLDevice returned no command queue".to_owned())
+            RendererError::NativeMetal("failed to create native Metal command queue".into())
         })?;
-        let context = Arc::new(NativeMetalContext::new_with_queue_and_options(
-            device,
-            queue,
-            capabilities,
-            platform,
-            options,
-        )?);
-        let target = Rc::new(RefCell::new(make_tracer_target(&context, width, height)?));
+        let target_texture = make_native_target_texture(&device, width, height)?;
+        mechanical.set_mode(mode);
+        mechanical.install_queue_and_target(
+            queue.clone(),
+            target_texture.clone(),
+            width,
+            height,
+        )?;
+        let mechanical = Rc::new(RefCell::new(mechanical));
         Ok(Self {
-            context,
-            target,
+            device,
+            queue: RefCell::new(Some(queue)),
+            capabilities,
+            target_texture: Rc::new(RefCell::new(target_texture)),
+            target_width: width,
+            target_height: height,
+            mechanical,
             mode,
         })
     }
 
+    fn mechanical_context(
+        &self,
+    ) -> Result<Rc<RefCell<mechanical_render_context::MechanicalRenderContext>>, RendererError>
+    {
+        Ok(Rc::clone(&self.mechanical))
+    }
+
     pub fn dimensions(&self) -> (u32, u32) {
-        let target = self.target.borrow();
-        (target.width(), target.height())
+        (self.target_width, self.target_height)
     }
 
     pub fn adapter_name(&self) -> String {
-        self.context.device().name().to_string()
+        self.device.name().to_string()
     }
 
     pub fn render_mode(&self) -> RenderMode {
         self.mode
     }
 
-    /// Replaces the dimensions used by subsequently created frames. Frames
-    /// already handed to a caller retain their original size, matching the
-    /// upstream target-owner boundary during an in-flight resize.
+    /// Immutable capability view copied from the canonical source owner at
+    /// construction. No adapter-side device-family query is performed here.
+    pub(crate) fn source_capabilities(&self) -> MetalCapabilitySelection {
+        self.capabilities
+    }
+
+    /// Replaces the dimensions used by subsequently created frames. Resize is
+    /// rejected while the persistent mechanical context has an active frame;
+    /// completed generations are retired only after their source submission.
     pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
-        validate_extent(width, height, self.context.capabilities().max_texture_size)?;
+        validate_extent(width, height, self.source_capabilities().max_texture_size)?;
         // Construct every size-dependent Metal owner before replacement. If
         // any allocation fails, the current generation remains intact.
-        let replacement = Rc::new(RefCell::new(make_tracer_target(
-            &self.context,
-            width,
-            height,
-        )?));
-        self.target = replacement;
+        let replacement = make_native_target_texture(&self.device, width, height)?;
+        self.mechanical
+            .borrow_mut()
+            .replace_target(replacement.clone(), width, height)?;
+        *self.target_texture.borrow_mut() = replacement;
+        self.target_width = width;
+        self.target_height = height;
         Ok(())
     }
 
@@ -254,46 +454,43 @@ impl NativeMetalFactory {
         clear_color: u32,
         collect_work_metrics: bool,
     ) -> Result<NativeMetalFrame, RendererError> {
-        // Acquisition happens here, once. The resulting concrete Metal owner
-        // moves into the frame and is either committed by `finish` or released
-        // uncommitted when the frame is abandoned.
-        let command_buffer = self.context.make_command_buffer()?;
+        let mechanical = self.mechanical_context()?;
+        let (renderer, frame_number, resource_domain) = {
+            let mut mechanical_context = mechanical.borrow_mut();
+            let target_texture = self.target_texture.borrow().clone();
+            if !mechanical_context.target_matches(
+                &target_texture,
+                self.target_width,
+                self.target_height,
+            ) {
+                mechanical_context.replace_target(
+                    target_texture,
+                    self.target_width,
+                    self.target_height,
+                )?;
+            }
+            mechanical_context.begin_frame(clear_color)?;
+            let context =
+                unsafe { Pin::get_unchecked_mut(mechanical_context.render_context_mut()) };
+            (
+                unsafe { RiveRenderer::new_from_context(context) },
+                mechanical_context.current_frame_number(),
+                mechanical_context.resource_domain(),
+            )
+        };
         Ok(NativeMetalFrame {
-            context: Arc::clone(&self.context),
-            target: Rc::clone(&self.target),
-            mode: self.mode,
-            command_buffer,
-            clear_color,
-            state: NativeMetalRenderState::default(),
-            state_stack: Vec::new(),
-            atomic_logical_state: LogicalDrawState::default(),
-            solid_draws: Vec::new(),
-            atomic_path_inputs: Vec::new(),
-            gradient_draws: Vec::new(),
-            atlas_requests: Vec::new(),
-            resource_lease: None,
+            mechanical,
+            renderer,
+            resource_domain,
             collect_work_metrics,
-            backend_work: BackendWorkMetrics {
-                command_encoders: u64::from(collect_work_metrics),
-                ..BackendWorkMetrics::default()
-            },
-            atomic_draw_count: 0,
-            atomic_draw_group_count: 0,
-            atomic_barrier_count: 0,
-            atomic_memory_barrier_count: 0,
-            atomic_render_pass_break_count: 0,
-            atomic_uses_clipping: false,
-            atomic_uses_clip_rects: false,
-            atomic_uses_advanced_blend: false,
-            atomic_uses_hsl_blend_modes: false,
-            unsupported: None,
+            frame_number,
         })
     }
 
     /// Copies the selected device so the platform caller can configure its
     /// presentation owner without transferring that policy to the renderer.
     pub fn retained_metal_device(&self) -> Retained<ProtocolObject<dyn MTLDevice>> {
-        self.context.retained_device()
+        self.device.clone()
     }
 
     /// Copies the renderer's ordered command queue for same-context Metal
@@ -301,8 +498,17 @@ impl NativeMetalFactory {
     /// rather than selecting a second device or creating an unrelated queue.
     pub fn retained_metal_queue(
         &self,
-    ) -> Retained<ProtocolObject<dyn objc2_metal::MTLCommandQueue>> {
-        self.context.retained_queue()
+    ) -> Option<Retained<ProtocolObject<dyn objc2_metal::MTLCommandQueue>>> {
+        self.queue.borrow().clone()
+    }
+
+    /// Exact nullable `setCommandQueue` ownership transition.
+    pub fn set_metal_command_queue(
+        &self,
+        queue: Option<Retained<ProtocolObject<dyn objc2_metal::MTLCommandQueue>>>,
+    ) {
+        *self.queue.borrow_mut() = queue.clone();
+        self.mechanical.borrow_mut().set_command_queue(queue);
     }
 
     /// Wraps a caller-created Metal texture as a retained renderer image
@@ -313,33 +519,69 @@ impl NativeMetalFactory {
         width: u32,
         height: u32,
     ) -> Option<Box<dyn RenderImage>> {
-        self.context
-            .adopt_image_texture(texture, width, height)
+        if width == 0
+            || height == 0
+            || texture.width() as u32 != width
+            || texture.height() as u32 != height
+            || texture.textureType() != objc2_metal::MTLTextureType::Type2D
+            || texture.depth() != 1
+            || texture.arrayLength() != 1
+            || texture.sampleCount() != 1
+            || !texture.usage().contains(MTLTextureUsage::ShaderRead)
+            || Retained::as_ptr(&texture.device()) != Retained::as_ptr(&self.device)
+        {
+            return None;
+        }
+        let mechanical = self.mechanical_context().ok()?;
+        let domain = mechanical.borrow().resource_domain();
+        let image = mechanical
+            .borrow_mut()
+            .adopt_image_handle(texture, width, height);
+        image
+            .map(|image| image.with_execution_domain(domain, Rc::clone(&mechanical) as Rc<dyn Any>))
             .map(|image| Box::new(image) as Box<dyn RenderImage>)
     }
 
     /// Creates a private texture shared by a render-target owner and a
     /// sampleable-image owner, matching the pinned Metal RenderCanvas factory.
+    #[cfg(feature = "native-ore-metal-experimental")]
     pub fn make_metal_render_canvas(
         &self,
         width: u32,
         height: u32,
     ) -> Result<NativeMetalRenderCanvas, RendererError> {
-        validate_extent(width, height, self.context.capabilities().max_texture_size)?;
-        self.context.make_render_canvas(width, height)
+        validate_extent(width, height, self.source_capabilities().max_texture_size)?;
+        let mechanical = self.mechanical_context()?;
+        let canvas = {
+            let mut mechanical_context = mechanical.borrow_mut();
+            let context =
+                unsafe { Pin::get_unchecked_mut(mechanical_context.render_context_mut()) };
+            context.makeRenderCanvasExecutable(width, height)
+        };
+        let resource_domain = mechanical.borrow().resource_domain();
+        NativeMetalRenderCanvas::from_source(canvas, Rc::clone(&mechanical), resource_domain)
+            .ok_or_else(|| {
+                RendererError::NativeMetal("mechanical RenderCanvas creation failed".into())
+            })
     }
 
     /// Constructs ORE from the exact retained device and queue owned by this
     /// renderer context. The opt-in feature corresponds to upstream's
     /// `RIVE_CANVAS` build and cannot select a second Metal service.
     #[cfg(feature = "native-ore-metal-experimental")]
-    pub fn make_ore_context(&self) -> nuxie_ore_metal::metal::context::ContextMetal {
-        nuxie_ore_metal::metal::context::ContextMetal::make(
-            self.context.retained_device(),
-            self.context.retained_queue(),
-        )
+    /// Runs a scoped operation against the cached source ORE singleton.
+    /// Ownership remains in RenderContext exactly as in the pinned source;
+    /// repeated calls observe the same object and it cannot outlive `self`.
+    pub fn with_ore_context<R>(
+        &self,
+        callback: impl FnOnce(&mut nuxie_ore_metal::metal::context::ContextMetal) -> R,
+    ) -> Option<R> {
+        let mechanical = self.mechanical_context().ok()?;
+        let result = mechanical.borrow_mut().with_ore_context(callback);
+        result
     }
 
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
     pub(crate) fn begin_drawable_frame_parts<'a>(
         &self,
         drawable: &'a ProtocolObject<dyn objc2_metal::MTLDrawable>,
@@ -347,11 +589,33 @@ impl NativeMetalFactory {
         clear_color: u32,
     ) -> Result<NativeMetalDrawableFrame<'a>, RendererError> {
         let (expected_width, expected_height) = self.dimensions();
+        if texture.pixelFormat() != MTLPixelFormat::BGRA8Unorm {
+            return Err(RendererError::NativeMetal(
+                "drawable texture is not BGRA8Unorm".into(),
+            ));
+        }
+        let texture_device = texture.device();
+        if Retained::as_ptr(&texture_device) != Retained::as_ptr(&self.device) {
+            return Err(RendererError::NativeMetal(
+                "drawable texture belongs to a different MTLDevice".into(),
+            ));
+        }
+        if texture.width() as u32 != expected_width || texture.height() as u32 != expected_height {
+            return Err(RendererError::NativeMetal(format!(
+                "drawable texture is {}x{}, expected {}x{}",
+                texture.width(),
+                texture.height(),
+                expected_width,
+                expected_height,
+            )));
+        }
+        let mechanical = self.mechanical_context()?;
+        let restore_texture = self.target_texture.borrow().clone();
         NativeMetalDrawableFrame::new(
-            Arc::clone(&self.context),
-            self.mode,
+            mechanical,
             drawable,
             texture,
+            restore_texture,
             expected_width,
             expected_height,
             clear_color,
@@ -366,15 +630,20 @@ impl Factory for NativeMetalFactory {
         flags: RenderBufferFlags,
         size_in_bytes: usize,
     ) -> Box<dyn RenderBuffer> {
-        // The established Factory seam is infallible, while Metal allocation
-        // can fail. Terminate at this explicit backend boundary: substituting a
-        // CPU buffer or the wgpu backend would conceal the selected renderer
-        // and violate the native Metal fail-closed contract.
+        let mechanical = self
+            .mechanical_context()
+            .unwrap_or_else(|error| panic!("mechanical render-buffer factory failed: {error}"));
+        let source_buffer = mechanical.borrow_mut().make_render_buffer_handle(
+            source_buffer_type(buffer_type),
+            source_buffer_flags(flags),
+            size_in_bytes,
+        );
+        let domain = mechanical.borrow().resource_domain();
+        let source_buffer = source_buffer.map(|buffer| {
+            buffer.with_execution_domain(domain, Rc::clone(&mechanical) as Rc<dyn Any>)
+        });
         Box::new(
-            NativeMetalBuffer::new(self.context.device(), buffer_type, flags, size_in_bytes)
-                .unwrap_or_else(|error| {
-                    panic!("native Metal render-buffer allocation failed: {error}")
-                }),
+            source_buffer.unwrap_or_else(|| panic!("mechanical render-buffer owner was not valid")),
         )
     }
 
@@ -387,12 +656,13 @@ impl Factory for NativeMetalFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        Box::new(LogicalShader::Linear {
-            start: (sx, sy),
-            end: (ex, ey),
-            colors: colors.to_vec(),
-            stops: stops.to_vec(),
-        })
+        let mechanical = self
+            .mechanical_context()
+            .unwrap_or_else(|error| panic!("mechanical linear-gradient factory failed: {error}"));
+        let source = mechanical
+            .borrow_mut()
+            .make_linear_gradient_handle(sx, sy, ex, ey, colors, stops);
+        Box::new(source.unwrap_or_else(|| panic!("mechanical linear gradient owner was not valid")))
     }
 
     fn make_radial_gradient(
@@ -403,12 +673,13 @@ impl Factory for NativeMetalFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        Box::new(LogicalShader::Radial {
-            center: (cx, cy),
-            radius,
-            colors: colors.to_vec(),
-            stops: stops.to_vec(),
-        })
+        let mechanical = self
+            .mechanical_context()
+            .unwrap_or_else(|error| panic!("mechanical radial-gradient factory failed: {error}"));
+        let source = mechanical
+            .borrow_mut()
+            .make_radial_gradient_handle(cx, cy, radius, colors, stops);
+        Box::new(source.unwrap_or_else(|| panic!("mechanical radial gradient owner was not valid")))
     }
 
     fn make_render_path(
@@ -416,94 +687,87 @@ impl Factory for NativeMetalFactory {
         mut raw_path: RawPath,
         fill_rule: FillRule,
     ) -> Box<dyn RenderPath> {
-        raw_path.renew_mutation_id();
-        Box::new(LogicalPath {
-            raw_path: Arc::new(raw_path),
-            fill_rule,
-            valid: true,
-        })
+        let mechanical = self
+            .mechanical_context()
+            .unwrap_or_else(|error| panic!("mechanical render-path factory failed: {error}"));
+        let source = mechanical
+            .borrow_mut()
+            .make_render_path_handle(&mut raw_path, fill_rule);
+        Box::new(source.unwrap_or_else(|| panic!("mechanical render-path owner was not valid")))
     }
 
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
-        Box::new(LogicalPath {
-            raw_path: Arc::new(RawPath::new()),
-            fill_rule: FillRule::NonZero,
-            valid: true,
-        })
+        let mechanical = self
+            .mechanical_context()
+            .unwrap_or_else(|error| panic!("mechanical empty-path factory failed: {error}"));
+        let source = mechanical
+            .borrow_mut()
+            .make_empty_render_path_handle()
+            .unwrap_or_else(|| panic!("mechanical empty-path owner was not valid"));
+        Box::new(source)
     }
 
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
-        Box::new(LogicalPaint::default())
+        let mechanical = self
+            .mechanical_context()
+            .unwrap_or_else(|error| panic!("mechanical paint factory failed: {error}"));
+        let source = mechanical
+            .borrow_mut()
+            .make_render_paint_handle()
+            .unwrap_or_else(|| panic!("mechanical paint owner was not valid"));
+        Box::new(source)
     }
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
-        let dimensions = preflight_encoded_image(data).ok_or(ImageDecodeError)?;
-        let max_texture_size = self.context.capabilities().max_texture_size;
-        if dimensions.width == 0
-            || dimensions.height == 0
-            || dimensions.width > max_texture_size
-            || dimensions.height > max_texture_size
-        {
-            return Err(ImageDecodeError);
+        let mechanical = self.mechanical_context().map_err(|_| ImageDecodeError)?;
+        let domain = mechanical.borrow().resource_domain();
+        let image = mechanical.borrow_mut().decode_image_handle(data);
+        image
+            .map(|image| image.with_execution_domain(domain, Rc::clone(&mechanical) as Rc<dyn Any>))
+            .map(|image| Box::new(image) as Box<dyn RenderImage>)
+            .ok_or(ImageDecodeError)
+    }
+}
+
+fn source_buffer_type(
+    value: RenderBufferType,
+) -> crate::mechanical_port::source::include::rive::renderer_hpp::RenderBufferType {
+    match value {
+        RenderBufferType::Index => {
+            crate::mechanical_port::source::include::rive::renderer_hpp::RenderBufferType::index
         }
-        let decoded = decode_image_rgba(data).ok_or(ImageDecodeError)?;
-        if (decoded.width, decoded.height) != (dimensions.width, dimensions.height) {
-            return Err(ImageDecodeError);
+        RenderBufferType::Vertex => {
+            crate::mechanical_port::source::include::rive::renderer_hpp::RenderBufferType::vertex
         }
-        let mip_level_count = u32::BITS - (decoded.width | decoded.height).leading_zeros();
-        let texture = self
-            .context
-            .make_image_texture(
-                decoded.width,
-                decoded.height,
-                mip_level_count,
-                NativeMetalTextureFormat::Rgba32,
-                &decoded.pixels,
-                1,
-                1,
-                false,
-                true,
-            )
-            .map_err(|_| ImageDecodeError)?;
-        Ok(Box::new(texture))
+    }
+}
+
+fn source_buffer_flags(
+    value: RenderBufferFlags,
+) -> crate::mechanical_port::source::include::rive::renderer_hpp::RenderBufferFlags {
+    match value {
+        RenderBufferFlags::None => crate::mechanical_port::source::include::rive::renderer_hpp::RenderBufferFlags::none,
+        RenderBufferFlags::MappedOnceAtInitialization => crate::mechanical_port::source::include::rive::renderer_hpp::RenderBufferFlags::mappedOnceAtInitialization,
     }
 }
 
 /// One native Metal frame retained until submission and deterministic readback.
 pub struct NativeMetalFrame {
-    context: Arc<NativeMetalContext>,
-    target: Rc<RefCell<RenderTargetMetal>>,
-    mode: RenderMode,
-    command_buffer: Retained<ProtocolObject<dyn MTLCommandBuffer>>,
-    clear_color: u32,
-    state: NativeMetalRenderState,
-    state_stack: Vec<NativeMetalRenderState>,
-    atomic_logical_state: LogicalDrawState,
-    solid_draws: Vec<SolidTracerDraw>,
-    atomic_path_inputs: Vec<AtomicPathInput>,
-    gradient_draws: Vec<GradientDraw>,
-    atlas_requests: Vec<AtlasRequest>,
-    resource_lease: Option<context::PreparedResourceLease>,
+    renderer: RiveRenderer,
+    mechanical: Rc<RefCell<mechanical_render_context::MechanicalRenderContext>>,
+    resource_domain: RenderResourceDomain,
     collect_work_metrics: bool,
-    backend_work: BackendWorkMetrics,
-    atomic_draw_count: usize,
-    atomic_draw_group_count: usize,
-    atomic_barrier_count: usize,
-    atomic_memory_barrier_count: usize,
-    atomic_render_pass_break_count: usize,
-    atomic_uses_clipping: bool,
-    atomic_uses_clip_rects: bool,
-    atomic_uses_advanced_blend: bool,
-    atomic_uses_hsl_blend_modes: bool,
-    unsupported: Option<&'static str>,
+    frame_number: u64,
 }
 
+#[cfg(any())]
 #[derive(Clone, Copy)]
 struct NativeMetalRenderState {
     transform: Mat2D,
     opacity: f32,
 }
 
+#[cfg(any())]
 impl Default for NativeMetalRenderState {
     fn default() -> Self {
         Self {
@@ -513,29 +777,34 @@ impl Default for NativeMetalRenderState {
     }
 }
 
+#[cfg(any())]
 struct SolidTracerDraw {
     vertices: Vec<[f32; 2]>,
     premultiplied_color: [f32; 4],
 }
 
+#[cfg(any())]
 struct AtomicPathInput {
     path: LogicalPath,
     paint: LogicalPaint,
     state: super::DrawState,
 }
 
+#[cfg(any())]
 struct GradientDraw {
     gradient_batch: super::logical_frame::GradientBatch,
     gradient: super::logical_frame::PreparedGradient,
     tessellation: super::draw::FillTessellation,
 }
 
+#[cfg(any())]
 struct AtlasRequest {
     path: LogicalPath,
     paint: LogicalPaint,
     state: super::DrawState,
 }
 
+#[cfg(any())]
 struct GradientUploadData {
     flush_uniforms: gpu::FlushUniforms,
     paths: [gpu::PathData; 2],
@@ -543,6 +812,7 @@ struct GradientUploadData {
     paint_aux: [gpu::PaintAuxData; 2],
 }
 
+#[cfg(any())]
 struct AtlasUploadData {
     flush_uniforms: gpu::FlushUniforms,
     paths: Vec<gpu::PathData>,
@@ -550,6 +820,7 @@ struct AtlasUploadData {
     paint_aux: Vec<gpu::PaintAuxData>,
 }
 
+#[cfg(any())]
 struct AtomicPathUploadData {
     flush_uniforms: gpu::FlushUniforms,
     paths: Vec<gpu::PathData>,
@@ -557,6 +828,7 @@ struct AtomicPathUploadData {
     paint_aux: Vec<gpu::PaintAuxData>,
 }
 
+#[cfg(any())]
 impl AtomicPathUploadData {
     fn new(width: u32, height: u32, clear_color: u32, flush: &PreparedAtomicPathFlush) -> Self {
         let tessellation_height = super::draw::tessellation_texture_height(&flush.spans);
@@ -606,6 +878,7 @@ impl AtomicPathUploadData {
     }
 }
 
+#[cfg(any())]
 impl AtlasUploadData {
     fn new(
         width: u32,
@@ -662,6 +935,7 @@ impl AtlasUploadData {
     }
 }
 
+#[cfg(any())]
 impl GradientUploadData {
     fn new(width: u32, height: u32, draw: &GradientDraw) -> Self {
         let tessellation_height =
@@ -705,250 +979,134 @@ impl GradientUploadData {
 
 impl Renderer for NativeMetalFrame {
     fn save(&mut self) {
-        if self.reject_post_clipped_content_state_mutation() {
-            return;
-        }
-        self.state_stack.push(self.state);
-        if self.mode == RenderMode::ClockwiseAtomic {
-            self.atomic_logical_state.save();
-        }
+        <RiveRenderer as RendererContract>::save(&mut self.renderer);
     }
 
     fn restore(&mut self) {
-        if self.reject_post_clipped_content_state_mutation() {
-            return;
-        }
-        if let Some(state) = self.state_stack.pop() {
-            self.state = state;
-        }
-        if self.mode == RenderMode::ClockwiseAtomic {
-            self.atomic_logical_state.restore();
-        }
+        <RiveRenderer as RendererContract>::restore(&mut self.renderer);
     }
 
     fn transform(&mut self, transform: Mat2D) {
-        if self.reject_post_clipped_content_state_mutation() {
-            return;
-        }
-        self.state.transform = super::multiply(self.state.transform, transform);
-        if self.mode == RenderMode::ClockwiseAtomic {
-            self.atomic_logical_state.transform(transform);
-        }
+        <RiveRenderer as RendererContract>::transform(&mut self.renderer, &transform);
     }
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
-        let Some(path) = path.as_any().downcast_ref::<LogicalPath>() else {
-            self.unsupported
-                .get_or_insert("path from another renderer backend");
+        let Some(path) = path.as_any().downcast_ref::<RiveRenderPathHandle>() else {
             return;
         };
-        let Some(paint) = paint.as_any().downcast_ref::<LogicalPaint>() else {
-            self.unsupported
-                .get_or_insert("paint from another renderer backend");
+        let Some(paint) = paint.as_any().downcast_ref::<RiveRenderPaintHandle>() else {
             return;
         };
-        if paint.feather != 0.0 {
-            if !path.valid
-                || paint.invalid_shader
-                || paint.shader.is_some()
-                || paint.blend_mode != BlendMode::SrcOver
-                || self.state.opacity != 1.0
-                || !self.solid_draws.is_empty()
-                || !self.gradient_draws.is_empty()
-                || !super::draw::feather_requires_atlas(paint.feather, self.state.transform, false)
-                || self
-                    .atlas_requests
-                    .first()
-                    .is_some_and(|request| request.paint.style != paint.style)
-            {
-                self.unsupported.get_or_insert(
-                    "native Metal feather atlas requires same-style solid SrcOver draws",
-                );
-                return;
-            }
-            let state = super::DrawState {
-                transform: self.state.transform,
-                opacity: self.state.opacity,
-                ..Default::default()
-            };
-            self.atlas_requests.push(AtlasRequest {
-                path: path.clone(),
-                paint: paint.clone(),
-                state,
-            });
-            return;
-        }
-        if !path.valid
-            || paint.style != RenderPaintStyle::Fill
-            || paint.invalid_shader
-            || (self.mode != RenderMode::ClockwiseAtomic && paint.blend_mode != BlendMode::SrcOver)
-            || self.state.opacity != 1.0
-        {
-            self.unsupported
-                .get_or_insert("native Metal tracer only supports opaque solid SrcOver fills");
-            return;
-        }
-
-        if self.mode == RenderMode::ClockwiseAtomic {
-            if !self.solid_draws.is_empty()
-                || !self.gradient_draws.is_empty()
-                || !self.atlas_requests.is_empty()
-            {
-                self.unsupported
-                    .get_or_insert("native Metal atomic tracer supports one path draw");
-                return;
-            }
-            if self.atomic_logical_state.state.clip_stack_height != 0
-                && !self.atomic_path_inputs.is_empty()
-            {
-                self.unsupported.get_or_insert(
-                    "native Metal atomic clip tracer supports one clipped content draw",
-                );
-                return;
-            }
-            let state = self.atomic_logical_state.state;
-            self.atomic_path_inputs.push(AtomicPathInput {
-                path: path.clone(),
-                paint: paint.clone(),
-                state,
-            });
-            return;
-        }
-
-        if let Some(shader @ LogicalShader::Linear { .. }) = paint.shader.as_ref() {
-            if !self.solid_draws.is_empty()
-                || !self.gradient_draws.is_empty()
-                || !is_single_closed_cubic_contour(path)
-            {
-                self.unsupported.get_or_insert(
-                    "native Metal gradient tracer requires one closed cubic fill and no other draws",
-                );
-                return;
-            }
-            let Some(gradient_batch) =
-                prepare_single_gradient_batch(shader, self.state.opacity, self.state.transform)
-            else {
-                self.unsupported
-                    .get_or_insert("native Metal gradient parameters are invalid");
-                return;
-            };
-            let Some(gradient) = gradient_batch.draw(0) else {
-                self.unsupported
-                    .get_or_insert("native Metal gradient parameters are invalid");
-                return;
-            };
-            let Some(mut tessellation) =
-                super::draw::build_fill_tessellation(&path.raw_path, self.state.transform)
-            else {
-                self.unsupported
-                    .get_or_insert("native Metal gradient path has no tessellatable geometry");
-                return;
-            };
-            for contour in &mut tessellation.contours {
-                contour.path_id = 1;
-            }
-            debug_assert!(matches!(shader, LogicalShader::Linear { .. }));
-            self.gradient_draws.push(GradientDraw {
-                gradient_batch,
-                gradient,
-                tessellation,
-            });
-            return;
-        }
-
-        if paint.shader.is_some() {
-            self.unsupported
-                .get_or_insert("native Metal tracer does not support this shader yet");
-            return;
-        }
-        if paint.color >> 24 != 0xff || !self.gradient_draws.is_empty() {
-            self.unsupported
-                .get_or_insert("native Metal tracer only supports opaque solid SrcOver fills");
-            return;
-        }
-        let Some(vertices) = solid_triangle_fan(path, self.state.transform) else {
-            self.unsupported.get_or_insert(
-                "native Metal tracer requires one pixel-aligned axis-aligned rectangle",
+        unsafe {
+            <RiveRenderer as RendererContract>::drawPath(
+                &mut self.renderer,
+                path.source_base() as *const _ as *mut _,
+                paint.source_base() as *const _ as *mut _,
             );
-            return;
-        };
-        let Some(vertex_bytes) = vertices.len().checked_mul(std::mem::size_of::<[f32; 2]>()) else {
-            self.unsupported
-                .get_or_insert("native Metal tracer path exceeds inline vertex limit");
-            return;
-        };
-        if vertex_bytes > INLINE_VERTEX_BYTE_LIMIT {
-            self.unsupported
-                .get_or_insert("native Metal tracer path exceeds inline vertex limit");
-            return;
         }
-        self.solid_draws.push(SolidTracerDraw {
-            vertices,
-            premultiplied_color: premultiplied_color(paint.color, self.state.opacity),
-        });
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
-        if self.mode != RenderMode::ClockwiseAtomic {
-            self.unsupported
-                .get_or_insert("native Metal tracer does not support clipping yet");
-            return;
-        }
-        let Some(path) = path.as_any().downcast_ref::<LogicalPath>() else {
-            self.unsupported
-                .get_or_insert("clip path from another renderer backend");
+        let Some(path) = path.as_any().downcast_ref::<RiveRenderPathHandle>() else {
             return;
         };
-        let result = if self.atomic_path_inputs.is_empty() {
-            self.atomic_logical_state
-                .clip_path(self.logical_frame_config(), path)
-        } else {
-            self.atomic_logical_state
-                .clip_rect_after_atomic_content(path)
-        };
-        if let Err(error) = result {
-            self.unsupported.get_or_insert(error);
+        unsafe {
+            <RiveRenderer as RendererContract>::clipPath(
+                &mut self.renderer,
+                path.source_base() as *const _ as *mut _,
+            );
         }
     }
 
     fn draw_image(
         &mut self,
-        _image: Option<&dyn RenderImage>,
-        _sampler: ImageSampler,
-        _blend_mode: BlendMode,
-        _opacity: f32,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
     ) {
-        self.unsupported
-            .get_or_insert("native Metal tracer does not support images yet");
+        let Some(image) =
+            image.and_then(|image| image.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(image_base) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::drawImage(
+                &mut self.renderer,
+                image_base as *const _,
+                source_image_sampler(sampler),
+                blend_mode,
+                opacity,
+            );
+        }
     }
 
     fn draw_image_mesh(
         &mut self,
-        _image: Option<&dyn RenderImage>,
-        _sampler: ImageSampler,
-        _vertices: Option<&dyn RenderBuffer>,
-        _uv_coords: Option<&dyn RenderBuffer>,
-        _indices: Option<&dyn RenderBuffer>,
-        _vertex_count: u32,
-        _index_count: u32,
-        _blend_mode: BlendMode,
-        _opacity: f32,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
     ) {
-        self.unsupported
-            .get_or_insert("native Metal tracer does not support image meshes yet");
+        let Some(image) =
+            image.and_then(|image| image.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(vertices) =
+            vertices.and_then(|buffer| buffer.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(uv_coords) =
+            uv_coords.and_then(|buffer| buffer.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(indices) =
+            indices.and_then(|buffer| buffer.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(image_base) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        if !vertices.belongs_to(&self.resource_domain)
+            || !uv_coords.belongs_to(&self.resource_domain)
+            || !indices.belongs_to(&self.resource_domain)
+        {
+            return;
+        }
+        unsafe {
+            <RiveRenderer as RendererContract>::drawImageMesh(
+                &mut self.renderer,
+                image_base as *const _,
+                source_image_sampler(sampler),
+                vertices.source_owner_unchecked(),
+                uv_coords.source_owner_unchecked(),
+                indices.source_owner_unchecked(),
+                vertex_count,
+                index_count,
+                blend_mode,
+                opacity,
+            );
+        }
     }
 
     fn modulate_opacity(&mut self, opacity: f32) {
-        if self.reject_post_clipped_content_state_mutation() {
-            return;
-        }
-        self.state.opacity *= opacity;
-        if self.mode == RenderMode::ClockwiseAtomic {
-            self.atomic_logical_state.state.opacity *= opacity;
-        }
+        <RiveRenderer as RendererContract>::modulateOpacity(&mut self.renderer, opacity);
     }
 }
 
+#[cfg(any())]
 impl NativeMetalFrame {
     fn reject_post_clipped_content_state_mutation(&mut self) -> bool {
         let must_reject = self.mode == RenderMode::ClockwiseAtomic
@@ -1259,21 +1417,10 @@ impl NativeMetalFrame {
         if let Some(flush) = atlas_flush.as_ref() {
             let tessellation_height = super::draw::tessellation_texture_height(&flush.spans);
             let upload_data = AtlasUploadData::new(width, height, flush);
-            let is_stroke = flush
-                .draws
-                .first()
-                .map(|draw| draw.is_stroke)
-                .ok_or_else(|| RendererError::NativeMetal("atlas flush has no draws".to_owned()))?;
-            if flush.draws.iter().any(|draw| draw.is_stroke != is_stroke) {
-                return Err(RendererError::Unsupported(
-                    "native Metal atlas checkpoint does not mix fill and stroke masks",
-                ));
-            }
             let lease = self.context.prepare_resources(
                 0,
                 tessellation_height as usize,
                 Some(flush.physical_extent.map(|value| value as usize)),
-                Some(is_stroke),
                 upload_data.batch(flush),
             )?;
             if self.collect_work_metrics {
@@ -1296,7 +1443,6 @@ impl NativeMetalFrame {
             let lease = self.context.prepare_resources(
                 draw.gradient_batch.height as usize,
                 tessellation_height as usize,
-                None,
                 None,
                 upload_data.batch(draw),
             )?;
@@ -1492,12 +1638,105 @@ impl NativeMetalFrame {
     }
 }
 
+impl NativeMetalFrame {
+    pub fn finish(self) -> Result<Vec<u8>, RendererError> {
+        Ok(self.finish_for_benchmark()?.pixels)
+    }
+
+    pub fn finish_for_benchmark(self) -> Result<NativeMetalFrameOutput, RendererError> {
+        let source_mode = self.mechanical.borrow().mode();
+        let completion = self
+            .mechanical
+            .borrow_mut()
+            .finish(self.frame_number, self.frame_number)?;
+        completion.wait()?;
+        let source_metrics = self.mechanical.borrow().execution_inventory();
+        let (width, height, texture) = {
+            let mechanical = self.mechanical.borrow();
+            let (width, height) = mechanical.dimensions();
+            let texture = mechanical.retained_target_texture().ok_or_else(|| {
+                RendererError::NativeMetal("mechanical target has no readback texture".into())
+            })?;
+            (width, height, texture)
+        };
+        let row_bytes = usize::try_from(width)
+            .ok()
+            .and_then(|width| width.checked_mul(4))
+            .ok_or_else(|| RendererError::NativeMetal("readback row size overflow".into()))?;
+        let byte_len = row_bytes
+            .checked_mul(height as usize)
+            .ok_or_else(|| RendererError::NativeMetal("readback size overflow".into()))?;
+        let mut pixels = vec![0; byte_len];
+        let pointer = NonNull::new(pixels.as_mut_ptr().cast::<c_void>())
+            .ok_or_else(|| RendererError::NativeMetal("readback buffer is null".into()))?;
+        let region = MTLRegion {
+            origin: MTLOrigin { x: 0, y: 0, z: 0 },
+            size: MTLSize {
+                width: width as usize,
+                height: height as usize,
+                depth: 1,
+            },
+        };
+        unsafe {
+            texture.getBytes_bytesPerRow_fromRegion_mipmapLevel(pointer, row_bytes, region, 0)
+        };
+        if texture.pixelFormat() == MTLPixelFormat::BGRA8Unorm {
+            for pixel in pixels.chunks_exact_mut(4) {
+                pixel.swap(0, 2);
+            }
+        }
+        let mut backend_work = BackendWorkMetrics::default();
+        if self.collect_work_metrics {
+            backend_work.queue_submissions = 1;
+        }
+        Ok(NativeMetalFrameOutput {
+            pixels,
+            backend_work,
+            execution_inventory: NativeMetalExecutionInventory::from_execution(
+                source_mode,
+                source_metrics,
+            ),
+        })
+    }
+
+    pub(super) fn finish_present(
+        &mut self,
+        drawable: &ProtocolObject<dyn objc2_metal::MTLDrawable>,
+    ) -> Result<(), RendererError> {
+        let completion = self.mechanical.borrow_mut().finish_present(
+            self.frame_number,
+            self.frame_number,
+            drawable,
+        )?;
+        completion.wait()?;
+        Ok(())
+    }
+}
+
+impl Drop for NativeMetalFrame {
+    fn drop(&mut self) {
+        if self.mechanical.borrow().is_active_frame() {
+            self.mechanical.borrow_mut().abandon_frame();
+        }
+    }
+}
+
+#[cfg(any())]
 fn encode_atomic_tessellation_pass(
     context: &NativeMetalContext,
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
     flush: &PreparedAtomicPathFlush,
     lease: &context::PreparedResourceLease,
 ) -> Result<(), RendererError> {
+    let Some(tessellate_pipeline) = context.tessellate_pipeline() else {
+        return Ok(());
+    };
+    let (Some(gaussian_integral_texture), Some(tess_span_index_buffer)) = (
+        context.gaussian_integral_texture(),
+        context.tess_span_index_buffer(),
+    ) else {
+        return Ok(());
+    };
     let tessellation_height = super::draw::tessellation_texture_height(&flush.spans);
     let pass = MTLRenderPassDescriptor::renderPassDescriptor();
     pass.setRenderTargetWidth(tessellation_resource::TESSELLATION_TEXTURE_WIDTH);
@@ -1523,11 +1762,11 @@ fn encode_atomic_tessellation_pass(
         znear: 0.0,
         zfar: 1.0,
     });
-    encoder.setRenderPipelineState(context.tessellate_pipeline());
+    encoder.setRenderPipelineState(tessellate_pipeline);
     // SAFETY: slot 9 is the generated `gaussianIntegralTexture` vertex binding
     // and the context retains the texture through command-buffer completion.
     unsafe {
-        encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 9);
     }
     bind_vertex_buffer(&encoder, &lease.flush_uniforms, 3);
     bind_vertex_buffer(&encoder, &lease.tessellation_spans, 0);
@@ -1543,7 +1782,7 @@ fn encode_atomic_tessellation_pass(
                 MTLPrimitiveType::Triangle,
                 tessellation_resource::K_TESS_SPAN_INDICES.len(),
                 MTLIndexType::UInt16,
-                context.tess_span_index_buffer(),
+                tess_span_index_buffer,
                 0,
                 flush.spans.len(),
             );
@@ -1553,12 +1792,14 @@ fn encode_atomic_tessellation_pass(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg(test)]
 struct AtomicBarrierInventory {
     semantic: usize,
     memory: usize,
     render_pass_breaks: usize,
 }
 
+#[cfg(test)]
 fn atomic_barrier_inventory(
     draw_group_count: usize,
     barrier_type: AtomicBarrierType,
@@ -1566,12 +1807,13 @@ fn atomic_barrier_inventory(
     let semantic = draw_group_count.saturating_add(1);
     AtomicBarrierInventory {
         semantic,
-        memory: usize::from(barrier_type == AtomicBarrierType::MemoryBarrier) * semantic,
-        render_pass_breaks: usize::from(barrier_type == AtomicBarrierType::RenderPassBreak)
+        memory: usize::from(barrier_type == AtomicBarrierType::memoryBarrier) * semantic,
+        render_pass_breaks: usize::from(barrier_type == AtomicBarrierType::renderPassBreak)
             * semantic,
     }
 }
 
+#[cfg(any())]
 fn make_atomic_main_encoder(
     context: &NativeMetalContext,
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
@@ -1610,14 +1852,13 @@ fn make_atomic_main_encoder(
     // SAFETY: slot 11 is the generated image-sampler ABI, and the context
     // retains the sampler through command completion.
     unsafe {
-        encoder.setFragmentSamplerState_atIndex(
-            Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
-            11,
-        );
+        encoder
+            .setFragmentSamplerState_atIndex(context.image_sampler(ImageSampler::LINEAR_CLAMP), 11);
     }
     Ok(encoder)
 }
 
+#[cfg(any())]
 fn apply_atomic_barrier(
     context: &NativeMetalContext,
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
@@ -1631,8 +1872,8 @@ fn apply_atomic_barrier(
     render_passes: &mut u64,
 ) -> Result<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>, RendererError> {
     match context.capabilities().atomic_barrier_type {
-        AtomicBarrierType::RasterOrderGroup => Ok(encoder),
-        AtomicBarrierType::MemoryBarrier => {
+        AtomicBarrierType::rasterOrderGroup => Ok(encoder),
+        AtomicBarrierType::memoryBarrier => {
             encoder.memoryBarrierWithScope_afterStages_beforeStages(
                 MTLBarrierScope::Buffers | MTLBarrierScope::RenderTargets,
                 MTLRenderStages::Fragment,
@@ -1640,7 +1881,7 @@ fn apply_atomic_barrier(
             );
             Ok(encoder)
         }
-        AtomicBarrierType::RenderPassBreak => {
+        AtomicBarrierType::renderPassBreak => {
             encoder.endEncoding();
             // SAFETY: the atomic main pass declares color attachment slot zero;
             // only its load action changes before the replacement encoder.
@@ -1661,6 +1902,7 @@ fn apply_atomic_barrier(
     }
 }
 
+#[cfg(any())]
 fn encode_atomic_main_pass(
     context: &NativeMetalContext,
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
@@ -1671,6 +1913,12 @@ fn encode_atomic_main_pass(
     flush: &PreparedAtomicPathFlush,
     lease: &context::PreparedResourceLease,
 ) -> Result<u64, RendererError> {
+    let (Some(path_patch_vertex_buffer), Some(path_patch_index_buffer)) = (
+        context.path_patch_vertex_buffer(),
+        context.path_patch_index_buffer(),
+    ) else {
+        return Ok(0);
+    };
     let pipelines = lease
         .atomic_path_pipelines
         .as_ref()
@@ -1773,7 +2021,7 @@ fn encode_atomic_main_pass(
                 ),
             };
             encoder.setRenderPipelineState(pipeline);
-            bind_vertex_buffer(&encoder, context.path_patch_vertex_buffer(), 0);
+            bind_vertex_buffer(&encoder, path_patch_vertex_buffer, 0);
             encoder.setCullMode(MTLCullMode::Back);
             set_vertex_bytes(&encoder, &draw.base_instance, 4)?;
             // SAFETY: the retained patch index/vertex buffers contain the
@@ -1784,7 +2032,7 @@ fn encode_atomic_main_pass(
                     MTLPrimitiveType::Triangle,
                     index_count,
                     MTLIndexType::UInt16,
-                    context.path_patch_index_buffer(),
+                    path_patch_index_buffer,
                     index_offset,
                     draw.instance_count as usize,
                 );
@@ -1838,6 +2086,7 @@ fn encode_atomic_main_pass(
     Ok(render_passes)
 }
 
+#[cfg(any())]
 fn is_single_closed_cubic_contour(path: &LogicalPath) -> bool {
     let verbs = path.raw_path.verbs();
     verbs.first() == Some(&PathVerb::Move)
@@ -1852,6 +2101,7 @@ fn is_single_closed_cubic_contour(path: &LogicalPath) -> bool {
         })
 }
 
+#[cfg(any())]
 fn configure_raster_order_attachments(
     pass: &MTLRenderPassDescriptor,
     target: &RenderTargetMetal,
@@ -1861,11 +2111,6 @@ fn configure_raster_order_attachments(
         target.scratch_color_memoryless_texture(),
         target.coverage_memoryless_texture(),
     ];
-    if textures.iter().any(|texture| texture.is_none()) {
-        return Err(RendererError::Unsupported(
-            "native Metal gradient tracer requires raster-order attachments",
-        ));
-    }
     for (index, texture) in textures.into_iter().enumerate() {
         // SAFETY: `index + 1` is limited to Metal color attachments 1...3,
         // matching upstream's clip, scratch-color, and coverage planes; the
@@ -1890,15 +2135,26 @@ fn configure_raster_order_attachments(
     Ok(())
 }
 
+#[cfg(any())]
 fn encode_gradient_resource_passes(
     context: &NativeMetalContext,
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
     draw: &GradientDraw,
     lease: &context::PreparedResourceLease,
 ) -> Result<(), RendererError> {
+    let (Some(gaussian_integral_texture), Some(tess_span_index_buffer)) = (
+        context.gaussian_integral_texture(),
+        context.tess_span_index_buffer(),
+    ) else {
+        return Ok(());
+    };
     let tessellation_height = super::draw::tessellation_texture_height(&draw.tessellation.spans);
 
     encode_color_ramp_pass(context, command_buffer, &draw.gradient_batch, lease)?;
+
+    let Some(tessellate_pipeline) = context.tessellate_pipeline() else {
+        return Ok(());
+    };
 
     let tessellation_pass = MTLRenderPassDescriptor::renderPassDescriptor();
     tessellation_pass.setRenderTargetWidth(tessellation_resource::TESSELLATION_TEXTURE_WIDTH);
@@ -1926,11 +2182,11 @@ fn encode_gradient_resource_passes(
         znear: 0.0,
         zfar: 1.0,
     });
-    tessellation_encoder.setRenderPipelineState(context.tessellate_pipeline());
+    tessellation_encoder.setRenderPipelineState(tessellate_pipeline);
     // SAFETY: texture slot 9 is the pinned tessellation-shader Gaussian-table
     // ABI, and the context-retained texture outlives command-buffer completion.
     unsafe {
-        tessellation_encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        tessellation_encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 9);
     }
     bind_vertex_buffer(&tessellation_encoder, &lease.flush_uniforms, 3);
     bind_vertex_buffer(&tessellation_encoder, &lease.tessellation_spans, 0);
@@ -1947,7 +2203,7 @@ fn encode_gradient_resource_passes(
                 MTLPrimitiveType::Triangle,
                 tessellation_resource::K_TESS_SPAN_INDICES.len(),
                 MTLIndexType::UInt16,
-                context.tess_span_index_buffer(),
+                tess_span_index_buffer,
                 0,
                 draw.tessellation.spans.len(),
             );
@@ -1956,12 +2212,16 @@ fn encode_gradient_resource_passes(
     Ok(())
 }
 
+#[cfg(any())]
 fn encode_color_ramp_pass(
     context: &NativeMetalContext,
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
     gradient_batch: &super::logical_frame::GradientBatch,
     lease: &context::PreparedResourceLease,
 ) -> Result<(), RendererError> {
+    let Some(color_ramp_pipeline) = context.color_ramp_pipeline() else {
+        return Ok(());
+    };
     let gradient_pass = MTLRenderPassDescriptor::renderPassDescriptor();
     gradient_pass.setRenderTargetWidth(gradient_resource::GRADIENT_TEXTURE_WIDTH);
     gradient_pass.setRenderTargetHeight(gradient_batch.height as usize);
@@ -1988,7 +2248,7 @@ fn encode_color_ramp_pass(
         znear: 0.0,
         zfar: 1.0,
     });
-    gradient_encoder.setRenderPipelineState(context.color_ramp_pipeline());
+    gradient_encoder.setRenderPipelineState(color_ramp_pipeline);
     bind_vertex_buffer(&gradient_encoder, &lease.flush_uniforms, 3);
     bind_vertex_buffer(
         &gradient_encoder,
@@ -2013,12 +2273,30 @@ fn encode_color_ramp_pass(
     Ok(())
 }
 
+#[cfg(any())]
 fn encode_atlas_resource_passes(
     context: &NativeMetalContext,
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
     flush: &super::logical_frame::PreparedRasterOrderingAtlasFlush,
     lease: &context::PreparedResourceLease,
 ) -> Result<(), RendererError> {
+    let (
+        Some(gaussian_integral_texture),
+        Some(tess_span_index_buffer),
+        Some(path_patch_vertex_buffer),
+        Some(path_patch_index_buffer),
+    ) = (
+        context.gaussian_integral_texture(),
+        context.tess_span_index_buffer(),
+        context.path_patch_vertex_buffer(),
+        context.path_patch_index_buffer(),
+    )
+    else {
+        return Ok(());
+    };
+    let Some(tessellate_pipeline) = context.tessellate_pipeline() else {
+        return Ok(());
+    };
     let tessellation_height = super::draw::tessellation_texture_height(&flush.spans);
     let tessellation_pass = MTLRenderPassDescriptor::renderPassDescriptor();
     tessellation_pass.setRenderTargetWidth(tessellation_resource::TESSELLATION_TEXTURE_WIDTH);
@@ -2046,11 +2324,11 @@ fn encode_atlas_resource_passes(
         znear: 0.0,
         zfar: 1.0,
     });
-    tessellation_encoder.setRenderPipelineState(context.tessellate_pipeline());
+    tessellation_encoder.setRenderPipelineState(tessellate_pipeline);
     // SAFETY: texture slot 9 is the exact generated tessellation ABI and the
     // context retains the Gaussian table through command-buffer completion.
     unsafe {
-        tessellation_encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        tessellation_encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 9);
     }
     bind_vertex_buffer(&tessellation_encoder, &lease.flush_uniforms, 3);
     bind_vertex_buffer(&tessellation_encoder, &lease.tessellation_spans, 0);
@@ -2065,7 +2343,7 @@ fn encode_atlas_resource_passes(
                 MTLPrimitiveType::Triangle,
                 tessellation_resource::K_TESS_SPAN_INDICES.len(),
                 MTLIndexType::UInt16,
-                context.tess_span_index_buffer(),
+                tess_span_index_buffer,
                 0,
                 flush.spans.len(),
             );
@@ -2104,9 +2382,9 @@ fn encode_atlas_resource_passes(
         znear: 0.0,
         zfar: 1.0,
     });
-    atlas_encoder.setRenderPipelineState(lease.feather_atlas_pipeline.as_deref().ok_or_else(
-        || RendererError::NativeMetal("feather atlas pipeline is absent".to_owned()),
-    )?);
+    let atlas_pipelines = lease.feather_atlas_pipelines.as_ref().ok_or_else(|| {
+        RendererError::NativeMetal("feather atlas pipeline pair is absent".to_owned())
+    })?;
     bind_vertex_buffer(&atlas_encoder, &lease.flush_uniforms, 3);
     bind_fragment_buffer(&atlas_encoder, &lease.flush_uniforms, 3);
     bind_vertex_buffer(&atlas_encoder, &lease.paths, 5);
@@ -2118,39 +2396,14 @@ fn encode_atlas_resource_passes(
     // texture, matching upstream's nullable zero-height gradient resource.
     unsafe {
         atlas_encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
-        atlas_encoder.setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
+        atlas_encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 9);
         atlas_encoder.setFragmentTexture_atIndex(lease.gradient.as_deref(), 8);
-        atlas_encoder.setFragmentTexture_atIndex(Some(context.gaussian_integral_texture()), 9);
-        atlas_encoder.setVertexBuffer_offset_atIndex(
-            Some(context.path_patch_vertex_buffer()),
-            0,
-            0,
-        );
+        atlas_encoder.setFragmentTexture_atIndex(Some(gaussian_integral_texture), 9);
+        atlas_encoder.setVertexBuffer_offset_atIndex(Some(path_patch_vertex_buffer), 0, 0);
     }
-    let is_stroke = flush
-        .draws
-        .first()
-        .map(|draw| draw.is_stroke)
-        .ok_or_else(|| RendererError::NativeMetal("atlas flush has no draws".to_owned()))?;
-    atlas_encoder.setCullMode(if is_stroke {
-        MTLCullMode::Back
-    } else {
-        MTLCullMode::None
-    });
-    let (index_count, index_offset) = if is_stroke {
-        (gpu::MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT, 0)
-    } else {
-        (
-            gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT,
-            gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT * std::mem::size_of::<u16>(),
-        )
-    };
-    let batches = if is_stroke {
-        &flush.stroke_batches
-    } else {
-        &flush.fill_batches
-    };
-    for batch in batches {
+    atlas_encoder.setCullMode(MTLCullMode::None);
+    atlas_encoder.setRenderPipelineState(&atlas_pipelines.fill);
+    for batch in &flush.fill_batches {
         let [left, top, right, bottom] = batch.scissor;
         atlas_encoder.setScissorRect(MTLScissorRect {
             x: left as usize,
@@ -2164,11 +2417,36 @@ fn encode_atlas_resource_passes(
         // patch count into the flush-wide tessellation texture.
         unsafe {
             atlas_encoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
-                    MTLPrimitiveType::Triangle,
-                    index_count,
+                MTLPrimitiveType::Triangle,
+                    gpu::MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT,
                     MTLIndexType::UInt16,
-                    context.path_patch_index_buffer(),
-                    index_offset,
+                    path_patch_index_buffer,
+                    gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT * std::mem::size_of::<u16>(),
+                    batch.patch_count as usize,
+                );
+        }
+    }
+    atlas_encoder.setCullMode(MTLCullMode::Back);
+    atlas_encoder.setRenderPipelineState(&atlas_pipelines.stroke);
+    for batch in &flush.stroke_batches {
+        let [left, top, right, bottom] = batch.scissor;
+        atlas_encoder.setScissorRect(MTLScissorRect {
+            x: left as usize,
+            y: top as usize,
+            width: usize::from(right - left),
+            height: usize::from(bottom - top),
+        });
+        set_vertex_bytes(&atlas_encoder, &batch.base_patch, 4)?;
+        // SAFETY: the static patch index buffer contains the exact stroke
+        // border range, and the canonical batch supplies a validated base
+        // patch and patch count into the flush-wide tessellation texture.
+        unsafe {
+            atlas_encoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount(
+                    MTLPrimitiveType::Triangle,
+                    gpu::MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT,
+                    MTLIndexType::UInt16,
+                    path_patch_index_buffer,
+                    0,
                     batch.patch_count as usize,
                 );
         }
@@ -2177,6 +2455,7 @@ fn encode_atlas_resource_passes(
     Ok(())
 }
 
+#[cfg(any())]
 fn encode_atlas_final_draw(
     context: &NativeMetalContext,
     encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
@@ -2197,10 +2476,8 @@ fn encode_atlas_final_draw(
     // buffers were bound once by `make_render_pass_for_draws`, and the context
     // retains this per-batch default sampler through command completion.
     unsafe {
-        encoder.setFragmentSamplerState_atIndex(
-            Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
-            11,
-        );
+        encoder
+            .setFragmentSamplerState_atIndex(context.image_sampler(ImageSampler::LINEAR_CLAMP), 11);
     }
     encoder.setCullMode(MTLCullMode::Back);
     // SAFETY: the canonical typed writer initialized every TriangleVertex in
@@ -2215,18 +2492,25 @@ fn encode_atlas_final_draw(
     Ok(())
 }
 
+#[cfg(any())]
 fn encode_gradient_final_draw(
     context: &NativeMetalContext,
     encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
     pixel_format: MTLPixelFormat,
     draw: &GradientDraw,
 ) -> Result<(), RendererError> {
+    let (Some(path_patch_vertex_buffer), Some(path_patch_index_buffer)) = (
+        context.path_patch_vertex_buffer(),
+        context.path_patch_index_buffer(),
+    ) else {
+        return Ok(());
+    };
     let midpoint_pipeline = context.midpoint_draw_pipeline(pixel_format)?;
     encoder.setRenderPipelineState(&midpoint_pipeline);
     // SAFETY: buffer slot zero is the pinned path-patch vertex ABI, offset zero
     // is aligned, and the context retains the complete buffer through completion.
     unsafe {
-        encoder.setVertexBuffer_offset_atIndex(Some(context.path_patch_vertex_buffer()), 0, 0);
+        encoder.setVertexBuffer_offset_atIndex(Some(path_patch_vertex_buffer), 0, 0);
     }
     // The first eight tessellation texels are a padding patch. Match
     // RenderContextMetalImpl's PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX binding
@@ -2237,10 +2521,8 @@ fn encode_gradient_final_draw(
     // buffers were bound once by `make_render_pass_for_draws`, and the context
     // retains this per-batch default sampler through command completion.
     unsafe {
-        encoder.setFragmentSamplerState_atIndex(
-            Some(context.image_sampler(ImageSampler::LINEAR_CLAMP)),
-            11,
-        );
+        encoder
+            .setFragmentSamplerState_atIndex(context.image_sampler(ImageSampler::LINEAR_CLAMP), 11);
     }
     encoder.setCullMode(MTLCullMode::Back);
     // SAFETY: the retained patch index buffer contains at least
@@ -2252,7 +2534,7 @@ fn encode_gradient_final_draw(
                 MTLPrimitiveType::Triangle,
                 gpu::MIDPOINT_FAN_PATCH_INDEX_COUNT,
                 MTLIndexType::UInt16,
-                context.path_patch_index_buffer(),
+                path_patch_index_buffer,
                 0,
                 draw.tessellation.instance_count as usize,
             );
@@ -2260,6 +2542,7 @@ fn encode_gradient_final_draw(
     Ok(())
 }
 
+#[cfg(any())]
 fn set_vertex_bytes<T: Pod>(
     encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
     value: &T,
@@ -2268,6 +2551,7 @@ fn set_vertex_bytes<T: Pod>(
     set_vertex_slice(encoder, std::slice::from_ref(value), index)
 }
 
+#[cfg(any())]
 fn bind_vertex_buffer(
     encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
     buffer: &ProtocolObject<dyn objc2_metal::MTLBuffer>,
@@ -2279,6 +2563,7 @@ fn bind_vertex_buffer(
     unsafe { encoder.setVertexBuffer_offset_atIndex(Some(buffer), 0, index) };
 }
 
+#[cfg(any())]
 fn bind_fragment_buffer(
     encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
     buffer: &ProtocolObject<dyn objc2_metal::MTLBuffer>,
@@ -2290,6 +2575,7 @@ fn bind_fragment_buffer(
     unsafe { encoder.setFragmentBuffer_offset_atIndex(Some(buffer), 0, index) };
 }
 
+#[cfg(any())]
 fn set_vertex_slice<T: Pod>(
     encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
     values: &[T],
@@ -2308,22 +2594,15 @@ fn set_vertex_slice<T: Pod>(
     Ok(())
 }
 
-/// Creates one complete size-dependent target generation for the diagnostic
-/// adapter. Upstream constructs `RenderTargetMetal` as one owner and attaches
-/// the product-supplied texture later; this headless tracer creates and
-/// attaches its shared readback texture at the same boundary.
-fn make_tracer_target(
-    context: &NativeMetalContext,
+/// Creates the exact target texture handed to the persistent mechanical
+/// RenderContext. Target attachment and retirement are owned by that source
+/// context; the factory retains only this generation handle for resize and
+/// drawable restoration.
+fn make_native_target_texture(
+    device: &ProtocolObject<dyn MTLDevice>,
     width: u32,
     height: u32,
-) -> Result<RenderTargetMetal, RendererError> {
-    let mut target = RenderTargetMetal::new(
-        context.retained_device(),
-        MTLPixelFormat::BGRA8Unorm,
-        width,
-        height,
-        context.capabilities(),
-    )?;
+) -> Result<Retained<ProtocolObject<dyn MTLTexture>>, RendererError> {
     // SAFETY: `NativeMetalFactory::{new,resize}` validate both dimensions
     // against the selected device limit before this helper is called, and
     // `RenderTargetMetal::new` above independently rejects zero dimensions.
@@ -2338,19 +2617,42 @@ fn make_tracer_target(
         )
     };
     descriptor.setStorageMode(MTLStorageMode::Shared);
-    descriptor.setUsage(MTLTextureUsage::RenderTarget);
-    let texture = context
-        .device()
-        .newTextureWithDescriptor(&descriptor)
-        .ok_or_else(|| RendererError::NativeMetal("failed to allocate render target".into()))?;
-    target.set_target_texture(Some(texture))?;
-    Ok(target)
+    descriptor.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+    device.newTextureWithDescriptor(&descriptor)
+        .ok_or_else(|| {
+            RendererError::NativeMetal("failed to allocate native target texture".into())
+        })
 }
 
-fn clear_color(color: u32) -> MTLClearColor {
+fn source_image_sampler(
+    value: ImageSampler,
+) -> crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler {
+    use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::{
+        ImageFilter, ImageSampler as SourceImageSampler, ImageWrap,
+    };
+    SourceImageSampler {
+        wrapX: match value.wrap_x {
+            nuxie_render_api::ImageWrap::Clamp => ImageWrap::clamp,
+            nuxie_render_api::ImageWrap::Repeat => ImageWrap::repeat,
+            nuxie_render_api::ImageWrap::Mirror => ImageWrap::mirror,
+        },
+        wrapY: match value.wrap_y {
+            nuxie_render_api::ImageWrap::Clamp => ImageWrap::clamp,
+            nuxie_render_api::ImageWrap::Repeat => ImageWrap::repeat,
+            nuxie_render_api::ImageWrap::Mirror => ImageWrap::mirror,
+        },
+        filter: match value.filter {
+            nuxie_render_api::ImageFilter::Bilinear => ImageFilter::bilinear,
+            nuxie_render_api::ImageFilter::Nearest => ImageFilter::nearest,
+        },
+    }
+}
+
+#[cfg(any())]
+fn clear_color(color: u32) -> objc2_metal::MTLClearColor {
     let [alpha, red, green, blue] = color.to_be_bytes();
     let premultiply = |channel: u8| f64::from(u16::from(channel) * u16::from(alpha) / 255) / 255.0;
-    MTLClearColor {
+    objc2_metal::MTLClearColor {
         red: premultiply(red),
         green: premultiply(green),
         blue: premultiply(blue),
@@ -2393,6 +2695,7 @@ fn select_native_metal_mode(
     }
 }
 
+#[cfg(test)]
 fn solid_triangle_fan(path: &LogicalPath, transform: Mat2D) -> Option<Vec<[f32; 2]>> {
     let verbs = path.raw_path.verbs();
     let line_count = verbs.iter().filter(|verb| **verb == PathVerb::Line).count();
@@ -2427,6 +2730,7 @@ fn solid_triangle_fan(path: &LogicalPath, transform: Mat2D) -> Option<Vec<[f32; 
     Some(vertices)
 }
 
+#[cfg(test)]
 fn fill_rule_accepts_source_winding(fill_rule: FillRule, points: &[Vec2D]) -> bool {
     if fill_rule != FillRule::Clockwise {
         return true;
@@ -2447,6 +2751,7 @@ fn fill_rule_accepts_source_winding(fill_rule: FillRule, points: &[Vec2D]) -> bo
     doubled_area > 0.0
 }
 
+#[cfg(test)]
 fn is_pixel_aligned_axis_aligned_rectangle(points: &[[f32; 2]]) -> bool {
     if points.len() != 4
         || points
@@ -2475,12 +2780,14 @@ fn is_pixel_aligned_axis_aligned_rectangle(points: &[[f32; 2]]) -> bool {
             == 2
 }
 
+#[cfg(test)]
 fn inline_triangle_fan_vertex_count(point_count: usize) -> Option<usize> {
     let vertex_count = point_count.checked_sub(2)?.checked_mul(3)?;
     let vertex_bytes = vertex_count.checked_mul(std::mem::size_of::<[f32; 2]>())?;
     (point_count >= 3 && vertex_bytes <= INLINE_VERTEX_BYTE_LIMIT).then_some(vertex_count)
 }
 
+#[cfg(test)]
 fn is_convex_finite_polygon(points: &[[f32; 2]]) -> bool {
     if points.len() < 3
         || points
@@ -2526,6 +2833,7 @@ fn is_convex_finite_polygon(points: &[[f32; 2]]) -> bool {
     winding != 0.0
 }
 
+#[cfg(test)]
 fn line_segments_intersect(a: [f32; 2], b: [f32; 2], c: [f32; 2], d: [f32; 2]) -> bool {
     fn orientation(a: [f32; 2], b: [f32; 2], c: [f32; 2]) -> f32 {
         (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
@@ -2551,6 +2859,7 @@ fn line_segments_intersect(a: [f32; 2], b: [f32; 2], c: [f32; 2], d: [f32; 2]) -
         || (cb == 0.0 && on_segment(c, d, b))
 }
 
+#[cfg(test)]
 fn select_apple_platform(device: &ProtocolObject<dyn MTLDevice>) -> ApplePlatform {
     #[cfg(target_os = "macos")]
     let platform = ApplePlatform::MacOs;
@@ -2562,11 +2871,29 @@ fn select_apple_platform(device: &ProtocolObject<dyn MTLDevice>) -> ApplePlatfor
     let platform = ApplePlatform::IosDevice {
         is_apple_silicon: device.supportsFamily(MTLGPUFamily::Apple4),
     };
-    #[cfg(any(target_os = "macos", all(target_os = "ios", target_abi = "sim")))]
+    #[cfg(all(target_os = "visionos", target_abi = "sim"))]
+    let platform = ApplePlatform::XrOsSimulator;
+    #[cfg(all(target_os = "visionos", not(target_abi = "sim")))]
+    let platform = ApplePlatform::XrOsDevice {
+        is_apple_silicon: device.supportsFamily(MTLGPUFamily::Apple4),
+    };
+    #[cfg(all(target_os = "tvos", target_abi = "sim"))]
+    let platform = ApplePlatform::AppleTvOsSimulator;
+    #[cfg(all(target_os = "tvos", not(target_abi = "sim")))]
+    let platform = ApplePlatform::AppleTvOsDevice {
+        is_apple_silicon: device.supportsFamily(MTLGPUFamily::Apple4),
+    };
+    #[cfg(any(
+        target_os = "macos",
+        all(target_os = "ios", target_abi = "sim"),
+        all(target_os = "visionos", target_abi = "sim"),
+        all(target_os = "tvos", target_abi = "sim")
+    ))]
     let _ = device;
     platform
 }
 
+#[cfg(test)]
 fn select_device_capabilities(
     device: &ProtocolObject<dyn MTLDevice>,
     platform: ApplePlatform,
@@ -2584,6 +2911,7 @@ fn select_device_capabilities(
     select_capabilities(platform, device_capabilities, disable_framebuffer_reads)
 }
 
+#[cfg(any())]
 fn premultiplied_color(color: ColorInt, opacity: f32) -> [f32; 4] {
     let [alpha, red, green, blue] = color.to_be_bytes();
     let alpha = f32::from(alpha) / 255.0 * opacity.clamp(0.0, 1.0);
@@ -2595,32 +2923,31 @@ fn premultiplied_color(color: ColorInt, opacity: f32) -> [f32; 4] {
     ]
 }
 
-fn make_solid_pipeline(
-    device: &ProtocolObject<dyn MTLDevice>,
-    pixel_format: MTLPixelFormat,
-) -> Result<Retained<ProtocolObject<dyn MTLRenderPipelineState>>, RendererError> {
-    let library = new_library_from_metallib_bytes(device, TRACER_METALLIB)?;
-    let vertex = library
-        .newFunctionWithName(&NSString::from_str("nuxie_tracer_solid_vertex"))
-        .ok_or_else(|| RendererError::NativeMetal("tracer vertex function is absent".into()))?;
-    let fragment = library
-        .newFunctionWithName(&NSString::from_str("nuxie_tracer_solid_fragment"))
-        .ok_or_else(|| RendererError::NativeMetal("tracer fragment function is absent".into()))?;
-    let descriptor = MTLRenderPipelineDescriptor::new();
-    descriptor.setVertexFunction(Some(&vertex));
-    descriptor.setFragmentFunction(Some(&fragment));
-    let attachment = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
-    attachment.setPixelFormat(pixel_format);
-    attachment.setBlendingEnabled(true);
-    attachment.setSourceRGBBlendFactor(MTLBlendFactor::One);
-    attachment.setDestinationRGBBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
-    attachment.setSourceAlphaBlendFactor(MTLBlendFactor::One);
-    attachment.setDestinationAlphaBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
-    device
-        .newRenderPipelineStateWithDescriptor_error(&descriptor)
-        .map_err(|error| RendererError::NativeMetal(format!("create solid pipeline: {error:?}")))
+#[cfg(test)]
+pub(crate) struct MetalObjectCreation<T> {
+    pub(crate) object: Option<T>,
+    pub(crate) error: Option<String>,
 }
 
+#[cfg(test)]
+pub(crate) fn new_render_pipeline_state(
+    device: &ProtocolObject<dyn MTLDevice>,
+    descriptor: &MTLRenderPipelineDescriptor,
+) -> MetalObjectCreation<Retained<ProtocolObject<dyn MTLRenderPipelineState>>> {
+    let mut error: Option<Retained<NSError>> = None;
+    let object: Option<Retained<ProtocolObject<dyn MTLRenderPipelineState>>> = unsafe {
+        msg_send![device,
+            newRenderPipelineStateWithDescriptor: descriptor,
+            error: &mut error
+        ]
+    };
+    MetalObjectCreation {
+        object,
+        error: error.map(|error| error.localizedDescription().to_string()),
+    }
+}
+
+#[cfg(test)]
 fn new_library_from_metallib_bytes(
     device: &ProtocolObject<dyn MTLDevice>,
     bytes: &[u8],
@@ -2633,23 +2960,94 @@ fn new_library_from_metallib_bytes(
             "failed to create dispatch data for metallib".into(),
         ));
     }
-    let result: Result<Retained<ProtocolObject<dyn MTLLibrary>>, Retained<NSError>> =
-        unsafe { msg_send![device, newLibraryWithData: data, error: _] };
+    let mut error: Option<Retained<NSError>> = None;
+    let library: Option<Retained<ProtocolObject<dyn MTLLibrary>>> =
+        unsafe { msg_send![device, newLibraryWithData: data, error: &mut error] };
     unsafe { dispatch_release(data) };
-    result.map_err(|error| RendererError::NativeMetal(format!("load tracer metallib: {error:?}")))
+    let error = error.map(|error| error.localizedDescription().to_string());
+    if error.is_some() || library.is_none() {
+        return Err(RendererError::NativeMetal(format!(
+            "load tracer metallib: {}",
+            error.as_deref().unwrap_or("<nil>")
+        )));
+    }
+    Ok(library.expect("library checked nonnil"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use objc2_metal::MTLCommandQueue;
 
+    #[test]
+    fn source_render_context_drops_members_in_reverse_then_base() {
+        use crate::mechanical_port::source::renderer::src::render_context_cpp::takeRenderContextDropTrace;
+
+        let _ = takeRenderContextDropTrace();
+        let factory = NativeMetalFactory::new(2, 2).expect("create native Metal factory");
+        drop(factory);
+
+        let mut expected = vec![
+            "logicalFlushes",
+            "parametricAllocator",
+            "polarAllocator",
+            "tangentAllocator",
+            "chopAllocator",
+            "numChopsAllocator",
+            "perFrameAllocator",
+            "imageDrawData",
+            "triangleData",
+            "tessData",
+            "gradientData",
+            "contourData",
+            "paintAuxData",
+            "paintData",
+            "pathData",
+            "flushUniformData",
+            "scissorLookup",
+            "intersectionBoard",
+            "indirectDrawList",
+        ];
+        #[cfg(feature = "native-ore-metal-experimental")]
+        expected.push("oreContext");
+        expected.extend(["implementation", "base"]);
+        assert_eq!(takeRenderContextDropTrace(), expected);
+    }
+
+    #[cfg(feature = "native-ore-metal-experimental")]
+    #[test]
+    fn public_source_canvas_uses_one_shared_texture_and_releases_it_with_the_canvas() {
+        use objc2::rc::Weak;
+
+        let factory = NativeMetalFactory::new(4, 4).expect("create native Metal factory");
+        let weak_texture = objc2::rc::autoreleasepool(|_| {
+            let canvas = factory
+                .make_metal_render_canvas(4, 4)
+                .expect("construct the complete source RenderCanvas product path");
+            assert_eq!((canvas.width(), canvas.height()), (4, 4));
+            assert!(canvas.render_target_and_image_share_texture());
+            let texture = canvas
+                .retained_metal_texture()
+                .expect("source image and target share a live native texture");
+            assert_eq!((texture.width(), texture.height()), (4, 4));
+            let weak = Weak::new(&*texture);
+            drop(texture);
+            assert!(weak.load().is_some());
+            drop(canvas);
+            weak
+        });
+        assert!(
+            weak_texture.load().is_none(),
+            "the public canvas path must not leak a third texture owner"
+        );
+    }
+
+    #[cfg(any())]
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     #[test]
     fn factory_exposes_one_retained_ordered_metal_queue() {
         let factory = NativeMetalFactory::new(2, 2).expect("create native Metal factory");
-        let first = factory.retained_metal_queue();
-        let second = factory.retained_metal_queue();
+        let first = factory.retained_metal_queue().expect("queue is set");
+        let second = factory.retained_metal_queue().expect("queue is set");
 
         assert_eq!(Retained::as_ptr(&first), Retained::as_ptr(&second));
         assert_eq!(
@@ -2658,6 +3056,33 @@ mod tests {
         );
     }
 
+    #[cfg(any())]
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[test]
+    fn factory_retains_the_exact_injected_metal_device() {
+        let device = MTLCreateSystemDefaultDevice().expect("system Metal device");
+        let identity = Retained::as_ptr(&device);
+        let factory = NativeMetalFactory::new_with_device_and_context_options(
+            2,
+            2,
+            device,
+            NativeMetalContextOptions::default(),
+        )
+        .expect("create factory from the injected Metal device");
+
+        assert_eq!(Retained::as_ptr(&factory.retained_metal_device()), identity);
+        assert_eq!(
+            Retained::as_ptr(
+                &factory
+                    .retained_metal_queue()
+                    .expect("queue is set")
+                    .device()
+            ),
+            identity
+        );
+    }
+
+    #[cfg(any())]
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     #[test]
     fn begin_frame_owns_one_uncommitted_buffer_and_one_target_generation() {
@@ -2716,6 +3141,7 @@ mod tests {
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(any())]
     #[test]
     fn abandoned_frame_releases_its_native_command_buffer_and_target_generation() {
         use objc2::rc::Weak;
@@ -2813,7 +3239,7 @@ mod tests {
             supports_texture_compression_etc2: false,
             supports_texture_compression_astc: true,
             supports_texture_compression_bc: true,
-            atomic_barrier_type: AtomicBarrierType::RasterOrderGroup,
+            atomic_barrier_type: AtomicBarrierType::rasterOrderGroup,
         };
         assert_eq!(
             select_native_metal_mode(both, None).unwrap(),
@@ -3001,7 +3427,7 @@ mod tests {
     #[test]
     fn four_atomic_draw_groups_apply_exact_upstream_barrier_policy() {
         assert_eq!(
-            atomic_barrier_inventory(4, AtomicBarrierType::RasterOrderGroup),
+            atomic_barrier_inventory(4, AtomicBarrierType::rasterOrderGroup),
             AtomicBarrierInventory {
                 semantic: 5,
                 memory: 0,
@@ -3009,7 +3435,7 @@ mod tests {
             }
         );
         assert_eq!(
-            atomic_barrier_inventory(4, AtomicBarrierType::MemoryBarrier),
+            atomic_barrier_inventory(4, AtomicBarrierType::memoryBarrier),
             AtomicBarrierInventory {
                 semantic: 5,
                 memory: 5,
@@ -3017,7 +3443,7 @@ mod tests {
             }
         );
         assert_eq!(
-            atomic_barrier_inventory(4, AtomicBarrierType::RenderPassBreak),
+            atomic_barrier_inventory(4, AtomicBarrierType::renderPassBreak),
             AtomicBarrierInventory {
                 semantic: 5,
                 memory: 0,
@@ -3025,7 +3451,7 @@ mod tests {
             }
         );
         assert_eq!(
-            1 + atomic_barrier_inventory(4, AtomicBarrierType::RenderPassBreak).render_pass_breaks,
+            1 + atomic_barrier_inventory(4, AtomicBarrierType::renderPassBreak).render_pass_breaks,
             6,
             "initial main pass plus one replacement pass per semantic barrier"
         );

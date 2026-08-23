@@ -1,0 +1,21 @@
+schema_version = 1
+unit = "ore-bind-group-layout"
+receipt_kind = "fix"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-bind-group-layout.fix.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_bind_group_layout.hpp:1-85",
+    "cpp:renderer/src/ore/ore_bind_group_layout.cpp:1-244",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_layout_hpp.rs:1-505",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_bind_group_layout_cpp.rs:1-228",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_layout_hpp.rs" = "ee5f462ad00caf61af19f792f4408db84e4a27d2220701230935db3a391c812b", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_bind_group_layout_cpp.rs" = "05675b778da057669f17e3f0b3617962c4101fd89d76b48148a5f4c98863e9f8" }
+resolutions = [
+    "V9-SRC-ORE-OWNER-001: restored exact intrusive GPUResource owner identity for BindGroupLayout",
+    "V9-SRC-ORE-DECL-002: restored authored base chain and source-order BindGroupLayout members with explicit reverse teardown",
+]

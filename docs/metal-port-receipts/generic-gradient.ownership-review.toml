@@ -1,0 +1,34 @@
+schema_version = 1
+unit = "generic-gradient"
+receipt_kind = "ownership-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-gradient.ownership-review.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/src/gradient.hpp:1-130",
+    "cpp:renderer/src/gradient.cpp:1-226",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_hpp.rs:1-532",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_cpp.rs:1-520",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_cpp.rs" = "9b651dc98c89f20748d324999b45e22f9eadef636e8dadc7d85fc6ce08a7a082", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_hpp.rs" = "14ba475f777a819aaa51b5951931828bcc85a09a203cf121402c83cf44ea4ea6" }
+findings = []
+review_run_id = "sol-v9-ownership-global-20260822-frozen-final-clean-890d85c1"
+coverage = [
+    "fields",
+    "lifetimes",
+    "threads",
+    "retain-release",
+    "drop-order",
+    "unsafe-invariants",
+    "divergences",
+]
+citations = [
+    "cpp:renderer/src/gradient.hpp:1-130",
+    "cpp:renderer/src/gradient.cpp:1-226",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_hpp.rs:1-532",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_cpp.rs:1-520",
+]

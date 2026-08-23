@@ -1,0 +1,23 @@
+schema_version = 1
+unit = "ore-shader-module"
+receipt_kind = "fix"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-shader-module.fix.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_shader_module.hpp:1-137",
+    "cpp:renderer/src/ore/metal/ore_shader_module_metal.hpp:1-20",
+    "cpp:renderer/src/ore/metal/ore_shader_module_metal.mm:1-5",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_shader_module_hpp.rs:1-412",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_hpp.rs:1-152",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_mm.rs:1-20",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_shader_module_hpp.rs" = "4d706a0a7549f05488131784463cb2ebff675541a1f381767752525d6a626322", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_hpp.rs" = "ac311c4f78a4d470fb1f03c4853b679666c4a992027fa0bfa9bec725cff80fb2", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_mm.rs" = "a69544c1cd752dce631e4a85cd60dcff5f3561bc2a481f2b03b1be7a68238291" }
+resolutions = [
+    "V9-SRC-ORE-OWNER-001: restored exact intrusive GPUResource owner identity for ShaderModule",
+    "V9-SRC-ORE-DECL-002: restored authored ShaderModule base chain/member order and teardown",
+]

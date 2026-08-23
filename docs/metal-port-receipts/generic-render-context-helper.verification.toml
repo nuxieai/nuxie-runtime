@@ -1,0 +1,18 @@
+schema_version = 1
+unit = "generic-render-context-helper"
+receipt_kind = "verification"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-render-context-helper.verification.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/render_context_helper_impl.hpp:1-92",
+    "cpp:renderer/src/render_context_helper_impl.cpp:1-169",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs:1-650",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_helper_impl_cpp.rs:1-365",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs" = "d87dc23922915e6b4f6aacaf53a68873cae02e83004082718309fa0e1717cbae", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_helper_impl_cpp.rs" = "a417f8f208dade2915c39d4129963f3fe65a266d11bd55f5448ee531b95226fc" }
+suite_reports = { "V0" = "docs/metal-port-reports/v0-inventory-provenance.md", "V1" = "docs/metal-port-reports/v1-source-ownership-closure.md", "V2" = "docs/metal-port-reports/v2-compile-configuration-matrix.md", "V3" = "docs/metal-port-reports/v3-native-lifecycle-failure.md", "V4" = "docs/metal-port-reports/v4-pinned-cpp-metal-parity.md", "V5" = "docs/metal-port-reports/v5-wgpu-diagnostic.md", "V6" = "docs/metal-port-reports/v6-msaa-exclusion.md", "V7" = "docs/metal-port-reports/v7-platform-hardware-policy.md", "V8" = "docs/metal-port-reports/v8-rooted-product-no-fallback.md", "V9" = "docs/metal-port-reports/v9-independent-closeout.md" }

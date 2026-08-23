@@ -124,6 +124,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
     if options.expect_all_fail {
         validate_stub_baseline(&counts)?;
+    } else if options.report_divergences {
+        // A diagnostic comparison still fails immediately when either replay
+        // process cannot execute: `emit_entry` propagates those errors through
+        // `run_bounded`. Only completed pixel comparisons are allowed to remain
+        // divergent here. This is intentionally not a parity gate.
     } else if entries
         .iter()
         .filter(|entry| entry.status == "exact")
@@ -1430,6 +1435,7 @@ struct Options {
     output_dir: PathBuf,
     jobs: usize,
     expect_all_fail: bool,
+    report_divergences: bool,
     probe_gated: Vec<String>,
     entry_ids: Vec<String>,
     reference_replay: Option<PathBuf>,
@@ -1450,6 +1456,7 @@ impl Options {
         let mut output_dir = PathBuf::from("target/renderer-corpus");
         let mut jobs = 1;
         let mut expect_all_fail = false;
+        let mut report_divergences = false;
         let mut probe_gated = Vec::new();
         let mut entry_ids = Vec::new();
         let mut reference_replay = None;
@@ -1473,6 +1480,7 @@ impl Options {
                     }
                 }
                 "--expect-all-fail" => expect_all_fail = true,
+                "--report-divergences" => report_divergences = true,
                 "--probe-gated" => probe_gated.push(args.next().ok_or(usage())?),
                 "--entry" => entry_ids.push(args.next().ok_or(usage())?),
                 "--reference-replay" => {
@@ -1511,6 +1519,9 @@ impl Options {
                     .into(),
             );
         }
+        if expect_all_fail && report_divergences {
+            return Err("--expect-all-fail and --report-divergences are mutually exclusive".into());
+        }
         if reference_backend
             .as_deref()
             .is_some_and(|backend| !matches!(backend, "ffi-metal" | "ffi-dawn" | "rust-wgpu"))
@@ -1526,6 +1537,7 @@ impl Options {
             output_dir,
             jobs,
             expect_all_fail,
+            report_divergences,
             probe_gated,
             entry_ids,
             reference_replay,
@@ -1550,7 +1562,7 @@ fn path_str(path: &Path) -> Result<&str, Box<dyn Error + Send + Sync>> {
 }
 
 fn usage() -> &'static str {
-    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--reference-replay FILE --reference-backend ffi-metal|ffi-dawn|rust-wgpu] [--reference-input-manifest FILE] [--output-dir DIR] [--jobs N] [--replay-timeout-seconds N] [--expect-all-fail] [--entry ID ...] [--probe-gated ID ...]"
+    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--reference-replay FILE --reference-backend ffi-metal|ffi-dawn|rust-wgpu] [--reference-input-manifest FILE] [--output-dir DIR] [--jobs N] [--replay-timeout-seconds N] [--expect-all-fail] [--report-divergences] [--entry ID ...] [--probe-gated ID ...]"
 }
 
 #[cfg(test)]
@@ -2117,6 +2129,20 @@ mod tests {
             .err()
             .unwrap();
         assert!(error.to_string().contains("positive integer"));
+    }
+
+    #[test]
+    fn report_divergences_is_diagnostic_and_excludes_the_negative_control() {
+        let options = Options::parse_args(["--report-divergences".to_owned()]).unwrap();
+        assert!(options.report_divergences);
+
+        let error = Options::parse_args([
+            "--report-divergences".to_owned(),
+            "--expect-all-fail".to_owned(),
+        ])
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("mutually exclusive"));
     }
 
     #[test]

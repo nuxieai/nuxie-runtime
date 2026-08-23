@@ -7,17 +7,62 @@ ownership_inventory = "docs/metal-port-ownership.toml"
 lifetime_ledger = "docs/ore-port-lifetimes.tsv"
 render_context_file_map = "docs/render-context-metal-file-map.tsv"
 render_context_field_map = "docs/render-context-metal-fields.tsv"
+render_context_field_owner_authority = "docs/render-context-metal-field-owners.tsv"
+render_context_field_source_authority = "docs/render-context-metal-field-sources.tsv"
+render_context_field_extractor = "tools/metal-port/extract_field_authority.py"
 render_context_configuration_map = "docs/render-context-metal-configurations.tsv"
+render_context_dependency_map = "docs/render-context-metal-dependencies.tsv"
+render_context_include_map = "docs/render-context-metal-includes.tsv"
+preprocessor_authority = "docs/metal-port-preprocessor-authority.tsv"
+direct_include_authority = "docs/metal-port-include-authority.tsv"
+source_dependency_authority = "docs/metal-port-source-dependencies.tsv"
+dispatch_prerequisite_authority = "docs/metal-port-dispatch-prerequisites.tsv"
+build_branch_authority = "docs/metal-port-build-branch-authority.tsv"
+divergence_ledger = "docs/metal-port-divergences.tsv"
 translation_conventions = "docs/metal-translation-conventions.tsv"
+shader_source_inventory = "docs/metal-shader-source-inventory.tsv"
 status_values = ["pending", "in-progress", "ported", "verified"]
-expected_status_counts = { pending = 0, in-progress = 2, ported = 40, verified = 0 }
+expected_status_counts = { pending = 0, in-progress = 0, ported = 0, verified = 111 }
 
 # These globs are intentionally exhaustive for the upstream native Metal
 # platform implementation, the backend-neutral ORE interface consumed by
 # Metal, the ORE Metal adapter, and the checked-in Metal shader sources.
 source_globs = [
+  "include/rive/rive_types.hpp",
   "include/rive/refcnt.hpp",
+  "include/utils/lite_rtti.hpp",
+  "include/rive/renderer.hpp",
+  "src/renderer.cpp",
+  "include/rive/gpu_texture_format.hpp",
+  "include/rive/shapes/paint/image_sampler.hpp",
+  "decoders/include/rive/decoders/astc_footprints.hpp",
+  "renderer/include/rive/renderer/gpu.hpp",
+  "renderer/src/gpu.cpp",
+  "renderer/include/rive/renderer/draw.hpp",
+  "renderer/src/draw.cpp",
   "renderer/include/rive/renderer/buffer_ring.hpp",
+  "renderer/include/rive/renderer/render_target.hpp",
+  "renderer/include/rive/renderer/texture.hpp",
+  "renderer/include/rive/renderer/rive_render_image.hpp",
+  "renderer/src/rive_render_image.cpp",
+  "renderer/include/rive/renderer/rive_renderer.hpp",
+  "renderer/src/rive_renderer.cpp",
+  "renderer/src/rive_render_path.hpp",
+  "renderer/src/rive_render_path.cpp",
+  "renderer/src/rive_render_paint.hpp",
+  "renderer/src/rive_render_paint.cpp",
+  "include/rive/factory.hpp",
+  "renderer/include/rive/renderer/rive_render_factory.hpp",
+  "renderer/src/rive_render_factory.cpp",
+  "renderer/src/gradient.hpp",
+  "renderer/src/gradient.cpp",
+  "renderer/include/rive/renderer/rive_render_buffer.hpp",
+  "renderer/include/rive/renderer/render_canvas.hpp",
+  "renderer/include/rive/renderer/render_context.hpp",
+  "renderer/include/rive/renderer/render_context_impl.hpp",
+  "renderer/include/rive/renderer/render_context_helper_impl.hpp",
+  "renderer/src/render_context_helper_impl.cpp",
+  "renderer/src/render_context.cpp",
   "renderer/include/rive/renderer/gpu_resource.hpp",
   "renderer/include/rive/renderer/metal/*",
   "renderer/src/gpu_resource.cpp",
@@ -26,6 +71,11 @@ source_globs = [
   "renderer/src/ore/ore_binding_map.cpp",
   "renderer/src/ore/ore_bind_group_layout.cpp",
   "renderer/src/ore/metal/*",
+  "renderer/src/shaders/Makefile",
+  "renderer/src/shaders/minify.py",
+  "renderer/src/shaders/*.glsl",
+  "renderer/src/shaders/*.vert",
+  "renderer/src/shaders/*.frag",
   "renderer/src/shaders/metal/*",
 ]
 source_excludes = [
@@ -35,6 +85,23 @@ source_excludes = [
   "renderer/include/rive/renderer/ore/ore_context_vulkan.hpp",
   "renderer/include/rive/renderer/ore/ore_context_wgpu.hpp",
 ]
+
+[mechanical_translation_workflow]
+methodology = "https://bun.com/blog/bun-in-rust"
+queue = "complete-pinned-files-in-parallel-waves"
+translator_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_driver_role = "sol-high"
+adversarial_reviews_per_translation = 2
+bulk_translation_before_compiler_queue = true
+bulk_translation_before_review_queue = true
+source_review_pass_before_ownership_review_pass = true
+ownership_review_pass_before_fix_queue = true
+compiler_queue_before_behavior_queue = true
+cleanup_only_after_full_parity = true
+feature_or_fixture_work_items_forbidden = true
+stubs_and_skipped_tests_forbidden = true
 
 [[reference_provenance]]
 id = "first-light-atlas-feather-stroke-clockwise-atomic"
@@ -80,7 +147,8 @@ sample_count = 1
 upstream = "renderer/include/rive/renderer/metal/render_context_metal_impl.h"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "in-progress"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
 # Adaptation: the upstream context permits a nil queue until the product sets
 # it. The explicitly selected Rust factory creates its retained queue during
 # context construction, then `begin_frame` fails closed if that queue cannot
@@ -126,6 +194,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/src/native_metal/tessellation_resource.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/metal/render_context_metal_impl_h.rs",
 ]
 evidence = [
   "docs/render-context-metal-file-map.tsv",
@@ -168,7 +237,8 @@ evidence = [
 upstream = "renderer/src/metal/background_shader_compiler.h"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "ported"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
 # Rust makes the upstream nil-library/assert failure observable as a typed,
 # fail-closed result while preserving the submitted source. The focused
 # `reports_backend_plan_and_synthesized_failures_without_stopping_worker` and
@@ -181,6 +251,7 @@ status = "ported"
 rust_modules = [
   "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_h.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
@@ -206,7 +277,8 @@ evidence = [
 upstream = "renderer/src/metal/background_shader_compiler.mm"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "ported"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
 # Rust makes the upstream nil-library/assert failure observable as a typed,
 # fail-closed result while preserving the submitted source. The focused
 # `reports_backend_plan_and_synthesized_failures_without_stopping_worker` and
@@ -219,6 +291,7 @@ status = "ported"
 rust_modules = [
   "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
@@ -244,7 +317,8 @@ evidence = [
 upstream = "renderer/include/rive/renderer/buffer_ring.hpp"
 lane = "renderer-platform"
 issue = "UNIV-2087"
-status = "ported"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
 # The Rust leaf preserves verbatim capacities and the 1,2,0 physical-buffer
 # rotation. A separate coordinator models upstream's blocking flush lock and
 # transfers release responsibility from an abandon-safe pre-submit lease to an
@@ -257,6 +331,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/buffer_ring_hpp.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
@@ -269,7 +344,8 @@ evidence = [
 upstream = "renderer/src/metal/render_context_metal_impl.mm"
 lane = "renderer-platform"
 issue = "UNIV-2086"
-status = "in-progress"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
 # Adaptation: upstream attaches a product-supplied target texture after target
 # construction. The headless tracer creates and attaches a shared readback
 # texture while building the same complete `RenderTargetMetal` owner. Resize
@@ -368,6 +444,7 @@ rust_modules = [
   "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
   "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
   "crates/nuxie-renderer/src/native_metal/drawable.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs",
 ]
 evidence = [
   "docs/render-context-metal-file-map.tsv",
@@ -425,15 +502,357 @@ evidence = [
   "tools/metal-port/tracer-corpus-wgpu-secondary.toml",
 ]
 
+# The Metal toolchain invokes minify.py once over the complete wildcard-expanded
+# GLSL/vertex/fragment batch. Identifier frequency and exported-name allocation
+# are global to that invocation, so every input below is source authority for
+# the resulting Metal artifacts even when a particular .metal file does not
+# include it directly. Exact order, line counts, and hashes live in
+# docs/metal-shader-source-inventory.tsv.
+[[source]]
+upstream = "renderer/src/shaders/Makefile"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/makefile.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/minify.py"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/minify_py.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/advanced_blend.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/advanced_blend_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/atomic_draw.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/atomic_draw_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/bezier_utils.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/bezier_utils_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/blit_texture_as_draw.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/blit_texture_as_draw_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/clear_clockwise_atomic_clip.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/clear_clockwise_atomic_clip_glsl.rs",
+]
+
+[[source]]
+upstream = "renderer/src/shaders/color_ramp.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/color_ramp_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/common.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/common_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/constants.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/constants_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_path_common.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_path_common_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/flush_uniforms.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/flush_uniforms_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/glsl.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/glsl_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/hlsl.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/hlsl_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/metal.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/pls_load_store_ext.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/pls_load_store_ext_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/render_atlas.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/render_atlas_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/resolve_atlas.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/resolve_atlas_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/rhi.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/rhi_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/specialization.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/specialization_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/stencil_draw.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/stencil_draw_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/tessellate.glsl"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/tessellate_glsl.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_fullscreen_quad.vert"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_fullscreen_quad_vert.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_image_mesh.vert"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_image_mesh_vert.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_path.vert"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_path_vert.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_clockwise_atomic_borrowed_coverage.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_borrowed_coverage_frag.rs",
+]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_clockwise_atomic_clip.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_clip_frag.rs",
+]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_clockwise_atomic_path.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_path_frag.rs",
+]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_clockwise_clip.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_clip_frag.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_clockwise_path.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_path_frag.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_input_attachment.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_input_attachment_frag.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_mesh.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_mesh_frag.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_msaa_object.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_msaa_object_frag.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_msaa_resolve.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_msaa_resolve_frag.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/draw_raster_order_path.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_raster_order_path_frag.rs"]
+
+[[source]]
+upstream = "renderer/src/shaders/init_clockwise_atomic_workaround.frag"
+lane = "platform-shaders"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+evidence = ["docs/metal-port-receipts/metal-shader-source-batch.compile.toml"]
+rust_modules = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/init_clockwise_atomic_workaround_frag.rs",
+]
+
 [[source]]
 upstream = "renderer/src/shaders/metal/color_ramp.metal"
 lane = "platform-shaders"
 issue = "UNIV-2087"
-status = "ported"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
 rust_modules = [
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/gradient_resource.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/color_ramp_metal.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/build.rs",
@@ -453,8 +872,12 @@ evidence = [
 upstream = "renderer/src/shaders/metal/draw.metal"
 lane = "platform-shaders"
 issue = "UNIV-2086"
-status = "ported"
-rust_modules = ["crates/nuxie-renderer/src/native_metal/draw_shader.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/draw_metal.rs",
+]
 evidence = [
   "crates/nuxie-renderer/build.rs",
   "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
@@ -478,8 +901,12 @@ evidence = [
 upstream = "renderer/src/shaders/metal/generate_draw_combinations.py"
 lane = "platform-shaders"
 issue = "UNIV-2086"
-status = "ported"
-rust_modules = ["crates/nuxie-renderer/src/native_metal/draw_combinations.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/generate_draw_combinations_py.rs",
+]
 evidence = [
   "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
   "crates/nuxie-renderer/tests/fixtures/native_metal/draw_combinations-4ac7b327-9f33bdcd.metal",
@@ -489,11 +916,13 @@ evidence = [
 upstream = "renderer/src/shaders/metal/tessellate.metal"
 lane = "platform-shaders"
 issue = "UNIV-2087"
-status = "ported"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
 rust_modules = [
   "crates/nuxie-renderer/src/native_metal/context.rs",
   "crates/nuxie-renderer/src/native_metal/mod.rs",
   "crates/nuxie-renderer/src/native_metal/tessellation_resource.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/tessellate_metal.rs",
 ]
 evidence = [
   "crates/nuxie-renderer/build.rs",
@@ -512,32 +941,48 @@ evidence = [
 upstream = "include/rive/refcnt.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/gpu_resource.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/gpu_resource.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/include/rive/refcnt_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/gpu_resource.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/gpu_resource.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/gpu_resource.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/gpu_resource.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/gpu_resource_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/gpu_resource.rs"]
 
 [[source]]
 upstream = "renderer/src/gpu_resource.cpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/gpu_resource.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/gpu_resource.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/gpu_resource_cpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/gpu_resource.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/ore_binding_map.cpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/binding_map.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/binding_map.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_binding_map_cpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/binding_map.rs"]
 
 # Rust adaptation for the bind-group-layout pair: the pinned Metal context
@@ -552,8 +997,12 @@ evidence = ["crates/nuxie-ore-metal/src/binding_map.rs"]
 upstream = "renderer/src/ore/ore_bind_group_layout.cpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/bind_group_layout.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_bind_group_layout_cpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
 
 # Rust adaptation for the bind-group file closure: `BindGroup` holds each
@@ -573,40 +1022,62 @@ evidence = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
 upstream = "renderer/include/rive/renderer/ore/ore_bind_group.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/bind_group.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/bind_group.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/bind_group.rs", "crates/nuxie-ore-metal/src/metal/bind_group.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_bind_group_layout.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/bind_group_layout.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_layout_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_binding_map.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/binding_map.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/binding_map.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_binding_map_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/binding_map.rs", "crates/nuxie-ore-metal/tests/ore_binding_witness.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_buffer.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/buffer.rs", "crates/nuxie-ore-metal/src/types.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/buffer.rs",
+  "crates/nuxie-ore-metal/src/types.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_buffer_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/buffer.rs", "crates/nuxie-ore-metal/src/metal/buffer.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_context.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/context.rs", "crates/nuxie-ore-metal/src/render_pass.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/context.rs",
+  "crates/nuxie-ore-metal/src/render_pass.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/context.rs", "crates/nuxie-ore-metal/src/render_pass.rs", "crates/nuxie-ore-metal/src/metal/context.rs"]
 
 # Rust adaptation for the context/render-pass closure: raw context/pass
@@ -627,8 +1098,12 @@ evidence = ["crates/nuxie-ore-metal/src/context.rs", "crates/nuxie-ore-metal/src
 upstream = "renderer/include/rive/renderer/ore/ore_context_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/context.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/context.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_metal_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/src/metal/buffer.rs"]
 
 # Rust adaptation for the file-local pipeline closure: `PipelineSnapshot`
@@ -652,72 +1127,108 @@ evidence = ["crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-met
 upstream = "renderer/include/rive/renderer/ore/ore_pipeline.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/pipeline.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/pipeline.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_pipeline_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/pipeline.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_render_pass.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/render_pass.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/render_pass.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_render_pass_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/render_pass.rs", "crates/nuxie-ore-metal/src/metal/render_pass.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/rstb_entry_container.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/rstb_entry_container.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_rstb_entry_container_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/rstb_entry_container.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_sampler.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/sampler.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/sampler.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_sampler_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/sampler.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_shader_module.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/shader_module.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/shader_module.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_shader_module_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/shader_module.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_texture.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/texture.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/texture.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_texture_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/texture.rs"]
 
 [[source]]
 upstream = "renderer/include/rive/renderer/ore/ore_types.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/types.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/types.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_types_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/types.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_bind_group_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/bind_group.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_bind_group_metal_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_bind_group_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/bind_group.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_bind_group_metal_mm.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
 
 # Rust adaptation for the Metal buffer pair: instead of retaining the
@@ -734,289 +1245,1894 @@ evidence = ["crates/nuxie-ore-metal/src/metal/bind_group.rs"]
 upstream = "renderer/src/ore/metal/ore_buffer_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/buffer.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/buffer.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/buffer.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_buffer_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/buffer.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/buffer.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_mm.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/buffer.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_context_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/context.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/context.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_context_metal_mm.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/src/metal/render_pass.rs", "crates/nuxie-ore-metal/tests/ore_binding_witness.rs", "tools/check-ore-metal-binding-witness.sh", "crates/nuxie/src/ore_metal_gpu_canvas.rs", "crates/nuxie/tests/ore_metal_authored_gpu_canvas.rs", "tools/check-ore-metal-authenticated-gpu-canvas.sh"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_pipeline_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/pipeline.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/pipeline.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/pipeline.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_pipeline_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/pipeline.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/pipeline.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_mm.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/pipeline.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_render_pass_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/render_pass.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/render_pass.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/render_pass.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_render_pass_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/render_pass.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/render_pass.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_mm.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/render_pass.rs", "crates/nuxie-ore-metal/src/metal/context.rs", "crates/nuxie-ore-metal/tests/ore_binding_witness.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_sampler_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/sampler.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/sampler.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/sampler.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_sampler_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/sampler.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/sampler.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_mm.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/sampler.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_shader_module_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/shader_module.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/shader_module.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/shader_module.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_shader_module_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/shader_module.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/shader_module.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_mm.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/shader_module.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_texture_metal.hpp"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/texture.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/texture.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_texture_metal_hpp.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/texture.rs"]
 
 [[source]]
 upstream = "renderer/src/ore/metal/ore_texture_metal.mm"
 lane = "ore-metal"
 issue = "UNIV-2091"
-status = "ported"
-rust_modules = ["crates/nuxie-ore-metal/src/metal/texture.rs"]
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-ore-metal/src/metal/texture.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_texture_metal_mm.rs",
+]
 evidence = ["crates/nuxie-ore-metal/src/metal/texture.rs"]
+
+[[source]]
+upstream = "include/rive/rive_types.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/lib.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/include/rive/rive_types_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-rive-types.compile.toml"]
+
+[[source]]
+upstream = "include/utils/lite_rtti.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-render-api/src/lib.rs",
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/include/utils/lite_rtti_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-lite-rtti.compile.toml"]
+
+[[source]]
+upstream = "include/rive/renderer.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-render-api/src/lib.rs",
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/include/rive/renderer_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-renderer-contract.compile.toml"]
+
+[[source]]
+upstream = "src/renderer.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-render-api/src/lib.rs",
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-runtime/src/text.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/src/renderer_cpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-renderer-implementation.compile.toml"]
+
+[[source]]
+upstream = "include/rive/gpu_texture_format.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/include/rive/gpu_texture_format_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-gpu-texture-format.compile.toml"]
+
+[[source]]
+upstream = "include/rive/shapes/paint/image_sampler.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-render-api/src/lib.rs",
+  "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/include/rive/shapes/paint/image_sampler_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-image-sampler.compile.toml"]
+
+[[source]]
+upstream = "decoders/include/rive/decoders/astc_footprints.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/decoders/include/rive/decoders/astc_footprints_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-astc-footprints.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/gpu.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/gpu.rs",
+  "crates/nuxie-renderer/src/native_metal/capabilities.rs",
+  "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_cache.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/gpu_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-gpu-contract.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/gpu.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/gpu.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_cache.rs",
+  "crates/nuxie-renderer/src/native_metal/pipeline_names.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gpu_cpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-gpu-implementation.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/render_target.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/render_target.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_target_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-render-target.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/texture.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/texture_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-texture-image.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/rive_render_image.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-render-api/src/lib.rs",
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/render_canvas.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_image_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-texture-image.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/rive_render_image.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/render_canvas.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_image_cpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-texture-image.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/rive_render_buffer.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_buffer_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-rive-render-buffer.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/render_canvas.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/render_canvas.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_canvas_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-render-canvas.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/render_context.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/logical_flush.rs",
+  "crates/nuxie-renderer/src/logical_frame.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-render-context-contract.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/render_context_impl.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/render_canvas.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_impl_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-render-context-impl-contract.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/render_context_helper_impl.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
+  "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-render-context-helper.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/render_context_helper_impl.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
+  "crates/nuxie-renderer/src/native_metal/buffer_ring_coordinator.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_helper_impl_cpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-render-context-helper.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/render_context.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/logical_flush.rs",
+  "crates/nuxie-renderer/src/logical_frame.rs",
+  "crates/nuxie-renderer/src/lib.rs",
+  "crates/nuxie-renderer/src/native_metal/mod.rs",
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_cpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-render-context-implementation.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/draw.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/draw_hpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-render-context-implementation.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/draw.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/draw_cpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-render-context-implementation.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/rive_render_path.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_hpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-rive-render-path.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/rive_render_path.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_cpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-rive-render-path.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/rive_render_paint.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_paint_hpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-rive-render-paint.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/rive_render_paint.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_paint_cpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-rive-render-paint.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/rive_renderer.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_renderer_hpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-rive-renderer.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/rive_renderer.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_renderer_cpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-rive-renderer.compile.toml"]
+
+[[source]]
+upstream = "include/rive/factory.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-factory-contract.compile.toml"]
+
+[[source]]
+upstream = "renderer/include/rive/renderer/rive_render_factory.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_factory_hpp.rs",
+]
+evidence = ["docs/metal-port-receipts/generic-rive-render-factory.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/rive_render_factory.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_factory_cpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-rive-render-factory.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/gradient.hpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_hpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-gradient.compile.toml"]
+
+[[source]]
+upstream = "renderer/src/gradient.cpp"
+lane = "renderer-core"
+issue = "UNIV-2086"
+status = "verified"
+parity_evidence = ["docs/metal-port-reports/v9-independent-closeout.md"]
+rust_modules = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_cpp.rs"]
+evidence = ["docs/metal-port-receipts/generic-gradient.compile.toml"]
+
+[[translation_unit]]
+id = "generic-rive-types"
+phase = "bulk"
+dispatch_ordinal = 4
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-1-generic-rive-types"
+sources = ["include/rive/rive_types.hpp"]
+source_dependencies = []
+dispatch_prerequisites = []
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/include/rive/rive_types_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-rive-types.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-rive-types.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-rive-types.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-rive-types.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-rive-types.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-rive-types.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-rive-render-path"
+phase = "bulk"
+dispatch_ordinal = 36
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-30-rive-render-path"
+sources = ["renderer/src/rive_render_path.hpp", "renderer/src/rive_render_path.cpp"]
+source_dependencies = ["generic-gpu-contract", "generic-renderer-contract", "metal-shader-source-batch"]
+dispatch_prerequisites = ["generic-renderer-contract", "generic-gpu-contract", "generic-render-context-implementation", "metal-shader-source-batch"]
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_hpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_cpp.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-rive-render-path.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-rive-render-path.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-rive-render-path.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-rive-render-path.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-rive-render-path.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-rive-render-path.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-rive-render-paint"
+phase = "bulk"
+dispatch_ordinal = 37
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-31-rive-render-paint"
+sources = ["renderer/src/rive_render_paint.hpp", "renderer/src/rive_render_paint.cpp"]
+source_dependencies = ["generic-gpu-contract", "generic-gradient", "generic-renderer-contract", "generic-texture-image"]
+dispatch_prerequisites = ["generic-renderer-contract", "generic-gpu-contract", "generic-texture-image", "generic-render-context-contract"]
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_paint_hpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_paint_cpp.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-rive-render-paint.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-rive-render-paint.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-rive-render-paint.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-rive-render-paint.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-rive-render-paint.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-rive-render-paint.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-rive-renderer"
+phase = "bulk"
+dispatch_ordinal = 38
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-32-rive-renderer"
+sources = ["renderer/include/rive/renderer/rive_renderer.hpp", "renderer/src/rive_renderer.cpp"]
+source_dependencies = ["generic-gpu-contract", "generic-render-context-contract", "generic-render-context-implementation", "generic-renderer-contract", "generic-rive-render-paint", "generic-rive-render-path", "generic-texture-image"]
+dispatch_prerequisites = ["generic-renderer-contract", "generic-gpu-contract", "generic-render-context-contract", "generic-render-context-implementation", "generic-texture-image", "generic-rive-render-path", "generic-rive-render-paint"]
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_renderer_hpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_renderer_cpp.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-rive-renderer.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-rive-renderer.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-rive-renderer.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-rive-renderer.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-rive-renderer.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-rive-renderer.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-factory-contract"
+phase = "bulk"
+dispatch_ordinal = 39
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-33-factory-contract"
+sources = ["include/rive/factory.hpp"]
+source_dependencies = ["generic-refcnt", "generic-renderer-contract"]
+dispatch_prerequisites = ["generic-refcnt", "generic-renderer-contract"]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-factory-contract.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-factory-contract.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-factory-contract.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-factory-contract.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-factory-contract.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-factory-contract.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-gradient"
+phase = "bulk"
+dispatch_ordinal = 40
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-34-gradient"
+sources = ["renderer/src/gradient.hpp", "renderer/src/gradient.cpp"]
+source_dependencies = ["generic-gpu-contract", "generic-renderer-contract"]
+dispatch_prerequisites = ["generic-gpu-contract", "generic-renderer-contract"]
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_hpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_cpp.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-gradient.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-gradient.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-gradient.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-gradient.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-gradient.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-gradient.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-rive-render-factory"
+phase = "bulk"
+dispatch_ordinal = 41
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-35-rive-render-factory"
+sources = ["renderer/include/rive/renderer/rive_render_factory.hpp", "renderer/src/rive_render_factory.cpp"]
+source_dependencies = ["generic-factory-contract", "generic-gradient", "generic-rive-render-paint", "generic-rive-render-path", "generic-rive-renderer"]
+dispatch_prerequisites = ["generic-factory-contract", "generic-gradient", "generic-rive-render-paint", "generic-rive-render-path", "generic-rive-renderer"]
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_factory_hpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_factory_cpp.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-rive-render-factory.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-rive-render-factory.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-rive-render-factory.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-rive-render-factory.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-rive-render-factory.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-rive-render-factory.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-refcnt"
+phase = "bulk"
+dispatch_ordinal = 5
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-2-generic-refcnt"
+sources = ["include/rive/refcnt.hpp"]
+source_dependencies = ["generic-rive-types"]
+dispatch_prerequisites = ["generic-rive-types"]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/include/rive/refcnt_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-refcnt.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-refcnt.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-refcnt.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-refcnt.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-refcnt.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-refcnt.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-lite-rtti"
+phase = "bulk"
+dispatch_ordinal = 15
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-10-generic-lite-rtti"
+sources = ["include/utils/lite_rtti.hpp"]
+source_dependencies = ["generic-refcnt"]
+dispatch_prerequisites = ["generic-refcnt"]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/include/utils/lite_rtti_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-lite-rtti.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-lite-rtti.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-lite-rtti.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-lite-rtti.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-lite-rtti.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-lite-rtti.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-image-sampler"
+phase = "bulk"
+dispatch_ordinal = 16
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-11-generic-image-sampler"
+sources = ["include/rive/shapes/paint/image_sampler.hpp"]
+source_dependencies = []
+dispatch_prerequisites = []
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/include/rive/shapes/paint/image_sampler_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-image-sampler.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-image-sampler.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-image-sampler.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-image-sampler.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-image-sampler.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-image-sampler.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-renderer-contract"
+phase = "bulk"
+dispatch_ordinal = 17
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-12-generic-renderer-contract"
+sources = ["include/rive/renderer.hpp"]
+source_dependencies = [
+  "generic-image-sampler",
+  "generic-lite-rtti",
+  "generic-refcnt",
+]
+dispatch_prerequisites = [
+  "generic-rive-types",
+  "generic-refcnt",
+  "generic-lite-rtti",
+  "generic-image-sampler",
+]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/include/rive/renderer_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-renderer-contract.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-renderer-contract.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-renderer-contract.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-renderer-contract.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-renderer-contract.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-renderer-contract.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-renderer-implementation"
+phase = "bulk"
+dispatch_ordinal = 18
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-13-generic-renderer-implementation"
+sources = ["src/renderer.cpp"]
+source_dependencies = ["generic-renderer-contract"]
+dispatch_prerequisites = ["generic-renderer-contract"]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/src/renderer_cpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-renderer-implementation.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-renderer-implementation.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-renderer-implementation.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-renderer-implementation.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-renderer-implementation.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-renderer-implementation.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-gpu-texture-format"
+phase = "bulk"
+dispatch_ordinal = 19
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-13-generic-gpu-texture-format"
+sources = ["include/rive/gpu_texture_format.hpp"]
+source_dependencies = []
+dispatch_prerequisites = []
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/include/rive/gpu_texture_format_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-gpu-texture-format.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-gpu-texture-format.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-gpu-texture-format.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-gpu-texture-format.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-gpu-texture-format.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-gpu-texture-format.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-astc-footprints"
+phase = "bulk"
+dispatch_ordinal = 20
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-14-generic-astc-footprints"
+sources = ["decoders/include/rive/decoders/astc_footprints.hpp"]
+source_dependencies = []
+dispatch_prerequisites = []
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/decoders/include/rive/decoders/astc_footprints_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-astc-footprints.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-astc-footprints.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-astc-footprints.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-astc-footprints.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-astc-footprints.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-astc-footprints.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-gpu-contract"
+phase = "bulk"
+dispatch_ordinal = 21
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-15-generic-gpu-contract"
+sources = ["renderer/include/rive/renderer/gpu.hpp"]
+source_dependencies = ["generic-image-sampler"]
+dispatch_prerequisites = [
+  "generic-rive-types",
+  "generic-image-sampler",
+  "generic-renderer-contract",
+]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/gpu_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-gpu-contract.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-gpu-contract.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-gpu-contract.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-gpu-contract.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-gpu-contract.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-gpu-contract.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-buffer-ring"
+phase = "bulk"
+dispatch_ordinal = 22
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-16-generic-buffer-ring"
+sources = ["renderer/include/rive/renderer/buffer_ring.hpp"]
+source_dependencies = ["generic-gpu-contract"]
+dispatch_prerequisites = ["generic-gpu-contract"]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/buffer_ring_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-buffer-ring.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-buffer-ring.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-buffer-ring.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-buffer-ring.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-buffer-ring.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-buffer-ring.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-render-target"
+phase = "bulk"
+dispatch_ordinal = 23
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-17-generic-render-target"
+sources = ["renderer/include/rive/renderer/render_target.hpp"]
+source_dependencies = ["generic-refcnt"]
+dispatch_prerequisites = ["generic-refcnt"]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_target_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-render-target.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-render-target.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-render-target.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-render-target.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-render-target.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-render-target.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-texture-image"
+phase = "bulk"
+dispatch_ordinal = 24
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-18-generic-texture-image"
+sources = [
+  "renderer/include/rive/renderer/texture.hpp",
+  "renderer/include/rive/renderer/rive_render_image.hpp",
+  "renderer/src/rive_render_image.cpp",
+]
+source_dependencies = ["generic-refcnt", "generic-renderer-contract"]
+dispatch_prerequisites = [
+  "generic-refcnt",
+  "generic-lite-rtti",
+  "generic-renderer-contract",
+]
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/texture_hpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_image_hpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_image_cpp.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-texture-image.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-texture-image.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-texture-image.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-texture-image.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-texture-image.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-texture-image.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-rive-render-buffer"
+phase = "bulk"
+dispatch_ordinal = 25
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-19-generic-rive-render-buffer"
+sources = ["renderer/include/rive/renderer/rive_render_buffer.hpp"]
+source_dependencies = ["generic-gpu-contract", "generic-renderer-contract"]
+dispatch_prerequisites = [
+  "generic-renderer-contract",
+  "generic-gpu-contract",
+]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_buffer_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-rive-render-buffer.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-rive-render-buffer.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-rive-render-buffer.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-rive-render-buffer.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-rive-render-buffer.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-rive-render-buffer.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-render-canvas"
+phase = "bulk"
+dispatch_ordinal = 26
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-20-generic-render-canvas"
+sources = ["renderer/include/rive/renderer/render_canvas.hpp"]
+source_dependencies = [
+  "generic-refcnt",
+  "generic-render-target",
+  "generic-texture-image",
+]
+dispatch_prerequisites = [
+  "generic-refcnt",
+  "generic-render-target",
+  "generic-texture-image",
+]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_canvas_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-render-canvas.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-render-canvas.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-render-canvas.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-render-canvas.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-render-canvas.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-render-canvas.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-render-context-contract"
+phase = "bulk"
+dispatch_ordinal = 27
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-21-render-context-hpp"
+sources = ["renderer/include/rive/renderer/render_context.hpp"]
+source_dependencies = [
+  "generic-gpu-contract",
+  "generic-render-canvas",
+  "generic-render-target",
+  "generic-rive-render-factory",
+  "ore-context-render-pass",
+]
+dispatch_prerequisites = [
+  "generic-renderer-contract",
+  "generic-gpu-contract",
+  "generic-render-target",
+  "generic-render-canvas",
+  "ore-context-render-pass",
+]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-render-context-contract.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-render-context-contract.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-render-context-contract.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-render-context-contract.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-render-context-contract.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-render-context-contract.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-render-context-impl-contract"
+phase = "bulk"
+dispatch_ordinal = 28
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-22-render-context-impl-hpp"
+sources = ["renderer/include/rive/renderer/render_context_impl.hpp"]
+source_dependencies = ["generic-gpu-texture-format", "generic-render-context-contract"]
+dispatch_prerequisites = [
+  "generic-gpu-texture-format",
+  "generic-render-context-contract",
+]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_impl_hpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-render-context-impl-contract.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-render-context-impl-contract.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-render-context-impl-contract.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-render-context-impl-contract.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-render-context-impl-contract.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-render-context-impl-contract.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-render-context-helper"
+phase = "bulk"
+dispatch_ordinal = 29
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-23-render-context-helper-hpp"
+sources = [
+  "renderer/include/rive/renderer/render_context_helper_impl.hpp",
+  "renderer/src/render_context_helper_impl.cpp",
+]
+source_dependencies = [
+  "generic-buffer-ring",
+  "generic-render-context-impl-contract",
+  "generic-texture-image",
+  "metal-shader-source-batch",
+]
+dispatch_prerequisites = [
+  "generic-buffer-ring",
+  "generic-texture-image",
+  "generic-render-context-impl-contract",
+]
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_helper_impl_cpp.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-render-context-helper.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-render-context-helper.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-render-context-helper.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-render-context-helper.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-render-context-helper.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-render-context-helper.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-gpu-implementation"
+phase = "bulk"
+dispatch_ordinal = 30
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-24-gpu-cpp"
+sources = ["renderer/src/gpu.cpp"]
+source_dependencies = [
+  "generic-gpu-contract",
+  "generic-gradient",
+  "generic-render-context-contract",
+  "generic-render-target",
+  "generic-rive-render-paint",
+  "generic-texture-image",
+  "metal-shader-source-batch",
+]
+dispatch_prerequisites = [
+  "generic-renderer-contract",
+  "generic-gpu-contract",
+  "generic-render-target",
+  "generic-texture-image",
+  "generic-render-context-contract",
+]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gpu_cpp.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-gpu-implementation.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-gpu-implementation.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-gpu-implementation.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-gpu-implementation.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-gpu-implementation.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-gpu-implementation.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "generic-render-context-implementation"
+phase = "bulk"
+dispatch_ordinal = 31
+source_authority = "render-context-dependency-map"
+worker_claim = "luna-wave-25-render-context-cpp"
+sources = [
+  "renderer/include/rive/renderer/draw.hpp",
+  "renderer/src/draw.cpp",
+  "renderer/src/render_context.cpp",
+]
+source_dependencies = [
+  "generic-gpu-contract",
+  "generic-gpu-texture-format",
+  "generic-gradient",
+  "generic-refcnt",
+  "generic-render-canvas",
+  "generic-render-context-contract",
+  "generic-render-context-impl-contract",
+  "generic-rive-render-paint",
+  "generic-rive-render-path",
+  "generic-texture-image",
+  "metal-shader-source-batch",
+]
+dispatch_prerequisites = [
+  "generic-refcnt",
+  "generic-renderer-implementation",
+  "generic-gpu-texture-format",
+  "generic-gpu-contract",
+  "generic-texture-image",
+  "generic-render-canvas",
+  "generic-render-context-contract",
+  "generic-render-context-impl-contract",
+  "generic-gpu-implementation",
+]
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/draw_hpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/draw_cpp.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_cpp.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/generic-render-context-implementation.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/generic-render-context-implementation.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/generic-render-context-implementation.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/generic-render-context-implementation.fix.toml"
+compile_receipt = "docs/metal-port-receipts/generic-render-context-implementation.compile.toml"
+verification_receipt = "docs/metal-port-receipts/generic-render-context-implementation.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "metal-shader-source-batch"
+phase = "bulk"
+dispatch_ordinal = 32
+worker_claim = "luna-wave-26-shader-makefile"
+sources = [
+  "renderer/src/shaders/Makefile",
+  "renderer/src/shaders/minify.py",
+  "renderer/src/shaders/advanced_blend.glsl",
+  "renderer/src/shaders/atomic_draw.glsl",
+  "renderer/src/shaders/bezier_utils.glsl",
+  "renderer/src/shaders/blit_texture_as_draw.glsl",
+  "renderer/src/shaders/clear_clockwise_atomic_clip.glsl",
+  "renderer/src/shaders/color_ramp.glsl",
+  "renderer/src/shaders/common.glsl",
+  "renderer/src/shaders/constants.glsl",
+  "renderer/src/shaders/draw_path_common.glsl",
+  "renderer/src/shaders/flush_uniforms.glsl",
+  "renderer/src/shaders/glsl.glsl",
+  "renderer/src/shaders/hlsl.glsl",
+  "renderer/src/shaders/metal.glsl",
+  "renderer/src/shaders/pls_load_store_ext.glsl",
+  "renderer/src/shaders/render_atlas.glsl",
+  "renderer/src/shaders/resolve_atlas.glsl",
+  "renderer/src/shaders/rhi.glsl",
+  "renderer/src/shaders/specialization.glsl",
+  "renderer/src/shaders/stencil_draw.glsl",
+  "renderer/src/shaders/tessellate.glsl",
+  "renderer/src/shaders/draw_fullscreen_quad.vert",
+  "renderer/src/shaders/draw_image_mesh.vert",
+  "renderer/src/shaders/draw_path.vert",
+  "renderer/src/shaders/draw_clockwise_atomic_borrowed_coverage.frag",
+  "renderer/src/shaders/draw_clockwise_atomic_clip.frag",
+  "renderer/src/shaders/draw_clockwise_atomic_path.frag",
+  "renderer/src/shaders/draw_clockwise_clip.frag",
+  "renderer/src/shaders/draw_clockwise_path.frag",
+  "renderer/src/shaders/draw_input_attachment.frag",
+  "renderer/src/shaders/draw_mesh.frag",
+  "renderer/src/shaders/draw_msaa_object.frag",
+  "renderer/src/shaders/draw_msaa_resolve.frag",
+  "renderer/src/shaders/draw_raster_order_path.frag",
+  "renderer/src/shaders/init_clockwise_atomic_workaround.frag",
+  "renderer/src/shaders/metal/generate_draw_combinations.py",
+  "renderer/src/shaders/metal/color_ramp.metal",
+  "renderer/src/shaders/metal/draw.metal",
+  "renderer/src/shaders/metal/tessellate.metal",
+]
+source_dependencies = []
+dispatch_prerequisites = []
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/makefile.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/minify_py.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/advanced_blend_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/atomic_draw_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/bezier_utils_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/blit_texture_as_draw_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/clear_clockwise_atomic_clip_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/color_ramp_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/common_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/constants_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_path_common_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/flush_uniforms_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/glsl_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/hlsl_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/pls_load_store_ext_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/render_atlas_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/resolve_atlas_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/rhi_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/specialization_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/stencil_draw_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/tessellate_glsl.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_fullscreen_quad_vert.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_image_mesh_vert.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_path_vert.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_borrowed_coverage_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_clip_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_path_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_clip_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_clockwise_path_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_input_attachment_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_mesh_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_msaa_object_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_msaa_resolve_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/draw_raster_order_path_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/init_clockwise_atomic_workaround_frag.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/generate_draw_combinations_py.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/color_ramp_metal.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/draw_metal.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/tessellate_metal.rs",
+]
+artifact_targets = [
+  "crates/nuxie-renderer/build.rs",
+  "crates/nuxie-renderer/src/native_metal/draw_combinations.rs",
+  "crates/nuxie-renderer/src/native_metal/shaders/advanced_blend.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/bezier_utils.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/color_ramp.metal",
+  "crates/nuxie-renderer/src/native_metal/shaders/color_ramp.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/common.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/constants.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw.metal",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_combinations.metal",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_image_mesh.minified.vert",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_mesh.minified.frag",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_path.minified.vert",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_path_common.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/draw_raster_order_path.minified.frag",
+  "crates/nuxie-renderer/src/native_metal/shaders/flush_uniforms.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/metal.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/render_atlas.minified.glsl",
+  "crates/nuxie-renderer/src/native_metal/shaders/tessellate.metal",
+  "crates/nuxie-renderer/src/native_metal/shaders/tessellate.minified.glsl",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "artifact-only"
+requires_lifetime_rows = false
+translation_receipt = "docs/metal-port-receipts/metal-shader-source-batch.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/metal-shader-source-batch.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/metal-shader-source-batch.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/metal-shader-source-batch.fix.toml"
+compile_receipt = "docs/metal-port-receipts/metal-shader-source-batch.compile.toml"
+verification_receipt = "docs/metal-port-receipts/metal-shader-source-batch.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "metal-render-context-api"
+phase = "bulk"
+dispatch_ordinal = 33
+source_authority = "source-manifest"
+worker_claim = "luna-wave-27-metal-render-context-api"
+sources = ["renderer/include/rive/renderer/metal/render_context_metal_impl.h"]
+source_dependencies = [
+  "generic-image-sampler",
+  "generic-render-context-helper",
+  "generic-rive-types",
+]
+dispatch_prerequisites = [
+  "generic-buffer-ring",
+  "generic-render-context-impl-contract",
+  "ore-context-render-pass",
+]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/metal/render_context_metal_impl_h.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/metal-render-context-api.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/metal-render-context-api.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/metal-render-context-api.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/metal-render-context-api.fix.toml"
+compile_receipt = "docs/metal-port-receipts/metal-render-context-api.compile.toml"
+verification_receipt = "docs/metal-port-receipts/metal-render-context-api.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "metal-background-shader-compiler"
+phase = "bulk"
+dispatch_ordinal = 34
+source_authority = "source-manifest"
+worker_claim = "luna-wave-28-background-shader-compiler"
+sources = [
+  "renderer/src/metal/background_shader_compiler.h",
+  "renderer/src/metal/background_shader_compiler.mm",
+]
+source_dependencies = [
+  "generic-gpu-contract",
+  "metal-render-context-api",
+  "metal-shader-source-batch",
+]
+dispatch_prerequisites = [
+  "metal-render-context-api",
+  "metal-shader-source-batch",
+]
+rust_targets = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_h.rs",
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs",
+]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/metal-background-shader-compiler.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/metal-background-shader-compiler.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/metal-background-shader-compiler.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/metal-background-shader-compiler.fix.toml"
+compile_receipt = "docs/metal-port-receipts/metal-background-shader-compiler.compile.toml"
+verification_receipt = "docs/metal-port-receipts/metal-background-shader-compiler.verification.toml"
+open_findings = 0
+
+[[translation_unit]]
+id = "metal-render-context-implementation"
+phase = "bulk"
+dispatch_ordinal = 35
+source_authority = "source-manifest"
+worker_claim = "luna-wave-29-metal-render-context-implementation"
+sources = ["renderer/src/metal/render_context_metal_impl.mm"]
+source_dependencies = [
+  "generic-astc-footprints",
+  "generic-buffer-ring",
+  "generic-render-canvas",
+  "generic-rive-render-buffer",
+  "generic-texture-image",
+  "metal-background-shader-compiler",
+  "metal-render-context-api",
+  "metal-shader-source-batch",
+  "ore-context-render-pass",
+]
+dispatch_prerequisites = [
+  "generic-buffer-ring",
+  "generic-gpu-contract",
+  "generic-gpu-implementation",
+  "generic-render-target",
+  "generic-texture-image",
+  "generic-rive-render-buffer",
+  "generic-render-canvas",
+  "generic-render-context-contract",
+  "generic-render-context-impl-contract",
+  "generic-render-context-helper",
+  "generic-render-context-implementation",
+  "metal-shader-source-batch",
+  "metal-render-context-api",
+  "metal-background-shader-compiler",
+  "ore-context-render-pass",
+]
+rust_targets = ["crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs"]
+worker_role = "luna-extra-high"
+source_reviewer_role = "sol-high"
+ownership_reviewer_role = "sol-high"
+fixer_role = "sol-high"
+base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+status = "verified"
+lifetime_authority = "render-context-field-map"
+requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/metal-render-context-implementation.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/metal-render-context-implementation.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/metal-render-context-implementation.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/metal-render-context-implementation.fix.toml"
+compile_receipt = "docs/metal-port-receipts/metal-render-context-implementation.compile.toml"
+verification_receipt = "docs/metal-port-receipts/metal-render-context-implementation.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-types"
+dispatch_ordinal = 1
 phase = "trial"
-worker_claim = "trial-ore-types"
+worker_claim = "luna-ore-types-translation"
 sources = ["renderer/include/rive/renderer/ore/ore_types.hpp"]
-dependencies = []
-rust_targets = ["crates/nuxie-ore-metal/src/types.rs"]
+source_dependencies = []
+dispatch_prerequisites = []
+rust_targets = ["crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_types_hpp.rs"]
 worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-types.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-types.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-types.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-types.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-types.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-types.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-rstb-container"
+dispatch_ordinal = 2
 phase = "trial"
-worker_claim = "trial-ore-rstb-container"
+worker_claim = "luna-ore-rstb-container-translation"
 sources = ["renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp"]
-dependencies = []
-rust_targets = ["crates/nuxie-ore-metal/src/rstb_entry_container.rs"]
+source_dependencies = []
+dispatch_prerequisites = []
+rust_targets = ["crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_rstb_entry_container_hpp.rs"]
 worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-rstb-container.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-rstb-container.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-rstb-container.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-rstb-container.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-rstb-container.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-rstb-container.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-binding-map"
+dispatch_ordinal = 3
 phase = "trial"
-worker_claim = "trial-ore-binding-map"
+worker_claim = "luna-wave-1-ore-binding-map"
 sources = [
   "renderer/include/rive/renderer/ore/ore_binding_map.hpp",
   "renderer/src/ore/ore_binding_map.cpp",
 ]
-dependencies = []
-rust_targets = ["crates/nuxie-ore-metal/src/binding_map.rs"]
+source_dependencies = []
+dispatch_prerequisites = []
+rust_targets = [
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_binding_map_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_binding_map_cpp.rs",
+]
 worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-binding-map.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-binding-map.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-binding-map.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-binding-map.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-binding-map.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-binding-map.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "gpu-resource"
+dispatch_ordinal = 6
 phase = "bulk"
-worker_claim = "sol-gpu-resource-port"
+worker_claim = "luna-wave-2-gpu-resource"
 sources = [
-  "include/rive/refcnt.hpp",
   "renderer/include/rive/renderer/gpu_resource.hpp",
   "renderer/src/gpu_resource.cpp",
 ]
-dependencies = []
-rust_targets = ["crates/nuxie-ore-metal/src/gpu_resource.rs"]
-worker_role = "sol-high"
+source_dependencies = ["generic-refcnt"]
+dispatch_prerequisites = ["generic-refcnt"]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/gpu_resource_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/gpu_resource_cpp.rs",
+]
+worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/gpu-resource.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/gpu-resource.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/gpu-resource.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/gpu-resource.fix.toml"
+compile_receipt = "docs/metal-port-receipts/gpu-resource.compile.toml"
+verification_receipt = "docs/metal-port-receipts/gpu-resource.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-bind-group-layout"
+dispatch_ordinal = 7
 phase = "bulk"
-worker_claim = "luna-ore-bind-group-layout"
+worker_claim = "luna-wave-3-ore-bind-group-layout"
 sources = [
   "renderer/include/rive/renderer/ore/ore_bind_group_layout.hpp",
   "renderer/src/ore/ore_bind_group_layout.cpp",
 ]
-dependencies = ["ore-types", "ore-binding-map", "gpu-resource"]
-rust_targets = ["crates/nuxie-ore-metal/src/bind_group_layout.rs"]
+source_dependencies = [
+  "generic-lite-rtti",
+  "gpu-resource",
+  "ore-binding-map",
+  "ore-types",
+]
+dispatch_prerequisites = ["ore-types", "ore-binding-map", "gpu-resource"]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_layout_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_bind_group_layout_cpp.rs",
+]
 worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-bind-group-layout.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-bind-group-layout.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-bind-group-layout.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-bind-group-layout.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-bind-group-layout.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-bind-group-layout.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-buffer"
+dispatch_ordinal = 8
 phase = "bulk"
-worker_claim = "sol-ore-buffer"
+worker_claim = "luna-wave-3-ore-buffer"
 sources = [
   "renderer/include/rive/renderer/ore/ore_buffer.hpp",
   "renderer/src/ore/metal/ore_buffer_metal.hpp",
   "renderer/src/ore/metal/ore_buffer_metal.mm",
 ]
-dependencies = ["ore-types", "gpu-resource"]
-rust_targets = [
-  "crates/nuxie-ore-metal/src/buffer.rs",
-  "crates/nuxie-ore-metal/src/metal/buffer.rs",
+source_dependencies = [
+  "generic-lite-rtti",
+  "generic-rive-types",
+  "gpu-resource",
+  "ore-context-render-pass",
+  "ore-types",
 ]
-worker_role = "sol-high"
+dispatch_prerequisites = ["ore-types", "gpu-resource"]
+rust_targets = [
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_buffer_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_mm.rs",
+]
+worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-buffer.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-buffer.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-buffer.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-buffer.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-buffer.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-buffer.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-texture"
+dispatch_ordinal = 9
 phase = "bulk"
-worker_claim = "luna-ore-texture"
+worker_claim = "luna-wave-4-ore-texture"
 sources = [
   "renderer/include/rive/renderer/ore/ore_texture.hpp",
   "renderer/src/ore/metal/ore_texture_metal.hpp",
   "renderer/src/ore/metal/ore_texture_metal.mm",
 ]
-dependencies = ["ore-types", "gpu-resource"]
+source_dependencies = [
+  "generic-lite-rtti",
+  "generic-rive-types",
+  "gpu-resource",
+  "ore-types",
+]
+dispatch_prerequisites = ["ore-types", "gpu-resource"]
 rust_targets = [
-  "crates/nuxie-ore-metal/src/texture.rs",
-  "crates/nuxie-ore-metal/src/metal/texture.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_texture_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_texture_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_texture_metal_mm.rs",
 ]
 worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-texture.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-texture.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-texture.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-texture.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-texture.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-texture.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-sampler"
+dispatch_ordinal = 10
 phase = "bulk"
-worker_claim = "luna-ore-sampler"
+worker_claim = "luna-wave-5-ore-sampler"
 sources = [
   "renderer/include/rive/renderer/ore/ore_sampler.hpp",
   "renderer/src/ore/metal/ore_sampler_metal.hpp",
   "renderer/src/ore/metal/ore_sampler_metal.mm",
 ]
-dependencies = ["ore-types", "gpu-resource"]
+source_dependencies = [
+  "generic-lite-rtti",
+  "gpu-resource",
+  "ore-types",
+]
+dispatch_prerequisites = ["ore-types", "gpu-resource"]
 rust_targets = [
-  "crates/nuxie-ore-metal/src/sampler.rs",
-  "crates/nuxie-ore-metal/src/metal/sampler.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_sampler_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_mm.rs",
 ]
 worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-sampler.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-sampler.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-sampler.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-sampler.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-sampler.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-sampler.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-shader-module"
+dispatch_ordinal = 11
 phase = "bulk"
-worker_claim = "luna-ore-shader"
+worker_claim = "luna-wave-6-ore-shader-module"
 sources = [
   "renderer/include/rive/renderer/ore/ore_shader_module.hpp",
   "renderer/src/ore/metal/ore_shader_module_metal.hpp",
   "renderer/src/ore/metal/ore_shader_module_metal.mm",
 ]
-dependencies = ["ore-types", "ore-binding-map", "gpu-resource"]
+source_dependencies = [
+  "generic-lite-rtti",
+  "gpu-resource",
+  "ore-binding-map",
+  "ore-types",
+]
+dispatch_prerequisites = ["ore-types", "ore-binding-map", "gpu-resource"]
 rust_targets = [
-  "crates/nuxie-ore-metal/src/shader_module.rs",
-  "crates/nuxie-ore-metal/src/metal/shader_module.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_shader_module_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_mm.rs",
 ]
 worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-shader-module.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-shader-module.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-shader-module.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-shader-module.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-shader-module.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-shader-module.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-pipeline"
+dispatch_ordinal = 12
 phase = "bulk"
-worker_claim = "luna-ore-pipeline"
+worker_claim = "luna-wave-7-ore-pipeline"
 sources = [
   "renderer/include/rive/renderer/ore/ore_pipeline.hpp",
   "renderer/src/ore/metal/ore_pipeline_metal.hpp",
   "renderer/src/ore/metal/ore_pipeline_metal.mm",
 ]
-dependencies = [
+source_dependencies = [
+  "generic-lite-rtti",
+  "gpu-resource",
+  "ore-bind-group-layout",
+  "ore-shader-module",
+  "ore-types",
+]
+dispatch_prerequisites = [
   "ore-types",
   "ore-binding-map",
   "gpu-resource",
@@ -1024,27 +3140,47 @@ dependencies = [
   "ore-shader-module",
 ]
 rust_targets = [
-  "crates/nuxie-ore-metal/src/pipeline.rs",
-  "crates/nuxie-ore-metal/src/metal/pipeline.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_pipeline_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_pipeline_metal_mm.rs",
 ]
 worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-pipeline.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-pipeline.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-pipeline.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-pipeline.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-pipeline.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-pipeline.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-bind-group"
+dispatch_ordinal = 13
 phase = "bulk"
-worker_claim = "luna-ore-bind-group"
+worker_claim = "luna-wave-8-ore-bind-group"
 sources = [
   "renderer/include/rive/renderer/ore/ore_bind_group.hpp",
   "renderer/src/ore/metal/ore_bind_group_metal.hpp",
   "renderer/src/ore/metal/ore_bind_group_metal.mm",
 ]
-dependencies = [
+source_dependencies = [
+  "generic-lite-rtti",
+  "gpu-resource",
+  "ore-bind-group-layout",
+  "ore-binding-map",
+  "ore-buffer",
+  "ore-sampler",
+  "ore-texture",
+  "ore-types",
+]
+dispatch_prerequisites = [
   "ore-types",
   "ore-binding-map",
   "gpu-resource",
@@ -1054,21 +3190,31 @@ dependencies = [
   "ore-sampler",
 ]
 rust_targets = [
-  "crates/nuxie-ore-metal/src/bind_group.rs",
-  "crates/nuxie-ore-metal/src/metal/bind_group.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_bind_group_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_bind_group_metal_mm.rs",
 ]
 worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-bind-group.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-bind-group.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-bind-group.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-bind-group.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-bind-group.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-bind-group.verification.toml"
+open_findings = 0
 
 [[translation_unit]]
 id = "ore-context-render-pass"
+dispatch_ordinal = 14
 phase = "bulk"
-worker_claim = "sol-ore-context-render-pass"
+worker_claim = "luna-wave-9-ore-context-render-pass"
 sources = [
   "renderer/include/rive/renderer/ore/ore_context.hpp",
   "renderer/include/rive/renderer/ore/ore_context_metal.hpp",
@@ -1077,7 +3223,20 @@ sources = [
   "renderer/src/ore/metal/ore_render_pass_metal.hpp",
   "renderer/src/ore/metal/ore_render_pass_metal.mm",
 ]
-dependencies = [
+source_dependencies = [
+  "generic-refcnt",
+  "generic-render-canvas",
+  "generic-rive-types",
+  "metal-render-context-api",
+  "ore-bind-group",
+  "ore-buffer",
+  "ore-pipeline",
+  "ore-sampler",
+  "ore-shader-module",
+  "ore-texture",
+  "ore-types",
+]
+dispatch_prerequisites = [
   "ore-types",
   "ore-binding-map",
   "gpu-resource",
@@ -1090,15 +3249,25 @@ dependencies = [
   "ore-bind-group",
 ]
 rust_targets = [
-  "crates/nuxie-ore-metal/src/context.rs",
-  "crates/nuxie-ore-metal/src/render_pass.rs",
-  "crates/nuxie-ore-metal/src/metal/context.rs",
-  "crates/nuxie-ore-metal/src/metal/render_pass.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_render_pass_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_context_metal_mm.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_mm.rs",
 ]
-worker_role = "sol-high"
+worker_role = "luna-extra-high"
 source_reviewer_role = "sol-high"
 ownership_reviewer_role = "sol-high"
 fixer_role = "sol-high"
 base_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-status = "compiled"
+status = "verified"
+lifetime_authority = "ore-port-lifetimes"
 requires_lifetime_rows = true
+translation_receipt = "docs/metal-port-receipts/ore-context-render-pass.translation.toml"
+source_review_receipt = "docs/metal-port-receipts/ore-context-render-pass.source-review.toml"
+ownership_review_receipt = "docs/metal-port-receipts/ore-context-render-pass.ownership-review.toml"
+fix_receipt = "docs/metal-port-receipts/ore-context-render-pass.fix.toml"
+compile_receipt = "docs/metal-port-receipts/ore-context-render-pass.compile.toml"
+verification_receipt = "docs/metal-port-receipts/ore-context-render-pass.verification.toml"
+open_findings = 0

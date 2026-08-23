@@ -1,0 +1,36 @@
+schema_version = 1
+unit = "ore-buffer"
+receipt_kind = "source-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-buffer.source-review.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_buffer.hpp:1-46",
+    "cpp:renderer/src/ore/metal/ore_buffer_metal.hpp:1-55",
+    "cpp:renderer/src/ore/metal/ore_buffer_metal.mm:1-76",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_buffer_hpp.rs:1-154",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_hpp.rs:1-482",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_mm.rs:1-173",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_buffer_hpp.rs" = "ab5512194c2bf99d7732294f5d4e11f97bb1e0bd008c8e8d0be7d0a72658de87", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_hpp.rs" = "74a058edd5961f8955dc9706dc174739520afb5df257a9da38accee948014a9c", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_mm.rs" = "3e7f2e9f191adc00c060ab71940f92aa95fb9ca1198785254f675027030d32b1" }
+findings = []
+review_run_id = "sol-v9-source-global-20260822-final-clean-45b6f0b3"
+coverage = [
+    "owned-source-lines",
+    "declarations",
+    "conditionals",
+    "include-owners",
+    "source-semantics",
+]
+citations = [
+    "cpp:renderer/include/rive/renderer/ore/ore_buffer.hpp:1-46",
+    "cpp:renderer/src/ore/metal/ore_buffer_metal.hpp:1-55",
+    "cpp:renderer/src/ore/metal/ore_buffer_metal.mm:1-76",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_buffer_hpp.rs:1-154",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_hpp.rs:1-482",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_mm.rs:1-173",
+]

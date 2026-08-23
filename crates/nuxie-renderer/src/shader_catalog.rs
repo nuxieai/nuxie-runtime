@@ -68,6 +68,9 @@ pub(crate) enum BuiltinShaderKey {
     MsaaStencilFragment,
     MsaaStencilVertex,
     Solid,
+    // Surface presentation is a macOS/iOS product seam. tvOS and visionOS
+    // compile the shared catalog but do not root the corresponding surface.
+    #[cfg_attr(not(any(target_os = "macos", target_os = "ios")), allow(dead_code))]
     SurfacePresent,
     TessellateFragment,
     TessellateVertex,

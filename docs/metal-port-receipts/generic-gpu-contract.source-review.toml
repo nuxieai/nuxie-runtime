@@ -1,0 +1,28 @@
+schema_version = 1
+unit = "generic-gpu-contract"
+receipt_kind = "source-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-gpu-contract.source-review.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/gpu.hpp:1-2017",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/gpu_hpp.rs:1-3658",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/gpu_hpp.rs" = "fe727a7c8ec63fd1062ae3a07539a2a090b3ec9c0e962134be874a3616eb5296" }
+findings = []
+review_run_id = "sol-v9-source-global-20260822-final-clean-45b6f0b3"
+coverage = [
+    "owned-source-lines",
+    "declarations",
+    "conditionals",
+    "include-owners",
+    "source-semantics",
+]
+citations = [
+    "cpp:renderer/include/rive/renderer/gpu.hpp:1-2017",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/gpu_hpp.rs:1-3658",
+]

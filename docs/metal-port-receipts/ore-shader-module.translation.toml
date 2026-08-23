@@ -1,0 +1,24 @@
+schema_version = 1
+unit = "ore-shader-module"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-shader-module.translation.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_shader_module.hpp:1-137",
+    "cpp:renderer/src/ore/metal/ore_shader_module_metal.hpp:1-20",
+    "cpp:renderer/src/ore/metal/ore_shader_module_metal.mm:1-5",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_shader_module_hpp.rs:1-412",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_hpp.rs:1-152",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_mm.rs:1-20",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_shader_module_hpp.rs" = "4d706a0a7549f05488131784463cb2ebff675541a1f381767752525d6a626322", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_hpp.rs" = "ac311c4f78a4d470fb1f03c4853b679666c4a992027fa0bfa9bec725cff80fb2", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_mm.rs" = "a69544c1cd752dce631e4a85cd60dcff5f3561bc2a481f2b03b1be7a68238291" }
+source_digests = { "renderer/include/rive/renderer/ore/ore_shader_module.hpp" = "7ed17ed2d9adf6ea941b0b53fdac1c96d3e7d2a4f2da3e01495ef16a67a65248", "renderer/src/ore/metal/ore_shader_module_metal.hpp" = "6817021607902cbf39a01683d0878a6fee017d6135b7e2f5a87723e72f7b8d05", "renderer/src/ore/metal/ore_shader_module_metal.mm" = "59f730a45e93d64c5bca8104867e1b8f981412b3da55dd2325ba4e70d044a64d" }

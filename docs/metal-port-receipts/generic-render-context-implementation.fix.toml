@@ -1,0 +1,22 @@
+schema_version = 1
+unit = "generic-render-context-implementation"
+receipt_kind = "fix"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-render-context-implementation.fix.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/draw.hpp:1-595",
+    "cpp:renderer/src/draw.cpp:1-2695",
+    "cpp:renderer/src/render_context.cpp:1-4013",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/draw_hpp.rs:1-210",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/draw_cpp.rs:1-2035",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_cpp.rs:1-7828",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/draw_hpp.rs" = "a7a067f011f7aaa225ef625d92bda09a24ff9cd4008006b744b925206e91c25f", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/draw_cpp.rs" = "3c343fca10848f9c217613cfa98b695470960b1194ac0580d63d3e36d17472c7", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_cpp.rs" = "ab4e842baec77d9cf11f33b5bf2ffafbcd94b90c2268110f622e7c4f0b502e2d" }
+resolutions = [
+    "OWN-generic-render-context-contract-001: completed explicit reverse RenderContext teardown for the restored source-order member aggregate",
+]

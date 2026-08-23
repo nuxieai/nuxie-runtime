@@ -1,51 +1,78 @@
 version = 1
-updated = "2026-08-20"
+updated = "2026-08-22"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_phase = "preparation"
+active_phase = "promotion"
+
+[workflow]
+methodology = "Bun all-at-once mechanical rewrite"
+reference = "https://bun.com/blog/bun-in-rust"
+translator = "Luna xhigh"
+orchestrator = "Sol"
+source_reviews_required = 1
+ownership_reviews_required = 1
+feature_slices_allowed = false
 
 [corpus]
 manifest = "corpus-r.toml"
 expected_total_rows = 1469
 expected_clockwise_atomic_rows = 736
 expected_msaa_rows = 733
-wgpu_secondary_rows = 4
-cpp_metal_bounded_rows = 12
+wgpu_secondary_rows = 736
+cpp_metal_bounded_rows = 736
 
 [[phase]]
 id = "preparation"
 label = "Preparation closure"
-status = "active"
-detail = "Re-audit the complete source inventory and account for every state-bearing field before further implementation."
+status = "complete"
+detail = "Frozen source, field, configuration, include, build, ownership, and dispatch authorities now govern translation; later audit refinements do not reorder complete source owners."
 
 [[phase]]
 id = "translation"
-label = "Mechanical translation"
-status = "queued"
-detail = "Translate the complete Metal ownership unit in pinned source order; fixtures do not select work."
+label = "Luna bulk translation"
+status = "complete"
+detail = "All 111 pinned files have source-shaped Rust targets across 41 compiler-rooted integration groups. Exact ORE and renderer Metal owners are the sole product authorities."
+
+[[phase]]
+id = "source-review"
+label = "Source adversarial pass"
+status = "complete"
+detail = "All 41 source/spec receipts are current, exhaustive, and finding-free. A final frozen-byte rereview after V4 closed with zero P0-P3 findings."
+
+[[phase]]
+id = "ownership-review"
+label = "Ownership adversarial pass"
+status = "complete"
+detail = "All 41 ownership/lifetime/ABI receipts and the 79-row native local-owner ledger are current, exhaustive, mutation-sensitive, and finding-free."
+
+[[phase]]
+id = "correction"
+label = "Owner-bounded correction"
+status = "complete"
+detail = "Every accepted source and ownership finding is corrected within its canonical owner. No parity-driven tolerance widening, fallback, or architectural redesign remains."
 
 [[phase]]
 id = "compiler"
-label = "Compiler queue"
-status = "queued"
-detail = "Wire the complete translation and resolve diagnostics without deleting source behavior."
+label = "Sol compiler queue"
+status = "complete"
+detail = "The renderer product, ORE default, and ORE tools compile with -D warnings; the nine-target Apple platform/configuration matrix passes 9/9."
 
 [[phase]]
 id = "behavior"
 label = "Behavior verification"
-status = "queued"
-detail = "Run structural, lifecycle, failure, platform, image, work-count, and no-WGPU gates."
+status = "complete"
+detail = "V0-V8 reran on final reviewed bytes: 993 required-live tests, 736/736 pinned C++ Metal parity, diagnostic WGPU coverage, MSAA exclusion, hardware policy, and rooted no-fallback product are green."
 
 [[phase]]
 id = "review"
 label = "Independent review"
-status = "queued"
-detail = "Complete separate source/spec and ownership/standards reviews, then fix accepted findings."
+status = "complete"
+detail = "Independent final source/spec and ownership/lifetime/ABI rereviews both closed with zero P0-P3 findings on the post-parity bytes."
 
 [[phase]]
 id = "promotion"
 label = "Whole-owner promotion"
-status = "queued"
-detail = "Promote the header and implementation only when every line, field, configuration, and reachable branch is closed."
+status = "complete"
+detail = "All 111 source rows, 41 translation units, and 15 ownership rows are receipt-gated and promoted to verified."
 
 [[suite]]
 id = "V0"
@@ -55,57 +82,57 @@ authority = "Pinned manifests and source digests"
 scope = "1,469 corpus rows; 736 Metal-compatible; 733 explicit MSAA exclusions"
 command = "make metal-port-check && make metal-port-progress-check"
 acceptance = "Pinned inputs, unique row counts, continuous source map, and generated dashboard all match."
-current = "Corpus count reconciled after commit 53b4c035a added the 1,469th row."
+current = "GREEN: 111 sources, 41 units, 1,469 corpus rows, current digests/receipts, exact census, and regenerated dashboard all replay cleanly."
 
 [[suite]]
 id = "V1"
 label = "Source and ownership closure"
-status = "active"
+status = "green"
 authority = "Pinned C++/Objective-C++ source"
 scope = "Complete header, implementation, fields, configs, and directly owned supporting units"
 command = "make metal-port-check"
 acceptance = "Zero partial/missing primary ranges and no incomplete required owner."
-current = "Preparation audit active: 36/37 state-bearing fields are prepared; tools-only ContextOptions.synthesizedFailureType still needs an explicit owner or configuration exclusion."
+current = "GREEN: every source and owner is uniquely rooted, all source/ownership findings are closed, and the 41-unit plus 79-row ownership evidence is current and finding-free."
 
 [[suite]]
 id = "V2"
 label = "Compile and configuration matrix"
-status = "queued"
+status = "green"
 authority = "Translated Rust owner graph and pinned preprocessor branches"
 scope = "Apple native features, portable cfgs, macOS/iOS/tvOS/visionOS configurations"
-command = "Defined during compiler queue after complete translation is wired"
+command = "Strict -Dwarnings native-ORE+riv-decoders cargo checks for every declared target"
 acceptance = "All represented configurations compile warning-clean against the recorded baseline."
-current = "Not an implementation work queue during preparation/translation."
+current = "GREEN: all nine declared Apple configurations reran warning-clean on final reviewed bytes; renderer and both ORE feature graphs also pass strict host checks."
 
 [[suite]]
 id = "V3"
 label = "Native structure, lifecycle, and failure"
-status = "queued"
+status = "green"
 authority = "Pinned Metal source behavior"
 scope = "Full native lib and tracer suites with Metal API and shader validation"
-command = "MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 cargo test -p nuxie-renderer --features native-metal-experimental --test native_metal_tracer"
+command = "make renderer-native-metal-v3"
 acceptance = "Complete flush topology, owners, failures, completion, and structural inventories pass."
-current = "Last bounded checkpoint passed 24/24; whole-owner suite waits for full translation."
+current = "GREEN: 993 required-live tests passed with Metal API/GPU validation enabled, zero failures, and exactly 40 declared external-oracle/diagnostic ignores."
 
 [[suite]]
 id = "V4"
 label = "Pinned C++ Metal parity"
-status = "queued"
+status = "green"
 authority = "Rive C++ Metal at 4ac7b327 on the same adapter"
-scope = "Every Metal-compatible row; current bounded lanes cover 4 + 8 rows"
-command = "make renderer-metal-oracle-tracers && make renderer-metal-atomic-oracle-tracer"
+scope = "Every one of the 736 Metal-compatible rows"
+command = "make renderer-metal-cpp-parity"
 acceptance = "Same-runner outputs, occupancy, execution path, and source-owned work contracts pass without tolerance widening."
-current = "The 12-row bounded evidence is green; complete-corpus promotion gate is not yet implemented."
+current = "GREEN: fresh same-runner replay against pinned 4ac7b327 accepted 736/736 rows, 698 byte-identical and 38 within unchanged budgets, with zero divergences or gated rows."
 
 [[suite]]
 id = "V5"
-label = "Rust Metal vs Rust-WGPU"
-status = "amber"
-authority = "Current product behavior on the same Nuxie revision"
-scope = "736/736 clockwise-atomic rows; current secondary manifest covers only 4"
-command = "Required behavior-phase target: make renderer-metal-wgpu-parity"
-acceptance = "All rows preserve pixels within predeclared independent budgets, exact occupancy, and public success/error behavior."
-current = "4/736 is regression evidence only and cannot support a whole-renderer WGPU parity claim."
+label = "Rust Metal vs Rust-WGPU diagnostic"
+status = "green"
+authority = "Pinned C++ Metal remains authoritative; current Rust-WGPU is diagnostic only"
+scope = "All 736 clockwise-atomic rows execute; cross-backend differences are retained, never promoted to Metal failures"
+command = "make renderer-metal-wgpu-diagnostic"
+acceptance = "All rows execute without crash, timeout, malformed output, or public success/error mismatch; differences never override V4."
+current = "GREEN as diagnostic completeness: all 736 rows executed without process/public-contract failures; 58 WGPU-only pixel differences remain diagnostic and did not influence Metal acceptance."
 
 [[suite]]
 id = "V6"
@@ -115,37 +142,200 @@ authority = "Pinned native Metal mode contract"
 scope = "733 WebGPU-style MSAA corpus rows"
 command = "make renderer-metal-msaa-contract"
 acceptance = "Native Metal rejects the unsupported mode and the harness cannot relabel WGPU/Dawn output."
-current = "Negative contract exists; these rows are not counted as native Metal parity."
+current = "GREEN: final native Metal replay rejects the unsupported MSAA mode with the authored error, so 733 WGPU-style rows cannot be substituted or relabeled."
 
 [[suite]]
 id = "V7"
 label = "Platform and hardware policy"
-status = "queued"
+status = "green"
 authority = "Pinned platform branches and capability policy"
 scope = "Apple Silicon, Intel/discrete, old-hardware barrier policy, Apple device/simulator configs"
 command = "Platform matrix commands are recorded with the compiler and behavior evidence"
 acceptance = "Every pinned configuration is executed, compile-checked, or explicitly excluded."
-current = "Awaiting complete translation."
+current = "GREEN: nine platform lanes plus the capability/host-architecture and exact barrier-policy regressions pass on the final canonical owners."
 
 [[suite]]
 id = "V8"
 label = "Rooted product and no fallback"
-status = "queued"
+status = "green"
 authority = "Exact product executable and Cargo graph"
 scope = "Native product execution, Mach-O, linked libraries, shader inventory, rendered output"
 command = "make renderer-native-metal-tracer-binary"
 acceptance = "Translated path is rooted with no WGPU, Naga, Dawn, WGSL translation, or CPU fallback."
-current = "Bounded product root was green; final whole-renderer root must be rerun after translation."
+current = "GREEN: the final 986,880-byte Mach-O executed the translated path, passed output/inventory scans, and both normal/build Cargo graphs contain zero WGPU/Naga/Dawn dependencies."
 
 [[suite]]
 id = "V9"
 label = "Independent closeout"
-status = "queued"
+status = "green"
 authority = "Independent source/spec and ownership/standards reviews"
 scope = "Complete translated owner and all retained evidence"
 command = "Run both independent reviews after V0-V8 are green"
 acceptance = "Every accepted finding is fixed and affected suites are rerun."
-current = "Not started."
+current = "GREEN: final independent source/spec and ownership/lifetime/ABI rereviews on frozen post-V4 bytes found zero P0-P3 findings; all 111 source, 41 unit, and 15 owner promotions are sealed by current receipts."
+
+[[report]]
+date = "2026-08-22"
+title = "Native Metal mechanical port closed V0-V9"
+status = "green"
+summary = "The complete pinned 41-unit C++/Objective-C++ to Rust translation is verified: every source and ownership row is receipt-gated, all native validation and parity lanes pass, and two independent frozen-byte reviews report zero P0-P3 findings."
+results = [
+  "111/111 source rows, 41/41 translation units, and 15/15 ownership rows verified",
+  "V3 required-live aggregate: 993 passed, 0 failed, 40 declared ignores",
+  "V4 pinned C++ Metal parity: 736/736 accepted, 698 byte-identical, 38 within unchanged budgets, 0 divergences",
+  "V8 rooted product: 986,880-byte arm64 Mach-O, no WGPU/Naga/Dawn graph or fallback, ORE binding and authenticated canvas green",
+  "V9 independent source/spec and ownership/lifetime/ABI reviews: zero P0-P3 findings",
+]
+evidence = "docs/metal-port-reports/v9-independent-closeout.md"
+
+[[report]]
+date = "2026-08-21"
+title = "Pinned-source review remains red after owner flattening"
+status = "red"
+summary = "The strict native product compiles, but compilation and historical pixels do not override current mechanical-translation defects. Both reviews are grading only against pinned C++ Metal; WGPU is diagnostic-only."
+results = [
+  "P0: the executable Metal context still copies gpu::FlushDescriptor and its linked DrawBatch list into a second DTO universe and narrows size_t offsets",
+  "P1: the canonical constructor still receives adapter-computed platform/capability/metallib decisions instead of executing the pinned device and cfg branches itself",
+  "P2: target compatibility, buffer-ring mutex handoff, raw TextureMetal upload, and TARGET_OS_IPHONE image-format branching remain wider or differently shaped than source",
+  "P3: selector adapters release or extend Objective-C locals at adapter/command lifetime instead of the authored full-expression and lexical scopes",
+  "previous V0 and V2-V8 evidence is retained as history but invalidated for acceptance until all current reds close and the complete matrix reruns",
+]
+evidence = "current worktree plus two independent pinned-source and ownership reviews"
+
+[[report]]
+date = "2026-08-21"
+title = "Canonical authority and test evidence are current"
+status = "green"
+summary = "The exact 111-file, 41-unit campaign graph is compiler-rooted and receipt-gated on current bytes. Duplicate ORE and renderer Metal class authorities were removed, all receipts replay, and canonical ORE tests execute rather than living in de-rooted adapters."
+results = [
+  "campaign checker: 111 sources, 41 units, no pending authority rows",
+  "all five ledgers and both crate target inventories regenerated from current bytes",
+  "41 translation receipts plus recorded review/fix receipts have current full-line citations, digests, and replayable commands",
+  "authority tooling: 127 tests passed with zero skips",
+  "test census: renderer 677/637/40, tracer 26/26, ORE default 112/112, ORE tools 127/127",
+]
+evidence = "docs/metal-port-manifest.toml"
+
+[[report]]
+date = "2026-08-21"
+title = "Final V9 audit stopped premature promotion"
+status = "red"
+summary = "The completed runtime suites did not override two campaign-level reds: the active renderer Metal source owner remains split across executor and host wrappers, and mandatory per-unit post-translation receipts/owner promotions are absent."
+results = [
+  "V9-SRC-001: active RenderTargetMetal omits its retained m_gpu and exact atomic-member order; MechanicalRenderTargetOwner owns part of the source lifetime",
+  "V9-SRC-001: active RenderContextMetal omits source-owned device/queue/options members that remain in MechanicalRenderContextImpl",
+  "evidence red: 40 source-review, 40 ownership-review, 40 fix, 41 compile, and 41 verification receipts remain pending",
+  "ownership authority red: 9 pending and 6 in-progress rows remain",
+  "Luna literal owner correction and checker-enforced final promotion are active; V1 and V9 remain red",
+]
+evidence = "docs/metal-port-reports/phase2-source-review.md"
+
+[[report]]
+date = "2026-08-21"
+title = "Canonical source and ownership rereviews passed"
+status = "green"
+summary = "Fresh independent passes found no residual P0-P3 source/config or ownership/lifetime/ABI defects in the exact 32-target ORE graph, consolidated renderer Metal owners, or rooted product adapters after literal corrections."
+results = [
+  "public ORE modules thinly reexport exact mechanical owners; old duplicate behavior files are compiler-inert",
+  "renderer RenderTargetMetal and RenderContextMetal each have one executable header-plus-implementation identity with offset-zero bases and complete derived destruction",
+  "recording-thread access, cross-context rejection, completion ownership, cached ORE borrowing, queue replacement, ASTC/BC7 predicates, and nullable native texture paths match pinned source",
+  "safe product validation remains outside the canonical source methods and does not silently rewrite upstream behavior",
+  "strict -Dwarnings matrix is green for all nine prescribed Apple lanes, including tvOS/visionOS build-std, plus the x86_64 Linux portability lane",
+]
+evidence = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs"
+
+[[report]]
+date = "2026-08-21"
+title = "Full canonical V3 validation passed"
+status = "green"
+summary = "Required-live Metal validation executed every canonical active test with Metal API and shader validation enabled for renderer and tracer."
+results = [
+  "renderer library: 637 passed, 0 failed, 40 exact external-oracle/diagnostic ignores",
+  "native Metal tracer: 26 passed, 0 failed or ignored",
+  "ORE default: 112 unit plus 1 integration passed; ORE tools: 127 unit plus 1 integration passed",
+  "aggregate: 904 passed, 0 failed, with zero ORE ignores and no silent device returns",
+]
+evidence = "docs/metal-test-census.toml"
+
+[[report]]
+date = "2026-08-21"
+title = "All 736 rows passed pinned C++ Metal parity"
+status = "green"
+summary = "The Rust Metal candidate passed the complete corpus against a freshly rebuilt C++ Metal replay bound to upstream 4ac7b327 on the same Apple M5 Max. WGPU was not used for acceptance."
+results = [
+  "736/736 rows accepted with 736/736 adapter provenance matches",
+  "698 rows byte-exact",
+  "38 rows within unchanged predeclared source-manifest budgets",
+  "0 divergences and 0 gated rows",
+  "reference bootstrap, replay binding, input manifest, and checksum checks passed",
+]
+evidence = "target/renderer-metal-cpp-parity/results"
+
+[[report]]
+date = "2026-08-21"
+title = "All remaining V5-V8 validation lanes passed"
+status = "red"
+summary = "V5-V7 passed, and the rooted Mach-O is clean, but final V8 review found that unconditional renderer dependencies still compile WGPU/Naga in the native-only Cargo graph."
+results = [
+  "V5: 736/736 rows executed with 736 adapter matches; 58 WGPU-only pixel divergences retained diagnostically and no Metal budget or tolerance changes",
+  "V6: native Metal rejected WebGPU-style msaa with the pinned authored error",
+  "V7: 9/9 strict Apple lanes passed, including tvOS and visionOS device/simulator nightly build-std rows; capability and barrier regressions passed",
+  "V8 binary half: arm64 Mach-O executed; forbidden WGPU/Naga/WGSL/Dawn scan zero; only Apple/system libraries linked; required drawable markers present",
+  "V8 graph half RED: cargo tree contains 20 WGPU/Naga-family rows through unconditional nuxie-renderer dependencies",
+]
+evidence = "target/native-metal-platform-matrix"
+
+[[report]]
+date = "2026-08-21"
+title = "Pinned shader artifacts and creation boundaries reproduced"
+status = "green"
+summary = "The shader gate regenerates the pinned upstream-derived artifacts and separately ratchets the catalog, authored WGSL, and trusted authored-MSL creation seams."
+results = [
+  "66 Rust WGSL modules regenerated at digest 44841b4b740f5a45b91eef19c98a62a57239e4725628d54fc5bc1fbe678732ed",
+  "56 pinned C++ WGSL headers regenerated at digest 97312cdab2f0621620d1ad55096464b138aa5ef1dae4a168b0aa223b09f3d64b",
+  "boundary checker requires one shader_catalog create_shader_module call, one authored WGSL call, and one trusted-MSL passthrough call",
+  "forbidden indirect renderer entry points remain absent",
+]
+evidence = "tools/check-renderer-shaders.sh"
+
+[[report]]
+date = "2026-08-20"
+title = "Adversarial preparation audit expanded the red surface"
+status = "red"
+summary = "The first Bun-preparation review rejected the old green denominator: renderer dispatch was ORE-only, 28 state fields were omitted, the shader artifact batch ignored its global minifier inputs, and generic renderer contracts had no correspondence gate. Luna remains intentionally undispatched while those authorities are made exhaustive."
+results = [
+  "renderer translation units must cover the platform and shader lanes, not only ORE",
+  "field inventory expands from the incomplete 37-row denominator to at least 65 renderer-owned fields",
+  "Metal shader artifact authority expands to Makefile, minify.py, 34 batch inputs, generator, and three Metal sources",
+  "generic FlushDescriptor, GPU types, render target/texture/buffer/canvas, ASTC, and sampler contracts require source-to-Rust correspondence",
+]
+evidence = "docs/METAL_RENDERER_PORT_PLAN.md"
+
+[[report]]
+date = "2026-08-20"
+title = "Metal shader source batch pinned for Luna"
+status = "red"
+summary = "The shader owner now treats the global minifier batch as source authority: 40 files and 10,622 logical lines are pinned in exact Make wildcard order. The unit is ready for one Luna xhigh mechanical pass, but all translation, two Sol review, and correction receipts remain pending."
+results = [
+  "Makefile and minify.py are explicit translation sources",
+  "34 GLSL, vertex, and fragment inputs retain separate wildcard-group order",
+  "generate_draw_combinations.py and color_ramp/draw/tessellate Metal entries close the 40-file batch",
+  "artifact targets are reserved without compiling or promoting existing shader outputs",
+]
+evidence = "docs/metal-shader-source-inventory.tsv"
+
+[[report]]
+date = "2026-08-20"
+title = "Bun translator-reviewer workflow locked"
+status = "green"
+summary = "The durable goal, reference plan, manifest, and dashboard now make the operating split explicit: Luna xhigh mechanically translates complete pinned owners; Sol orchestrates, performs two adversarial review passes, drives corrections, and later owns compiler and validation queues."
+results = [
+  "all-at-once source-owner translation precedes compiler work",
+  "source-semantics and ownership/lifetime reviews are separate mandatory passes",
+  "feature and fixture work items, stubs, skipped tests, and pre-parity cleanup are forbidden",
+  "Bun false-start rules and semantic translation traps are recorded",
+]
+evidence = "docs/METAL_RENDERER_PORT_PLAN.md"
 
 [[report]]
 date = "2026-08-20"
@@ -163,25 +353,76 @@ evidence = "docs/metal-translation-conventions.tsv"
 date = "2026-08-20"
 title = "Conditional configuration surface made exhaustive"
 status = "amber"
-summary = "The campaign checker now derives all 30 conditional blocks across the pinned Metal context and background compiler units and rejects omitted blocks, invented blocks, or branch-line drift."
+summary = "The campaign checker derives every semantic preprocessor block and branch across all 98 pinned sources while excluding exactly five canonical outer header guards. Mapping and translation remain separate axes, so complete preparation does not masquerade as implemented code."
 results = [
-  "30/30 preprocessor blocks inventoried",
-  "13 blocks prepared",
-  "17 blocks remain review-needed",
-  "open configurations include visionOS, tvOS, simulators, full RIVE_CANVAS, and the inert WITH_RIVE_TOOLS context field",
+  "631/631 semantic blocks and 842/842 branch entries inventoried; exactly five canonical header guards excluded",
+  "base/current lane contributes 82 blocks and 117 entries; ORE contributes 18/22 across five files; 33 shader inputs contribute 531/703",
+  "all 842 branch entries map to exact translation units and targets; every mechanical translation remains pending",
+  "six multiline directives retain their complete continued expressions and elif/else paths are recorded semantically",
 ]
-evidence = "docs/render-context-metal-configurations.tsv"
+evidence = "docs/metal-port-preprocessor-authority.tsv"
+
+[[report]]
+date = "2026-08-20"
+title = "Complete dependency and dispatch queue prepared"
+status = "red"
+summary = "The complete 35-unit renderer campaign is freshly queued for Luna: historical ORE code remains comparison evidence, while every ORE, generic, shader, and Metal source now requires canonical translation, two Sol review, and correction receipts before advancement."
+results = [
+  "22/22 generic dependency mappings prepared; 0/22 whole-file translations claimed",
+  "305/305 direct #include/#import occurrences mapped across 133 tokens and 61 files; 298 normalized source-target edges retain all occurrence lines",
+  "15 Objective-C #import occurrences are explicit authority alongside 290 #include occurrences",
+  "all 44 upstream-global occurrences across 29 dependency files resolve to exact tracked Rust correspondence owners and evidence; none remains an external placeholder",
+  "source_dependencies preserve 97 cross-unit include edges and one real seven-unit SCC; dispatch_prerequisites remain a separately checked acyclic graph",
+  "22 source-only unit edges across 26 occurrences are explicit authority rather than being forced into dispatch order",
+  "65 build-branch rows cover 12 Make rule families, minify.py's 36 If plus 6 IfExp branches and four option families, and the draw generator's 10 If plus 1 IfExp branches",
+  "98/98 active manifest sources assigned to exactly one translation unit",
+  "the global topological queue interleaves ORE and generic foundations at ordinals 1-15 so every dispatch prerequisite precedes its consumer; remaining generic units occupy 16-31, shader batch is 32, and Metal owners are 33-35",
+  "all 12 ORE units are unclaimed and pending with fresh source-shaped targets; historical code is comparison-only and no unrecorded receipt can advance a unit",
+]
+evidence = "docs/metal-port-source-dependencies.tsv"
+
+[[report]]
+date = "2026-08-21"
+title = "Global ownership/lifetime/ABI pass completed across 98 files"
+status = "red"
+summary = "Three fresh Sol contexts reviewed disjoint 34/20/44-file partitions. The second global adversarial pass is complete with 32 raw findings, including twelve P0 unsafe, dangling-owner, or nonexistent-owner defects."
+results = [
+  "98/98 individual source-target pairs independently ownership-reviewed",
+  "12 P0, 14 P1, and 6 P2 raw findings",
+  "zero-sized retained/native owners and missing completion transfers block native Metal ownership closure",
+  "generic intrusive owners, mapped memory, context back-pointers, arenas, polymorphic owners, and drop order are not yet safe or source-exact",
+  "three complete owner partitions are now in correction before clean rereviews",
+]
+evidence = "docs/metal-port-reports/phase3-ownership-review.md"
+
+[[report]]
+date = "2026-08-21"
+title = "Global source-semantics pass completed across 98 files"
+status = "red"
+summary = "Three independent Sol contexts reviewed disjoint 34/20/44-file partitions against pinned source. The first global adversarial pass is complete with 28 raw findings; two primary implementation targets are comment-only shells."
+results = [
+  "98/98 individual source-target pairs reviewed",
+  "2 P0, 12 P1, 11 P2, and 3 P3 raw findings",
+  "renderer/src/render_context.cpp and renderer/src/metal/render_context_metal_impl.mm lack executable translated bodies",
+  "37/37 shader-source constants independently match pinned bytes",
+  "the complete 98-file tree advances to ownership/lifetime/ABI review before corrections",
+]
+evidence = "docs/metal-port-reports/phase2-source-review.md"
 
 [[report]]
 date = "2026-08-20"
 title = "State-bearing field inventory made exhaustive"
-status = "amber"
-summary = "The campaign checker now extracts all 37 fields from the pinned RenderTargetMetal, ContextOptions, DrawPipeline, and RenderContextMetalImpl declarations and rejects omissions, inventions, duplicates, or declaration-line drift."
+status = "red"
+summary = "The checker now derives 455 direct, inherited, and reachable dependency fields from complete pinned declarations. Mapping preparation and Rust translation are tracked independently."
 results = [
   "RenderTargetMetal: 9/9 prepared",
-  "ContextOptions: 2/3 prepared; synthesizedFailureType review-needed",
+  "ContextOptions: 3/3 prepared, including the deliberately inert tools value",
+  "audited dependency owners: 28/28 prepared, including ColorRampPipeline and TessellatePipeline",
+  "inherited declarations: all mapped and 0 translated; prior implementation is comparison evidence until Luna receipts are accepted",
+  "reachable dependency declarations: 363/363 mapped and 0/363 translated, including gpu.hpp (208) and render_context.hpp plus nested owners (142)",
   "DrawPipeline: 2/2 prepared",
   "RenderContextMetalImpl: 23/23 prepared",
+  "complete denominator: 455/455 mapped and 0/455 translated; the independently discovered MetalFeatures.atomicBarrierType declaration closes the prior 454-row omission",
 ]
 evidence = "docs/render-context-metal-fields.tsv"
 

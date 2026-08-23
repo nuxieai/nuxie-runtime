@@ -15,28 +15,28 @@ use crate::types::{BackendId, Sampler as SamplerResource};
 
 use super::MetalBackend;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::rc::Retained;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::runtime::ProtocolObject;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_metal::MTLSamplerState;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalSampler(Retained<ProtocolObject<dyn MTLSamplerState>>);
 
 // SAFETY: MTLSamplerState is immutable after creation and supports concurrent
 // retain/release and binding. The wrapper exposes only shared protocol access.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalSampler {}
 // SAFETY: Same invariant as the `Send` implementation above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalSampler {}
 
 /// Direct translation of `rive::ore::SamplerMetal`.
 pub struct SamplerMetal {
     base: Sampler,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlSampler: Option<RetainedMetalSampler>,
 }
 
@@ -45,12 +45,12 @@ impl SamplerMetal {
     pub fn new() -> Self {
         Self {
             base: Sampler::new(),
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            #[cfg(target_vendor = "apple")]
             m_mtlSampler: None,
         }
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn with_native_sampler_state(state: Retained<ProtocolObject<dyn MTLSamplerState>>) -> Self {
         Self {
             base: Sampler::new(),
@@ -62,7 +62,7 @@ impl SamplerMetal {
         &self.base
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn mtlSampler(&self) -> Option<&ProtocolObject<dyn MTLSamplerState>> {
         self.m_mtlSampler.as_ref().map(|sampler| sampler.0.as_ref())
     }
@@ -103,7 +103,7 @@ mod tests {
         assert!(handle.ptr_eq(&clone));
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn live_sampler_retains_the_native_state() {
         use objc2_metal::{
@@ -111,6 +111,7 @@ mod tests {
         };
 
         let Some(device) = MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let descriptor = MTLSamplerDescriptor::new();

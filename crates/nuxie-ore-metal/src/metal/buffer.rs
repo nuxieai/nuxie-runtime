@@ -8,11 +8,11 @@
 #![allow(non_snake_case)]
 
 use std::any::Any;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use std::sync::atomic::{AtomicU64, Ordering};
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use std::sync::{Arc, Weak};
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use std::sync::{Mutex, MutexGuard};
 
 use crate::buffer::{BufferBase, BufferUpdateError};
@@ -21,16 +21,16 @@ use crate::types::{BackendId, Buffer as BufferResource, BufferUsage};
 
 use super::MetalBackend;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::rc::Retained;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::runtime::ProtocolObject;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_foundation::NSString;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_metal::{MTLBuffer, MTLDevice, MTLResource, MTLResourceOptions, MTLStorageMode};
 
-#[cfg(any(test, target_os = "ios", target_os = "macos"))]
+#[cfg(any(test, target_vendor = "apple"))]
 const ALLOCATION_FAILURE: &str =
     "ore: Metal buffer backing allocation failed; reusing in flight backing for this update";
 
@@ -39,29 +39,29 @@ const ALLOCATION_FAILURE: &str =
 /// Upstream stores a raw `ContextMetal*` in each buffer. Rust retains only the
 /// exact state the buffer reads or writes, avoiding a context/resource cycle
 /// and keeping completion-thread serial publication alive independently.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 pub(crate) struct BufferMetalContextState {
     current: AtomicU64,
     completed: AtomicU64,
     error_sink: Option<Weak<dyn BufferErrorSink>>,
-    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+    #[cfg(all(test, target_vendor = "apple"))]
     standalone_last_error: Mutex<Option<String>>,
 }
 
 /// Narrow immediate error publication seam used by versioned buffers.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 pub(crate) trait BufferErrorSink: Send + Sync {
     fn set_buffer_error(&self, message: &str);
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 impl BufferErrorSink for crate::context::ContextState {
     fn set_buffer_error(&self, message: &str) {
         self.set_last_error(message);
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 impl BufferMetalContextState {
     #[cfg(test)]
     pub(crate) fn new() -> Arc<Self> {
@@ -69,7 +69,7 @@ impl BufferMetalContextState {
             current: AtomicU64::new(0),
             completed: AtomicU64::new(0),
             error_sink: None,
-            #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+            #[cfg(all(test, target_vendor = "apple"))]
             standalone_last_error: Mutex::new(None),
         })
     }
@@ -79,7 +79,7 @@ impl BufferMetalContextState {
             current: AtomicU64::new(0),
             completed: AtomicU64::new(0),
             error_sink: Some(error_sink),
-            #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+            #[cfg(all(test, target_vendor = "apple"))]
             standalone_last_error: Mutex::new(None),
         })
     }
@@ -88,34 +88,38 @@ impl BufferMetalContextState {
         self.current.load(Ordering::Relaxed)
     }
 
-    #[cfg(any(test, target_os = "ios", target_os = "macos"))]
+    #[cfg(any(test, target_vendor = "apple"))]
     pub(crate) fn completed_serial(&self) -> u64 {
         self.completed.load(Ordering::Relaxed)
     }
 
     pub(crate) fn set_current_serial(&self, serial: u64) {
-        let result = self
-            .current
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |previous| {
-                (serial >= previous).then_some(serial)
-            });
-        assert!(result.is_ok(), "Metal buffer serial must be monotonic");
+        self.current.store(serial, Ordering::Relaxed);
     }
 
     pub(crate) fn complete_serial(&self, serial: u64) {
-        assert!(
-            serial <= self.current_serial(),
-            "completed Metal buffer serial cannot exceed current serial"
-        );
-        self.completed.fetch_max(serial, Ordering::Relaxed);
+        // Literal pinned source ordering. In particular, do not repair the
+        // authored ordinary uint64 comparison when current serial rolls over.
+        let mut completed = self.completed.load(Ordering::Relaxed);
+        while serial > completed {
+            match self.completed.compare_exchange_weak(
+                completed,
+                serial,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(observed) => completed = observed,
+            }
+        }
     }
 
-    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+    #[cfg(all(test, target_vendor = "apple"))]
     pub(crate) fn take_last_error(&self) -> Option<String> {
         self.lock_standalone_last_error().take()
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     fn set_last_error(&self, message: &str) {
         if let Some(sink) = self.error_sink.as_ref().and_then(Weak::upgrade) {
             sink.set_buffer_error(message);
@@ -127,7 +131,7 @@ impl BufferMetalContextState {
         }
     }
 
-    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+    #[cfg(all(test, target_vendor = "apple"))]
     fn lock_standalone_last_error(&self) -> MutexGuard<'_, Option<String>> {
         self.standalone_last_error
             .lock()
@@ -135,48 +139,48 @@ impl BufferMetalContextState {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 impl Default for BufferMetalContextState {
     fn default() -> Self {
         Self {
             current: AtomicU64::new(0),
             completed: AtomicU64::new(0),
             error_sink: None,
-            #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+            #[cfg(all(test, target_vendor = "apple"))]
             standalone_last_error: Mutex::new(None),
         }
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalBuffer(Retained<ProtocolObject<dyn MTLBuffer>>);
 
 // SAFETY: MTLBuffer supports concurrent retain/release and GPU binding. CPU
 // writes and backing selection remain serialized by `BufferMetal::state`.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalBuffer {}
 // SAFETY: Same ownership and mutation invariant as the `Send` implementation.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalBuffer {}
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalDevice(Retained<ProtocolObject<dyn MTLDevice>>);
 
 // SAFETY: MTLDevice is a process-wide thread-safe factory. The wrapper only
 // exposes shared allocation calls and concurrent retain/release.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalDevice {}
 // SAFETY: Same invariant as the `Send` implementation above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalDevice {}
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct Backing {
     mtl: RetainedMetalBuffer,
     serial: u64,
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct BufferMetalState {
     pool: Vec<Backing>,
     current_index: usize,
@@ -189,16 +193,16 @@ struct BufferMetalState {
 /// Concrete Metal buffer with orphan-on-update backing reuse.
 pub struct BufferMetal {
     base: BufferBase,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     context_state: Arc<BufferMetalContextState>,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     device: RetainedMetalDevice,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     state: Mutex<BufferMetalState>,
 }
 
 impl BufferMetal {
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn with_native_buffer(
         size: u32,
         usage: BufferUsage,
@@ -239,7 +243,7 @@ impl BufferMetal {
         &self.base
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[cfg_attr(
         not(test),
         expect(
@@ -255,7 +259,7 @@ impl BufferMetal {
         ResourceHandle::new(manager, self)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[expect(
         clippy::indexing_slicing,
         reason = "current_index is initialized to an existing backing and only reassigned to an existing or newly pushed backing"
@@ -301,12 +305,12 @@ impl BufferMetal {
         Ok(())
     }
 
-    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+    #[cfg(all(test, target_vendor = "apple"))]
     pub(crate) fn mark_bound(&self) {
         let _ = self.mark_bound_and_current_buffer();
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[expect(
         clippy::indexing_slicing,
         reason = "current_index always names an owned backing in the nonempty pool"
@@ -319,7 +323,7 @@ impl BufferMetal {
         state.pool[current_index].mtl.0.clone()
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[expect(
         clippy::indexing_slicing,
         reason = "current_index always names an owned backing in the nonempty pool"
@@ -329,7 +333,7 @@ impl BufferMetal {
         state.pool[state.current_index].mtl.0.clone()
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[expect(
         clippy::indexing_slicing,
         reason = "current_index is valid on entry and fresh is either an existing index or the index appended immediately below"
@@ -389,14 +393,14 @@ impl BufferMetal {
         true
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     fn lock_state(&self) -> MutexGuard<'_, BufferMetalState> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+    #[cfg(all(test, target_vendor = "apple"))]
     fn current_bytes(&self) -> Vec<u8> {
         let current = self.current_buffer();
         // SAFETY: the retained buffer owns `base.size()` bytes of shared
@@ -410,7 +414,7 @@ impl BufferMetal {
         }
     }
 
-    #[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+    #[cfg(all(test, target_vendor = "apple"))]
     pub(crate) fn fail_next_allocation_for_test(&self) {
         self.lock_state().fail_next_allocation = true;
     }
@@ -434,12 +438,12 @@ impl BufferResource for BufferMetal {
     }
 
     fn update(&self, data: &[u8], offset: u32) -> Result<(), BufferUpdateError> {
-        #[cfg(any(target_os = "ios", target_os = "macos"))]
+        #[cfg(target_vendor = "apple")]
         {
             self.update_inner(data, offset)
         }
 
-        #[cfg(not(any(target_os = "ios", target_os = "macos")))]
+        #[cfg(not(target_vendor = "apple"))]
         {
             let _ = (data, offset);
             Err(BufferUpdateError::UnsupportedPlatform)
@@ -453,11 +457,14 @@ mod tests {
     use crate::gpu_resource::GpuResourceManagerOwner;
     use crate::types::BufferUsage;
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     fn live_buffer(size: u32, label: Option<&str>) -> Option<BufferMetal> {
         use objc2_metal::{MTLCreateSystemDefaultDevice, MTLDevice, MTLResourceOptions};
 
-        let device = MTLCreateSystemDefaultDevice()?;
+        let Some(device) = MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device for ORE buffer");
+            return None;
+        };
         let initial = device
             .newBufferWithLength_options(size as usize, MTLResourceOptions::StorageModeShared)?;
         Some(BufferMetal::with_native_buffer(
@@ -470,7 +477,7 @@ mod tests {
         ))
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn live_unbound_update_writes_the_current_backing_in_place() {
         let Some(buffer) = live_buffer(8, None) else {
@@ -486,7 +493,7 @@ mod tests {
         assert_eq!(buffer.current_bytes(), [0, 0, 1, 2, 3, 4, 0, 0]);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn live_bound_partial_update_orphans_copies_and_reuses_completed_backing() {
         let Some(buffer) = live_buffer(8, Some("versioned")) else {
@@ -519,7 +526,7 @@ mod tests {
         assert_eq!(buffer.current_bytes(), [11, 12, 13, 14, 15, 16, 17, 18]);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn bound_backing_token_remains_the_exact_backing_after_an_orphaning_update() {
         let Some(buffer) = live_buffer(8, None) else {
@@ -538,7 +545,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn update_rejects_out_of_bounds_without_mutating_contents() {
         let Some(buffer) = live_buffer(8, None) else {
@@ -569,7 +576,7 @@ mod tests {
         assert_eq!(buffer.current_bytes(), [0; 8]);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn allocation_failure_reports_error_keeps_current_and_retries_next_update() {
         let Some(buffer) = live_buffer(4, None) else {
@@ -605,7 +612,7 @@ mod tests {
     }
 
     #[test]
-    fn serials_are_monotonic_and_reject_impossible_completion() {
+    fn serials_preserve_literal_source_ordering_through_rollover() {
         let context_state = BufferMetalContextState::new();
         context_state.set_current_serial(4);
         context_state.complete_serial(2);
@@ -613,25 +620,15 @@ mod tests {
         assert_eq!(context_state.current_serial(), 4);
         assert_eq!(context_state.completed_serial(), 2);
 
-        assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe({
-                let context_state = Arc::clone(&context_state);
-                move || context_state.set_current_serial(3)
-            }))
-            .is_err()
-        );
-        assert_eq!(context_state.current_serial(), 4);
-        assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe({
-                let context_state = Arc::clone(&context_state);
-                move || context_state.complete_serial(5)
-            }))
-            .is_err()
-        );
-        assert_eq!(context_state.completed_serial(), 2);
+        context_state.set_current_serial(u64::MAX);
+        context_state.complete_serial(u64::MAX);
+        context_state.set_current_serial(0);
+        context_state.complete_serial(0);
+        assert_eq!(context_state.current_serial(), 0);
+        assert_eq!(context_state.completed_serial(), u64::MAX);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn buffer_resource_retains_manager_and_rejects_wrong_backend() {
         let Some(buffer) = live_buffer(4, None) else {

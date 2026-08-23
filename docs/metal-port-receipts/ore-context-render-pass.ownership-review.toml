@@ -1,0 +1,50 @@
+schema_version = 1
+unit = "ore-context-render-pass"
+receipt_kind = "ownership-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-context-render-pass.ownership-review.toml :: exit=0 :: count=12",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_context.hpp:1-288",
+    "cpp:renderer/include/rive/renderer/ore/ore_context_metal.hpp:1-105",
+    "cpp:renderer/include/rive/renderer/ore/ore_render_pass.hpp:1-109",
+    "cpp:renderer/src/ore/metal/ore_context_metal.mm:1-1344",
+    "cpp:renderer/src/ore/metal/ore_render_pass_metal.hpp:1-67",
+    "cpp:renderer/src/ore/metal/ore_render_pass_metal.mm:1-314",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_hpp.rs:1-597",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_metal_hpp.rs:1-291",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_render_pass_hpp.rs:1-449",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_context_metal_mm.rs:1-2757",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_hpp.rs:1-348",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_mm.rs:1-746",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_hpp.rs" = "cd17596b0b55d99edc50b20d74dbfe96564b4dcd2f95174c7a7adf3d4bb33f6c", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_metal_hpp.rs" = "657bcd7ff65206416764628e27eaba9f1b450ce2e39594d9b7fb8ba97d2481a2", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_render_pass_hpp.rs" = "62f26812c9770c0ff67b2491f9f251a6cf910c33b931c5a3f7517b465e5f9bfa", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_context_metal_mm.rs" = "d071f818450d5fc8de091e0c7faaaf53a626042fbe5daed03faf58e86223a473", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_hpp.rs" = "1bcc2cbc0d69df3bd6411979b316c037bcfd6ce4141ad295b57d006a60e88ec3", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_mm.rs" = "4da7cb7fae95fc0234a631ca420f326365ac604ead6ee189b27bc21f02510923" }
+findings = []
+review_run_id = "sol-v9-ownership-global-20260822-frozen-final-clean-890d85c1"
+coverage = [
+    "fields",
+    "lifetimes",
+    "threads",
+    "retain-release",
+    "drop-order",
+    "unsafe-invariants",
+    "divergences",
+]
+citations = [
+    "cpp:renderer/include/rive/renderer/ore/ore_context.hpp:1-288",
+    "cpp:renderer/include/rive/renderer/ore/ore_context_metal.hpp:1-105",
+    "cpp:renderer/include/rive/renderer/ore/ore_render_pass.hpp:1-109",
+    "cpp:renderer/src/ore/metal/ore_context_metal.mm:1-1344",
+    "cpp:renderer/src/ore/metal/ore_render_pass_metal.hpp:1-67",
+    "cpp:renderer/src/ore/metal/ore_render_pass_metal.mm:1-314",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_hpp.rs:1-597",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_metal_hpp.rs:1-291",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_render_pass_hpp.rs:1-449",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_context_metal_mm.rs:1-2757",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_hpp.rs:1-348",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_mm.rs:1-746",
+]

@@ -1,0 +1,23 @@
+schema_version = 1
+unit = "ore-types"
+receipt_kind = "fix"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-types.fix.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_types.hpp:1-746",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_types_hpp.rs:1-2337",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_types_hpp.rs" = "329f6346778361cbb903fc43a407af45dac5577ded68cdb2373385a6a9316f66" }
+resolutions = [
+    "ORE-TYPES-LIFETIMES-P1: replaced descriptor raw pointers and detached counts with explicit borrowed slices, byte slices, strings, checked derived u32 counts, and Option only where the source contract remains nullable",
+    "ORE-TYPES-OPAQUE-RESOURCES-P1: replaced constructible forward-declaration ZSTs with canonical nonconstructible AnyResourceHandle aliases and made TextureViewDesc.texture a required borrowed texture owner",
+    "ORE-TYPES-LAYOUT-COPY-P1: added repr(C) field-order authority and Clone plus Copy to every source aggregate, including StageVisibility",
+    "ORE-TYPES-ENUM-VALUES-P1: assigned every repr(u8) enum member its exact source discriminant while retaining ColorWriteMask arbitrary-bit semantics",
+    "ORE-TYPES-RECEIPT-COMMANDS-P1: replaced prose placeholders with executable revision, coverage, formatting, whitespace, digest, and TOML commands whose outputs match their recorded counts",
+    "ORE-TYPES-COVERAGE-P1: strengthened the pure checker to verify exact scalar and aggregate field types, translated defaults, constants, helper bodies, and bit operators; three hostile mutation probes now fail for their intended mismatch",
+]

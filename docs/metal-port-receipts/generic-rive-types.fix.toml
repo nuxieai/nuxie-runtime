@@ -1,0 +1,18 @@
+schema_version = 1
+unit = "generic-rive-types"
+receipt_kind = "fix"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-rive-types.fix.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:include/rive/rive_types.hpp:1-137",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/include/rive/rive_types_hpp.rs:1-220",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/include/rive/rive_types_hpp.rs" = "e6d038e08929c31f5dfaee03fa087a84cc6582d1d0e4dd3dedbe5483d6dbd078" }
+resolutions = [
+    "FINAL-SRC-ASSERT-001: restored pinned C assert/NDEBUG behavior with debug-only assertion semantics and hostile release-mode regression",
+]

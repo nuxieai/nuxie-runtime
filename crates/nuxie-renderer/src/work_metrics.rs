@@ -4,26 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut, Range};
 use wgpu::util::DeviceExt;
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct BackendWorkMetrics {
-    pub command_encoders: u64,
-    pub render_passes: u64,
-    pub bind_groups_created: u64,
-    pub bind_group_sets: u64,
-    pub texture_bindings: u64,
-    pub buffer_clear_calls: u64,
-    pub buffer_clear_bytes: u64,
-    pub buffer_upload_calls: u64,
-    pub buffer_upload_bytes: u64,
-    pub texture_upload_calls: u64,
-    pub texture_upload_bytes: u64,
-    pub queue_submissions: u64,
-    pub gpu_draw_calls: u64,
-    pub gpu_draw_instances: u64,
-    pub tessellation_spans: u64,
-    pub path_patches: u64,
-}
+use crate::BackendWorkMetrics;
 
 #[cfg(feature = "perf-counters")]
 thread_local! {

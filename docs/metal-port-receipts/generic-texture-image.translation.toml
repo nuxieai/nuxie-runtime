@@ -1,0 +1,24 @@
+schema_version = 1
+unit = "generic-texture-image"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-texture-image.translation.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/texture.hpp:1-39",
+    "cpp:renderer/include/rive/renderer/rive_render_image.hpp:1-48",
+    "cpp:renderer/src/rive_render_image.cpp:1-15",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/texture_hpp.rs:1-158",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_image_hpp.rs:1-377",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_image_cpp.rs:1-58",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_image_hpp.rs" = "b46fc0ffd0374d075b7e5e07e1403e8afac9e04621e8194c0c298f5e40c80f99", "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/texture_hpp.rs" = "7a098341893afeefc087a9960c5ffab81c2f26dd61a83dde55f3ba5f0bcb39a7", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_image_cpp.rs" = "77d6ee5ca2cd91007a1a1d4a3a5ffe14cbe98d91a424669219e5d396c600d165" }
+source_digests = { "renderer/include/rive/renderer/rive_render_image.hpp" = "b4e7f753191c1cea1514364184a313484e5ac550d234cf73a00cdbbdb8ae29fb", "renderer/include/rive/renderer/texture.hpp" = "297c615ee0de054e28d2d6067316ac39b89fa3cea4de19d2b23aaf96395432b9", "renderer/src/rive_render_image.cpp" = "d9fa9247d8cea0ff8f6d5c3ef5bda31197697c7c6c0577fd05f29f310e3c9cd3" }

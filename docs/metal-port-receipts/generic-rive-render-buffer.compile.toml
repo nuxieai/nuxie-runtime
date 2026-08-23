@@ -1,0 +1,16 @@
+schema_version = 1
+unit = "generic-rive-render-buffer"
+receipt_kind = "compile"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-rive-render-buffer.compile.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/rive_render_buffer.hpp:1-43",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_buffer_hpp.rs:1-369",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_buffer_hpp.rs" = "1bea85acde31999559c94faaf5a7a8cb12f323571a51977825c33f2fd9881e79" }
+compiler_diagnostics = 0

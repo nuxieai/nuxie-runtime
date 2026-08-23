@@ -1,0 +1,20 @@
+schema_version = 1
+unit = "divergence-transactional-resource-generation"
+receipt_kind = "fix"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/divergence-transactional-resource-generation.fix.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/src/metal/render_context_metal_impl.mm:1-2030",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs:1-15199",
+    "cpp:renderer/src/metal/render_context_metal_impl.mm:1023-1115",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs:4494-4640",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs" = "6de9771955c83193d8e2b681e43faeb7f3463f1da33754ccd1a1588c856b6844" }
+resolutions = [
+    "DIVERGENCE-transactional-resource-generation: resolved by the final source-shaped canonical owner and independently clean source/ownership rereviews; obsolete parallel adaptation is de-rooted",
+]

@@ -52,7 +52,7 @@ pub(crate) struct MetalFeatures {
 impl Default for MetalFeatures {
     fn default() -> Self {
         Self {
-            atomic_barrier_type: AtomicBarrierType::RenderPassBreak,
+            atomic_barrier_type: AtomicBarrierType::renderPassBreak,
         }
     }
 }
@@ -74,7 +74,9 @@ pub(crate) struct BackgroundCompileJob {
 pub(crate) enum SynthesizedFailureType {
     #[default]
     None,
+    UbershaderLoad,
     ShaderCompilation,
+    PipelineCreation,
 }
 
 impl BackgroundCompileJob {
@@ -400,7 +402,7 @@ pub(crate) fn build_shader_compile_plan(
             name: ShaderMacro::PlsImplDeviceBuffer,
             value: MacroValue::Empty,
         });
-        if metal_features.atomic_barrier_type == AtomicBarrierType::RasterOrderGroup {
+        if metal_features.atomic_barrier_type == AtomicBarrierType::rasterOrderGroup {
             defines.push(MacroDefinition {
                 name: ShaderMacro::PlsImplDeviceBufferRasterOrdered,
                 value: MacroValue::Empty,
@@ -1155,9 +1157,9 @@ mod tests {
     #[test]
     fn atomic_barrier_and_misc_macro_values_match_upstream() {
         for (barrier, expects_raster_ordered_define) in [
-            (AtomicBarrierType::MemoryBarrier, false),
-            (AtomicBarrierType::RasterOrderGroup, true),
-            (AtomicBarrierType::RenderPassBreak, false),
+            (AtomicBarrierType::memoryBarrier, false),
+            (AtomicBarrierType::rasterOrderGroup, true),
+            (AtomicBarrierType::renderPassBreak, false),
         ] {
             let plan = build_shader_compile_plan(
                 BackgroundCompileJob::new(

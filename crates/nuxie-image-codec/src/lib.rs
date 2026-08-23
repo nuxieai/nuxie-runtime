@@ -4,7 +4,8 @@
 //! needs to prove PNG, JPEG, or WebP bytes can be decoded must not pull WebGPU,
 //! WebGL, or their JavaScript host ABI into a raw `wasm32-unknown-unknown`
 //! module. Platform decoder mechanics that are part of Rive parity still live
-//! here: on macOS, JPEG uses ImageIO/CoreGraphics just like the C++ runtime.
+//! here: on macOS, PNG, JPEG, and WebP use ImageIO/CoreGraphics just like the
+//! C++ runtime.
 //!
 //! The baseline entry points enforce the resource ceilings below. Product and
 //! platform admission may add stricter limits with [`ImageAdmissionPolicy`],
@@ -219,6 +220,12 @@ pub fn validate_encoded_image(data: &[u8]) -> Option<DecodedImageDimensions> {
     validate_encoded_image_with_policy(data, ImageAdmissionPolicy::BASELINE)
 }
 
+#[cfg(target_os = "macos")]
+fn decode_png_rgba(data: &[u8], max_decoded_bytes: Option<usize>) -> Option<(u32, u32, Vec<u8>)> {
+    decode_macos_image_rgba(data, max_decoded_bytes)
+}
+
+#[cfg(not(target_os = "macos"))]
 fn decode_png_rgba(data: &[u8], max_decoded_bytes: Option<usize>) -> Option<(u32, u32, Vec<u8>)> {
     let mut decoder = png_decoder_with_limit(data, max_decoded_bytes);
     let info = decoder.read_header_info().ok()?;
@@ -316,7 +323,7 @@ unsafe extern "C" {
 }
 
 #[cfg(target_os = "macos")]
-fn decode_macos_jpeg_rgba(
+fn decode_macos_image_rgba(
     data: &[u8],
     max_decoded_bytes: Option<usize>,
 ) -> Option<(u32, u32, Vec<u8>)> {
@@ -427,7 +434,7 @@ fn decode_macos_jpeg_rgba(
 
 #[cfg(target_os = "macos")]
 fn decode_jpeg_rgba(data: &[u8], max_decoded_bytes: Option<usize>) -> Option<(u32, u32, Vec<u8>)> {
-    decode_macos_jpeg_rgba(data, max_decoded_bytes)
+    decode_macos_image_rgba(data, max_decoded_bytes)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -485,6 +492,12 @@ fn decode_portable_jpeg_rgba(
     Some((u32::from(info.width), u32::from(info.height), pixels))
 }
 
+#[cfg(target_os = "macos")]
+fn decode_webp_rgba(data: &[u8], max_decoded_bytes: Option<usize>) -> Option<(u32, u32, Vec<u8>)> {
+    decode_macos_image_rgba(data, max_decoded_bytes)
+}
+
+#[cfg(not(target_os = "macos"))]
 fn decode_webp_rgba(data: &[u8], max_decoded_bytes: Option<usize>) -> Option<(u32, u32, Vec<u8>)> {
     let mut decoder = image_webp::WebPDecoder::new(Cursor::new(data)).ok()?;
     decoder.set_memory_limit(max_decoded_bytes.unwrap_or(usize::MAX));
@@ -513,6 +526,7 @@ fn decode_webp_rgba(data: &[u8], max_decoded_bytes: Option<usize>) -> Option<(u3
     Some((width, height, pixels))
 }
 
+#[cfg(any(not(target_os = "macos"), test))]
 fn convert_icc_rgba_to_srgb(pixels: &mut [u8], width: u32, icc_profile: &[u8]) {
     let Ok(source) = moxcms::ColorProfile::new_from_slice(icc_profile) else {
         return;
@@ -547,6 +561,7 @@ fn convert_icc_rgba_to_srgb(pixels: &mut [u8], width: u32, icc_profile: &[u8]) {
     pixels.copy_from_slice(&converted);
 }
 
+#[cfg(any(not(target_os = "macos"), test))]
 fn premultiply_rgba(pixels: &mut [u8]) {
     for pixel in pixels.chunks_exact_mut(4) {
         let alpha = u16::from(pixel[3]);
@@ -980,7 +995,7 @@ mod tests {
         ];
         let mut portable = jpeg_decoder::Decoder::new(std::io::Cursor::new(encoded));
         assert!(portable.decode().is_ok());
-        assert!(super::decode_macos_jpeg_rgba(&encoded, None).is_none());
+        assert!(super::decode_macos_image_rgba(&encoded, None).is_none());
         assert!(decode_image_rgba(&encoded).is_none());
     }
 }

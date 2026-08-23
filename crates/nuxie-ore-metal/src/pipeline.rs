@@ -131,7 +131,7 @@ pub struct Pipeline {
 impl Pipeline {
     /// Translate the protected unmanaged C++ constructor.
     #[cfg_attr(
-        not(any(target_os = "ios", target_os = "macos")),
+        not(target_vendor = "apple"),
         expect(dead_code, reason = "the ContextMetal factory is Apple-only")
     )]
     pub(crate) fn new(desc: &PipelineDesc<'_>) -> Self {

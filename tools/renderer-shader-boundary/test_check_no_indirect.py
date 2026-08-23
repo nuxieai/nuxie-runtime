@@ -68,15 +68,21 @@ class NoIndirectRendererTest(unittest.TestCase):
             )
             (root / "nested").mkdir()
             (root / "nested" / "new_pipeline.rs").write_text(
-                "device.create_shader_module(desc);\n",
+                "device.create_shader_module(desc);\n"
+                "device.create_shader_module_passthrough(desc);\n",
                 encoding="utf-8",
             )
 
             self.assertEqual(
                 CHECK.shader_module_creation_sites(root),
                 {
-                    pathlib.PurePosixPath("nested/new_pipeline.rs"): 1,
-                    pathlib.PurePosixPath("shader_catalog.rs"): 1,
+                    pathlib.PurePosixPath("nested/new_pipeline.rs"): {
+                        "create_shader_module": 1,
+                        "create_shader_module_passthrough": 1,
+                    },
+                    pathlib.PurePosixPath("shader_catalog.rs"): {
+                        "create_shader_module": 1
+                    },
                 },
             )
 

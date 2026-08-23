@@ -1,0 +1,18 @@
+schema_version = 1
+unit = "gpu-resource"
+receipt_kind = "verification"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/gpu-resource.verification.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/gpu_resource.hpp:1-131",
+    "cpp:renderer/src/gpu_resource.cpp:1-119",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/gpu_resource_hpp.rs:1-1807",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/gpu_resource_cpp.rs:1-282",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/gpu_resource_hpp.rs" = "a66c04313878c8da357bb8adaed4148ff5f9b1dddf2fcdbbbc0a906392c53a8b", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/gpu_resource_cpp.rs" = "79902ee7168d81dc5986b411864ce0ecb19179b42b3c1b67fc61070d82bcc31b" }
+suite_reports = { "V0" = "docs/metal-port-reports/v0-inventory-provenance.md", "V1" = "docs/metal-port-reports/v1-source-ownership-closure.md", "V2" = "docs/metal-port-reports/v2-compile-configuration-matrix.md", "V3" = "docs/metal-port-reports/v3-native-lifecycle-failure.md", "V4" = "docs/metal-port-reports/v4-pinned-cpp-metal-parity.md", "V5" = "docs/metal-port-reports/v5-wgpu-diagnostic.md", "V6" = "docs/metal-port-reports/v6-msaa-exclusion.md", "V7" = "docs/metal-port-reports/v7-platform-hardware-policy.md", "V8" = "docs/metal-port-reports/v8-rooted-product-no-fallback.md", "V9" = "docs/metal-port-reports/v9-independent-closeout.md" }

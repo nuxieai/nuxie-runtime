@@ -24,6 +24,11 @@ STATUS_LABEL = {
     "active": "Active",
     "queued": "Queued",
     "frozen": "Frozen",
+    "ready": "Ready",
+    "translated": "Translated",
+    "reviewed": "Reviewed",
+    "fixed": "Fixed",
+    "compiled": "Legacy compiled",
 }
 
 
@@ -105,19 +110,41 @@ def field_summary(rows: list[dict[str, str]]) -> str:
     cards = []
     for cpp_type in dict.fromkeys(row["cpp_type"] for row in rows):
         type_rows = [row for row in rows if row["cpp_type"] == cpp_type]
-        prepared = sum(row["status"] in {"prepared", "verified"} for row in type_rows)
-        review = [row["cpp_field"] for row in type_rows if row["status"] == "review-needed"]
-        percent = prepared / len(type_rows) * 100
+        mapped = sum(row["mapping_status"] == "prepared" for row in type_rows)
+        translated = sum(
+            row["translation_status"] in {"translated", "verified"}
+            for row in type_rows
+        )
+        mapping_review = [
+            row["cpp_field"]
+            for row in type_rows
+            if row["mapping_status"] == "review-needed"
+        ]
+        translation_pending = [
+            row["cpp_field"]
+            for row in type_rows
+            if row["translation_status"] == "pending"
+        ]
+        percent = translated / len(type_rows) * 100
+        details = []
+        if mapping_review:
+            details.append(
+                f'Mapping review: <code>{escape(", ".join(mapping_review))}</code>'
+            )
+        if translation_pending:
+            details.append(
+                f'Translation pending: <code>{escape(", ".join(translation_pending))}</code>'
+            )
         review_text = (
-            f'<p class="field-review">Review needed: <code>{escape(", ".join(review))}</code></p>'
-            if review
-            else '<p class="field-ready">Every declared field is prepared.</p>'
+            f'<p class="field-review">{" · ".join(details)}</p>'
+            if details
+            else '<p class="field-ready">Every declared field is mapped and translated.</p>'
         )
         cards.append(
             f"""
             <article class="field-card">
-              <div class="source-card-head"><div><h3>{escape(cpp_type)}</h3><code>{len(type_rows)} declared fields</code></div><strong>{prepared}/{len(type_rows)} prepared</strong></div>
-              <div class="stacked-bar" aria-label="{escape(cpp_type)} field preparation"><span class="bar-part bar-ported" style="width:{percent:.5f}%"></span><span class="bar-part bar-missing" style="width:{100 - percent:.5f}%"></span></div>
+              <div class="source-card-head"><div><h3>{escape(cpp_type)}</h3><code>{len(type_rows)} declared fields</code></div><strong>{mapped}/{len(type_rows)} mapped · {translated}/{len(type_rows)} translated</strong></div>
+              <div class="stacked-bar" aria-label="{escape(cpp_type)} field translation"><span class="bar-part bar-ported" style="width:{percent:.5f}%"></span><span class="bar-part bar-missing" style="width:{100 - percent:.5f}%"></span></div>
               {review_text}
             </article>
             """
@@ -129,28 +156,108 @@ def configuration_summary(rows: list[dict[str, str]]) -> str:
     cards = []
     for upstream_file in dict.fromkeys(row["upstream_file"] for row in rows):
         source_rows = [row for row in rows if row["upstream_file"] == upstream_file]
-        prepared = sum(
-            row["status"] in {"prepared", "verified"} for row in source_rows
+        prepared = sum(row["mapping_status"] == "prepared" for row in source_rows)
+        translated = sum(
+            row["translation_status"] in {"translated", "verified"}
+            for row in source_rows
         )
         review = [
-            row["block"] for row in source_rows if row["status"] == "review-needed"
+            row["block_id"]
+            for row in source_rows
+            if row["mapping_status"] == "review-needed"
         ]
+        block_count = len({row["block_id"] for row in source_rows})
         percent = prepared / len(source_rows) * 100
         review_text = (
             f'<p class="field-review">Open branches: <code>{escape(", ".join(review))}</code></p>'
             if review
-            else '<p class="field-ready">Every conditional block is prepared.</p>'
+            else '<p class="field-ready">Every conditional branch entry is prepared.</p>'
         )
         cards.append(
             f"""
             <article class="field-card">
-              <div class="source-card-head"><div><h3>{escape(source_label(upstream_file))}</h3><code>{len(source_rows)} conditional blocks</code></div><strong>{prepared}/{len(source_rows)} prepared</strong></div>
+              <div class="source-card-head"><div><h3>{escape(source_label(upstream_file))}</h3><code>{block_count} blocks · {len(source_rows)} branch entries</code></div><strong>{prepared}/{len(source_rows)} mapped · {translated}/{len(source_rows)} translated</strong></div>
               <div class="stacked-bar" aria-label="{escape(source_label(upstream_file))} configuration preparation"><span class="bar-part bar-ported" style="width:{percent:.5f}%"></span><span class="bar-part bar-missing" style="width:{100 - percent:.5f}%"></span></div>
               {review_text}
             </article>
             """
         )
     return "".join(cards)
+
+
+def dependency_summary(rows: list[dict[str, str]]) -> str:
+    return "".join(
+        f"""
+        <article class="field-card">
+          <div class="source-card-head"><div><h3>{escape(source_label(row['upstream_file']))}</h3><code>{escape(row['translation_unit'])}</code></div><strong>{escape(row['mapping_status'])} · {escape(row['translation_status'])}</strong></div>
+          <div class="stacked-bar" aria-label="{escape(source_label(row['upstream_file']))} whole-file translation"><span class="bar-part bar-ported" style="width:{100 if row['translation_status'] in {'translated', 'verified'} else 0}%"></span><span class="bar-part bar-missing" style="width:{0 if row['translation_status'] in {'translated', 'verified'} else 100}%"></span></div>
+          <p class="field-review">Lifetime coverage: <code>{escape(row['field_coverage'])}</code> · target: <code>{escape(row['translation_target'])}</code></p>
+        </article>
+        """
+        for row in rows
+    )
+
+
+def include_summary(rows: list[dict[str, str]]) -> str:
+    kinds = Counter(row["resolution_kind"] for row in rows)
+    tokens = len({row["include_token"] for row in rows})
+    files = len({row["upstream_file"] for row in rows})
+    prepared = sum(
+        row["mapping_status"] in {"prepared", "existing-complete"} for row in rows
+    )
+    directives = Counter(row["directive"] for row in rows)
+    exact_globals = sum(
+        row["resolution_kind"] == "upstream-global-source"
+        and row["mapping_status"] == "existing-complete"
+        for row in rows
+    )
+    return f"""
+    <article class="field-card">
+      <div class="source-card-head"><div><h3>Direct include/import graph</h3><code>{len(rows)} occurrences · {tokens} tokens · {files} files</code></div><strong>{prepared}/{len(rows)} mapped</strong></div>
+      <div class="stacked-bar" aria-label="direct include and import correspondence"><span class="bar-part bar-ported" style="width:{prepared / len(rows) * 100:.5f}%"></span><span class="bar-part bar-missing" style="width:{(len(rows) - prepared) / len(rows) * 100:.5f}%"></span></div>
+      <p class="field-ready">{directives['include']} #include · {directives['import']} #import · {kinds['campaign-source']} campaign · {exact_globals}/{kinds['upstream-global-source']} upstream-global with exact Rust correspondence · {kinds['generated-shader-source']} generated-source · {kinds['generated-shader-artifact']} generated-artifact · {kinds['toolchain-header']} toolchain occurrences.</p>
+    </article>
+    """
+
+
+def authority_graph_summary(
+    source_dependencies: list[dict[str, str]],
+    dispatch_rows: list[dict[str, str]],
+    build_rows: list[dict[str, str]],
+) -> str:
+    dependency_occurrences = sum(
+        int(row["occurrence_count"]) for row in source_dependencies
+    )
+    source_only = [
+        row
+        for row in source_dependencies
+        if row["unit_edge_status"] == "source-only-dependency"
+    ]
+    source_only_edges = {
+        (row["source_unit"], row["dependency_unit"]) for row in source_only
+    }
+    source_only_occurrences = sum(int(row["occurrence_count"]) for row in source_only)
+    scc_members = {
+        row["translation_unit"]
+        for row in dispatch_rows
+        if row["source_dependency_scc"] != "-"
+    }
+    make_rows = sum(row["authority_kind"] == "make-rule-family" for row in build_rows)
+    python_rows = len(build_rows) - make_rows
+    return f"""
+    <article class="field-card">
+      <div class="source-card-head"><div><h3>Source dependencies</h3><code>{len(source_dependencies)} normalized edges · {dependency_occurrences} occurrences</code></div><strong>cycle-allowing</strong></div>
+      <p class="field-ready">{len(source_only_edges)} source-only unit edges across {source_only_occurrences} occurrences · {len(scc_members)} units in the real SCC.</p>
+    </article>
+    <article class="field-card">
+      <div class="source-card-head"><div><h3>Dispatch prerequisites</h3><code>{len(dispatch_rows)} translation units</code></div><strong>acyclic</strong></div>
+      <p class="field-ready">Scheduling order is intentionally separate from the complete source include graph; every prerequisite ordinal strictly precedes its consumer.</p>
+    </article>
+    <article class="field-card">
+      <div class="source-card-head"><div><h3>Build behavior</h3><code>{len(build_rows)} branch rows</code></div><strong>required</strong></div>
+      <p class="field-ready">{make_rows} Make rule families · {python_rows} Python If/IfExp branches, including all Apple Metal and SPIR-V/WGSL/D3D dispositions.</p>
+    </article>
+    """
 
 
 def convention_summary(rows: list[dict[str, str]]) -> str:
@@ -176,6 +283,66 @@ def phase_rail(phases: list[dict]) -> str:
         """
         for phase in phases
     )
+
+
+def translation_unit_summary(units: list[dict], repo_root: Path) -> str:
+    def order(unit: dict) -> tuple[int, str]:
+        ordinal = unit.get("dispatch_ordinal")
+        return (int(ordinal) if ordinal is not None else 10_000, str(unit["id"]))
+
+    cards = []
+    for unit in sorted(units, key=order):
+        receipts = [
+            str(unit.get(name, "unrecorded"))
+            for name in (
+                "translation_receipt",
+                "source_review_receipt",
+                "ownership_review_receipt",
+                "fix_receipt",
+                "compile_receipt",
+                "verification_receipt",
+            )
+        ]
+        suffixes = (
+            "translation.toml",
+            "source-review.toml",
+            "ownership-review.toml",
+            "fix.toml",
+            "compile.toml",
+            "verification.toml",
+        )
+        canonical_receipts = [
+            f"docs/metal-port-receipts/{unit['id']}.{suffix}" for suffix in suffixes
+        ]
+        loop_complete = (
+            receipts[:4] == canonical_receipts[:4]
+            and all((repo_root / receipt).is_file() for receipt in receipts[:4])
+            and unit.get("open_findings") == 0
+        )
+        if loop_complete and unit.get("status") in {"fixed", "compiled", "verified"}:
+            gate_status = "green"
+        elif unit.get("status") != "pending" or unit.get("worker_claim") != "unclaimed":
+            gate_status = "in-progress"
+        else:
+            gate_status = "pending"
+        ordinal = unit.get("dispatch_ordinal", "legacy")
+        targets = len(unit.get("rust_targets", [])) + len(unit.get("artifact_targets", []))
+        cards.append(
+            f"""
+            <article class="unit-card unit-{escape(gate_status)}">
+              <div class="suite-head"><code>#{escape(ordinal)} · {escape(unit['id'])}</code>{status_chip(gate_status)}</div>
+              <p>{len(unit.get('sources', []))} complete source files · {targets} reserved outputs</p>
+              <dl>
+                <dt>Translator</dt><dd>{escape(unit.get('worker_role', 'missing'))} · {escape(unit.get('worker_claim', 'unclaimed'))}</dd>
+                <dt>Source review</dt><dd>{escape(unit.get('source_reviewer_role', 'missing'))} · {escape(receipts[1])}</dd>
+                <dt>Ownership review</dt><dd>{escape(unit.get('ownership_reviewer_role', 'missing'))} · {escape(receipts[2])}</dd>
+                <dt>Translation</dt><dd>{escape(receipts[0])}</dd>
+                <dt>Fix</dt><dd>{escape(receipts[3])} · {escape(unit.get('open_findings', 'unrecorded'))} open findings</dd>
+              </dl>
+            </article>
+            """
+        )
+    return "".join(cards)
 
 
 def validation_suites(suites: list[dict]) -> str:
@@ -304,8 +471,17 @@ def render(repo_root: Path) -> str:
     manifest = load_toml(repo_root / "docs/metal-port-manifest.toml")
     field_rows = parse_tsv(repo_root / manifest["render_context_field_map"])
     configuration_rows = parse_tsv(
-        repo_root / manifest["render_context_configuration_map"]
+        repo_root / manifest["preprocessor_authority"]
     )
+    dependency_rows = parse_tsv(repo_root / manifest["render_context_dependency_map"])
+    include_rows = parse_tsv(repo_root / manifest["direct_include_authority"])
+    source_dependency_rows = parse_tsv(
+        repo_root / manifest["source_dependency_authority"]
+    )
+    dispatch_rows = parse_tsv(
+        repo_root / manifest["dispatch_prerequisite_authority"]
+    )
+    build_branch_rows = parse_tsv(repo_root / manifest["build_branch_authority"])
     convention_rows = parse_tsv(repo_root / manifest["translation_conventions"])
     metal_sources = [
         source
@@ -316,6 +492,30 @@ def render(repo_root: Path) -> str:
         or source["upstream"].startswith("renderer/src/shaders/metal/")
     ]
     source_statuses = Counter(source["status"] for source in metal_sources)
+    translation_units = manifest.get("translation_unit", [])
+    total_campaign_files = sum(len(unit.get("sources", [])) for unit in translation_units)
+    translated_campaign_files = 0
+    for unit in translation_units:
+        sources = unit.get("sources", [])
+        rust_targets = unit.get("rust_targets", [])
+        if rust_targets:
+            # Most units have a complete one-to-one source/target list. The
+            # shader batch grows that list file-by-file during the bulk pass,
+            # so count already-materialized source-shaped targets without
+            # waiting for the entire 40-file batch to close.
+            translated_campaign_files += min(
+                len(sources),
+                sum((repo_root / target).is_file() for target in rust_targets),
+            )
+        elif unit.get("status") in {"translated", "reviewed", "fixed", "compiled", "verified"}:
+            # Artifact batches, such as the globally coupled shader build,
+            # advance atomically because outputs do not map one-to-one to inputs.
+            translated_campaign_files += len(sources)
+    claimed_campaign_files = sum(
+        len(unit.get("sources", []))
+        for unit in translation_units
+        if unit.get("status") != "pending" or unit.get("worker_claim") != "unclaimed"
+    )
     owner_statuses = Counter(
         owner["status"]
         for owner in ownership.get("owner", [])
@@ -325,12 +525,30 @@ def render(repo_root: Path) -> str:
     ported_lines = sum(int(row["length"]) for row in rows if row["status"] == "ported")
     partial_lines = sum(int(row["length"]) for row in rows if row["status"] == "partial")
     missing_lines = sum(int(row["length"]) for row in rows if row["status"] == "missing")
-    prepared_fields = sum(
-        row["status"] in {"prepared", "verified"} for row in field_rows
+    mapped_fields = sum(row["mapping_status"] == "prepared" for row in field_rows)
+    translated_fields = sum(
+        row["translation_status"] in {"translated", "verified"}
+        for row in field_rows
     )
-    prepared_configurations = sum(
-        row["status"] in {"prepared", "verified"} for row in configuration_rows
+    mapped_configurations = sum(
+        row["mapping_status"] == "prepared" for row in configuration_rows
     )
+    translated_configurations = sum(
+        row["translation_status"] in {"translated", "verified"}
+        for row in configuration_rows
+    )
+    mapped_dependencies = sum(
+        row["mapping_status"] == "prepared" for row in dependency_rows
+    )
+    translated_dependencies = sum(
+        row["translation_status"] in {"translated", "verified"}
+        for row in dependency_rows
+    )
+    mapped_includes = sum(
+        row["mapping_status"] in {"prepared", "existing-complete"}
+        for row in include_rows
+    )
+    configuration_blocks = len({row["block_id"] for row in configuration_rows})
     frozen_conventions = sum(
         row["status"] in {"frozen", "verified"} for row in convention_rows
     )
@@ -386,17 +604,19 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
 .field-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }} .field-card {{ min-width:0; background:var(--panel); border:1px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .field-card h3 {{ margin:0 0 5px; overflow-wrap:anywhere; }} .field-review {{ color:var(--red); margin:0; overflow-wrap:anywhere; }} .field-review code {{ word-break:break-word; }} .field-ready {{ color:var(--green); margin:0; }} .source-card-head>* {{ min-width:0; }}
 .stacked-bar {{ display:flex; width:100%; height:18px; overflow:hidden; margin:22px 0 13px; background:var(--line); }} .bar-part {{ display:block; }} .bar-ported {{ background:var(--green); }} .bar-partial {{ background:var(--amber); }} .bar-missing {{ background:var(--red); }}
 .bar-legend {{ display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:.84rem; }} .dot {{ display:inline-block; width:9px; height:9px; margin-right:6px; }} .dot-ported {{ background:var(--green); }} .dot-partial {{ background:var(--amber); }} .dot-missing {{ background:var(--red); }}
-.phases {{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:0; }} .phase {{ position:relative; padding:32px 16px 0 0; border-top:2px solid var(--line); }} .phase-marker {{ position:absolute; top:-7px; left:0; width:12px; height:12px; border-radius:50%; background:var(--queued); }} .phase-active {{ border-color:var(--green); }} .phase-active .phase-marker {{ background:var(--green); box-shadow:0 0 0 5px var(--green-soft); }} .phase strong {{ display:block; margin-bottom:8px; }} .phase p {{ color:var(--muted); font-size:.82rem; line-height:1.45; margin:9px 0 0; }}
-.status {{ display:inline-block; padding:3px 7px; margin-left:6px; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border:1px solid currentColor; }} .status-ported,.status-verified,.status-exact,.status-green,.status-active,.status-frozen {{ color:var(--green); background:var(--green-soft); }} .status-partial,.status-in-progress,.status-amber {{ color:var(--amber); background:var(--amber-soft); }} .status-missing,.status-pending {{ color:var(--red); background:var(--red-soft); }} .status-queued {{ color:var(--queued); }}
+.phases {{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:0; }} .phase {{ position:relative; padding:32px 16px 0 0; border-top:2px solid var(--line); }} .phase-marker {{ position:absolute; top:-7px; left:0; width:12px; height:12px; border-radius:50%; background:var(--queued); }} .phase-active {{ border-color:var(--green); }} .phase-active .phase-marker {{ background:var(--green); box-shadow:0 0 0 5px var(--green-soft); }} .phase strong {{ display:block; margin-bottom:8px; }} .phase p {{ color:var(--muted); font-size:.82rem; line-height:1.45; margin:9px 0 0; }}
+.workflow-grid {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }} .workflow-card {{ background:var(--panel); border:1px solid var(--line); border-top:4px solid var(--green); padding:18px; box-shadow:var(--shadow); }} .workflow-card h3 {{ margin:0 0 8px; }} .workflow-card p {{ margin:0; color:var(--muted); line-height:1.5; }} .workflow-flow {{ margin-top:14px; border-left:4px solid var(--green); padding:12px 16px; background:var(--panel); color:var(--muted); line-height:1.6; }}
+.status {{ display:inline-block; padding:3px 7px; margin-left:6px; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border:1px solid currentColor; }} .status-ported,.status-verified,.status-exact,.status-green,.status-active,.status-frozen,.status-fixed {{ color:var(--green); background:var(--green-soft); }} .status-partial,.status-in-progress,.status-amber,.status-translated,.status-reviewed,.status-compiled {{ color:var(--amber); background:var(--amber-soft); }} .status-missing,.status-pending,.status-ready,.status-red {{ color:var(--red); background:var(--red-soft); }} .status-queued {{ color:var(--queued); }}
 .convention-shape {{ color:var(--muted); font-size:.84rem; }} .field-card>p:last-child {{ line-height:1.45; }}
 .owner-list {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }} .owner {{ min-width:0; background:var(--panel); border:1px solid var(--line); }} .owner summary {{ min-width:0; cursor:pointer; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:14px 16px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }} .owner summary>span:first-child {{ min-width:0; overflow-wrap:anywhere; word-break:break-word; }} .owner p,.owner-meta {{ min-width:0; margin:0; padding:0 16px 15px; color:var(--muted); line-height:1.45; overflow-wrap:anywhere; }} .owner-meta {{ display:grid; gap:5px; font-size:.82rem; }}
 .filters {{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }} .filters button {{ appearance:none; background:transparent; color:var(--ink); border:1px solid var(--line); padding:7px 10px; cursor:pointer; }} .filters button[aria-pressed="true"] {{ border-color:var(--green); color:var(--green); background:var(--green-soft); }}
 .table-wrap {{ overflow-x:auto; border:1px solid var(--line); background:var(--panel); }} table {{ width:100%; border-collapse:collapse; min-width:920px; }} th,td {{ padding:11px 13px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }} th {{ color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; }} td small {{ color:var(--muted); }} td:nth-child(1) {{ width:220px; }} td:nth-child(3) {{ width:120px; }} td:nth-child(5) {{ max-width:340px; overflow-wrap:anywhere; }} tr:last-child td {{ border-bottom:0; }}
-	.reports {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }} .report {{ background:var(--panel); border:1px solid var(--line); border-top:4px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .report-green {{ border-top-color:var(--green); }} .report-amber {{ border-top-color:var(--amber); }} .report-head,.report footer {{ display:flex; justify-content:space-between; gap:10px; align-items:center; }} .report time {{ color:var(--muted); }} .report h3 {{ margin:15px 0 8px; }} .report p {{ color:var(--muted); line-height:1.5; }} .report footer {{ margin-top:16px; }} .runs {{ display:grid; gap:8px; margin-top:14px; }} .run {{ border-left:2px solid var(--line); padding-left:10px; }} .run code,.run span {{ display:block; overflow-wrap:anywhere; }} .run span {{ color:var(--muted); margin-top:3px; font-size:.82rem; }}
+	.reports {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }} .report {{ background:var(--panel); border:1px solid var(--line); border-top:4px solid var(--line); padding:18px; box-shadow:var(--shadow); }} .report-green {{ border-top-color:var(--green); }} .report-amber {{ border-top-color:var(--amber); }} .report-red {{ border-top-color:var(--red); }} .report-head,.report footer {{ display:flex; justify-content:space-between; gap:10px; align-items:center; }} .report time {{ color:var(--muted); }} .report h3 {{ margin:15px 0 8px; }} .report p {{ color:var(--muted); line-height:1.5; }} .report footer {{ margin-top:16px; }} .runs {{ display:grid; gap:8px; margin-top:14px; }} .run {{ border-left:2px solid var(--line); padding-left:10px; }} .run code,.run span {{ display:block; overflow-wrap:anywhere; }} .run span {{ color:var(--muted); margin-top:3px; font-size:.82rem; }}
 	.suites {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }} .suite {{ background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--queued); padding:18px; box-shadow:var(--shadow); }} .suite-green {{ border-left-color:var(--green); }} .suite-active {{ border-left-color:var(--green); }} .suite-amber {{ border-left-color:var(--amber); }} .suite-head {{ display:flex; align-items:center; justify-content:space-between; gap:12px; }} .suite h3 {{ margin:12px 0 7px; }} .suite>p {{ color:var(--muted); line-height:1.5; }} .suite dl {{ display:grid; grid-template-columns:90px 1fr; gap:8px 12px; margin:16px 0 0; font-size:.84rem; }} .suite dt {{ color:var(--muted); font-weight:700; }} .suite dd {{ margin:0; overflow-wrap:anywhere; }}
+.unit-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }} .unit-card {{ background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--red); padding:18px; box-shadow:var(--shadow); }} .unit-in-progress {{ border-left-color:var(--amber); }} .unit-green {{ border-left-color:var(--green); }} .unit-card>p {{ color:var(--muted); }} .unit-card dl {{ display:grid; grid-template-columns:110px 1fr; gap:7px 12px; margin:14px 0 0; font-size:.82rem; }} .unit-card dt {{ color:var(--muted); font-weight:700; }} .unit-card dd {{ margin:0; overflow-wrap:anywhere; }}
 .gallery {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }} .gallery-card {{ margin:0; background:var(--panel); border:1px solid var(--line); overflow:hidden; }} .gallery-card>a {{ display:grid; place-items:center; aspect-ratio:1/1; background:repeating-conic-gradient(from 45deg,var(--line) 0 25%,transparent 0 50%) 50%/18px 18px; }} .gallery-card img {{ display:block; width:100%; height:100%; object-fit:contain; image-rendering:auto; }} .gallery-card figcaption {{ padding:12px; display:grid; gap:8px; }} .gallery-card figcaption>span {{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }} .gallery-card .status {{ margin-left:0; }} .gallery-card figcaption>a {{ font-size:.82rem; }}
 .contract {{ border-left:4px solid var(--green); padding:5px 0 5px 18px; color:var(--muted); line-height:1.55; }}
-@media (max-width:900px) {{ .hero {{ grid-template-columns:1fr; }} .hero-meta {{ border-left:0; border-top:3px solid var(--green); padding-left:0; }} .overview,.reports,.suites {{ grid-template-columns:1fr; }} .source-grid,.owner-list,.field-grid {{ grid-template-columns:1fr; }} .phases {{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 0; }} .gallery {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
+@media (max-width:900px) {{ .hero {{ grid-template-columns:1fr; }} .hero-meta {{ border-left:0; border-top:3px solid var(--green); padding-left:0; }} .overview,.reports,.suites,.workflow-grid,.unit-grid {{ grid-template-columns:1fr; }} .source-grid,.owner-list,.field-grid {{ grid-template-columns:1fr; }} .phases {{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 0; }} .gallery {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
 @media (max-width:520px) {{ .shell {{ padding:28px 15px 60px; }} .section-head {{ display:block; }} .section-head p {{ margin-top:8px; }} .phases,.gallery {{ grid-template-columns:1fr; }} .source-card-head {{ display:block; }} .source-card-head strong {{ display:block; margin-top:10px; }} }}
 </style>
 </head>
@@ -410,26 +630,66 @@ h2 {{ margin:0; font-size:1.45rem; letter-spacing:-.025em; }} .section-head p {{
   <section class="section">
     <div class="section-head"><h2>Source closure</h2><p>Line-weighted status from the exhaustive header and implementation map.</p></div>
     <div class="overview">
-      <div class="metric"><strong>{ported_lines / total_lines * 100:.1f}%</strong><span>{ported_lines:,} of {total_lines:,} pinned lines ported</span></div>
+      <div class="metric"><strong>{translated_campaign_files}/{total_campaign_files}</strong><span>individual pinned files mechanically translated</span></div>
+      <div class="metric"><strong>{claimed_campaign_files}/{total_campaign_files}</strong><span>individual pinned files claimed in parallel waves</span></div>
+      <div class="metric"><strong>{ported_lines / total_lines * 100:.1f}%</strong><span>{ported_lines:,} of {total_lines:,} primary-context lines ported</span></div>
       <div class="metric"><strong>{partial_lines:,}</strong><span>partial source lines still under translation</span></div>
       <div class="metric"><strong>{missing_lines:,}</strong><span>missing source lines with no Rust owner</span></div>
-      <div class="metric"><strong>{prepared_fields}/{len(field_rows)}</strong><span>state-bearing fields prepared</span></div>
-      <div class="metric"><strong>{prepared_configurations}/{len(configuration_rows)}</strong><span>conditional blocks prepared</span></div>
+      <div class="metric"><strong>{mapped_fields}/{len(field_rows)}</strong><span>field ownership mappings prepared</span></div>
+      <div class="metric"><strong>{translated_fields}/{len(field_rows)}</strong><span>field owners translated</span></div>
+      <div class="metric"><strong>{configuration_blocks}/{configuration_blocks}</strong><span>semantic preprocessor blocks inventoried</span></div>
+      <div class="metric"><strong>{mapped_configurations}/{len(configuration_rows)}</strong><span>conditional branch mappings prepared</span></div>
+      <div class="metric"><strong>{translated_configurations}/{len(configuration_rows)}</strong><span>conditional branch entries translated</span></div>
+      <div class="metric"><strong>{mapped_dependencies}/{len(dependency_rows)}</strong><span>generic source mappings prepared</span></div>
+      <div class="metric"><strong>{translated_dependencies}/{len(dependency_rows)}</strong><span>generic sources translated</span></div>
+      <div class="metric"><strong>{mapped_includes}/{len(include_rows)}</strong><span>direct #include/#import occurrences mapped</span></div>
+      <div class="metric"><strong>{len(source_dependency_rows)}</strong><span>normalized source-dependency edges</span></div>
+      <div class="metric"><strong>{len(build_branch_rows)}</strong><span>build behavior branches mapped</span></div>
       <div class="metric"><strong>{frozen_conventions}/{len(convention_rows)}</strong><span>translation conventions frozen</span></div>
     </div>
     <div class="source-grid">{source_summary(rows)}</div>
   </section>
 
+  <section class="section">
+    <div class="section-head"><h2>Bun mechanical-port operating model</h2><p>Roles and queue order are machine-checked. Translation and review are separate contexts; validation cannot choose implementation scope.</p></div>
+    <div class="workflow-grid">
+      <article class="workflow-card"><h3>{escape(progress['workflow']['translator'])} · translator</h3><p>Mechanically translates complete pinned C++/Objective-C++ source owners in source order. No feature slices, self-review, stubs, cleanup, or architecture redesign.</p></article>
+      <article class="workflow-card"><h3>{escape(progress['workflow']['orchestrator'])} · adversarial driver</h3><p>Orchestrates ownership, performs separate source-semantics and ownership/lifetime reviews, drives corrections, then owns compiler and validation queues.</p></article>
+      <article class="workflow-card"><h3>Two independent review passes</h3><p>{progress['workflow']['source_reviews_required']} source review + {progress['workflow']['ownership_reviews_required']} ownership review for every translation. Reviewers assume the diff is wrong and do not inherit translator rationale.</p></article>
+    </div>
+    <div class="workflow-flow"><strong>Ordered queue:</strong> preparation → parallel Luna translation of {total_campaign_files} files → global Sol source review → global Sol ownership review → correction → compiler queue → rooted smoke → V0–V9 parity → post-green cleanup. The {len(translation_units)} groups are integration boundaries, not the file denominator. <strong>Feature slices allowed:</strong> {str(progress['workflow']['feature_slices_allowed']).lower()}.</div>
+  </section>
+
   <section class="section"><div class="section-head"><h2>Campaign phases</h2><p>Translation completes before compiler diagnostics and behavior fixtures become work queues.</p></div><ol class="phases">{phase_rail(progress['phase'])}</ol></section>
 
   <section class="section">
-    <div class="section-head"><h2>State-bearing field closure</h2><p>The checker derives all 37 declarations from the pinned header and implementation. Any omitted or invented ledger row fails the campaign gate.</p></div>
+    <div class="section-head"><h2>{total_campaign_files} files · {len(translation_units)} integration groups</h2><p>Files are the primary transliteration denominator. Groups only aggregate coupled file receipts and later compiler diagnostics; reviews run as separate global passes after all file targets exist.</p></div>
+    <div class="unit-grid">{translation_unit_summary(manifest.get('translation_unit', []), repo_root)}</div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>State-bearing field closure</h2><p>The checker derives all {len(field_rows)} direct and inherited declarations from the pinned source owners. Any omitted, invented, configuration-drifted, or line-drifted ledger row fails the campaign gate.</p></div>
     <div class="field-grid">{field_summary(field_rows)}</div>
   </section>
 
   <section class="section">
-    <div class="section-head"><h2>Conditional-configuration closure</h2><p>The checker extracts every preprocessor block and branch line from the pinned context and compiler units. Missing platform, tools, canvas, simulator, or header modes stay red.</p></div>
+    <div class="section-head"><h2>Conditional-configuration closure</h2><p>The checker extracts every preprocessor block and branch entry from all {total_campaign_files} pinned sources, including continued directives and semantic elif/else paths. Missing ORE, shader, platform, tools, canvas, simulator, or header modes stay red.</p></div>
     <div class="field-grid">{configuration_summary(configuration_rows)}</div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Generic dependency translation queue</h2><p>Every complete generic renderer source has one source-shaped Rust target, one dispatch owner, and field-lifetime coverage. Prepared mappings stay red until the literal target is translated.</p></div>
+    <div class="field-grid">{dependency_summary(dependency_rows)}</div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Direct include/import correspondence</h2><p>The checker derives every direct #include and Objective-C #import occurrence across the complete campaign and resolves campaign, exact existing Rust, generated shader/artifact, and toolchain boundaries.</p></div>
+    <div class="field-grid">{include_summary(include_rows)}</div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Source, dispatch, and build authority</h2><p>Cycle-allowing source dependencies are exhaustive and independent from acyclic translation scheduling. Make and Python build behavior is also translation authority, including non-Metal rule dispositions.</p></div>
+    <div class="field-grid">{authority_graph_summary(source_dependency_rows, dispatch_rows, build_branch_rows)}</div>
   </section>
 
   <section class="section">

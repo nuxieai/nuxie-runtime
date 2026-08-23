@@ -271,6 +271,7 @@ mod tests {
     #[test]
     fn live_shared_buffer_mapping_and_ring_identity() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let mut mutable = NativeMetalBuffer::new(
@@ -324,6 +325,7 @@ mod tests {
         use std::panic::{catch_unwind, AssertUnwindSafe};
 
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let make_mutable = || {
@@ -380,6 +382,7 @@ mod tests {
     #[test]
     fn live_buffer_retains_the_upstream_device_owner() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let device_pointer = device.as_ref() as *const ProtocolObject<dyn MTLDevice>;

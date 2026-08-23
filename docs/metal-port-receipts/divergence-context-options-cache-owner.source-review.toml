@@ -1,0 +1,36 @@
+schema_version = 1
+unit = "divergence-context-options-cache-owner"
+receipt_kind = "source-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/divergence-context-options-cache-owner.source-review.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:1-282",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs:1-15199",
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:93-109",
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:235-240",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs:3828-3845",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs:3852-3927",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs" = "6de9771955c83193d8e2b681e43faeb7f3463f1da33754ccd1a1588c856b6844" }
+findings = []
+review_run_id = "sol-v9-divergence-source-global-20260822-final-clean-45b6f0b3"
+coverage = [
+    "owned-source-lines",
+    "declarations",
+    "conditionals",
+    "include-owners",
+    "source-semantics",
+]
+citations = [
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:1-282",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs:1-15199",
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:93-109",
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:235-240",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs:3828-3845",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs:3852-3927",
+]

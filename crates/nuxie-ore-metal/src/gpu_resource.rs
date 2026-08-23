@@ -12,7 +12,7 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 const SHUTDOWN_FRAME_NUMBER: u64 = u64::MAX;
 
@@ -37,21 +37,17 @@ impl LogicalRefCount {
     }
 
     fn retain(&self) {
-        let result = self
-            .0
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
-                count.checked_add(1)
-            });
+        let result = self.update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+            count.checked_add(1)
+        });
         assert!(result.is_ok(), "GPU resource reference count overflow");
     }
 
     /// Returns true when this release transitions the count from one to zero.
     fn release(&self) -> bool {
-        let previous = self
-            .0
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
-                count.checked_sub(1)
-            });
+        let previous = self.update(Ordering::AcqRel, Ordering::Acquire, |count| {
+            count.checked_sub(1)
+        });
         match previous {
             Ok(1) => true,
             Ok(_) => false,
@@ -61,6 +57,31 @@ impl LogicalRefCount {
 
     fn load(&self) -> usize {
         self.0.load(Ordering::Relaxed)
+    }
+
+    // `AtomicUsize::fetch_update` was renamed to the still-unstable
+    // `try_update` by the nightly toolchain used for tvOS/visionOS build-std.
+    // Spell out the same compare-exchange loop so stable and nightly execute
+    // identical refcount transitions and memory orderings.
+    fn update(
+        &self,
+        set_order: Ordering,
+        fetch_order: Ordering,
+        mut update: impl FnMut(usize) -> Option<usize>,
+    ) -> Result<usize, usize> {
+        let mut previous = self.0.load(fetch_order);
+        loop {
+            let Some(next) = update(previous) else {
+                return Err(previous);
+            };
+            match self
+                .0
+                .compare_exchange_weak(previous, next, set_order, fetch_order)
+            {
+                Ok(value) => return Ok(value),
+                Err(value) => previous = value,
+            }
+        }
     }
 }
 
@@ -523,17 +544,37 @@ impl fmt::Debug for GpuResourceManager {
 /// `rcp::release()`. Dropping or trimming an entry destroys it directly rather
 /// than sending it through manager purgatory.
 pub struct GpuResourcePool {
-    manager: GpuResourceManager,
-    max_pool_count: usize,
     pool: Mutex<VecDeque<ZombieResource>>,
+    max_pool_count: usize,
+    // Models the single inherited GPUResource::m_manager owner. Standalone
+    // pool values carry that owner directly; a pool published inside a
+    // ResourceAllocation observes the allocation's inherited owner weakly so
+    // the payload cannot add a second retain.
+    manager: PoolManager,
+}
+
+enum PoolManager {
+    Standalone(GpuResourceManager),
+    Inherited(Weak<GpuResourceManagerInner>),
 }
 
 impl GpuResourcePool {
     pub fn new(manager: GpuResourceManager, max_pool_count: usize) -> Self {
         Self {
-            manager,
-            max_pool_count,
             pool: Mutex::new(VecDeque::new()),
+            max_pool_count,
+            manager: PoolManager::Standalone(manager),
+        }
+    }
+
+    fn inherited_manager(&self) -> GpuResourceManager {
+        match &self.manager {
+            PoolManager::Standalone(manager) => manager.clone(),
+            PoolManager::Inherited(manager) => GpuResourceManager {
+                inner: manager
+                    .upgrade()
+                    .expect("a live managed pool allocation retains its inherited manager"),
+            },
         }
     }
 
@@ -541,15 +582,21 @@ impl GpuResourcePool {
     /// `GPUResourcePool : GPUResource`. The direct [`new`](Self::new) form is
     /// also retained because upstream permits pools as stack/member values.
     pub fn new_managed(manager: GpuResourceManager, max_pool_count: usize) -> ResourceHandle<Self> {
-        ResourceHandle::new(Some(manager.clone()), Self::new(manager, max_pool_count))
+        let pool = Self {
+            pool: Mutex::new(VecDeque::new()),
+            max_pool_count,
+            manager: PoolManager::Inherited(Arc::downgrade(&manager.inner)),
+        };
+        ResourceHandle::new(Some(manager), pool)
     }
 
     pub fn acquire(&self) -> Option<AnyResourceHandle> {
+        let manager = self.inherited_manager();
         let resource = {
             // Pool operations always lock manager state before pool state.
             // Holding the manager snapshot lock through the pool mutation
             // prevents concurrent frame advancement from reordering entries.
-            let manager_state = self.manager.inner.lock_state();
+            let manager_state = manager.inner.lock_state();
             let safe_frame_number = manager_state.safe_frame_number;
             let mut pool = self
                 .pool
@@ -571,7 +618,7 @@ impl GpuResourcePool {
 
         loop {
             let trimmed = {
-                let manager_state = self.manager.inner.lock_state();
+                let manager_state = manager.inner.lock_state();
                 let safe_frame_number = manager_state.safe_frame_number;
                 let mut pool = self
                     .pool
@@ -614,7 +661,8 @@ impl GpuResourcePool {
 
         // Match acquire's manager-state-then-pool order and keep the frame
         // snapshot stable until the entry is appended.
-        let manager_state = self.manager.inner.lock_state();
+        let manager = self.inherited_manager();
+        let manager_state = manager.inner.lock_state();
         let current_frame_number = manager_state.current_frame_number;
         let mut pool = self
             .pool

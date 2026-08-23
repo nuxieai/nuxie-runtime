@@ -201,6 +201,7 @@ mod tests {
     #[test]
     fn live_sampler_table_has_18_retained_states_and_stable_lookup() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let samplers = NativeMetalSamplers::new(&device).unwrap();

@@ -540,6 +540,7 @@ mod tests {
         use objc2_metal::MTLCommandQueue;
 
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let image = NativeMetalImageTexture::new(
@@ -571,6 +572,7 @@ mod tests {
     #[test]
     fn live_adopted_texture_retains_identity_and_dimensions() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let descriptor = MTLTextureDescriptor::new();

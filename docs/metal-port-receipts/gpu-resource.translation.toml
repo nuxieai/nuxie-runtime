@@ -1,0 +1,22 @@
+schema_version = 1
+unit = "gpu-resource"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/gpu-resource.translation.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/gpu_resource.hpp:1-131",
+    "cpp:renderer/src/gpu_resource.cpp:1-119",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/gpu_resource_hpp.rs:1-1807",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/gpu_resource_cpp.rs:1-282",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/gpu_resource_hpp.rs" = "a66c04313878c8da357bb8adaed4148ff5f9b1dddf2fcdbbbc0a906392c53a8b", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/gpu_resource_cpp.rs" = "79902ee7168d81dc5986b411864ce0ecb19179b42b3c1b67fc61070d82bcc31b" }
+source_digests = { "renderer/include/rive/renderer/gpu_resource.hpp" = "6c291074e9b87e0534a7266592e92108b1195be95fd74bd58718398eede214e0", "renderer/src/gpu_resource.cpp" = "cfb13b8fc6bc8210f831f5130747a0068f1b9f1195e60a0cbe58359f6de80ca0" }

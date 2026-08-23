@@ -263,21 +263,34 @@ impl DrawShaderLibrary {
             return Err(DrawShaderLibraryError::DispatchDataCreation);
         }
 
-        let result: Result<Retained<ProtocolObject<dyn MTLLibrary>>, Retained<NSError>> =
+        let mut error: Option<Retained<NSError>> = None;
+        // Keep the +1 library and retained NSError writeback independent until
+        // after the pinned `err != nil || library == nil` condition.
+        let library: Option<Retained<ProtocolObject<dyn MTLLibrary>>> =
             // SAFETY: `device` is a live MTLDevice protocol object and `data`
             // is a valid +1 dispatch-data object containing the complete
-            // metallib. The selector consumes it synchronously and returns
-            // retained library/error ownership through objc2.
-            unsafe { msg_send![device, newLibraryWithData: data, error: _] };
+            // metallib. The selector consumes it synchronously and publishes
+            // independently retained library and error owners.
+            unsafe { msg_send![device, newLibraryWithData: data, error: &mut error] };
         // SAFETY: This balances the +1 create_dispatch_data result after the
         // synchronous Metal call; the embedded bytes remain static and a
-        // successful MTLLibrary is independently retained in `result`.
+        // successful MTLLibrary is independently retained in `library`.
         unsafe { release_dispatch_object(data) };
-        let library = result.map_err(|error| DrawShaderLibraryError::MetalLibraryLoad {
-            domain: error.domain().to_string(),
-            code: error.code(),
-            description: error.localizedDescription().to_string(),
-        })?;
+        if error.is_some() || library.is_none() {
+            return Err(match error {
+                Some(error) => DrawShaderLibraryError::MetalLibraryLoad {
+                    domain: error.domain().to_string(),
+                    code: error.code(),
+                    description: error.localizedDescription().to_string(),
+                },
+                None => DrawShaderLibraryError::MetalLibraryLoad {
+                    domain: "<nil>".to_owned(),
+                    code: 0,
+                    description: "<nil>".to_owned(),
+                },
+            });
+        }
+        let library = library.expect("library checked nonnil");
         Ok(Self { library })
     }
 

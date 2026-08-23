@@ -1,0 +1,20 @@
+schema_version = 1
+unit = "ore-bind-group"
+receipt_kind = "compile"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-bind-group.compile.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_bind_group.hpp:1-71",
+    "cpp:renderer/src/ore/metal/ore_bind_group_metal.hpp:1-50",
+    "cpp:renderer/src/ore/metal/ore_bind_group_metal.mm:1-8",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_hpp.rs:1-261",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_bind_group_metal_hpp.rs:1-413",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_bind_group_metal_mm.rs:1-20",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_hpp.rs" = "bb78635fca37aab7ac43152a34db263fd9ccca1779ff716bf7bc83107abc5871", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_bind_group_metal_hpp.rs" = "204bcc8c8d4a5bd0f97262081f2e3e6af927bc0f2d8cdef2943f435d90421933", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_bind_group_metal_mm.rs" = "9575e44d4021fd8aec3b1d640f820e192c54940d43625b5559bd0cd12aece548" }
+compiler_diagnostics = 0

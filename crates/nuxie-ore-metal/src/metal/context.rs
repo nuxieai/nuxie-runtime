@@ -59,13 +59,13 @@ use crate::types::{
     kMaxBindGroups,
 };
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::rc::Retained;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::runtime::ProtocolObject;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_foundation::{NSRange, NSString};
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_metal::{
     MTLBlendFactor, MTLBlendOperation, MTLClearColor, MTLColorWriteMask, MTLCommandBuffer,
     MTLCommandBufferStatus, MTLCommandEncoder, MTLCommandQueue, MTLCompareFunction,
@@ -80,13 +80,13 @@ use objc2_metal::{
 const MAX_BINDINGS_PER_KIND: usize = 8;
 const METAL_VERTEX_BUFFER_BASE: usize = 16;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalDevice(Retained<ProtocolObject<dyn MTLDevice>>);
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalQueue(Retained<ProtocolObject<dyn MTLCommandQueue>>);
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalCommandBuffer(Retained<ProtocolObject<dyn MTLCommandBuffer>>);
 
 /// Product-facing completion token for one submitted Metal command buffer.
@@ -94,13 +94,13 @@ struct RetainedMetalCommandBuffer(Retained<ProtocolObject<dyn MTLCommandBuffer>>
 /// Pinned ORE publishes only a completed serial. The authenticated product
 /// adapter additionally needs to distinguish successful completion from a
 /// driver-reported command-buffer failure before publishing rendered pixels.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 #[derive(Clone)]
 pub struct MetalSubmissionCompletion {
     result: Arc<Mutex<Option<Result<(), String>>>>,
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 impl MetalSubmissionCompletion {
     pub fn result(&self) -> Option<Result<(), String>> {
         self.result
@@ -117,7 +117,7 @@ impl MetalSubmissionCompletion {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn command_buffer_completion_result(
     status: MTLCommandBufferStatus,
     error: Option<String>,
@@ -141,11 +141,11 @@ pub struct ContextMetal {
     // Rust fields drop in declaration order. Match ContextMetal's explicit
     // destructor release of command buffer, queue, device, followed by the
     // completion state and finally the portable Context base.
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     command_buffer: Mutex<Option<RetainedMetalCommandBuffer>>,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     queue: RetainedMetalQueue,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     device: RetainedMetalDevice,
     buffer_state: Arc<BufferMetalContextState>,
     state: Arc<ContextState>,
@@ -156,7 +156,7 @@ pub struct ContextMetal {
 }
 
 impl ContextMetal {
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn make(
         device: Retained<ProtocolObject<dyn MTLDevice>>,
         queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
@@ -164,7 +164,7 @@ impl ContextMetal {
         Self::make_with_manager(device, queue, None)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn make_with_manager(
         device: Retained<ProtocolObject<dyn MTLDevice>>,
         queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
@@ -204,12 +204,12 @@ impl ContextMetal {
         self.current_serial()
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn completed_serial(&self) -> u64 {
         self.buffer_state.completed_serial()
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn completedSerial(&self) -> u64 {
         self.completed_serial()
     }
@@ -230,7 +230,7 @@ impl ContextMetal {
         self.clear_last_error();
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn current_command_buffer(
         &self,
     ) -> Option<Retained<ProtocolObject<dyn MTLCommandBuffer>>> {
@@ -243,34 +243,33 @@ impl ContextMetal {
     ///
     /// The descriptor is intentionally ignored, exactly as in the pinned
     /// Objective-C++ implementation.
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn begin_frame(&self, _descriptor: &FrameDescriptor) {
         *self.lock_command_buffer() = self.queue.0.commandBuffer().map(RetainedMetalCommandBuffer);
-        let serial = self
-            .current_serial()
-            .checked_add(1)
-            .expect("Metal command-buffer serial overflow");
+        // Pinned source is ordinary unsigned `++m_currentSerial`; preserve
+        // its defined uint64 rollover rather than introducing a failure.
+        let serial = self.current_serial().wrapping_add(1);
         self.buffer_state.set_current_serial(serial);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn beginFrame(&self, descriptor: &FrameDescriptor) {
         self.begin_frame(descriptor);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn wait_for_gpu(&self) {
         if let Some(command_buffer) = self.lock_command_buffer().as_ref() {
             command_buffer.0.waitUntilCompleted();
         }
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn waitForGPU(&self) {
         self.wait_for_gpu();
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn end_frame(&self) {
         let _ = self.end_frame_with_completion();
     }
@@ -279,7 +278,7 @@ impl ContextMetal {
     ///
     /// This is a narrow corrective product seam over pinned ORE's serial-only
     /// completion callback. It does not change `end_frame`'s submission order.
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn end_frame_with_completion(&self) -> Option<MetalSubmissionCompletion> {
         let Some(command_buffer) = self.lock_command_buffer().take() else {
             return None;
@@ -317,12 +316,12 @@ impl ContextMetal {
         Some(submission)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn endFrame(&self) {
         self.end_frame();
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn make_buffer(&self, desc: &BufferDesc<'_>) -> Option<AnyResourceHandle> {
         let initial = if let Some(data) = desc.data() {
             let pointer = std::ptr::NonNull::new(data.as_ptr().cast_mut().cast())?;
@@ -358,12 +357,12 @@ impl ContextMetal {
         )
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn makeBuffer(&self, desc: &BufferDesc<'_>) -> Option<AnyResourceHandle> {
         self.make_buffer(desc)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn make_texture(&self, desc: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
         let is_msaa = desc.sampleCount > 1 && desc.r#type == TextureType::texture2D;
         let mipmap_level_count = if is_msaa { 1 } else { desc.numMipmaps };
@@ -434,13 +433,13 @@ impl ContextMetal {
         )
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn makeTexture(&self, desc: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
         self.make_texture(desc)
     }
 
     /// Shared native seam for `wrapCanvasTexture` and `wrapRiveTexture`.
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn wrap_native_texture(
         &self,
         native: Retained<ProtocolObject<dyn MTLTexture>>,
@@ -475,7 +474,7 @@ impl ContextMetal {
             .erase()
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn make_texture_view(&self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
         let Some(texture) = desc.texture.downcast_ref::<TextureMetal>() else {
             self.state
@@ -512,12 +511,12 @@ impl ContextMetal {
         Some(self.publish_texture_view(desc, native))
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn makeTextureView(&self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
         self.make_texture_view(desc)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn make_sampler(&self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
         let descriptor = MTLSamplerDescriptor::new();
         descriptor.setMinFilter(filter_to_mtl(desc.minFilter));
@@ -539,12 +538,12 @@ impl ContextMetal {
         Some(self.publish_sampler(native))
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn makeSampler(&self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
         self.make_sampler(desc)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     fn publish_texture_view(
         &self,
         desc: &TextureViewDesc<'_>,
@@ -558,7 +557,7 @@ impl ContextMetal {
         .erase()
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     fn publish_sampler(
         &self,
         native: Option<Retained<ProtocolObject<dyn objc2_metal::MTLSamplerState>>>,
@@ -571,7 +570,7 @@ impl ContextMetal {
         .erase()
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn make_shader_module(&self, desc: &ShaderModuleDesc<'_>) -> Option<AnyResourceHandle> {
         let code = desc.code?;
         let source = std::str::from_utf8(code).ok()?;
@@ -589,12 +588,12 @@ impl ContextMetal {
         Some(module.into_resource(self.state.manager()).erase())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn makeShaderModule(&self, desc: &ShaderModuleDesc<'_>) -> Option<AnyResourceHandle> {
         self.make_shader_module(desc)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn make_pipeline(
         &self,
         desc: &PipelineDesc<'_>,
@@ -862,7 +861,7 @@ impl ContextMetal {
         )
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn makePipeline(
         &self,
         desc: &PipelineDesc<'_>,
@@ -871,7 +870,7 @@ impl ContextMetal {
         self.make_pipeline(desc, out_error)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn begin_render_pass(
         &self,
         desc: &RenderPassDesc<'_>,
@@ -1069,7 +1068,7 @@ impl ContextMetal {
         Some(pass)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn beginRenderPass(
         &self,
         desc: &RenderPassDesc<'_>,
@@ -1117,7 +1116,7 @@ impl ContextMetal {
         self.make_bind_group_layout(desc)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn make_bind_group(&self, desc: &BindGroupDesc<'_>) -> Option<AnyResourceHandle> {
         let Some(layout_handle) = desc.layout else {
             self.state
@@ -1244,7 +1243,7 @@ impl ContextMetal {
         )
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn makeBindGroup(&self, desc: &BindGroupDesc<'_>) -> Option<AnyResourceHandle> {
         self.make_bind_group(desc)
     }
@@ -1300,7 +1299,7 @@ impl ContextMetal {
         Some((vs, fs))
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     fn lock_command_buffer(&self) -> MutexGuard<'_, Option<RetainedMetalCommandBuffer>> {
         self.command_buffer
             .lock()
@@ -1340,7 +1339,7 @@ fn binding_kind_name(kind: BindingKind) -> &'static str {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn retain_texture(
     value: &ProtocolObject<dyn MTLTexture>,
 ) -> Option<Retained<ProtocolObject<dyn MTLTexture>>> {
@@ -1349,7 +1348,7 @@ fn retain_texture(
     unsafe { Retained::retain(std::ptr::from_ref(value).cast_mut()) }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn retain_sampler(
     value: &ProtocolObject<dyn objc2_metal::MTLSamplerState>,
 ) -> Option<Retained<ProtocolObject<dyn objc2_metal::MTLSamplerState>>> {
@@ -1357,7 +1356,7 @@ fn retain_sampler(
     unsafe { Retained::retain(std::ptr::from_ref(value).cast_mut()) }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn report_pipeline_validation(
     state: &ContextState,
     out_error: &mut Option<&mut String>,
@@ -1370,14 +1369,14 @@ fn report_pipeline_validation(
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn report_pipeline_native(out_error: &mut Option<&mut String>, message: String) {
     if let Some(error) = out_error.as_deref_mut() {
         *error = message;
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn vertex_format_to_mtl(value: VertexFormat) -> MTLVertexFormat {
     match value {
         VertexFormat::float1 => MTLVertexFormat::Float,
@@ -1400,7 +1399,7 @@ fn vertex_format_to_mtl(value: VertexFormat) -> MTLVertexFormat {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn color_write_mask_to_mtl(value: ColorWriteMask) -> MTLColorWriteMask {
     let mut result = MTLColorWriteMask::None;
     if value & ColorWriteMask::red != ColorWriteMask::none {
@@ -1418,7 +1417,7 @@ fn color_write_mask_to_mtl(value: ColorWriteMask) -> MTLColorWriteMask {
     result
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn blend_factor_to_mtl(value: BlendFactor) -> MTLBlendFactor {
     match value {
         BlendFactor::zero => MTLBlendFactor::Zero,
@@ -1437,7 +1436,7 @@ fn blend_factor_to_mtl(value: BlendFactor) -> MTLBlendFactor {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn blend_op_to_mtl(value: BlendOp) -> MTLBlendOperation {
     match value {
         BlendOp::add => MTLBlendOperation::Add,
@@ -1448,7 +1447,7 @@ fn blend_op_to_mtl(value: BlendOp) -> MTLBlendOperation {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn stencil_op_to_mtl(value: StencilOp) -> MTLStencilOperation {
     match value {
         StencilOp::keep => MTLStencilOperation::Keep,
@@ -1462,7 +1461,7 @@ fn stencil_op_to_mtl(value: StencilOp) -> MTLStencilOperation {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn stencil_descriptor(
     compare: CompareFunction,
     fail: StencilOp,
@@ -1481,7 +1480,7 @@ fn stencil_descriptor(
     descriptor
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn load_op_to_mtl(value: LoadOp) -> MTLLoadAction {
     match value {
         LoadOp::clear => MTLLoadAction::Clear,
@@ -1490,7 +1489,7 @@ fn load_op_to_mtl(value: LoadOp) -> MTLLoadAction {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn store_op_to_mtl(value: StoreOp) -> MTLStoreAction {
     match value {
         StoreOp::store => MTLStoreAction::Store,
@@ -1498,7 +1497,7 @@ fn store_op_to_mtl(value: StoreOp) -> MTLStoreAction {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn populate_features(device: &ProtocolObject<dyn MTLDevice>) -> Features {
     let mut features = Features {
         colorBufferFloat: true,
@@ -1534,7 +1533,7 @@ fn populate_features(device: &ProtocolObject<dyn MTLDevice>) -> Features {
     features
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn texture_type_to_mtl(value: TextureType) -> MTLTextureType {
     match value {
         TextureType::texture2D => MTLTextureType::Type2D,
@@ -1544,7 +1543,7 @@ fn texture_type_to_mtl(value: TextureType) -> MTLTextureType {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn view_dimension_to_mtl(value: TextureViewDimension) -> MTLTextureType {
     match value {
         TextureViewDimension::texture2D => MTLTextureType::Type2D,
@@ -1555,7 +1554,7 @@ fn view_dimension_to_mtl(value: TextureViewDimension) -> MTLTextureType {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn filter_to_mtl(value: Filter) -> MTLSamplerMinMagFilter {
     match value {
         Filter::nearest => MTLSamplerMinMagFilter::Nearest,
@@ -1563,7 +1562,7 @@ fn filter_to_mtl(value: Filter) -> MTLSamplerMinMagFilter {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn mip_filter_to_mtl(value: Filter) -> MTLSamplerMipFilter {
     match value {
         Filter::nearest => MTLSamplerMipFilter::Nearest,
@@ -1571,7 +1570,7 @@ fn mip_filter_to_mtl(value: Filter) -> MTLSamplerMipFilter {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn wrap_to_mtl(value: WrapMode) -> MTLSamplerAddressMode {
     match value {
         WrapMode::repeat => MTLSamplerAddressMode::Repeat,
@@ -1580,7 +1579,7 @@ fn wrap_to_mtl(value: WrapMode) -> MTLSamplerAddressMode {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn compare_to_mtl(value: CompareFunction) -> MTLCompareFunction {
     match value {
         CompareFunction::none | CompareFunction::never => MTLCompareFunction::Never,
@@ -1594,7 +1593,7 @@ fn compare_to_mtl(value: CompareFunction) -> MTLCompareFunction {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn format_to_mtl(value: TextureFormat) -> MTLPixelFormat {
     match value {
         TextureFormat::r8unorm => MTLPixelFormat::R8Unorm,
@@ -1631,7 +1630,7 @@ fn format_to_mtl(value: TextureFormat) -> MTLPixelFormat {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn format_from_mtl(value: MTLPixelFormat) -> TextureFormat {
     match value {
         MTLPixelFormat::RGBA8Unorm => TextureFormat::rgba8unorm,
@@ -1646,7 +1645,7 @@ fn format_from_mtl(value: MTLPixelFormat) -> TextureFormat {
 mod tests {
     use super::*;
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     use crate::types::{ColorAttachment, SampEntry, TexEntry, TextureAspect, UBOEntry};
 
     #[test]
@@ -1667,16 +1666,22 @@ mod tests {
         assert_eq!(native_slot(BindingKind::uniformBuffer, 65_536), None);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     fn live_context() -> Option<ContextMetal> {
         use objc2_metal::{MTLCreateSystemDefaultDevice, MTLDevice};
 
-        let device = MTLCreateSystemDefaultDevice()?;
-        let queue = device.newCommandQueue()?;
+        let Some(device) = MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device for ORE context");
+            return None;
+        };
+        let Some(queue) = device.newCommandQueue() else {
+            crate::live_metal_test_unavailable("Metal command queue for ORE context");
+            return None;
+        };
         Some(ContextMetal::make(device, queue))
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn frame_serial_completion_outlives_context_and_begin_preserves_error() {
         let Some(context) = live_context() else {
@@ -1710,7 +1715,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn factories_publish_only_complete_native_resources() {
         let Some(context) = live_context() else {
@@ -1793,7 +1798,7 @@ mod tests {
         assert_eq!(wrapped_texture.base().format(), TextureFormat::rgba8unorm);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn nil_native_texture_view_and_sampler_still_publish_logical_resources() {
         let Some(context) = live_context() else {
@@ -1836,7 +1841,7 @@ mod tests {
         assert!(sampler.mtlSampler().is_none());
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn public_layout_factory_rejects_out_of_range_native_slots_without_publication() {
         let Some(context) = live_context() else {
@@ -1893,7 +1898,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn buffer_allocation_failure_immediately_replaces_and_clears_context_error() {
         let Some(context) = live_context() else {
@@ -1920,7 +1925,7 @@ mod tests {
         assert_eq!(context.last_error(), "");
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn native_shader_compile_failure_preserves_context_error() {
         let Some(context) = live_context() else {
@@ -1957,7 +1962,7 @@ mod tests {
         assert_eq!(context.last_error(), "earlier context error");
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn pipeline_validation_routes_to_out_error_without_overwriting_context_error() {
         let Some(context) = live_context() else {
@@ -1992,7 +1997,7 @@ mod tests {
         assert_eq!(context.last_error(), "earlier context error");
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn shader_and_pipeline_factories_publish_live_native_state_and_reject_bad_entry() {
         let Some(context) = live_context() else {
@@ -2038,7 +2043,7 @@ fragment float4 fs_main() { return float4(1.0); }
         );
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn pipeline_layout_validation_preserves_vertex_reflection_precedence() {
         let Some(context) = live_context() else {
@@ -2103,7 +2108,7 @@ fragment float4 fs_main() { return float4(1.0); }
         );
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn bind_group_skips_unresolved_entries_and_last_error_follows_kind_order() {
         let Some(context) = live_context() else {
@@ -2172,7 +2177,7 @@ fragment float4 fs_main() { return float4(1.0); }
         );
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn beginning_a_second_pass_auto_finishes_the_first() {
         let Some(context) = live_context() else {
@@ -2218,7 +2223,7 @@ fragment float4 fs_main() { return float4(1.0); }
         context.end_frame();
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn render_pass_is_not_published_without_a_frame_command_buffer() {
         let Some(context) = live_context() else {

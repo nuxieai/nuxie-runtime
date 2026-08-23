@@ -1,16 +1,19 @@
 //! Canonical Gaussian lookup texture used by Rive's feather shaders.
 
+#[cfg(any(feature = "rust-wgpu", test))]
 use crate::work_metrics::CountedQueueExt;
 
 pub(crate) const TABLE_SIZE: usize = 512;
 const TEXTURE_STDDEVS: f32 = 3.0;
 
+#[cfg(any(feature = "rust-wgpu", test))]
 pub(crate) struct FeatherLut {
     #[allow(dead_code)]
     texture: wgpu::Texture,
     pub(crate) view: wgpu::TextureView,
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 impl FeatherLut {
     pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {

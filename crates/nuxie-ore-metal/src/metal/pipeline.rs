@@ -11,39 +11,39 @@ use std::any::Any;
 
 use crate::gpu_resource::{GpuResourceManager, ResourceHandle};
 use crate::pipeline::Pipeline;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use crate::types::PipelineDesc;
 use crate::types::{BackendId, Pipeline as PipelineResource};
 
 use super::MetalBackend;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::rc::Retained;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::runtime::ProtocolObject;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_metal::{MTLDepthStencilState, MTLRenderPipelineState};
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalPipeline(Retained<ProtocolObject<dyn MTLRenderPipelineState>>);
 
 // SAFETY: MTLRenderPipelineState is immutable after creation. The wrapper
 // exposes only shared access and Objective-C retain/release operations.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalPipeline {}
 // SAFETY: Same immutable-state invariant as `Send` above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalPipeline {}
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalDepthStencil(Retained<ProtocolObject<dyn MTLDepthStencilState>>);
 
 // SAFETY: MTLDepthStencilState is immutable after creation. The wrapper
 // exposes only shared access and Objective-C retain/release operations.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalDepthStencil {}
 // SAFETY: Same immutable-state invariant as `Send` above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalDepthStencil {}
 
 /// Concrete Metal pipeline retaining the compiled render and optional
@@ -55,9 +55,9 @@ unsafe impl Sync for RetainedMetalDepthStencil {}
 /// this leaf intentionally does not recreate
 /// `ore_context_metal.mm`'s descriptor translation or error publication.
 pub struct PipelineMetal {
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlDepthStencil: Option<RetainedMetalDepthStencil>,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlPipeline: RetainedMetalPipeline,
     pipeline: Pipeline,
 }
@@ -69,7 +69,7 @@ impl PipelineMetal {
     /// descriptor construction, NSError/exception handling, and depth/stencil
     /// descriptor construction. This constructor only transfers the already
     /// successful retained states into the Metal pipeline payload.
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn with_native_states(
         desc: &PipelineDesc<'_>,
         pipeline: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
@@ -87,19 +87,19 @@ impl PipelineMetal {
     }
 
     #[cfg_attr(
-        not(any(target_os = "ios", target_os = "macos")),
+        not(target_vendor = "apple"),
         expect(dead_code, reason = "the ContextMetal factory is Apple-only")
     )]
     pub(crate) fn into_resource(self, manager: Option<GpuResourceManager>) -> ResourceHandle<Self> {
         ResourceHandle::new(manager, self)
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn mtl_pipeline(&self) -> &ProtocolObject<dyn MTLRenderPipelineState> {
         self.m_mtlPipeline.0.as_ref()
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn mtl_depth_stencil(&self) -> Option<&ProtocolObject<dyn MTLDepthStencilState>> {
         self.m_mtlDepthStencil
             .as_ref()
@@ -121,15 +121,15 @@ impl PipelineResource for PipelineMetal {
 mod tests {
     use super::*;
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     use std::sync::Arc;
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     use objc2::rc::Weak;
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn native_states_publish_together_and_own_portable_dependencies() {
         use objc2_foundation::NSString;
@@ -218,12 +218,12 @@ mod tests {
         assert!(portable_dropped.load(Ordering::Relaxed));
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     struct DropProbe {
         dropped: Arc<AtomicBool>,
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     impl Drop for DropProbe {
         fn drop(&mut self) {
             self.dropped.store(true, Ordering::Relaxed);

@@ -109,6 +109,45 @@ fn icc_png() -> Vec<u8> {
 }
 
 #[test]
+fn gm_image_assets_decode_with_source_equivalent_alpha() {
+    let stream = nuxie_render_stream::RenderStream::parse(include_str!(
+        "../../../fixtures/renderer/streams/gm/image.rive-stream"
+    ))
+    .expect("gm:image stream");
+    let deltas = stream
+        .resources
+        .into_iter()
+        .filter_map(|resource| match resource {
+            nuxie_render_stream::Resource::Image { data, .. } => {
+                let decoded =
+                    nuxie_image_codec::decode_image_rgba(&data).expect("Rust gm:image decode");
+                Some(compare_decode(&data, (decoded.width, decoded.height)))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    eprintln!("gm:image decode deltas: {deltas:?}");
+    assert_eq!(deltas.len(), 2);
+    #[cfg(target_os = "macos")]
+    assert!(deltas.iter().all(|delta| {
+        *delta
+            == DecodeDelta {
+                differing_pixels: 0,
+                pixels_over_delta_2: 0,
+                differing_channels: 0,
+                max_delta: 0,
+                alpha_mismatches: 0,
+            }
+    }));
+    #[cfg(not(target_os = "macos"))]
+    {
+        assert!(deltas.iter().all(|delta| delta.alpha_mismatches == 0));
+        assert!(deltas.iter().all(|delta| delta.pixels_over_delta_2 == 0));
+    }
+}
+
+#[test]
 fn production_decode_contracts() {
     let jpeg = compare_decode(&reachable_jpeg(), (278, 278));
     eprintln!("reachable JPEG decode delta: {jpeg:?}");
@@ -135,11 +174,25 @@ fn production_decode_contracts() {
 
     let icc_png = compare_decode(&icc_png(), (319, 320));
     eprintln!("ICC PNG decode delta: {icc_png:?}");
-    assert_eq!(icc_png.alpha_mismatches, 0);
-    assert_eq!(icc_png.pixels_over_delta_2, 0);
-    assert!(icc_png.differing_pixels <= 6_000);
-    assert!(icc_png.differing_channels <= 6_000);
-    assert!(icc_png.max_delta <= 2);
+    #[cfg(target_os = "macos")]
+    assert_eq!(
+        icc_png,
+        DecodeDelta {
+            differing_pixels: 0,
+            pixels_over_delta_2: 0,
+            differing_channels: 0,
+            max_delta: 0,
+            alpha_mismatches: 0,
+        }
+    );
+    #[cfg(not(target_os = "macos"))]
+    {
+        assert_eq!(icc_png.alpha_mismatches, 0);
+        assert_eq!(icc_png.pixels_over_delta_2, 0);
+        assert!(icc_png.differing_pixels <= 6_000);
+        assert!(icc_png.differing_channels <= 6_000);
+        assert!(icc_png.max_delta <= 2);
+    }
 
     assert!(decode_bitmap_rgba(b"not an image").is_none());
 }

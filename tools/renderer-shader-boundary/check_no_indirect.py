@@ -31,10 +31,14 @@ FORBIDDEN_IDENTIFIERS = frozenset(
 # Renderer-owned built-ins must enter through shader_catalog::create so the
 # committed Apple artifacts and their translation keys remain exhaustive.
 # Authored GPU-canvas source is deliberately dynamic and has its own trust and
-# reflection path (UNIV-2073), so those two creation sites stay explicit.
+# reflection path (UNIV-2073), so its WGSL and trusted-MSL creation sites stay
+# explicit and are ratcheted separately.
 EXPECTED_SHADER_MODULE_CREATION_SITES = {
-    pathlib.PurePosixPath("gpu_canvas_shader.rs"): 2,
-    pathlib.PurePosixPath("shader_catalog.rs"): 1,
+    pathlib.PurePosixPath("gpu_canvas_shader.rs"): {
+        "create_shader_module": 1,
+        "create_shader_module_passthrough": 1,
+    },
+    pathlib.PurePosixPath("shader_catalog.rs"): {"create_shader_module": 1},
 }
 
 RAW_LITERAL_PREFIX = re.compile(r'(?:br|cr|r)(?P<hashes>#{0,255})"')
@@ -145,13 +149,20 @@ def findings(source_root: pathlib.Path) -> list[tuple[pathlib.Path, int, str]]:
     return result
 
 
-def shader_module_creation_sites(source_root: pathlib.Path) -> dict[pathlib.PurePosixPath, int]:
-    result: dict[pathlib.PurePosixPath, int] = {}
+def shader_module_creation_sites(
+    source_root: pathlib.Path,
+) -> dict[pathlib.PurePosixPath, dict[str, int]]:
+    result: dict[pathlib.PurePosixPath, dict[str, int]] = {}
     for path in sorted(source_root.rglob("*.rs")):
         code = _blank_literal_or_comment(path.read_text(encoding="utf-8"))
-        count = len(re.findall(r"\bcreate_shader_module\b", code))
-        if count:
-            result[path.relative_to(source_root)] = count
+        counts: dict[str, int] = {}
+        for match in re.finditer(
+            r"\bcreate_shader_module(?:_passthrough)?\b", code
+        ):
+            identifier = match.group(0)
+            counts[identifier] = counts.get(identifier, 0) + 1
+        if counts:
+            result[path.relative_to(source_root)] = counts
     return result
 
 

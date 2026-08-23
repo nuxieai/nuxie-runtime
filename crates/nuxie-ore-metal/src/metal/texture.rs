@@ -12,40 +12,40 @@ use std::any::Any;
 use crate::gpu_resource::{GpuResourceManager, ResourceHandle};
 use crate::texture::{TextureBase, TextureViewBase};
 use crate::types::{BackendId, Texture, TextureDesc, TextureView, TextureViewDesc};
-#[cfg(any(test, target_os = "ios", target_os = "macos"))]
+#[cfg(any(test, target_vendor = "apple"))]
 use crate::types::{TextureDataDesc, TextureType};
 
 use super::MetalBackend;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use std::ffi::c_void;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use std::ptr::NonNull;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::rc::Retained;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::runtime::ProtocolObject;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_metal::{MTLOrigin, MTLRegion, MTLSize, MTLTexture};
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalTexture(Retained<ProtocolObject<dyn MTLTexture>>);
 
 // SAFETY: Metal texture objects support concurrent retain/release and API
 // access. Synchronization of CPU/GPU contents is still enforced at each
 // unsafe upload/encoder call; this wrapper only makes the upstream thread-safe
 // intrusive ownership contract explicit to Rust.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalTexture {}
 // SAFETY: Same invariant as the `Send` implementation above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalTexture {}
 
 /// Pure upload policy shared by portable tests and the native `replaceRegion`
 /// call. This is a value calculation, not a deferred GPU command.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg(any(test, target_os = "ios", target_os = "macos"))]
+#[cfg(any(test, target_vendor = "apple"))]
 struct TextureUploadLayout {
     pub x: u32,
     pub y: u32,
@@ -67,7 +67,7 @@ pub enum TextureUploadError {
     DataTooShort { required: usize, actual: usize },
 }
 
-#[cfg(any(test, target_os = "ios", target_os = "macos"))]
+#[cfg(any(test, target_vendor = "apple"))]
 fn validate_upload_span(
     texture_type: TextureType,
     data: &TextureDataDesc<'_>,
@@ -97,7 +97,7 @@ fn validate_upload_span(
     Ok(())
 }
 
-#[cfg(any(test, target_os = "ios", target_os = "macos"))]
+#[cfg(any(test, target_vendor = "apple"))]
 fn upload_layout(
     texture_type: TextureType,
     data: &TextureDataDesc<'_>,
@@ -132,7 +132,7 @@ fn upload_layout(
 /// Concrete Metal texture corresponding to `TextureMetal`.
 pub struct TextureMetal {
     base: TextureBase,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlTexture: Option<RetainedMetalTexture>,
 }
 
@@ -142,12 +142,12 @@ impl TextureMetal {
     pub fn new(desc: &TextureDesc<'_>) -> Self {
         Self {
             base: TextureBase::new(desc),
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            #[cfg(target_vendor = "apple")]
             m_mtlTexture: None,
         }
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn with_native_texture(
         desc: &TextureDesc<'_>,
         native_texture: Retained<ProtocolObject<dyn MTLTexture>>,
@@ -166,13 +166,13 @@ impl TextureMetal {
         &self.base
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn mtlTexture(&self) -> Option<&ProtocolObject<dyn MTLTexture>> {
         self.m_mtlTexture.as_ref().map(|texture| texture.0.as_ref())
     }
 
     /// Invoke the exact Objective-C++ `replaceRegion` upload on Apple.
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
         let texture: &ProtocolObject<dyn MTLTexture> = self
             .m_mtlTexture
@@ -225,7 +225,7 @@ impl Texture for TextureMetal {
 /// Concrete Metal texture view corresponding to `TextureViewMetal`.
 pub struct TextureViewMetal {
     base: TextureViewBase,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlTextureView: Option<RetainedMetalTexture>,
 }
 
@@ -233,12 +233,12 @@ impl TextureViewMetal {
     pub fn new(desc: &TextureViewDesc<'_>) -> Self {
         Self {
             base: TextureViewBase::new(desc),
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            #[cfg(target_vendor = "apple")]
             m_mtlTextureView: None,
         }
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn with_native_texture_view(
         desc: &TextureViewDesc<'_>,
         native_view: Retained<ProtocolObject<dyn MTLTexture>>,
@@ -259,7 +259,7 @@ impl TextureViewMetal {
 
     /// Return the view, falling back to the retained source texture exactly
     /// as the upstream conditional expression does.
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn mtlTexture(&self) -> Option<&ProtocolObject<dyn MTLTexture>> {
         self.m_mtlTextureView
             .as_ref()
@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(source.debugging_ref_count(), 2);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn live_texture_upload_calls_metal_and_view_falls_back_to_source() {
         use objc2_metal::{
@@ -378,6 +378,7 @@ mod tests {
         };
 
         let Some(device) = MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let descriptor = MTLTextureDescriptor::new();

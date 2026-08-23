@@ -18,35 +18,35 @@ use crate::bind_group::BindGroup;
 use crate::gpu_resource::{GpuResourceManager, ResourceHandle};
 use crate::metal::buffer::BufferMetal;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::rc::Retained;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::runtime::ProtocolObject;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_metal::{MTLBuffer, MTLSamplerState, MTLTexture};
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalTexture(Retained<ProtocolObject<dyn MTLTexture>>);
 
 // SAFETY: MTLTexture is retained by Metal and accessed only through its
 // immutable binding handle. CPU-side resource mutation is owned by the
 // corresponding TextureMetal/TextureViewMetal resource and is not performed
 // through this wrapper.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalTexture {}
 // SAFETY: Same immutable native-handle invariant as `Send` above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalTexture {}
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalSampler(Retained<ProtocolObject<dyn MTLSamplerState>>);
 
 // SAFETY: MTLSamplerState is immutable after creation and supports concurrent
 // retain/release and binding.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalSampler {}
 // SAFETY: Same immutable native-handle invariant as `Send` above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalSampler {}
 
 /// Metal buffer binding metadata.
@@ -118,7 +118,7 @@ impl MTLBufferBinding {
 
     /// Resolve the backing selected at encode time, after any prior update may
     /// have orphaned the previous native buffer.
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn current_buffer(
         &self,
         group: &BindGroupMetal,
@@ -132,7 +132,7 @@ impl MTLBufferBinding {
 /// resource vector; this second retain is the native ARC handle required by
 /// Metal's stage binding table, matching the C++ field exactly.
 pub struct MTLTextureBinding {
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     texture: Option<RetainedMetalTexture>,
     vsSlot: u16,
     fsSlot: u16,
@@ -141,14 +141,14 @@ pub struct MTLTextureBinding {
 impl MTLTextureBinding {
     pub(crate) fn new(vs_slot: u16, fs_slot: u16) -> Self {
         Self {
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            #[cfg(target_vendor = "apple")]
             texture: None,
             vsSlot: vs_slot,
             fsSlot: fs_slot,
         }
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn with_native(
         texture: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
         vs_slot: u16,
@@ -169,7 +169,7 @@ impl MTLTextureBinding {
         self.fsSlot
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn texture(&self) -> Option<&ProtocolObject<dyn MTLTexture>> {
         self.texture.as_ref().map(|texture| texture.0.as_ref())
     }
@@ -177,7 +177,7 @@ impl MTLTextureBinding {
 
 /// Metal sampler binding metadata and its retained native state.
 pub struct MTLSamplerBinding {
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     sampler: Option<RetainedMetalSampler>,
     vsSlot: u16,
     fsSlot: u16,
@@ -186,14 +186,14 @@ pub struct MTLSamplerBinding {
 impl MTLSamplerBinding {
     pub(crate) fn new(vs_slot: u16, fs_slot: u16) -> Self {
         Self {
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            #[cfg(target_vendor = "apple")]
             sampler: None,
             vsSlot: vs_slot,
             fsSlot: fs_slot,
         }
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn with_native(
         sampler: Option<Retained<ProtocolObject<dyn MTLSamplerState>>>,
         vs_slot: u16,
@@ -214,7 +214,7 @@ impl MTLSamplerBinding {
         self.fsSlot
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn sampler(&self) -> Option<&ProtocolObject<dyn MTLSamplerState>> {
         self.sampler.as_ref().map(|sampler| sampler.0.as_ref())
     }
@@ -348,7 +348,7 @@ mod tests {
         assert_send_sync::<BindGroupMetal>();
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn buffer_record_resolves_the_live_backing_without_a_second_logical_owner() {
         use crate::metal::buffer::BufferMetalContextState;
@@ -356,6 +356,7 @@ mod tests {
         use objc2_metal::{MTLCreateSystemDefaultDevice, MTLDevice, MTLResourceOptions};
 
         let Some(device) = MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let initial = device
@@ -395,7 +396,7 @@ mod tests {
         assert_eq!(buffer.debugging_ref_count(), 2);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn native_texture_and_sampler_records_retain_exact_binding_handles() {
         use objc2::rc::Weak;
@@ -405,6 +406,7 @@ mod tests {
         };
 
         let Some(device) = MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let descriptor = MTLTextureDescriptor::new();

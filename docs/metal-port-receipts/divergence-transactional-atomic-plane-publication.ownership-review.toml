@@ -1,0 +1,34 @@
+schema_version = 1
+unit = "divergence-transactional-atomic-plane-publication"
+receipt_kind = "ownership-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/divergence-transactional-atomic-plane-publication.ownership-review.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:1-282",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/metal/render_context_metal_impl_h.rs:1-1169",
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:19-87",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/metal/render_context_metal_impl_h.rs:764-816",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/metal/render_context_metal_impl_h.rs" = "45b6f0b321c00f87b08c76cf9138e13dd03690020588ac1a35b60e73b8937c61" }
+findings = []
+review_run_id = "sol-v9-divergence-ownership-global-20260822-frozen-final-clean-ce8ca061"
+coverage = [
+    "fields",
+    "lifetimes",
+    "threads",
+    "retain-release",
+    "drop-order",
+    "unsafe-invariants",
+    "divergences",
+]
+citations = [
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:1-282",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/metal/render_context_metal_impl_h.rs:1-1169",
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:19-87",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/metal/render_context_metal_impl_h.rs:764-816",
+]

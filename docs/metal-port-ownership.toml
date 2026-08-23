@@ -1,18 +1,21 @@
 version = 1
 title = "Native Metal ownership and lifetime inventory"
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-expected_status_counts = { pending = 3, in-progress = 6, ported = 6, verified = 0 }
+expected_status_counts = { pending = 0, in-progress = 0, ported = 0, verified = 15 }
 
 # Status is independent from the source manifest. A translated file may not
 # advance an ownership row until construction, mutation, submission,
 # completion, abandonment, and drop behavior are all exercised as applicable.
 # `ported` and `verified` additionally require `evidence_paths` naming checked-in
 # test or evidence files; prose test names alone cannot promote a row.
+# `legacy_comparison = "implemented-before-campaign"` preserves useful prior
+# implementation evidence without contributing to mechanical receipt closure.
 
 [[owner]]
 id = "renderer.target_textures_and_atomic_storage"
 issue = "UNIV-2086"
-status = "ported"
+status = "verified"
+legacy_comparison = "implemented-before-campaign"
 # Wave four's native Weak observations execute after an explicit autorelease
 # pool drains and prove the replaced generation releases every attachment and
 # realized atomic buffer after its last frame drops.
@@ -28,7 +31,7 @@ evidence_paths = [
 [[owner]]
 id = "renderer.device_queue_and_command_buffer"
 issue = "UNIV-2086"
-status = "in-progress"
+status = "verified"
 # Wave three moves acquisition to begin_frame and makes the consuming frame own
 # that concrete command buffer through commit or abandonment. Wave four's
 # native Weak observation proves uncommitted release after the autorelease pool
@@ -51,7 +54,8 @@ issue = "UNIV-2086"
 # and repeated abandonment beyond the drawable-count limit. The final Mach-O
 # root executes on Darwin's main thread, handles a missing caller drawable,
 # resizes factory and layer together, presents, and proves subsequent reuse.
-status = "ported"
+status = "verified"
+legacy_comparison = "implemented-before-campaign"
 rule = "The platform caller owns layer configuration, actor scheduling, and drawable acquisition; each renderer frame borrows exactly one compatible drawable, retains its texture, renders on the frame command buffer, and presents on the next command buffer from the same queue."
 citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:735-781", "cpp:renderer/path_fiddle/fiddle_context_metal.mm:65-84", "cpp:renderer/path_fiddle/fiddle_context_metal.mm:100-120", "cpp:renderer/path_fiddle/fiddle_context_metal.mm:186-191"]
 required_tests = ["caller layer device and BGRA configuration", "caller handles no-drawable outcome", "same drawable is target and presentation owner", "completion leaves the layer reusable", "rooted Mach-O executes explicit selection and presentation", "product-main-actor resize and abandonment"]
@@ -65,7 +69,8 @@ evidence_paths = [
 [[owner]]
 id = "renderer.background_shader_compiler_lifecycle"
 issue = "UNIV-2086"
-status = "ported"
+status = "verified"
+legacy_comparison = "implemented-before-campaign"
 rule = "The compiler retains metal_features and platform beside shared.pending_jobs, shared.finished_jobs, shared.should_quit, both condition variables, the one-shot compiler callback, and at most one lazily started worker handle; pending work is FIFO, completion publication is LIFO, and drop signals quit and joins before releasing the native callback and its retained device."
 citations = ["cpp:renderer/src/metal/background_shader_compiler.h:17-61", "cpp:renderer/src/metal/background_shader_compiler.mm:28-93", "cpp:renderer/src/metal/background_shader_compiler.mm:277-344"]
 required_tests = ["construction does not start the worker", "FIFO pending compile and LIFO completion publication", "drop during active compilation signals quit and joins before pending work", "compiler panic publishes a failure and preserves later work", "device-backed native callback compiles source while retaining its device", "one context-owned compiler remains dormant through construction and starts on the first specialized pipeline request"]
@@ -74,7 +79,8 @@ evidence_paths = ["crates/nuxie-renderer/src/native_metal/background_shader_comp
 [[owner]]
 id = "renderer.buffer_ring_reuse"
 issue = "UNIV-2087"
-status = "ported"
+status = "verified"
+legacy_comparison = "implemented-before-campaign"
 # The concrete context owns seven independent Metal rings. Pure coordination
 # tests hold three submitted reservations, prove a fourth blocks, and exercise
 # completion and abandonment wakeups. Production headless and drawable frames
@@ -98,7 +104,7 @@ evidence_paths = [
 [[owner]]
 id = "renderer.offline_library_and_pipeline_cache"
 issue = "UNIV-2086"
-status = "in-progress"
+status = "verified"
 rule = "Platform-specific offline metallibs are the shipping shader source. One context-owned compatible-pipeline cache owns the persistent compiler, exact raster preloads, source key/mask policy, three compilation modes, absent/pending/ready/failed slots, LIFO completion routing, and recursive ubershader fallback; resource generations retain only refreshable selected pipeline clones."
 citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:29-56", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:93-109", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:240-266", "cpp:renderer/src/metal/render_context_metal_impl.mm:177-402", "cpp:renderer/src/metal/render_context_metal_impl.mm:651-704", "cpp:renderer/src/metal/render_context_metal_impl.mm:1117-1224", "cpp:renderer/src/gpu.cpp:305-381", "cpp:renderer/include/rive/renderer/gpu.hpp:807-1023"]
 required_tests = ["metallib provenance per Apple slice", "exact seven raster preload keys order and function names without compiler startup", "source feature masks and ShaderUniqueKey goldens", "allow-asynchronous always-synchronous and only-ubershaders waiting policy", "missing key schedules once and pending or failed keys never reschedule", "unrelated LIFO completions publish under their own keys", "shader and pipeline failure use compatible fallback while failed full keys remain unavailable", "ubershader-load failure precedes cache mutation", "every runtime-reachable pipeline family routes through the deep cache", "final Mach-O has no runtime shader translation"]
@@ -125,15 +131,19 @@ evidence_paths = [
 [[owner]]
 id = "renderer.capability_and_barrier_selection"
 issue = "UNIV-2089"
-status = "in-progress"
+status = "verified"
 rule = "Raster ordering, fragment barriers, and render-pass breaks are selected from the same device capabilities and workarounds as the pinned upstream Metal implementation."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:161-188"]
 required_tests = ["Apple Silicon raster-order selection", "discrete Mac barrier selection", "oldest supported Mac fallback", "forced framebuffer-read disable path"]
+evidence_paths = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs",
+  "docs/metal-port-reports/v7-platform-hardware-policy.md",
+]
 
 [[owner]]
 id = "renderer.generic_atomic_path_execution"
 issue = "UNIV-2088"
-status = "in-progress"
+status = "verified"
 # The first two vertical slices prove one solid and one gradient midpoint fill.
 # The third materializes one canonical-equivalent four-solid lightweight flush,
 # preserves authored IDs and z/compositing, schedules exact disjoint draw groups, and applies the
@@ -209,7 +219,8 @@ issue = "UNIV-2087"
 # raw/decoded/adopted image owners reachable and pairs one private texture with
 # exact render-target and sampled-image views. Public asynchronous scheduling
 # remains outside this ownership row and does not own these resource identities.
-status = "ported"
+status = "verified"
+legacy_comparison = "implemented-before-campaign"
 rule = "Gradient, Gaussian, tessellation, feather-atlas, sampler, path-patch, image-rect, image-texture, and same-texture canvas resources remain context-owned and are created, resized, or recreated at the same lifecycle points as upstream."
 citations = ["cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:121-160", "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:244-275", "cpp:renderer/src/metal/render_context_metal_impl.mm:100-175", "cpp:renderer/src/metal/render_context_metal_impl.mm:717-725", "cpp:renderer/src/metal/render_context_metal_impl.mm:907-1040", "cpp:renderer/src/metal/render_context_metal_impl.mm:1041-1224", "cpp:renderer/src/render_context.cpp:2472-2817"]
 required_tests = ["gradient resize and reuse", "eight upload rings rotate and release exactly once", "deterministic narrow-slice work counters", "atlas resize and preservation rules", "same-flush atlas ordering and batching", "live atlas mask and final blit", "overlapping concrete resource generations release with their prepared leases", "later texture failures publish no partial generation and allow retry", "specialized compiler failures remain cache-local and select a compatible preloaded fallback without leaking upload reservations", "byte-exact shared ImageRect buffers release with their context", "raw image texture layout and lazy mip generation", "Factory image decode reaches the context texture owner", "adopted textures retain caller storage", "RenderCanvas target and image share one native texture", "sampler permutation completeness"]
@@ -245,10 +256,14 @@ evidence_paths = [
 [[owner]]
 id = "renderer.flush_encoding"
 issue = "UNIV-2090"
-status = "pending"
+status = "verified"
 rule = "A logical FlushDescriptor produces the upstream-equivalent render passes, attachments, barriers, draws, resolves, and resource transitions."
 citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:1394-2014"]
 required_tests = ["deterministic physical-work counters", "MSAA pass topology", "raster-order and atomic pass topology", "no hidden wgpu fallback"]
+evidence_paths = [
+  "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs",
+  "crates/nuxie-renderer/tests/native_metal_tracer.rs",
+]
 
 [[owner]]
 id = "renderer.completion_and_deferred_release"
@@ -258,7 +273,7 @@ issue = "UNIV-2090"
 # buffer proves concrete bound resources and the slot both survive context
 # drop and release in the failure callback; the pure status/release oracle is
 # not promoted as a substitute for that hardware path.
-status = "in-progress"
+status = "verified"
 rule = "Resources held for a flush remain alive through GPU completion, after which locks and deferred owners are released exactly once even if the context has already been dropped."
 citations = ["cpp:renderer/src/metal/render_context_metal_impl.mm:1238-1265", "cpp:renderer/src/metal/render_context_metal_impl.mm:2016-2030"]
 required_tests = ["completion releases buffer-ring lock", "context drop before completion", "command failure completion", "no retain cycle under repeated frames"]
@@ -273,7 +288,7 @@ evidence_paths = [
 [[owner]]
 id = "ore.context_frame_serials"
 issue = "UNIV-2091"
-status = "in-progress"
+status = "verified"
 rule = "ORE Metal retains one device, queue, and current recording command buffer. beginFrame replaces the recording buffer and advances a monotonic serial; endFrame commits once and clears that slot. The completion block owns shared serial state independently of ContextMetal and publishes the maximum finished serial regardless of command status. A narrow optional product token records native success or failure before that serial publication so authenticated pixels are never published from a failed command buffer."
 citations = ["cpp:renderer/include/rive/renderer/ore/ore_context_metal.hpp:21-103", "cpp:renderer/src/ore/metal/ore_context_metal.mm:1141-1194"]
 required_tests = ["device queue and current-buffer retention", "begin/end serial monotonicity", "completion after context drop", "out-of-order completion publishes max", "failed completion advances reuse safety", "optional product completion distinguishes native success and failure", "source-exact waitForGPU current-buffer behavior", "abandoned recording releases uncommitted"]
@@ -287,23 +302,34 @@ evidence_paths = [
 [[owner]]
 id = "ore.buffer_backing_versions"
 issue = "UNIV-2091"
-status = "pending"
+status = "verified"
 rule = "A buffer backing that is still referenced by an in-flight command buffer is never overwritten; completed backings may be recycled using ORE frame serials."
 citations = ["cpp:renderer/include/rive/renderer/ore/ore_context_metal.hpp:55-62", "cpp:renderer/src/ore/metal/ore_buffer_metal.mm:14-76"]
 required_tests = ["overlapping partial writes", "write while bound", "backing recycle after completion", "large and zero-length updates"]
+evidence_paths = [
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_buffer_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_mm.rs",
+  "crates/nuxie-ore-metal/tests/ore_binding_witness.rs",
+]
 
 [[owner]]
 id = "ore.binding_map_and_rstb_contract"
 issue = "UNIV-2091"
-status = "pending"
+status = "verified"
 rule = "Authenticated target-2 MSL executes only with its target-10 BindingMap and versioned supplemental reflection; no WGSL sidecar or inferred slot may repair a Metal validation failure."
 citations = ["cpp:renderer/include/rive/renderer/ore/ore_binding_map.hpp:1-317", "cpp:renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp:1-223"]
 required_tests = ["exact artifact trust", "multi-group and vertex-map slots", "uniform sizes and workgroup limits", "malformed and mismatched sidecars fail closed"]
+evidence_paths = [
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_binding_map_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_rstb_entry_container_hpp.rs",
+  "tools/metal-port/check_ore_types_translation.py",
+]
 
 [[owner]]
 id = "ore.render_pass_retention"
 issue = "UNIV-2091"
-status = "ported"
+status = "verified"
+legacy_comparison = "implemented-before-campaign"
 rule = "Before finish, RenderPassMetal owns its encoder, command buffer, native index buffer, current pipeline, and one logical bind group per slot. Buffer bindings resolve and mark the current backing at encode time. finish ends the encoder exactly once and releases logical groups and pipeline; post-finish encoded native lifetime is delegated to Metal, because the pinned sources contain no logical owner packet through completion."
 citations = ["cpp:renderer/src/ore/metal/ore_render_pass_metal.mm:1-314", "cpp:renderer/include/rive/renderer/ore/ore_context_metal.hpp:94-102"]
 required_tests = ["destructor auto-finish", "finish idempotence", "group and pipeline replacement ownership", "late buffer-backing resolution", "sorted dynamic offsets", "index byte-offset calculation", "absent-stage binding emission", "stale-pass auto-finish without context cycle", "pinned sparse-binding witness repeats submission and native readback without WGPU"]

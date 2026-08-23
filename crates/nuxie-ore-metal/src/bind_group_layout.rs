@@ -39,7 +39,7 @@ impl BindGroupLayout {
     /// error publication, and resource construction. This leaf only owns the
     /// protected C++ payload copy.
     #[cfg_attr(
-        not(any(target_os = "ios", target_os = "macos")),
+        not(target_vendor = "apple"),
         expect(dead_code, reason = "the ContextMetal factory is Apple-only")
     )]
     pub(crate) fn from_context_entries(group_index: u32, entries: &[BindGroupLayoutEntry]) -> Self {

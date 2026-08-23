@@ -1,7 +1,27 @@
 //! Renderer implementations behind the `nuxie-render-api` trait boundary.
 //!
-//! WebGPU remains the default implementation. The native Metal tracer is
-//! available only through its explicit experimental feature during the port.
+//! WebGPU remains the default implementation. Native Metal is independently
+//! selectable and does not root the WebGPU/Naga implementation graph.
+
+mod renderer_types;
+pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};
+mod tessellation_relocation;
+pub(crate) use tessellation_relocation::relocate_tessellation_logically;
+#[cfg(test)]
+pub(crate) use tessellation_relocation::relocate_tessellation_logically_with_scratch;
+
+#[cfg(any(feature = "rust-wgpu", test))]
+macro_rules! define_wgpu_renderer_root {
+    () => {
+
+#[cfg(test)]
+pub(crate) fn live_metal_test_unavailable(context: &str) {
+    if std::env::var_os("NUXIE_REQUIRE_LIVE_METAL_TESTS").as_deref()
+        == Some(std::ffi::OsStr::new("1"))
+    {
+        panic!("required live Metal test resource is unavailable: {context}");
+    }
+}
 
 #[cfg(test)]
 mod atlas_blit_oracle;
@@ -32,9 +52,24 @@ use logical_frame::PreparedGradient;
 use logical_frame::{normalize_gradient, prepare_gradient_batch, LogicalFlushAllocations};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod apple_surface;
+#[cfg(all(
+    feature = "native-metal-experimental",
+    any(target_os = "ios", target_os = "macos")
+))]
+mod native_apple_surface;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod apple_wgpu_policy;
 mod logical_flush;
+#[cfg(all(
+    feature = "native-metal-experimental",
+    any(
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "tvos",
+        target_os = "visionos"
+    )
+))]
+mod mechanical_port;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod metal;
 mod mipmap_pipeline;
@@ -43,9 +78,19 @@ mod msaa_image_mesh_pipeline;
 mod msaa_stencil_pipeline;
 #[cfg(all(
     feature = "native-metal-experimental",
-    any(target_os = "ios", target_os = "macos")
+    any(target_os = "ios", target_os = "macos", target_os = "tvos", target_os = "visionos")
 ))]
 mod native_metal;
+#[cfg(all(
+    feature = "native-metal-experimental",
+    any(
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "tvos",
+        target_os = "visionos"
+    )
+))]
+use mechanical_port::source::renderer::src::metal::render_context_metal_impl_mm as mechanical_metal_implementation;
 mod path_pipeline;
 #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
 mod present_pipeline;
@@ -83,61 +128,15 @@ use std::any::Any;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
 use work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
-
-#[derive(Debug)]
-pub enum RendererError {
-    Adapter(String),
-    AtlasPacking(&'static str),
-    Device(String),
-    InvalidTextureExtent {
-        label: &'static str,
-        width: u32,
-        height: u32,
-        max_dimension: u32,
-    },
-    InvalidGpuCanvas(String),
-    InvalidImageUpload(String),
-    Map(String),
-    NativeMetal(String),
-    Unsupported(&'static str),
-}
-
-impl fmt::Display for RendererError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Adapter(message) => write!(f, "wgpu adapter error: {message}"),
-            Self::AtlasPacking(message) => write!(f, "atlas packing error: {message}"),
-            Self::Device(message) => write!(f, "wgpu device error: {message}"),
-            Self::InvalidTextureExtent {
-                label,
-                width,
-                height,
-                max_dimension,
-            } => write!(
-                f,
-                "invalid {label} texture extent {width}x{height}; dimensions must be between 1 and {max_dimension}"
-            ),
-            Self::InvalidGpuCanvas(message) => write!(f, "invalid GPU-canvas plan: {message}"),
-            Self::InvalidImageUpload(message) => write!(f, "invalid image upload: {message}"),
-            Self::Map(message) => write!(f, "wgpu readback error: {message}"),
-            Self::NativeMetal(message) => write!(f, "native Metal error: {message}"),
-            Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
-        }
-    }
-}
 
 #[cfg(target_arch = "wasm32")]
 pub use presentation::{
     WgpuPresentationAcquireError, WgpuPresentationAlpha, WgpuPresentationFrame,
     WgpuPresentationSurface,
 };
-
-impl Error for RendererError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WgpuDeviceFailureKind {
@@ -572,7 +571,12 @@ impl Drop for DecodedImageLoadGuard {
 }
 
 struct FrameAttachments {
+    // The pool's generation test reads these dimensions directly. Production
+    // uses the enclosing pool dimensions, so retain the test oracle fields
+    // without treating that configuration split as dead production state.
+    #[cfg_attr(not(test), allow(dead_code))]
     width: u32,
+    #[cfg_attr(not(test), allow(dead_code))]
     height: u32,
     target_texture: wgpu::Texture,
     target_view: wgpu::TextureView,
@@ -862,25 +866,19 @@ pub use logical_frame::{
 pub use metal::{WgpuDeviceHealth, WgpuExternalDeviceFailureKind, WgpuMetalPresenter};
 #[cfg(all(
     feature = "native-metal-experimental",
-    any(target_os = "ios", target_os = "macos")
+    any(target_os = "ios", target_os = "macos", target_os = "tvos", target_os = "visionos")
 ))]
 pub use native_metal::{
     NativeMetalContextOptions, NativeMetalDrawableFrame, NativeMetalExecutionInventory,
-    NativeMetalFactory, NativeMetalFrame, NativeMetalFrameOutput, NativeMetalRenderCanvas,
-    ShaderCompilationMode,
+    NativeMetalFactory, NativeMetalFrame, NativeMetalFrameOutput,
+    NativeMetalSynthesizedFailureType, ShaderCompilationMode,
 };
-pub use work_metrics::BackendWorkMetrics;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RenderMode {
-    /// Backend-neutral pixel-local-storage planning that mirrors Rive's
-    /// raster-ordering renderer. WGPU does not expose this interlock; use it
-    /// with `NullLogicalRenderer` for production logical-frame consumption.
-    RasterOrdering,
-    Msaa,
-    ClockwiseAtomic,
-}
-
+#[cfg(all(
+    feature = "native-ore-metal-experimental",
+    feature = "native-metal-experimental",
+    any(target_os = "ios", target_os = "macos", target_os = "tvos", target_os = "visionos")
+))]
+pub use native_metal::NativeMetalRenderCanvas;
 fn validate_wgpu_render_mode(mode: RenderMode) -> Result<(), RendererError> {
     if mode == RenderMode::RasterOrdering {
         return Err(RendererError::Unsupported(
@@ -9175,157 +9173,6 @@ fn relocate_midpoint_tessellation_logically_with_scratch(
     );
 }
 
-fn relocate_tessellation_logically(
-    spans: &mut Vec<gpu::TessVertexSpan>,
-    base_instance: &mut u32,
-    contours: &mut [gpu::ContourData],
-    next_base_instance: u32,
-    segment_span: u32,
-) {
-    let mut span_scratch = Vec::new();
-    relocate_tessellation_logically_with_scratch(
-        spans,
-        base_instance,
-        contours,
-        next_base_instance,
-        segment_span,
-        &mut span_scratch,
-    );
-}
-
-fn relocate_tessellation_logically_with_scratch(
-    spans: &mut Vec<gpu::TessVertexSpan>,
-    base_instance: &mut u32,
-    contours: &mut [gpu::ContourData],
-    next_base_instance: u32,
-    segment_span: u32,
-    span_scratch: &mut Vec<gpu::TessVertexSpan>,
-) {
-    #[derive(PartialEq, Eq)]
-    struct SourceSpanKey {
-        points: [[u32; 2]; 4],
-        join_tangent: [u32; 2],
-        logical_x0: i64,
-        logical_x1: i64,
-        reflection_location: Option<u32>,
-        segment_counts: u32,
-        contour_id_with_flags: u32,
-    }
-
-    let texture_width = gpu::TESS_TEXTURE_WIDTH as u32;
-    let old_base = base_instance
-        .checked_mul(segment_span)
-        .expect("tessellation source location overflow");
-    let new_base = next_base_instance
-        .checked_mul(segment_span)
-        .expect("tessellation destination location overflow");
-    let relocation = new_base
-        .checked_sub(old_base)
-        .expect("compact tessellation layout must move forward");
-    let mut source = std::mem::take(spans);
-    span_scratch.clear();
-    span_scratch.reserve(source.len());
-    let mut previous_key = None;
-    for mut span in source.drain(..) {
-        let (source_x0, source_x1) = span.x_range();
-        debug_assert!(span.y >= 0.0 && span.y.fract() == 0.0);
-        debug_assert!(source_x1 >= source_x0);
-        let vertex_count = u32::try_from(source_x1 - source_x0)
-            .expect("tessellation span width must be non-negative");
-        let vertex_count_i32 =
-            i32::try_from(vertex_count).expect("tessellation span width fits i32");
-        let source_logical_x0 = (span.y as i64)
-            .checked_mul(i64::from(texture_width))
-            .and_then(|row| row.checked_add(i64::from(source_x0)))
-            .expect("tessellation source span location overflow");
-        let source_logical_x1 = source_logical_x0
-            .checked_add(i64::from(vertex_count))
-            .expect("tessellation source span end overflow");
-        let source_reflection_location = span.reflection_y.is_finite().then(|| {
-            debug_assert!(span.reflection_y >= 0.0 && span.reflection_y.fract() == 0.0);
-            let source_reflection_x0 = span.reflection_x0_x1 as i16 as i32;
-            (span.reflection_y as u32)
-                .wrapping_mul(texture_width)
-                .wrapping_add_signed(source_reflection_x0)
-        });
-        let key = SourceSpanKey {
-            points: span.points.map(|point| point.map(f32::to_bits)),
-            join_tangent: span.join_tangent.map(f32::to_bits),
-            logical_x0: source_logical_x0,
-            logical_x1: source_logical_x1,
-            reflection_location: source_reflection_location,
-            segment_counts: span.segment_counts,
-            contour_id_with_flags: span.contour_id_with_flags,
-        };
-        if previous_key.as_ref() == Some(&key) {
-            continue;
-        }
-        previous_key = Some(key);
-
-        let logical_x0 = u32::try_from(source_logical_x0)
-            .expect("tessellation span start must be non-negative")
-            .checked_add(relocation)
-            .expect("tessellation span relocation overflow");
-        let mut y = logical_x0 / texture_width;
-        let mut x0 =
-            i32::try_from(logical_x0 % texture_width).expect("tessellation span x must fit i32");
-        let mut x1 = x0
-            .checked_add(vertex_count_i32)
-            .expect("tessellation span end overflow");
-
-        if let Some(source_reflection_location) = source_reflection_location {
-            let source_reflection_x0 = span.reflection_x0_x1 as i16 as i32;
-            let source_reflection_x1 = (span.reflection_x0_x1 >> 16) as i16 as i32;
-            debug_assert!(source_reflection_x0 >= source_reflection_x1);
-            debug_assert_eq!(
-                source_reflection_x0 - source_reflection_x1,
-                vertex_count_i32
-            );
-            let reflection_location = source_reflection_location.wrapping_add(relocation);
-            let reflection_last = reflection_location.wrapping_sub(1);
-            let mut reflection_y = reflection_last / texture_width;
-            let mut reflection_x0 = i32::try_from(reflection_last % texture_width + 1)
-                .expect("tessellation reflection x must fit i32");
-            let mut reflection_x1 = reflection_x0 - vertex_count_i32;
-            loop {
-                span.y = y as f32;
-                span.set_ranges(x0, x1, reflection_x0, reflection_x1, reflection_y as f32);
-                span_scratch.push(span);
-                if x1 <= gpu::TESS_TEXTURE_WIDTH && reflection_x1 >= 0 {
-                    break;
-                }
-                y += 1;
-                x0 -= gpu::TESS_TEXTURE_WIDTH;
-                x1 -= gpu::TESS_TEXTURE_WIDTH;
-                reflection_y = reflection_y.wrapping_sub(1);
-                reflection_x0 += gpu::TESS_TEXTURE_WIDTH;
-                reflection_x1 += gpu::TESS_TEXTURE_WIDTH;
-            }
-        } else {
-            loop {
-                span.y = y as f32;
-                span.set_ranges(x0, x1, -1, -1, f32::NAN);
-                span_scratch.push(span);
-                if x1 <= gpu::TESS_TEXTURE_WIDTH {
-                    break;
-                }
-                y += 1;
-                x0 -= gpu::TESS_TEXTURE_WIDTH;
-                x1 -= gpu::TESS_TEXTURE_WIDTH;
-            }
-        }
-    }
-    *base_instance = next_base_instance;
-    for contour in contours {
-        contour.vertex_index0 = contour
-            .vertex_index0
-            .checked_add(relocation)
-            .expect("MSAA midpoint contour relocation overflow");
-    }
-    std::mem::swap(spans, span_scratch);
-    *span_scratch = source;
-}
-
 fn relocate_tessellation(
     spans: &mut [gpu::TessVertexSpan],
     base_instance: &mut u32,
@@ -9654,14 +9501,20 @@ fn append_compact_midpoint_tessellation_to_flush<'a>(
     {
         let (source_x0, source_x1) = span.x_range();
         debug_assert!(span.y >= 0.0 && span.y.fract() == 0.0);
-        debug_assert!(source_x1 >= source_x0);
-        let vertex_count = u32::try_from(source_x1 - source_x0)
+        let reverse_only = span.reflection_y.is_nan() && source_x1 < source_x0;
+        let (source_logical_local_x0, source_logical_local_x1) = if reverse_only {
+            (source_x1, source_x0)
+        } else {
+            debug_assert!(source_x1 >= source_x0);
+            (source_x0, source_x1)
+        };
+        let vertex_count = u32::try_from(source_logical_local_x1 - source_logical_local_x0)
             .expect("tessellation span width must be non-negative");
         let vertex_count_i32 =
             i32::try_from(vertex_count).expect("tessellation span width fits i32");
         let source_logical_x0 = (span.y as i64)
             .checked_mul(i64::from(texture_width))
-            .and_then(|row| row.checked_add(i64::from(source_x0)))
+            .and_then(|row| row.checked_add(i64::from(source_logical_local_x0)))
             .expect("tessellation source span location overflow");
         let source_logical_x1 = source_logical_x0
             .checked_add(i64::from(vertex_count))
@@ -9726,6 +9579,30 @@ fn append_compact_midpoint_tessellation_to_flush<'a>(
                 reflection_y = reflection_y.wrapping_sub(1);
                 reflection_x0 += gpu::TESS_TEXTURE_WIDTH;
                 reflection_x1 += gpu::TESS_TEXTURE_WIDTH;
+            }
+        } else if reverse_only {
+            let reverse_location = logical_x0
+                .checked_add(vertex_count)
+                .expect("reverse tessellation span end overflow");
+            let reverse_last = reverse_location
+                .checked_sub(1)
+                .expect("reverse tessellation span must not be empty");
+            let mut reverse_y = reverse_last / texture_width;
+            let mut reverse_x0 = i32::try_from(reverse_last % texture_width + 1)
+                .expect("reverse tessellation x must fit i32");
+            let mut reverse_x1 = reverse_x0
+                .checked_sub(vertex_count_i32)
+                .expect("reverse tessellation span start overflow");
+            loop {
+                span.y = reverse_y as f32;
+                span.set_ranges(reverse_x0, reverse_x1, -1, -1, f32::NAN);
+                spans.push(span);
+                if reverse_x1 >= 0 {
+                    break;
+                }
+                reverse_y = reverse_y.wrapping_sub(1);
+                reverse_x0 += gpu::TESS_TEXTURE_WIDTH;
+                reverse_x1 += gpu::TESS_TEXTURE_WIDTH;
             }
         } else {
             loop {
@@ -11991,7 +11868,11 @@ mod tests {
         assert_eq!(prepared.stroke_batches[0].base_patch, 1);
         assert_eq!(
             prepared.stroke_batches[0].patch_count,
-            prepared.draws.iter().map(|draw| draw.patch_count).sum()
+            prepared
+                .draws
+                .iter()
+                .map(|draw| draw.patch_count)
+                .sum::<u32>()
         );
         assert_eq!(
             prepared.stroke_batches[0].scissor,
@@ -16594,6 +16475,65 @@ mod tests {
     }
 
     #[test]
+    fn compact_reverse_only_tessellation_wraps_descending_spans_across_rows() {
+        let segment_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
+        let source = MsaaTessellationSource {
+            spans: &[gpu::TessVertexSpan::without_reflection(
+                [[1.0; 2]; 4],
+                [2.0; 2],
+                0.0,
+                (segment_span * 3) as i32,
+                segment_span as i32,
+                1,
+                1,
+                0,
+                1,
+            )],
+            path: gpu::PathData::zeroed(),
+            contours: &[gpu::ContourData::new(
+                [0.0, 0.0],
+                0,
+                segment_span * 3 - 1,
+            )],
+            base_instance: 1,
+            instance_count: 2,
+            contour_base: 0,
+        };
+        let instances_per_row = gpu::TESS_TEXTURE_WIDTH as u32 / segment_span;
+        let mut spans = Vec::new();
+        let mut contours = Vec::new();
+        let mut local_contour_ids = Vec::new();
+
+        let (next, base) = append_compact_midpoint_tessellation_to_flush(
+            source,
+            true,
+            7,
+            instances_per_row - 1,
+            0,
+            &mut spans,
+            &mut contours,
+            &mut local_contour_ids,
+        );
+
+        assert_eq!(base, instances_per_row - 1);
+        assert_eq!(next, instances_per_row + 1);
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].y, 1.0);
+        assert_eq!(spans[0].x_range(), (segment_span as i32, -(segment_span as i32)));
+        assert_eq!(spans[1].y, 0.0);
+        assert_eq!(
+            spans[1].x_range(),
+            (
+                gpu::TESS_TEXTURE_WIDTH + segment_span as i32,
+                gpu::TESS_TEXTURE_WIDTH - segment_span as i32,
+            )
+        );
+        assert_eq!(contours.len(), 1);
+        assert_eq!(contours[0].path_id, 7);
+        assert_eq!(contours[0].vertex_index0, gpu::TESS_TEXTURE_WIDTH as u32 + segment_span - 1);
+    }
+
+    #[test]
     fn logical_relocation_rebuilds_previously_wrapped_reflected_spans_once() {
         let texture_width = gpu::TESS_TEXTURE_WIDTH;
         let segment_span = gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
@@ -16836,7 +16776,7 @@ mod tests {
     }
 
     #[test]
-    fn flush_wide_tessellation_preserves_sparse_empty_contour_ids() {
+    fn flush_wide_tessellation_preserves_dense_empty_contour_ids() {
         let mut path = RawPath::new();
         path.move_to(40.0, 40.0);
         path.move_to(80.0, 40.0);
@@ -16851,7 +16791,10 @@ mod tests {
             StrokeCap::Butt,
         )
         .unwrap();
-        assert_eq!(tessellation.contours.len(), 1);
+        // Source publishes zero-geometry ContourData for both empty butt-cap
+        // contours. The closed miter contour still emits the square-cap spans
+        // under local ID 2, and the three authored local IDs remain dense.
+        assert_eq!(tessellation.contours.len(), 3);
         assert!(tessellation
             .spans
             .iter()
@@ -16876,7 +16819,7 @@ mod tests {
         let sparse_span_start = spans.len();
         append_midpoint_tessellation_to_flush(
             &tessellation,
-            false,
+            true,
             2,
             second_x,
             0,
@@ -16885,10 +16828,9 @@ mod tests {
             &mut local_contour_ids,
         );
 
-        assert_eq!(contours.len(), 3);
+        assert_eq!(contours.len(), 4);
         assert_eq!(contours[0].path_id, 1);
-        assert_eq!(contours[1].path_id, 0);
-        assert_eq!(contours[2].path_id, 2);
+        assert!(contours[1..].iter().all(|contour| contour.path_id == 2));
         assert!(spans[..sparse_span_start].iter().all(|span| {
             let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
             id == 0 || id == 1
@@ -23641,7 +23583,7 @@ mod tests {
     }
 
     #[test]
-    fn generic_atomic_sparse_stroke_contours_use_shared_owned_compact_fallback() {
+    fn generic_atomic_empty_stroke_contours_keep_source_dense_ids() {
         let mut raw_path = RawPath::new();
         raw_path.move_to(4.0, 4.0);
         raw_path.move_to(8.0, 32.0);
@@ -23654,7 +23596,7 @@ mod tests {
             StrokeCap::Butt,
         )
         .unwrap();
-        assert!(!built.local_contour_ids_are_dense);
+        assert!(built.local_contour_ids_are_dense);
         let tessellation = built.tessellation;
         let mut contour_ids = tessellation
             .spans
@@ -23665,7 +23607,7 @@ mod tests {
         contour_ids.sort_unstable();
         contour_ids.dedup();
         assert_eq!(contour_ids, [2]);
-        assert_eq!(tessellation.contours.len(), 1);
+        assert_eq!(tessellation.contours.len(), 2);
 
         let path = LogicalPath {
             valid: true,
@@ -24191,7 +24133,7 @@ mod tests {
     }
 
     #[test]
-    fn interior_admission_counts_are_variant_invariant_and_bound_non_zero_triangles() {
+    fn interior_admission_counts_follow_effective_fill_rule_and_bound_triangles() {
         let mut raw_path = RawPath::new();
         append_oval(&mut raw_path, [32.0, 32.0, 400.0, 608.0]);
         append_oval(&mut raw_path, [240.0, 32.0, 608.0, 608.0]);
@@ -24226,12 +24168,20 @@ mod tests {
                 authored_resources.draw_pass_count,
                 clockwise_resources.draw_pass_count
             );
-            assert_eq!(
-                authored_resources.max_triangle_vertex_count,
-                clockwise_resources.max_triangle_vertex_count
-            );
+            if fill_rule == FillRule::EvenOdd {
+                // The authored even-odd triangulator has a smaller source
+                // upper bound. Clockwise override changes m_pathFillRule to
+                // clockwise, which source maps to the non-zero bound.
+                assert_eq!(authored_resources.max_triangle_vertex_count, 24);
+                assert_eq!(clockwise_resources.max_triangle_vertex_count, 30);
+            } else {
+                assert_eq!(
+                    authored_resources.max_triangle_vertex_count,
+                    clockwise_resources.max_triangle_vertex_count
+                );
+            }
             assert!(authored.max_triangle_vertex_count >= authored.triangles.len());
-            assert!(authored.max_triangle_vertex_count >= clockwise.triangles.len());
+            assert!(clockwise.max_triangle_vertex_count >= clockwise.triangles.len());
             assert_eq!(
                 authored_resources.max_triangle_vertex_count,
                 authored.max_triangle_vertex_count
@@ -26897,3 +26847,12 @@ mod tests {
         );
     }
 }
+
+    };
+}
+
+#[cfg(any(feature = "rust-wgpu", test))]
+define_wgpu_renderer_root!();
+
+#[cfg(all(not(feature = "rust-wgpu"), not(test)))]
+include!("native_root.rs");

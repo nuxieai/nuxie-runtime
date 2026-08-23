@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:bind_group"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_bind_group_gl.hpp"
+source_sha256 = "e8da200cf341a35d855e9a71a55f3b957f92566ea4ae73ae44cbbaddb2f28034"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_bind_group_gl_hpp__decl.rs"
+target_sha256 = "018937eb61403d597908e79c569d9f5ec01cd66adc5bed113c27f1f7400fb428"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_bind_group_gl.hpp"
+source_snapshot_sha256 = "e8da200cf341a35d855e9a71a55f3b957f92566ea4ae73ae44cbbaddb2f28034"
+dependency_units = []
+source_lines = 45
+source_bytes = 1154
+configuration_authorities = 1
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete concrete GL bind-group owner, all 14 frozen fields, exact GLuint/GLenum and WGSL-binding roles, dynamic-offset metadata, vector ownership, base-at-offset-zero layout, and reverse destruction."

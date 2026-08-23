@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:gles3"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/gl/gles3.hpp"
+source_sha256 = "1a70f796ef53540d2778c0ac5335933c46ddeb9bd6f547bd8802365879d5e27b"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_gles3_hpp__decl.rs"
+target_sha256 = "3103b26f6c94e061d9a9cb9ac0c10387b3ed18e6d79e0e9ce6967c43eb736010"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_include_rive_renderer_gl_gles3.hpp"
+source_snapshot_sha256 = "1a70f796ef53540d2778c0ac5335933c46ddeb9bd6f547bd8802365879d5e27b"
+dependency_units = []
+source_lines = 277
+source_bytes = 10770
+configuration_authorities = 90
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete WebGL2 configuration surface: every pinned ANGLE, KHR, EXT, ASTC, storage-buffer, debug-renderer, provoking-vertex, blend and PLS constant; all GLCapabilities fields and version comparisons; and the exact Emscripten extension entrypoint declarations."

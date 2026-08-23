@@ -64,10 +64,16 @@ pub(crate) mod backend_port_wgsl_header_generator;
 // target and compile that prerequisite for WebGPU as well.
 #[cfg(feature = "native-webgpu-experimental")]
 pub(crate) mod webgl2 {
+    #[path = "renderer_include_rive_renderer_gl_gles3_hpp__decl.rs"]
+    pub(crate) mod gles3_decl;
     #[path = "renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs"]
     pub(crate) mod load_store_actions_ext_decl;
     #[path = "renderer_src_gl_load_store_actions_ext_cpp__impl.rs"]
     pub(crate) mod load_store_actions_ext_impl;
+    #[path = "renderer_src_ore_gl_ore_bind_group_gl_hpp__decl.rs"]
+    pub(crate) mod ore_bind_group_gl_decl;
+    #[path = "renderer_src_ore_gl_ore_bind_group_gl_cpp__impl.rs"]
+    pub(crate) mod ore_bind_group_gl_impl;
 }
 
 #[cfg(feature = "native-webgpu-experimental")]

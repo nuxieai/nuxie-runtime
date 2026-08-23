@@ -1,0 +1,20 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:bind_group_layout"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_bind_group_layout_wgpu.hpp"
+source_sha256 = "8dd38691042c22fc7da7db5ddc37c39681a56dbf60fc82c05ea8be76c6d6be9a"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_bind_group_layout_wgpu_hpp__decl.rs"
+target_sha256 = "1e043e41338aa8db09cf25030300162881d1e961a7f04f56299c2144b6283eff"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_bind_group_layout_wgpu.hpp"
+source_snapshot_sha256 = "8dd38691042c22fc7da7db5ddc37c39681a56dbf60fc82c05ea8be76c6d6be9a"
+dependency_units = ["webgpu:wagyu:webgpu_cpp"]
+dependency_artifacts = [
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs", sha256 = "55f62f7b418155379a88a36674c08140ef16ace16203cb6d35e0e39eb8f79def" },
+]
+source_lines = 21
+source_bytes = 495
+configuration_authorities = 2
+lifecycle_authorities = 2
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_bind_group_layout_wgpu_decl"
+scope_note = "Preserves the complete one-field concrete ORE subclass: offset-zero BindGroupLayout base, default-null value-owned Wagyu BindGroupLayout member, friend-owned construction seam, source-equivalent Send eligibility for the ORE deferred-destruction manager, and derived-field-before-base destruction order. The Wagyu member's already-locked RAII Drop performs the sole native release; no legacy Rust-WGPU handle participates."

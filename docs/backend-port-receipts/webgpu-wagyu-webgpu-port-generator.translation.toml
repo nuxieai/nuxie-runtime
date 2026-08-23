@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:wagyu:webgpu_port"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/wagyu-port/webgpu-port.py"
+source_sha256 = "5640d11cc4cc069695247c928a7f354dee38328553c2ed56afaeb52bc92f5590"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs"
+target_sha256 = "83f2c686864f7426172d31a7812f2877f16e1664a8d8867895b50d721d6ebebe"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_webgpu-port.py"
+source_snapshot_sha256 = "5640d11cc4cc069695247c928a7f354dee38328553c2ed56afaeb52bc92f5590"
+dependency_units = []
+source_lines = 123
+source_bytes = 2918
+configuration_authorities = 0
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::webgpu_port_generator"
+scope_note = "Preserves the complete Emscripten port generator: persistent case-folded Wagyu option state and validation, exact include/source/build-file discovery and sorting, incremental zlib-compatible Adler-32 from zero and archive naming, allowed-settings short circuit, cache/build/clear requests, deprecated USE_WEBGPU rejection before mutation, core and optional Wagyu JS libraries, and the required compiled-version export."

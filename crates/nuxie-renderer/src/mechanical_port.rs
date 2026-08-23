@@ -71,6 +71,8 @@ pub(crate) mod webgpu {
     pub(crate) mod library_webgpu_stubs_build_input;
     #[path = "renderer_src_webgpu_wagyu_port_src_library_webgpu_wagyu_stubs_js__compat_build_input.rs"]
     pub(crate) mod library_webgpu_wagyu_stubs_build_input;
+    #[path = "renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs"]
+    pub(crate) mod webgpu_port_generator;
 }
 
 #[cfg(feature = "native-vulkan-experimental")]

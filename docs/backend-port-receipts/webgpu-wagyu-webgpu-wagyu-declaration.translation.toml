@@ -1,0 +1,20 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:wagyu:webgpu_wagyu"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_wagyu.h"
+source_sha256 = "8828c4bc56f7b616e6ffb2ca8517cf67db203e3eb4e5802b3853e90e8b9faf5c"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs"
+target_sha256 = "3edc4576ca0e09b4308e6c72f38c8b595e99f7d0f4567f0205ee52995155108c"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_include_webgpu_webgpu_wagyu.h"
+source_snapshot_sha256 = "8828c4bc56f7b616e6ffb2ca8517cf67db203e3eb4e5802b3853e90e8b9faf5c"
+dependency_units = ["webgpu:wagyu:webgpu"]
+dependency_artifacts = [
+  { path = "tools/backend-port/generate_wagyu_bindings.py", sha256 = "621d6c2d642afecc7e3f38c3342dec6e64a292daec5d56f58f650e2875537f1c" },
+]
+source_lines = 722
+source_bytes = 43574
+configuration_authorities = 238
+lifecycle_authorities = 25
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu"
+scope_note = "Preserves the complete generated Wagyu extension ABI dependency authority: all 53 preprocessor definitions, reserved-range and extension constants, 5 enums, 46 structs and 177 ordered C fields, the external-texture handle, 6 callbacks, 21 typed constants, 73 exported declarations, PLS, external-texture, reflection, cache, surface, and synchronous-request seams, with exact mutual dependency on the core Wagyu WebGPU header."

@@ -61,6 +61,12 @@ pub(crate) mod backend_port_wgsl_header_generator;
 
 #[cfg(feature = "native-webgpu-experimental")]
 pub(crate) mod webgpu {
+    #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs"]
+    pub(crate) mod webgpu_decl;
+    #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs"]
+    pub(crate) mod webgpu_wagyu_decl;
+    #[path = "renderer_src_webgpu_wagyu_port_src_webgpu_c__impl.rs"]
+    pub(crate) mod webgpu_impl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs"]
     pub(crate) mod webgpu_cpp_chained_struct_decl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs"]

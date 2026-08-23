@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:wagyu:webgpu"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/wagyu-port/src/webgpu.c"
+source_sha256 = "f5a1cef8e2e7661d23e9ba6144426eb0bbbd6c2422ffd3dfce969aa878131937"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_src_webgpu_c__impl.rs"
+target_sha256 = "ffe764b09e796067fb9428b1c7eb8a9fbe65e54108bfa2f1b4d7ea47adfcb737"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_src_webgpu.c"
+source_snapshot_sha256 = "f5a1cef8e2e7661d23e9ba6144426eb0bbbd6c2422ffd3dfce969aa878131937"
+dependency_units = ["webgpu:wagyu:webgpu_wagyu"]
+source_lines = 22
+source_bytes = 679
+configuration_authorities = 4
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::webgpu_impl"
+scope_note = "Preserves the complete Wagyu C implementation owner: the exported compiled-version ABI struct, exact WebGPU 1.0 and Wagyu extension-level 1 values, null-output no-op, and ordered writes of all three non-null output fields."

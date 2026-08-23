@@ -1,0 +1,20 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:wagyu:webgpu"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu.h"
+source_sha256 = "026f05a7fc6db460d3fe048c07067b1596c53527c31334ec5386353520b9044b"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs"
+target_sha256 = "a4302afb9975350fa64db22c79e9bb471300c6514d27abc200b7eedf2d26b6e1"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_include_webgpu_webgpu.h"
+source_snapshot_sha256 = "026f05a7fc6db460d3fe048c07067b1596c53527c31334ec5386353520b9044b"
+dependency_units = ["webgpu:wagyu:webgpu_wagyu"]
+dependency_artifacts = [
+  { path = "tools/backend-port/generate_wagyu_bindings.py", sha256 = "621d6c2d642afecc7e3f38c3342dec6e64a292daec5d56f58f650e2875537f1c" },
+]
+source_lines = 2828
+source_bytes = 148027
+configuration_authorities = 1041
+lifecycle_authorities = 42
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu"
+scope_note = "Preserves the complete generated Wagyu WebGPU C ABI dependency authority: all 119 preprocessor definitions, 54 enums and enumerators, 87 structs and 420 ordered C fields, 22 opaque handles, 210 callback/proc pointer types, 30 flag constants, 199 exported function declarations, primitive undefined sentinels, and exact reference/release surface. The generated binding is derived only from the frozen header through Clang AST and does not substitute legacy Rust-WGPU types."

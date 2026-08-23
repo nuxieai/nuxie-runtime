@@ -61,6 +61,8 @@ pub(crate) mod backend_port_wgsl_header_generator;
 
 #[cfg(feature = "native-vulkan-experimental")]
 pub(crate) mod vulkan {
+    #[path = "renderer_src_ore_vulkan_ore_bind_group_layout_vulkan_hpp__decl.rs"]
+    pub(crate) mod ore_bind_group_layout_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs"]
     pub(crate) mod ore_sampler_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs"]

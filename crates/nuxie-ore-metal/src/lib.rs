@@ -67,3 +67,9 @@ pub fn new_sampler_backend_base() -> sampler::Sampler {
 pub fn new_shader_module_backend_base() -> shader_module::ShaderModule {
     shader_module::ShaderModule::new()
 }
+
+/// Backend integration seam for exact concrete ORE bind-group-layout subclasses.
+#[doc(hidden)]
+pub fn new_bind_group_layout_backend_base() -> bind_group_layout::BindGroupLayout {
+    bind_group_layout::BindGroupLayout::new()
+}

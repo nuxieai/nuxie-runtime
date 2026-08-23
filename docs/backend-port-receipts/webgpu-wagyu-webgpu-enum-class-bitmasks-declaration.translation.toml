@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:wagyu:webgpu_enum_class_bitmasks"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h"
+source_sha256 = "cae961820e1d3b4dde5b2b4938d549f587bd0e513857bb018850036b646fe821"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs"
+target_sha256 = "9bf176b80ae59a38282c6a8a18331927e6d493b7d29bc218d30bd4209200bda8"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_include_webgpu_webgpu_enum_class_bitmasks.h"
+source_snapshot_sha256 = "cae961820e1d3b4dde5b2b4938d549f587bd0e513857bb018850036b646fe821"
+dependency_units = []
+source_lines = 161
+source_bytes = 6073
+configuration_authorities = 3
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::webgpu_enum_class_bitmasks_decl"
+scope_note = "Preserves the complete opt-in enum-class bitmask authority: disabled-by-default type admission, enum and BoolConvertible lowering, all binary/unary and compound-assignment operand combinations, explicit boolean/enum conversion, underlying integral layout, and the source zero-or-one-bit predicate including unsigned zero wraparound."

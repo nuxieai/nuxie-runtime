@@ -9,6 +9,11 @@ source_review_schema = "docs/backend-port-source-review-schema.md"
 source_review_receipt_directory = "docs/backend-port-source-reviews"
 source_review_support_inventory = "docs/backend-port-source-review-support.tsv"
 source_review_status = "complete"
+ownership_review_plan = "docs/backend-port-ownership-review-plan.toml"
+ownership_review_schema = "docs/backend-port-ownership-review-schema.md"
+ownership_review_receipt_directory = "docs/backend-port-ownership-reviews"
+ownership_review_launch_ref = "pending"
+ownership_review_status = "active"
 queue_order = [
   "audit",
   "preparation",

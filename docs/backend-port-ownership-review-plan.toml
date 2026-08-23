@@ -1,0 +1,1635 @@
+schema_version = 1
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+review_kind = "global-ownership-lifetime-abi"
+review_mode = "independent-read-only-scc-waves"
+receipt_directory = "docs/backend-port-ownership-reviews"
+source_review_receipt_directory = "docs/backend-port-source-reviews"
+coverage = [
+  "field-and-layout",
+  "ownership-transfers",
+  "provenance-and-aliasing",
+  "callbacks-and-threading",
+  "synchronization-and-mapping",
+  "failure-and-loss",
+  "teardown-and-destruction-order",
+  "unsafe-ffi-and-abi",
+  "configuration-owner-graphs",
+]
+severity_order = ["P0", "P1", "P2", "P3"]
+finding_id_rules = { component = "OR-CNNN-<positive-decimal-minimum-two-digits>", support = "OR-SUP-<positive-decimal-minimum-two-digits>", overlay = "OR-OVL-NN-<positive-decimal-minimum-two-digits>" }
+structural_sequence = ["g0", "g1", "g2", "g3", "g4", "g5", "g6", "support", "overlays", "global"]
+overlay_order = ["shared-authority-consumers", "webgpu-to-webgl2-load-store", "generated-authority", "webgpu-abi", "shared-ore-contracts", "shared-renderer-contracts", "vulkan-vma-adaptation", "backend-identity-and-browser-bridges", "classification-boundary"]
+
+[denominator]
+ownership_units = 135
+components = 115
+component_receipts = 115
+support_receipts = 1
+overlay_receipts = 1
+total_receipts = 117
+source_review_prerequisite_receipts = 117
+source_review_open_findings = 67
+source_review_p0_findings = 0
+source_review_p1_findings = 18
+source_review_p2_findings = 29
+source_review_p3_findings = 20
+sources = 200
+targets = 188
+support_artifacts = 52
+fields = 1946
+lifecycle_events = 2431
+configurations = 5409
+dependency_edges = 924
+owner_contract_families = 8
+field_profiles = 4
+owner_family_memberships = 135
+component_profile_memberships = 61
+declared_dependency_unit_edges = 511
+intra_scc_dependency_unit_edges = 59
+cross_component_dependency_unit_edges = 452
+known_unit_dependency_pairs = 565
+self_unit_dependency_pairs = 54
+nonself_unit_dependency_pairs = 511
+unique_cross_component_pairs = 413
+cross_component_raw_dependency_rows = 545
+source_overlay_covered_cross_component_raw_dependency_rows = 457
+source_overlay_omitted_cross_component_raw_dependency_rows = 88
+ownership_overlay_covered_cross_component_raw_dependency_rows = 545
+ownership_overlay_omitted_cross_component_raw_dependency_rows = 0
+overlay_covered_cross_component_pairs = 412
+overlay_omitted_cross_component_pairs = 1
+source_logical_lines = 55916
+source_bytes = 2277054
+target_logical_lines = 54129
+target_bytes = 2114401
+support_logical_lines = 97253
+support_bytes = 3871115
+source_review_receipt_logical_lines = 10228
+source_review_receipt_bytes = 1179667
+
+[rules]
+authority = "The immutable source-review barrier, pinned upstream bytes, exact translated target and support bytes, four raw state ledgers, SCC graph, owner contracts, field profiles, and all 117 source-review receipts are primary. Other backends are diagnostic only."
+read_only = "Review contexts create only canonical ownership-review receipts; they do not edit source, target, support, prerequisite source-review receipts, or authority and do not use compiler diagnostics, tests, features, fixtures, or behavioral failures to select or delimit review work."
+complete_bytes = "Every source, translated target, and support artifact is rebound to its exact SHA-256, logical-line count, byte count, and full-file citation before ownership claims are admitted."
+complete_state = "Review field/layout, ownership transfer, provenance/aliasing, callbacks/threading, synchronization/mapping, failure/loss, teardown/destruction, unsafe/FFI/ABI, and configuration owner graphs for every component and support artifact."
+ledger_scope = "The 1,946 field, 2,431 lifecycle, 5,409 configuration, and 924 dependency rows are exhaustive prompts and graph authority, never line-scope delimiters. A component with zero extracted rows still receives complete full-file ownership/lifetime/ABI review."
+owner_authority = "Each of 135 units maps to exactly one same-campaign owner family by declared prefix. Field profiles apply by component campaign, independently of whether a component has extracted field rows."
+dependency_closure = "All 511 declared unit edges are replayed. Every cross-component dependency is lower-wave; each component lists the lexical deduplicated dependency component set and binds the exact already-admitted ownership receipt bytes for those components."
+unsafe_boundary = "Every raw pointer, cast, alias, callback user-data path, native handle, mapping, FFI call, ABI record, and unsafe block must state and preserve its source preconditions, provenance, synchronization, and destruction owner."
+no_phase_jump = "This pass records findings only. It performs no correction, compiler work, tests, feature work, fixture work, rooted execution, editor wiring, fallback work, or legacy deletion."
+finding_stability = "Every mismatch receives a stable ID, severity, review-domain set, relevant authority keys, and exact in-range citations. Findings remain open for the later correction gate."
+structural_red = "A complete receipt set with open P0-P3 findings is successful structural red; zero findings is structural green. Open findings do not block the next structural wave."
+skill_exclusion = "Actively ignore and do not use the implement or tdd skills."
+wave_order = "Review g0 through g6 in order, then support, then all nine overlays in fixed order, then global. Within a wave parallelize only by complete component_id and never split an SCC."
+component_atomicity = "One receipt covers the full source/target and state-authority union of one frozen SCC; fields, lifecycle rows, configurations, dependencies, or source files never split a component."
+overlay_gate = "The overlay receipt is admitted only after all 115 component receipts and support receipt. Its nine records expose strengthened ownership unions and explicit physical bindings; they do not reuse the smaller source-overlay digest as the new ownership digest."
+two_commit_launch = "Launch Commit A records ownership_review_launch_ref=pending and the complete launch authority. Activation Commit B is the unique reachable single-parent direct child of A and changes only that manifest field to A's full SHA. B's committed ownership receipt tree and the live admission receipt directory are empty. Admission rejects pending; then the exact plan/schema/ownership-checker/source-checker regular bytes must match across A, HEAD, index, and worktree, and the sole effective phony ownership Make definitions must validate independently in all four layers. Activated/completed manifest index and worktree bytes must be clean against HEAD. Squash, rebase, or history rewriting that discards A or B invalidates the chain."
+two_commit_close = "Close Commit C is distinct from B and closes the exact 117 ownership receipts while the queue/status remain ownership-review/active and no completion pins exist. Across any number of wave commits, the exact B-to-C added-path set is those 117 canonical receipts and no other path. Transition Commit D is the unique reachable single-parent direct child of C, changes only the campaign manifest, sets status complete, advances only to correction, and pins C plus its exact receipt tree, line/byte totals, finding total/severity counts, and finding-ID digest. Later replay uses an ephemeral detached checkout at C, requires the live tracked regular non-symlink receipt working tree, index, HEAD, bytes, and statistics identical to C, and permits only active_queue to advance after D."
+product_scope = "Port Vulkan, WebGPU, and WebGL2 exactly; expose WebGPU and WebGL2 as explicit editor choices; retain legacy Rust-WGPU until all three independently pass frozen closeout, then delete it."
+
+[launch_contract]
+launch_ref_field = "ownership_review_launch_ref"
+pending_ref = "pending"
+active_queue = "ownership-review"
+active_status = "active"
+manifest_path = "docs/backend-port-campaign.toml"
+frozen_paths = [
+  "docs/backend-port-ownership-review-plan.toml",
+  "docs/backend-port-ownership-review-schema.md",
+  "tools/backend-port/check_ownership_review.py",
+  "tools/backend-port/check_source_review.py",
+]
+makefile_path = "Makefile"
+make_tool_assignment = "BACKEND_PORT_OWNERSHIP_REVIEW_TOOL ?= $(CURDIR)/tools/backend-port/check_ownership_review.py"
+make_admission_target = "backend-port-ownership-review-admission"
+make_admission_recipe = "PYTHONDONTWRITEBYTECODE=1 python3 \"$(BACKEND_PORT_OWNERSHIP_REVIEW_TOOL)\" --repo-root \"$(CURDIR)\" --upstream-root \"$(RIVE_RUNTIME_DIR)\" --manifest \"$(BACKEND_PORT_CAMPAIGN)\" --admission"
+make_check_target = "backend-port-ownership-review-check"
+make_check_recipe = "PYTHONDONTWRITEBYTECODE=1 python3 \"$(BACKEND_PORT_OWNERSHIP_REVIEW_TOOL)\" --repo-root \"$(CURDIR)\" --upstream-root \"$(RIVE_RUNTIME_DIR)\" --manifest \"$(BACKEND_PORT_CAMPAIGN)\""
+activation_receipt_files = 0
+admission_live_receipt_directory = "absent-or-empty"
+frozen_byte_layers = ["launch-commit", "HEAD", "index", "worktree"]
+make_definition_layers = ["launch-commit", "HEAD", "index", "worktree"]
+manifest_clean_states = ["activated", "complete"]
+
+[completion_contract]
+active_queue = "ownership-review"
+active_status = "active"
+transition_queue = "correction"
+complete_status = "complete"
+barrier_ref_field = "ownership_review_barrier_ref"
+receipt_tree_sha256_field = "ownership_review_receipt_tree_sha256"
+receipt_logical_lines_field = "ownership_review_receipt_logical_lines"
+receipt_bytes_field = "ownership_review_receipt_bytes"
+finding_total_field = "ownership_review_finding_total"
+finding_p0_field = "ownership_review_p0_findings"
+finding_p1_field = "ownership_review_p1_findings"
+finding_p2_field = "ownership_review_p2_findings"
+finding_p3_field = "ownership_review_p3_findings"
+finding_id_sha256_field = "ownership_review_finding_id_sha256"
+close_distinct_from_activation = true
+active_phase_changed_paths = "exact-117-canonical-added-ownership-receipts"
+
+[canonicalization]
+logical_lines = "len(exact_file_bytes.splitlines()); an unterminated nonempty final line counts once."
+tsv_row_key = "For prefix K and raw TSV record R, K + colon + U+001F-join of name=value for every header sorted by UTF-8 header bytes. Values are exact decoded TSV cells with no trimming or normalization."
+authority_set_sha256 = "Reject duplicate keys; sort complete UTF-8 keys bytewise; join with one LF and no final LF; SHA-256 the resulting bytes. The empty set is SHA-256 of zero bytes."
+file_binding_key = "For source/target/support and physical file records, apply the same sorted name=value/U+001F rule to every schema field and prepend the declared typed prefix."
+source_review_receipt_binding_key = "source-review-receipt-binding: followed by sorted fields byte_count,id,path,sha256."
+scc_partition_key = "scc-partition: followed by component_id,order_group,units fields under the generic sorted-field rule; units is the semicolon-joined lexical unit set."
+owner_family_key = "owner-family: followed by campaign,component_id,family_id,ownership_unit under the generic sorted-field rule."
+field_profile_key = "field-profile: followed by campaign,component_id,profile_id under the generic sorted-field rule; applicability is by component campaign."
+dependency_unit_seam_key = "For each of 452 cross-component unit edges, dependency-unit-seam: followed by dependency_component,dependency_unit,source_component,source_unit under the generic sorted-field rule."
+component_dependency_key = "Literal component-dependency:<source component id>-><dependency component id>; one per unique cross-component pair."
+component_order_sha256 = "SHA-256 over UTF-8 component_ids in first SCC-ledger appearance order, joined by one LF with no final LF."
+tree_sha256 = "For every regular file recursively below a tree root, sort root-relative POSIX paths bytewise; append UTF-8 path, NUL, complete file bytes, NUL for each member; SHA-256 the concatenation. Directories add no record; non-regular members are rejected."
+record_order = "Component IDs follow first appearance in the SCC ledger within their wave. Units follow SCC ledger row order. Owner-family/profile ID arrays follow pinned TOML declaration order. Dependency component IDs and every physical path array are lexical."
+empty_authority_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[authority]
+scc_partition_records = 115
+scc_partition_sha256 = "6dba6dbdf824e9080d850abe19c87ee42a77fda64c692202de767b4da98df3ea"
+owner_family_membership_records = 135
+owner_family_membership_sha256 = "8d32180cf28d3d074471f1154674cad905d8e9d640437abb9880cc897c2ceefd"
+field_profile_membership_records = 61
+field_profile_membership_sha256 = "f2d966d1ba14937adcf5165de45fbb8ef36b86a219f60cfa747b11686515107c"
+cross_dependency_unit_seam_records = 452
+cross_dependency_unit_seam_sha256 = "287f25e6be86c833591fba6fd5459af27d428db7c203f8390030f3d18dac5da1"
+cross_component_raw_dependency_rows = 545
+cross_component_raw_dependency_sha256 = "4bfefd8b3b5a4cd8e5634378df27f12d16bb19d591b167855afdeb284cd08534"
+source_overlay_omitted_cross_component_raw_dependency_rows = 88
+source_overlay_omitted_cross_component_raw_dependency_sha256 = "1f83c99b7490a0570cb54c8050205aa080f373276dfd92cf150f108c54d8bf59"
+ownership_overlay_omitted_cross_component_raw_dependency_rows = 0
+ownership_overlay_omitted_cross_component_raw_dependency_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+overlay_omitted_cross_component_pair = "component-084->component-083"
+component_authority_records = 11937
+component_authority_sha256 = "78573b0c03e151f95ff85981a98bb56219a0ea678c48107647a0d8e67f83fa35"
+support_authority_records = 53
+support_authority_sha256 = "a7772b03439e94efa03c2a9e523301264d8f9d592b447196e282185a0c01f050"
+source_review_finding_id_sha256 = "9e39d1be506a9dfb6a1e1589061d5a2d7726d3bb3ecbd13baeccb41535f6af17"
+source_ownership_path = "docs/backend-port-source-ownership.tsv"
+source_ownership_sha256 = "6bae57574f8299f6d22d4696337c54834405f51deece03d1c46e6f949aa857af"
+source_ownership_logical_lines = 201
+source_ownership_byte_count = 64446
+ownership_order_path = "docs/backend-port-ownership-order.tsv"
+ownership_order_sha256 = "5b653f425054900e0f539a3b2ce41e954b7689348c2fa20b413bc5cd04124773"
+ownership_order_logical_lines = 136
+ownership_order_byte_count = 22854
+source_review_plan_path = "docs/backend-port-source-review-plan.toml"
+source_review_plan_sha256 = "015cc3763be315e3bcfe0fe7793f25d45c9ccea90e0ad20a2ba6b0f154da4ddb"
+source_review_plan_logical_lines = 381
+source_review_plan_byte_count = 13727
+source_review_schema_path = "docs/backend-port-source-review-schema.md"
+source_review_schema_sha256 = "f5d449bd67fac1de88be554cab042321146fe7a5dcbeb9f46495b077cb09d748"
+source_review_schema_logical_lines = 642
+source_review_schema_byte_count = 29664
+source_review_support_path = "docs/backend-port-source-review-support.tsv"
+source_review_support_sha256 = "4b26bd58f1ff7da06267c3d485c91db13adea7a1995c6051d337cd7058fccf3e"
+source_review_support_logical_lines = 53
+source_review_support_byte_count = 13122
+
+[byte_authority.sources]
+record_count = 200
+logical_lines = 55916
+byte_count = 2277054
+binding_prefix = "source-binding"
+binding_sha256 = "2eb802438b2fad3e5cd8612319deb22e5e0f9f444649d86f4cb66aa672f1fc91"
+subset_tree_sha256 = "ca6903e6d5982623fada51ebd0556c2232d87774c62c51fe0b926c7da89aa666"
+
+[byte_authority.targets]
+record_count = 188
+logical_lines = 54129
+byte_count = 2114401
+binding_prefix = "target-binding"
+binding_sha256 = "8351cbeed2d03ddc7fecce20939983272ab554769a73ecf85352ef6a470410ef"
+subset_tree_sha256 = "ae2386f4a43061cffc03b3c169b2f70414efa758418d3f171201fba4564009f0"
+
+[byte_authority.support]
+record_count = 52
+logical_lines = 97253
+byte_count = 3871115
+binding_prefix = "support-binding"
+binding_sha256 = "ac34add6fef74cbba4444fdc342300a86aa70648bac4aa46a3db6d301b5f625e"
+subset_tree_sha256 = "3d6778d1964459cd2dcc9269e281d6909b17e0fb356cbe77207720039d5fb44d"
+
+[byte_authority.source_review_receipts]
+record_count = 117
+logical_lines = 10228
+byte_count = 1179667
+binding_prefix = "source-review-receipt-binding"
+binding_sha256 = "500640ff8e6dcdf25edb56b0323617dbfc8f6ad191a009a54028658fdfbbef67"
+tree_sha256 = "5ab7b2271288fd1ee5e3de066b2f0c87c1983c17df0a0376e078605a17f30d5f"
+
+[ledger_authority.fields]
+path = "docs/backend-port-fields.tsv"
+row_count = 1946
+logical_lines = 1947
+byte_count = 379543
+file_sha256 = "60663fc752031193390b258556ab08d43032985bcbbe9ed6cbd37e078a8c7d2d"
+authority_sha256 = "a6bb31c8bbdd609cb04883282ad19efbbb3b5abbc2e0037c7713f5a3821d6b89"
+typed_prefix = "field-raw"
+
+[ledger_authority.lifecycle_events]
+path = "docs/backend-port-lifecycle-events.tsv"
+row_count = 2431
+logical_lines = 2432
+byte_count = 501021
+file_sha256 = "41c7ca51347e341b82b8ba80e3434c00ab239b906a518b6e60f1b5388ddfb7a2"
+authority_sha256 = "d7dff40064460ceb27a89eed93d75e6218f8fc21f100cdcbe8ce426cec0de67d"
+typed_prefix = "lifecycle-raw"
+
+[ledger_authority.configurations]
+path = "docs/backend-port-configurations.tsv"
+row_count = 5409
+logical_lines = 5410
+byte_count = 1063093
+file_sha256 = "5865452ffd8392a233b0536a057a5d0ccb0f3f5a5c4788b7623019f309ebfc1e"
+authority_sha256 = "8a25deb0e0f46f8579b254cf5b54f7b51ca2c1775d4528c2e133e3dbbb512315"
+typed_prefix = "configuration-raw"
+
+[ledger_authority.dependency_edges]
+path = "docs/backend-port-dependency-edges.tsv"
+row_count = 924
+logical_lines = 925
+byte_count = 255696
+file_sha256 = "345d6904be2271eeb54dfe3cd746a618fa8fd75b890895cb1d42de3d0e7c733c"
+authority_sha256 = "200635550831eca73a1f88aff3ec19679e8ec096c99ca1592809be2883841f6c"
+typed_prefix = "dependency-raw"
+
+[contract_authority.owner_contracts]
+path = "docs/backend-port-owner-contracts.toml"
+logical_lines = 85
+byte_count = 7474
+file_sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6"
+family_ids = ["shared-shader-and-build-authority", "vulkan-renderer-owners", "vulkan-ore-owners", "webgpu-wagyu-dependency-authority", "webgpu-renderer-owners", "webgpu-ore-owners", "webgl2-renderer-owners", "webgl2-ore-owners"]
+
+[contract_authority.field_profiles]
+path = "docs/backend-port-field-profiles.toml"
+logical_lines = 59
+byte_count = 1484
+file_sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79"
+profile_ids = ["vulkan", "webgpu-wagyu-v1", "webgpu-dawn-v2", "webgl2-emscripten"]
+
+[[wave]]
+id = "g0"
+order_group = 0
+component_count = 45
+unit_count = 47
+source_count = 53
+target_count = 51
+field_rows = 956
+lifecycle_rows = 189
+configuration_rows = 2646
+dependency_rows = 69
+owner_family_memberships = 47
+field_profile_memberships = 26
+cross_dependency_unit_seams = 0
+dependency_component_pairs = 0
+component_order_sha256 = "a0ddc20f289a6038eb5fc3032fa5c4666259fa63cb25d67becd5d50f5d342d0d"
+component_ids = [
+  "component-000",
+  "component-001",
+  "component-002",
+  "component-003",
+  "component-004",
+  "component-005",
+  "component-006",
+  "component-007",
+  "component-008",
+  "component-024",
+  "component-025",
+  "component-009",
+  "component-010",
+  "component-029",
+  "component-051",
+  "component-011",
+  "component-030",
+  "component-012",
+  "component-013",
+  "component-059",
+  "component-061",
+  "component-062",
+  "component-066",
+  "component-067",
+  "component-014",
+  "component-057",
+  "component-069",
+  "component-070",
+  "component-073",
+  "component-076",
+  "component-074",
+  "component-075",
+  "component-071",
+  "component-081",
+  "component-082",
+  "component-083",
+  "component-108",
+  "component-110",
+  "component-111",
+  "component-112",
+  "component-113",
+  "component-098",
+  "component-099",
+  "component-100",
+  "component-114",
+]
+
+[[wave]]
+id = "g1"
+order_group = 1
+component_count = 20
+unit_count = 21
+source_count = 36
+target_count = 35
+field_rows = 440
+lifecycle_rows = 826
+configuration_rows = 1053
+dependency_rows = 140
+owner_family_memberships = 21
+field_profile_memberships = 8
+cross_dependency_unit_seams = 84
+dependency_component_pairs = 84
+component_order_sha256 = "e938592590b981289869b4f509b67f4ab581aa0577b63e4469eb4914f8912f45"
+component_ids = [
+  "component-015",
+  "component-026",
+  "component-027",
+  "component-028",
+  "component-048",
+  "component-039",
+  "component-049",
+  "component-056",
+  "component-058",
+  "component-031",
+  "component-060",
+  "component-063",
+  "component-068",
+  "component-072",
+  "component-077",
+  "component-091",
+  "component-090",
+  "component-084",
+  "component-094",
+  "component-101",
+]
+
+[[wave]]
+id = "g2"
+order_group = 2
+component_count = 36
+unit_count = 36
+source_count = 55
+target_count = 50
+field_rows = 27
+lifecycle_rows = 44
+configuration_rows = 295
+dependency_rows = 185
+owner_family_memberships = 36
+field_profile_memberships = 16
+cross_dependency_unit_seams = 145
+dependency_component_pairs = 145
+component_order_sha256 = "70c642da0315be051260d085d0b8f754fc8f97f5e8788eb219f473f686245681"
+component_ids = [
+  "component-016",
+  "component-017",
+  "component-018",
+  "component-019",
+  "component-020",
+  "component-021",
+  "component-022",
+  "component-023",
+  "component-032",
+  "component-033",
+  "component-034",
+  "component-035",
+  "component-037",
+  "component-040",
+  "component-041",
+  "component-043",
+  "component-045",
+  "component-046",
+  "component-050",
+  "component-052",
+  "component-053",
+  "component-054",
+  "component-055",
+  "component-064",
+  "component-065",
+  "component-085",
+  "component-086",
+  "component-088",
+  "component-089",
+  "component-087",
+  "component-092",
+  "component-102",
+  "component-104",
+  "component-106",
+  "component-105",
+  "component-107",
+]
+
+[[wave]]
+id = "g3"
+order_group = 3
+component_count = 7
+unit_count = 10
+source_count = 17
+target_count = 15
+field_rows = 115
+lifecycle_rows = 258
+configuration_rows = 496
+dependency_rows = 130
+owner_family_memberships = 10
+field_profile_memberships = 3
+cross_dependency_unit_seams = 85
+dependency_component_pairs = 78
+component_order_sha256 = "a4b054fac851ab9e3bb5ebad81ec068ddbb7b78f1de019cefe177a46bc75e44d"
+component_ids = [
+  "component-036",
+  "component-038",
+  "component-042",
+  "component-044",
+  "component-047",
+  "component-093",
+  "component-103",
+]
+
+[[wave]]
+id = "g4"
+order_group = 4
+component_count = 5
+unit_count = 9
+source_count = 15
+target_count = 13
+field_rows = 192
+lifecycle_rows = 517
+configuration_rows = 307
+dependency_rows = 252
+owner_family_memberships = 9
+field_profile_memberships = 6
+cross_dependency_unit_seams = 105
+dependency_component_pairs = 94
+component_order_sha256 = "73da4a8c21fbbbb452c7f2611158ee7bb71a4a4534b30cf9529625e619dc4778"
+component_ids = [
+  "component-078",
+  "component-095",
+  "component-096",
+  "component-097",
+  "component-109",
+]
+
+[[wave]]
+id = "g5"
+order_group = 5
+component_count = 1
+unit_count = 1
+source_count = 2
+target_count = 2
+field_rows = 2
+lifecycle_rows = 39
+configuration_rows = 9
+dependency_rows = 6
+owner_family_memberships = 1
+field_profile_memberships = 1
+cross_dependency_unit_seams = 2
+dependency_component_pairs = 2
+component_order_sha256 = "17ea3e73e501bf8f181a096e1a0b88b685b6ab81dbbd7cbfe24522f894db7529"
+component_ids = [
+  "component-079",
+]
+
+[[wave]]
+id = "g6"
+order_group = 6
+component_count = 1
+unit_count = 11
+source_count = 22
+target_count = 22
+field_rows = 214
+lifecycle_rows = 558
+configuration_rows = 603
+dependency_rows = 142
+owner_family_memberships = 11
+field_profile_memberships = 1
+cross_dependency_unit_seams = 31
+dependency_component_pairs = 10
+component_order_sha256 = "f6cc99a3b1eed164a6259d6f902fb3585ae8125d79a4e5e634ace6a3310cbe97"
+component_ids = [
+  "component-080",
+]
+
+[[overlay]]
+ordinal = 1
+id = "shared-authority-consumers"
+rule = "Review shared shader/build authority through every Vulkan, WebGPU, and WebGL2 consumer owner, including generated-byte provenance, publication, synchronization, and teardown."
+component_count = 68
+support_count = 0
+field_rows = 544
+lifecycle_rows = 1378
+configuration_rows = 2798
+dependency_rows = 764
+owner_family_memberships = 86
+field_profile_memberships = 12
+source_review_authority_record_count = 373
+source_review_authority_sha256 = "cd31ec1195880aa8756ee66eacc59628433974907e7531796060d073dad7d6a1"
+ownership_authority_record_count = 5901
+ownership_authority_sha256 = "184c6ca1862d6fbe2db34ec3e566f8100427d5114934ee978d081f8b5f282820"
+source_binding_count = 127
+source_logical_lines = 36661
+source_byte_count = 1405421
+source_binding_sha256 = "104784575aeafbfc6cb06bd62dec80ed4f0b1ab8692af95d5fc6065ebc48e965"
+target_binding_count = 123
+target_logical_lines = 36222
+target_byte_count = 1368632
+target_binding_sha256 = "eb7e8618daf695acbdb00e9428c563bf586ac58ce46c4fc396c55e2669dc3bcb"
+support_binding_count = 0
+support_logical_lines = 0
+support_byte_count = 0
+support_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+artifact_binding_count = 0
+artifact_logical_lines = 0
+artifact_byte_count = 0
+artifact_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+tree_binding_count = 0
+tree_member_count = 0
+tree_logical_lines = 0
+tree_byte_count = 0
+tree_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+external_binding_count = 0
+external_logical_lines = 0
+external_byte_count = 0
+external_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+generated_binding_count = 0
+generated_logical_lines = 0
+generated_byte_count = 0
+generated_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[[overlay]]
+ordinal = 2
+id = "webgpu-to-webgl2-load-store"
+rule = "Review the exact WebGPU-to-WebGL2 load/store seam for ownership, layout, call provenance, and loss behavior without treating one backend as fallback for the other."
+component_count = 2
+support_count = 0
+field_rows = 192
+lifecycle_rows = 378
+configuration_rows = 263
+dependency_rows = 139
+owner_family_memberships = 6
+field_profile_memberships = 3
+source_review_authority_record_count = 4
+source_review_authority_sha256 = "b45f4d9b77e9856bdea375e3ca6e96f4192f30214a21c98505d1a47796e83e60"
+ownership_authority_record_count = 1008
+ownership_authority_sha256 = "cd5a390847a2c1a52bc47e6c4e3648f4f14463e8a9d68102980e5b98a75341c9"
+source_binding_count = 12
+source_logical_lines = 7232
+source_byte_count = 277826
+source_binding_sha256 = "4b0fa9ecd7a5f30c642788add3d9ba720440ea1d5c0bfadab9256015fe339830"
+target_binding_count = 12
+target_logical_lines = 7802
+target_byte_count = 306998
+target_binding_sha256 = "4489559b21bf02f27ea5f06c1306ef0173cb5500f02eaa45c4da42b675fb18dd"
+support_binding_count = 0
+support_logical_lines = 0
+support_byte_count = 0
+support_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+artifact_binding_count = 0
+artifact_logical_lines = 0
+artifact_byte_count = 0
+artifact_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+tree_binding_count = 0
+tree_member_count = 0
+tree_logical_lines = 0
+tree_byte_count = 0
+tree_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+external_binding_count = 0
+external_logical_lines = 0
+external_byte_count = 0
+external_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+generated_binding_count = 0
+generated_logical_lines = 0
+generated_byte_count = 0
+generated_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[[overlay]]
+ordinal = 3
+id = "generated-authority"
+rule = "Review generator inputs, retained outputs, immutable byte ownership, consumer lifetimes, ABI/layout, and regeneration owner graphs."
+component_count = 67
+support_count = 4
+field_rows = 304
+lifecycle_rows = 808
+configuration_rows = 2099
+dependency_rows = 618
+owner_family_memberships = 75
+field_profile_memberships = 9
+source_review_authority_record_count = 1913
+source_review_authority_sha256 = "1b1a49bfb5ec429acaed62de858f1772d5c7652e405bb7835d6dc3d327cc3175"
+ownership_authority_record_count = 4724
+ownership_authority_sha256 = "55a77146963bda10711351a134c134201d467260f793d6c78069520dfa56a17c"
+source_binding_count = 104
+source_logical_lines = 24764
+source_byte_count = 933877
+source_binding_sha256 = "31d305bd2724dbbf92d984b19d59d12e5e7779b45bcd323fdc4bd76ddeef9521"
+target_binding_count = 100
+target_logical_lines = 22601
+target_byte_count = 860422
+target_binding_sha256 = "ce6ce69c81333244dd260773648e7a5049910b7575016b4400bf8509ba8dd06e"
+support_binding_count = 4
+support_logical_lines = 1209
+support_byte_count = 51689
+support_binding_sha256 = "2c9eaca84d838b782b40e6c11f8e27c4b8db5417466c1a0acc231307669bc483"
+artifact_binding_count = 14
+artifact_logical_lines = 11529
+artifact_byte_count = 536866
+artifact_binding_sha256 = "68bd0ce932936ccc4ad268f65770528cd96bf11b6068fb0ccd78479ae74a31be"
+tree_binding_count = 3
+tree_member_count = 210
+tree_logical_lines = 72386
+tree_byte_count = 5252081
+tree_binding_sha256 = "a5b8142ca912c2583053dbea44d825d2d8c44a3b3e826970719395ab5e25261b"
+external_binding_count = 0
+external_logical_lines = 0
+external_byte_count = 0
+external_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+generated_binding_count = 514
+generated_logical_lines = 114637
+generated_byte_count = 9459764
+generated_binding_sha256 = "c52016fbe8ba2050991aa91d5932fbeee2be9c85c638c7d174e94a53fee99bbe"
+
+[[overlay]]
+ordinal = 4
+id = "webgpu-abi"
+rule = "Review Wagyu v1, Dawn v2, C/C++/JavaScript, callback user data, reference/release, chained-layout, and renderer/ORE ownership across the WebGPU ABI."
+component_count = 17
+support_count = 2
+field_rows = 1387
+lifecycle_rows = 1228
+configuration_rows = 2427
+dependency_rows = 181
+owner_family_memberships = 22
+field_profile_memberships = 34
+source_review_authority_record_count = 70
+source_review_authority_sha256 = "12da060a0a297d35bd28b6970668d4d9c52cfbc0f5995d3d2c11fdef6ed3d2a7"
+ownership_authority_record_count = 5375
+ownership_authority_sha256 = "799a653ed8a7c8c2c1224e50432c0b27c31d8be524712ae1518286b97f667c61"
+source_binding_count = 32
+source_logical_lines = 18368
+source_byte_count = 842489
+source_binding_sha256 = "98d185e470023a62a0fe8c84c0c926f11a916f54ae47c32d93a47abc270a53c3"
+target_binding_count = 30
+target_logical_lines = 17844
+target_byte_count = 749023
+target_binding_sha256 = "5afd9edd5c61538f2ab59c24612aa08581f5fbeb6a6adc3e115a4319d2c64901"
+support_binding_count = 2
+support_logical_lines = 976
+support_byte_count = 40345
+support_binding_sha256 = "66e148575224f064007ee108d6c05b1a8e35f3c9717c4dc79f6ff58dec7c5e8b"
+artifact_binding_count = 12
+artifact_logical_lines = 11082
+artifact_byte_count = 524389
+artifact_binding_sha256 = "1e87a5e4f5a617680d48c02a3023afffd3fc8c6c12cf83b3e3ee8e17079d6733"
+tree_binding_count = 0
+tree_member_count = 0
+tree_logical_lines = 0
+tree_byte_count = 0
+tree_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+external_binding_count = 0
+external_logical_lines = 0
+external_byte_count = 0
+external_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+generated_binding_count = 0
+generated_logical_lines = 0
+generated_byte_count = 0
+generated_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[[overlay]]
+ordinal = 5
+id = "shared-ore-contracts"
+rule = "Review shared ORE contracts against every distinct Vulkan, WebGPU, and GL owner, including transfer, alias, pass, mapping, callback, and destruction contracts."
+component_count = 21
+support_count = 7
+field_rows = 690
+lifecycle_rows = 1355
+configuration_rows = 1545
+dependency_rows = 444
+owner_family_memberships = 39
+field_profile_memberships = 28
+source_review_authority_record_count = 110
+source_review_authority_sha256 = "2eaecaa75c637e2cab436cef72d579cbee280bc762dad4b3e67b5dbaa64f842e"
+ownership_authority_record_count = 4304
+ownership_authority_sha256 = "0cd6739ab24db8df95a3b78791c4d8f3b9d2a757d8dbe66194efec5f83ba3c9f"
+source_binding_count = 81
+source_logical_lines = 28757
+source_byte_count = 1098890
+source_binding_sha256 = "804fc55bc37de7e3715d511385d57b6a183d3f05c05871db0f955f7084bc2de8"
+target_binding_count = 74
+target_logical_lines = 35906
+target_byte_count = 1338940
+target_binding_sha256 = "8c00275fe259118789b65db8958aac0a226b1d8c8abb7bc7326c6651e3e1d69e"
+support_binding_count = 7
+support_logical_lines = 5254
+support_byte_count = 186384
+support_binding_sha256 = "ad14ed269124ead46503979ac8ffa0f15159022ca70fbbfd3206b068ddc344c3"
+artifact_binding_count = 0
+artifact_logical_lines = 0
+artifact_byte_count = 0
+artifact_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+tree_binding_count = 0
+tree_member_count = 0
+tree_logical_lines = 0
+tree_byte_count = 0
+tree_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+external_binding_count = 12
+external_logical_lines = 2188
+external_byte_count = 71376
+external_binding_sha256 = "8f7b15a45289483f20fac14489bb92d72a5ad5beb8d321ce3939f2d2548aabd6"
+generated_binding_count = 0
+generated_logical_lines = 0
+generated_byte_count = 0
+generated_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[[overlay]]
+ordinal = 6
+id = "shared-renderer-contracts"
+rule = "Review shared renderer and native Metal authority against all new backend owners, preserving field/layout, intrusive ownership, polymorphic destruction, and no-fallback identity."
+component_count = 15
+support_count = 14
+field_rows = 717
+lifecycle_rows = 1514
+configuration_rows = 1776
+dependency_rows = 538
+owner_family_memberships = 33
+field_profile_memberships = 17
+source_review_authority_record_count = 199
+source_review_authority_sha256 = "09b8fb1087ff555294e277326b71c419e510be1b837150b82fb9ffd5fbb8baac"
+ownership_authority_record_count = 4794
+ownership_authority_sha256 = "779e3e076f968c05c3b62533eef4b24d33fb48bc1e9a8a74777de7e370c171a9"
+source_binding_count = 68
+source_logical_lines = 30956
+source_byte_count = 1189858
+source_binding_sha256 = "e350af9b241a586da47f91ffb86709d650b0fb8c07a4e0ba37ff6c093fb32ef3"
+target_binding_count = 64
+target_logical_lines = 39876
+target_byte_count = 1488212
+target_binding_sha256 = "4ad5a607e79fc347b456bb4aed874fbf0cceac0fef9266c0cb5455c49641ec16"
+support_binding_count = 14
+support_logical_lines = 31907
+support_byte_count = 1300231
+support_binding_sha256 = "cc8ca3455188b3cce10608e57285686600bd69ac6b0fdd1ec704a55c6ff4530f"
+artifact_binding_count = 0
+artifact_logical_lines = 0
+artifact_byte_count = 0
+artifact_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+tree_binding_count = 0
+tree_member_count = 0
+tree_logical_lines = 0
+tree_byte_count = 0
+tree_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+external_binding_count = 23
+external_logical_lines = 5769
+external_byte_count = 200216
+external_binding_sha256 = "8cef97c3109f7d04e83fd6840d2389b44192bd0d9ee028f033bbfc2047d2a0cf"
+generated_binding_count = 0
+generated_logical_lines = 0
+generated_byte_count = 0
+generated_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[[overlay]]
+ordinal = 7
+id = "vulkan-vma-adaptation"
+rule = "Review Vulkan/VMA allocator, proc-table, device/allocation, mapping, flush/invalidate, unsafe FFI, ABI, and destruction-owner seams against pinned physical headers."
+component_count = 4
+support_count = 11
+field_rows = 337
+lifecycle_rows = 681
+configuration_rows = 702
+dependency_rows = 169
+owner_family_memberships = 15
+field_profile_memberships = 4
+source_review_authority_record_count = 43
+source_review_authority_sha256 = "8dad68730becd028c4652b24951a6db769c4e36610c9ea44989052748f2c3fe2"
+ownership_authority_record_count = 1997
+ownership_authority_sha256 = "02c42fb360643da1f750f958c9d46504a2e64cd5ca8742bff467e7e77b7f06ee"
+source_binding_count = 29
+source_logical_lines = 13073
+source_byte_count = 512769
+source_binding_sha256 = "b6d9307540dab260f08aa6f7c8aedf5c59378964078335e80d5a6a0a543969d6"
+target_binding_count = 29
+target_logical_lines = 14262
+target_byte_count = 545168
+target_binding_sha256 = "f194db3809d441ae07e104a6fc647be61ca201daeb83b5aba4bac47a2db0271d"
+support_binding_count = 11
+support_logical_lines = 22933
+support_byte_count = 969740
+support_binding_sha256 = "03a7ea9417526158ed6285baebab248ef3557b2ab4c26ca249cb55b4a754fb0c"
+artifact_binding_count = 3
+artifact_logical_lines = 19704
+artifact_byte_count = 758593
+artifact_binding_sha256 = "3d2a1f03b8fe76e26314ce3114ba7013cf9533a54e93a2fb6fa748f1369ef048"
+tree_binding_count = 1
+tree_member_count = 49
+tree_logical_lines = 380913
+tree_byte_count = 19336710
+tree_binding_sha256 = "717a2915b396b07bf52c81d1d72f37c78f80890135b4b45caf56b546d2fa2af3"
+external_binding_count = 0
+external_logical_lines = 0
+external_byte_count = 0
+external_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+generated_binding_count = 0
+generated_logical_lines = 0
+generated_byte_count = 0
+generated_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[[overlay]]
+ordinal = 8
+id = "backend-identity-and-browser-bridges"
+rule = "Review backend factory/module/browser identities, callback and thread lifetimes, command ownership, loss/restoration, and explicit no-fallback separation; editor wiring remains later."
+component_count = 10
+support_count = 6
+field_rows = 1336
+lifecycle_rows = 1297
+configuration_rows = 2770
+dependency_rows = 395
+owner_family_memberships = 28
+field_profile_memberships = 15
+source_review_authority_record_count = 488
+source_review_authority_sha256 = "906e203bfd09cd484a06eacf3cc90ca69390d40b4d8b5e34598252d56f29994c"
+ownership_authority_record_count = 5966
+ownership_authority_sha256 = "9b868e165c375e15fb2c451b6e5a52a7501b0417e104db27f45a7fb6f4c742cb"
+source_binding_count = 52
+source_logical_lines = 30637
+source_byte_count = 1237027
+source_binding_sha256 = "c6da814fd855c33b1592cbf4c986c94ba097520bf35be32e40b6b9d9af7e269c"
+target_binding_count = 50
+target_logical_lines = 39662
+target_byte_count = 1513182
+target_binding_sha256 = "1ebb7ad4e7a30580f69fc96d7cb9e1d5c1a73d8a40b160ef24fc0eae91ef56c5"
+support_binding_count = 6
+support_logical_lines = 34816
+support_byte_count = 1316506
+support_binding_sha256 = "76f2118e732d742878f1ef1a12a18371bd59a44a16c037b11621cc772919152c"
+artifact_binding_count = 0
+artifact_logical_lines = 0
+artifact_byte_count = 0
+artifact_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+tree_binding_count = 0
+tree_member_count = 0
+tree_logical_lines = 0
+tree_byte_count = 0
+tree_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+external_binding_count = 0
+external_logical_lines = 0
+external_byte_count = 0
+external_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+generated_binding_count = 0
+generated_logical_lines = 0
+generated_byte_count = 0
+generated_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[[overlay]]
+ordinal = 9
+id = "classification-boundary"
+rule = "Review excluded-source owner graphs and positive WebGL2 replacements so no excluded native owner, stale identity, stub, or fallback participates in the admitted build."
+component_count = 13
+support_count = 8
+field_rows = 120
+lifecycle_rows = 316
+configuration_rows = 622
+dependency_rows = 129
+owner_family_memberships = 16
+field_profile_memberships = 14
+source_review_authority_record_count = 52
+source_review_authority_sha256 = "22d78d511bef480af6c9ab696a401271e2e2614beb21615c434bea9ee09aa702"
+ownership_authority_record_count = 1301
+ownership_authority_sha256 = "7585df6d303bc46453ebb9a72c07e7d1287a8cc2d125e735b033739ba0b7bb38"
+source_binding_count = 33
+source_logical_lines = 9525
+source_byte_count = 346647
+source_binding_sha256 = "1b803f0c5ca2bcc7bafc5006ce2ebb0c18f58e9454d66862cfc962b0618fb8a9"
+target_binding_count = 21
+target_logical_lines = 13372
+target_byte_count = 481734
+target_binding_sha256 = "5b731ee5bd80ca450315ec84b8759620e5956d5e4ffb4dfd8e5aa465c250b428"
+support_binding_count = 8
+support_logical_lines = 158
+support_byte_count = 6220
+support_binding_sha256 = "31d72d5fff9cf16c1a8bada2f489392bebcfdeae0d7b1853b0211e2d2aeca426"
+artifact_binding_count = 0
+artifact_logical_lines = 0
+artifact_byte_count = 0
+artifact_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+tree_binding_count = 0
+tree_member_count = 0
+tree_logical_lines = 0
+tree_byte_count = 0
+tree_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+external_binding_count = 0
+external_logical_lines = 0
+external_byte_count = 0
+external_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+generated_binding_count = 0
+generated_logical_lines = 0
+generated_byte_count = 0
+generated_binding_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[[prerequisite_receipt]]
+id = "component-000"
+path = "docs/backend-port-source-reviews/component-000.source-review.toml"
+sha256 = "3e231c02623af7edef02ce55f996940833b778d82b7f07ec0e7c85d708ddc3fe"
+byte_count = 1807
+
+[[prerequisite_receipt]]
+id = "component-001"
+path = "docs/backend-port-source-reviews/component-001.source-review.toml"
+sha256 = "51bfbf1f65b8b3b3be238a6ffab06e49ddf53e679a9813b9cb0594bf3a9ee4d4"
+byte_count = 1964
+
+[[prerequisite_receipt]]
+id = "component-002"
+path = "docs/backend-port-source-reviews/component-002.source-review.toml"
+sha256 = "349b5fba5130768c71b06be39abc55bbcecb185c53d1bc3cfff926dccecc66df"
+byte_count = 1072
+
+[[prerequisite_receipt]]
+id = "component-003"
+path = "docs/backend-port-source-reviews/component-003.source-review.toml"
+sha256 = "27e5e920c2e0ec0deb770563ae16e7fa1e728e18cc21084e205814fc775ce842"
+byte_count = 1092
+
+[[prerequisite_receipt]]
+id = "component-004"
+path = "docs/backend-port-source-reviews/component-004.source-review.toml"
+sha256 = "f56ddb30126d996123744522c15115e82da2e0cc4cdf9bbdc23063763f9fc02b"
+byte_count = 1107
+
+[[prerequisite_receipt]]
+id = "component-005"
+path = "docs/backend-port-source-reviews/component-005.source-review.toml"
+sha256 = "2f8bc5028b06455a3eb4a38271257c12966daf410d710b1f27a828f851a979fe"
+byte_count = 1108
+
+[[prerequisite_receipt]]
+id = "component-006"
+path = "docs/backend-port-source-reviews/component-006.source-review.toml"
+sha256 = "240795730559a46a57f1ef80be73364b40986ea009513e289687980afb211357"
+byte_count = 2230
+
+[[prerequisite_receipt]]
+id = "component-007"
+path = "docs/backend-port-source-reviews/component-007.source-review.toml"
+sha256 = "c042c4bfab995d3a33f0bdfb413939d40c1bad8b6cd873fd3fd424df80dda2ad"
+byte_count = 1170
+
+[[prerequisite_receipt]]
+id = "component-008"
+path = "docs/backend-port-source-reviews/component-008.source-review.toml"
+sha256 = "d9686bc8473c55f282c60ebd6b182c9a4a93d084b02aa107a9fbf66c60ce4cf3"
+byte_count = 1156
+
+[[prerequisite_receipt]]
+id = "component-009"
+path = "docs/backend-port-source-reviews/component-009.source-review.toml"
+sha256 = "2e6d7d6c7e1c3626574b74f4179dffb7aaff658b16bffac0a2bc4d3aa62f5caf"
+byte_count = 1130
+
+[[prerequisite_receipt]]
+id = "component-010"
+path = "docs/backend-port-source-reviews/component-010.source-review.toml"
+sha256 = "96460c3bfffbbd0e54e8a7613a292d69dc5c7d98973c53666912638e9685efe0"
+byte_count = 1145
+
+[[prerequisite_receipt]]
+id = "component-011"
+path = "docs/backend-port-source-reviews/component-011.source-review.toml"
+sha256 = "5c189899d17dce14bb0d441f792341fd3c77bd9c0ad52f856ac5fa01e9eec313"
+byte_count = 1180
+
+[[prerequisite_receipt]]
+id = "component-012"
+path = "docs/backend-port-source-reviews/component-012.source-review.toml"
+sha256 = "ffe937779b789814f0287208e03638ba38f80e2b181aa4f496eca4c904fb4c60"
+byte_count = 1169
+
+[[prerequisite_receipt]]
+id = "component-013"
+path = "docs/backend-port-source-reviews/component-013.source-review.toml"
+sha256 = "3121bae051709bf6b1530eeba30f7c05e93827c09828314e02999281d7562f05"
+byte_count = 1120
+
+[[prerequisite_receipt]]
+id = "component-014"
+path = "docs/backend-port-source-reviews/component-014.source-review.toml"
+sha256 = "9589f2dc36cd9c11575c3648de1d7aaa08fe60476b3e34022a2c3b296d6222e2"
+byte_count = 1169
+
+[[prerequisite_receipt]]
+id = "component-015"
+path = "docs/backend-port-source-reviews/component-015.source-review.toml"
+sha256 = "26efb35c6312d09b20d404d845cf9a9705e2f48a8e5b10f3112d8ad480a0e90a"
+byte_count = 1178
+
+[[prerequisite_receipt]]
+id = "component-016"
+path = "docs/backend-port-source-reviews/component-016.source-review.toml"
+sha256 = "81d617dfab220ee1dc9764895e5e621c41eaaaa0573623644cb0d44a2407aac3"
+byte_count = 1232
+
+[[prerequisite_receipt]]
+id = "component-017"
+path = "docs/backend-port-source-reviews/component-017.source-review.toml"
+sha256 = "5973dbace6c880535a6f654e4029da353808c101b9014d5279bed29127c15d7e"
+byte_count = 1232
+
+[[prerequisite_receipt]]
+id = "component-018"
+path = "docs/backend-port-source-reviews/component-018.source-review.toml"
+sha256 = "c2b879fd5cb2c7f1912117d10585404787444065b6840c4a603d0829958091f0"
+byte_count = 1232
+
+[[prerequisite_receipt]]
+id = "component-019"
+path = "docs/backend-port-source-reviews/component-019.source-review.toml"
+sha256 = "6a4a619067a65675ff4507d88362fd513374f6251768346d8b4050378709750c"
+byte_count = 1272
+
+[[prerequisite_receipt]]
+id = "component-020"
+path = "docs/backend-port-source-reviews/component-020.source-review.toml"
+sha256 = "ea7bd43550f54d768c49e4d57f2345890ed86a09705391bb3ff8cbf2487f3b81"
+byte_count = 1202
+
+[[prerequisite_receipt]]
+id = "component-021"
+path = "docs/backend-port-source-reviews/component-021.source-review.toml"
+sha256 = "4deb0ba86cf6328fb6ac3316de1641f1a983c41be2e8947ddc02ff311ee0736d"
+byte_count = 1177
+
+[[prerequisite_receipt]]
+id = "component-022"
+path = "docs/backend-port-source-reviews/component-022.source-review.toml"
+sha256 = "e31dd3d74ff3d7871f4f665cf8198a4b45d878f9fda8702e49e830cedc247632"
+byte_count = 1192
+
+[[prerequisite_receipt]]
+id = "component-023"
+path = "docs/backend-port-source-reviews/component-023.source-review.toml"
+sha256 = "f058a0e1066f1ae2a5a89655b1c509aa39b33dedf348180fa6a8e352ac447f2d"
+byte_count = 1242
+
+[[prerequisite_receipt]]
+id = "component-024"
+path = "docs/backend-port-source-reviews/component-024.source-review.toml"
+sha256 = "d32d0c1ca2e183692fe21c0bd260c2fd514d347a2525a71bb4bfdf2079c7187f"
+byte_count = 1160
+
+[[prerequisite_receipt]]
+id = "component-025"
+path = "docs/backend-port-source-reviews/component-025.source-review.toml"
+sha256 = "3f672bc80760b663e9d20f3f37f805df7a675df42437e48ae4d4d489c5e7eae8"
+byte_count = 1199
+
+[[prerequisite_receipt]]
+id = "component-026"
+path = "docs/backend-port-source-reviews/component-026.source-review.toml"
+sha256 = "ef085d7bc9ea08208541c5275d857033a85ffa7ff78c83e85845e2b2c9c5324a"
+byte_count = 1267
+
+[[prerequisite_receipt]]
+id = "component-027"
+path = "docs/backend-port-source-reviews/component-027.source-review.toml"
+sha256 = "ee7a9441ec85f9ce31407dc00effc3f2838762fc24053e4804661feacfdba273"
+byte_count = 1923
+
+[[prerequisite_receipt]]
+id = "component-028"
+path = "docs/backend-port-source-reviews/component-028.source-review.toml"
+sha256 = "b3128a87d3b9557e6b11ef94d10419613d75599dd1b081ce1f50ff7f039fa964"
+byte_count = 1770
+
+[[prerequisite_receipt]]
+id = "component-029"
+path = "docs/backend-port-source-reviews/component-029.source-review.toml"
+sha256 = "e9af333641cf412e59345a246982efa52a61b8bd7a830f4edf4880347b7d708b"
+byte_count = 1145
+
+[[prerequisite_receipt]]
+id = "component-030"
+path = "docs/backend-port-source-reviews/component-030.source-review.toml"
+sha256 = "a88f1a9a6b54a7cacc1076d0fa9a61d2d8f086a792f8835bae8ccad0ec23f64d"
+byte_count = 1210
+
+[[prerequisite_receipt]]
+id = "component-031"
+path = "docs/backend-port-source-reviews/component-031.source-review.toml"
+sha256 = "1c2b7df675069066ff21207fb65de75a2bfc54774ba6269d7fecdba9d833024c"
+byte_count = 1762
+
+[[prerequisite_receipt]]
+id = "component-032"
+path = "docs/backend-port-source-reviews/component-032.source-review.toml"
+sha256 = "cbda2b363dcd46fe73ead0b7dd32bc40be322e0d82fb172b6f254f07d86e095d"
+byte_count = 1198
+
+[[prerequisite_receipt]]
+id = "component-033"
+path = "docs/backend-port-source-reviews/component-033.source-review.toml"
+sha256 = "68f0b047f467479e464a19ea25b2071b300ff2d5c6908d90eea425895d5773a2"
+byte_count = 1248
+
+[[prerequisite_receipt]]
+id = "component-034"
+path = "docs/backend-port-source-reviews/component-034.source-review.toml"
+sha256 = "afc8495a8fe0c9dadac8295fe4df3ab358be8f3b73f856a635c589e149b6f4c1"
+byte_count = 1283
+
+[[prerequisite_receipt]]
+id = "component-035"
+path = "docs/backend-port-source-reviews/component-035.source-review.toml"
+sha256 = "7cede47e8765d2c626d0b347bfb62f675a40364cdd51331f9e56446da124085f"
+byte_count = 2031
+
+[[prerequisite_receipt]]
+id = "component-036"
+path = "docs/backend-port-source-reviews/component-036.source-review.toml"
+sha256 = "f326de7c0993da6b642a961f6f41ecac055d7f6f129df44533d46f32e7c9f0e7"
+byte_count = 1413
+
+[[prerequisite_receipt]]
+id = "component-037"
+path = "docs/backend-port-source-reviews/component-037.source-review.toml"
+sha256 = "242f623848f693207dcdc08facd175530a1266615bac29e7334de0c90d80b855"
+byte_count = 1915
+
+[[prerequisite_receipt]]
+id = "component-038"
+path = "docs/backend-port-source-reviews/component-038.source-review.toml"
+sha256 = "8c0ee01fa51b7845af272cb2cc40839c4c6ddb120c8577a4c4c1a4d5722210c3"
+byte_count = 1348
+
+[[prerequisite_receipt]]
+id = "component-039"
+path = "docs/backend-port-source-reviews/component-039.source-review.toml"
+sha256 = "b600c9cdb61d80aab0825f55ecdff92a00912c892d3db25592bde0108b6ca521"
+byte_count = 1816
+
+[[prerequisite_receipt]]
+id = "component-040"
+path = "docs/backend-port-source-reviews/component-040.source-review.toml"
+sha256 = "b5862f834154eb42dd57b9947900b5554c087d9bad5ba768c8b6da5828ddea35"
+byte_count = 1283
+
+[[prerequisite_receipt]]
+id = "component-041"
+path = "docs/backend-port-source-reviews/component-041.source-review.toml"
+sha256 = "f92df1cc29d89edcf8ecadc8c258424a6cfac838e7babefae4e58acfe68aeb16"
+byte_count = 1915
+
+[[prerequisite_receipt]]
+id = "component-042"
+path = "docs/backend-port-source-reviews/component-042.source-review.toml"
+sha256 = "530ad052ae603fe6a9acff1696ee970b70c3ebf6bd0e8c41be4986f1564a362d"
+byte_count = 1323
+
+[[prerequisite_receipt]]
+id = "component-043"
+path = "docs/backend-port-source-reviews/component-043.source-review.toml"
+sha256 = "026b30d758480aec5056ab31573dd8ac4fa8b004730ac322ac12265e7ac531b2"
+byte_count = 1852
+
+[[prerequisite_receipt]]
+id = "component-044"
+path = "docs/backend-port-source-reviews/component-044.source-review.toml"
+sha256 = "e5e5d462488b642b33473dcf913e81fba0cf7e5d02390518e48c26ee761e8e59"
+byte_count = 1313
+
+[[prerequisite_receipt]]
+id = "component-045"
+path = "docs/backend-port-source-reviews/component-045.source-review.toml"
+sha256 = "c6dd6fc8d847fecc76a7e611428e6c3c26bc50f0807ca60ba3ea174be6234633"
+byte_count = 1248
+
+[[prerequisite_receipt]]
+id = "component-046"
+path = "docs/backend-port-source-reviews/component-046.source-review.toml"
+sha256 = "63428f6e8cfc974ec16affddaa7dabfccdbcda7c2981bec1f7e77df220552c59"
+byte_count = 1852
+
+[[prerequisite_receipt]]
+id = "component-047"
+path = "docs/backend-port-source-reviews/component-047.source-review.toml"
+sha256 = "f02ac7d8b1f7d52f0dcf51454a7560560fd08c95a99eb0832264e4e6c2546c20"
+byte_count = 1288
+
+[[prerequisite_receipt]]
+id = "component-048"
+path = "docs/backend-port-source-reviews/component-048.source-review.toml"
+sha256 = "51ef877edd4ffbed15d9052da45890203b5c90ac50d12890b3a0197d8d849a70"
+byte_count = 1859
+
+[[prerequisite_receipt]]
+id = "component-049"
+path = "docs/backend-port-source-reviews/component-049.source-review.toml"
+sha256 = "06252d8478fb43a6e05d580717ddcd56dff7eef8621ec50aeb4663ddeb72895e"
+byte_count = 1868
+
+[[prerequisite_receipt]]
+id = "component-050"
+path = "docs/backend-port-source-reviews/component-050.source-review.toml"
+sha256 = "5a1c01a5b22a9bde7d4595f50db8fc3b94fc38c1264aff1fef7aff88f56b70ed"
+byte_count = 1238
+
+[[prerequisite_receipt]]
+id = "component-051"
+path = "docs/backend-port-source-reviews/component-051.source-review.toml"
+sha256 = "24d766c9661e7c1950a23b44b30041696134e4be35c9243612d07d907cee012e"
+byte_count = 1180
+
+[[prerequisite_receipt]]
+id = "component-052"
+path = "docs/backend-port-source-reviews/component-052.source-review.toml"
+sha256 = "d3659295c4543b9bee9f7c3ed7d2841536d6b419e0de69b1adf6a690e3a5ef93"
+byte_count = 1223
+
+[[prerequisite_receipt]]
+id = "component-053"
+path = "docs/backend-port-source-reviews/component-053.source-review.toml"
+sha256 = "33596f96b871a8d4168b265438c4b386765260482836c9db932a32386f5ef137"
+byte_count = 1277
+
+[[prerequisite_receipt]]
+id = "component-054"
+path = "docs/backend-port-source-reviews/component-054.source-review.toml"
+sha256 = "424af04f25583f27e60bf62d319d55f03e8a50415af90fd48d7acd4cf557c748"
+byte_count = 1223
+
+[[prerequisite_receipt]]
+id = "component-055"
+path = "docs/backend-port-source-reviews/component-055.source-review.toml"
+sha256 = "ec353741be1073031a017e57672eb8efb41f1fdf45e0ef69b3a09bab08157af2"
+byte_count = 1193
+
+[[prerequisite_receipt]]
+id = "component-056"
+path = "docs/backend-port-source-reviews/component-056.source-review.toml"
+sha256 = "fc03371dffa9b20a0b0955343521395ef638496f98a444a1127a49e2c827e95a"
+byte_count = 1832
+
+[[prerequisite_receipt]]
+id = "component-057"
+path = "docs/backend-port-source-reviews/component-057.source-review.toml"
+sha256 = "7352e9def9adc2a2a5cbe4903e00dc07529cd302d2c1667ffb6e672df20e00a8"
+byte_count = 1159
+
+[[prerequisite_receipt]]
+id = "component-058"
+path = "docs/backend-port-source-reviews/component-058.source-review.toml"
+sha256 = "e05a53a776301635e988f0097197d698b3f4180cab8567e36cf0216091745c59"
+byte_count = 1208
+
+[[prerequisite_receipt]]
+id = "component-059"
+path = "docs/backend-port-source-reviews/component-059.source-review.toml"
+sha256 = "befc9634a88b53854e467c3926414b33aa8cc279a3c8f7c448a7960747d2e2a5"
+byte_count = 1120
+
+[[prerequisite_receipt]]
+id = "component-060"
+path = "docs/backend-port-source-reviews/component-060.source-review.toml"
+sha256 = "346c8ad7185161b221939f0fd71ced0fc7bb06dc003d8200c1c93e6707e316e3"
+byte_count = 1968
+
+[[prerequisite_receipt]]
+id = "component-061"
+path = "docs/backend-port-source-reviews/component-061.source-review.toml"
+sha256 = "c3eb04ec295e29ec30f572cc9743c62b37f68bd34fb36b36ac68cecd5f2b1d13"
+byte_count = 1125
+
+[[prerequisite_receipt]]
+id = "component-062"
+path = "docs/backend-port-source-reviews/component-062.source-review.toml"
+sha256 = "32f1995ac4d8dfe0cea4012750872e3c19e44cefea400f18307b6bbddafc7c3d"
+byte_count = 1190
+
+[[prerequisite_receipt]]
+id = "component-063"
+path = "docs/backend-port-source-reviews/component-063.source-review.toml"
+sha256 = "b06248496b356e80880475b9832413871b8fe7caa1866b2b274e54c210d89e42"
+byte_count = 2482
+
+[[prerequisite_receipt]]
+id = "component-064"
+path = "docs/backend-port-source-reviews/component-064.source-review.toml"
+sha256 = "4f2db3051306b6972c6223401a1adee0499f33469a6b7ecdbff84c18a3f3c504"
+byte_count = 1207
+
+[[prerequisite_receipt]]
+id = "component-065"
+path = "docs/backend-port-source-reviews/component-065.source-review.toml"
+sha256 = "6237e401a8af6e0c876cfb66aaa2c2cac19c8da407bf7ac39f467dedb2ef11a4"
+byte_count = 1217
+
+[[prerequisite_receipt]]
+id = "component-066"
+path = "docs/backend-port-source-reviews/component-066.source-review.toml"
+sha256 = "e0dfeed51b3726d23aa4c6d354846a039c473f35cac0df585a2f238088ff7fa0"
+byte_count = 1164
+
+[[prerequisite_receipt]]
+id = "component-067"
+path = "docs/backend-port-source-reviews/component-067.source-review.toml"
+sha256 = "7c0a96810a7add4a54bfba793e52ba7aa4343816349d84c24c731b59bb390618"
+byte_count = 1115
+
+[[prerequisite_receipt]]
+id = "component-068"
+path = "docs/backend-port-source-reviews/component-068.source-review.toml"
+sha256 = "fc5d6dd89b6f94edb76d32275ebc6745a53a9c2d2bf818d22e9edb8c648ed3dc"
+byte_count = 1770
+
+[[prerequisite_receipt]]
+id = "component-069"
+path = "docs/backend-port-source-reviews/component-069.source-review.toml"
+sha256 = "e748984bb4d60c1405f6c7bd6c9739f233648c2abe1dd72f6431f31117c8083b"
+byte_count = 1616
+
+[[prerequisite_receipt]]
+id = "component-070"
+path = "docs/backend-port-source-reviews/component-070.source-review.toml"
+sha256 = "672a3076aa0c67ad89c542859bccb6d1a34e9fb36bc28c7321b0b5d131eef3ee"
+byte_count = 1150
+
+[[prerequisite_receipt]]
+id = "component-071"
+path = "docs/backend-port-source-reviews/component-071.source-review.toml"
+sha256 = "caf0b29bf959ae2f080a05501ce60068d4bc6fdac06a073797334ae91eaefa68"
+byte_count = 2848
+
+[[prerequisite_receipt]]
+id = "component-072"
+path = "docs/backend-port-source-reviews/component-072.source-review.toml"
+sha256 = "972ccb25945afb0ddfa9b058185f6514db8c586d8a9d28477456322b508c9659"
+byte_count = 1692
+
+[[prerequisite_receipt]]
+id = "component-073"
+path = "docs/backend-port-source-reviews/component-073.source-review.toml"
+sha256 = "73096cc4f450f96e254a006ccdcc2d103099398fe2618034f1436f5a853a58e3"
+byte_count = 1172
+
+[[prerequisite_receipt]]
+id = "component-074"
+path = "docs/backend-port-source-reviews/component-074.source-review.toml"
+sha256 = "32a288980426ced1a4f2bad19ae1a25f55b22838d057ea51752a09396973b070"
+byte_count = 1752
+
+[[prerequisite_receipt]]
+id = "component-075"
+path = "docs/backend-port-source-reviews/component-075.source-review.toml"
+sha256 = "fa20c2341b97f0316e893b80879e656b3d98d55e5537d5cb176418778a4257bd"
+byte_count = 1111
+
+[[prerequisite_receipt]]
+id = "component-076"
+path = "docs/backend-port-source-reviews/component-076.source-review.toml"
+sha256 = "ea1a920b765d9fd42fa36bb324b4168d5c60e25cfa21fdf38b8642a72d009ae3"
+byte_count = 1698
+
+[[prerequisite_receipt]]
+id = "component-077"
+path = "docs/backend-port-source-reviews/component-077.source-review.toml"
+sha256 = "426faa67fdcdb0662b5a2ce5f0e907ba14f717fd8b31f4fb98d7e96342fca9d1"
+byte_count = 1104
+
+[[prerequisite_receipt]]
+id = "component-078"
+path = "docs/backend-port-source-reviews/component-078.source-review.toml"
+sha256 = "03b533d6e7cfefc54366f2f0effddf633ded72cc3e269496d3409a2ca30e58bd"
+byte_count = 1650
+
+[[prerequisite_receipt]]
+id = "component-079"
+path = "docs/backend-port-source-reviews/component-079.source-review.toml"
+sha256 = "8a2b8f3a045b6f6cbab4e6498f3c0db5d2ebde49ffc0ab9ecf5a0b4d03613331"
+byte_count = 1677
+
+[[prerequisite_receipt]]
+id = "component-080"
+path = "docs/backend-port-source-reviews/component-080.source-review.toml"
+sha256 = "e956ae4d15fc23f467d2cdff8ec705000f72153d344d15c7ba8d45c7515d1e3f"
+byte_count = 26037
+
+[[prerequisite_receipt]]
+id = "component-081"
+path = "docs/backend-port-source-reviews/component-081.source-review.toml"
+sha256 = "bc3f4dfd9f499559c07a3620f1839fcb6bc91d9526597c2d267f3401c5631db3"
+byte_count = 1146
+
+[[prerequisite_receipt]]
+id = "component-082"
+path = "docs/backend-port-source-reviews/component-082.source-review.toml"
+sha256 = "5e62222a3d1c3b111eac3faf841c79dcb105fd9bddaa54479038bcbf9f125597"
+byte_count = 1661
+
+[[prerequisite_receipt]]
+id = "component-083"
+path = "docs/backend-port-source-reviews/component-083.source-review.toml"
+sha256 = "332e4f2ac8c62de2c3b2d09c0fff23fbafcddec55ff9f3db6c56e246c3f75de5"
+byte_count = 2023
+
+[[prerequisite_receipt]]
+id = "component-084"
+path = "docs/backend-port-source-reviews/component-084.source-review.toml"
+sha256 = "e7e503a14b2ea08f517b659f42dd12849eb71c5dd6ae95dee2a16a9f68fc3a13"
+byte_count = 1979
+
+[[prerequisite_receipt]]
+id = "component-085"
+path = "docs/backend-port-source-reviews/component-085.source-review.toml"
+sha256 = "fc394d601681bd68ae01e95cb291aef7a6bbc44b7093ccf1641567bc700704fc"
+byte_count = 1871
+
+[[prerequisite_receipt]]
+id = "component-086"
+path = "docs/backend-port-source-reviews/component-086.source-review.toml"
+sha256 = "14ab1d36a23bef459bc6acff271caf3a620d1384a9c00e34ec614da996c519b5"
+byte_count = 1893
+
+[[prerequisite_receipt]]
+id = "component-087"
+path = "docs/backend-port-source-reviews/component-087.source-review.toml"
+sha256 = "393f218965d2c52f05ff8bb1fd2077418a6af482a9a6df98e19096438309bda9"
+byte_count = 2860
+
+[[prerequisite_receipt]]
+id = "component-088"
+path = "docs/backend-port-source-reviews/component-088.source-review.toml"
+sha256 = "cf40adabdd48e5161df33d8fcd9060fedc97d59fdad028cf3337397c4f7106b5"
+byte_count = 1882
+
+[[prerequisite_receipt]]
+id = "component-089"
+path = "docs/backend-port-source-reviews/component-089.source-review.toml"
+sha256 = "6f6433eeb9f79f12198b9818ab861cfc4e85d05f6a838ae3961c89e8664bc8c4"
+byte_count = 1948
+
+[[prerequisite_receipt]]
+id = "component-090"
+path = "docs/backend-port-source-reviews/component-090.source-review.toml"
+sha256 = "32001c133a5a33f5de37c93e96485c05e9178459d1e05084541def01711b23d8"
+byte_count = 2350
+
+[[prerequisite_receipt]]
+id = "component-091"
+path = "docs/backend-port-source-reviews/component-091.source-review.toml"
+sha256 = "44e1c8a755a7c0b2dbe73b1203d58df6fcf2bd1982cb1a99a69abd9c6798e35c"
+byte_count = 1635
+
+[[prerequisite_receipt]]
+id = "component-092"
+path = "docs/backend-port-source-reviews/component-092.source-review.toml"
+sha256 = "b1f0175b255a06e0ed5cea89aa6c9ba7a67822af38422f67acd876934904a443"
+byte_count = 1752
+
+[[prerequisite_receipt]]
+id = "component-093"
+path = "docs/backend-port-source-reviews/component-093.source-review.toml"
+sha256 = "036b0e30ae54f67dfb071e33fc91d767244339e8364e1e1d91e395a41a21d81b"
+byte_count = 10523
+
+[[prerequisite_receipt]]
+id = "component-094"
+path = "docs/backend-port-source-reviews/component-094.source-review.toml"
+sha256 = "ed34d306a4fa0da50f193885968f0f3b88921f02515d1323045bf003621dbf10"
+byte_count = 2934
+
+[[prerequisite_receipt]]
+id = "component-095"
+path = "docs/backend-port-source-reviews/component-095.source-review.toml"
+sha256 = "ef9f5be0c07ab34f99791056e06af2225db808c306c4e0f2775f50d2b5f7910b"
+byte_count = 830
+
+[[prerequisite_receipt]]
+id = "component-096"
+path = "docs/backend-port-source-reviews/component-096.source-review.toml"
+sha256 = "2a5228c3995ddf6293937c06fa608b57df519db93df0f80ec887936853eacd21"
+byte_count = 830
+
+[[prerequisite_receipt]]
+id = "component-097"
+path = "docs/backend-port-source-reviews/component-097.source-review.toml"
+sha256 = "2b1ad294f68df4ca92e493f85b22176233d5302c1ef492c2f05940a13c0cc77e"
+byte_count = 1089
+
+[[prerequisite_receipt]]
+id = "component-098"
+path = "docs/backend-port-source-reviews/component-098.source-review.toml"
+sha256 = "b9e3ea350c51e14dca03ae6101477fd3562c5c7ee2555cc4cc8ddfeb1e2f0be2"
+byte_count = 3965
+
+[[prerequisite_receipt]]
+id = "component-099"
+path = "docs/backend-port-source-reviews/component-099.source-review.toml"
+sha256 = "49d4f418e075cd827e1fadd138596a521d218769c5607063399e1166bfc19392"
+byte_count = 1261
+
+[[prerequisite_receipt]]
+id = "component-100"
+path = "docs/backend-port-source-reviews/component-100.source-review.toml"
+sha256 = "cdb24a245f902ffcc28663b64407e8372cc43e2a3af348fcaa4c070184cc2e87"
+byte_count = 2020
+
+[[prerequisite_receipt]]
+id = "component-101"
+path = "docs/backend-port-source-reviews/component-101.source-review.toml"
+sha256 = "88534d93d2f3ee138262f2bced82992212c205fc58564a214bed90475f230807"
+byte_count = 8313
+
+[[prerequisite_receipt]]
+id = "component-102"
+path = "docs/backend-port-source-reviews/component-102.source-review.toml"
+sha256 = "81529aabea8cb3ccba4de91c3398a420889c7047e317ecdc83332dd79281fa8b"
+byte_count = 1157
+
+[[prerequisite_receipt]]
+id = "component-103"
+path = "docs/backend-port-source-reviews/component-103.source-review.toml"
+sha256 = "7f5a4e7a389a69f1c6f6368e5a581c0df380d7b7bdceb9fe9ece9afbb36f9b64"
+byte_count = 1675
+
+[[prerequisite_receipt]]
+id = "component-104"
+path = "docs/backend-port-source-reviews/component-104.source-review.toml"
+sha256 = "e55c6ebc4a34058dd2cc99c77bb5c47364981bc3f73e85f72f5b0028016445d7"
+byte_count = 1665
+
+[[prerequisite_receipt]]
+id = "component-105"
+path = "docs/backend-port-source-reviews/component-105.source-review.toml"
+sha256 = "3e989e5b9c0e4d6ce6d01c51b0f318beb45b050d3598e77f3e5d96a56e33c770"
+byte_count = 1668
+
+[[prerequisite_receipt]]
+id = "component-106"
+path = "docs/backend-port-source-reviews/component-106.source-review.toml"
+sha256 = "3cc34c8993cd7a4d5e11340feb4d120f627884524d424b77bf0e7b1241085d85"
+byte_count = 1719
+
+[[prerequisite_receipt]]
+id = "component-107"
+path = "docs/backend-port-source-reviews/component-107.source-review.toml"
+sha256 = "ecae83ae5d5ee98c978a3ad4b9571f801507ba9579d7e9305342014f8996963e"
+byte_count = 1108
+
+[[prerequisite_receipt]]
+id = "component-108"
+path = "docs/backend-port-source-reviews/component-108.source-review.toml"
+sha256 = "14c93224760fb0387b39c44c4762f6d73c6021f61b073df2bae7f0d856767ba7"
+byte_count = 1091
+
+[[prerequisite_receipt]]
+id = "component-109"
+path = "docs/backend-port-source-reviews/component-109.source-review.toml"
+sha256 = "aacfb899c78ac4a452d0cc548921311f65aef91fcc8836922e5872e2b17432f4"
+byte_count = 15031
+
+[[prerequisite_receipt]]
+id = "component-110"
+path = "docs/backend-port-source-reviews/component-110.source-review.toml"
+sha256 = "afe6db8a5d5f74623e34323bd1e934bff4f72c73fb4331672425719cbd5ca4a4"
+byte_count = 809
+
+[[prerequisite_receipt]]
+id = "component-111"
+path = "docs/backend-port-source-reviews/component-111.source-review.toml"
+sha256 = "292558d1f672952d36974eb62a8965363d0cecc47832cd21a96dbdc324f74de0"
+byte_count = 795
+
+[[prerequisite_receipt]]
+id = "component-112"
+path = "docs/backend-port-source-reviews/component-112.source-review.toml"
+sha256 = "915a88c62f30d234ae13ba083a32fc251fe57158576729f8148df0a1cc5503ea"
+byte_count = 1226
+
+[[prerequisite_receipt]]
+id = "component-113"
+path = "docs/backend-port-source-reviews/component-113.source-review.toml"
+sha256 = "c644423fb117d263cf3bd4bcd4a04674a786de161af2b0d31b313880dd50a779"
+byte_count = 1255
+
+[[prerequisite_receipt]]
+id = "component-114"
+path = "docs/backend-port-source-reviews/component-114.source-review.toml"
+sha256 = "f5756498b6d193c32cee102003a4cbaf195eb128775c6e3f6de9e129c8984a04"
+byte_count = 1147
+
+[[prerequisite_receipt]]
+id = "overlays"
+path = "docs/backend-port-source-reviews/overlays.source-review.toml"
+sha256 = "0a95632667dde44abc1b90049d0bf3c3ff34b3b1f9af209ef8c44b72154878a0"
+byte_count = 924169
+
+[[prerequisite_receipt]]
+id = "support"
+path = "docs/backend-port-source-reviews/support.source-review.toml"
+sha256 = "670822d5f0e6eebf659d7a26bd291ea049b0eb8c72f65d717b3d0cc5d8655d01"
+byte_count = 30922

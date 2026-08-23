@@ -26,11 +26,31 @@ EXPECTED_SOURCE_REVIEW_PATHS = {
     "source_review_receipt_directory": "docs/backend-port-source-reviews",
     "source_review_support_inventory": "docs/backend-port-source-review-support.tsv",
 }
+EXPECTED_OWNERSHIP_REVIEW_PATHS = {
+    "ownership_review_plan": "docs/backend-port-ownership-review-plan.toml",
+    "ownership_review_schema": "docs/backend-port-ownership-review-schema.md",
+    "ownership_review_receipt_directory": "docs/backend-port-ownership-reviews",
+}
+OWNERSHIP_COMPLETION_PIN_KEYS = {
+    "ownership_review_barrier_ref",
+    "ownership_review_receipt_tree_sha256",
+    "ownership_review_receipt_logical_lines",
+    "ownership_review_receipt_bytes",
+    "ownership_review_finding_total",
+    "ownership_review_p0_findings",
+    "ownership_review_p1_findings",
+    "ownership_review_p2_findings",
+    "ownership_review_p3_findings",
+    "ownership_review_finding_id_sha256",
+}
 EXPECTED_MANIFEST_KEYS = {
     "schema_version", "upstream_ref", "active_queue", "preparation_status",
     "ignored_skills", "translation_receipt_directory", "source_review_plan",
     "source_review_schema", "source_review_receipt_directory",
-    "source_review_support_inventory", "source_review_status", "queue_order",
+    "source_review_support_inventory", "source_review_status",
+    "ownership_review_plan", "ownership_review_schema",
+    "ownership_review_receipt_directory", "ownership_review_launch_ref",
+    "ownership_review_status", "queue_order",
     "shared_generic_authority", "shared_ownership_authority", "source_inventory",
     "ownership_inventory", "dependency_inventory", "ownership_unit_order",
     "toolchain_authority", "generated_artifact_inventory", "configuration_inventory",
@@ -1773,7 +1793,11 @@ def load_authority(repo: Path, upstream: Path, manifest_path: Path) -> Authority
     require(manifest_path == (repo / "docs/backend-port-campaign.toml").resolve(),
             "source-review campaign manifest path drift")
     manifest = load_toml(manifest_path, "campaign manifest")
-    require_exact_keys(manifest, EXPECTED_MANIFEST_KEYS, "campaign manifest")
+    ownership_status = manifest.get("ownership_review_status")
+    manifest_keys = set(EXPECTED_MANIFEST_KEYS)
+    if ownership_status == "complete":
+        manifest_keys.update(OWNERSHIP_COMPLETION_PIN_KEYS)
+    require_exact_keys(manifest, manifest_keys, "campaign manifest")
     require(manifest.get("schema_version") == 1, "invalid campaign manifest schema")
     require(git_tracked(repo, manifest_path), "campaign manifest is not tracked")
     require(manifest.get("upstream_ref") == EXPECTED_UPSTREAM_REF,
@@ -1789,6 +1813,19 @@ def load_authority(repo: Path, upstream: Path, manifest_path: Path) -> Authority
     for key, expected in EXPECTED_SOURCE_REVIEW_PATHS.items():
         require(manifest.get(key) == expected,
                 f"source-review authority path drift: {key}")
+    for key, expected in EXPECTED_OWNERSHIP_REVIEW_PATHS.items():
+        require(manifest.get(key) == expected,
+                f"ownership-review authority path drift: {key}")
+    require(ownership_status in {"active", "complete"},
+            "ownership-review status is not active or complete")
+    launch_ref = manifest.get("ownership_review_launch_ref")
+    require(launch_ref == "pending" or (
+        isinstance(launch_ref, str)
+        and re.fullmatch(r"[0-9a-f]{40}", launch_ref) is not None
+    ), "ownership-review launch ref is not pending or a full SHA")
+    if ownership_status == "complete":
+        require(launch_ref != "pending",
+                "complete ownership review has a pending launch ref")
     schema_path = repo_path(repo, str(manifest["source_review_schema"]),
                             "source-review schema")
     require(schema_path.is_file(), "source-review schema is missing")

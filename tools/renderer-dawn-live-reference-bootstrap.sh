@@ -11,9 +11,11 @@ dependency_pins="$repo_root/tools/renderer-dawn-live-reference-dependencies.txt"
 build_out="out/cpp-atlas-mask-oracle"
 expected_runtime_revision="4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 expected_dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"
+expected_depot_tools_revision="1709e20d5ca2afe97bfa726168719c3b77eb9883"
 expected_naga_version="30.0.0"
+arm64_python_requirements="$repo_root/tools/renderer-dawn-live-arm64-requirements.txt"
 
-for command in gclient git glslangValidator gn make premake5 python3 spirv-opt xcrun xxd; do
+for command in gclient git glslangValidator make premake5 python3 spirv-opt xcrun xxd; do
     if ! command -v "$command" >/dev/null 2>&1; then
         echo "missing live Dawn bootstrap tool: $command" >&2
         exit 2
@@ -22,6 +24,36 @@ done
 if [[ ! "$jobs" =~ ^[1-9][0-9]*$ ]]; then
     echo "RIVE_DAWN_LIVE_JOBS must be a positive integer, got '$jobs'" >&2
     exit 2
+fi
+
+gclient_command=(gclient sync -f -D)
+gn_bin="$(command -v gn || true)"
+if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+    gclient_bin="$(command -v gclient)"
+    depot_tools_dir="$(cd "$(dirname "$gclient_bin")" && pwd)"
+    if [[ ! -d "$depot_tools_dir/.git" ]]; then
+        echo "Apple arm64 gclient must come from the pinned depot_tools checkout: $depot_tools_dir" >&2
+        exit 2
+    fi
+    actual_depot_tools_revision="$(git -C "$depot_tools_dir" rev-parse HEAD)"
+    if [[ "$actual_depot_tools_revision" != "$expected_depot_tools_revision" ]]; then
+        echo "depot_tools drifted: expected $expected_depot_tools_revision, got $actual_depot_tools_revision" >&2
+        exit 2
+    fi
+    if [[ ! -f "$arm64_python_requirements" ]]; then
+        echo "missing Apple arm64 gclient requirements: $arm64_python_requirements" >&2
+        exit 2
+    fi
+    gclient_venv="$repo_root/target/renderer-dawn-live-gclient-arm64"
+    if [[ ! -x "$gclient_venv/bin/python3" ]]; then
+        python3 -m venv "$gclient_venv"
+    fi
+    "$gclient_venv/bin/python3" -m pip install \
+        --disable-pip-version-check --no-compile --require-hashes \
+        --no-binary=:all: --requirement "$arm64_python_requirements"
+    export PATH="$gclient_venv/bin:$PATH"
+    export VPYTHON_BYPASS="manually managed python not supported by chrome operations"
+    gclient_command+=(--nohooks)
 fi
 naga_bin="${RIVE_DAWN_LIVE_NAGA:-$(command -v naga || true)}"
 if [[ ! -x "$naga_bin" || "$(basename "$naga_bin")" != "naga" ]]; then
@@ -82,12 +114,19 @@ fi
 cp "$dawn_dir/scripts/standalone.gclient" "$dawn_dir/.gclient"
 (
     cd "$dawn_dir"
-    DEPOT_TOOLS_UPDATE=0 gclient sync -f -D
+    DEPOT_TOOLS_UPDATE=0 "${gclient_command[@]}"
 )
 
 ninja_bin="$dawn_dir/third_party/ninja/ninja"
 if [[ ! -x "$ninja_bin" ]]; then
     echo "pinned Dawn ninja is missing after gclient sync: $ninja_bin" >&2
+    exit 2
+fi
+if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+    gn_bin="$dawn_dir/buildtools/mac/gn"
+fi
+if [[ ! -x "$gn_bin" ]]; then
+    echo "pinned Dawn gn is missing after gclient sync: ${gn_bin:-missing}" >&2
     exit 2
 fi
 
@@ -122,7 +161,7 @@ fi
 
 (
     cd "$dawn_dir"
-    gn gen --args="$dawn_args" out/release
+    "$gn_bin" gen --args="$dawn_args" out/release
     "$ninja_bin" -C out/release -j"$jobs" webgpu_dawn_static cpp proc_static
 )
 

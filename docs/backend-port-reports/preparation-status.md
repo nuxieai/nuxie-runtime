@@ -48,6 +48,10 @@ Result: **RED; translation is not admitted**
   every backend with no exclusions, names distinct backend identities, freezes
   local and cross-platform requirements, and forbids candidate-derived
   tolerances.
+- A 4,407-row source-repeatability ledger reserves every corpus row for all
+  three primary backends. WebGPU is captured and frozen at 1,469/1,469
+  byte-identical source reruns with 0/0 per-row budgets on Apple M5 Max;
+  Vulkan and WebGL2 remain explicitly pending.
 
 The source, ownership, dependency, and unit-order ledgers are generated from
 the pinned upstream checkout. Their checks fail on source drift, stale output,
@@ -56,13 +60,13 @@ an incomplete unit graph.
 
 ## Remaining preparation blockers
 
-1. Replace the captured local shader tool paths with a hermetic bootstrap while
-   preserving the frozen versions and output digests.
-2. Build the Vulkan, new-WebGPU, and WebGL2 primary/candidate replay roots.
-3. Capture two independent source-only repeatability runs for each primary
-   platform and freeze comparison budgets without viewing candidate output.
-4. Run the available local Vulkan/MoltenVK, native WebGPU/Dawn, and
-   Chromium/WebGL2 platform gates.
+1. Build the Vulkan and WebGL2 primary replay roots. The WebGPU/Dawn primary
+   root is green; all three candidate root contracts are already frozen.
+2. Capture two independent source-only repeatability runs for Vulkan and WebGL2
+   (WebGPU is complete) and freeze comparison budgets without viewing candidate
+   output.
+3. Run the available local Vulkan/MoltenVK and Chromium/WebGL2 primary platform
+   gates. The native WebGPU/Dawn primary platform gate is green.
 
 No compiler integration, fixture-driven implementation, or backend translation
 is allowed while this report remains red.

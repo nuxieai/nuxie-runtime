@@ -23,7 +23,8 @@ secondary_oracles = ["rust-metal", "rust-webgpu-exact"]
 required_modes = ["msaa", "clockwise-atomic"]
 corpus_entries = 1469
 rooted_native_runner = "tools/renderer-replay"
-root_status = "pending"
+primary_root_status = "pending"
+candidate_root_contract_status = "frozen"
 
 [[backend]]
 id = "webgpu"
@@ -36,7 +37,8 @@ corpus_entries = 1469
 rooted_native_runner = "tools/renderer-replay"
 rooted_browser_runner = "tools/browser-renderer-smoke"
 web_editor_selection = "webgpu"
-root_status = "pending"
+primary_root_status = "green"
+candidate_root_contract_status = "frozen"
 
 [[backend]]
 id = "webgl2"
@@ -48,84 +50,96 @@ required_modes = ["msaa", "clockwise-atomic"]
 corpus_entries = 1469
 rooted_browser_runner = "tools/browser-renderer-smoke"
 web_editor_selection = "webgl2"
-root_status = "pending"
+primary_root_status = "pending"
+candidate_root_contract_status = "frozen"
 
 [[platform]]
 id = "vulkan-macos-moltenvk-apple-m5-max"
 backend = "vulkan"
 environment = "macOS Apple M5 Max through pinned MoltenVK"
 requirement = "local-blocking"
-status = "available-unrun"
+primary_status = "available-unrun"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "vulkan-linux-amd"
 backend = "vulkan"
 environment = "Linux AMD Vulkan"
 requirement = "closeout-blocking"
-status = "hardware-not-yet-provisioned"
+primary_status = "hardware-not-yet-provisioned"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "vulkan-linux-nvidia"
 backend = "vulkan"
 environment = "Linux NVIDIA Vulkan"
 requirement = "closeout-blocking"
-status = "hardware-not-yet-provisioned"
+primary_status = "hardware-not-yet-provisioned"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "vulkan-linux-intel"
 backend = "vulkan"
 environment = "Linux Intel Vulkan"
 requirement = "closeout-blocking"
-status = "hardware-not-yet-provisioned"
+primary_status = "hardware-not-yet-provisioned"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "webgpu-native-dawn-macos-apple-m5-max"
 backend = "webgpu"
 environment = "native Dawn Metal on macOS Apple M5 Max"
 requirement = "local-blocking"
-status = "available-existing-oracle-needs-new-candidate"
+primary_status = "green"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "webgpu-chromium-macos"
 backend = "webgpu"
 environment = "current pinned Chromium browser build on macOS"
 requirement = "closeout-blocking"
-status = "pending"
+primary_status = "pending"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "webgpu-firefox-macos"
 backend = "webgpu"
 environment = "current pinned Firefox browser build on macOS"
 requirement = "closeout-blocking"
-status = "pending"
+primary_status = "pending"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "webgpu-safari-macos"
 backend = "webgpu"
 environment = "current pinned Safari/WebKit build on macOS"
 requirement = "closeout-blocking"
-status = "pending"
+primary_status = "pending"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "webgl2-chromium-macos"
 backend = "webgl2"
 environment = "current pinned Chromium browser build on macOS"
 requirement = "local-blocking"
-status = "available-unrun"
+primary_status = "available-unrun"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "webgl2-firefox-macos"
 backend = "webgl2"
 environment = "current pinned Firefox browser build on macOS"
 requirement = "closeout-blocking"
-status = "pending"
+primary_status = "pending"
+candidate_status = "pending-translation"
 
 [[platform]]
 id = "webgl2-safari-macos"
 backend = "webgl2"
 environment = "current pinned Safari/WebKit build on macOS"
 requirement = "closeout-blocking"
-status = "pending"
+primary_status = "pending"
+candidate_status = "pending-translation"
 
 [[cross_platform_family]]
 id = "browser-windows"

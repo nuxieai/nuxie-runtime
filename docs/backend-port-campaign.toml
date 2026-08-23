@@ -35,6 +35,7 @@ lifecycle_inventory = "docs/backend-port-lifecycle-events.tsv"
 oracle_contract = "docs/backend-port-oracle-contract.toml"
 legacy_wgpu_inventory = "docs/backend-port-legacy-wgpu.tsv"
 owner_contracts = "docs/backend-port-owner-contracts.toml"
+repeatability_inventory = "docs/backend-port-repeatability.tsv"
 
 [denominator]
 sources = 200
@@ -46,6 +47,7 @@ configuration_rows = 5409
 fields = 907
 lifecycle_events = 2431
 legacy_wgpu_files = 103
+repeatability_rows = 4407
 corpus_entries = 1469
 
 [[backend]]

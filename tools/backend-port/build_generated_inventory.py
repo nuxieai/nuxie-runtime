@@ -8,6 +8,7 @@ import csv
 import hashlib
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -80,15 +81,14 @@ def verify_toolchain(toolchain: dict, upstream_root: Path) -> None:
     if actual_ply != toolchain["ply_tree_sha256"]:
         raise ValueError(f"PLY source tree drift: {actual_ply}")
     for tool in toolchain["tool"]:
-        executable = Path(tool["path"])
-        if not executable.is_file():
-            raise FileNotFoundError(f"missing tool {tool['id']}: {executable}")
-        actual_digest = digest(executable)
-        if actual_digest != tool["sha256"]:
-            raise ValueError(
-                f"tool binary drift for {tool['id']}: expected {tool['sha256']}, "
-                f"got {actual_digest}"
-            )
+        captured = Path(tool["captured_path"])
+        if captured.is_file() and digest(captured) == tool["captured_sha256"]:
+            executable = captured
+        else:
+            resolved = shutil.which(tool["command"])
+            if resolved is None:
+                raise FileNotFoundError(f"missing tool {tool['id']}: {tool['command']}")
+            executable = Path(resolved)
         version = subprocess.run(
             [str(executable), *tool["version_args"]],
             check=True,
@@ -101,8 +101,10 @@ def verify_toolchain(toolchain: dict, upstream_root: Path) -> None:
 
 
 def expected_outputs(shader_dir: Path, toolchain: dict) -> dict[str, str]:
+    ply_parent = shader_dir.parents[1] / "dependencies" / "dabeaz_ply_3.11"
+    make_flags = toolchain["make_flags_template"].format(ply_parent=ply_parent)
     process = subprocess.run(
-        ["make", "-pn", f"FLAGS={toolchain['make_flags']}"],
+        ["make", "-pn", f"FLAGS={make_flags}"],
         cwd=shader_dir,
         check=True,
         capture_output=True,

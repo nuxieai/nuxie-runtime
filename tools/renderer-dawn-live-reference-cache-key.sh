@@ -96,6 +96,7 @@ source_roots=(
     tools/renderer-dawn-live-reference-bootstrap.sh
     tools/renderer-dawn-live-reference-cache-key.sh
     tools/renderer-dawn-live-reference-dependencies.txt
+    tools/renderer-dawn-live-arm64-requirements.txt
     tools/renderer-replay
 )
 

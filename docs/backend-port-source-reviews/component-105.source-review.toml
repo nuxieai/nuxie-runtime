@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-105"
+units = ["webgpu:ore:texture"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-105-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_texture_wgpu.cpp"
+sha256 = "82ff1b598e914350e7d3791bff0a8dd7c9d0c6ddaee2a08a360835530d475cb2"
+citation = "source:renderer/src/ore/wgpu/ore_texture_wgpu.cpp:1-94"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_texture_wgpu.hpp"
+sha256 = "79b2a93e29d3a8f1fcaa4a625274e1ae383eb7011d5adb0e99507b87871127f1"
+citation = "source:renderer/src/ore/wgpu/ore_texture_wgpu.hpp:1-35"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_texture_wgpu_cpp__impl.rs"
+sha256 = "2769b9acfbe16bb61a83f337a786840e5656273e7fb9cde199bfc998d1e0945a"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_texture_wgpu_cpp__impl.rs:1-226"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_texture_wgpu_hpp__decl.rs"
+sha256 = "6abb4f8e7bbc875509085e1ff63b71fef020bdd6125d7639f1710fa23ccc528f"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_texture_wgpu_hpp__decl.rs:1-151"

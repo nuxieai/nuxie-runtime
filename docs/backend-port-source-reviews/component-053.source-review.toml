@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-053"
+units = ["shader:source:draw_msaa_color_seed_attachment"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-053-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag"
+sha256 = "0baeda14de63ded97fc2247240b01b71f891be7235b3c73a2a950810402c44d5"
+citation = "source:renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag:1-8"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.rs"
+sha256 = "8122045673a115e371f0afac22f0c7e7831a19f1e47cdbff8440aafd709be2ed"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.rs:1-17"

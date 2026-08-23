@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-106"
+units = ["webgpu:ore:shader_module"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-106-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_shader_module_wgpu.cpp"
+sha256 = "aef1ea905817c98dc82cafa4bb0cf1f74cf66407c229bf30241dfafa7171949f"
+citation = "source:renderer/src/ore/wgpu/ore_shader_module_wgpu.cpp:1-5"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp"
+sha256 = "00920df29c3426c1eb9796196b942b228c75879c65f1687c04ab3dbe6e4be4a6"
+citation = "source:renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp:1-21"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_cpp__impl.rs"
+sha256 = "c06253b493c47058ad90b06ac382e9978a50954aa44a16c286c45364d1c04f67"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_cpp__impl.rs:1-21"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_hpp__decl.rs"
+sha256 = "fbe36467f3daef42cf1eaa8425dce619ef51d958836dfebc1cb40b68333b4e81"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_hpp__decl.rs:1-97"

@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-020"
+units = ["shader:source:atomic_draw_path"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-020-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/spirv/atomic_draw_path.main"
+sha256 = "03327dcdaa878b265f76d721cb321e047f87e5df4e8b40dc4cb923623e4ab99b"
+citation = "source:renderer/src/shaders/spirv/atomic_draw_path.main:1-4"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_path_main__generated_input.rs"
+sha256 = "72808af21c68b486b839fd7de226684e4472fda68e571bb7351f43ff909899b1"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_path_main__generated_input.rs:1-17"

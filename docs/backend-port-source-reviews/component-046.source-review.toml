@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-046"
+units = ["shader:source:draw_clockwise_path"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-046-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/draw_clockwise_path.frag"
+sha256 = "f033a35f69ad4d2802fc9afa21f0ca0e06f73bb516d9cd9099a378a553eaa377"
+citation = "source:renderer/src/shaders/draw_clockwise_path.frag:1-251"
+disposition = "shared-authority"
+
+[[sources]]
+path = "renderer/src/shaders/spirv/draw_clockwise_path.main"
+sha256 = "220db78a8f799a0c37718e9e7afe5121819263f90f92c7aae6a28048b44ad23b"
+citation = "source:renderer/src/shaders/spirv/draw_clockwise_path.main:1-15"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_draw_clockwise_path_frag__generated_input.rs"
+sha256 = "281e9b440cbf8b6ca2e93165628c539ae887d6a3d0a280809683c53ba10c9d9e"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_draw_clockwise_path_frag__generated_input.rs:1-17"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_path_main__generated_input.rs"
+sha256 = "3a341905fcf743cc5e198c493cae7e04bc12d12725094d278f0d9685b3383c91"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_path_main__generated_input.rs:1-17"

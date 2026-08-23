@@ -1,0 +1,59 @@
+schema_version = 1
+component_id = "component-087"
+units = ["webgl2:ore:texture"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-087-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 1
+
+[[findings]]
+id = "SR-C087-01"
+severity = "P2"
+summary = "The pinned WebGL2 source activates texture unit zero and binds the texture before resolving its internal format. Consequently, BC1, BC3, and BC7, whose extension constants are absent in the frozen configuration, reach RIVE_UNREACHABLE only after those observable GL-state mutations. The target resolves and panics on the unsupported format before recording ActiveTexture or BindTexture, reversing failure order and suppressing both source mutations."
+citations = [
+  "source:renderer/src/ore/gl/ore_texture_gl.cpp:53-69",
+  "source:renderer/src/ore/gl/ore_texture_gl.cpp:207-212",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_texture_gl_cpp__impl.rs:21-28",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_texture_gl_cpp__impl.rs:55-76",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_texture_gl_cpp__impl.rs:158-189",
+]
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_texture_gl.cpp"
+sha256 = "c8b2025d1fce801cbd75f7e8be406135f2d74b64d323cb3d74f20765e028bac3"
+citation = "source:renderer/src/ore/gl/ore_texture_gl.cpp:1-349"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_texture_gl.hpp"
+sha256 = "2c8a624832db465cde7ddedebc5cf4f518fc18a6369908662801532673f41bc5"
+citation = "source:renderer/src/ore/gl/ore_texture_gl.hpp:1-35"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_texture_gl.mm"
+sha256 = "a6f198d2840ea065288718431caf921081599b92ce6bd5d9b53e273c32418c37"
+citation = "source:renderer/src/ore/gl/ore_texture_gl.mm:1-3"
+disposition = "source-exclusion-non-webgl2-build"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_texture_gl_cpp__impl.rs"
+sha256 = "226dc828ac5d942913d4e7922103d395570b6e13d8b8c75dacadc9a8a7a8964e"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_texture_gl_cpp__impl.rs:1-379"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_texture_gl_hpp__decl.rs"
+sha256 = "c3906dbf3aa86b12790e1cd45c71d3d8c252c9180e36e3ad2a6c3d5b743bd5f1"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_texture_gl_hpp__decl.rs:1-166"

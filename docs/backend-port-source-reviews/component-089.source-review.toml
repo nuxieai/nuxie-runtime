@@ -1,0 +1,48 @@
+schema_version = 1
+component_id = "component-089"
+units = ["webgl2:ore:shader_module"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-089-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_shader_module_gl.cpp"
+sha256 = "4d2ad73340a497876d53afeb8a942c61f19c5899376670598b120a19e20749f9"
+citation = "source:renderer/src/ore/gl/ore_shader_module_gl.cpp:1-23"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_shader_module_gl.hpp"
+sha256 = "dbf7df7229881737857831f349eadc1be49c1277c36bccb994611b2a7f9b3953"
+citation = "source:renderer/src/ore/gl/ore_shader_module_gl.hpp:1-20"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/gl/ore_shader_module_gl.mm"
+sha256 = "1612b74089d148b62a68aa1c08f30d4bf33cd5b563a30ea05293e9e828b475b0"
+citation = "source:renderer/src/ore/gl/ore_shader_module_gl.mm:1-3"
+disposition = "source-exclusion-non-webgl2-build"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_shader_module_gl_cpp__impl.rs"
+sha256 = "e31299a05b16cbddbd4a982a5aad7880ac920ab79985f540f844dd823b783a64"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_shader_module_gl_cpp__impl.rs:1-30"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_shader_module_gl_hpp__decl.rs"
+sha256 = "b87df1043ec36082d65ad86274167fd1a5a29b09a0c27e6b4348d0137d427c80"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_shader_module_gl_hpp__decl.rs:1-72"

@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-064"
+units = ["shader:source:render_atlas_fill"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-064-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/spirv/render_atlas_fill.frag"
+sha256 = "2ba6ac1bec020d443619622f060bee9fd978d0f3fcde65e715419968886d7f9a"
+citation = "source:renderer/src/shaders/spirv/render_atlas_fill.frag:1-4"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_fill_frag__generated_input.rs"
+sha256 = "00732a66270da53180d4d2ab85ccad799b1c4a53b78ab1fe5cfed983aca7a0b3"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_fill_frag__generated_input.rs:1-17"

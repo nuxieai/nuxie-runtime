@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-037"
+units = ["shader:source:draw_clockwise_atomic_clip"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-037-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/draw_clockwise_atomic_clip.frag"
+sha256 = "c50f3d97fa389ef3e68ac2a20579f022ea688079ab97956d66e4c4b62310ceb4"
+citation = "source:renderer/src/shaders/draw_clockwise_atomic_clip.frag:1-138"
+disposition = "shared-authority"
+
+[[sources]]
+path = "renderer/src/shaders/spirv/draw_clockwise_atomic_clip.frag"
+sha256 = "b3ff666c75b3da500bd64a8de38f4dafb5260ff4ace5d30db86b49c410e64205"
+citation = "source:renderer/src/shaders/spirv/draw_clockwise_atomic_clip.frag:1-17"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_draw_clockwise_atomic_clip_frag__generated_input.rs"
+sha256 = "a98c47010b65918dffd75282d4922d4aee7e952a40c7b944dad8770a9e2874ab"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_draw_clockwise_atomic_clip_frag__generated_input.rs:1-17"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_clip_frag__generated_input.rs"
+sha256 = "0471ec349c44638616ab0462267c9a256fcc6c7e761898ae4edd3c822be081ea"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_clip_frag__generated_input.rs:1-17"

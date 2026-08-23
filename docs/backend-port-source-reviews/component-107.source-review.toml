@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-107"
+units = ["webgpu:ore:wgpu_layout"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g2-component-107-20260823"
+review_wave = "g2"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_wgpu_layout.hpp"
+sha256 = "56de4177e8cf574ed40ff297f2c29de6c3ed5ff0daafaa3f33053bf242bba680"
+citation = "source:renderer/src/ore/wgpu/ore_wgpu_layout.hpp:1-283"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_wgpu_layout_hpp__decl.rs"
+sha256 = "6ef8d3dabf1bfb97479c9fa659ee5cc148d846cc0603d14f46d004e2fc8b695a"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_wgpu_layout_hpp__decl.rs:1-413"

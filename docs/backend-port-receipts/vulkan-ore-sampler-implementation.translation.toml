@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:ore:sampler"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/vulkan/ore_sampler_vulkan.cpp"
+source_sha256 = "28ab55810848a33d95789ff1f09f73c808ab57d5f3757213fa3c0b0b11e29272"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs"
+target_sha256 = "ea5ced40a6fec496b0b03995f9a0af46f0b3c3f34ddea22966d24b80ffbef2c2"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_ore_vulkan_ore_sampler_vulkan.cpp"
+source_snapshot_sha256 = "28ab55810848a33d95789ff1f09f73c808ab57d5f3757213fa3c0b0b11e29272"
+dependency_units = []
+source_lines = 16
+source_bytes = 285
+configuration_authorities = 1
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-vulkan-experimental mechanical_port::vulkan::ore_sampler_vulkan_impl::tests --lib"
+scope_note = "Preserves the exact two-part guarded destroy condition, null allocator, derived-before-base teardown, and no-op behavior for unpublished resources."

@@ -55,3 +55,15 @@ pub mod texture {
 pub mod types {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_types_hpp::*;
 }
+
+/// Backend integration seam for exact concrete ORE sampler subclasses.
+#[doc(hidden)]
+pub fn new_sampler_backend_base() -> sampler::Sampler {
+    sampler::Sampler::new()
+}
+
+/// Backend integration seam for exact concrete ORE shader-module subclasses.
+#[doc(hidden)]
+pub fn new_shader_module_backend_base() -> shader_module::ShaderModule {
+    shader_module::ShaderModule::new()
+}

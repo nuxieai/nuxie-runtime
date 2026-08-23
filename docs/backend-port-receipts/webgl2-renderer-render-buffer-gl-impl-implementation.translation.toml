@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:render_buffer_gl_impl"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/gl/render_buffer_gl_impl.cpp"
+source_sha256 = "f867e3eb85413d4326cda24d1a73c49b9957b26ca2abe6b696c6c2cb96b6439c"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_buffer_gl_impl_cpp__impl.rs"
+target_sha256 = "7877fbb50e84e0fddc2a33cb496bc04e4b143da9b58e43cd7525dec924bd4d78"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_gl_render_buffer_gl_impl.cpp"
+source_snapshot_sha256 = "f867e3eb85413d4326cda24d1a73c49b9957b26ca2abe6b696c6c2cb96b6439c"
+dependency_units = ["webgl2:renderer:gl_state", "webgl2:renderer:gles3"]
+source_lines = 120
+source_bytes = 3388
+configuration_authorities = 13
+lifecycle_authorities = 11
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the pinned RIVE_WEBGL implementation: GL buffer generation, VAO-zero and cached-target binding, exact static-versus-dynamic allocation, WebGL fallback CPU mapping and subdata upload, one-time mapping release, detach behavior, GLState-mediated deletion, reverse member destruction, and final RiveRenderBuffer base teardown. Rust zero-initializes the source's uninitialized byte allocation so under-written mapped memory remains valid; fully written mapping behavior is identical."

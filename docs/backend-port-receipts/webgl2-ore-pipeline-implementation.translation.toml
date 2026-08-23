@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:pipeline"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_pipeline_gl.cpp"
+source_sha256 = "33521d2c899fa8f9d3a26b34f2cf39b77380d71496d10cb7790fbf36bc9c3d3c"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_pipeline_gl_cpp__impl.rs"
+target_sha256 = "75f62f2a66c4da7942be7cec5925bbb75e1d8514a49bd0421f813f583aabd390"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_pipeline_gl.cpp"
+source_snapshot_sha256 = "33521d2c899fa8f9d3a26b34f2cf39b77380d71496d10cb7790fbf36bc9c3d3c"
+dependency_units = ["webgl2:renderer:load_gles_extensions"]
+source_lines = 23
+source_bytes = 326
+configuration_authorities = 3
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete ORE_BACKEND_GL implementation: a nonzero GL program is deleted exactly once before the ORE Pipeline base is destroyed."

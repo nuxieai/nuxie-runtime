@@ -31,6 +31,11 @@ pub(crate) const GL_INCR_WRAP: GLenum = 0x8507;
 pub(crate) const GL_DECR: GLenum = 0x1E03;
 pub(crate) const GL_DECR_WRAP: GLenum = 0x8508;
 pub(crate) const GL_ARRAY_BUFFER: GLenum = 0x8892;
+pub(crate) const GL_ELEMENT_ARRAY_BUFFER: GLenum = 0x8893;
+pub(crate) const GL_ELEMENT_ARRAY_BUFFER_BINDING: GLenum = 0x8895;
+pub(crate) const GL_COPY_WRITE_BUFFER: GLenum = 0x8F37;
+pub(crate) const GL_STATIC_DRAW: GLenum = 0x88E4;
+pub(crate) const GL_DYNAMIC_DRAW: GLenum = 0x88E8;
 pub(crate) const GL_UNIFORM_BUFFER: GLenum = 0x8A11;
 pub(crate) const GL_PIXEL_UNPACK_BUFFER: GLenum = 0x88EC;
 pub(crate) const GL_SCISSOR_TEST: GLenum = 0x0C11;
@@ -58,6 +63,11 @@ pub(crate) const GL_ONE_MINUS_SRC_ALPHA: GLenum = 0x0303;
 pub(crate) const GL_VERTEX_SHADER: GLenum = 0x8B31;
 pub(crate) const GL_FRAGMENT_SHADER: GLenum = 0x8B30;
 pub(crate) const GL_TEXTURE_2D: GLenum = 0x0DE1;
+pub(crate) const GL_TEXTURE_3D: GLenum = 0x806F;
+pub(crate) const GL_TEXTURE_2D_ARRAY: GLenum = 0x8C1A;
+pub(crate) const GL_TEXTURE_CUBE_MAP: GLenum = 0x8513;
+pub(crate) const GL_TEXTURE_CUBE_MAP_POSITIVE_X: GLenum = 0x8515;
+pub(crate) const GL_TEXTURE0: GLenum = 0x84C0;
 pub(crate) const GL_TEXTURE_MIN_FILTER: GLenum = 0x2801;
 pub(crate) const GL_TEXTURE_MAG_FILTER: GLenum = 0x2800;
 pub(crate) const GL_TEXTURE_WRAP_S: GLenum = 0x2802;
@@ -69,6 +79,43 @@ pub(crate) const GL_LINEAR: GLenum = 0x2601;
 pub(crate) const GL_NEAREST: GLenum = 0x2600;
 pub(crate) const GL_LINEAR_MIPMAP_NEAREST: GLenum = 0x2701;
 pub(crate) const GL_COLOR_BUFFER_BIT: GLbitfield = 0x00004000;
+pub(crate) const GL_UNPACK_IMAGE_HEIGHT: GLenum = 0x806E;
+pub(crate) const GL_R8: GLenum = 0x8229;
+pub(crate) const GL_RG8: GLenum = 0x822B;
+pub(crate) const GL_RGBA8: GLenum = 0x8058;
+pub(crate) const GL_RGBA8_SNORM: GLenum = 0x8F97;
+pub(crate) const GL_RGBA16F: GLenum = 0x881A;
+pub(crate) const GL_RG16F: GLenum = 0x822F;
+pub(crate) const GL_R16F: GLenum = 0x822D;
+pub(crate) const GL_RGBA32F: GLenum = 0x8814;
+pub(crate) const GL_RG32F: GLenum = 0x8230;
+pub(crate) const GL_R32F: GLenum = 0x822E;
+pub(crate) const GL_RGB10_A2: GLenum = 0x8059;
+pub(crate) const GL_R11F_G11F_B10F: GLenum = 0x8C3A;
+pub(crate) const GL_DEPTH_COMPONENT16: GLenum = 0x81A5;
+pub(crate) const GL_DEPTH24_STENCIL8: GLenum = 0x88F0;
+pub(crate) const GL_DEPTH_COMPONENT32F: GLenum = 0x8CAC;
+pub(crate) const GL_DEPTH32F_STENCIL8: GLenum = 0x8CAD;
+pub(crate) const GL_COMPRESSED_RGB_S3TC_DXT1_EXT: GLenum = 0x83F0;
+pub(crate) const GL_COMPRESSED_RGBA_S3TC_DXT5_EXT: GLenum = 0x83F3;
+pub(crate) const GL_COMPRESSED_RGBA_BPTC_UNORM: GLenum = 0x8E8C;
+pub(crate) const GL_COMPRESSED_RGB8_ETC2: GLenum = 0x9274;
+pub(crate) const GL_COMPRESSED_RGBA8_ETC2_EAC: GLenum = 0x9278;
+pub(crate) const GL_RED: GLenum = 0x1903;
+pub(crate) const GL_RG: GLenum = 0x8227;
+pub(crate) const GL_RGB: GLenum = 0x1907;
+pub(crate) const GL_RGBA: GLenum = 0x1908;
+pub(crate) const GL_DEPTH_COMPONENT: GLenum = 0x1902;
+pub(crate) const GL_DEPTH_STENCIL: GLenum = 0x84F9;
+pub(crate) const GL_UNSIGNED_BYTE: GLenum = 0x1401;
+pub(crate) const GL_BYTE: GLenum = 0x1400;
+pub(crate) const GL_HALF_FLOAT: GLenum = 0x140B;
+pub(crate) const GL_FLOAT: GLenum = 0x1406;
+pub(crate) const GL_UNSIGNED_INT_2_10_10_10_REV: GLenum = 0x8368;
+pub(crate) const GL_UNSIGNED_INT_10F_11F_11F_REV: GLenum = 0x8C3B;
+pub(crate) const GL_UNSIGNED_SHORT: GLenum = 0x1403;
+pub(crate) const GL_UNSIGNED_INT_24_8: GLenum = 0x84FA;
+pub(crate) const GL_FLOAT_32_UNSIGNED_INT_24_8_REV: GLenum = 0x8DAD;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum GLCommand {
@@ -101,6 +148,7 @@ pub(crate) enum GLCommand {
     DeleteTexture(GLuint),
     DeleteFramebuffer(GLuint),
     DeleteRenderbuffer(GLuint),
+    DeleteSampler(GLuint),
     GenerateBuffer(GLuint),
     GenerateTexture(GLuint),
     GenerateFramebuffer(GLuint),
@@ -128,11 +176,73 @@ pub(crate) enum GLCommand {
     TextureParameter(GLenum, GLenum, i32),
     BlitFramebuffer([i32; 8], GLbitfield, GLenum),
     Uniform1iByName(GLuint, String, GLint),
+    GetInteger(GLenum, u64),
+    BindBufferFromQuery(GLenum, u64),
+    BufferSubData {
+        target: GLenum,
+        offset: u32,
+        data: Vec<u8>,
+    },
+    BufferData {
+        target: GLenum,
+        size: usize,
+        usage: GLenum,
+    },
+    ActiveTexture(GLenum),
+    BindTexture(GLenum, GLuint),
+    CompressedTexSubImage2D {
+        target: GLenum,
+        level: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        format: GLenum,
+        data: Vec<u8>,
+    },
+    CompressedTexSubImage3D {
+        target: GLenum,
+        level: u32,
+        x: u32,
+        y: u32,
+        z: u32,
+        width: u32,
+        height: u32,
+        depth: u32,
+        format: GLenum,
+        data: Vec<u8>,
+    },
+    TexSubImage2D {
+        target: GLenum,
+        level: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        format: GLenum,
+        type_: GLenum,
+        data: Vec<u8>,
+    },
+    TexSubImage3D {
+        target: GLenum,
+        level: u32,
+        x: u32,
+        y: u32,
+        z: u32,
+        width: u32,
+        height: u32,
+        depth: u32,
+        format: GLenum,
+        type_: GLenum,
+        data: Vec<u8>,
+    },
+    PixelStoreFromQuery(GLenum, u64),
 }
 
 #[derive(Debug)]
 struct GLCommandStream {
     nextName: GLuint,
+    nextQuerySlot: u64,
     commands: Vec<GLCommand>,
 }
 
@@ -140,9 +250,22 @@ impl Default for GLCommandStream {
     fn default() -> Self {
         Self {
             nextName: 1,
+            nextQuerySlot: 1,
             commands: Vec::new(),
         }
     }
+}
+
+pub(crate) fn allocateGLQuerySlot() -> u64 {
+    GL_COMMAND_STREAM.with(|stream| {
+        let mut stream = stream.borrow_mut();
+        let slot = stream.nextQuerySlot;
+        stream.nextQuerySlot = stream
+            .nextQuerySlot
+            .checked_add(1)
+            .expect("GL query slot overflow");
+        slot
+    })
 }
 
 thread_local! {

@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:shader_module"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_shader_module_gl.cpp"
+source_sha256 = "4d2ad73340a497876d53afeb8a942c61f19c5899376670598b120a19e20749f9"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_shader_module_gl_cpp__impl.rs"
+target_sha256 = "6834cd29b75dd0980df7ca3bc03048c74a448d6cd4720557257b16e8189c2004"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_shader_module_gl.cpp"
+source_snapshot_sha256 = "4d2ad73340a497876d53afeb8a942c61f19c5899376670598b120a19e20749f9"
+dependency_units = ["webgl2:renderer:load_gles_extensions"]
+source_lines = 23
+source_bytes = 336
+configuration_authorities = 3
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete ORE_BACKEND_GL implementation: a nonzero GL shader is deleted exactly once before the ORE ShaderModule base is destroyed."

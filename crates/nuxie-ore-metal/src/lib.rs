@@ -87,6 +87,15 @@ pub fn new_pipeline_backend_base(
     Some(base)
 }
 
+/// Backend integration seam for concrete ORE pipeline subclasses whose source
+/// constructor explicitly selects the null-manager base overload.
+#[doc(hidden)]
+pub fn new_pipeline_backend_base_without_manager(
+    desc: &types::PipelineDesc<'_>,
+) -> Option<pipeline::Pipeline> {
+    pipeline::Pipeline::new(desc)
+}
+
 /// Exposes the protected source `Context::m_manager` to concrete backend
 /// subclasses implemented in a sibling crate.
 #[doc(hidden)]
@@ -124,6 +133,13 @@ pub fn new_texture_backend_base(
     base
 }
 
+/// Backend integration seam for concrete ORE texture subclasses whose source
+/// constructor explicitly selects the null-manager base overload.
+#[doc(hidden)]
+pub fn new_texture_backend_base_without_manager(desc: &types::TextureDesc<'_>) -> texture::Texture {
+    texture::Texture::new(desc)
+}
+
 /// Backend integration seam for exact concrete ORE texture-view subclasses.
 #[doc(hidden)]
 pub fn new_texture_view_backend_base(
@@ -138,6 +154,16 @@ pub fn new_texture_view_backend_base(
     base
 }
 
+/// Backend integration seam for concrete ORE texture-view subclasses whose
+/// source constructor explicitly selects the null-manager base overload.
+#[doc(hidden)]
+pub fn new_texture_view_backend_base_without_manager(
+    texture: gpu_resource::AnyResourceHandle,
+    desc: &types::TextureViewDesc<'_>,
+) -> texture::TextureView {
+    texture::TextureView::new(texture, desc)
+}
+
 /// Backend integration seam for exact concrete ORE bind-group subclasses.
 #[doc(hidden)]
 pub fn new_bind_group_backend_base(
@@ -148,6 +174,13 @@ pub fn new_bind_group_backend_base(
     let mut base = bind_group::BindGroup::new();
     base.gpu_resource_mut().install_manager(Some(manager));
     base
+}
+
+/// Backend integration seam for concrete ORE bind-group subclasses whose
+/// source constructor explicitly selects the null-manager base overload.
+#[doc(hidden)]
+pub fn new_bind_group_backend_base_without_manager() -> bind_group::BindGroup {
+    bind_group::BindGroup::new()
 }
 
 /// Installs the source-owned resource graph captured by a concrete context.
@@ -256,6 +289,16 @@ pub fn new_buffer_backend_base(
     let mut base = buffer::Buffer::new(size, usage);
     base.gpu_resource_mut().install_manager(Some(manager));
     base
+}
+
+/// Backend integration seam for concrete ORE buffer subclasses whose source
+/// constructor explicitly selects the null-manager base overload.
+#[doc(hidden)]
+pub fn new_buffer_backend_base_without_manager(
+    size: u32,
+    usage: types::BufferUsage,
+) -> buffer::Buffer {
+    buffer::Buffer::new(size, usage)
 }
 
 /// Backend integration seam for an exact embedded `GPUResourcePool` base.

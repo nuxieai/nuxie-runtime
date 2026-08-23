@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:texture"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_texture_gl.cpp"
+source_sha256 = "c8b2025d1fce801cbd75f7e8be406135f2d74b64d323cb3d74f20765e028bac3"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_texture_gl_cpp__impl.rs"
+target_sha256 = "b847dc283aba1ee9ae24a965b1efc77bcbd4b8328543ad55d246f548be9242e8"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_texture_gl.cpp"
+source_snapshot_sha256 = "c8b2025d1fce801cbd75f7e8be406135f2d74b64d323cb3d74f20765e028bac3"
+dependency_units = ["webgl2:renderer:load_gles_extensions"]
+source_lines = 349
+source_bytes = 11219
+configuration_authorities = 58
+lifecycle_authorities = 5
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves all 25 format cases, including the pinned Emscripten 3.1.61 RIVE_WEBGL preprocessor selection that makes BC1, BC3, and BC7 unreachable; exact compressed and uncompressed 2D, cube, 3D, and array upload routing; row-length and image-height save/restore; BGRA upload rejection; and renderbuffer-before-texture-before-base destruction."

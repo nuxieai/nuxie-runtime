@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:pipeline"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_pipeline_gl.hpp"
+source_sha256 = "42361bb21ea71a936975b69cabecc4f6a7fcef0f8d1418df7c0b7e891e0abc54"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_pipeline_gl_hpp__decl.rs"
+target_sha256 = "4e76a471d939f946380806c886c31a4f7cd7330c390be9314f0cedd345ae2beb"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_pipeline_gl.hpp"
+source_snapshot_sha256 = "42361bb21ea71a936975b69cabecc4f6a7fcef0f8d1418df7c0b7e891e0abc54"
+dependency_units = ["webgl2:renderer:load_gles_extensions"]
+source_lines = 20
+source_bytes = 451
+configuration_authorities = 0
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete PipelineGL declaration: offset-zero null-manager ORE Pipeline base, GL program field, descriptor-backed construction, resource identity, and Send eligibility."

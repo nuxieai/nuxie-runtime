@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:render_buffer_gl_impl"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/gl/render_buffer_gl_impl.hpp"
+source_sha256 = "0ba64664eed80db64b8741972ce55d28bf3521c024b29fc0b24aa0c013543dad"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_render_buffer_gl_impl_hpp__decl.rs"
+target_sha256 = "9c60a6cc04a69d10f4c5f2896e8c3663c02581cb56b4fe488b5a3eb9c070796c"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_include_rive_renderer_gl_render_buffer_gl_impl.hpp"
+source_snapshot_sha256 = "0ba64664eed80db64b8741972ce55d28bf3521c024b29fc0b24aa0c013543dad"
+dependency_units = ["webgl2:renderer:gl_state", "webgl2:renderer:gles3"]
+source_lines = 59
+source_bytes = 1491
+configuration_authorities = 3
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete RenderBufferGLImpl declaration: offset-zero RiveRenderBuffer base, immutable target choice, buffer name, fallback mapping owner, retained GLState owner, lite RTTI identity, map contract, initialization boundary, and detach semantics."

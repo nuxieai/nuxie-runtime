@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:sampler"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_sampler_gl.hpp"
+source_sha256 = "38a3f85f36ba884c495893df6b60b4a9c6e1b745723e70d8d2b9503735f10274"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_sampler_gl_hpp__decl.rs"
+target_sha256 = "b7e075616de3d186a8ece3fb4a12b3b73dc7fcdb7ce089663acb04fc170e948c"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_sampler_gl.hpp"
+source_snapshot_sha256 = "38a3f85f36ba884c495893df6b60b4a9c6e1b745723e70d8d2b9503735f10274"
+dependency_units = ["webgl2:renderer:load_gles_extensions"]
+source_lines = 18
+source_bytes = 337
+configuration_authorities = 0
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete SamplerGL declaration: offset-zero ORE Sampler base, GL sampler field, resource identity, and Send eligibility."

@@ -4,7 +4,7 @@
 #![allow(non_snake_case)]
 
 use nuxie_ore_metal::bind_group::BindGroup;
-use nuxie_ore_metal::gpu_resource::{GPUResource, GPUResourceManager, GpuResourcePayload};
+use nuxie_ore_metal::gpu_resource::{GPUResource, GpuResourcePayload};
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
@@ -46,13 +46,19 @@ pub(crate) struct BindGroupGL {
 }
 
 impl BindGroupGL {
-    pub(crate) fn new(manager: GPUResourceManager) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            base: ManuallyDrop::new(nuxie_ore_metal::new_bind_group_backend_base(manager)),
+            base: ManuallyDrop::new(nuxie_ore_metal::new_bind_group_backend_base_without_manager()),
             m_glUBOs: ManuallyDrop::new(Vec::new()),
             m_glTextures: ManuallyDrop::new(Vec::new()),
             m_glSamplers: ManuallyDrop::new(Vec::new()),
         }
+    }
+}
+
+impl Default for BindGroupGL {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -106,5 +112,6 @@ mod tests {
         assert!(offset_of!(GLUBOBinding, hasDynamicOffset) > offset_of!(GLUBOBinding, slot));
         assert_eq!(std::mem::size_of::<GLTexBinding>(), 12);
         assert_eq!(std::mem::size_of::<GLSamplerBinding>(), 8);
+        assert!(BindGroupGL::new().gpu_resource().manager().is_none());
     }
 }

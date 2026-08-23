@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:buffer"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_buffer_gl.cpp"
+source_sha256 = "4e4f4e90e10956c44ee1695b31ff519ef94faba5fc8327b2fee4e902daad54a1"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_buffer_gl_cpp__impl.rs"
+target_sha256 = "56b9805770bd11d772aec8203a4ba7e5f6e8308e75b9a0b6bca84dd3e19b06fe"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_buffer_gl.cpp"
+source_snapshot_sha256 = "4e4f4e90e10956c44ee1695b31ff519ef94faba5fc8327b2fee4e902daad54a1"
+dependency_units = ["webgl2:renderer:load_gles_extensions"]
+source_lines = 53
+source_bytes = 1498
+configuration_authorities = 6
+lifecycle_authorities = 3
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete update and destruction implementation: index uploads save and restore the host VAO element binding, other uploads use the copy-write target, both issue exact subdata calls, and the GL name is deleted before the ORE base. Rust range checks are safety adaptations, not fallback behavior."

@@ -74,6 +74,10 @@ pub(crate) mod webgl2 {
     pub(crate) mod gl_utils_decl;
     #[path = "renderer_src_gl_gl_utils_cpp__impl.rs"]
     pub(crate) mod gl_utils_impl;
+    #[path = "renderer_include_rive_renderer_gl_render_buffer_gl_impl_hpp__decl.rs"]
+    pub(crate) mod render_buffer_gl_impl_decl;
+    #[path = "renderer_src_gl_render_buffer_gl_impl_cpp__impl.rs"]
+    pub(crate) mod render_buffer_gl_impl_impl;
     #[path = "renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs"]
     pub(crate) mod load_gles_extensions_decl;
     #[path = "renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs"]
@@ -84,6 +88,26 @@ pub(crate) mod webgl2 {
     pub(crate) mod ore_bind_group_gl_decl;
     #[path = "renderer_src_ore_gl_ore_bind_group_gl_cpp__impl.rs"]
     pub(crate) mod ore_bind_group_gl_impl;
+    #[path = "renderer_src_ore_gl_ore_buffer_gl_hpp__decl.rs"]
+    pub(crate) mod ore_buffer_gl_decl;
+    #[path = "renderer_src_ore_gl_ore_buffer_gl_cpp__impl.rs"]
+    pub(crate) mod ore_buffer_gl_impl;
+    #[path = "renderer_src_ore_gl_ore_pipeline_gl_hpp__decl.rs"]
+    pub(crate) mod ore_pipeline_gl_decl;
+    #[path = "renderer_src_ore_gl_ore_pipeline_gl_cpp__impl.rs"]
+    pub(crate) mod ore_pipeline_gl_impl;
+    #[path = "renderer_src_ore_gl_ore_sampler_gl_hpp__decl.rs"]
+    pub(crate) mod ore_sampler_gl_decl;
+    #[path = "renderer_src_ore_gl_ore_sampler_gl_cpp__impl.rs"]
+    pub(crate) mod ore_sampler_gl_impl;
+    #[path = "renderer_src_ore_gl_ore_shader_module_gl_hpp__decl.rs"]
+    pub(crate) mod ore_shader_module_gl_decl;
+    #[path = "renderer_src_ore_gl_ore_shader_module_gl_cpp__impl.rs"]
+    pub(crate) mod ore_shader_module_gl_impl;
+    #[path = "renderer_src_ore_gl_ore_texture_gl_hpp__decl.rs"]
+    pub(crate) mod ore_texture_gl_decl;
+    #[path = "renderer_src_ore_gl_ore_texture_gl_cpp__impl.rs"]
+    pub(crate) mod ore_texture_gl_impl;
 }
 
 #[cfg(feature = "native-webgpu-experimental")]

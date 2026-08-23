@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:buffer"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_buffer_gl.hpp"
+source_sha256 = "383a37adea0387cee1446e634785329e5446406b37b22f8dc2ce8da9595ab0aa"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_buffer_gl_hpp__decl.rs"
+target_sha256 = "1c78cd5e94b228faeead275af3d92112d0aeef5bf559d3234acea5cb0fd75bf5"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_buffer_gl.hpp"
+source_snapshot_sha256 = "383a37adea0387cee1446e634785329e5446406b37b22f8dc2ce8da9595ab0aa"
+dependency_units = ["webgl2:renderer:load_gles_extensions"]
+source_lines = 22
+source_bytes = 533
+configuration_authorities = 0
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete BufferGL declaration: offset-zero null-manager ORE Buffer base, GL buffer name and target fields, resource payload identity, Send eligibility, and update dispatch."

@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:renderer:webgpu_compat"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/webgpu_compat.h"
+source_sha256 = "c5ef834542179044710337aae028b35e393b36d5337504843cf3bd8adf75fbbe"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_webgpu_compat_h__decl.rs"
+target_sha256 = "dbea60a402bb003c8ac943d0537fdc6f3dbc6bed6c8990725876358a170bddcc"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_webgpu_compat.h"
+source_snapshot_sha256 = "c5ef834542179044710337aae028b35e393b36d5337504843cf3bd8adf75fbbe"
+dependency_units = []
+source_lines = 640
+source_bytes = 43972
+configuration_authorities = 246
+lifecycle_authorities = 6
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::webgpu_compat_decl"
+scope_note = "Preserves the complete RIVE_WEBGPU=1 compatibility authority: 114 macro definitions and 109 unique names, every old-to-pinned API alias, all exact line-indexed aggregate initializer token recipes, optional-bool/status/NaN/max-draw values, C-string strdup/free ownership, reference dispatch, identity status checks, and both C/C++ Wagyu string-view construction branches."

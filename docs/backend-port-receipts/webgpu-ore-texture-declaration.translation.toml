@@ -1,0 +1,20 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:texture"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_texture_wgpu.hpp"
+source_sha256 = "79b2a93e29d3a8f1fcaa4a625274e1ae383eb7011d5adb0e99507b87871127f1"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_texture_wgpu_hpp__decl.rs"
+target_sha256 = "6abb4f8e7bbc875509085e1ff63b71fef020bdd6125d7639f1710fa23ccc528f"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_texture_wgpu.hpp"
+source_snapshot_sha256 = "79b2a93e29d3a8f1fcaa4a625274e1ae383eb7011d5adb0e99507b87871127f1"
+dependency_units = ["webgpu:wagyu:webgpu_cpp"]
+dependency_artifacts = [
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs", sha256 = "55f62f7b418155379a88a36674c08140ef16ace16203cb6d35e0e39eb8f79def" },
+]
+source_lines = 35
+source_bytes = 981
+configuration_authorities = 2
+lifecycle_authorities = 5
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_texture_wgpu"
+scope_note = "Preserves the complete TextureWGPU and TextureViewWGPU declaration owner: both offset-zero ORE bases, all three value-owned Wagyu handles, the queue's source-authored addref'd weak-reference semantics, both friend construction boundaries, upload dispatch, source-equivalent Send eligibility, and exact reverse-member-before-base destruction without legacy Rust-WGPU authority."

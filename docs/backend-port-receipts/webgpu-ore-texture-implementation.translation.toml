@@ -1,0 +1,20 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:texture"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_texture_wgpu.cpp"
+source_sha256 = "82ff1b598e914350e7d3791bff0a8dd7c9d0c6ddaee2a08a360835530d475cb2"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_texture_wgpu_cpp__impl.rs"
+target_sha256 = "2769b9acfbe16bb61a83f337a786840e5656273e7fb9cde199bfc998d1e0945a"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_texture_wgpu.cpp"
+source_snapshot_sha256 = "82ff1b598e914350e7d3791bff0a8dd7c9d0c6ddaee2a08a360835530d475cb2"
+dependency_units = ["webgpu:wagyu:webgpu_cpp"]
+dependency_artifacts = [
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_texture_wgpu_hpp__decl.rs", sha256 = "6abb4f8e7bbc875509085e1ff63b71fef020bdd6125d7639f1710fa23ccc528f" },
+]
+source_lines = 94
+source_bytes = 3655
+configuration_authorities = 5
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_texture_wgpu"
+scope_note = "Preserves the complete upload implementation: four legacy Dawn aliases, destination mip/origin/layer/aspect mapping, texture and data preconditions, inferred or caller-authored row stride, default rows-per-image, exact 256-byte Dawn alignment decision, uncompressed 2D row splitting with caller padding skipped, block-compressed authored-stride requirement, wrapped uint32 size arithmetic, and both Queue.WriteTexture call sites. Rust slice bounds and missing-native-handle errors are safety adaptations, not fallback behavior."

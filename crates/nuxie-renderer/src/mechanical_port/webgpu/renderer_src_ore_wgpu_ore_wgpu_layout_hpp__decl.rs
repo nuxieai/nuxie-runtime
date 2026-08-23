@@ -207,7 +207,8 @@ fn prepareWGPUBindGroupLayoutFromDesc(
     desc: &BindGroupLayoutDesc<'_>,
 ) -> ([WGPUBindGroupLayoutEntry; kMaxEntriesPerGroup], usize) {
     let mut entries = std::array::from_fn(|_| WGPUBindGroupLayoutEntry::default());
-    let n = desc.entries.len().min(kMaxEntriesPerGroup);
+    let authoredCount = (desc.entryCount as usize).min(desc.entries.len());
+    let n = authoredCount.min(kMaxEntriesPerGroup);
     for (dst, src) in entries.iter_mut().zip(desc.entries.iter()).take(n) {
         *dst = makeWGPUBGLEntryFromDesc(src);
     }
@@ -385,11 +386,20 @@ mod tests {
         let authored = vec![OreBindGroupLayoutEntry::default(); 18];
         let desc = BindGroupLayoutDesc {
             entries: &authored,
+            entryCount: 18,
             ..Default::default()
         };
         let (entries, n) = prepareWGPUBindGroupLayoutFromDesc(&desc);
         assert_eq!(n, 16);
         assert_eq!(entries[15].binding, 0);
+
+        let explicitly_short = BindGroupLayoutDesc {
+            entries: &authored,
+            entryCount: 3,
+            ..Default::default()
+        };
+        let (_, short_n) = prepareWGPUBindGroupLayoutFromDesc(&explicitly_short);
+        assert_eq!(short_n, 3);
 
         let empty = BindGroupLayoutDesc::default();
         let (_, empty_n) = prepareWGPUBindGroupLayoutFromDesc(&empty);

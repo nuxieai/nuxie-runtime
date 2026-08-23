@@ -71,6 +71,10 @@ pub(crate) mod vulkan {
     pub(crate) mod vkutil_impl;
     #[path = "renderer_src_ore_vulkan_ore_bind_group_layout_vulkan_hpp__decl.rs"]
     pub(crate) mod ore_bind_group_layout_vulkan_decl;
+    #[path = "renderer_src_ore_vulkan_ore_buffer_vulkan_hpp__decl.rs"]
+    pub(crate) mod ore_buffer_vulkan_decl;
+    #[path = "renderer_src_ore_vulkan_ore_buffer_vulkan_cpp__impl.rs"]
+    pub(crate) mod ore_buffer_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs"]
     pub(crate) mod ore_sampler_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs"]

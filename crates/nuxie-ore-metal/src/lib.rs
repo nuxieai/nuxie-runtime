@@ -80,6 +80,20 @@ pub fn new_gpu_resource_backend_base() -> gpu_resource::GPUResource {
     gpu_resource::GPUResource::new(None)
 }
 
+/// Backend integration seam for exact concrete ORE buffer subclasses.
+#[doc(hidden)]
+pub fn new_buffer_backend_base(
+    manager: gpu_resource::GPUResourceManager,
+    size: u32,
+    usage: types::BufferUsage,
+) -> buffer::Buffer {
+    use gpu_resource::GpuResourcePayload;
+
+    let mut base = buffer::Buffer::new(size, usage);
+    base.gpu_resource_mut().install_manager(Some(manager));
+    base
+}
+
 /// Backend integration seam for an exact embedded `GPUResourcePool` base.
 #[doc(hidden)]
 pub fn new_gpu_resource_pool_backend_base(

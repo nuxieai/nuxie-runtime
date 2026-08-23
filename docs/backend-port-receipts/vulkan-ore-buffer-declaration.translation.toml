@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:ore:buffer"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/vulkan/ore_buffer_vulkan.hpp"
+source_sha256 = "14324b56728e053d8d1d5061d6375bd7a16cef8bf10888a9a7db8cfb4ee38b22"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_buffer_vulkan_hpp__decl.rs"
+target_sha256 = "d29762131175c3df35fbecb6e0f144412a3490a07e3f938a2398a25dc74657cd"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_ore_vulkan_ore_buffer_vulkan.hpp"
+source_snapshot_sha256 = "14324b56728e053d8d1d5061d6375bd7a16cef8bf10888a9a7db8cfb4ee38b22"
+dependency_units = ["vulkan:renderer:vulkan_context"]
+source_lines = 74
+source_bytes = 2863
+configuration_authorities = 2
+lifecycle_authorities = 4
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-vulkan-experimental mechanical_port::vulkan --lib"
+scope_note = "Preserves the exact offset-zero ORE Buffer base; current buffer/allocation/mapped mirrors; weak device and retained VulkanContext; pooled backing handle/allocation/mapping/frame stamp; current index, bound state, and usage; explicit pooled-versus-staging ownership; and ContextVulkan, RenderPassVulkan, and TextureVulkan friend seams. The non-Copy Rust VMA wrapper has one stable owner while AllocationMirror preserves the source raw-handle alias without double destruction."

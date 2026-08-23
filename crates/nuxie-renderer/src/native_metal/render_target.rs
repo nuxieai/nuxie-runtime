@@ -155,24 +155,9 @@ impl RenderTargetMetal {
             scratch_color_memoryless_texture,
         ) = match formats {
             Some(formats) => (
-                Some(make_pls_memoryless_texture(
-                    &device,
-                    formats.coverage,
-                    width,
-                    height,
-                )?),
-                Some(make_pls_memoryless_texture(
-                    &device,
-                    formats.clip,
-                    width,
-                    height,
-                )?),
-                Some(make_pls_memoryless_texture(
-                    &device,
-                    formats.scratch_color,
-                    width,
-                    height,
-                )?),
+                make_pls_memoryless_texture(&device, formats.coverage, width, height).ok(),
+                make_pls_memoryless_texture(&device, formats.clip, width, height).ok(),
+                make_pls_memoryless_texture(&device, formats.scratch_color, width, height).ok(),
             ),
             None => (None, None, None),
         };
@@ -293,25 +278,28 @@ impl RenderTargetMetal {
         let color = (uses_color_plane && self.color_atomic_buffer.is_none())
             .then(|| {
                 before_allocate(AtomicPlane::Color)?;
-                self.make_atomic_buffer()
+                Ok::<_, RendererError>(self.make_atomic_buffer().ok())
             })
-            .transpose()?;
+            .transpose()?
+            .flatten();
         let clip = self
             .clip_atomic_buffer
             .is_none()
             .then(|| {
                 before_allocate(AtomicPlane::Clip)?;
-                self.make_atomic_buffer()
+                Ok::<_, RendererError>(self.make_atomic_buffer().ok())
             })
-            .transpose()?;
+            .transpose()?
+            .flatten();
         let coverage = self
             .coverage_atomic_buffer
             .is_none()
             .then(|| {
                 before_allocate(AtomicPlane::Coverage)?;
-                self.make_atomic_buffer()
+                Ok::<_, RendererError>(self.make_atomic_buffer().ok())
             })
-            .transpose()?;
+            .transpose()?
+            .flatten();
         if let Some(color) = color {
             self.color_atomic_buffer = Some(color);
         }
@@ -333,40 +321,25 @@ impl RenderTargetMetal {
         self.prepare_atomic_planes_core(uses_color_plane, before_allocate)
     }
 
-    pub(crate) fn color_atomic_buffer(
-        &mut self,
-    ) -> Result<&ProtocolObject<dyn MTLBuffer>, RendererError> {
+    pub(crate) fn color_atomic_buffer(&mut self) -> Option<&ProtocolObject<dyn MTLBuffer>> {
         if self.color_atomic_buffer.is_none() {
-            self.color_atomic_buffer = Some(self.make_atomic_buffer()?);
+            self.color_atomic_buffer = self.make_atomic_buffer().ok();
         }
-        Ok(self
-            .color_atomic_buffer
-            .as_deref()
-            .expect("atomic buffer initialized above"))
+        self.color_atomic_buffer.as_deref()
     }
 
-    pub(crate) fn coverage_atomic_buffer(
-        &mut self,
-    ) -> Result<&ProtocolObject<dyn MTLBuffer>, RendererError> {
+    pub(crate) fn coverage_atomic_buffer(&mut self) -> Option<&ProtocolObject<dyn MTLBuffer>> {
         if self.coverage_atomic_buffer.is_none() {
-            self.coverage_atomic_buffer = Some(self.make_atomic_buffer()?);
+            self.coverage_atomic_buffer = self.make_atomic_buffer().ok();
         }
-        Ok(self
-            .coverage_atomic_buffer
-            .as_deref()
-            .expect("atomic buffer initialized above"))
+        self.coverage_atomic_buffer.as_deref()
     }
 
-    pub(crate) fn clip_atomic_buffer(
-        &mut self,
-    ) -> Result<&ProtocolObject<dyn MTLBuffer>, RendererError> {
+    pub(crate) fn clip_atomic_buffer(&mut self) -> Option<&ProtocolObject<dyn MTLBuffer>> {
         if self.clip_atomic_buffer.is_none() {
-            self.clip_atomic_buffer = Some(self.make_atomic_buffer()?);
+            self.clip_atomic_buffer = self.make_atomic_buffer().ok();
         }
-        Ok(self
-            .clip_atomic_buffer
-            .as_deref()
-            .expect("atomic buffer initialized above"))
+        self.clip_atomic_buffer.as_deref()
     }
 
     #[cfg(test)]
@@ -498,6 +471,7 @@ mod tests {
     #[test]
     fn atomic_buffers_are_lazy_and_each_plane_keeps_identity() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let capabilities = MetalCapabilitySelection {
@@ -571,6 +545,7 @@ mod tests {
     #[test]
     fn atomic_plane_transaction_preserves_prior_owners_on_each_allocation_failure() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let capabilities = MetalCapabilitySelection {
@@ -664,6 +639,7 @@ mod tests {
     #[test]
     fn raster_order_constructor_selects_memoryless_attachments() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let mut capabilities = capabilities_for_test();
@@ -709,7 +685,7 @@ mod tests {
             supports_texture_compression_etc2: false,
             supports_texture_compression_astc: false,
             supports_texture_compression_bc: false,
-            atomic_barrier_type: super::super::capabilities::AtomicBarrierType::RenderPassBreak,
+            atomic_barrier_type: super::super::source_capabilities::AtomicBarrierType::renderPassBreak,
         }
     }
 }

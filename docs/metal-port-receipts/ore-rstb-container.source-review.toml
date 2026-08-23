@@ -1,0 +1,28 @@
+schema_version = 1
+unit = "ore-rstb-container"
+receipt_kind = "source-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-rstb-container.source-review.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp:1-224",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_rstb_entry_container_hpp.rs:1-621",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_rstb_entry_container_hpp.rs" = "9d71f3723ce4fa867db2f9885a320364fcff82681cc9ef6d8b875f368e89c0ea" }
+findings = []
+review_run_id = "sol-v9-source-global-20260822-final-clean-45b6f0b3"
+coverage = [
+    "owned-source-lines",
+    "declarations",
+    "conditionals",
+    "include-owners",
+    "source-semantics",
+]
+citations = [
+    "cpp:renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp:1-224",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_rstb_entry_container_hpp.rs:1-621",
+]

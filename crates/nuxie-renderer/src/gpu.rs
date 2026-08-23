@@ -22,6 +22,7 @@ pub(crate) struct GradientSpan {
 }
 
 impl GradientSpan {
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as u64,
@@ -66,6 +67,7 @@ pub(crate) struct TessVertexSpan {
 }
 
 impl TessVertexSpan {
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as u64,
@@ -203,6 +205,7 @@ pub(crate) struct PatchVertex {
 }
 
 impl PatchVertex {
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as u64,
@@ -675,6 +678,7 @@ pub(crate) struct TriangleVertex {
 }
 
 impl TriangleVertex {
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as u64,
@@ -705,6 +709,7 @@ pub(crate) struct ImageDrawInstance {
 }
 
 impl ImageDrawInstance {
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as u64,
@@ -766,6 +771,7 @@ pub(crate) struct ImageRectVertex {
 }
 
 impl ImageRectVertex {
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as u64,

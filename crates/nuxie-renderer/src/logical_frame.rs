@@ -32,7 +32,7 @@ use super::{
     SolidDraw, FEATHER_ATLAS_PADDING,
 };
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 use super::PreparedFeatherGeometry;
 
 #[cfg(test)]
@@ -62,26 +62,31 @@ pub(crate) fn reset_prepared_typed_tessellation_vector_copies() {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn prepared_typed_tessellation_vector_copies() -> usize {
     PREPARED_TYPED_TESSELLATION_VECTOR_COPIES.with(Cell::get)
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn reset_production_direct_msaa_logical_writer_tessellation_copies() {
     PRODUCTION_DIRECT_MSAA_LOGICAL_WRITER_TESSELLATION_COPIES.with(|copies| copies.set(0));
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn production_direct_msaa_logical_writer_tessellation_copies() -> usize {
     PRODUCTION_DIRECT_MSAA_LOGICAL_WRITER_TESSELLATION_COPIES.with(Cell::get)
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn reset_logical_feather_atlas_placement_records() {
     LOGICAL_FEATHER_ATLAS_PLACEMENT_RECORDS.with(|records| records.set(0));
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn logical_feather_atlas_placement_records() -> usize {
     LOGICAL_FEATHER_ATLAS_PLACEMENT_RECORDS.with(Cell::get)
 }
@@ -97,11 +102,13 @@ pub(crate) fn planned_draw_batch_heap_backings() -> usize {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn reset_prepared_logical_frame_auxiliary_heap_backings() {
     PREPARED_LOGICAL_FRAME_AUXILIARY_HEAP_BACKINGS.with(|backings| backings.set(0));
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn prepared_logical_frame_auxiliary_heap_backings() -> usize {
     PREPARED_LOGICAL_FRAME_AUXILIARY_HEAP_BACKINGS.with(Cell::get)
 }
@@ -1156,7 +1163,7 @@ impl LogicalDrawState {
     /// bounded native-Metal atomic flush has begun. Incompatible rectangles
     /// must not fall through to path-clip storage because the already-recorded
     /// content cannot be retroactively rewritten as a clipped-path flush.
-    #[cfg(any(test, feature = "native-metal-experimental"))]
+    #[cfg(test)]
     pub(crate) fn clip_rect_after_atomic_content(
         &mut self,
         path: &LogicalPath,
@@ -1652,14 +1659,14 @@ pub(crate) struct PreparedTypedDrawResources {
 }
 
 #[derive(Clone, Copy)]
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) struct RasterOrderingAtlasInput<'a> {
     pub(crate) path: &'a LogicalPath,
     pub(crate) paint: &'a LogicalPaint,
     pub(crate) state: DrawState,
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) struct PreparedRasterOrderingAtlasDraw {
     /// Index in the caller's authored input slice. Atlas resource emission can
     /// reorder draws while path/paint records and final blits stay authored.
@@ -1669,6 +1676,7 @@ pub(crate) struct PreparedRasterOrderingAtlasDraw {
     pub(crate) path_id: u16,
     #[cfg(test)]
     pub(crate) atlas_placement: super::AtlasPlacement,
+    #[cfg(test)]
     pub(crate) is_stroke: bool,
     #[cfg(test)]
     pub(crate) scissor: [u16; 4],
@@ -1680,7 +1688,7 @@ pub(crate) struct PreparedRasterOrderingAtlasDraw {
     pub(crate) blit_vertex_range: std::ops::Range<usize>,
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) struct PreparedRasterOrderingAtlasFlush {
     pub(crate) paths: Vec<gpu::PathData>,
     pub(crate) paints: Vec<gpu::PaintData>,
@@ -1859,6 +1867,7 @@ impl PreparedLogicalFrameResources {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn report_with_consumption(&self) -> LogicalFrameReport {
         #[cfg(test)]
         PREPARED_LOGICAL_FRAME_AUXILIARY_HEAP_BACKINGS
@@ -2130,7 +2139,8 @@ pub(crate) fn prepare_gradient_batch(draws: &[SolidDraw]) -> GradientBatch {
     prepare_normalized_gradient_batch(definitions)
 }
 
-#[cfg(feature = "native-metal-experimental")]
+#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn prepare_single_gradient_batch(
     shader: &super::LogicalShader,
     opacity: f32,
@@ -3075,7 +3085,7 @@ fn write_typed_draw_resources(
     )
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 fn write_raster_ordering_atlas_resources(
     buffers: &mut ShadowBuffers,
     draw_index: usize,
@@ -3301,7 +3311,7 @@ pub(crate) fn admit_path_draw(
 
 /// Lightweight canonical-equivalent resources for one native-Metal
 /// generic-atomic path draw.
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) struct PreparedSingleAtomicPathDraw {
     pub(crate) resources: PreparedTypedDrawResources,
     #[cfg(test)]
@@ -3311,7 +3321,7 @@ pub(crate) struct PreparedSingleAtomicPathDraw {
 
 /// Borrowed input for one path in the bounded native-Metal generic-atomic
 /// logical flush.
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 #[derive(Clone, Copy)]
 pub(crate) struct AtomicPathFlushInput<'a> {
     pub(crate) path: &'a LogicalPath,
@@ -3319,7 +3329,7 @@ pub(crate) struct AtomicPathFlushInput<'a> {
     pub(crate) state: DrawState,
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PreparedAtomicPatchKind {
     Midpoint,
@@ -3327,7 +3337,7 @@ pub(crate) enum PreparedAtomicPatchKind {
 }
 
 /// One scheduled midpoint draw in a prepared generic-atomic logical flush.
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PreparedAtomicPathDraw {
     pub(crate) input_index: usize,
@@ -3342,9 +3352,8 @@ pub(crate) struct PreparedAtomicPathDraw {
 
 /// Flush-wide resources and the canonical disjoint draw-group schedule for the
 /// bounded native-Metal generic-atomic path slice.
-#[cfg(any(test, feature = "native-metal-experimental"))]
-// Default-feature unit tests exercise scheduling and canonical equivalence;
-// the native feature is the consumer of every upload plane.
+#[cfg(test)]
+// Unit tests retain the retired tracer scheduler as a pinned-source oracle.
 #[cfg_attr(
     all(test, not(feature = "native-metal-experimental")),
     allow(dead_code)
@@ -3368,7 +3377,7 @@ pub(crate) struct PreparedAtomicPathFlush {
     pub(crate) canonical_draw_resources: Vec<PreparedTypedDrawResources>,
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 struct PendingAtomicPath {
     input_index: usize,
     bounds: [i32; 4],
@@ -3381,7 +3390,7 @@ struct PendingAtomicPath {
     has_clip_rect: bool,
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 fn relocate_atomic_path_geometry(
     draw: &mut PendingAtomicPath,
     next_base_instance: u32,
@@ -3411,7 +3420,7 @@ fn relocate_atomic_path_geometry(
     Ok(base_instance)
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) fn validate_atomic_path_flush_limits(
     path_count: usize,
     contour_slot_count: usize,
@@ -3425,7 +3434,7 @@ pub(crate) fn validate_atomic_path_flush_limits(
     Ok(())
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) fn shift_atomic_path_contour_ids(
     spans: &mut [gpu::TessVertexSpan],
     contour_base: u32,
@@ -3455,7 +3464,7 @@ pub(crate) fn shift_atomic_path_contour_ids(
     Ok(next_contour_base)
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 fn prepare_atomic_path_draw_resources(
     config: LogicalFrameConfig,
     path: &LogicalPath,
@@ -3566,7 +3575,7 @@ fn prepare_atomic_path_draw_resources(
     })
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 fn atomic_path_clip_scissor(
     config: LogicalFrameConfig,
     draw_bounds: [i32; 4],
@@ -3594,7 +3603,7 @@ fn atomic_path_clip_scissor(
     ]))
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 fn normalize_atomic_linear_gradient(
     paint: &LogicalPaint,
     opacity: f32,
@@ -3678,7 +3687,7 @@ pub(crate) fn prepare_single_atomic_path_draw(
 /// path. Each authored input crosses canonical admission/preparation exactly
 /// once. Path IDs remain authored; execution order follows C++'s disjoint
 /// `IntersectionBoard` draw groups.
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) fn prepare_atomic_path_flush(
     config: LogicalFrameConfig,
     inputs: &[AtomicPathFlushInput<'_>],
@@ -3790,7 +3799,7 @@ pub(crate) fn prepare_atomic_path_flush(
 /// constructing the backend-bearing `SolidDraw` envelope. Admission happens
 /// before clip replay; clip replacement IDs and parent IDs advance in the
 /// canonical outer-to-inner order, followed by exactly one content draw.
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) fn prepare_atomic_clipped_path_flush(
     config: LogicalFrameConfig,
     logical_state: &mut LogicalDrawState,
@@ -3936,7 +3945,7 @@ pub(crate) fn prepare_atomic_clipped_path_flush(
     assemble_atomic_path_flush(config, pending, true, None)
 }
 
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 fn assemble_atomic_path_flush(
     config: LogicalFrameConfig,
     mut pending: Vec<PendingAtomicPath>,
@@ -4257,7 +4266,7 @@ fn assemble_atomic_path_flush(
 ///
 /// Pinned upstream source: `renderer/src/render_context.cpp:1412-1439,
 /// 2239-2329` at `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
-#[cfg(any(test, feature = "native-metal-experimental"))]
+#[cfg(test)]
 pub(crate) fn prepare_raster_ordering_atlas_flush(
     config: LogicalFrameConfig,
     inputs: &[RasterOrderingAtlasInput<'_>],
@@ -4522,6 +4531,7 @@ pub(crate) fn prepare_raster_ordering_atlas_flush(
                     path_id: draw.path_id,
                     #[cfg(test)]
                     atlas_placement: draw.placement,
+                    #[cfg(test)]
                     is_stroke,
                     #[cfg(test)]
                     scissor,

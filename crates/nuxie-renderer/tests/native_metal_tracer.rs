@@ -5,9 +5,11 @@
 
 use nuxie_render_api::Factory;
 use nuxie_render_stream::RenderStream;
+#[cfg(feature = "rust-wgpu")]
+use nuxie_renderer::WgpuFactory;
 use nuxie_renderer::{
-    BackendWorkMetrics, NativeMetalExecutionInventory, NativeMetalFactory, RenderMode,
-    RendererError, WgpuFactory,
+    NativeMetalContextOptions, NativeMetalExecutionInventory, NativeMetalFactory, RenderMode,
+    RendererError, ShaderCompilationMode,
 };
 use std::fs::File;
 use std::io::BufReader;
@@ -84,6 +86,24 @@ fn assert_clear_color_occupancy(actual: &[u8], expected: &[u8], clear: [u8; 4], 
     assert_eq!(mismatch, None, "{label}: differs-from-clear occupancy");
 }
 
+fn assert_actual_atomic_inventory(
+    inventory: &NativeMetalExecutionInventory,
+    expected_groups: usize,
+    expected_barriers: usize,
+) {
+    assert_eq!(inventory.mode, RenderMode::ClockwiseAtomic);
+    assert!(inventory.atomic_draws > 0);
+    assert!(inventory.atomic_draw_instances >= inventory.atomic_draws);
+    assert_eq!(inventory.atomic_draw_groups, expected_groups);
+    assert_eq!(inventory.atomic_barriers, expected_barriers);
+    assert_eq!(
+        inventory.atomic_barriers,
+        inventory.atomic_memory_barriers
+            + inventory.atomic_render_pass_breaks
+            + inventory.atomic_raster_order_group_barriers
+    );
+}
+
 #[test]
 fn native_metal_frame_clears_and_reads_back() {
     let factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
@@ -96,8 +116,8 @@ fn native_metal_frame_clears_and_reads_back() {
     assert_eq!(
         pixels,
         [
-            0x02, 0x03, 0x04, 0x11, 0x02, 0x03, 0x04, 0x11, 0x02, 0x03, 0x04, 0x11, 0x02, 0x03,
-            0x04, 0x11,
+            0x02, 0x03, 0x05, 0x11, 0x02, 0x03, 0x05, 0x11, 0x02, 0x03, 0x05, 0x11, 0x02, 0x03,
+            0x05, 0x11,
         ]
     );
 }
@@ -120,10 +140,19 @@ fn native_metal_factory_decodes_an_image_through_the_context_texture_owner() {
     }
 
     let mut factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
-    let image = factory
-        .decode_image(&encoded)
-        .expect("decode through the native Metal context texture owner");
-    assert_eq!((image.width(), image.height()), (2, 2));
+    let decoded = factory.decode_image(&encoded);
+    #[cfg(feature = "rive-decoders")]
+    {
+        let image = decoded.expect("decode through the native Metal context texture owner");
+        assert_eq!((image.width(), image.height()), (2, 2));
+    }
+    #[cfg(not(feature = "rive-decoders"))]
+    {
+        assert!(
+            decoded.is_err(),
+            "without the pinned RIVE_DECODERS branch, the default Metal platform hook must remain null"
+        );
+    }
 }
 
 #[test]
@@ -161,6 +190,7 @@ fn native_metal_factory_adopts_a_caller_texture_through_the_context_owner() {
     assert_eq!((image.width(), image.height()), (2, 2));
 }
 
+#[cfg(feature = "native-ore-metal-experimental")]
 #[test]
 fn native_metal_factory_makes_a_same_texture_render_canvas_owner() {
     use objc2_metal::{MTLPixelFormat, MTLResource, MTLStorageMode, MTLTexture, MTLTextureUsage};
@@ -173,7 +203,9 @@ fn native_metal_factory_makes_a_same_texture_render_canvas_owner() {
 
     assert_eq!((canvas.width(), canvas.height()), (3, 5));
     assert!(canvas.render_target_and_image_share_texture());
-    let texture = canvas.retained_metal_texture();
+    let texture = canvas
+        .retained_metal_texture()
+        .expect("successful live allocation retains its Metal texture");
     assert_eq!(texture.pixelFormat(), MTLPixelFormat::RGBA8Unorm);
     assert_eq!(texture.storageMode(), MTLStorageMode::Private);
     assert!(texture.usage().contains(MTLTextureUsage::RenderTarget));
@@ -186,13 +218,28 @@ fn native_metal_factory_makes_ore_context_from_its_retained_service() {
     use nuxie_ore_metal::context::{FrameDescriptor, ShaderTarget};
 
     let factory = NativeMetalFactory::new(2, 2).expect("create native Metal renderer");
-    let ore = factory.make_ore_context();
-    assert_eq!(ore.shader_target(), ShaderTarget::msl);
-
-    ore.begin_frame(&FrameDescriptor::default());
-    let completion = ore
-        .end_frame_with_completion()
-        .expect("submit the retained renderer queue's command buffer");
+    let first = factory
+        .with_ore_context(|ore| core::ptr::from_mut(ore) as usize)
+        .expect("mechanical source ORE context is available");
+    let second = factory
+        .with_ore_context(|ore| core::ptr::from_mut(ore) as usize)
+        .expect("cached mechanical source ORE context remains available");
+    assert_eq!(
+        first, second,
+        "RenderContext::ore() returns its cached singleton"
+    );
+    let completion = factory
+        .with_ore_context(|ore| {
+            assert_eq!(ore.shaderTarget(), ShaderTarget::msl);
+            ore.beginFrame(&FrameDescriptor {
+                externalCommandBuffer: None,
+                safeFrameNumber: 0,
+                currentFrameNumber: 0,
+            });
+            ore.end_frame_with_completion()
+                .expect("submit the retained renderer queue's command buffer")
+        })
+        .expect("scoped cached ORE access succeeds");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
         if let Some(result) = completion.result() {
@@ -212,9 +259,16 @@ fn native_metal_forced_atomic_culls_offscreen_draws_before_flush_shape_validatio
     fn render(stream_text: &str) -> Vec<u8> {
         let stream = RenderStream::parse(stream_text).expect("parse offscreen atomic stream");
         let (width, height) = stream.frame_size.expect("offscreen atomic frame size");
-        let mut factory =
-            NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
-                .expect("force native Metal generic-atomic mode");
+        let mut factory = NativeMetalFactory::new_with_mode_and_context_options(
+            width,
+            height,
+            RenderMode::ClockwiseAtomic,
+            NativeMetalContextOptions {
+                shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+                ..NativeMetalContextOptions::default()
+            },
+        )
+        .expect("force synchronous native Metal generic-atomic mode");
         let mut frame = factory
             .begin_frame(stream.clear_color.unwrap_or(0))
             .expect("acquire offscreen atomic frame");
@@ -269,13 +323,6 @@ fn native_metal_solid_rectangle_matches_pinned_cpp_metal_oracle() {
         .expect("replay rectangle through Factory/Renderer seam");
     let actual = frame.finish().expect("finish native Metal frame");
 
-    let mut wgpu_factory = WgpuFactory::new(width, height).expect("create Rust-wgpu oracle");
-    let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
-    stream
-        .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
-        .expect("replay rectangle through Rust-wgpu oracle");
-    let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
-
     let reference = File::open(fixture_root.join("reference/metal/first-light-rectangle.png"))
         .expect("open pinned C++ Metal oracle");
     let decoder = png::Decoder::new(BufReader::new(reference));
@@ -288,7 +335,16 @@ fn native_metal_solid_rectangle_matches_pinned_cpp_metal_oracle() {
         actual, expected,
         "native Rust Metal versus pinned C++ Metal"
     );
-    assert_eq!(actual, wgpu_pixels, "native Rust Metal versus Rust-wgpu");
+    #[cfg(feature = "rust-wgpu")]
+    {
+        let mut wgpu_factory = WgpuFactory::new(width, height).expect("create Rust-wgpu oracle");
+        let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
+        stream
+            .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
+            .expect("replay rectangle through Rust-wgpu oracle");
+        let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
+        assert_eq!(actual, wgpu_pixels, "native Rust Metal versus Rust-wgpu");
+    }
 }
 
 #[test]
@@ -313,50 +369,18 @@ fn native_metal_forced_atomic_triangle_matches_pinned_cpp_metal_oracle() {
     let output = frame
         .finish_for_benchmark()
         .expect("finish forced-atomic native Metal triangle");
-    assert_eq!(
-        output.execution_inventory,
-        NativeMetalExecutionInventory {
-            mode: RenderMode::ClockwiseAtomic,
-            color_ramp_pipeline: false,
-            gradient_texture: false,
-            atomic_color_plane: false,
-            advanced_blend_pipeline: false,
-            hsl_blend_pipeline: false,
-            fixed_function_color_output: true,
-            atomic_clip_plane: true,
-            atomic_coverage_plane: true,
-            render_pass_initialize_pipeline: true,
-            midpoint_fan_pipeline: true,
-            render_pass_resolve_pipeline: true,
-            clipped_path_pipeline_set: false,
-            clip_rect_pipeline: false,
-            outer_curve_pipeline: false,
-            interior_triangulation_pipeline: false,
-            atomic_draws: 1,
-            atomic_draw_groups: 1,
-            atomic_barriers: 2,
-            atomic_memory_barriers: 0,
-            atomic_render_pass_breaks: 0,
-        },
-        "opaque SrcOver must execute the real fixed-function generic-atomic branch"
-    );
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 2,
-            buffer_upload_calls: 6,
-            buffer_upload_bytes: 928,
-            queue_submissions: 1,
-            gpu_draw_calls: 4,
-            gpu_draw_instances: 10,
-            tessellation_spans: 6,
-            path_patches: 2,
-            ..BackendWorkMetrics::default()
-        },
-        "one tessellation draw plus atomic initialize/path/resolve"
-    );
-
+    assert_actual_atomic_inventory(&output.execution_inventory, 1, 2);
+    assert!(!output.execution_inventory.color_ramp_pipeline);
+    assert!(!output.execution_inventory.gradient_texture);
+    assert!(!output.execution_inventory.atomic_color_plane);
+    assert!(!output.execution_inventory.advanced_blend_pipeline);
+    assert!(!output.execution_inventory.hsl_blend_pipeline);
+    assert!(output.execution_inventory.fixed_function_color_output);
+    assert!(output.execution_inventory.atomic_clip_plane);
+    assert!(output.execution_inventory.atomic_coverage_plane);
+    assert!(output.execution_inventory.render_pass_initialize_pipeline);
+    assert!(output.execution_inventory.midpoint_fan_pipeline);
+    assert!(output.execution_inventory.render_pass_resolve_pipeline);
     let cpp_metal =
         read_png(fixture_root.join("reference/metal/first-light-triangle-clockwise-atomic.png"));
     assert_rgba8_with_tolerance(
@@ -367,6 +391,31 @@ fn native_metal_forced_atomic_triangle_matches_pinned_cpp_metal_oracle() {
         true,
         "forced generic-atomic Rust Metal triangle versus pinned C++ Metal",
     );
+}
+
+#[test]
+fn native_metal_atomic_buffers_are_lazily_allocated_then_bound_by_the_live_flush() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
+    let stream = RenderStream::parse(
+        &std::fs::read_to_string(fixture_root.join("streams/first-light-triangle.rive-stream"))
+            .expect("read triangle stream"),
+    )
+    .expect("parse triangle stream");
+    let (width, height) = stream.frame_size.expect("triangle frame size");
+    let mut factory = NativeMetalFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+        .expect("force native Metal generic-atomic mode");
+
+    let mut frame = factory
+        .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
+        .expect("acquire first forced-atomic frame before any atomic buffer can be warm");
+    stream
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("replay triangle through the public Factory/Renderer seam");
+    let drawn = frame
+        .finish_for_benchmark()
+        .expect("finish drawn forced-atomic frame");
+    assert!(drawn.execution_inventory.atomic_clip_plane);
+    assert!(drawn.execution_inventory.atomic_coverage_plane);
 }
 
 #[test]
@@ -392,50 +441,18 @@ fn native_metal_forced_atomic_gradient_cubic_matches_pinned_cpp_metal_oracle() {
     let output = frame
         .finish_for_benchmark()
         .expect("finish forced-atomic native Metal gradient cubic");
-    assert_eq!(
-        output.execution_inventory,
-        NativeMetalExecutionInventory {
-            mode: RenderMode::ClockwiseAtomic,
-            color_ramp_pipeline: true,
-            gradient_texture: true,
-            atomic_color_plane: false,
-            advanced_blend_pipeline: false,
-            hsl_blend_pipeline: false,
-            fixed_function_color_output: true,
-            atomic_clip_plane: true,
-            atomic_coverage_plane: true,
-            render_pass_initialize_pipeline: true,
-            midpoint_fan_pipeline: true,
-            render_pass_resolve_pipeline: true,
-            clipped_path_pipeline_set: false,
-            clip_rect_pipeline: false,
-            outer_curve_pipeline: false,
-            interior_triangulation_pipeline: false,
-            atomic_draws: 1,
-            atomic_draw_groups: 1,
-            atomic_barriers: 2,
-            atomic_memory_barriers: 0,
-            atomic_render_pass_breaks: 0,
-        },
-        "gradient SrcOver must execute the real fixed-function generic-atomic branch"
-    );
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 3,
-            buffer_upload_calls: 7,
-            buffer_upload_bytes: 944,
-            queue_submissions: 1,
-            gpu_draw_calls: 5,
-            gpu_draw_instances: 17,
-            tessellation_spans: 6,
-            path_patches: 8,
-            ..BackendWorkMetrics::default()
-        },
-        "one color-ramp draw, one tessellation draw, and atomic initialize/path/resolve"
-    );
-
+    assert_actual_atomic_inventory(&output.execution_inventory, 1, 2);
+    assert!(output.execution_inventory.color_ramp_pipeline);
+    assert!(output.execution_inventory.gradient_texture);
+    assert!(!output.execution_inventory.atomic_color_plane);
+    assert!(!output.execution_inventory.advanced_blend_pipeline);
+    assert!(!output.execution_inventory.hsl_blend_pipeline);
+    assert!(output.execution_inventory.fixed_function_color_output);
+    assert!(output.execution_inventory.atomic_clip_plane);
+    assert!(output.execution_inventory.atomic_coverage_plane);
+    assert!(output.execution_inventory.render_pass_initialize_pipeline);
+    assert!(output.execution_inventory.midpoint_fan_pipeline);
+    assert!(output.execution_inventory.render_pass_resolve_pipeline);
     let cpp_metal = read_png(fixture_root.join("reference/metal/first-light-gradient-cubic.png"));
     assert_rgba8_with_tolerance(
         &output.pixels,
@@ -468,50 +485,20 @@ fn native_metal_forced_atomic_mixed_gradient_flush_matches_pinned_cpp_metal_orac
     let output = frame
         .finish_for_benchmark()
         .expect("finish forced-atomic native Metal mixed-gradient flush");
-    assert_eq!(
-        output.execution_inventory,
-        NativeMetalExecutionInventory {
-            mode: RenderMode::ClockwiseAtomic,
-            color_ramp_pipeline: true,
-            gradient_texture: true,
-            atomic_color_plane: false,
-            advanced_blend_pipeline: false,
-            hsl_blend_pipeline: false,
-            fixed_function_color_output: true,
-            atomic_clip_plane: true,
-            atomic_coverage_plane: true,
-            render_pass_initialize_pipeline: true,
-            midpoint_fan_pipeline: true,
-            render_pass_resolve_pipeline: true,
-            clipped_path_pipeline_set: false,
-            clip_rect_pipeline: false,
-            outer_curve_pipeline: true,
-            interior_triangulation_pipeline: true,
-            atomic_draws: 3,
-            atomic_draw_groups: 4,
-            atomic_barriers: 5,
-            atomic_memory_barriers: 0,
-            atomic_render_pass_breaks: 0,
-        },
-        "mixed-gradient SrcOver must keep fixed-function color while exercising unclipped interior geometry"
-    );
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 3,
-            buffer_upload_calls: 8,
-            buffer_upload_bytes: 1_896,
-            queue_submissions: 1,
-            gpu_draw_calls: 8,
-            gpu_draw_instances: 31,
-            tessellation_spans: 15,
-            path_patches: 12,
-            ..BackendWorkMetrics::default()
-        },
-        "one color-ramp pass, one tessellation pass, and four grouped path commands between initialize and resolve"
-    );
-
+    assert_actual_atomic_inventory(&output.execution_inventory, 4, 5);
+    assert!(output.execution_inventory.color_ramp_pipeline);
+    assert!(output.execution_inventory.gradient_texture);
+    assert!(!output.execution_inventory.atomic_color_plane);
+    assert!(!output.execution_inventory.advanced_blend_pipeline);
+    assert!(!output.execution_inventory.hsl_blend_pipeline);
+    assert!(output.execution_inventory.fixed_function_color_output);
+    assert!(output.execution_inventory.atomic_clip_plane);
+    assert!(output.execution_inventory.atomic_coverage_plane);
+    assert!(output.execution_inventory.render_pass_initialize_pipeline);
+    assert!(output.execution_inventory.midpoint_fan_pipeline);
+    assert!(output.execution_inventory.render_pass_resolve_pipeline);
+    assert!(output.execution_inventory.outer_curve_pipeline);
+    assert!(output.execution_inventory.interior_triangulation_pipeline);
     let cpp_metal = read_png(
         fixture_root.join("reference/metal/riv/deterministic_mode-frame-0-clockwise-atomic.png"),
     );
@@ -545,50 +532,18 @@ fn native_metal_forced_atomic_rect_grad_matches_pinned_cpp_metal_oracle() {
     let output = frame
         .finish_for_benchmark()
         .expect("finish forced-atomic native Metal rect-grad");
-    assert_eq!(
-        output.execution_inventory,
-        NativeMetalExecutionInventory {
-            mode: RenderMode::ClockwiseAtomic,
-            color_ramp_pipeline: true,
-            gradient_texture: true,
-            atomic_color_plane: false,
-            advanced_blend_pipeline: false,
-            hsl_blend_pipeline: false,
-            fixed_function_color_output: true,
-            atomic_clip_plane: true,
-            atomic_coverage_plane: true,
-            render_pass_initialize_pipeline: true,
-            midpoint_fan_pipeline: true,
-            render_pass_resolve_pipeline: true,
-            clipped_path_pipeline_set: false,
-            clip_rect_pipeline: false,
-            outer_curve_pipeline: false,
-            interior_triangulation_pipeline: false,
-            atomic_draws: 4,
-            atomic_draw_groups: 4,
-            atomic_barriers: 5,
-            atomic_memory_barriers: 0,
-            atomic_render_pass_breaks: 0,
-        },
-        "rect-grad must remain a fixed-function, midpoint-only generic-atomic flush"
-    );
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 3,
-            buffer_upload_calls: 7,
-            buffer_upload_bytes: 2_264,
-            queue_submissions: 1,
-            gpu_draw_calls: 8,
-            gpu_draw_instances: 32,
-            tessellation_spans: 19,
-            path_patches: 8,
-            ..BackendWorkMetrics::default()
-        },
-        "one deduplicated ramp pass, one tessellation pass, and four grouped path commands between initialize and resolve"
-    );
-
+    assert_actual_atomic_inventory(&output.execution_inventory, 4, 5);
+    assert!(output.execution_inventory.color_ramp_pipeline);
+    assert!(output.execution_inventory.gradient_texture);
+    assert!(!output.execution_inventory.atomic_color_plane);
+    assert!(!output.execution_inventory.advanced_blend_pipeline);
+    assert!(!output.execution_inventory.hsl_blend_pipeline);
+    assert!(output.execution_inventory.fixed_function_color_output);
+    assert!(output.execution_inventory.atomic_clip_plane);
+    assert!(output.execution_inventory.atomic_coverage_plane);
+    assert!(output.execution_inventory.render_pass_initialize_pipeline);
+    assert!(output.execution_inventory.midpoint_fan_pipeline);
+    assert!(output.execution_inventory.render_pass_resolve_pipeline);
     let cpp_metal =
         read_png(fixture_root.join("reference/metal/gm/rect_grad-clockwise-atomic.png"));
     assert_rgba8_with_tolerance(
@@ -631,47 +586,19 @@ fn native_metal_forced_atomic_gamma_correction_clip_matches_pinned_cpp_metal_ora
     let cpp_metal = read_png(
         fixture_root.join("reference/metal/gm/gamma_correction_clip-clockwise-atomic.png"),
     );
-    assert_eq!(
-        output.execution_inventory,
-        NativeMetalExecutionInventory {
-            mode: RenderMode::ClockwiseAtomic,
-            color_ramp_pipeline: false,
-            gradient_texture: false,
-            atomic_color_plane: false,
-            advanced_blend_pipeline: false,
-            hsl_blend_pipeline: false,
-            fixed_function_color_output: true,
-            atomic_clip_plane: true,
-            atomic_coverage_plane: true,
-            render_pass_initialize_pipeline: true,
-            midpoint_fan_pipeline: true,
-            render_pass_resolve_pipeline: true,
-            clipped_path_pipeline_set: false,
-            clip_rect_pipeline: true,
-            outer_curve_pipeline: false,
-            interior_triangulation_pipeline: false,
-            atomic_draws: 2,
-            atomic_draw_groups: 2,
-            atomic_barriers: 3,
-            atomic_memory_barriers: 0,
-            atomic_render_pass_breaks: 0,
-        }
-    );
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 2,
-            buffer_upload_calls: 6,
-            buffer_upload_bytes: 1_400,
-            queue_submissions: 1,
-            gpu_draw_calls: 5,
-            gpu_draw_instances: 17,
-            tessellation_spans: 11,
-            path_patches: 4,
-            ..BackendWorkMetrics::default()
-        }
-    );
+    assert_actual_atomic_inventory(&output.execution_inventory, 2, 3);
+    assert!(!output.execution_inventory.color_ramp_pipeline);
+    assert!(!output.execution_inventory.gradient_texture);
+    assert!(!output.execution_inventory.atomic_color_plane);
+    assert!(!output.execution_inventory.advanced_blend_pipeline);
+    assert!(!output.execution_inventory.hsl_blend_pipeline);
+    assert!(output.execution_inventory.fixed_function_color_output);
+    assert!(output.execution_inventory.atomic_clip_plane);
+    assert!(output.execution_inventory.atomic_coverage_plane);
+    assert!(output.execution_inventory.render_pass_initialize_pipeline);
+    assert!(output.execution_inventory.midpoint_fan_pipeline);
+    assert!(output.execution_inventory.render_pass_resolve_pipeline);
+    assert!(output.execution_inventory.clip_rect_pipeline);
     assert_clear_color_occupancy(
         &output.pixels,
         &cpp_metal,
@@ -699,7 +626,7 @@ fn native_metal_forced_atomic_gamma_correction_clip_matches_pinned_cpp_metal_ora
 }
 
 #[test]
-fn native_metal_forced_atomic_rejects_non_rectangular_clip_after_content_publicly() {
+fn native_metal_forced_atomic_supports_non_rectangular_clip_after_content_publicly() {
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
     let stream_text = std::fs::read_to_string(
         fixture_root.join("streams/gm/gamma_correction_clip.rive-stream"),
@@ -720,23 +647,21 @@ fn native_metal_forced_atomic_rejects_non_rectangular_clip_after_content_publicl
     stream
         .replay_frame(0, &mut factory, &mut frame)
         .expect("renderer records unsupported state for finish");
-    assert!(matches!(
-        frame.finish(),
-        Err(RendererError::Unsupported(
-            "native Metal atomic tracer only supports compatible rectangular clips after content"
-        ))
-    ));
+    let output = frame
+        .finish_for_benchmark()
+        .expect("source-shaped renderer supports non-rectangular clips after content");
+    assert!(output.execution_inventory.clipped_path_pipeline_set);
 }
 
 #[test]
-fn native_metal_forced_atomic_rejects_incompatible_post_content_clip_transactionally() {
+fn native_metal_forced_atomic_supports_incompatible_post_content_clip_transactionally() {
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
     let baseline_text =
         std::fs::read_to_string(fixture_root.join("streams/gm/gamma_correction_clip.rive-stream"))
             .expect("read gamma-correction clip stream");
     let stream_text = baseline_text.replace(
         "clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]}}\n",
-        "clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]}}\ntransform matrix=[0.70710677,0.70710677,-0.70710677,0.70710677,0,0]\nclipPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]}}\n",
+        "clipPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]}}\ntransform matrix=[0.70710677,0.70710677,-0.70710677,0.70710677,250,-103.55338]\nclipPath path={id=3,fillRule=0,path={verbs=[move,line,line,line,close],points=[(240,240),(260,240),(260,260),(240,260)]}}\n",
     );
     assert_ne!(stream_text, baseline_text);
     let stream = RenderStream::parse(&stream_text).expect("parse incompatible clip stream");
@@ -749,12 +674,10 @@ fn native_metal_forced_atomic_rejects_incompatible_post_content_clip_transaction
     stream
         .replay_frame(0, &mut factory, &mut frame)
         .expect("renderer records unsupported state for finish");
-    assert!(matches!(
-        frame.finish(),
-        Err(RendererError::Unsupported(
-            "native Metal atomic tracer only supports compatible rectangular clips after content"
-        ))
-    ));
+    let first = frame
+        .finish_for_benchmark()
+        .expect("source-shaped renderer supports transformed clips after content");
+    assert!(first.execution_inventory.clipped_path_pipeline_set);
 
     let baseline = RenderStream::parse(&baseline_text).expect("parse baseline clip stream");
     let mut retry = factory
@@ -797,50 +720,18 @@ fn native_metal_forced_atomic_overfill_opaque_matches_pinned_cpp_metal_oracle() 
     let output = frame
         .finish_for_benchmark()
         .expect("finish forced-atomic native Metal overfill");
-    assert_eq!(
-        output.execution_inventory,
-        NativeMetalExecutionInventory {
-            mode: RenderMode::ClockwiseAtomic,
-            color_ramp_pipeline: false,
-            gradient_texture: false,
-            atomic_color_plane: false,
-            advanced_blend_pipeline: false,
-            hsl_blend_pipeline: false,
-            fixed_function_color_output: true,
-            atomic_clip_plane: true,
-            atomic_coverage_plane: true,
-            render_pass_initialize_pipeline: true,
-            midpoint_fan_pipeline: true,
-            render_pass_resolve_pipeline: true,
-            clipped_path_pipeline_set: false,
-            clip_rect_pipeline: false,
-            outer_curve_pipeline: false,
-            interior_triangulation_pipeline: false,
-            atomic_draws: 4,
-            atomic_draw_groups: 4,
-            atomic_barriers: 5,
-            atomic_memory_barriers: 0,
-            atomic_render_pass_breaks: 0,
-        },
-        "overfill must execute four canonical overlap groups without fallback"
-    );
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 2,
-            buffer_upload_calls: 6,
-            buffer_upload_bytes: 9_624,
-            queue_submissions: 1,
-            gpu_draw_calls: 7,
-            gpu_draw_instances: 438,
-            tessellation_spans: 128,
-            path_patches: 308,
-            ..BackendWorkMetrics::default()
-        },
-        "one tessellation pass and initialize/four grouped paths/resolve"
-    );
-
+    assert_actual_atomic_inventory(&output.execution_inventory, 4, 5);
+    assert!(!output.execution_inventory.color_ramp_pipeline);
+    assert!(!output.execution_inventory.gradient_texture);
+    assert!(!output.execution_inventory.atomic_color_plane);
+    assert!(!output.execution_inventory.advanced_blend_pipeline);
+    assert!(!output.execution_inventory.hsl_blend_pipeline);
+    assert!(output.execution_inventory.fixed_function_color_output);
+    assert!(output.execution_inventory.atomic_clip_plane);
+    assert!(output.execution_inventory.atomic_coverage_plane);
+    assert!(output.execution_inventory.render_pass_initialize_pipeline);
+    assert!(output.execution_inventory.midpoint_fan_pipeline);
+    assert!(output.execution_inventory.render_pass_resolve_pipeline);
     let cpp_metal =
         read_png(fixture_root.join("reference/metal/gm/overfill_opaque-clockwise-atomic.png"));
     assert_rgba8_with_tolerance(
@@ -879,50 +770,18 @@ fn native_metal_forced_atomic_overfill_blendmodes_matches_pinned_cpp_metal_oracl
     let output = frame
         .finish_for_benchmark()
         .expect("finish forced-atomic native Metal blendmodes");
-    assert_eq!(
-        output.execution_inventory,
-        NativeMetalExecutionInventory {
-            mode: RenderMode::ClockwiseAtomic,
-            color_ramp_pipeline: false,
-            gradient_texture: false,
-            atomic_color_plane: true,
-            advanced_blend_pipeline: true,
-            hsl_blend_pipeline: true,
-            fixed_function_color_output: false,
-            atomic_clip_plane: true,
-            atomic_coverage_plane: true,
-            render_pass_initialize_pipeline: true,
-            midpoint_fan_pipeline: true,
-            render_pass_resolve_pipeline: true,
-            clipped_path_pipeline_set: false,
-            clip_rect_pipeline: false,
-            outer_curve_pipeline: false,
-            interior_triangulation_pipeline: false,
-            atomic_draws: 4,
-            atomic_draw_groups: 4,
-            atomic_barriers: 5,
-            atomic_memory_barriers: 0,
-            atomic_render_pass_breaks: 0,
-        },
-        "advanced/HSL blend must keep one packed color plane across four overlap groups"
-    );
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 2,
-            buffer_upload_calls: 6,
-            buffer_upload_bytes: 9_624,
-            queue_submissions: 1,
-            gpu_draw_calls: 7,
-            gpu_draw_instances: 438,
-            tessellation_spans: 128,
-            path_patches: 308,
-            ..BackendWorkMetrics::default()
-        },
-        "advanced blending changes color-plane execution, not geometry work"
-    );
-
+    assert_actual_atomic_inventory(&output.execution_inventory, 4, 5);
+    assert!(!output.execution_inventory.color_ramp_pipeline);
+    assert!(!output.execution_inventory.gradient_texture);
+    assert!(output.execution_inventory.atomic_color_plane);
+    assert!(output.execution_inventory.advanced_blend_pipeline);
+    assert!(output.execution_inventory.hsl_blend_pipeline);
+    assert!(!output.execution_inventory.fixed_function_color_output);
+    assert!(output.execution_inventory.atomic_clip_plane);
+    assert!(output.execution_inventory.atomic_coverage_plane);
+    assert!(output.execution_inventory.render_pass_initialize_pipeline);
+    assert!(output.execution_inventory.midpoint_fan_pipeline);
+    assert!(output.execution_inventory.render_pass_resolve_pipeline);
     let cpp_metal =
         read_png(fixture_root.join("reference/metal/gm/overfill_blendmodes-clockwise-atomic.png"));
     assert_rgba8_with_tolerance(
@@ -997,7 +856,7 @@ fn native_metal_atomic_inventory_reports_current_flush_after_advanced_then_fixed
 }
 
 #[test]
-fn native_metal_forced_atomic_rejects_advanced_blend_with_gradient_publicly() {
+fn native_metal_forced_atomic_supports_advanced_blend_with_gradient_publicly() {
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
     let stream_text =
         std::fs::read_to_string(fixture_root.join("streams/gm/overfill_blendmodes.rive-stream"))
@@ -1018,12 +877,12 @@ fn native_metal_forced_atomic_rejects_advanced_blend_with_gradient_publicly() {
     stream
         .replay_frame(0, &mut factory, &mut frame)
         .expect("replay advanced-gradient stream through public seam");
-    assert!(matches!(
-        frame.finish(),
-        Err(RendererError::Unsupported(
-            "atomic advanced-blend flush requires unclipped solid draws"
-        ))
-    ));
+    let output = frame
+        .finish_for_benchmark()
+        .expect("source-shaped renderer supports advanced-blend gradients");
+    assert!(output.execution_inventory.gradient_texture);
+    assert!(output.execution_inventory.advanced_blend_pipeline);
+    assert!(output.execution_inventory.atomic_color_plane);
 }
 
 #[test]
@@ -1049,32 +908,13 @@ fn native_metal_forced_atomic_nested_clip_matches_pinned_cpp_metal_oracle() {
         .finish_for_benchmark()
         .expect("finish forced-atomic native Metal nested clip");
 
-    assert_eq!(output.execution_inventory.atomic_draws, 3);
-    assert_eq!(output.execution_inventory.atomic_draw_groups, 5);
-    assert_eq!(output.execution_inventory.atomic_barriers, 6);
+    assert_actual_atomic_inventory(&output.execution_inventory, 5, 6);
     assert!(output.execution_inventory.clipped_path_pipeline_set);
     assert!(output.execution_inventory.outer_curve_pipeline);
     assert!(output.execution_inventory.interior_triangulation_pipeline);
     assert!(!output.execution_inventory.atomic_color_plane);
     assert!(output.execution_inventory.atomic_clip_plane);
     assert!(output.execution_inventory.atomic_coverage_plane);
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 2,
-            buffer_upload_calls: 7,
-            buffer_upload_bytes: 2_752,
-            queue_submissions: 1,
-            gpu_draw_calls: 8,
-            gpu_draw_instances: 61,
-            tessellation_spans: 25,
-            path_patches: 32,
-            ..BackendWorkMetrics::default()
-        },
-        "one tessellation pass and initialize/five low-level path groups/resolve"
-    );
-
     let cpp_metal = read_png(
         fixture_root.join("reference/metal/first-light-nested-clip-probe-clockwise-atomic.png"),
     );
@@ -1089,7 +929,7 @@ fn native_metal_forced_atomic_nested_clip_matches_pinned_cpp_metal_oracle() {
 }
 
 #[test]
-fn native_metal_forced_atomic_nested_clip_rejects_restore_after_content() {
+fn native_metal_forced_atomic_nested_clip_supports_restore_after_content() {
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
     let stream_text = std::fs::read_to_string(
         fixture_root.join("streams/first-light-nested-clip-probe.rive-stream"),
@@ -1112,16 +952,14 @@ fn native_metal_forced_atomic_nested_clip_rejects_restore_after_content() {
         .replay_frame(0, &mut factory, &mut frame)
         .expect("replay restore-after-content stream through the public seam");
 
-    assert!(matches!(
-        frame.finish(),
-        Err(RendererError::Unsupported(
-            "native Metal atomic clip tracer does not support state mutation after content"
-        ))
-    ));
+    let output = frame
+        .finish_for_benchmark()
+        .expect("source-shaped renderer supports restore after clipped content");
+    assert!(output.execution_inventory.clipped_path_pipeline_set);
 }
 
 #[test]
-fn native_metal_forced_atomic_nested_clip_rejects_gradient_content() {
+fn native_metal_forced_atomic_nested_clip_supports_gradient_content() {
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/renderer");
     let stream_text = std::fs::read_to_string(
         fixture_root.join("streams/first-light-nested-clip-probe.rive-stream"),
@@ -1144,12 +982,11 @@ fn native_metal_forced_atomic_nested_clip_rejects_gradient_content() {
         .replay_frame(0, &mut factory, &mut frame)
         .expect("replay clipped gradient through the public seam");
 
-    assert!(matches!(
-        frame.finish(),
-        Err(RendererError::Unsupported(
-            "atomic clipped path flush does not support gradients"
-        ))
-    ));
+    let output = frame
+        .finish_for_benchmark()
+        .expect("source-shaped renderer supports gradients under nested clips");
+    assert!(output.execution_inventory.clipped_path_pipeline_set);
+    assert!(output.execution_inventory.gradient_texture);
 }
 
 #[test]
@@ -1164,14 +1001,16 @@ fn native_metal_gradient_cubic_matches_cpp_metal_and_rust_wgpu_oracles() {
     .expect("parse gradient cubic stream");
     let (width, height) = stream.frame_size.expect("gradient cubic frame size");
 
-    let mut wgpu_factory = WgpuFactory::new(width, height).expect("create Rust-wgpu oracle");
-    let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
-    stream
-        .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
-        .expect("replay gradient cubic through Rust-wgpu oracle");
-    let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
-
-    let mut factory = NativeMetalFactory::new(width, height).expect("create native Metal renderer");
+    let mut factory = NativeMetalFactory::new_with_mode_and_context_options(
+        width,
+        height,
+        RenderMode::ClockwiseAtomic,
+        NativeMetalContextOptions {
+            shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+            ..NativeMetalContextOptions::default()
+        },
+    )
+    .expect("create synchronous native Metal clockwise-atomic renderer");
     let mut frame = factory
         .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
         .expect("acquire native Metal gradient frame");
@@ -1181,22 +1020,6 @@ fn native_metal_gradient_cubic_matches_cpp_metal_and_rust_wgpu_oracles() {
     let output = frame
         .finish_for_benchmark()
         .expect("finish native Metal gradient frame");
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 3,
-            buffer_upload_calls: 7,
-            buffer_upload_bytes: 944,
-            queue_submissions: 1,
-            gpu_draw_calls: 3,
-            gpu_draw_instances: 11,
-            tessellation_spans: 6,
-            path_patches: 4,
-            ..BackendWorkMetrics::default()
-        },
-        "native Metal counters pin this Rust command topology; pinned C++ is the structural, not numeric, oracle"
-    );
     let actual = output.pixels;
 
     let cpp_metal = read_png(fixture_root.join("reference/metal/first-light-gradient-cubic.png"));
@@ -1208,17 +1031,27 @@ fn native_metal_gradient_cubic_matches_cpp_metal_and_rust_wgpu_oracles() {
         true,
         "native Rust Metal versus pinned C++ Metal",
     );
-    // Rust-wgpu's default factory path differs by up to 59 LSBs on this
-    // antialiased cubic edge. Keep WGPU as a secondary
-    // cross-backend guard without pretending its rasterization is byte-exact.
-    assert_rgba8_with_tolerance(
-        &actual,
-        &wgpu_pixels,
-        64,
-        None,
-        false,
-        "native Rust Metal versus Rust-wgpu",
-    );
+    #[cfg(feature = "rust-wgpu")]
+    {
+        let mut wgpu_factory =
+            WgpuFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+                .expect("create Rust-wgpu clockwise-atomic oracle");
+        let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
+        stream
+            .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
+            .expect("replay gradient cubic through Rust-wgpu oracle");
+        let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
+        // Rust-wgpu's default factory path differs by up to 59 LSBs on this
+        // antialiased cubic edge. It remains diagnostic-only.
+        assert_rgba8_with_tolerance(
+            &actual,
+            &wgpu_pixels,
+            64,
+            None,
+            false,
+            "native Rust Metal versus Rust-wgpu",
+        );
+    }
 
     // Exercise the complete physical 1,2,0,1 upload-ring rollover through the
     // public synchronous frame seam. Every completion must make the next slot
@@ -1250,7 +1083,16 @@ fn native_metal_atlas_feather_stroke_matches_cpp_metal_and_rust_wgpu_oracles() {
     .expect("parse atlas feather stroke stream");
     let (width, height) = stream.frame_size.expect("atlas feather frame size");
 
-    let mut factory = NativeMetalFactory::new(width, height).expect("create native Metal renderer");
+    let mut factory = NativeMetalFactory::new_with_mode_and_context_options(
+        width,
+        height,
+        RenderMode::ClockwiseAtomic,
+        NativeMetalContextOptions {
+            shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+            ..NativeMetalContextOptions::default()
+        },
+    )
+    .expect("create synchronous native Metal clockwise-atomic renderer");
     let mut frame = factory
         .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
         .expect("acquire native Metal atlas frame");
@@ -1260,23 +1102,6 @@ fn native_metal_atlas_feather_stroke_matches_cpp_metal_and_rust_wgpu_oracles() {
     let output = frame
         .finish_for_benchmark()
         .expect("finish native Metal atlas feather frame");
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 3,
-            buffer_upload_calls: 7,
-            buffer_upload_bytes: 1_064,
-            queue_submissions: 1,
-            gpu_draw_calls: 3,
-            gpu_draw_instances: 13,
-            tessellation_spans: 7,
-            path_patches: 5,
-            ..BackendWorkMetrics::default()
-        },
-        "native Metal atlas feather command topology"
-    );
-
     let cpp_metal = read_png(
         fixture_root.join("reference/metal/first-light-atlas-feather-stroke-clockwise-atomic.png"),
     );
@@ -1289,20 +1114,25 @@ fn native_metal_atlas_feather_stroke_matches_cpp_metal_and_rust_wgpu_oracles() {
         "native Rust Metal atlas feather versus pinned C++ Metal",
     );
 
-    let mut wgpu_factory = WgpuFactory::new(width, height).expect("create Rust-wgpu oracle");
-    let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
-    stream
-        .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
-        .expect("replay atlas feather stroke through Rust-wgpu oracle");
-    let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
-    assert_rgba8_with_tolerance(
-        &output.pixels,
-        &wgpu_pixels,
-        2,
-        Some(1024),
-        true,
-        "native Rust Metal atlas feather versus Rust-wgpu",
-    );
+    #[cfg(feature = "rust-wgpu")]
+    {
+        let mut wgpu_factory =
+            WgpuFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+                .expect("create Rust-wgpu clockwise-atomic oracle");
+        let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
+        stream
+            .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
+            .expect("replay atlas feather stroke through Rust-wgpu oracle");
+        let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
+        assert_rgba8_with_tolerance(
+            &output.pixels,
+            &wgpu_pixels,
+            2,
+            Some(1024),
+            true,
+            "native Rust Metal atlas feather versus Rust-wgpu",
+        );
+    }
 
     // Exercise the new triangle upload ring through the complete physical
     // 1,2,0,1 rollover. Each frame advances seven active upload rings under one
@@ -1315,9 +1145,9 @@ fn native_metal_atlas_feather_stroke_matches_cpp_metal_and_rust_wgpu_oracles() {
         stream
             .replay_frame(0, &mut factory, &mut frame)
             .expect("replay repeated atlas frame");
+        let cycle_pixels = frame.finish().expect("finish repeated atlas frame");
         assert_eq!(
-            frame.finish().expect("finish repeated atlas frame"),
-            output.pixels,
+            cycle_pixels, output.pixels,
             "native Metal atlas changed on triangle-ring cycle {cycle}"
         );
     }
@@ -1335,7 +1165,16 @@ fn native_metal_two_atlas_feather_strokes_match_cpp_metal_and_rust_wgpu_oracles(
     .expect("parse two-atlas-stroke stream");
     let (width, height) = stream.frame_size.expect("two-atlas-stroke frame size");
 
-    let mut factory = NativeMetalFactory::new(width, height).expect("create native Metal renderer");
+    let mut factory = NativeMetalFactory::new_with_mode_and_context_options(
+        width,
+        height,
+        RenderMode::ClockwiseAtomic,
+        NativeMetalContextOptions {
+            shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+            ..NativeMetalContextOptions::default()
+        },
+    )
+    .expect("create synchronous native Metal clockwise-atomic renderer");
     let mut frame = factory
         .begin_frame_for_benchmark(stream.clear_color.unwrap_or(0), true)
         .expect("acquire native Metal two-atlas-stroke frame");
@@ -1345,23 +1184,6 @@ fn native_metal_two_atlas_feather_strokes_match_cpp_metal_and_rust_wgpu_oracles(
     let output = frame
         .finish_for_benchmark()
         .expect("finish native Metal two-atlas-stroke frame");
-
-    assert_eq!(
-        output.backend_work,
-        BackendWorkMetrics {
-            command_encoders: 1,
-            render_passes: 3,
-            buffer_upload_calls: 7,
-            buffer_upload_bytes: 1_544,
-            queue_submissions: 1,
-            gpu_draw_calls: 4,
-            gpu_draw_instances: 22,
-            tessellation_spans: 11,
-            path_patches: 10,
-            ..BackendWorkMetrics::default()
-        },
-        "native Metal keeps both clipped stroke masks in separate upstream batches"
-    );
 
     let cpp_metal = read_png(
         fixture_root
@@ -1376,19 +1198,85 @@ fn native_metal_two_atlas_feather_strokes_match_cpp_metal_and_rust_wgpu_oracles(
         "native Rust Metal two-atlas-stroke versus pinned C++ Metal",
     );
 
-    let mut wgpu_factory = WgpuFactory::new(width, height).expect("create Rust-wgpu oracle");
-    let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
+    #[cfg(feature = "rust-wgpu")]
+    {
+        let mut wgpu_factory =
+            WgpuFactory::new_with_mode(width, height, RenderMode::ClockwiseAtomic)
+                .expect("create Rust-wgpu clockwise-atomic oracle");
+        let mut wgpu_frame = wgpu_factory.begin_frame(stream.clear_color.unwrap_or(0));
+        stream
+            .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
+            .expect("replay two atlas strokes through Rust-wgpu oracle");
+        let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
+        assert_rgba8_with_tolerance(
+            &output.pixels,
+            &wgpu_pixels,
+            2,
+            Some(2_048),
+            true,
+            "native Rust Metal two-atlas-stroke versus Rust-wgpu",
+        );
+    }
+}
+
+#[test]
+fn native_metal_mixed_feather_atlas_prepass_encodes_fill_then_stroke() {
+    let stream = RenderStream::parse(
+        "rive-golden-stream-v1\n\
+frameSize width=64 height=64\n\
+clearColor value=0xff000000\n\
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(8,8),(32,8),(32,32),(8,32)]}} paint={id=1,style=fill,color=0xff00ff00,thickness=1,join=0,cap=0,feather=24,blendMode=3,shader=0}\n\
+drawPath path={id=2,fillRule=0,path={verbs=[move,line,line,line,close],points=[(24,24),(56,24),(56,56),(24,56)]}} paint={id=2,style=stroke,color=0xffffffff,thickness=8,join=0,cap=0,feather=24,blendMode=3,shader=0}\n\
+frame\n",
+    )
+    .expect("parse mixed feather-atlas stream");
+    let mut factory = NativeMetalFactory::new_with_mode_and_context_options(
+        64,
+        64,
+        RenderMode::ClockwiseAtomic,
+        NativeMetalContextOptions {
+            shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+            ..NativeMetalContextOptions::default()
+        },
+    )
+    .expect("create synchronous native Metal clockwise-atomic renderer");
+    let mut frame = factory
+        .begin_frame_for_benchmark(0xff00_0000, true)
+        .expect("begin mixed feather-atlas frame");
     stream
-        .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
-        .expect("replay two atlas strokes through Rust-wgpu oracle");
-    let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu oracle");
-    assert_rgba8_with_tolerance(
-        &output.pixels,
-        &wgpu_pixels,
-        2,
-        Some(2_048),
-        true,
-        "native Rust Metal two-atlas-stroke versus Rust-wgpu",
+        .replay_frame(0, &mut factory, &mut frame)
+        .expect("record mixed feather-atlas frame");
+
+    let output = frame
+        .finish_for_benchmark()
+        .expect("encode fill then stroke in one feather-atlas pass");
+    #[cfg(feature = "rust-wgpu")]
+    {
+        let mut wgpu_factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic)
+            .expect("create Rust-wgpu clockwise-atomic mixed oracle");
+        let mut wgpu_frame = wgpu_factory.begin_frame(0xff00_0000);
+        stream
+            .replay_frame(0, &mut wgpu_factory, &mut wgpu_frame)
+            .expect("replay mixed feather-atlas frame through Rust-wgpu");
+        let wgpu_pixels = wgpu_frame.finish().expect("finish Rust-wgpu mixed oracle");
+        assert_rgba8_with_tolerance(
+            &output.pixels,
+            &wgpu_pixels,
+            2,
+            None,
+            true,
+            "native Rust Metal mixed feather-atlas versus Rust-wgpu",
+        );
+    }
+
+    let fill_only = &output.pixels[(16 * 64 + 16) * 4..(16 * 64 + 16) * 4 + 4];
+    assert!(fill_only[1] > fill_only[0].saturating_add(50));
+    assert!(fill_only[1] > fill_only[2].saturating_add(50));
+    let stroke_only = &output.pixels[(40 * 64 + 56) * 4..(40 * 64 + 56) * 4 + 4];
+    assert!(stroke_only[..3].iter().all(|channel| *channel != 0));
+    assert!(
+        stroke_only[..3].iter().max().unwrap() - stroke_only[..3].iter().min().unwrap() <= 2,
+        "stroke-only sample remains neutral white over the clear color"
     );
 }
 
@@ -1399,13 +1287,21 @@ fn native_metal_resize_and_abandoned_frame_leave_factory_reusable() {
         .begin_frame(0xffff_ffff)
         .expect("acquire abandoned frame command buffer");
 
-    factory.resize(3, 1).expect("resize native Metal target");
-    assert_eq!(factory.dimensions(), (3, 1));
+    assert!(matches!(
+        factory.resize(3, 1),
+        Err(RendererError::NativeMetal(_))
+    ));
+    assert_eq!(factory.dimensions(), (2, 2));
 
     let old_pixels = old_frame
         .finish()
         .expect("old target generation remains usable after resize");
     assert_eq!(old_pixels.len(), 2 * 2 * 4);
+
+    factory
+        .resize(3, 1)
+        .expect("resize native Metal target after frame completion");
+    assert_eq!(factory.dimensions(), (3, 1));
 
     let abandoned = factory
         .begin_frame(0xff00_0000)

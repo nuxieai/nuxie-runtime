@@ -1,0 +1,18 @@
+schema_version = 1
+unit = "ore-binding-map"
+receipt_kind = "verification"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-binding-map.verification.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_binding_map.hpp:1-317",
+    "cpp:renderer/src/ore/ore_binding_map.cpp:1-189",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_binding_map_hpp.rs:1-927",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_binding_map_cpp.rs:1-211",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_binding_map_hpp.rs" = "3c8df63f4ab2857e6a00b1e6749036c9494afed4100c920060789e6306abce74", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_binding_map_cpp.rs" = "3a03a4147ef84ff7aadb9325ab7fe3e4a32c25d952af863e597ced587f6b1149" }
+suite_reports = { "V0" = "docs/metal-port-reports/v0-inventory-provenance.md", "V1" = "docs/metal-port-reports/v1-source-ownership-closure.md", "V2" = "docs/metal-port-reports/v2-compile-configuration-matrix.md", "V3" = "docs/metal-port-reports/v3-native-lifecycle-failure.md", "V4" = "docs/metal-port-reports/v4-pinned-cpp-metal-parity.md", "V5" = "docs/metal-port-reports/v5-wgpu-diagnostic.md", "V6" = "docs/metal-port-reports/v6-msaa-exclusion.md", "V7" = "docs/metal-port-reports/v7-platform-hardware-policy.md", "V8" = "docs/metal-port-reports/v8-rooted-product-no-fallback.md", "V9" = "docs/metal-port-reports/v9-independent-closeout.md" }

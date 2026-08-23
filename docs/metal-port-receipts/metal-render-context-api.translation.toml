@@ -1,0 +1,20 @@
+schema_version = 1
+unit = "metal-render-context-api"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/metal-render-context-api.translation.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/metal/render_context_metal_impl.h:1-282",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/metal/render_context_metal_impl_h.rs:1-1169",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/metal/render_context_metal_impl_h.rs" = "45b6f0b321c00f87b08c76cf9138e13dd03690020588ac1a35b60e73b8937c61" }
+source_digests = { "renderer/include/rive/renderer/metal/render_context_metal_impl.h" = "c563c456f73c874990910db206dd8c8a36d2a6a0c9774cd006619c8f033b0c4f" }

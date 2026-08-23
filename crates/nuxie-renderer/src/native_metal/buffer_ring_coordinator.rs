@@ -131,6 +131,15 @@ impl BufferRingCoordinator {
             transferred: false,
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn slot_is_available_for_test(&self, slot: usize) -> bool {
+        self.shared
+            .lock_state()
+            .outstanding
+            .get(slot)
+            .is_some_and(Option::is_none)
+    }
 }
 
 #[derive(Debug)]

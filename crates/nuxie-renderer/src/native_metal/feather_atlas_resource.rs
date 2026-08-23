@@ -214,6 +214,7 @@ mod tests {
     #[test]
     fn live_feather_atlas_capacity_reuses_and_forced_resize_replaces() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let mut resource = FeatherAtlasResource::new(&device, 37, 19).unwrap().unwrap();
@@ -256,6 +257,7 @@ mod tests {
     #[test]
     fn live_feather_atlas_drop_releases_owner_without_invalidating_retained_texture() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let resource = FeatherAtlasResource::new(&device, 5, 7).unwrap().unwrap();
@@ -271,6 +273,7 @@ mod tests {
     #[test]
     fn failed_feather_atlas_replace_preserves_identity_and_real_retry_succeeds() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let mut resource = FeatherAtlasResource::new(&device, 37, 19).unwrap().unwrap();

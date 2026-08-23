@@ -19,12 +19,12 @@
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use crate::gpu_resource::GpuResourceManager;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use crate::types::Features;
 
 /// RSTB shader variant selected by a concrete backend.
@@ -55,14 +55,14 @@ pub struct FrameDescriptor {
 /// Keeping this interface here mirrors the two operations used by
 /// `Context::finishActiveRenderPass`; draw and encoder behavior remain in the
 /// render-pass translation.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 pub(crate) trait ActiveRenderPass: Send + Sync {
     fn is_finished(&self) -> bool;
     fn finish(&self);
 }
 
 /// Cross-cutting state shared by a concrete context and its render passes.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 pub(crate) struct ContextState {
     // Rust fields drop in declaration order. C++ destroys Context members in
     // reverse declaration order: manager, error, active pointer, features.
@@ -72,7 +72,7 @@ pub(crate) struct ContextState {
     features: Features,
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 impl ContextState {
     pub(crate) fn new(features: Features, manager: Option<GpuResourceManager>) -> Arc<Self> {
         Arc::new(Self {
@@ -134,7 +134,7 @@ impl ContextState {
     }
 }
 
-#[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+#[cfg(all(test, target_vendor = "apple"))]
 mod tests {
     use super::*;
     use crate::gpu_resource::GpuResourceManagerOwner;

@@ -1,0 +1,16 @@
+schema_version = 1
+unit = "generic-gpu-implementation"
+receipt_kind = "compile"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-gpu-implementation.compile.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/src/gpu.cpp:1-2185",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gpu_cpp.rs:1-4005",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gpu_cpp.rs" = "f0f1a856fd702f64930fe94dbf83b0b6d2df8058e3067cd0346bc334a3dfd757" }
+compiler_diagnostics = 0

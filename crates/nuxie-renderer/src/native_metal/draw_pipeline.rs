@@ -204,11 +204,14 @@ fn make_pipeline_state(
     descriptor: &MTLRenderPipelineDescriptor,
     pixel_format: MTLPixelFormat,
 ) -> Result<Retained<ProtocolObject<dyn MTLRenderPipelineState>>, DrawPipelineError> {
-    gpu.newRenderPipelineStateWithDescriptor_error(descriptor)
-        .map_err(|error| DrawPipelineError::PipelineCreation {
+    let creation = super::new_render_pipeline_state(gpu, descriptor);
+    if creation.error.is_some() || creation.object.is_none() {
+        return Err(DrawPipelineError::PipelineCreation {
             pixel_format,
-            description: error.localizedDescription().to_string(),
-        })
+            description: creation.error.unwrap_or_else(|| "<nil>".to_owned()),
+        });
+    }
+    Ok(creation.object.expect("pipeline checked nonnil"))
 }
 
 fn apply_attachment_policy(descriptor: &MTLRenderPipelineDescriptor, policy: AttachmentPolicy) {

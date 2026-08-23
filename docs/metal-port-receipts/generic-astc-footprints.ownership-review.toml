@@ -1,0 +1,30 @@
+schema_version = 1
+unit = "generic-astc-footprints"
+receipt_kind = "ownership-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-astc-footprints.ownership-review.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:decoders/include/rive/decoders/astc_footprints.hpp:1-61",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/decoders/include/rive/decoders/astc_footprints_hpp.rs:1-141",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/decoders/include/rive/decoders/astc_footprints_hpp.rs" = "3ac677e37ccd21642cc73672eec5e61030ff222e17ca1ea82865d3241df9d7fe" }
+findings = []
+review_run_id = "sol-v9-ownership-global-20260822-frozen-final-clean-890d85c1"
+coverage = [
+    "fields",
+    "lifetimes",
+    "threads",
+    "retain-release",
+    "drop-order",
+    "unsafe-invariants",
+    "divergences",
+]
+citations = [
+    "cpp:decoders/include/rive/decoders/astc_footprints.hpp:1-61",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/decoders/include/rive/decoders/astc_footprints_hpp.rs:1-141",
+]

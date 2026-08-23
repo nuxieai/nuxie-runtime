@@ -1,0 +1,16 @@
+schema_version = 1
+unit = "generic-factory-contract"
+receipt_kind = "verification"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-factory-contract.verification.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:include/rive/factory.hpp:1-82",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs:1-249",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs" = "835d1abaf7fc4e24af087fbbd6d23a14ff31af91a7f7e60b948412f9f7776d08" }
+suite_reports = { "V0" = "docs/metal-port-reports/v0-inventory-provenance.md", "V1" = "docs/metal-port-reports/v1-source-ownership-closure.md", "V2" = "docs/metal-port-reports/v2-compile-configuration-matrix.md", "V3" = "docs/metal-port-reports/v3-native-lifecycle-failure.md", "V4" = "docs/metal-port-reports/v4-pinned-cpp-metal-parity.md", "V5" = "docs/metal-port-reports/v5-wgpu-diagnostic.md", "V6" = "docs/metal-port-reports/v6-msaa-exclusion.md", "V7" = "docs/metal-port-reports/v7-platform-hardware-policy.md", "V8" = "docs/metal-port-reports/v8-rooted-product-no-fallback.md", "V9" = "docs/metal-port-reports/v9-independent-closeout.md" }

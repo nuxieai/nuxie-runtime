@@ -1,0 +1,24 @@
+schema_version = 1
+unit = "ore-texture"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-texture.translation.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_texture.hpp:1-123",
+    "cpp:renderer/src/ore/metal/ore_texture_metal.hpp:1-41",
+    "cpp:renderer/src/ore/metal/ore_texture_metal.mm:1-37",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_texture_hpp.rs:1-463",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_texture_metal_hpp.rs:1-359",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_texture_metal_mm.rs:1-146",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_texture_hpp.rs" = "354939198ab17ac17aa0e7d0411c7beb455e84387cf9df196cfcff7aa0b7b7ed", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_texture_metal_hpp.rs" = "897877be3fe00c780a323bb525579a6b52e4cc3d19523294cb60522e870dc3ee", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_texture_metal_mm.rs" = "753835515fe6a660e1b985dd1139dcb853175f0e202b70f15ca8be59716e0778" }
+source_digests = { "renderer/include/rive/renderer/ore/ore_texture.hpp" = "3280b33c7f1f1f3c99a48c5ca6ea0c1434dae389c4ed391cdc6a5cd272b53c69", "renderer/src/ore/metal/ore_texture_metal.hpp" = "1e4c26de1d4614bba9cf1979d52a711f8db06ce12274d9d88dc963ab2bb47829", "renderer/src/ore/metal/ore_texture_metal.mm" = "6fe43086f30d051b6238390671f53ac88b0a72f4e6d598d610dbe45550b74654" }

@@ -1,0 +1,16 @@
+schema_version = 1
+unit = "generic-gpu-texture-format"
+receipt_kind = "verification"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-gpu-texture-format.verification.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:include/rive/gpu_texture_format.hpp:1-23",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/include/rive/gpu_texture_format_hpp.rs:1-45",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/include/rive/gpu_texture_format_hpp.rs" = "ea1b4ce7b83e1e5f2d8fc05f351864ab589fcb9859a14d385c8568118571e0a2" }
+suite_reports = { "V0" = "docs/metal-port-reports/v0-inventory-provenance.md", "V1" = "docs/metal-port-reports/v1-source-ownership-closure.md", "V2" = "docs/metal-port-reports/v2-compile-configuration-matrix.md", "V3" = "docs/metal-port-reports/v3-native-lifecycle-failure.md", "V4" = "docs/metal-port-reports/v4-pinned-cpp-metal-parity.md", "V5" = "docs/metal-port-reports/v5-wgpu-diagnostic.md", "V6" = "docs/metal-port-reports/v6-msaa-exclusion.md", "V7" = "docs/metal-port-reports/v7-platform-hardware-policy.md", "V8" = "docs/metal-port-reports/v8-rooted-product-no-fallback.md", "V9" = "docs/metal-port-reports/v9-independent-closeout.md" }

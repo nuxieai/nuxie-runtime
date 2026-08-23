@@ -1,0 +1,22 @@
+schema_version = 1
+unit = "ore-binding-map"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-binding-map.translation.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_binding_map.hpp:1-317",
+    "cpp:renderer/src/ore/ore_binding_map.cpp:1-189",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_binding_map_hpp.rs:1-927",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_binding_map_cpp.rs:1-211",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_binding_map_hpp.rs" = "3c8df63f4ab2857e6a00b1e6749036c9494afed4100c920060789e6306abce74", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_binding_map_cpp.rs" = "3a03a4147ef84ff7aadb9325ab7fe3e4a32c25d952af863e597ced587f6b1149" }
+source_digests = { "renderer/include/rive/renderer/ore/ore_binding_map.hpp" = "23a1dd8c138b434bcfea335eb547fcb3ce8ed1d54154c1bad402c892be877d13", "renderer/src/ore/ore_binding_map.cpp" = "1ca7fa820ceab888e763e4860408bbe8046de9fb869b672cc9dc1d79de608d69" }

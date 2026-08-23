@@ -8,19 +8,19 @@
 #![allow(non_snake_case)]
 
 use std::fmt;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use std::sync::Weak;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use crate::context::ContextState;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use crate::gpu_resource::AnyResourceHandle;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use crate::metal::texture::{TextureMetal, TextureViewMetal};
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use crate::pipeline::Pipeline;
 use crate::types::kMaxBindGroups;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use crate::types::{RenderPassDesc, TextureFormat};
 
 /// A render-pass operation rejected before it can mutate native encoder state.
@@ -103,7 +103,7 @@ impl std::error::Error for RenderPassError {}
 /// The context is deliberately weak, matching upstream's non-owning
 /// `RenderPass::m_context`. Bound groups are the only logical resource owners
 /// in this base. A concrete backend owns its current pipeline separately.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 pub(crate) struct RenderPass {
     m_finished: bool,
     m_colorFormats: [TextureFormat; 4],
@@ -115,7 +115,7 @@ pub(crate) struct RenderPass {
     m_boundGroups: [Option<AnyResourceHandle>; kMaxBindGroups as usize],
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 impl RenderPass {
     pub(crate) fn new(context: Weak<ContextState>, desc: &RenderPassDesc<'_>) -> Self {
         let mut pass = Self {
@@ -267,14 +267,14 @@ impl RenderPass {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn texture_metadata(view: Option<&AnyResourceHandle>) -> Option<(TextureFormat, u32)> {
     let view = view?.downcast_ref::<TextureViewMetal>()?;
     let texture = view.base().texture().downcast_ref::<TextureMetal>()?;
     Some((texture.base().format(), texture.base().sampleCount()))
 }
 
-#[cfg(all(test, any(target_os = "ios", target_os = "macos")))]
+#[cfg(all(test, target_vendor = "apple"))]
 mod tests {
     use super::*;
     use crate::gpu_resource::ResourceHandle;

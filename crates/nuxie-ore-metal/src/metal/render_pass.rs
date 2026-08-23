@@ -19,28 +19,28 @@ use crate::metal::pipeline::PipelineMetal;
 use crate::render_pass::{RenderPass, RenderPassError};
 use crate::types::{IndexFormat, RenderPassDesc};
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::rc::Retained;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::runtime::ProtocolObject;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_metal::{
     MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCullMode, MTLIndexType, MTLPrimitiveType,
     MTLRenderCommandEncoder, MTLScissorRect, MTLViewport, MTLWinding,
 };
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalEncoder(Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>);
 
 // SAFETY: all access to this stateful encoder is serialized by
 // `RenderPassMetalInner::state`; no encoder method can run concurrently.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalEncoder {}
 // SAFETY: shared access never escapes the serializing state mutex.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalEncoder {}
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 #[expect(
     dead_code,
     reason = "the command buffer is retained for the pass lifetime, not messaged by the pass"
@@ -49,21 +49,21 @@ struct RetainedMetalCommandBuffer(Retained<ProtocolObject<dyn MTLCommandBuffer>>
 
 // SAFETY: the command buffer is retained for lifetime only; this module does
 // not commit it or invoke stateful command-buffer operations through the field.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalCommandBuffer {}
 // SAFETY: same retain-only invariant as `Send` above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalCommandBuffer {}
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalIndexBuffer(Retained<ProtocolObject<dyn objc2_metal::MTLBuffer>>);
 
 // SAFETY: the native buffer is retained as immutable draw state and all use is
 // serialized by the render-pass state mutex.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalIndexBuffer {}
 // SAFETY: same serialized immutable-handle invariant as `Send` above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalIndexBuffer {}
 
 /// Concrete Metal render pass.
@@ -94,28 +94,28 @@ struct RenderPassMetalState {
     // destruction: current pipeline, index buffer, command buffer, encoder,
     // then the portable base and its bound groups.
     m_currentPipeline: Option<AnyResourceHandle>,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlIndexBuffer: Option<RetainedMetalIndexBuffer>,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[expect(
         dead_code,
         reason = "exact source lifetime owner; ContextMetal commits its separate command-buffer owner"
     )]
     m_mtlCommandBuffer: RetainedMetalCommandBuffer,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlEncoder: Option<RetainedMetalEncoder>,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlIndexType: MTLIndexType,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlIndexBufferOffset: usize,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlPrimitiveType: MTLPrimitiveType,
     base: RenderPass,
 }
 
 impl RenderPassMetal {
     /// Publish a pass only after ContextMetal has created a live encoder.
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn with_native_encoder(
         context: &Arc<ContextState>,
         desc: &RenderPassDesc<'_>,
@@ -151,7 +151,7 @@ impl RenderPassMetal {
         self.inner.finish_inner();
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn setPipeline(&self, pipeline: &AnyResourceHandle) -> Result<(), RenderPassError> {
         let mut state = self.inner.lock_state();
         state.base.validate()?;
@@ -183,7 +183,7 @@ impl RenderPassMetal {
         Ok(())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn setVertexBuffer(
         &self,
         slot: u32,
@@ -230,7 +230,7 @@ impl RenderPassMetal {
         Ok(())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn setIndexBuffer(
         &self,
         buffer: &AnyResourceHandle,
@@ -262,7 +262,7 @@ impl RenderPassMetal {
         Ok(())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn setBindGroup(
         &self,
         group_index: u32,
@@ -393,7 +393,7 @@ impl RenderPassMetal {
         Ok(())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn setViewport(
         &self,
         x: f32,
@@ -416,7 +416,7 @@ impl RenderPassMetal {
         Ok(())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn setScissorRect(
         &self,
         x: u32,
@@ -435,7 +435,7 @@ impl RenderPassMetal {
         Ok(())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn setStencilReference(&self, reference: u32) -> Result<(), RenderPassError> {
         let state = self.inner.lock_state();
         state.base.validate()?;
@@ -443,7 +443,7 @@ impl RenderPassMetal {
         Ok(())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn setBlendColor(
         &self,
         red: f32,
@@ -459,7 +459,7 @@ impl RenderPassMetal {
         Ok(())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn draw(
         &self,
         vertex_count: u32,
@@ -485,7 +485,7 @@ impl RenderPassMetal {
         Ok(())
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn drawIndexed(
         &self,
         index_count: u32,
@@ -583,7 +583,7 @@ impl Drop for RenderPassMetalInner {
 }
 
 impl RenderPassMetalState {
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     fn encoder(&self) -> Result<&ProtocolObject<dyn MTLRenderCommandEncoder>, RenderPassError> {
         self.m_mtlEncoder
             .as_ref()
@@ -595,7 +595,7 @@ impl RenderPassMetalState {
         if self.base.is_finished() {
             return;
         }
-        #[cfg(any(target_os = "ios", target_os = "macos"))]
+        #[cfg(target_vendor = "apple")]
         if let Some(encoder) = self.m_mtlEncoder.take() {
             encoder.0.endEncoding();
         }
@@ -604,7 +604,7 @@ impl RenderPassMetalState {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn primitive_topology_to_mtl(topology: crate::types::PrimitiveTopology) -> MTLPrimitiveType {
     match topology {
         crate::types::PrimitiveTopology::pointList => MTLPrimitiveType::Point,
@@ -615,7 +615,7 @@ fn primitive_topology_to_mtl(topology: crate::types::PrimitiveTopology) -> MTLPr
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn index_format_to_mtl(format: IndexFormat) -> Option<MTLIndexType> {
     match format {
         IndexFormat::uint16 => Some(MTLIndexType::UInt16),
@@ -624,7 +624,7 @@ fn index_format_to_mtl(format: IndexFormat) -> Option<MTLIndexType> {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn cull_mode_to_mtl(mode: crate::types::CullMode) -> MTLCullMode {
     match mode {
         crate::types::CullMode::none => MTLCullMode::None,
@@ -633,7 +633,7 @@ fn cull_mode_to_mtl(mode: crate::types::CullMode) -> MTLCullMode {
     }
 }
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 fn winding_to_mtl(winding: crate::types::FaceWinding) -> MTLWinding {
     match winding {
         crate::types::FaceWinding::clockwise => MTLWinding::Clockwise,
@@ -644,7 +644,7 @@ fn winding_to_mtl(winding: crate::types::FaceWinding) -> MTLWinding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     use crate::gpu_resource::ResourceHandle;
 
     fn assert_send_sync<T: Send + Sync>() {}
@@ -654,7 +654,7 @@ mod tests {
         assert_send_sync::<RenderPassMetalInner>();
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn live_encoder_covers_state_binding_draw_and_finish_ownership() {
         use crate::bind_group::BindGroup;
@@ -668,11 +668,13 @@ mod tests {
         use objc2_foundation::NSString;
         use objc2_metal::{
             MTLCommandBuffer, MTLCommandQueue, MTLCreateSystemDefaultDevice, MTLDevice, MTLLibrary,
-            MTLPixelFormat, MTLRenderPassDescriptor, MTLRenderPipelineDescriptor,
-            MTLResourceOptions, MTLTextureDescriptor, MTLTextureUsage,
+            MTLDepthStencilDescriptor, MTLPixelFormat, MTLRenderPassDescriptor,
+            MTLRenderPipelineDescriptor, MTLResourceOptions, MTLTextureDescriptor,
+            MTLTextureUsage,
         };
 
         let Some(device) = MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let queue = device.newCommandQueue().expect("create command queue");
@@ -770,10 +772,20 @@ mod tests {
         let native_pipeline = device
             .newRenderPipelineStateWithDescriptor_error(&native_pipeline_desc)
             .expect("create render pipeline");
-        let pipeline =
-            PipelineMetal::with_native_states(&PipelineDesc::default(), native_pipeline, None)
-                .into_resource(None)
-                .erase();
+        // Pinned ContextMetal::mtlMakePipeline always creates a depth/stencil
+        // state, even for the default descriptor. Construct the same complete
+        // native owner here; a nil test-only state violates the source owner
+        // invariant and Metal validation correctly rejects binding it.
+        let native_depth_stencil = device
+            .newDepthStencilStateWithDescriptor(&MTLDepthStencilDescriptor::new())
+            .expect("create default depth/stencil state");
+        let pipeline = PipelineMetal::with_native_states(
+            &PipelineDesc::default(),
+            native_pipeline,
+            Some(native_depth_stencil),
+        )
+        .into_resource(None)
+        .erase();
         pass.setPipeline(&pipeline)
             .expect("bind compatible pipeline");
         assert_eq!(pipeline.debugging_ref_count(), 2);
@@ -880,7 +892,7 @@ mod tests {
 
     #[test]
     fn conversion_helpers_cover_every_source_enum_value() {
-        #[cfg(any(target_os = "ios", target_os = "macos"))]
+        #[cfg(target_vendor = "apple")]
         {
             assert_eq!(
                 primitive_topology_to_mtl(crate::types::PrimitiveTopology::triangleStrip),

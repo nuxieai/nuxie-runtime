@@ -151,12 +151,14 @@ impl FeatherAtlasPipeline {
             FeatherAtlasPipelineError::MissingFragmentFunction(kind.fragment_main().to_owned())
         })?;
         let descriptor = make_descriptor(&vertex, &fragment, kind);
-        let pipeline_state = gpu
-            .newRenderPipelineStateWithDescriptor_error(&descriptor)
-            .map_err(|error| FeatherAtlasPipelineError::PipelineCreation {
+        let creation = super::new_render_pipeline_state(gpu, &descriptor);
+        if creation.error.is_some() || creation.object.is_none() {
+            return Err(FeatherAtlasPipelineError::PipelineCreation {
                 kind,
-                description: error.localizedDescription().to_string(),
-            })?;
+                description: creation.error.unwrap_or_else(|| "<nil>".to_owned()),
+            });
+        }
+        let pipeline_state = creation.object.expect("pipeline checked nonnil");
         Ok(Self {
             pipeline_state,
             #[cfg(test)]
@@ -314,6 +316,7 @@ mod tests {
     #[test]
     fn live_pipeline_pair_resolves_pinned_draw_metallib() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let library = crate::native_metal::draw_shader::DrawShaderLibrary::load(&device).unwrap();

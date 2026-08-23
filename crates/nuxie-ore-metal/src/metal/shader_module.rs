@@ -16,28 +16,28 @@ use crate::types::{BackendId, ShaderModule as ShaderModuleResource};
 
 use super::MetalBackend;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::rc::Retained;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2::runtime::ProtocolObject;
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 use objc2_metal::MTLLibrary;
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 struct RetainedMetalLibrary(Retained<ProtocolObject<dyn MTLLibrary>>);
 
 // SAFETY: MTLLibrary is immutable after compilation and supports concurrent
 // retain/release and function lookup. The wrapper exposes shared access only.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Send for RetainedMetalLibrary {}
 // SAFETY: Same invariant as the `Send` implementation above.
-#[cfg(any(target_os = "ios", target_os = "macos"))]
+#[cfg(target_vendor = "apple")]
 unsafe impl Sync for RetainedMetalLibrary {}
 
 /// Metal-specific shader module with the exact retained MTLLibrary owner.
 pub struct ShaderModuleMetal {
     shader_module: ShaderModule,
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     m_mtlLibrary: Option<RetainedMetalLibrary>,
 }
 
@@ -47,12 +47,12 @@ impl ShaderModuleMetal {
     pub fn new() -> Self {
         Self {
             shader_module: ShaderModule::new(),
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            #[cfg(target_vendor = "apple")]
             m_mtlLibrary: None,
         }
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn from_compiled_library(
         library: Option<Retained<ProtocolObject<dyn MTLLibrary>>>,
     ) -> Option<Self> {
@@ -62,7 +62,7 @@ impl ShaderModuleMetal {
         })
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     pub fn mtlLibrary(&self) -> Option<&ProtocolObject<dyn MTLLibrary>> {
         self.m_mtlLibrary.as_ref().map(|library| library.0.as_ref())
     }
@@ -114,18 +114,23 @@ mod tests {
         assert_eq!(handle.debugging_ref_count(), 1);
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn nil_compilation_publishes_no_module_and_live_library_is_retained() {
+        use objc2_foundation::NSString;
         use objc2_metal::{MTLCreateSystemDefaultDevice, MTLDevice};
 
         assert!(ShaderModuleMetal::from_compiled_library(None).is_none());
         let Some(device) = MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
-        let Some(library) = device.newDefaultLibrary() else {
-            return;
-        };
+        let source = NSString::from_str(
+            "#include <metal_stdlib>\nusing namespace metal;\nkernel void ownership_probe() {}",
+        );
+        let library = device
+            .newLibraryWithSource_options_error(&source, None)
+            .expect("compile minimal shader-module ownership library");
         let module = ShaderModuleMetal::from_compiled_library(Some(library))
             .expect("non-nil compilation result publishes module");
         assert!(module.mtlLibrary().is_some());

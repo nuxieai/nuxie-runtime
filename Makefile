@@ -1,7 +1,8 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-apple-passthrough-probe renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-metal-atomic-oracle-tracer renderer-native-metal-tracer-binary ore-metal-binding-witness ore-metal-authenticated-gpu-canvas renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check metal-port-progress metal-port-progress-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-apple-passthrough-probe renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-metal-atomic-oracle-tracer renderer-native-metal-tracer-binary ore-metal-binding-witness ore-metal-authenticated-gpu-canvas renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check metal-assert-parity-check metal-port-progress metal-port-progress-check
 .PHONY: runtime-drift-queue runtime-drift-queue-test runtime-drift-queue-snapshot runtime-drift-queue-check
-.PHONY: renderer-metal-msaa-contract renderer-metal-msaa-probe
+.PHONY: renderer-metal-msaa-contract renderer-metal-msaa-probe renderer-metal-cpp-parity renderer-metal-wgpu-diagnostic renderer-metal-wgpu-parity
 .PHONY: renderer-native-metal-replay
+.PHONY: renderer-native-metal-platform-matrix renderer-native-metal-v3 metal-test-census-check
 .PHONY: renderer-apple-msl-capture-check renderer-apple-msl-no-wgsl-probe renderer-apple-msl-replay
 .PHONY: parity-evidence-freshness parity-evidence-freshness-test parity-evidence-registry-check parity-evidence-freshness-report
 .PHONY: runtime-behavior-inventory runtime-behavior-inventory-test runtime-behavior-inventory-snapshot runtime-behavior-inventory-check
@@ -26,6 +27,10 @@ RUNTIME_DRAWING_GAPS ?= $(CURDIR)/docs/runtime-drawing-gaps.toml
 METAL_PORT_TOOL ?= $(CURDIR)/tools/metal-port/check.py
 METAL_PORT_MANIFEST ?= $(CURDIR)/docs/metal-port-manifest.toml
 METAL_PORT_OWNERSHIP ?= $(CURDIR)/docs/metal-port-ownership.toml
+METAL_ASSERT_PARITY_TOOL ?= $(CURDIR)/tools/metal-port/check_assert_translation.py
+METAL_ASSERT_AUTHORITY ?= $(CURDIR)/docs/metal-port-assert-authority.tsv
+METAL_TEST_CENSUS_TOOL ?= $(CURDIR)/tools/metal-port/check_test_census.py
+METAL_TEST_CENSUS ?= $(CURDIR)/docs/metal-test-census.toml
 RUNTIME_FRAME_LOOP_PORT_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check.py
 TEST_CORRESPONDENCE_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check_test_correspondence.py
 LAYOUT_STYLE_HANDLER_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check_layout_style_handlers.py
@@ -84,6 +89,10 @@ RENDERER_METAL_ATOMIC_TRACER_MANIFEST ?= $(CURDIR)/tools/metal-port/tracer-corpu
 RENDERER_METAL_WGPU_TRACER_MANIFEST ?= $(CURDIR)/tools/metal-port/tracer-corpus-wgpu-secondary.toml
 RENDERER_METAL_TRACER_OUTPUT_DIR ?= $(CURDIR)/target/renderer-metal-tracers
 RENDERER_METAL_WGPU_OUTPUT_DIR ?= $(RENDERER_METAL_TRACER_OUTPUT_DIR)/rust-wgpu-secondary
+RENDERER_METAL_WGPU_PARITY_MANIFEST ?= $(CURDIR)/target/renderer-metal-wgpu-parity/clockwise-atomic.toml
+RENDERER_METAL_CPP_PARITY_OUTPUT_DIR ?= $(CURDIR)/target/renderer-metal-cpp-parity/results
+RENDERER_METAL_WGPU_PARITY_OUTPUT_DIR ?= $(CURDIR)/target/renderer-metal-wgpu-parity/results
+RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS ?= 736
 RENDERER_METAL_ORACLE_ENTRIES ?= --entry native-metal-first-light-rectangle --entry native-metal-first-light-gradient-cubic --entry native-metal-first-light-atlas-feather-stroke --entry native-metal-first-light-two-atlas-feather-strokes
 RENDERER_METAL_ATOMIC_ORACLE_ENTRIES ?= --entry native-metal-first-light-triangle-generic-atomic --entry native-metal-first-light-gradient-cubic-generic-atomic --entry native-metal-gm-rect-grad-generic-atomic --entry native-metal-gm-gamma-correction-clip-generic-atomic --entry native-metal-gm-overfill-opaque-generic-atomic --entry native-metal-first-light-nested-clip-generic-atomic --entry native-metal-riv-deterministic-mode-mixed-gradient-generic-atomic --entry native-metal-gm-overfill-blendmodes-generic-atomic
 RENDERER_DAWN_REFERENCE_BUILD_DIR ?= $(CURDIR)/target/renderer-dawn-reference-build
@@ -255,11 +264,25 @@ port-manifest-gate:
 		"upstream C++ port manifest check" "$(MAKE) --no-print-directory port-manifest-check"
 
 metal-port-test:
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/metal-port -p 'test_*.py' -v
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/metal-port -p 'test_*.py' -v
 
 metal-port-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(METAL_PORT_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(METAL_PORT_MANIFEST)" --ownership "$(METAL_PORT_OWNERSHIP)"
+	@$(MAKE) --no-print-directory metal-assert-parity-check
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(METAL_PORT_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(METAL_PORT_MANIFEST)" --ownership "$(METAL_PORT_OWNERSHIP)" --replay-receipt-commands
+	@$(MAKE) --no-print-directory metal-test-census-check
 	@$(MAKE) --no-print-directory metal-port-progress-check
+
+metal-assert-parity-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(METAL_ASSERT_PARITY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(METAL_PORT_MANIFEST)" --authority "$(METAL_ASSERT_AUTHORITY)"
+
+metal-test-census-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(METAL_TEST_CENSUS_TOOL)" --repo-root "$(CURDIR)" --manifest "$(METAL_TEST_CENSUS)" --execute
+
+renderer-native-metal-v3:
+	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features native-ore-metal-experimental,rive-decoders --lib -- --test-threads=1
+	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features native-ore-metal-experimental,rive-decoders --test native_metal_tracer -- --test-threads=1
+	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features -- --test-threads=1
+	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features --features tools -- --test-threads=1
 
 metal-port-progress:
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/metal-port/generate_progress.py --repo-root "$(CURDIR)" --output docs/metal-renderer-progress.html
@@ -275,6 +298,7 @@ metal-port-progress-check:
 	}
 
 renderer-native-metal-tracer-binary:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_check_native_metal_product_dependencies.py
 	tools/check-native-metal-tracer-binary.sh
 
 ore-metal-binding-witness:
@@ -700,7 +724,7 @@ renderer-metal-reference-check:
 	@if otool -L "$(RENDERER_METAL_REFERENCE_REPLAY)" | tail -n +2 | grep -Eiq 'dawn|webgpu'; then echo "C++ Metal reference replay unexpectedly requires a Dawn/WebGPU dynamic library" >&2; exit 2; fi
 
 # Compare the actual Rust Metal candidate against pinned C++ Metal, then run
-# the same candidate and stream against current Rust-wgpu as a secondary oracle.
+# the same candidate and stream against current Rust-wgpu as a diagnostic only.
 renderer-metal-oracle-tracers: renderer-native-metal-replay renderer-rust-replay-release renderer-metal-reference-check
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
@@ -709,6 +733,32 @@ renderer-metal-oracle-tracers: renderer-native-metal-replay renderer-rust-replay
 # capability-driven selection; only these bounded tracers force generic atomics.
 renderer-metal-atomic-oracle-tracer: renderer-native-metal-replay renderer-metal-reference-check
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_ATOMIC_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)/generic-atomic" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ATOMIC_ORACLE_ENTRIES)
+
+# Complete authoritative product-output differential against the pinned
+# upstream C++ Metal renderer. The derived manifest contains every
+# Metal-compatible corpus row and carries the predeclared source-manifest
+# tolerances unchanged; neither candidate output nor this target can widen
+# them. Run serially because both replay processes share one physical adapter.
+renderer-metal-cpp-parity: renderer-native-metal-replay renderer-metal-reference-check
+	python3 tools/metal-port/derive_clockwise_atomic_manifest.py --input "$(RENDERER_CORPUS_MANIFEST)" --output "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --expected "$(RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS)"
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_CPP_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
+
+# Secondary backend differential. This never overrules the pinned C++ Metal
+# oracle: completed WGPU pixel differences are reported as diagnostics, while
+# replay crashes, timeouts, and malformed outputs still fail the command.
+renderer-metal-wgpu-diagnostic: renderer-native-metal-replay renderer-rust-replay-release
+	python3 tools/metal-port/derive_clockwise_atomic_manifest.py --input "$(RENDERER_CORPUS_MANIFEST)" --output "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --expected "$(RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS)"
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --report-divergences
+
+# Compatibility spelling retained for existing local scripts. This target is
+# diagnostic; `renderer-metal-cpp-parity` is the authoritative gate.
+renderer-metal-wgpu-parity: renderer-metal-wgpu-diagnostic
+
+# Compile every Apple target configuration represented by the pinned Metal
+# source. tvOS and visionOS use nightly build-std because rustup does not ship
+# prebuilt standard libraries for those targets.
+renderer-native-metal-platform-matrix:
+	tools/check-native-metal-platform-matrix.sh
 
 # Native Metal deliberately has no WebGPU-style MSAA execution mode. Keep this
 # green negative contract so a future harness cannot silently relabel Dawn

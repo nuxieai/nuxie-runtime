@@ -1,0 +1,24 @@
+schema_version = 1
+unit = "ore-sampler"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-sampler.translation.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_sampler.hpp:1-31",
+    "cpp:renderer/src/ore/metal/ore_sampler_metal.hpp:1-19",
+    "cpp:renderer/src/ore/metal/ore_sampler_metal.mm:1-8",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_sampler_hpp.rs:1-94",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_hpp.rs:1-142",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_mm.rs:1-20",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_sampler_hpp.rs" = "7c90d6adcdd7aa2a6ccaf7d9f2924072fa5c2182627eb0ca0f4da02895befc1a", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_hpp.rs" = "b0e774cda5a4a1c71a53bd650e9a87e5de3240ca9851c57813dea6a464e29b7b", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_mm.rs" = "3fb890a24e178a07e87749063790242d028eef0f792d001daff91fa088fa3193" }
+source_digests = { "renderer/include/rive/renderer/ore/ore_sampler.hpp" = "e185a80af7fbe556f56a060b3a075a7727acc74da9048a2327c91ce566e80671", "renderer/src/ore/metal/ore_sampler_metal.hpp" = "5bb17fc2cd6f239e518562ab0871b165210d2216f95ceaaa2118fa5002ea2fdb", "renderer/src/ore/metal/ore_sampler_metal.mm" = "3f8fd538e130469c888a6b97a720ddd7a733bb5ea9637ed6adeff80e66adcaae" }

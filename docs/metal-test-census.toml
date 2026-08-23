@@ -1,0 +1,196 @@
+version = 1
+authority = "pinned-cpp-metal-4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+wgpu_role = "diagnostic-only"
+expected_source_ignore_count = 43
+source_ignore_sha256 = "464d82fe9739c990b427bde4882ec9da4a6ff403045d49b03c05b32f32f50973"
+expected_live_metal_test_count = 63
+expected_live_metal_guard_count = 33
+live_metal_guard_sha256 = "f5c6b45cbff5d3595be8d9a1d035eea070fbf949e0a5795e7ee5cbf34b6d1eb3"
+source_ignore_paths = [
+  "crates/nuxie-renderer/src/lib.rs",
+  "crates/nuxie-renderer/src/direct_grid_oracle.rs",
+  "crates/nuxie-renderer/tests/apple_msl_passthrough.rs",
+  "tools/renderer-replay/src/perf_runner.rs",
+]
+live_metal_guard_paths = [
+  "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
+  "crates/nuxie-renderer/src/native_metal/buffer.rs",
+  "crates/nuxie-renderer/src/native_metal/context.rs",
+  "crates/nuxie-renderer/src/native_metal/feather_atlas_pipeline.rs",
+  "crates/nuxie-renderer/src/native_metal/feather_atlas_resource.rs",
+  "crates/nuxie-renderer/src/native_metal/gradient_resource.rs",
+  "crates/nuxie-renderer/src/native_metal/image_texture.rs",
+  "crates/nuxie-renderer/src/native_metal/render_target.rs",
+  "crates/nuxie-renderer/src/native_metal/samplers.rs",
+  "crates/nuxie-renderer/src/native_metal/tessellation_resource.rs",
+  "crates/nuxie-renderer/src/native_metal/upload_buffer_ring.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_bind_group_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_buffer_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_context_metal_mm.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_render_pass_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_shader_module_metal_hpp.rs",
+  "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_texture_metal_hpp.rs",
+]
+
+[[harness]]
+id = "renderer-lib-maximal"
+cargo_args = ["-p", "nuxie-renderer", "--no-default-features", "--features", "native-ore-metal-experimental,rive-decoders", "--lib"]
+expected_total = 753
+expected_active = 713
+names_sha256 = "6d2030c9d3e38fbfa0ef55161749659d235506b4dc19cfddeef9142e018b6a51"
+active_names_sha256 = "e7802becf1f63f12fc24bc34b045f86288e001c60837d5d67f9bb317378013c4"
+expected_ignored = [
+  "direct_grid_oracle::tests::configured_cpp_bad_skin_preparation_matches_record_for_record",
+  "direct_grid_oracle::tests::configured_cpp_bug339297_preparation_matches_record_for_record",
+  "tests::cpp_direct_degenerate_cubic_cpu_spans_match_rust_record_for_record",
+  "tests::cpp_direct_degenerate_cubic_msaa_blits_match_rust",
+  "tests::cpp_direct_degenerate_cubic_tessellation_texture_matches_rust",
+  "tests::cpp_direct_overstroke_quad_cpu_spans_match_rust_record_for_record",
+  "tests::cpp_direct_rawtext_cpu_spans_match_rust_record_for_record",
+  "tests::cpp_direct_strokes_round_cpu_spans_match_rust_record_for_record",
+  "tests::cpp_softened_cusp_path_oracle_matches_rust_when_configured",
+  "tests::cpp_webgpu_atlas_cusp_input_oracle_matches_fixed_rust_inputs_when_configured",
+  "tests::cpp_webgpu_atlas_cusp_mask_oracle_matches_fixed_rust_mask_when_configured",
+  "tests::cpp_webgpu_atlas_empty_stroke_inputs_match_rust_when_configured",
+  "tests::cpp_webgpu_atlas_empty_stroke_mask_matches_rust_when_configured",
+  "tests::cpp_webgpu_atlas_fill_input_oracle_matches_fixed_rust_inputs_when_configured",
+  "tests::cpp_webgpu_atlas_fill_mask_oracle_matches_fixed_rust_mask_when_configured",
+  "tests::cpp_webgpu_atlas_input_oracle_matches_fixed_rust_inputs_when_configured",
+  "tests::cpp_webgpu_atlas_mask_oracle_matches_fixed_rust_mask_when_configured",
+  "tests::cpp_webgpu_atomic_advanced_blend_matches_within_backend_quantization_when_configured",
+  "tests::cpp_webgpu_atomic_colorburn_pair_has_only_coupled_quantization_when_configured",
+  "tests::cpp_webgpu_atomic_dstreadshuffle_full_matches_rust_when_configured",
+  "tests::cpp_webgpu_atomic_dstreadshuffle_srcover_control_matches_rust_when_configured",
+  "tests::cpp_webgpu_atomic_interleavedfeather_full_matches_rust_when_configured",
+  "tests::cpp_webgpu_atomic_spotify_kids_app_icon_is_fixed_color_backend_residual",
+  "tests::cpp_webgpu_direct_cusp_atomic_coverage_matches_rust_when_configured",
+  "tests::cpp_webgpu_direct_cusp_blit_matches_rust_when_configured",
+  "tests::cpp_webgpu_direct_cusp_input_oracle_matches_rust_when_configured",
+  "tests::cpp_webgpu_direct_polyshark_input_oracle_matches_rust_when_configured",
+  "tests::cpp_webgpu_direct_rawtext_tessellation_matches_rust",
+  "tests::cpp_webgpu_direct_strokes_round_tessellation_matches_bounded_tangent_angles",
+  "tests::cpp_webgpu_large_radius_feather_atlas_stages_match_rust_when_configured",
+  "tests::cpp_webgpu_msaa_atlas_advanced_blend_matches_rust_output_when_configured",
+  "tests::cpp_webgpu_msaa_atlas_blit_oracle_matches_fixed_rust_output_when_configured",
+  "tests::cpp_webgpu_msaa_atlas_changing_path_clipped_blit_matches_fixed_rust_output_when_configured",
+  "tests::cpp_webgpu_msaa_atlas_clipped_blit_matches_fixed_rust_output_when_configured",
+  "tests::cpp_webgpu_msaa_atlas_empty_stroke_blit_matches_rust_when_configured",
+  "tests::cpp_webgpu_msaa_atlas_nested_clockwise_path_clipped_blit_matches_fixed_rust_output_when_configured",
+  "tests::cpp_webgpu_msaa_atlas_nested_even_odd_path_clipped_blit_matches_fixed_rust_output_when_configured",
+  "tests::cpp_webgpu_msaa_atlas_nested_path_clipped_blit_matches_fixed_rust_output_when_configured",
+  "tests::cpp_webgpu_msaa_atlas_path_clipped_blit_matches_fixed_rust_output_when_configured",
+  "tests::direct_cusp_atomic_coverage_capture_has_one_full_frame",
+]
+
+[[harness]]
+id = "native-metal-tracer"
+cargo_args = ["-p", "nuxie-renderer", "--no-default-features", "--features", "native-ore-metal-experimental,rive-decoders", "--test", "native_metal_tracer"]
+expected_total = 27
+expected_active = 27
+names_sha256 = "26ac4a487a9f6d6ad9d88d3e7f4d8b8c373d28d8c451580baf5418d091bba832"
+active_names_sha256 = "26ac4a487a9f6d6ad9d88d3e7f4d8b8c373d28d8c451580baf5418d091bba832"
+expected_ignored = []
+
+[[harness]]
+id = "ore-default"
+cargo_args = ["-p", "nuxie-ore-metal", "--no-default-features", "--lib"]
+expected_total = 118
+expected_active = 118
+names_sha256 = "d4642555ad7d338c215d0e151d341da4472d92747967090a668bd8835c5f78b7"
+active_names_sha256 = "d4642555ad7d338c215d0e151d341da4472d92747967090a668bd8835c5f78b7"
+expected_ignored = []
+
+[[harness]]
+id = "ore-tools"
+cargo_args = ["-p", "nuxie-ore-metal", "--no-default-features", "--features", "with-rive-tools", "--lib"]
+expected_total = 133
+expected_active = 133
+names_sha256 = "74e8417def42ef44c891c0e52eaf83aec40102c8943c55a0872d2e44c603dd3e"
+active_names_sha256 = "74e8417def42ef44c891c0e52eaf83aec40102c8943c55a0872d2e44c603dd3e"
+expected_ignored = []
+
+[[diagnostic_ignore]]
+path = "crates/nuxie-renderer/tests/apple_msl_passthrough.rs"
+name = "pinned_wgpu_creates_an_explicit_layout_pipeline_from_msl"
+reason = "requires a real macOS Metal device; run make renderer-apple-passthrough-probe"
+classification = "external-hardware-wgpu-diagnostic"
+
+[[diagnostic_ignore]]
+path = "crates/nuxie-renderer/tests/apple_msl_passthrough.rs"
+name = "trusted_factory_profile_materializes_authenticated_msl"
+reason = "requires a real macOS Metal device; run make renderer-apple-passthrough-probe"
+classification = "external-hardware-wgpu-diagnostic"
+
+[[diagnostic_ignore]]
+path = "tools/renderer-replay/src/perf_runner.rs"
+name = "reports_overstroke_work_after_each_draw"
+reason = "diagnostic C++ Dawn/Rust prefix oracle"
+classification = "external-dawn-performance-diagnostic"
+
+[baseline]
+required_live_metal_test = [
+  "renderer-lib-maximal:native_metal::background_shader_compiler::tests::live_metal_compiles_the_materialized_image_mesh_source",
+  "renderer-lib-maximal:native_metal::buffer::tests::live_shared_buffer_mapping_and_ring_identity",
+  "renderer-lib-maximal:native_metal::buffer::tests::live_map_unmap_protocol_rejects_invalid_sequences",
+  "renderer-lib-maximal:native_metal::buffer::tests::live_buffer_retains_the_upstream_device_owner",
+  "renderer-lib-maximal:native_metal::context::tests::generic_atomic_pipeline_cache_realizes_only_requested_keyed_families",
+  "renderer-lib-maximal:native_metal::context::tests::context_retains_supplied_metal_service_and_starts_its_compiler_lazily",
+  "renderer-lib-maximal:native_metal::context::tests::context_owns_exact_upstream_image_rect_buffers_until_drop",
+  "renderer-lib-maximal:native_metal::context::tests::overlapping_resource_leases_retain_distinct_complete_generations",
+  "renderer-lib-maximal:native_metal::context::tests::later_tessellation_failure_does_not_publish_staged_gradient",
+  "renderer-lib-maximal:native_metal::context::tests::absent_required_tessellation_owner_does_not_publish_candidate_generation",
+  "renderer-lib-maximal:native_metal::context::tests::atlas_growth_failure_preserves_prior_complete_generation",
+  "renderer-lib-maximal:native_metal::context::tests::specialized_compile_failure_uses_preloaded_uber_and_releases_reservation",
+  "renderer-lib-maximal:native_metal::context::tests::submitted_ring_slot_releases_after_context_drop",
+  "renderer-lib-maximal:native_metal::context::tests::repeated_async_submissions_reuse_all_ring_slots_without_a_cycle",
+  "renderer-lib-maximal:native_metal::context::tests::upload_capacity_is_verbatim_reused_and_grows_by_replacement",
+  "renderer-lib-maximal:native_metal::context::tests::later_upload_failure_leaves_earlier_rings_submitted_not_mapped",
+  "renderer-lib-maximal:native_metal::feather_atlas_pipeline::tests::live_pipeline_pair_resolves_pinned_draw_metallib",
+  "renderer-lib-maximal:native_metal::feather_atlas_resource::tests::live_feather_atlas_capacity_reuses_and_forced_resize_replaces",
+  "renderer-lib-maximal:native_metal::feather_atlas_resource::tests::live_feather_atlas_drop_releases_owner_without_invalidating_retained_texture",
+  "renderer-lib-maximal:native_metal::feather_atlas_resource::tests::failed_feather_atlas_replace_preserves_identity_and_real_retry_succeeds",
+  "renderer-lib-maximal:native_metal::gradient_resource::tests::live_gradient_descriptor_and_resize_preserve_identity",
+  "renderer-lib-maximal:native_metal::gradient_resource::tests::failed_gradient_resize_preserves_identity_and_real_retry_succeeds",
+  "renderer-lib-maximal:native_metal::image_texture::tests::live_rgba_upload_generates_remaining_mips_exactly_once",
+  "renderer-lib-maximal:native_metal::image_texture::tests::live_adopted_texture_retains_identity_and_dimensions",
+  "renderer-lib-maximal:native_metal::render_target::tests::atomic_buffers_are_lazy_and_each_plane_keeps_identity",
+  "renderer-lib-maximal:native_metal::render_target::tests::atomic_plane_transaction_preserves_prior_owners_on_each_allocation_failure",
+  "renderer-lib-maximal:native_metal::render_target::tests::raster_order_constructor_selects_memoryless_attachments",
+  "renderer-lib-maximal:native_metal::samplers::tests::live_sampler_table_has_18_retained_states_and_stable_lookup",
+  "renderer-lib-maximal:native_metal::tessellation_resource::tests::live_tessellation_descriptor_and_resize_preserve_identity",
+  "renderer-lib-maximal:native_metal::tessellation_resource::tests::failed_tessellation_resize_preserves_identity_and_real_retry_succeeds",
+  "renderer-lib-maximal:native_metal::upload_buffer_ring::tests::zero_capacity_mirrors_upstream_null_ring",
+  "renderer-lib-maximal:native_metal::upload_buffer_ring::tests::map_rolls_over_one_two_zero",
+  "renderer-lib-maximal:native_metal::upload_buffer_ring::tests::double_map_is_rejected_without_advancing_the_ring",
+  "renderer-lib-maximal:native_metal::upload_buffer_ring::tests::zero_and_over_capacity_maps_are_rejected",
+  "renderer-lib-maximal:native_metal::upload_buffer_ring::tests::submit_unmapped_and_read_before_first_submit_are_rejected",
+  "renderer-lib-maximal:native_metal::upload_buffer_ring::tests::rings_rotate_independently",
+  "renderer-lib-maximal:native_metal::upload_buffer_ring::tests::reports_verbatim_capacity_and_submitted_slot",
+  "renderer-lib-maximal:native_metal::upload_buffer_ring::tests::live_shared_slots_retain_distinct_uploaded_bytes",
+  "renderer-lib-maximal:native_metal::upload_buffer_ring::tests::invalid_sequences_do_not_panic",
+"ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_bind_group_metal_hpp::tests::buffer_record_resolves_the_live_backing_without_a_second_logical_owner",
+"ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_bind_group_metal_hpp::tests::native_texture_and_sampler_records_retain_exact_binding_handles",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::tests::live_unbound_update_writes_the_current_backing_in_place",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::tests::live_bound_partial_update_orphans_copies_and_reuses_completed_backing",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::tests::bound_backing_token_remains_the_exact_backing_after_an_orphaning_update",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::tests::update_rejects_out_of_bounds_without_mutating_contents",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::tests::allocation_failure_reports_error_keeps_current_and_retries_next_update",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::tests::buffer_resource_retains_manager_and_rejects_wrong_backend",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::frame_serial_completion_outlives_context_and_begin_preserves_error",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::beginning_a_second_pass_auto_finishes_the_first",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::render_pass_is_not_published_without_a_frame_command_buffer",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::factories_publish_only_complete_native_resources",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::native_shader_compile_failure_preserves_context_error",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::shader_and_pipeline_factories_publish_live_native_state_and_reject_bad_entry",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::pipeline_validation_routes_to_out_error_without_overwriting_context_error",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::pipeline_layout_validation_preserves_vertex_reflection_precedence",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::nil_native_texture_view_and_sampler_still_publish_logical_resources",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::public_layout_factory_rejects_out_of_range_native_slots_without_publication",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::buffer_allocation_failure_immediately_replaces_and_clears_context_error",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::tests::bind_group_skips_unresolved_entries_and_last_error_follows_kind_order",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_render_pass_metal_hpp::tests::live_encoder_covers_state_binding_draw_and_finish_ownership",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_sampler_metal_hpp::tests::live_sampler_retains_the_native_state",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_shader_module_metal_hpp::tests::nil_compilation_publishes_no_module_and_live_library_is_retained",
+  "ore-tools:mechanical_port::source::renderer::src::ore::metal::ore_texture_metal_hpp::tests::live_texture_upload_calls_metal_and_view_falls_back_to_source",
+]

@@ -205,7 +205,10 @@ mod tests {
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     fn make_ring() -> Option<UploadBufferRing> {
-        let device = objc2_metal::MTLCreateSystemDefaultDevice()?;
+        let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
+            return None;
+        };
         UploadBufferRing::new(&device, 16).expect("shared upload ring allocation")
     }
 
@@ -218,6 +221,7 @@ mod tests {
     #[test]
     fn zero_capacity_mirrors_upstream_null_ring() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         assert!(UploadBufferRing::new(&device, 0).unwrap().is_none());

@@ -180,9 +180,9 @@ fn apply_binding(
         Resource::Paints => Some(lease.paints.as_ref()),
         Resource::PaintAux => Some(lease.paint_aux.as_ref()),
         Resource::Contours => Some(lease.contours.as_ref()),
-        Resource::ColorAtomicPlane => Some(target.color_atomic_buffer()?),
-        Resource::ClipAtomicPlane => Some(target.clip_atomic_buffer()?),
-        Resource::CoverageAtomicPlane => Some(target.coverage_atomic_buffer()?),
+        Resource::ColorAtomicPlane => target.color_atomic_buffer(),
+        Resource::ClipAtomicPlane => target.clip_atomic_buffer(),
+        Resource::CoverageAtomicPlane => target.coverage_atomic_buffer(),
         Resource::TessellationTexture
         | Resource::GaussianTexture
         | Resource::GradientTexture
@@ -205,6 +205,22 @@ fn apply_binding(
         return Ok(());
     }
 
+    if matches!(
+        binding.resource,
+        Resource::ColorAtomicPlane | Resource::ClipAtomicPlane | Resource::CoverageAtomicPlane
+    ) {
+        // Objective-C `id<MTLBuffer>` owners are nullable. Preserve the
+        // source's nil binding after an allocation failure; the context and
+        // flush remain alive and Metal receives the selector in source order.
+        unsafe {
+            match binding.stage {
+                Stage::Vertex => encoder.setVertexBuffer_offset_atIndex(None, 0, binding.index),
+                Stage::Fragment => encoder.setFragmentBuffer_offset_atIndex(None, 0, binding.index),
+            }
+        }
+        return Ok(());
+    }
+
     // SAFETY: the binding plan uses the generated texture ABI indices. Metal
     // accepts nil for optional gradient/atlas textures, and the context/lease
     // retain every non-nil texture until command completion.
@@ -213,15 +229,14 @@ fn apply_binding(
             (Resource::TessellationTexture, Stage::Vertex) => {
                 encoder.setVertexTexture_atIndex(Some(&lease.tessellation), binding.index)
             }
-            (Resource::GaussianTexture, Stage::Vertex) => encoder
-                .setVertexTexture_atIndex(Some(context.gaussian_integral_texture()), binding.index),
+            (Resource::GaussianTexture, Stage::Vertex) => {
+                encoder.setVertexTexture_atIndex(context.gaussian_integral_texture(), binding.index)
+            }
             (Resource::GradientTexture, Stage::Fragment) => {
                 encoder.setFragmentTexture_atIndex(lease.gradient.as_deref(), binding.index)
             }
-            (Resource::GaussianTexture, Stage::Fragment) => encoder.setFragmentTexture_atIndex(
-                Some(context.gaussian_integral_texture()),
-                binding.index,
-            ),
+            (Resource::GaussianTexture, Stage::Fragment) => encoder
+                .setFragmentTexture_atIndex(context.gaussian_integral_texture(), binding.index),
             (Resource::FeatherAtlasTexture, Stage::Fragment) => {
                 encoder.setFragmentTexture_atIndex(lease.feather_atlas.as_deref(), binding.index)
             }

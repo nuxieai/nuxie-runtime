@@ -1,0 +1,20 @@
+schema_version = 1
+unit = "generic-gpu-texture-format"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-gpu-texture-format.translation.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:include/rive/gpu_texture_format.hpp:1-23",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/include/rive/gpu_texture_format_hpp.rs:1-45",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/include/rive/gpu_texture_format_hpp.rs" = "ea1b4ce7b83e1e5f2d8fc05f351864ab589fcb9859a14d385c8568118571e0a2" }
+source_digests = { "include/rive/gpu_texture_format.hpp" = "0b4b115330cefcd7a9b5c98e96453bbd1fb3fa476c5064073392f7c0ce1724e2" }

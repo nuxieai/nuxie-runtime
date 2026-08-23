@@ -1,0 +1,16 @@
+schema_version = 1
+unit = "ore-rstb-container"
+receipt_kind = "verification"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-rstb-container.verification.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp:1-224",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_rstb_entry_container_hpp.rs:1-621",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_rstb_entry_container_hpp.rs" = "9d71f3723ce4fa867db2f9885a320364fcff82681cc9ef6d8b875f368e89c0ea" }
+suite_reports = { "V0" = "docs/metal-port-reports/v0-inventory-provenance.md", "V1" = "docs/metal-port-reports/v1-source-ownership-closure.md", "V2" = "docs/metal-port-reports/v2-compile-configuration-matrix.md", "V3" = "docs/metal-port-reports/v3-native-lifecycle-failure.md", "V4" = "docs/metal-port-reports/v4-pinned-cpp-metal-parity.md", "V5" = "docs/metal-port-reports/v5-wgpu-diagnostic.md", "V6" = "docs/metal-port-reports/v6-msaa-exclusion.md", "V7" = "docs/metal-port-reports/v7-platform-hardware-policy.md", "V8" = "docs/metal-port-reports/v8-rooted-product-no-fallback.md", "V9" = "docs/metal-port-reports/v9-independent-closeout.md" }

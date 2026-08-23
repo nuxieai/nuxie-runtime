@@ -1,0 +1,22 @@
+schema_version = 1
+unit = "generic-gradient"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-gradient.translation.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/src/gradient.hpp:1-130",
+    "cpp:renderer/src/gradient.cpp:1-226",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_hpp.rs:1-532",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_cpp.rs:1-520",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_cpp.rs" = "9b651dc98c89f20748d324999b45e22f9eadef636e8dadc7d85fc6ce08a7a082", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/gradient_hpp.rs" = "14ba475f777a819aaa51b5951931828bcc85a09a203cf121402c83cf44ea4ea6" }
+source_digests = { "renderer/src/gradient.cpp" = "b96155177a1f4cb8be67028d74886dce9123208cedc196debfffa74e6acf5901", "renderer/src/gradient.hpp" = "f7a1f167b6dd70067c8ba56c12f2f360946f8cc8e626c25f165ada9780631a1b" }

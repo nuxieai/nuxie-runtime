@@ -1,13 +1,21 @@
+#[path = "src/mechanical_port/source/renderer/src/shaders/minify_py.rs"]
+mod minify_py;
+#[path = "src/mechanical_port/source/renderer/src/shaders/metal/generate_draw_combinations_py.rs"]
+mod translated_draw_combinations;
+#[path = "src/mechanical_port/source/renderer/src/shaders/makefile.rs"]
+mod translated_makefile;
+
 use std::env;
+use std::fs;
+use std::io;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
 fn main() {
-    println!("cargo:rerun-if-changed=src/native_metal/tracer.metal");
-    for source in DRAW_SHADER_SOURCES {
+    for source in TRANSLATED_SHADER_RUST_PATHS {
         println!("cargo:rerun-if-changed={source}");
     }
-    for source in RESOURCE_SHADER_SOURCES {
+    for source in TRANSLATED_BUILD_RULE_PATHS {
         println!("cargo:rerun-if-changed={source}");
     }
     if env::var_os("CARGO_FEATURE_NATIVE_METAL_EXPERIMENTAL").is_none() {
@@ -15,51 +23,111 @@ fn main() {
     }
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").expect("Cargo provides target OS");
-    if target_os != "ios" && target_os != "macos" {
+    if !matches!(target_os.as_str(), "ios" | "macos" | "tvos" | "visionos") {
         return;
     }
 
-    let (sdk, deployment_target, metal_standard) = match (
-        target_os.as_str(),
-        env::var("CARGO_CFG_TARGET_ABI").as_deref(),
-    ) {
-        ("ios", Ok("sim")) => (
-            "iphonesimulator",
-            "-miphonesimulator-version-min=15.0",
-            "-std=ios-metal2.2",
-        ),
-        ("ios", _) => ("iphoneos", "-mios-version-min=15.0", "-std=ios-metal2.2"),
-        ("macos", _) => ("macosx", "-mmacosx-version-min=12.0", "-std=macos-metal2.3"),
-        _ => unreachable!(),
-    };
-    let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let target_abi = env::var("CARGO_CFG_TARGET_ABI").unwrap_or_default();
+    let (sdk, deployment_target, metal_standard, source_metallib_name, family) =
+        match (target_os.as_str(), target_abi.as_str()) {
+            ("ios", "sim") => (
+                "iphonesimulator",
+                "-miphonesimulator-version-min=13",
+                "-std=ios-metal2.2",
+                "rive_pls_ios_simulator.metallib",
+                translated_makefile::AppleFamily::IosSimulator,
+            ),
+            ("ios", _) => (
+                "iphoneos",
+                "-mios-version-min=13",
+                "-std=ios-metal2.2",
+                "rive_pls_ios.metallib",
+                translated_makefile::AppleFamily::Ios,
+            ),
+            ("macos", _) => (
+                "macosx",
+                "-mmacosx-version-min=11.0",
+                "-std=macos-metal2.3",
+                "rive_pls_macosx.metallib",
+                translated_makefile::AppleFamily::MacOs,
+            ),
+            ("visionos", "sim") => (
+                "xrsimulator",
+                "--target=air64-apple-xros1.0-simulator",
+                "-std=metal3.1",
+                "rive_renderer_xros_simulator.metallib",
+                translated_makefile::AppleFamily::XrOsSimulator,
+            ),
+            ("visionos", _) => (
+                "xros",
+                "--target=air64-apple-xros1.0",
+                "-std=metal3.1",
+                "rive_renderer_xros.metallib",
+                translated_makefile::AppleFamily::XrOs,
+            ),
+            ("tvos", "sim") => (
+                "appletvsimulator",
+                "-mappletvsimulator-version-min=16.0",
+                "-std=metal3.0",
+                "rive_renderer_appletvsimulator.metallib",
+                translated_makefile::AppleFamily::AppleTvOsSimulator,
+            ),
+            ("tvos", _) => (
+                "appletvos",
+                "-mappletvos-version-min=16.0",
+                "-std=metal3.0",
+                "rive_renderer_appletvos.metallib",
+                translated_makefile::AppleFamily::AppleTvOs,
+            ),
+            _ => unreachable!(),
+        };
     let output = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let source = manifest.join("src/native_metal/tracer.metal");
-    let air = output.join("native_metal_tracer.air");
-    let metallib = output.join("native_metal_tracer.metallib");
 
-    checked(
-        Command::new("xcrun")
-            .args(["-sdk", sdk, "metal", "-c"])
-            .arg(deployment_target)
-            .arg(&source)
-            .arg("-o")
-            .arg(&air)
-            .output(),
-        "compile native Metal tracer shader",
-    );
-    checked(
-        Command::new("xcrun")
-            .args(["-sdk", sdk, "metallib"])
-            .arg(&air)
-            .arg("-o")
-            .arg(&metallib)
-            .output(),
-        "link native Metal tracer library",
-    );
+    // The translated pinned shader batch is the build authority.  Materialize
+    // its embedded source constants into an upstream-shaped tree, then invoke
+    // the translated minifier/Make rules against that tree.  The old
+    // native_metal copies remain only as source-shaped compatibility inputs
+    // for dormant/test consumers; they are never used to produce these
+    // production libraries.
+    let translated_shader_dir = output.join("mechanical_shader_sources");
+    let translated_generated_dir = output.join("mechanical_shader_generated");
+    materialize_translated_shader_sources(&translated_shader_dir)
+        .unwrap_or_else(|error| panic!("materialize translated shader sources: {error}"));
+    let shader_inputs = shader_batch_inputs(&translated_shader_dir)
+        .unwrap_or_else(|error| panic!("enumerate translated shader inputs: {error}"));
+    let shader_outputs = minifier_outputs(&shader_inputs, &translated_generated_dir);
+    // Cargo reruns this build owner when any embedded translated source or
+    // rule changes. Invalidate the Make-style stamp for that invocation so a
+    // persistent OUT_DIR cannot reuse minified bytes from the prior source
+    // snapshot merely because every output file still exists.
+    match fs::remove_file(translated_generated_dir.join("glsl.stamp")) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => panic!("invalidate translated shader minify stamp: {error}"),
+    }
+    translated_makefile::ensure_minified_outputs(
+        "python3",
+        &translated_shader_dir,
+        &translated_generated_dir,
+        &shader_inputs,
+        &shader_outputs,
+    )
+    .unwrap_or_else(|error| panic!("translate shader minification: {error}"));
+    materialize_runtime_shader_exports(&translated_generated_dir)
+        .unwrap_or_else(|error| panic!("materialize runtime shader exports: {error}"));
+    materialize_runtime_shader_fragments(&shader_outputs)
+        .unwrap_or_else(|error| panic!("materialize runtime shader fragments: {error}"));
+    translated_draw_combinations::run([
+        "generate_draw_combinations.py".to_owned(),
+        translated_generated_dir
+            .join("draw_combinations.metal")
+            .to_string_lossy()
+            .into_owned(),
+    ])
+    .unwrap_or_else(|error| panic!("generate translated draw combinations: {error}"));
 
-    let draw_source = manifest.join("src/native_metal/shaders/draw.metal");
-    let draw_include_dir = manifest.join("src/native_metal/shaders");
+    let draw_source = translated_shader_dir.join("metal/draw.metal");
+    let draw_include_dir = translated_generated_dir.clone();
     let draw_air = output.join("native_metal_draw.air");
     let draw_metallib = output.join("native_metal_draw.metallib");
 
@@ -91,14 +159,13 @@ fn main() {
             .output(),
         "link native Metal offline draw shader library",
     );
-
     let resource_sources = [
         (
-            manifest.join("src/native_metal/shaders/color_ramp.metal"),
+            translated_shader_dir.join("metal/color_ramp.metal"),
             output.join("native_metal_color_ramp.air"),
         ),
         (
-            manifest.join("src/native_metal/shaders/tessellate.metal"),
+            translated_shader_dir.join("metal/tessellate.metal"),
             output.join("native_metal_tessellate.air"),
         ),
     ];
@@ -134,34 +201,379 @@ fn main() {
         resource_link.output(),
         "link native Metal color-ramp/tessellate resource shader library",
     );
+
+    let translated_source_c = translated_makefile::build_apple_metallib(
+        family,
+        &translated_shader_dir,
+        &translated_generated_dir,
+    )
+    .unwrap_or_else(|error| panic!("build translated Apple shader family: {error}"));
+    let translated_source_metallib = translated_generated_dir
+        .join(family.rule().intermediate_dir)
+        .join(family.rule().metallib_name);
+    assert!(
+        translated_source_c.is_file(),
+        "translated C shader owner was not emitted"
+    );
+    fs::copy(
+        translated_source_metallib,
+        output.join(source_metallib_name),
+    )
+    .unwrap_or_else(|error| panic!("publish translated source metallib: {error}"));
 }
 
-const DRAW_SHADER_SOURCES: &[&str] = &[
-    "src/native_metal/shaders/draw.metal",
-    "src/native_metal/shaders/metal.minified.glsl",
-    "src/native_metal/shaders/constants.minified.glsl",
-    "src/native_metal/shaders/flush_uniforms.minified.glsl",
-    "src/native_metal/shaders/common.minified.glsl",
-    "src/native_metal/shaders/draw_path_common.minified.glsl",
-    "src/native_metal/shaders/render_atlas.minified.glsl",
-    "src/native_metal/shaders/advanced_blend.minified.glsl",
-    "src/native_metal/shaders/draw_combinations.metal",
-    "src/native_metal/shaders/draw_path.minified.vert",
-    "src/native_metal/shaders/draw_raster_order_path.minified.frag",
-    "src/native_metal/shaders/draw_mesh.minified.frag",
-    "src/native_metal/shaders/draw_image_mesh.minified.vert",
+fn shader_batch_inputs(shader_dir: &std::path::Path) -> io::Result<Vec<PathBuf>> {
+    let mut inputs = fs::read_dir(shader_dir)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            matches!(
+                path.extension().and_then(|extension| extension.to_str()),
+                Some("glsl" | "vert" | "frag")
+            )
+        })
+        .collect::<Vec<_>>();
+    inputs.sort_by(|left, right| {
+        let rank = |path: &std::path::Path| match path.extension().and_then(|value| value.to_str())
+        {
+            Some("glsl") => 0,
+            Some("vert") => 1,
+            Some("frag") => 2,
+            _ => 3,
+        };
+        rank(left).cmp(&rank(right)).then_with(|| left.cmp(right))
+    });
+    Ok(inputs)
+}
+
+fn minifier_outputs(inputs: &[PathBuf], generated_dir: &std::path::Path) -> Vec<PathBuf> {
+    let mut outputs = Vec::with_capacity(inputs.len() * 3);
+    for input in inputs {
+        let filename = input
+            .file_name()
+            .expect("translated shader input has a filename")
+            .to_string_lossy();
+        outputs.push(generated_dir.join(format!("{filename}.exports.h")));
+        let minified = match input.extension().and_then(|extension| extension.to_str()) {
+            Some("glsl") => filename.replace(".glsl", ".minified.glsl"),
+            Some("vert") => filename.replace(".vert", ".minified.vert"),
+            Some("frag") => filename.replace(".frag", ".minified.frag"),
+            _ => unreachable!("shader batch only contains GLSL, vertex, and fragment inputs"),
+        };
+        outputs.push(generated_dir.join(minified));
+        outputs.push(generated_dir.join(format!("{filename}.hpp")));
+    }
+    outputs
+}
+
+/// Publish the exact C++ embedded-string payload for runtime inclusion.
+/// `minify.py` deliberately emits two different token streams: the offline
+/// `.minified.*` files preserve exported preprocessor identifiers for command
+/// line compilation, while the `.hpp` embedded strings rewrite them for the
+/// runtime macro dictionary. BackgroundShaderCompiler includes the latter.
+fn materialize_runtime_shader_fragments(outputs: &[PathBuf]) -> io::Result<()> {
+    for output_group in outputs.chunks_exact(3) {
+        let minified = &output_group[1];
+        let embedded = fs::read_to_string(&output_group[2])?;
+        let payload_start_marker = "R\"===(";
+        let payload_end_marker = ")===";
+        let payload_start = embedded
+            .find(payload_start_marker)
+            .map(|index| index + payload_start_marker.len())
+            .ok_or_else(|| io::Error::other("generated shader header has no raw payload"))?;
+        let payload_end = embedded[payload_start..]
+            .find(payload_end_marker)
+            .map(|index| payload_start + index)
+            .ok_or_else(|| io::Error::other("generated shader header has no raw terminator"))?;
+        let runtime_name = format!(
+            "{}.runtime",
+            minified
+                .file_name()
+                .expect("minified output has a filename")
+                .to_string_lossy()
+        );
+        fs::write(
+            minified.with_file_name(runtime_name),
+            &embedded.as_bytes()[payload_start..payload_end],
+        )?;
+    }
+    Ok(())
+}
+
+/// Materialize the generated `GLSL_*` export names as Rust constants and
+/// Objective-C static literals. The pinned Metal sources consume the same
+/// `*.exports.h` macros for both dynamic-source preprocessor keys and
+/// `newFunctionWithName:` lookups; spelling the pre-minification identifiers
+/// in Rust would compile a library with no exported entry points.
+fn materialize_runtime_shader_exports(generated_dir: &std::path::Path) -> io::Result<()> {
+    use std::collections::BTreeMap;
+
+    const REQUIRED_EXPORTS: &[&str] = &[
+        "GLSL_VERTEX",
+        "GLSL_FRAGMENT",
+        "GLSL_PLS_IMPL_DEVICE_BUFFER",
+        "GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED",
+        "GLSL_FIXED_FUNCTION_COLOR_OUTPUT",
+        "GLSL_CLOCKWISE_FILL",
+        "GLSL_ENABLE_INSTANCE_INDEX",
+        "GLSL_DRAW_PATH",
+        "GLSL_DRAW_INTERIOR_TRIANGLES",
+        "GLSL_FEATHER_ATLAS_BLIT",
+        "GLSL_DRAW_IMAGE",
+        "GLSL_DRAW_IMAGE_RECT",
+        "GLSL_DRAW_IMAGE_MESH",
+        "GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS",
+        "GLSL_INITIALIZE_PLS",
+        "GLSL_STORE_COLOR_CLEAR",
+        "GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA",
+        "GLSL_RESOLVE_PLS",
+        "GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER",
+        "GLSL_ENABLE_CLIPPING",
+        "GLSL_ENABLE_CLIP_RECT",
+        "GLSL_ENABLE_ADVANCED_BLEND",
+        "GLSL_ENABLE_FEATHER",
+        "GLSL_ENABLE_EVEN_ODD",
+        "GLSL_ENABLE_NESTED_CLIPPING",
+        "GLSL_ENABLE_HSL_BLEND_MODES",
+        "GLSL_ENABLE_DITHER",
+        "GLSL_colorRampVertexMain",
+        "GLSL_colorRampFragmentMain",
+        "GLSL_tessellateVertexMain",
+        "GLSL_tessellateFragmentMain",
+        "GLSL_atlasVertexMain",
+        "GLSL_atlasFillFragmentMain",
+        "GLSL_atlasStrokeFragmentMain",
+        "GLSL_drawVertexMain",
+        "GLSL_drawFragmentMain",
+    ];
+    const MACRO_LITERAL_EXPORTS: &[&str] = &[
+        "GLSL_VERTEX",
+        "GLSL_FRAGMENT",
+        "GLSL_PLS_IMPL_DEVICE_BUFFER",
+        "GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED",
+        "GLSL_FIXED_FUNCTION_COLOR_OUTPUT",
+        "GLSL_CLOCKWISE_FILL",
+        "GLSL_ENABLE_INSTANCE_INDEX",
+        "GLSL_DRAW_PATH",
+        "GLSL_DRAW_INTERIOR_TRIANGLES",
+        "GLSL_FEATHER_ATLAS_BLIT",
+        "GLSL_DRAW_IMAGE",
+        "GLSL_DRAW_IMAGE_RECT",
+        "GLSL_DRAW_IMAGE_MESH",
+        "GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS",
+        "GLSL_INITIALIZE_PLS",
+        "GLSL_STORE_COLOR_CLEAR",
+        "GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA",
+        "GLSL_RESOLVE_PLS",
+        "GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER",
+    ];
+
+    let exports = fs::read_to_string(generated_dir.join("constants.glsl.exports.h"))?;
+    let mut values = BTreeMap::new();
+    for line in exports.lines() {
+        let Some(rest) = line.strip_prefix("#define ") else {
+            continue;
+        };
+        let Some((name, quoted)) = rest.split_once(' ') else {
+            continue;
+        };
+        if name.ends_with("_raw") || !quoted.starts_with('"') || !quoted.ends_with('"') {
+            continue;
+        }
+        values.insert(name, &quoted[1..quoted.len() - 1]);
+    }
+    for name in REQUIRED_EXPORTS {
+        if !values.contains_key(name) {
+            return Err(io::Error::other(format!(
+                "translated minifier did not export {name}"
+            )));
+        }
+    }
+
+    let mut rust =
+        String::from("// @generated by build.rs from constants.glsl.exports.h; do not edit.\n");
+    for name in REQUIRED_EXPORTS {
+        rust.push_str(&format!("pub const {name}: &str = {:?};\n", values[name]));
+    }
+    let mut literal_values = vec!["", "1", "true"];
+    literal_values.extend(MACRO_LITERAL_EXPORTS.iter().map(|name| values[name]));
+    rust.push_str(&format!(
+        "pub const SOURCE_MACRO_LITERAL_TEXTS: [&str; {}] = [\n",
+        literal_values.len()
+    ));
+    for value in &literal_values {
+        rust.push_str(&format!("    {:?},\n", value));
+    }
+    rust.push_str("] ;\n");
+    rust.push_str(
+        "#[cfg(target_vendor = \"apple\")]\n\
+         pub fn source_macro_literal(text: &str) -> &'static objc2_foundation::NSString {\n\
+             match text {\n",
+    );
+    for value in &literal_values {
+        rust.push_str(&format!(
+            "        {:?} => objc2_foundation::ns_string!({:?}),\n",
+            value, value
+        ));
+    }
+    rust.push_str(
+        "        _ => panic!(\"generated shader export has no static NSString authority: {text}\"),\n\
+         \t}\n\
+         }\n",
+    );
+    fs::write(generated_dir.join("runtime_shader_exports.rs"), rust)
+}
+
+fn materialize_translated_shader_sources(shader_dir: &std::path::Path) -> io::Result<()> {
+    for rust_source in TRANSLATED_SHADER_SOURCES {
+        let upstream_path = embedded_source_path(rust_source)?;
+        let source = embedded_source_literal(rust_source)?;
+        let relative = upstream_path
+            .strip_prefix("renderer/src/shaders/")
+            .ok_or_else(|| {
+                io::Error::other(format!("unexpected shader source path {upstream_path}"))
+            })?;
+        let destination = shader_dir.join(relative);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(destination, source)?;
+    }
+    fs::create_dir_all(shader_dir.join("metal"))?;
+    Ok(())
+}
+
+fn embedded_source_path(rust_source: &str) -> io::Result<&str> {
+    let marker = "pub const PINNED_SOURCE_PATH: &str";
+    let declaration = rust_source
+        .find(marker)
+        .map(|index| &rust_source[index + marker.len()..])
+        .ok_or_else(|| io::Error::other("translated shader has no pinned source path"))?;
+    let value = declaration
+        .find('=')
+        .map(|index| declaration[index + 1..].trim_start())
+        .and_then(|value| value.strip_prefix('"'))
+        .ok_or_else(|| io::Error::other("malformed pinned shader source path"))?;
+    let end = value
+        .find('"')
+        .ok_or_else(|| io::Error::other("unterminated pinned shader source path"))?;
+    Ok(&value[..end])
+}
+
+/// Extract the first raw string assigned to a `PINNED_*_SOURCE` constant.
+/// Keeping this tiny parser in the build owner lets the build consume the
+/// literal translated constants without duplicating their bytes in build.rs.
+fn embedded_source_literal(rust_source: &str) -> io::Result<&str> {
+    let mut cursor = 0;
+    while let Some(relative) = rust_source[cursor..].find("pub const PINNED_") {
+        let declaration_start = cursor + relative;
+        let declaration = &rust_source[declaration_start..];
+        if let Some(relative_raw) = declaration.find("_SOURCE: &str = r") {
+            let raw_start = declaration_start + relative_raw + "_SOURCE: &str = ".len();
+            let raw = &rust_source[raw_start..];
+            let quote = raw
+                .find('"')
+                .ok_or_else(|| io::Error::other("malformed translated shader raw delimiter"))?;
+            let hashes = raw[..quote].len().saturating_sub(1);
+            let body_start = raw_start + quote + 1;
+            let terminator = format!("\"{}", "#".repeat(hashes));
+            let body_end = rust_source[body_start..]
+                .find(&terminator)
+                .map(|index| body_start + index)
+                .ok_or_else(|| io::Error::other("unterminated translated shader raw constant"))?;
+            return Ok(&rust_source[body_start..body_end]);
+        }
+        cursor = declaration_start + "pub const PINNED_".len();
+    }
+    Err(io::Error::other(
+        "translated shader has no pinned source constant",
+    ))
+}
+
+const TRANSLATED_SHADER_RUST_PATHS: &[&str] = &[
+    "src/mechanical_port/source/renderer/src/shaders/advanced_blend_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/atomic_draw_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/bezier_utils_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/blit_texture_as_draw_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/clear_clockwise_atomic_clip_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/color_ramp_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/common_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/constants_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_borrowed_coverage_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_clip_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_path_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_clip_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_path_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_fullscreen_quad_vert.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_image_mesh_vert.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_input_attachment_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_mesh_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_msaa_object_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_msaa_resolve_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_path_common_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_path_vert.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_raster_order_path_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/flush_uniforms_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/glsl_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/hlsl_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/init_clockwise_atomic_workaround_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/metal_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/pls_load_store_ext_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/render_atlas_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/resolve_atlas_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/rhi_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/specialization_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/stencil_draw_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/tessellate_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/metal/color_ramp_metal.rs",
+    "src/mechanical_port/source/renderer/src/shaders/metal/draw_metal.rs",
+    "src/mechanical_port/source/renderer/src/shaders/metal/tessellate_metal.rs",
 ];
 
-const RESOURCE_SHADER_SOURCES: &[&str] = &[
-    "src/native_metal/shaders/color_ramp.metal",
-    "src/native_metal/shaders/tessellate.metal",
-    "src/native_metal/shaders/metal.minified.glsl",
-    "src/native_metal/shaders/constants.minified.glsl",
-    "src/native_metal/shaders/flush_uniforms.minified.glsl",
-    "src/native_metal/shaders/common.minified.glsl",
-    "src/native_metal/shaders/color_ramp.minified.glsl",
-    "src/native_metal/shaders/bezier_utils.minified.glsl",
-    "src/native_metal/shaders/tessellate.minified.glsl",
+const TRANSLATED_BUILD_RULE_PATHS: &[&str] = &[
+    "src/mechanical_port/source/renderer/src/shaders/makefile.rs",
+    "src/mechanical_port/source/renderer/src/shaders/minify_py.rs",
+    "src/mechanical_port/source/renderer/src/shaders/metal/generate_draw_combinations_py.rs",
+];
+
+const TRANSLATED_SHADER_SOURCES: &[&str] = &[
+    include_str!("src/mechanical_port/source/renderer/src/shaders/advanced_blend_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/atomic_draw_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/bezier_utils_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/blit_texture_as_draw_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/clear_clockwise_atomic_clip_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/color_ramp_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/common_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/constants_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_borrowed_coverage_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_clip_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_path_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_clip_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_path_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_fullscreen_quad_vert.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_image_mesh_vert.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_input_attachment_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_mesh_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_msaa_object_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_msaa_resolve_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_path_common_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_path_vert.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_raster_order_path_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/flush_uniforms_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/glsl_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/hlsl_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/init_clockwise_atomic_workaround_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/metal_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/pls_load_store_ext_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/render_atlas_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/resolve_atlas_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/rhi_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/specialization_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/stencil_draw_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/tessellate_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/metal/color_ramp_metal.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/metal/draw_metal.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/metal/tessellate_metal.rs"),
 ];
 
 fn checked(output: std::io::Result<Output>, operation: &str) {

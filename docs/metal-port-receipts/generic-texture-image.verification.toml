@@ -1,0 +1,20 @@
+schema_version = 1
+unit = "generic-texture-image"
+receipt_kind = "verification"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-texture-image.verification.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/texture.hpp:1-39",
+    "cpp:renderer/include/rive/renderer/rive_render_image.hpp:1-48",
+    "cpp:renderer/src/rive_render_image.cpp:1-15",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/texture_hpp.rs:1-158",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_image_hpp.rs:1-377",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_image_cpp.rs:1-58",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/rive_render_image_hpp.rs" = "b46fc0ffd0374d075b7e5e07e1403e8afac9e04621e8194c0c298f5e40c80f99", "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/texture_hpp.rs" = "7a098341893afeefc087a9960c5ffab81c2f26dd61a83dde55f3ba5f0bcb39a7", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_image_cpp.rs" = "77d6ee5ca2cd91007a1a1d4a3a5ffe14cbe98d91a424669219e5d396c600d165" }
+suite_reports = { "V0" = "docs/metal-port-reports/v0-inventory-provenance.md", "V1" = "docs/metal-port-reports/v1-source-ownership-closure.md", "V2" = "docs/metal-port-reports/v2-compile-configuration-matrix.md", "V3" = "docs/metal-port-reports/v3-native-lifecycle-failure.md", "V4" = "docs/metal-port-reports/v4-pinned-cpp-metal-parity.md", "V5" = "docs/metal-port-reports/v5-wgpu-diagnostic.md", "V6" = "docs/metal-port-reports/v6-msaa-exclusion.md", "V7" = "docs/metal-port-reports/v7-platform-hardware-policy.md", "V8" = "docs/metal-port-reports/v8-rooted-product-no-fallback.md", "V9" = "docs/metal-port-reports/v9-independent-closeout.md" }

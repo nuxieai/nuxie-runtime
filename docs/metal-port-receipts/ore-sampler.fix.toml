@@ -1,0 +1,23 @@
+schema_version = 1
+unit = "ore-sampler"
+receipt_kind = "fix"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/ore-sampler.fix.toml :: exit=0 :: count=6",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/ore/ore_sampler.hpp:1-31",
+    "cpp:renderer/src/ore/metal/ore_sampler_metal.hpp:1-19",
+    "cpp:renderer/src/ore/metal/ore_sampler_metal.mm:1-8",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_sampler_hpp.rs:1-94",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_hpp.rs:1-142",
+    "rust:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_mm.rs:1-20",
+]
+artifact_digests = { "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_sampler_hpp.rs" = "7c90d6adcdd7aa2a6ccaf7d9f2924072fa5c2182627eb0ca0f4da02895befc1a", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_hpp.rs" = "b0e774cda5a4a1c71a53bd650e9a87e5de3240ca9851c57813dea6a464e29b7b", "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/metal/ore_sampler_metal_mm.rs" = "3fb890a24e178a07e87749063790242d028eef0f792d001daff91fa088fa3193" }
+resolutions = [
+    "V9-SRC-ORE-OWNER-001: restored exact intrusive GPUResource owner identity for Sampler",
+    "V9-SRC-ORE-DECL-002: restored authored Sampler base chain/member order and teardown",
+]

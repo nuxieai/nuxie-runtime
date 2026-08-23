@@ -180,6 +180,7 @@ mod tests {
     #[test]
     fn live_gradient_descriptor_and_resize_preserve_identity() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let mut resource = GradientResource::new(&device, GRADIENT_TEXTURE_WIDTH, 3)
@@ -222,6 +223,7 @@ mod tests {
     #[test]
     fn failed_gradient_resize_preserves_identity_and_real_retry_succeeds() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let mut resource = GradientResource::new(&device, GRADIENT_TEXTURE_WIDTH, 1)

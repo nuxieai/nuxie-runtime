@@ -5,11 +5,11 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::time::{Duration, Instant};
 
-use nuxie_ore_metal::binding_map::{BindingMap, ResourceKind};
-use nuxie_ore_metal::context::FrameDescriptor;
-use nuxie_ore_metal::metal::context::ContextMetal;
-use nuxie_ore_metal::metal::shader_module::ShaderModuleMetal;
-use nuxie_ore_metal::types::{
+use nuxie_ore_metal::mechanical_port::source::renderer::include::rive::renderer::ore::ore_binding_map_hpp::{BindingMap, ResourceKind};
+use nuxie_ore_metal::mechanical_port::source::renderer::include::rive::renderer::ore::ore_context_hpp::FrameDescriptor;
+use nuxie_ore_metal::mechanical_port::source::renderer::include::rive::renderer::ore::ore_context_metal_hpp::ContextMetal;
+use nuxie_ore_metal::mechanical_port::source::renderer::src::ore::metal::ore_shader_module_metal_hpp::ShaderModuleMetal;
+use nuxie_ore_metal::mechanical_port::source::renderer::include::rive::renderer::ore::ore_types_hpp::{
     BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
     ClearColor, ColorAttachment, ColorTargetState, PipelineDesc, RenderPassDesc, ShaderModuleDesc,
     StageVisibility, TextureFormat, UBOEntry,
@@ -99,12 +99,16 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     let queue = device
         .newCommandQueue()
         .expect("create the pinned witness command queue");
-    let context = ContextMetal::make(device.clone(), queue);
+    let mut context = *ContextMetal::MakeChecked(Some(device.clone()), Some(queue))
+        .expect("retained Metal device and queue construct ORE");
 
     let module = context
-        .make_shader_module(&ShaderModuleDesc {
+        .makeShaderModule(&ShaderModuleDesc {
             code: Some(BINDING_WITNESS_MSL),
+            codeSize: u32::try_from(BINDING_WITNESS_MSL.len()).expect("small witness MSL"),
             bindingMapBytes: Some(&BINDING_WITNESS_MAP),
+            bindingMapSize: u32::try_from(BINDING_WITNESS_MAP.len())
+                .expect("small witness binding map"),
             label: Some("pinned ore_binding_witness"),
             ..ShaderModuleDesc::default()
         })
@@ -113,9 +117,9 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     let module_metal = module
         .downcast_ref::<ShaderModuleMetal>()
         .expect("ContextMetal publishes ShaderModuleMetal");
-    let layout_entries = (0..module_metal.m_bindingMap.size())
+    let layout_entries = (0..module_metal.bindingMap().size())
         .filter_map(|index| {
-            let reflected = module_metal.m_bindingMap.at(index);
+            let reflected = module_metal.bindingMap().at(index);
             (reflected.group == 0).then(|| {
                 assert_eq!(reflected.kind, ResourceKind::UniformBuffer);
                 BindGroupLayoutEntry {
@@ -124,12 +128,12 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
                     visibility: StageVisibility {
                         mask: reflected.stageMask,
                     },
-                    nativeSlotVS: if reflected.backendSlot[0] == BindingMap::K_ABSENT {
+                    nativeSlotVS: if reflected.backendSlot[0] == BindingMap::kAbsent {
                         BindGroupLayoutEntry::kNativeSlotAbsent
                     } else {
                         u32::from(reflected.backendSlot[0])
                     },
-                    nativeSlotFS: if reflected.backendSlot[1] == BindingMap::K_ABSENT {
+                    nativeSlotFS: if reflected.backendSlot[1] == BindingMap::kAbsent {
                         BindGroupLayoutEntry::kNativeSlotAbsent
                     } else {
                         u32::from(reflected.backendSlot[1])
@@ -151,9 +155,10 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
         "the runtime layout must be derived from the exact target-10 map"
     );
     let incomplete_layout = context
-        .make_bind_group_layout(&BindGroupLayoutDesc {
+        .makeBindGroupLayout(&BindGroupLayoutDesc {
             groupIndex: 0,
             entries: &layout_entries[..1],
+            entryCount: 1,
             label: Some("intentionally incomplete witness group 0"),
         })
         .expect("materialize the incomplete negative-case layout");
@@ -161,11 +166,12 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     let mut incomplete_error = String::new();
     assert!(
         context
-            .make_pipeline(
+            .makePipeline(
                 &PipelineDesc {
                     vertexModule: Some(&module),
                     fragmentModule: Some(&module),
                     bindGroupLayouts: Some(&incomplete_pipeline_layouts),
+                    bindGroupLayoutCount: 1,
                     ..PipelineDesc::default()
                 },
                 Some(&mut incomplete_error),
@@ -179,15 +185,16 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     );
 
     let layout = context
-        .make_bind_group_layout(&BindGroupLayoutDesc {
+        .makeBindGroupLayout(&BindGroupLayoutDesc {
             groupIndex: 0,
             entries: &layout_entries,
+            entryCount: u32::try_from(layout_entries.len()).expect("small witness layout"),
             label: Some("pinned witness group 0"),
         })
         .expect("materialize the exact authored binding layout");
     let pipeline_layouts = [Some(&layout)];
     let pipeline = context
-        .make_pipeline(
+        .makePipeline(
             &PipelineDesc {
                 vertexModule: Some(&module),
                 vertexEntryPoint: Some("vs_main"),
@@ -203,6 +210,7 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
                     ColorTargetState::default(),
                 ],
                 bindGroupLayouts: Some(&pipeline_layouts),
+                bindGroupLayoutCount: 1,
                 label: Some("pinned witness pipeline"),
                 ..PipelineDesc::default()
             },
@@ -213,13 +221,13 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     let low_bytes = uniform_bytes([0.3, 0.0, 0.0, 0.0]);
     let high_bytes = uniform_bytes([0.0, 0.6, 0.0, 0.0]);
     let low = context
-        .make_buffer(
+        .makeBuffer(
             &BufferDesc::initialized(BufferUsage::uniform, &low_bytes, true)
                 .expect("small low uniform descriptor"),
         )
         .expect("create authored binding 0");
     let high = context
-        .make_buffer(
+        .makeBuffer(
             &BufferDesc::initialized(BufferUsage::uniform, &high_bytes, true)
                 .expect("small high uniform descriptor"),
         )
@@ -239,16 +247,17 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
         },
     ];
     let group = context
-        .make_bind_group(&BindGroupDesc {
+        .makeBindGroup(&BindGroupDesc {
             layout: Some(&layout),
             ubos: &ubos,
+            uboCount: u32::try_from(ubos.len()).expect("small witness UBO set"),
             label: Some("pinned witness group"),
             ..BindGroupDesc::default()
         })
         .expect("bind both sparse authored uniform slots");
     let repeat_high_bytes = uniform_bytes([0.0, 0.4, 0.0, 0.0]);
     let repeat_high = context
-        .make_buffer(
+        .makeBuffer(
             &BufferDesc::initialized(BufferUsage::uniform, &repeat_high_bytes, true)
                 .expect("small repeated high uniform descriptor"),
         )
@@ -268,9 +277,10 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
         },
     ];
     let repeat_group = context
-        .make_bind_group(&BindGroupDesc {
+        .makeBindGroup(&BindGroupDesc {
             layout: Some(&layout),
             ubos: &repeat_ubos,
+            uboCount: u32::try_from(repeat_ubos.len()).expect("small witness UBO set"),
             label: Some("repeated witness group"),
             ..BindGroupDesc::default()
         })
@@ -290,14 +300,20 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     let texture = device
         .newTextureWithDescriptor(&descriptor)
         .expect("allocate shared witness render target");
-    let view = context.wrap_native_texture(texture.clone(), WIDTH as u32, HEIGHT as u32, true);
+    let view = context
+        .wrap_native_texture(texture.clone(), WIDTH as u32, HEIGHT as u32, true)
+        .expect("witness texture belongs to the context device");
 
     let frames = [(&group, 153_u8), (&repeat_group, 102_u8)];
     for (frame_index, (frame_group, expected_green)) in frames.into_iter().enumerate() {
         let expected_serial = (frame_index + 1) as u64;
-        context.begin_frame(&FrameDescriptor::default());
-        let pass = context
-            .begin_render_pass(
+        context.beginFrame(&FrameDescriptor {
+            externalCommandBuffer: None,
+            safeFrameNumber: 0,
+            currentFrameNumber: expected_serial,
+        });
+        let mut pass = context
+            .beginRenderPass(
                 &RenderPassDesc {
                     colorAttachments: [
                         ColorAttachment {
@@ -320,22 +336,20 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
                 None,
             )
             .expect("begin witness render pass");
-        pass.setPipeline(&pipeline).expect("bind witness pipeline");
-        pass.setBindGroup(0, frame_group, &[])
-            .expect("bind authored slots 0 and 7");
-        pass.setViewport(0.0, 0.0, WIDTH as f32, HEIGHT as f32, 0.0, 1.0)
-            .expect("set full target viewport");
-        pass.draw(3, 1, 0, 0).expect("draw fullscreen triangle");
+        pass.setPipeline(Some(&pipeline));
+        pass.setBindGroup(0, Some(frame_group), None, 0);
+        pass.setViewport(0.0, 0.0, WIDTH as f32, HEIGHT as f32, 0.0, 1.0);
+        pass.draw(3, 1, 0, 0);
         pass.finish();
-        assert_eq!(context.current_serial(), expected_serial);
-        context.end_frame();
+        assert_eq!(context.currentSerial(), expected_serial);
+        context.endFrame();
 
         let deadline = Instant::now() + Duration::from_secs(5);
-        while context.completed_serial() < expected_serial && Instant::now() < deadline {
+        while context.completedSerial() < expected_serial && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(1));
         }
         assert_eq!(
-            context.completed_serial(),
+            context.completedSerial(),
             expected_serial,
             "Metal completion timed out"
         );

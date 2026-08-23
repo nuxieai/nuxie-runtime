@@ -1,0 +1,20 @@
+schema_version = 1
+unit = "generic-image-sampler"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-image-sampler.translation.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:include/rive/shapes/paint/image_sampler.hpp:1-97",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/include/rive/shapes/paint/image_sampler_hpp.rs:1-181",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/include/rive/shapes/paint/image_sampler_hpp.rs" = "e711443fe2b31aff86da6c8917812eb32d66b1a3801cfa96e48bccf274658ae8" }
+source_digests = { "include/rive/shapes/paint/image_sampler.hpp" = "c88d4708b86905adc5e9125bce82410fed3d56a0e2a6b628c0b003db862524ae" }

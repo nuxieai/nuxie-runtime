@@ -1,0 +1,28 @@
+schema_version = 1
+unit = "generic-factory-contract"
+receipt_kind = "source-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-factory-contract.source-review.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:include/rive/factory.hpp:1-82",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs:1-249",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs" = "835d1abaf7fc4e24af087fbbd6d23a14ff31af91a7f7e60b948412f9f7776d08" }
+findings = []
+review_run_id = "sol-v9-source-global-20260822-final-clean-45b6f0b3"
+coverage = [
+    "owned-source-lines",
+    "declarations",
+    "conditionals",
+    "include-owners",
+    "source-semantics",
+]
+citations = [
+    "cpp:include/rive/factory.hpp:1-82",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs:1-249",
+]

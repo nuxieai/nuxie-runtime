@@ -17,6 +17,11 @@ use super::shader_compile_plan::{
     ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_HSL_BLEND_MODES, ENABLE_NESTED_CLIPPING,
     FIXED_FUNCTION_COLOR_OUTPUT, STORE_COLOR_CLEAR, SWIZZLE_COLOR_BGRA_TO_RGBA,
 };
+pub(crate) use super::context_options::{
+    NativeMetalContextOptions, ShaderCompilationMode,
+};
+#[cfg(test)]
+use super::context_options::NativeMetalSynthesizedFailureType;
 use crate::gpu::DrawType;
 use std::collections::HashMap;
 use std::fmt;
@@ -28,26 +33,6 @@ const INTERLOCK_MODE_BIT_COUNT: u32 = 3;
 const SHADER_FEATURE_COUNT: u32 = 8;
 const DRAW_TYPE_KEY_BIT_COUNT: u32 = 3;
 const CLOCKWISE_FILL: ShaderMiscFlags = 1 << 1;
-
-/// Exact behavior choices from pinned upstream `ShaderCompilationMode`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ShaderCompilationMode {
-    /// Upstream `standard` is an alias for `allowAsynchronous`.
-    #[default]
-    AllowAsynchronous,
-    AlwaysSynchronous,
-    OnlyUbershaders,
-}
-
-/// Context options consumed by the native Metal construction/cache closure.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct NativeMetalContextOptions {
-    pub shader_compilation_mode: ShaderCompilationMode,
-    /// Consumed by capability selection before cache construction. It remains
-    /// here beside compilation mode because both fields belong to the pinned
-    /// `ContextOptions`; the cache itself does not reinterpret this flag.
-    pub disable_framebuffer_reads: bool,
-}
 
 /// Platform facts read by upstream `UbershaderFeaturesMaskFor`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -692,12 +677,17 @@ fn resolve_key<Backend: PipelineCacheBackend>(
 
 #[cfg(all(
     feature = "native-metal-experimental",
-    any(target_os = "ios", target_os = "macos")
+    any(
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "tvos",
+        target_os = "visionos"
+    )
 ))]
 mod metal_backend {
     use super::*;
     use crate::native_metal::background_shader_compiler::{
-        BackgroundShaderCompileError, NativeBackgroundShaderCompiler,
+        BackgroundShaderCompileError, NativeBackgroundShaderCompiler, NativeMetalLibraryCreation,
     };
     use crate::native_metal::draw_pipeline::{DrawPipeline, DrawPipelineError, MetalInterlockMode};
     use crate::native_metal::draw_shader::DrawShaderLibrary;
@@ -716,19 +706,20 @@ mod metal_backend {
     pub(crate) enum MetalPipelineCacheError {
         Background(BackgroundShaderCompileError),
         DrawPipeline(DrawPipelineError),
+        MissingPrecompiledLibrary,
         UnsupportedInterlock(InterlockMode),
     }
 
     pub(crate) struct MetalPipelineCacheBackend {
         device: Retained<ProtocolObject<dyn MTLDevice>>,
-        precompiled_library: DrawShaderLibrary,
+        precompiled_library: Option<DrawShaderLibrary>,
         compiler: NativeBackgroundShaderCompiler,
     }
 
     impl MetalPipelineCacheBackend {
         pub(crate) fn new(
             device: Retained<ProtocolObject<dyn MTLDevice>>,
-            precompiled_library: DrawShaderLibrary,
+            precompiled_library: Option<DrawShaderLibrary>,
             metal_features: MetalFeatures,
             platform: super::super::capabilities::ApplePlatform,
         ) -> Self {
@@ -767,12 +758,12 @@ mod metal_backend {
             job.shader_misc_flags,
         )
         .with_synthesized_failure(match job.failure_injection {
+            PipelineFailureInjection::UbershaderLoad => SynthesizedFailureType::UbershaderLoad,
             PipelineFailureInjection::ShaderCompilation => {
                 SynthesizedFailureType::ShaderCompilation
             }
-            PipelineFailureInjection::None
-            | PipelineFailureInjection::UbershaderLoad
-            | PipelineFailureInjection::PipelineCreation => SynthesizedFailureType::None,
+            PipelineFailureInjection::PipelineCreation => SynthesizedFailureType::PipelineCreation,
+            PipelineFailureInjection::None => SynthesizedFailureType::None,
         })
     }
 
@@ -784,8 +775,12 @@ mod metal_backend {
             shader_misc_flags: job.shader_misc_flags,
             failure_injection: match job.synthesized_failure_type {
                 SynthesizedFailureType::None => PipelineFailureInjection::None,
+                SynthesizedFailureType::UbershaderLoad => PipelineFailureInjection::UbershaderLoad,
                 SynthesizedFailureType::ShaderCompilation => {
                     PipelineFailureInjection::ShaderCompilation
+                }
+                SynthesizedFailureType::PipelineCreation => {
+                    PipelineFailureInjection::PipelineCreation
                 }
             },
         }
@@ -797,9 +792,13 @@ mod metal_backend {
         type Error = MetalPipelineCacheError;
 
         fn preload(&mut self, spec: RasterPreloadSpec) -> Result<Self::Pipeline, Self::Error> {
+            let precompiled_library = self
+                .precompiled_library
+                .as_ref()
+                .ok_or(MetalPipelineCacheError::MissingPrecompiledLibrary)?;
             DrawPipeline::new(
                 &self.device,
-                Some(self.precompiled_library.library()),
+                Some(precompiled_library.library()),
                 &NSString::from_str(spec.vertex_function),
                 &NSString::from_str(spec.fragment_function),
                 spec.job.draw_type,
@@ -818,12 +817,27 @@ mod metal_backend {
             &mut self,
             wait: bool,
         ) -> Option<FinishedPipelineJob<Self::Artifact, Self::Error>> {
-            self.compiler
-                .pop_finished_job(wait)
-                .map(|finished| FinishedPipelineJob {
+            self.compiler.pop_finished_job(wait).map(|finished| {
+                let result = finished
+                    .result
+                    .map_err(MetalPipelineCacheError::Background)
+                    .and_then(|creation: NativeMetalLibraryCreation| {
+                        if creation.error.is_some() || creation.library.is_none() {
+                            Err(MetalPipelineCacheError::Background(
+                                BackgroundShaderCompileError::MetalCompilation {
+                                    localized_description: creation.error,
+                                    source: creation.source,
+                                },
+                            ))
+                        } else {
+                            Ok(creation.library.expect("library checked nonnil"))
+                        }
+                    });
+                FinishedPipelineJob {
                     job: pipeline_job(finished.job),
-                    result: finished.result.map_err(MetalPipelineCacheError::Background),
-                })
+                    result,
+                }
+            })
         }
 
         fn realize(
@@ -848,6 +862,30 @@ mod metal_backend {
         CompatibleDrawPipelineCache<MetalPipelineCacheBackend>;
 
     impl NativeCompatibleDrawPipelineCache {
+        pub(crate) fn schedule_library_job(
+            &self,
+            job: PipelineJob,
+        ) -> Result<(), MetalPipelineCacheError> {
+            self.inner
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .backend
+                .schedule(job)
+        }
+
+        pub(crate) fn pop_finished_library_job(
+            &self,
+            wait: bool,
+        ) -> Option<
+            FinishedPipelineJob<Retained<ProtocolObject<dyn MTLLibrary>>, MetalPipelineCacheError>,
+        > {
+            self.inner
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .backend
+                .pop_finished(wait)
+        }
+
         #[cfg(test)]
         pub(crate) fn compiler_is_started(&self) -> bool {
             self.inner
@@ -859,11 +897,10 @@ mod metal_backend {
     }
 }
 
-#[cfg(all(
-    feature = "native-metal-experimental",
-    any(target_os = "ios", target_os = "macos")
-))]
-pub(crate) use metal_backend::{MetalPipelineCacheBackend, NativeCompatibleDrawPipelineCache};
+#[cfg(test)]
+pub(crate) use metal_backend::NativeCompatibleDrawPipelineCache;
+#[cfg(test)]
+pub(crate) use metal_backend::MetalPipelineCacheBackend;
 
 #[cfg(test)]
 mod tests {
@@ -989,6 +1026,7 @@ mod tests {
             NativeMetalContextOptions {
                 shader_compilation_mode: mode,
                 disable_framebuffer_reads: false,
+                ..Default::default()
             },
             platform(raster),
             backend,
@@ -1003,6 +1041,7 @@ mod tests {
             NativeMetalContextOptions {
                 shader_compilation_mode: ShaderCompilationMode::AllowAsynchronous,
                 disable_framebuffer_reads: false,
+                synthesized_failure_type: NativeMetalSynthesizedFailureType::None,
             }
         );
         let platform = PipelinePlatformFeatures {
@@ -1064,6 +1103,29 @@ mod tests {
             Ok(ENABLE_CLIP_RECT | ENABLE_ADVANCED_BLEND | ENABLE_HSL_BLEND_MODES | ENABLE_DITHER),
             "the pure key policy must still distinguish a backend that really has clip planes"
         );
+    }
+
+    #[test]
+    fn context_level_synthesized_failure_is_stored_but_inert() {
+        let backend = ScriptBackend::default();
+        let state = backend.state();
+        let cache = CompatibleDrawPipelineCache::new(
+            NativeMetalContextOptions {
+                synthesized_failure_type: NativeMetalSynthesizedFailureType::PipelineCreation,
+                ..Default::default()
+            },
+            platform(false),
+            backend,
+        )
+        .unwrap();
+
+        let _ = cache.select(atomic_midpoint(0)).unwrap();
+        let state = state.lock().unwrap();
+        assert!(!state.scheduled.is_empty());
+        assert!(state
+            .scheduled
+            .iter()
+            .all(|job| job.failure_injection == PipelineFailureInjection::None));
     }
 
     #[test]

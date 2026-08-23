@@ -1,0 +1,32 @@
+schema_version = 1
+unit = "generic-rive-render-path"
+receipt_kind = "source-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-rive-render-path.source-review.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/src/rive_render_path.hpp:1-86",
+    "cpp:renderer/src/rive_render_path.cpp:1-373",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_hpp.rs:1-474",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_cpp.rs:1-529",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_cpp.rs" = "3f5def436baebb5c3be6cc2e895fab44f29f3ee3a371d5ed44b52e0573e0341c", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_hpp.rs" = "e79f04fb5afd98faad820dcddb2e33eb5f0bf2bf2a3fc364f8920d4ccaf03faa" }
+findings = []
+review_run_id = "sol-v9-source-global-20260822-final-clean-45b6f0b3"
+coverage = [
+    "owned-source-lines",
+    "declarations",
+    "conditionals",
+    "include-owners",
+    "source-semantics",
+]
+citations = [
+    "cpp:renderer/src/rive_render_path.hpp:1-86",
+    "cpp:renderer/src/rive_render_path.cpp:1-373",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_hpp.rs:1-474",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_path_cpp.rs:1-529",
+]

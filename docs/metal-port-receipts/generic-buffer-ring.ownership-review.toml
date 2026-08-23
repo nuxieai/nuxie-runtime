@@ -1,0 +1,30 @@
+schema_version = 1
+unit = "generic-buffer-ring"
+receipt_kind = "ownership-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-buffer-ring.ownership-review.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:renderer/include/rive/renderer/buffer_ring.hpp:1-99",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/buffer_ring_hpp.rs:1-325",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/buffer_ring_hpp.rs" = "2f1f6a5a1d1dade80aa4034eaa2ba6013e6ef39f5024ade7c7516814cf3eefd8" }
+findings = []
+review_run_id = "sol-v9-ownership-global-20260822-frozen-final-clean-890d85c1"
+coverage = [
+    "fields",
+    "lifetimes",
+    "threads",
+    "retain-release",
+    "drop-order",
+    "unsafe-invariants",
+    "divergences",
+]
+citations = [
+    "cpp:renderer/include/rive/renderer/buffer_ring.hpp:1-99",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/buffer_ring_hpp.rs:1-325",
+]

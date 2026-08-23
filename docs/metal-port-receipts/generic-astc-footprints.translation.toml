@@ -1,0 +1,20 @@
+schema_version = 1
+unit = "generic-astc-footprints"
+receipt_kind = "translation"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "luna-extra-high"
+open_findings = 0
+omitted_lines = 0
+omitted_declarations = 0
+omitted_conditionals = 0
+omitted_include_owners = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/generic-astc-footprints.translation.toml :: exit=0 :: count=2",
+]
+evidence = [
+    "cpp:decoders/include/rive/decoders/astc_footprints.hpp:1-61",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/decoders/include/rive/decoders/astc_footprints_hpp.rs:1-141",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/decoders/include/rive/decoders/astc_footprints_hpp.rs" = "3ac677e37ccd21642cc73672eec5e61030ff222e17ca1ea82865d3241df9d7fe" }
+source_digests = { "decoders/include/rive/decoders/astc_footprints.hpp" = "6f392e603c55713e3e3d2a8931cd67e4fb02af975cd32a3e5d6375db2fe077a7" }

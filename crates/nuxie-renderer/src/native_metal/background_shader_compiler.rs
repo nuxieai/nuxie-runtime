@@ -239,7 +239,11 @@ pub(crate) fn build_metal_shader_compile_request(
                 ApplePlatform::IosDevice { .. } | ApplePlatform::IosSimulator { .. } => {
                     MetalLanguageVersion::Version2_2
                 }
-                ApplePlatform::MacOs => MetalLanguageVersion::Version2_3,
+                ApplePlatform::XrOsDevice { .. }
+                | ApplePlatform::XrOsSimulator
+                | ApplePlatform::AppleTvOsDevice { .. }
+                | ApplePlatform::AppleTvOsSimulator
+                | ApplePlatform::MacOs => MetalLanguageVersion::Version2_3,
             },
             fast_math_enabled: true,
             preserve_invariance_when_available: true,
@@ -319,18 +323,29 @@ fn wait_recovering_poison<'a, T>(
 
 #[cfg(all(
     feature = "native-metal-experimental",
-    any(target_os = "ios", target_os = "macos")
+    any(
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "tvos",
+        target_os = "visionos"
+    )
 ))]
 mod native {
     use super::*;
     use objc2::rc::{autoreleasepool, Retained};
     use objc2::runtime::{NSObject, ProtocolObject};
     use objc2::{available, msg_send};
-    use objc2_foundation::{NSMutableDictionary, NSString};
+    use objc2_foundation::{NSError, NSMutableDictionary, NSString};
     use objc2_metal::{MTLCompileOptions, MTLDevice, MTLLanguageVersion, MTLLibrary};
 
+    pub(crate) struct NativeMetalLibraryCreation {
+        pub(crate) library: Option<Retained<ProtocolObject<dyn MTLLibrary>>>,
+        pub(crate) error: Option<String>,
+        pub(crate) source: String,
+    }
+
     pub(crate) type NativeBackgroundShaderCompiler =
-        BackgroundShaderCompiler<Retained<ProtocolObject<dyn MTLLibrary>>>;
+        BackgroundShaderCompiler<NativeMetalLibraryCreation>;
 
     impl NativeBackgroundShaderCompiler {
         pub(crate) fn new_metal(
@@ -347,7 +362,7 @@ mod native {
     fn compile_library(
         device: &ProtocolObject<dyn MTLDevice>,
         request: &MetalShaderCompileRequest,
-    ) -> Result<Retained<ProtocolObject<dyn MTLLibrary>>, MetalLibraryCompileFailure> {
+    ) -> Result<NativeMetalLibraryCreation, MetalLibraryCompileFailure> {
         let options = MTLCompileOptions::new();
         options.setLanguageVersion(match request.options.language_version {
             MetalLanguageVersion::Version2_2 => MTLLanguageVersion::Version2_2,
@@ -381,22 +396,37 @@ mod native {
             options.setPreprocessorMacros(Some(&macros));
         }
 
-        device
-            .newLibraryWithSource_options_error(
-                &NSString::from_str(&request.source),
-                Some(&options),
-            )
-            .map_err(|error| MetalLibraryCompileFailure {
-                localized_description: Some(error.localizedDescription().to_string()),
-            })
+        let source = NSString::from_str(&request.source);
+        let mut error: Option<Retained<NSError>> = None;
+        // SAFETY: The typed receiver, arguments, +1 `new` result, and NSError
+        // out-parameter exactly match `newLibraryWithSource:options:error:`.
+        // Keeping both outputs independent preserves the valid nonnil/nonnil
+        // state before applying the source's `err != nil || library == nil`.
+        let creation = NativeMetalLibraryCreation {
+            library: unsafe {
+                msg_send![device,
+                    newLibraryWithSource: &*source,
+                    options: Some(&*options),
+                    error: &mut error
+                ]
+            },
+            error: error.map(|error| error.localizedDescription().to_string()),
+            source: request.source.clone(),
+        };
+        Ok(creation)
     }
 }
 
 #[cfg(all(
     feature = "native-metal-experimental",
-    any(target_os = "ios", target_os = "macos")
+    any(
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "tvos",
+        target_os = "visionos"
+    )
 ))]
-pub(crate) use native::NativeBackgroundShaderCompiler;
+pub(crate) use native::{NativeBackgroundShaderCompiler, NativeMetalLibraryCreation};
 
 #[cfg(test)]
 mod tests {
@@ -751,6 +781,7 @@ mod tests {
     #[test]
     fn live_metal_compiles_the_materialized_image_mesh_source() {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
+            crate::live_metal_test_unavailable("system Metal device");
             return;
         };
         let compiler =

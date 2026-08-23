@@ -127,20 +127,6 @@ pub struct AppleSurface {
     attached: bool,
 }
 
-#[cfg(feature = "native-metal-experimental")]
-impl crate::NativeMetalFactory {
-    /// Begins a native Metal frame from one caller-acquired drawable. The
-    /// texture is derived from that same object so rendering and presentation
-    /// cannot accidentally target different native owners.
-    pub fn begin_drawable_frame<'a>(
-        &self,
-        drawable: &'a ProtocolObject<dyn CAMetalDrawable>,
-        clear_color: u32,
-    ) -> Result<crate::NativeMetalDrawableFrame<'a>, RendererError> {
-        self.begin_drawable_frame_parts(drawable.as_ref(), drawable.texture(), clear_color)
-    }
-}
-
 /// One Objective-C +1 `MTLDevice` copy whose ownership has not yet crossed an
 /// FFI boundary. Dropping it releases the copy; `into_raw` transfers it.
 pub struct AppleMetalDevice {

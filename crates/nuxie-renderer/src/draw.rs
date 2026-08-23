@@ -14,6 +14,7 @@ use bytemuck::Zeroable;
 use nuxie_render_api::{FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
 use smallvec::SmallVec;
 
+#[cfg(any(feature = "rust-wgpu", test))]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Contour {
     pub points: Vec<Vec2D>,
@@ -44,6 +45,7 @@ impl Clone for FillTessellation {
 
 pub(crate) struct StrokeTessellation {
     pub tessellation: FillTessellation,
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub local_contour_ids_are_dense: bool,
 }
 
@@ -74,6 +76,7 @@ impl Clone for InteriorTessellation {
 }
 
 impl InteriorTessellation {
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub(crate) fn visit_triangles(
         &self,
         path_id: u16,
@@ -158,6 +161,7 @@ pub(crate) struct StrokePreparationScratch {
 }
 
 impl StrokePreparationScratch {
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub(crate) fn retained_capacity_bytes(&self) -> usize {
         let contour_bytes = self
             .contours
@@ -188,6 +192,7 @@ impl StrokePreparationScratch {
             )
     }
 
+    #[cfg(any(feature = "rust-wgpu", test))]
     pub(crate) fn reset_for_reuse(&mut self) {
         for contour in &mut self.contours {
             contour.curves.clear();
@@ -253,6 +258,7 @@ pub(crate) fn build_stroke_tessellation_with_layout_using_scratch(
         transform,
         Some((thickness, join, cap)),
         0.0,
+        false,
         scratch,
     )
 }
@@ -298,14 +304,74 @@ pub(crate) fn build_feather_tessellation_with_direction(
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     fill_direction: FeatherFillDirection,
 ) -> Option<StrokeTessellation> {
+    build_feather_tessellation_with_direction_impl(
+        path,
+        transform,
+        paint_feather,
+        stroke,
+        fill_direction,
+        true,
+    )
+}
+
+/// Builds source `PathDraw` feather geometry from the path that
+/// `RiveRenderer::drawPath` has already softened when required.
+///
+/// The generic logical renderer enters through
+/// `build_feather_tessellation_with_direction` with an original path and owns
+/// that source preparation itself. The mechanical renderer enters here after
+/// translating the earlier `RiveRenderer::drawPath` preparation step, so
+/// repeating it would soften large-feather fills twice.
+#[cfg(any(
+    test,
+    all(
+        feature = "native-metal-experimental",
+        any(
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "tvos",
+            target_os = "visionos"
+        )
+    )
+))]
+pub(crate) fn build_prepared_feather_tessellation_with_direction(
+    path: &RawPath,
+    transform: Mat2D,
+    paint_feather: f32,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+    fill_direction: FeatherFillDirection,
+) -> Option<StrokeTessellation> {
+    build_feather_tessellation_with_direction_impl(
+        path,
+        transform,
+        paint_feather,
+        stroke,
+        fill_direction,
+        false,
+    )
+}
+
+fn build_feather_tessellation_with_direction_impl(
+    path: &RawPath,
+    transform: Mat2D,
+    paint_feather: f32,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+    fill_direction: FeatherFillDirection,
+    soften_feather_fill: bool,
+) -> Option<StrokeTessellation> {
     #[cfg(test)]
     FEATHER_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
     let feather_radius = paint_feather * 1.5;
     if feather_radius <= 0.0 || !feather_radius.is_finite() {
         return None;
     }
-    let mut tessellation =
-        build_stroke_or_feather_tessellation(path, transform, stroke, paint_feather)?;
+    let mut tessellation = build_stroke_or_feather_tessellation(
+        path,
+        transform,
+        stroke,
+        paint_feather,
+        soften_feather_fill,
+    )?;
     if stroke.is_none() {
         match fill_direction {
             FeatherFillDirection::Forward => {}
@@ -344,8 +410,42 @@ pub(crate) fn feather_pixel_bounds(
     paint_feather: f32,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
 ) -> Option<[i32; 4]> {
+    feather_pixel_bounds_impl(path, transform, paint_feather, stroke, true)
+}
+
+/// Source `PathDraw::Make` bounds for a path already prepared by
+/// `RiveRenderer::drawPath`.
+#[cfg(any(
+    test,
+    all(
+        feature = "native-metal-experimental",
+        any(
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "tvos",
+            target_os = "visionos"
+        )
+    )
+))]
+pub(crate) fn prepared_feather_pixel_bounds(
+    path: &RawPath,
+    transform: Mat2D,
+    paint_feather: f32,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+) -> Option<[i32; 4]> {
+    feather_pixel_bounds_impl(path, transform, paint_feather, stroke, false)
+}
+
+fn feather_pixel_bounds_impl(
+    path: &RawPath,
+    transform: Mat2D,
+    paint_feather: f32,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+    soften_feather_fill: bool,
+) -> Option<[i32; 4]> {
     let matrix_scale = max_matrix_scale(transform);
-    let softened_path = (stroke.is_none()
+    let softened_path = (soften_feather_fill
+        && stroke.is_none()
         && feather_fill_requires_softening(paint_feather, matrix_scale))
     .then(|| softened_path_for_feathering(path, paint_feather * 1.5, matrix_scale));
     let path = softened_path.as_ref().unwrap_or(path);
@@ -398,6 +498,7 @@ fn transformed_control_bounds(path: &RawPath, transform: Mat2D) -> Option<(Vec2D
     Some((min, max))
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 pub(crate) fn clockwise_atomic_coverage_range(
     path: &RawPath,
     transform: Mat2D,
@@ -409,6 +510,7 @@ pub(crate) fn clockwise_atomic_coverage_range(
     clockwise_atomic_coverage_range_from_bounds(bounds, viewport_width, viewport_height, offset)
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 pub(crate) fn clockwise_atomic_coverage_range_from_bounds(
     [left, top, right, bottom]: [i32; 4],
     viewport_width: u32,
@@ -446,6 +548,7 @@ fn build_stroke_or_feather_tessellation(
     transform: Mat2D,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     paint_feather: f32,
+    soften_feather_fill: bool,
 ) -> Option<StrokeTessellation> {
     let mut scratch = StrokePreparationScratch::default();
     build_stroke_or_feather_tessellation_using_scratch(
@@ -453,6 +556,7 @@ fn build_stroke_or_feather_tessellation(
         transform,
         stroke,
         paint_feather,
+        soften_feather_fill,
         &mut scratch,
     )
 }
@@ -462,11 +566,13 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     transform: Mat2D,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     paint_feather: f32,
+    soften_feather_fill: bool,
     scratch: &mut StrokePreparationScratch,
 ) -> Option<StrokeTessellation> {
     let matrix_scale = max_matrix_scale(transform);
     let feather_radius = paint_feather * 1.5;
-    let softened_path = (stroke.is_none()
+    let softened_path = (soften_feather_fill
+        && stroke.is_none()
         && feather_fill_requires_softening(paint_feather, matrix_scale))
     .then(|| softened_path_for_feathering(path, feather_radius, matrix_scale));
     let path = softened_path.as_ref().unwrap_or(path);
@@ -579,6 +685,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     }
     let mut spans = Vec::new();
     let mut contour_data = Vec::with_capacity(contours.len());
+    #[cfg(any(feature = "rust-wgpu", test))]
     let mut local_contour_ids_are_dense = true;
     let mut location = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32;
     push_padding_span(&mut spans, 0, location);
@@ -592,7 +699,10 @@ fn build_stroke_or_feather_tessellation_using_scratch(
         if curves.is_empty() && !is_stroke {
             // There is a contour record but no span carrying this local ID.
             // Preserve the generic validation/fallback for this sparse layout.
-            local_contour_ids_are_dense = false;
+            #[cfg(any(feature = "rust-wgpu", test))]
+            {
+                local_contour_ids_are_dense = false;
+            }
             contour_data.push(ContourData::new([f32::NAN, f32::NAN], 0, contour_start));
             continue;
         }
@@ -607,6 +717,14 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                 cap
             };
             if empty_cap == StrokeCap::Butt {
+                // Source still publishes a contour record for an empty stroke
+                // when another contour makes the draw nonempty. Keep local IDs
+                // dense even though this contour contributes no tessellation.
+                contour_data.push(ContourData::new(
+                    [if contour.closed { 1.0 } else { 0.0 }, 0.0],
+                    0,
+                    contour_start,
+                ));
                 continue;
             }
             let empty_cap_segments = match empty_cap {
@@ -742,8 +860,11 @@ fn build_stroke_or_feather_tessellation_using_scratch(
         } else {
             contour_midpoint(curves)
         };
-        local_contour_ids_are_dense &=
-            u32::try_from(contour_data.len() + 1).ok() == Some(contour_id);
+        #[cfg(any(feature = "rust-wgpu", test))]
+        {
+            local_contour_ids_are_dense &=
+                u32::try_from(contour_data.len() + 1).ok() == Some(contour_id);
+        }
         contour_data.push(ContourData::new([midpoint.x, midpoint.y], 0, contour_start));
         for (index, (curve, tangent, parametric, polar, join, flags)) in
             pending.drain(..).enumerate()
@@ -786,6 +907,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
             base_instance: 1,
             instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
         },
+        #[cfg(any(feature = "rust-wgpu", test))]
         local_contour_ids_are_dense,
     })
 }
@@ -1072,7 +1194,7 @@ fn stroke_contours(path: &RawPath, contours: &mut Vec<StrokeContour>) -> Option<
     Some(contour_count)
 }
 
-fn cubic_tangents(curve: [Vec2D; 4]) -> [Vec2D; 2] {
+pub(crate) fn cubic_tangents(curve: [Vec2D; 4]) -> [Vec2D; 2] {
     let start_control = if !same_point(curve[0], curve[1]) {
         curve[1]
     } else if !same_point(curve[1], curve[2]) {
@@ -1093,7 +1215,7 @@ fn cubic_tangents(curve: [Vec2D; 4]) -> [Vec2D; 2] {
     ]
 }
 
-fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool) {
+pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool) {
     const TESS_EPSILON: f32 = 1.0 / 1024.0;
     let c_vector = subtract(points[1], points[0]);
     let d = subtract(points[2], points[1]);
@@ -1144,7 +1266,7 @@ fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool) {
     (roots, are_cusps)
 }
 
-fn chop_cubic_at_values(curve: [Vec2D; 4], roots: &[f32]) -> Vec<[Vec2D; 4]> {
+pub(crate) fn chop_cubic_at_values(curve: [Vec2D; 4], roots: &[f32]) -> Vec<[Vec2D; 4]> {
     let mut result = Vec::with_capacity(roots.len() + 1);
     let mut remaining = curve;
     let mut last_t = 0.0;
@@ -1251,6 +1373,7 @@ fn split_cubic(curve: [Vec2D; 4], t: f32) -> ([Vec2D; 4], [Vec2D; 4]) {
 }
 
 fn max_matrix_scale(transform: Mat2D) -> f32 {
+    const MATH_EPSILON: f32 = 1.0 / 4096.0;
     let [xx, yx, xy, yy, _, _] = transform.0;
     if xy == 0.0 && yx == 0.0 {
         return xx.abs().max(yy.abs());
@@ -1258,7 +1381,7 @@ fn max_matrix_scale(transform: Mat2D) -> f32 {
     let a = xx * xx + xy * xy;
     let b = xx * yx + yy * xy;
     let c = yx * yx + yy * yy;
-    let result = if b * b <= f32::EPSILON * f32::EPSILON {
+    let result = if b * b <= MATH_EPSILON * MATH_EPSILON {
         a.max(c)
     } else {
         (a + c) * 0.5 + ((a - c) * (a - c) + 4.0 * b * b).sqrt() * 0.5
@@ -1501,28 +1624,45 @@ pub(crate) fn build_interior_tessellation(
 ) -> Option<InteriorTessellation> {
     #[cfg(test)]
     INTERIOR_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
-    let cubic_contours = cubic_contours(path)
-        .into_iter()
-        .map(|curves| {
-            curves
-                .into_iter()
-                .flat_map(|curve| {
-                    let subdivision_count = outer_cubic_subdivision_count(curve, transform);
-                    subdivide_cubic(curve, subdivision_count)
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-    if cubic_contours.is_empty() {
+    #[derive(Clone, Copy)]
+    enum OuterPatch {
+        Cubic([Vec2D; 4]),
+        Glue([Vec2D; 3]),
+    }
+
+    fn append_middle_out_glue(
+        subdivisions: &[[Vec2D; 4]],
+        first: usize,
+        last: usize,
+        patches: &mut Vec<OuterPatch>,
+    ) {
+        if last - first < 2 {
+            return;
+        }
+        let middle = (first + last) / 2;
+        patches.push(OuterPatch::Glue([
+            subdivisions[first][0],
+            subdivisions[middle][0],
+            subdivisions[last - 1][3],
+        ]));
+        append_middle_out_glue(subdivisions, first, middle, patches);
+        append_middle_out_glue(subdivisions, middle, last, patches);
+    }
+
+    let cubic_contours = interior_cubic_contours(path);
+    if cubic_contours.iter().all(Vec::is_empty) {
         return None;
     }
-    let mut scratch = RawPath::new();
+    let mut outer_patch_contours = Vec::with_capacity(cubic_contours.len());
     for curves in &cubic_contours {
-        let first = curves.first()?;
-        scratch.move_to(first[0].x, first[0].y);
-        for curve in curves {
-            scratch.line_to(curve[3].x, curve[3].y);
+        let mut patches = Vec::new();
+        for &curve in curves {
+            let subdivision_count = outer_cubic_subdivision_count(curve, transform);
+            let subdivisions = subdivide_cubic(curve, subdivision_count);
+            patches.extend(subdivisions.iter().copied().map(OuterPatch::Cubic));
+            append_middle_out_glue(&subdivisions, 0, subdivisions.len(), &mut patches);
         }
+        outer_patch_contours.push(patches);
     }
     let mut min = path.points()[0];
     let mut max = min;
@@ -1550,26 +1690,27 @@ pub(crate) fn build_interior_tessellation(
     } else {
         fill_rule
     };
+    // The inner fan consumes the authored RawPath. Outer-curve subdivision
+    // points are only for the outer patches; feeding them to the triangulator
+    // changes the polygon and drops move-only contours.
     let mut triangulator =
-        InnerFanTriangulator::new(&scratch, transform, direction, effective_fill_rule);
+        InnerFanTriangulator::new(path, transform, direction, effective_fill_rule);
     if (determinant < 0.0) != negate_coverage {
         triangulator.negate_winding();
     }
     let triangles = triangulator.triangles(1, WindingFaces::All);
-    // Count the NonZero superset from the already-built mesh. This is the same
-    // allocation-free polygon bound as C++ and stays conservative if admission
-    // selects a different fill variant from the final atomic run.
-    let max_triangle_vertex_count = triangulator.non_zero_max_triangle_vertex_count();
+    // Source sizes the triangle mapping for the authored effective fill rule.
+    let max_triangle_vertex_count = triangulator.max_vertex_count();
     let grout = triangulator.grout_triangles().to_vec();
     let base = OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
-    let curve_count = cubic_contours.iter().map(Vec::len).sum::<usize>();
-    let patch_count = curve_count + grout.len();
+    let outer_patch_count = outer_patch_contours.iter().map(Vec::len).sum::<usize>();
+    let patch_count = outer_patch_count + grout.len();
     let half_vertex_count = (patch_count * OUTER_CURVE_PATCH_SEGMENT_SPAN) as i32;
     let mut spans = Vec::with_capacity(patch_count + 1);
     push_padding_span(&mut spans, 0, base);
     let mut contours = Vec::with_capacity(cubic_contours.len());
     let mut curve_offset = 0i32;
-    for (contour_index, curves) in cubic_contours.iter().enumerate() {
+    for (contour_index, patches) in outer_patch_contours.iter().enumerate() {
         let forward_base = if negate_coverage {
             base
         } else {
@@ -1580,9 +1721,20 @@ pub(crate) fn build_interior_tessellation(
             1,
             (forward_base + curve_offset) as u32,
         ));
-        for curve in curves {
+        for patch in patches {
+            let (points, flags) = match patch {
+                OuterPatch::Cubic(curve) => (
+                    (*curve).map(|point| [point.x, point.y]),
+                    CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
+                ),
+                OuterPatch::Glue(triangle) => (
+                    [triangle[0], triangle[1], Vec2D::new(0.0, 0.0), triangle[2]]
+                        .map(|point| [point.x, point.y]),
+                    RETROFITTED_TRIANGLE_CONTOUR_FLAG,
+                ),
+            };
             let span = TessVertexSpan::without_reflection(
-                curve.map(|point| [point.x, point.y]),
+                points,
                 [0.0, 0.0],
                 0.0,
                 0,
@@ -1591,7 +1743,7 @@ pub(crate) fn build_interior_tessellation(
                 1,
                 1,
                 ((contour_index as u32 + 1) & CONTOUR_ID_MASK)
-                    | CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG
+                    | flags
                     | u32::from(negate_coverage) * NEGATE_PATH_FILL_COVERAGE_FLAG,
             );
             push_double_sided_tessellation_spans(
@@ -1814,6 +1966,7 @@ pub(crate) fn msaa_fill_requires_reverse(
     msaa_fill_requires_reverse_from_area(path_coarse_area(path), transform, fill_rule)
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 pub(crate) fn msaa_fill_requires_reverse_from_area(
     coarse_area: f32,
     transform: Mat2D,
@@ -2165,11 +2318,79 @@ fn fill_cubic_contours(path: &RawPath) -> Vec<Vec<StrokeCurve>> {
     result
 }
 
-fn cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
-    fill_cubic_contours(path)
-        .into_iter()
-        .map(|curves| curves.into_iter().map(|curve| curve.cubic).collect())
-        .collect()
+fn interior_cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
+    let mut contours = Vec::new();
+    let mut curves = Vec::new();
+    let mut first: Option<Vec2D> = None;
+    let mut current: Option<Vec2D> = None;
+    let mut point_index = 0;
+    for verb in path.verbs() {
+        match verb {
+            PathVerb::Move => {
+                // iterateInteriorTriangulation closes the previous contour at
+                // the next move using the source's numeric `!=` comparison.
+                // This is deliberately not same_point(): -0 compares equal
+                // to 0 and NaN compares unequal, as in C++.
+                if let (Some(start), Some(end)) = (first, current) {
+                    if end.x != start.x || end.y != start.y {
+                        curves.push(line_cubic(end, start));
+                    }
+                }
+                if first.is_some() {
+                    contours.push(std::mem::take(&mut curves));
+                }
+                let point = path.points()[point_index];
+                point_index += 1;
+                first = Some(point);
+                current = Some(point);
+            }
+            PathVerb::Line => {
+                let end = path.points()[point_index];
+                point_index += 1;
+                if let Some(start) = current {
+                    curves.push(line_cubic(start, end));
+                }
+                current = Some(end);
+            }
+            PathVerb::Quad => {
+                let control = path.points()[point_index];
+                let end = path.points()[point_index + 1];
+                point_index += 2;
+                if let Some(start) = current {
+                    curves.push([
+                        start,
+                        lerp(start, control, 2.0 / 3.0),
+                        lerp(end, control, 2.0 / 3.0),
+                        end,
+                    ]);
+                }
+                current = Some(end);
+            }
+            PathVerb::Cubic => {
+                let control0 = path.points()[point_index];
+                let control1 = path.points()[point_index + 1];
+                let end = path.points()[point_index + 2];
+                point_index += 3;
+                if let Some(start) = current {
+                    curves.push([start, control0, control1, end]);
+                }
+                current = Some(end);
+            }
+            PathVerb::Close => {
+                // The source iterator handles closure at the next move or
+                // after the loop; `close` itself does not emit a segment.
+            }
+        }
+    }
+    if let (Some(start), Some(end)) = (first, current) {
+        if end.x != start.x || end.y != start.y {
+            curves.push(line_cubic(end, start));
+        }
+    }
+    if first.is_some() {
+        contours.push(curves);
+    }
+    contours
 }
 
 fn line_cubic(start: Vec2D, end: Vec2D) -> [Vec2D; 4] {
@@ -2277,6 +2498,7 @@ fn push_forward_tessellation_spans(
     }
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 pub(crate) fn tessellation_texture_height(spans: &[TessVertexSpan]) -> u32 {
     spans.iter().map(|span| span.y as u32).max().unwrap_or(0) + 1
 }
@@ -2285,6 +2507,7 @@ fn align_up(value: i32, alignment: i32) -> i32 {
     ((value + alignment - 1) / alignment) * alignment
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 pub(crate) fn flatten_path(path: &RawPath, transform: Mat2D) -> Vec<Contour> {
     let mut contours = Vec::new();
     let mut contour = None::<Contour>;
@@ -2360,6 +2583,7 @@ pub(crate) fn flatten_path(path: &RawPath, transform: Mat2D) -> Vec<Contour> {
     contours
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 fn ensure_contour(contour: &mut Option<Contour>) -> &mut Contour {
     contour.get_or_insert_with(|| Contour {
         points: vec![Vec2D::new(0.0, 0.0)],
@@ -2367,6 +2591,7 @@ fn ensure_contour(contour: &mut Option<Contour>) -> &mut Contour {
     })
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 fn finish_contour(contours: &mut Vec<Contour>, contour: Option<Contour>) {
     if let Some(mut contour) = contour {
         contour.points.dedup_by(|a, b| same_point(*a, *b));
@@ -2390,6 +2615,7 @@ fn points_equal(a: Vec2D, b: Vec2D) -> bool {
     a.x == b.x && a.y == b.y
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 fn append_cubic(contour: &mut Contour, cubic: [Vec2D; 4]) {
     let segment_count = cubic_segment_count(cubic);
     for segment in 1..=segment_count {
@@ -2399,10 +2625,12 @@ fn append_cubic(contour: &mut Contour, cubic: [Vec2D; 4]) {
     }
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 pub(crate) fn cubic_segment_count(points: [Vec2D; 4]) -> u32 {
     cubic_segment_count_with_precision(points, PARAMETRIC_PRECISION as f32)
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 fn cubic_segment_count_with_precision(points: [Vec2D; 4], precision: f32) -> u32 {
     cubic_segment_count_with_precision_and_transform(points, precision, Mat2D::IDENTITY)
 }
@@ -2435,6 +2663,7 @@ fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D)
     )
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 pub(crate) fn triangulate_contour(points: &[Vec2D]) -> Option<Vec<u32>> {
     if points.len() < 3 {
         return None;
@@ -2483,6 +2712,7 @@ pub(crate) fn triangulate_contour(points: &[Vec2D]) -> Option<Vec<u32>> {
     Some(indices)
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 fn signed_area(points: &[Vec2D]) -> f32 {
     points
         .iter()
@@ -2492,10 +2722,12 @@ fn signed_area(points: &[Vec2D]) -> f32 {
         * 0.5
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 fn cross(a: Vec2D, b: Vec2D, c: Vec2D) -> f32 {
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
 }
 
+#[cfg(any(feature = "rust-wgpu", test))]
 fn point_in_triangle(point: Vec2D, a: Vec2D, b: Vec2D, c: Vec2D, winding: f32) -> bool {
     cross(a, b, point) * winding >= 0.0
         && cross(b, c, point) * winding >= 0.0
@@ -3128,6 +3360,23 @@ mod tests {
     }
 
     #[test]
+    fn interior_open_contours_get_source_implicit_close() {
+        let mut open = RawPath::new();
+        open.move_to(0.0, 0.0);
+        open.line_to(100.0, 0.0);
+        open.line_to(100.0, 100.0);
+
+        let mut explicitly_closed = open.clone();
+        explicitly_closed.close();
+
+        assert_eq!(
+            interior_cubic_contours(&open),
+            interior_cubic_contours(&explicitly_closed)
+        );
+        assert_eq!(interior_cubic_contours(&open)[0].len(), 3);
+    }
+
+    #[test]
     fn mirrored_clockwise_interior_uses_forward_then_reverse_layout() {
         let mut path = RawPath::new();
         path.move_to(1600.0, 0.0);
@@ -3156,7 +3405,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(positive.contours[0].vertex_index0, 493);
+        // The source middle-out glue patches are part of the forward half of
+        // the double-sided allocation, so the positive contour begins after
+        // the complete reflected half rather than after only authored cubics.
+        assert_eq!(positive.contours[0].vertex_index0, 799);
         assert_eq!(mirrored.contours[0].vertex_index0, 17);
         assert_ne!(
             positive.spans[1].reflection_x0_x1,
@@ -3456,6 +3708,55 @@ mod tests {
                 let (x0, x1) = span.x_range();
                 x0 > x1 && span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0
             }));
+    }
+
+    #[test]
+    fn source_prepared_large_feather_cusp_is_not_softened_twice() {
+        let mut source = RawPath::new();
+        source.move_to(0.0, 100.0);
+        source.move_to(0.0, 100.0);
+        source.cubic_to(90.0, 0.0, 10.0, 0.0, 100.0, 100.0);
+        let transform = Mat2D([1.463, 0.0, 0.0, 1.463, 50.0, 50.0]);
+        let feather = 4.0f32.exp();
+        let softened =
+            softened_path_for_feathering(&source, feather * 1.5, max_matrix_scale(transform));
+
+        let expected = build_feather_tessellation_with_direction(
+            &source,
+            transform,
+            feather,
+            None,
+            FeatherFillDirection::Forward,
+        )
+        .unwrap();
+        let prepared = build_prepared_feather_tessellation_with_direction(
+            &softened,
+            transform,
+            feather,
+            None,
+            FeatherFillDirection::Forward,
+        )
+        .unwrap();
+
+        assert_stroke_tessellation_bytes_eq(&prepared, &expected);
+        assert_eq!(
+            prepared_feather_pixel_bounds(&softened, transform, feather, None),
+            feather_pixel_bounds(&source, transform, feather, None)
+        );
+
+        let incorrectly_unprepared = build_prepared_feather_tessellation_with_direction(
+            &source,
+            transform,
+            feather,
+            None,
+            FeatherFillDirection::Forward,
+        )
+        .unwrap();
+        assert_ne!(
+            bytemuck::cast_slice::<_, u8>(&incorrectly_unprepared.tessellation.spans),
+            bytemuck::cast_slice::<_, u8>(&expected.tessellation.spans),
+            "the regression fixture must distinguish an original path from the source-softened path"
+        );
     }
 
     #[test]

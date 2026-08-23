@@ -1,0 +1,32 @@
+schema_version = 1
+unit = "metal-background-shader-compiler"
+receipt_kind = "source-review"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "b7123c75342748959ce61d8f92a30d4cfaa18be5"
+role = "sol-high"
+open_findings = 0
+commands = [
+    "python3 tools/metal-port/check_receipt_evidence.py --repo-root . --upstream-root \"$RIVE_RUNTIME_DIR\" --manifest docs/metal-port-manifest.toml --receipt docs/metal-port-receipts/metal-background-shader-compiler.source-review.toml :: exit=0 :: count=4",
+]
+evidence = [
+    "cpp:renderer/src/metal/background_shader_compiler.h:1-62",
+    "cpp:renderer/src/metal/background_shader_compiler.mm:1-346",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_h.rs:1-88",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs:1-3276",
+]
+artifact_digests = { "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_h.rs" = "b18da519776c7aea5c0ddca3fc16cdcd51ae708727304be0f2a77353822273b7", "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs" = "890d85c172761c54c4bc2dc3d4f7100ebd14f7cc93ba1931293edf6004fbeaad" }
+findings = []
+review_run_id = "sol-v9-source-global-20260822-final-clean-45b6f0b3"
+coverage = [
+    "owned-source-lines",
+    "declarations",
+    "conditionals",
+    "include-owners",
+    "source-semantics",
+]
+citations = [
+    "cpp:renderer/src/metal/background_shader_compiler.h:1-62",
+    "cpp:renderer/src/metal/background_shader_compiler.mm:1-346",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_h.rs:1-88",
+    "rust:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs:1-3276",
+]

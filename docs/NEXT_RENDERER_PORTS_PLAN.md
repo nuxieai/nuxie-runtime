@@ -22,13 +22,21 @@ passes, or a related backend already has a plausible Rust abstraction.
 
 | Backend | Port disposition | Shipping disposition |
 | --- | --- | --- |
-| Vulkan | Complete concrete renderer-platform and ORE source port | Experimental until a separate product cutover decision |
-| WebGPU | Complete source and ownership correspondence audit of the existing Rust backend, followed by owner-bounded correction | Remains the sole shipping browser backend |
-| WebGL2 | Complete upstream GL/WebGL2 reference-parity port | Reference-only; do not restore the retired public backend, selector, dependencies, or fallback |
+| Vulkan | Complete concrete renderer-platform and ORE source port | Available as an exact backend after closeout; shipping selection remains a separate product decision |
+| WebGPU | Complete new renderer-platform and ORE source port | Replaces the legacy Rust-WGPU implementation after all three exact ports pass closeout |
+| WebGL2 | Complete concrete GL/WebGL2 renderer-platform and ORE source port | Added as an explicitly selectable backend in the web editor alongside WebGPU |
 
-WebGL2's reference-only status preserves the decision in
-`webgpu-only-browser-cut.md`. Port completion is not permission to expand the
-browser product support matrix.
+`webgpu-only-browser-cut.md` records the previous product state, not the target
+state of this campaign. The campaign deliberately reverses that cut for the web
+editor by adding an exact WebGL2 backend and explicit selection. It does not
+silently introduce failure-triggered fallback; fallback policy requires its own
+explicit product contract.
+
+The current Rust-WGPU implementation is legacy evidence during translation. It
+must remain intact until Vulkan, the new WebGPU port, and WebGL2 all pass frozen
+closeout. The cutover queue then roots the new WebGPU and WebGL2 implementations,
+removes the legacy Rust-WGPU implementation and its exclusive dependencies, and
+proves that no legacy route remains.
 
 ## Authority order
 
@@ -58,11 +66,11 @@ because later commands are available.
    compiler-inert targets, stubs, and success-returning no-ops.
 4. **Vulkan translation:** translate complete Vulkan renderer and ORE owners in
    dependency order.
-5. **WebGPU correspondence:** compare the complete existing Rust-WGPU backend
-   to pinned C++ WebGPU/Dawn owners and translate or correct complete owners in
-   dependency order.
-6. **WebGL2 translation:** translate complete GL/WebGL2 owners as a
-   reference-only backend without reconnecting product APIs.
+5. **WebGPU translation:** translate complete C++ WebGPU/Dawn owners into a new
+   exact backend in dependency order. Use the legacy Rust-WGPU backend only as
+   secondary diagnostic evidence.
+6. **WebGL2 translation:** translate complete GL/WebGL2 owners into a concrete
+   browser backend in dependency order.
 7. **Source review:** independently compare every complete backend source and
    generated authority to its Rust correspondence.
 8. **Ownership review:** independently attack lifetime, native handles,
@@ -76,11 +84,15 @@ because later commands are available.
     reference seam, not a fixture-specific path.
 12. **Behavior and platform queues:** run primary-oracle parity, lifecycle,
     hostile failure, generated artifact, physical-work, platform/browser, and
-    forbidden-fallback gates.
+    forbidden-unselected-route gates.
 13. **Frozen-byte closeout:** rerun independent source and ownership reviews on
     the exact bytes that passed parity.
-14. **Post-green work:** only after closeout, consider idiomatic cleanup,
-    unsafe reduction, deduplication, or a shared backend interface.
+14. **Product cutover:** after all three ports pass closeout, add explicit
+    WebGPU/WebGL2 selection to the web editor, switch WebGPU to the new exact
+    port, delete the legacy Rust-WGPU implementation, and prove its code and
+    exclusive dependencies are absent from rooted products.
+15. **Post-green work:** only after closeout and cutover, consider idiomatic
+    cleanup, unsafe reduction, deduplication, or a shared backend interface.
 
 ## Preparation completion target
 
@@ -117,15 +129,16 @@ existing Rust code appears related.
 
 ### WebGPU
 
-- Dawn/WebGPU is the primary backend authority; native Metal and Vulkan are
-  diagnostic only;
+- Dawn/WebGPU is the primary backend authority; the legacy Rust-WGPU backend,
+  native Metal, and Vulkan are diagnostic only;
 - adapter selection, Core/Compatibility admission, features, and limits;
 - bind-group layouts, dynamic offsets, copy alignment, and implicit layouts;
 - error scopes, uncaptured errors, device loss, mapping, and async pipeline
   ownership;
 - exact SPIR-V-to-WGSL generation and immutable WGSL identities;
 - native Dawn and real-browser execution;
-- explicit proof that browser failure never reaches WebGL2.
+- explicit backend identity proof for both WebGPU and WebGL2 selections;
+- explicit proof that neither selection reaches the legacy Rust-WGPU route.
 
 ### WebGL2
 
@@ -137,7 +150,8 @@ existing Rust code appears related.
 - context loss/restoration and stale resource identity;
 - readback, premultiplied alpha, color space, orientation, MSAA, and resolve;
 - Chromium, Firefox, and Safari reference execution where available;
-- source and artifact isolation from the shipping browser product graph.
+- explicit web-editor selection, rooted artifact identity, and isolation from
+  the legacy Rust-WGPU route.
 
 ## Checkpoint rule
 
@@ -151,6 +165,7 @@ Create immutable commits at these barriers:
 6. rooted execution green;
 7. parity/platform green;
 8. frozen-byte closeout green.
+9. legacy Rust-WGPU deletion and web-editor cutover green.
 
 Receipts and dashboards complement these commits; they do not replace
 reviewable history.

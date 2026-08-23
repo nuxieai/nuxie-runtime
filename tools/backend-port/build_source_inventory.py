@@ -18,7 +18,7 @@ class SourceRow:
     source_kind: str
     source_path: str
     source_sha256: str
-    classification_status: str = "unclassified"
+    classification_status: str = "ownership-ledger"
 
     def tsv(self) -> str:
         return "\t".join(

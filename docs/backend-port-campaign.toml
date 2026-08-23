@@ -8,7 +8,7 @@ queue_order = [
   "preparation",
   "translation-admission",
   "vulkan-translation",
-  "webgpu-correspondence",
+  "webgpu-translation",
   "webgl2-translation",
   "source-review",
   "ownership-review",
@@ -17,16 +17,20 @@ queue_order = [
   "rooted-execution",
   "behavior-platform",
   "frozen-byte-closeout",
+  "product-cutover",
   "post-green",
 ]
 shared_generic_authority = "docs/metal-port-manifest.toml"
 shared_ownership_authority = "docs/metal-port-ownership.toml"
 source_inventory = "docs/backend-port-source-inventory.tsv"
+ownership_inventory = "docs/backend-port-source-ownership.tsv"
+dependency_inventory = "docs/backend-port-dependency-edges.tsv"
+ownership_unit_order = "docs/backend-port-ownership-order.tsv"
 
 [[backend]]
 id = "vulkan"
 upstream_name = "Rive Vulkan renderer and ORE Vulkan"
-product_disposition = "experimental-nonshipping"
+product_disposition = "exact-backend-selection-after-closeout"
 primary_oracle = "pinned C++ Vulkan on the same reported adapter and driver"
 secondary_oracles = ["Rust native Metal", "Rust WebGPU"]
 translation_status = "pending"
@@ -41,9 +45,9 @@ extra_sources = ["renderer/include/rive/renderer/ore/ore_context_vulkan.hpp"]
 [[backend]]
 id = "webgpu"
 upstream_name = "Rive WebGPU renderer, Wagyu browser port, and ORE WGPU"
-product_disposition = "shipping-browser"
+product_disposition = "new-exact-browser-backend-replaces-legacy-rust-wgpu-after-all-ports-close"
 primary_oracle = "pinned C++ Dawn WebGPU on the same reported adapter"
-secondary_oracles = ["Rust native Metal", "future Rust Vulkan"]
+secondary_oracles = ["legacy Rust-WGPU", "Rust native Metal", "future Rust Vulkan"]
 translation_status = "pending"
 preparation_status = "red"
 source_roots = [
@@ -56,7 +60,7 @@ extra_sources = ["renderer/include/rive/renderer/ore/ore_context_wgpu.hpp"]
 [[backend]]
 id = "webgl2"
 upstream_name = "Rive GL renderer WebGL2 configuration and ORE GL"
-product_disposition = "reference-only-no-product-surface"
+product_disposition = "web-editor-selectable-browser-backend"
 primary_oracle = "pinned C++ WebGL2 in the same browser and reported GPU"
 secondary_oracles = ["Rust WebGPU", "pinned C++ native GL where applicable"]
 translation_status = "pending"

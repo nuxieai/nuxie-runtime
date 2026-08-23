@@ -1,0 +1,136 @@
+order_group	component_id	campaign	ownership_unit	dependency_units	source_count
+0	component-000	shader-build-authority	build:pls_renderer		1
+0	component-001	shader-build-authority	build:renderer		1
+0	component-002	shader-build-authority	dependency:dawn		1
+0	component-003	shader-build-authority	dependency:moltenvk		1
+0	component-004	shader-build-authority	dependency:swiftshader		1
+0	component-005	shader-build-authority	shader:build_graph		1
+0	component-006	shader-build-authority	shader:minifier		1
+0	component-007	shader-build-authority	shader:source:advanced_blend		1
+0	component-008	shader-build-authority	shader:source:atomic_draw		1
+0	component-024	shader-build-authority	shader:source:bezier_utils		1
+0	component-025	shader-build-authority	shader:source:blit_texture_as_draw		1
+0	component-009	shader-build-authority	shader:source:common		1
+0	component-010	shader-build-authority	shader:source:constants		1
+0	component-029	shader-build-authority	shader:source:draw_mesh		1
+0	component-051	shader-build-authority	shader:source:draw_msaa_object		1
+0	component-011	shader-build-authority	shader:source:draw_path_common		1
+0	component-030	shader-build-authority	shader:source:draw_raster_order_path		1
+0	component-012	shader-build-authority	shader:source:flush_uniforms		1
+0	component-013	shader-build-authority	shader:source:glsl		1
+0	component-059	shader-build-authority	shader:source:hlsl		1
+0	component-061	shader-build-authority	shader:source:metal		1
+0	component-062	shader-build-authority	shader:source:pls_load_store_ext		1
+0	component-066	shader-build-authority	shader:source:resolve_atlas		1
+0	component-067	shader-build-authority	shader:source:rhi		1
+0	component-014	shader-build-authority	shader:source:specialization		1
+0	component-057	shader-build-authority	shader:source:stencil_draw		1
+0	component-069	shader-build-authority	shader:spirv_header_generator		1
+0	component-070	shader-build-authority	shader:wgsl_header_generator		1
+0	component-073	vulkan	vulkan:ore:bind_group_layout		1
+0	component-076	vulkan	vulkan:ore:sampler		2
+0	component-074	vulkan	vulkan:ore:shader_module		2
+0	component-075	vulkan	vulkan:ore:vulkan_dsl		1
+0	component-071	vulkan	vulkan:renderer:vkutil	vulkan:renderer:vulkan_context	2
+0	component-071	vulkan	vulkan:renderer:vulkan_context	vulkan:renderer:vkutil	2
+0	component-081	vulkan	vulkan:renderer:vulkan_memory_allocator		1
+0	component-082	webgl2	webgl2:ore:bind_group		2
+0	component-083	webgl2	webgl2:renderer:gles3		1
+0	component-108	webgpu	webgpu:renderer:webgpu_compat		1
+0	component-110	webgpu	webgpu:wagyu:.clang_format		1
+0	component-111	webgpu	webgpu:wagyu:README		1
+0	component-112	webgpu	webgpu:wagyu:library_webgpu_stubs		1
+0	component-113	webgpu	webgpu:wagyu:library_webgpu_wagyu_stubs		1
+0	component-098	webgpu	webgpu:wagyu:webgpu	webgpu:wagyu:webgpu_wagyu	2
+0	component-099	webgpu	webgpu:wagyu:webgpu_cpp_chained_struct		1
+0	component-100	webgpu	webgpu:wagyu:webgpu_enum_class_bitmasks		1
+0	component-114	webgpu	webgpu:wagyu:webgpu_port		1
+0	component-098	webgpu	webgpu:wagyu:webgpu_wagyu	webgpu:wagyu:webgpu	1
+1	component-015	shader-build-authority	shader:source:atomic_base	shader:source:advanced_blend;shader:source:atomic_draw;shader:source:common;shader:source:constants;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+1	component-026	shader-build-authority	shader:source:blit_texture_as_draw_filtered	shader:source:blit_texture_as_draw;shader:source:common;shader:source:constants;shader:source:flush_uniforms;shader:source:glsl	1
+1	component-027	shader-build-authority	shader:source:clear_clockwise_atomic_clip	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	2
+1	component-028	shader-build-authority	shader:source:color_ramp	shader:source:common;shader:source:constants;shader:source:flush_uniforms;shader:source:glsl	2
+1	component-048	shader-build-authority	shader:source:draw_fullscreen_quad	shader:source:common;shader:source:constants;shader:source:flush_uniforms;shader:source:glsl	2
+1	component-039	shader-build-authority	shader:source:draw_image_mesh	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_mesh;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	2
+1	component-049	shader-build-authority	shader:source:draw_input_attachment	shader:source:common;shader:source:constants;shader:source:flush_uniforms;shader:source:glsl	2
+1	component-056	shader-build-authority	shader:source:draw_msaa_resolve	shader:source:common;shader:source:constants;shader:source:flush_uniforms;shader:source:glsl	2
+1	component-058	shader-build-authority	shader:source:draw_msaa_stencil	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization;shader:source:stencil_draw	1
+1	component-031	shader-build-authority	shader:source:draw_path	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_path_common;shader:source:draw_raster_order_path;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	2
+1	component-060	shader-build-authority	shader:source:init_clockwise_atomic_workaround	shader:source:common;shader:source:constants;shader:source:draw_path_common;shader:source:glsl	2
+1	component-063	shader-build-authority	shader:source:render_atlas	shader:source:render_atlas_common	2
+1	component-063	shader-build-authority	shader:source:render_atlas_common	shader:source:common;shader:source:constants;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:render_atlas	1
+1	component-068	shader-build-authority	shader:source:tessellate	shader:source:bezier_utils;shader:source:common;shader:source:constants;shader:source:flush_uniforms;shader:source:glsl	2
+1	component-072	vulkan	vulkan:ore:buffer	vulkan:renderer:vulkan_context	2
+1	component-077	vulkan	vulkan:renderer:common_layouts	shader:source:constants;vulkan:renderer:vkutil	1
+1	component-091	webgl2	webgl2:renderer:gl_state	shader:source:constants;webgl2:renderer:gles3	2
+1	component-090	webgl2	webgl2:renderer:gl_utils	shader:source:glsl;webgl2:renderer:gles3	2
+1	component-084	webgl2	webgl2:renderer:load_gles_extensions	webgl2:renderer:gles3	2
+1	component-094	webgl2	webgl2:renderer:load_store_actions_ext	shader:source:pls_load_store_ext	2
+1	component-101	webgpu	webgpu:wagyu:webgpu_cpp	webgpu:wagyu:webgpu;webgpu:wagyu:webgpu_cpp_chained_struct;webgpu:wagyu:webgpu_enum_class_bitmasks	1
+2	component-016	shader-build-authority	shader:source:atomic_draw_atlas_blit	shader:source:atomic_base	1
+2	component-017	shader-build-authority	shader:source:atomic_draw_image_mesh	shader:source:atomic_base	1
+2	component-018	shader-build-authority	shader:source:atomic_draw_image_rect	shader:source:atomic_base	1
+2	component-019	shader-build-authority	shader:source:atomic_draw_interior_triangles	shader:source:atomic_base	1
+2	component-020	shader-build-authority	shader:source:atomic_draw_path	shader:source:atomic_base	1
+2	component-021	shader-build-authority	shader:source:atomic_init	shader:source:atomic_base	1
+2	component-022	shader-build-authority	shader:source:atomic_resolve	shader:source:atomic_base	1
+2	component-023	shader-build-authority	shader:source:atomic_resolve_coalesced	shader:source:atomic_base	1
+2	component-032	shader-build-authority	shader:source:draw_atlas_blit	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_mesh;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+2	component-033	shader-build-authority	shader:source:draw_clockwise_atlas_blit	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_mesh;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+2	component-034	shader-build-authority	shader:source:draw_clockwise_atomic_atlas_blit	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_mesh;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+2	component-035	shader-build-authority	shader:source:draw_clockwise_atomic_borrowed_coverage	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	2
+2	component-037	shader-build-authority	shader:source:draw_clockwise_atomic_clip	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	2
+2	component-040	shader-build-authority	shader:source:draw_clockwise_atomic_image_mesh	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_image_mesh;shader:source:draw_mesh;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+2	component-041	shader-build-authority	shader:source:draw_clockwise_atomic_path	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	2
+2	component-043	shader-build-authority	shader:source:draw_clockwise_clip	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	2
+2	component-045	shader-build-authority	shader:source:draw_clockwise_image_mesh	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_image_mesh;shader:source:draw_mesh;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+2	component-046	shader-build-authority	shader:source:draw_clockwise_path	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	2
+2	component-050	shader-build-authority	shader:source:draw_interior_triangles	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_path;shader:source:draw_path_common;shader:source:draw_raster_order_path;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+2	component-052	shader-build-authority	shader:source:draw_msaa_atlas_blit	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_msaa_object;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+2	component-053	shader-build-authority	shader:source:draw_msaa_color_seed_attachment	shader:source:common;shader:source:constants;shader:source:draw_input_attachment;shader:source:flush_uniforms;shader:source:glsl	1
+2	component-054	shader-build-authority	shader:source:draw_msaa_image_mesh	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_image_mesh;shader:source:draw_msaa_object;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+2	component-055	shader-build-authority	shader:source:draw_msaa_path	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_msaa_object;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+2	component-064	shader-build-authority	shader:source:render_atlas_fill	shader:source:render_atlas_common	1
+2	component-065	shader-build-authority	shader:source:render_atlas_stroke	shader:source:render_atlas_common	1
+2	component-085	webgl2	webgl2:ore:buffer	webgl2:renderer:load_gles_extensions	3
+2	component-086	webgl2	webgl2:ore:pipeline	webgl2:renderer:load_gles_extensions	3
+2	component-088	webgl2	webgl2:ore:sampler	webgl2:renderer:load_gles_extensions	3
+2	component-089	webgl2	webgl2:ore:shader_module	webgl2:renderer:load_gles_extensions	3
+2	component-087	webgl2	webgl2:ore:texture	webgl2:renderer:load_gles_extensions	3
+2	component-092	webgl2	webgl2:renderer:render_buffer_gl_impl	webgl2:renderer:gl_state;webgl2:renderer:gles3	2
+2	component-102	webgpu	webgpu:ore:bind_group_layout	webgpu:wagyu:webgpu_cpp	1
+2	component-104	webgpu	webgpu:ore:sampler	webgpu:wagyu:webgpu_cpp	2
+2	component-106	webgpu	webgpu:ore:shader_module	webgpu:wagyu:webgpu_cpp	2
+2	component-105	webgpu	webgpu:ore:texture	webgpu:wagyu:webgpu_cpp	2
+2	component-107	webgpu	webgpu:ore:wgpu_layout	webgpu:wagyu:webgpu_cpp	1
+3	component-036	shader-build-authority	shader:source:draw_clockwise_atomic_borrowed_coverage_interior_triangles	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_clockwise_atomic_borrowed_coverage;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+3	component-038	shader-build-authority	shader:source:draw_clockwise_atomic_clip_interior_triangles	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_clockwise_atomic_clip;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+3	component-042	shader-build-authority	shader:source:draw_clockwise_atomic_interior_triangles	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_clockwise_atomic_path;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+3	component-044	shader-build-authority	shader:source:draw_clockwise_clip_interior_triangles	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_clockwise_clip;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+3	component-047	shader-build-authority	shader:source:draw_clockwise_interior_triangles	shader:source:advanced_blend;shader:source:common;shader:source:constants;shader:source:draw_clockwise_path;shader:source:draw_path;shader:source:draw_path_common;shader:source:flush_uniforms;shader:source:glsl;shader:source:specialization	1
+3	component-093	webgl2	webgl2:ore:context	webgl2:ore:bind_group;webgl2:ore:buffer;webgl2:ore:pipeline;webgl2:ore:render_pass;webgl2:ore:sampler;webgl2:ore:shader_module;webgl2:ore:texture;webgl2:renderer:load_gles_extensions;webgl2:renderer:render_target	3
+3	component-093	webgl2	webgl2:ore:render_pass	webgl2:ore:bind_group;webgl2:ore:buffer;webgl2:ore:context;webgl2:ore:pipeline;webgl2:ore:texture;webgl2:renderer:load_gles_extensions	3
+3	component-093	webgl2	webgl2:renderer:render_context_gl_impl	shader:source:advanced_blend;shader:source:atomic_draw;shader:source:bezier_utils;shader:source:blit_texture_as_draw;shader:source:color_ramp;shader:source:common;shader:source:constants;shader:source:draw_clockwise_clip;shader:source:draw_clockwise_path;shader:source:draw_image_mesh;shader:source:draw_mesh;shader:source:draw_msaa_object;shader:source:draw_path;shader:source:draw_path_common;shader:source:draw_raster_order_path;shader:source:flush_uniforms;shader:source:render_atlas;shader:source:resolve_atlas;shader:source:stencil_draw;shader:source:tessellate;webgl2:ore:context;webgl2:renderer:gl_state;webgl2:renderer:gl_utils;webgl2:renderer:render_buffer_gl_impl;webgl2:renderer:render_target	2
+3	component-093	webgl2	webgl2:renderer:render_target	shader:source:constants;webgl2:renderer:gl_utils;webgl2:renderer:gles3;webgl2:renderer:render_context_gl_impl	2
+3	component-103	webgpu	webgpu:ore:pipeline	webgpu:ore:bind_group_layout;webgpu:wagyu:webgpu_cpp	2
+4	component-078	vulkan	vulkan:renderer:vulkan_shaders	shader:source:atomic_draw_atlas_blit;shader:source:atomic_draw_image_mesh;shader:source:atomic_draw_image_rect;shader:source:atomic_draw_interior_triangles;shader:source:atomic_draw_path;shader:source:atomic_resolve;shader:source:atomic_resolve_coalesced;shader:source:clear_clockwise_atomic_clip;shader:source:color_ramp;shader:source:draw_atlas_blit;shader:source:draw_clockwise_atlas_blit;shader:source:draw_clockwise_atomic_atlas_blit;shader:source:draw_clockwise_atomic_borrowed_coverage;shader:source:draw_clockwise_atomic_borrowed_coverage_interior_triangles;shader:source:draw_clockwise_atomic_clip;shader:source:draw_clockwise_atomic_clip_interior_triangles;shader:source:draw_clockwise_atomic_image_mesh;shader:source:draw_clockwise_atomic_interior_triangles;shader:source:draw_clockwise_atomic_path;shader:source:draw_clockwise_clip;shader:source:draw_clockwise_clip_interior_triangles;shader:source:draw_clockwise_image_mesh;shader:source:draw_clockwise_interior_triangles;shader:source:draw_clockwise_path;shader:source:draw_fullscreen_quad;shader:source:draw_image_mesh;shader:source:draw_input_attachment;shader:source:draw_interior_triangles;shader:source:draw_msaa_atlas_blit;shader:source:draw_msaa_color_seed_attachment;shader:source:draw_msaa_image_mesh;shader:source:draw_msaa_path;shader:source:draw_msaa_resolve;shader:source:draw_msaa_stencil;shader:source:draw_path;shader:source:init_clockwise_atomic_workaround;shader:source:render_atlas;shader:source:render_atlas_fill;shader:source:render_atlas_stroke;shader:source:tessellate	2
+4	component-095	webgl2	webgl2:renderer:pls_impl_ext_native	shader:source:constants;shader:source:pls_load_store_ext;webgl2:renderer:gl_utils;webgl2:renderer:load_store_actions_ext;webgl2:renderer:render_context_gl_impl;webgl2:renderer:render_target	1
+4	component-096	webgl2	webgl2:renderer:pls_impl_rw_texture	shader:source:constants;shader:source:glsl;webgl2:renderer:gl_utils;webgl2:renderer:render_context_gl_impl;webgl2:renderer:render_target	1
+4	component-097	webgl2	webgl2:renderer:pls_impl_webgl	shader:source:constants;shader:source:glsl;webgl2:renderer:gl_utils;webgl2:renderer:render_context_gl_impl;webgl2:renderer:render_target	1
+4	component-109	webgpu	webgpu:ore:bind_group	webgpu:ore:buffer;webgpu:ore:context;webgpu:wagyu:webgpu_cpp	2
+4	component-109	webgpu	webgpu:ore:buffer	webgpu:ore:context;webgpu:wagyu:webgpu_cpp	2
+4	component-109	webgpu	webgpu:ore:context	webgpu:ore:bind_group;webgpu:ore:bind_group_layout;webgpu:ore:buffer;webgpu:ore:pipeline;webgpu:ore:render_pass;webgpu:ore:sampler;webgpu:ore:shader_module;webgpu:ore:texture;webgpu:ore:wgpu_layout;webgpu:renderer:render_context_webgpu_impl;webgpu:wagyu:webgpu_cpp;webgpu:wagyu:webgpu_wagyu	2
+4	component-109	webgpu	webgpu:ore:render_pass	webgpu:ore:bind_group;webgpu:ore:buffer;webgpu:ore:context;webgpu:ore:pipeline;webgpu:ore:sampler;webgpu:ore:texture;webgpu:wagyu:webgpu_cpp	2
+4	component-109	webgpu	webgpu:renderer:render_context_webgpu_impl	shader:source:advanced_blend;shader:source:atomic_draw_atlas_blit;shader:source:atomic_draw_image_mesh;shader:source:atomic_draw_image_rect;shader:source:atomic_draw_interior_triangles;shader:source:atomic_draw_path;shader:source:atomic_init;shader:source:atomic_resolve;shader:source:atomic_resolve_coalesced;shader:source:bezier_utils;shader:source:blit_texture_as_draw_filtered;shader:source:color_ramp;shader:source:common;shader:source:constants;shader:source:draw_clockwise_clip;shader:source:draw_clockwise_path;shader:source:draw_image_mesh;shader:source:draw_mesh;shader:source:draw_msaa_atlas_blit;shader:source:draw_msaa_image_mesh;shader:source:draw_msaa_path;shader:source:draw_msaa_stencil;shader:source:draw_path;shader:source:draw_path_common;shader:source:draw_raster_order_path;shader:source:flush_uniforms;shader:source:glsl;shader:source:render_atlas;shader:source:render_atlas_fill;shader:source:render_atlas_stroke;shader:source:tessellate;webgl2:renderer:load_store_actions_ext;webgpu:ore:context;webgpu:renderer:webgpu_compat;webgpu:wagyu:webgpu_cpp;webgpu:wagyu:webgpu_wagyu	2
+5	component-079	vulkan	vulkan:renderer:draw_shader	vulkan:renderer:vulkan_context;vulkan:renderer:vulkan_shaders	2
+6	component-080	vulkan	vulkan:ore:bind_group	vulkan:ore:buffer;vulkan:ore:context	2
+6	component-080	vulkan	vulkan:ore:context	vulkan:ore:bind_group;vulkan:ore:bind_group_layout;vulkan:ore:buffer;vulkan:ore:pipeline;vulkan:ore:render_pass;vulkan:ore:sampler;vulkan:ore:shader_module;vulkan:ore:texture;vulkan:ore:vulkan_dsl;vulkan:renderer:render_target;vulkan:renderer:vulkan_context	2
+6	component-080	vulkan	vulkan:ore:pipeline	vulkan:ore:bind_group;vulkan:ore:bind_group_layout;vulkan:ore:context;vulkan:ore:shader_module;vulkan:ore:vulkan_dsl	2
+6	component-080	vulkan	vulkan:ore:render_pass	vulkan:ore:bind_group;vulkan:ore:buffer;vulkan:ore:context;vulkan:ore:pipeline;vulkan:ore:sampler;vulkan:ore:texture;vulkan:renderer:render_target;vulkan:renderer:vkutil	2
+6	component-080	vulkan	vulkan:ore:texture	vulkan:ore:buffer;vulkan:ore:context;vulkan:renderer:render_target;vulkan:renderer:vulkan_context	2
+6	component-080	vulkan	vulkan:renderer:draw_pipeline	shader:source:constants;vulkan:renderer:common_layouts;vulkan:renderer:draw_pipeline_layout;vulkan:renderer:draw_shader;vulkan:renderer:pipeline_manager;vulkan:renderer:render_context_vulkan_impl;vulkan:renderer:render_pass;vulkan:renderer:vulkan_context	2
+6	component-080	vulkan	vulkan:renderer:draw_pipeline_layout	shader:source:constants;vulkan:renderer:pipeline_manager;vulkan:renderer:render_context_vulkan_impl;vulkan:renderer:render_pass;vulkan:renderer:vulkan_context	2
+6	component-080	vulkan	vulkan:renderer:pipeline_manager	shader:source:constants;vulkan:renderer:draw_pipeline;vulkan:renderer:draw_pipeline_layout;vulkan:renderer:render_context_vulkan_impl;vulkan:renderer:render_pass	2
+6	component-080	vulkan	vulkan:renderer:render_context_vulkan_impl	shader:source:constants;vulkan:ore:context;vulkan:renderer:common_layouts;vulkan:renderer:draw_pipeline;vulkan:renderer:draw_pipeline_layout;vulkan:renderer:draw_shader;vulkan:renderer:pipeline_manager;vulkan:renderer:render_pass;vulkan:renderer:render_target;vulkan:renderer:vulkan_context;vulkan:renderer:vulkan_shaders	2
+6	component-080	vulkan	vulkan:renderer:render_pass	shader:source:constants;vulkan:renderer:common_layouts;vulkan:renderer:draw_pipeline_layout;vulkan:renderer:pipeline_manager;vulkan:renderer:render_context_vulkan_impl;vulkan:renderer:vulkan_context	2
+6	component-080	vulkan	vulkan:renderer:render_target	vulkan:renderer:render_context_vulkan_impl;vulkan:renderer:vulkan_context	2

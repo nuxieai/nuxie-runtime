@@ -192,6 +192,17 @@ impl FfiFactory {
         })
     }
 
+    #[cfg(all(feature = "vulkan", target_os = "macos"))]
+    pub fn new_vulkan(width: u32, height: u32) -> Result<Self, NativeRendererError> {
+        let context = unsafe { ffi::rive_ffi_context_make_vulkan(width, height) };
+        let context = NonNull::new(context).ok_or(NativeRendererError::CreateContext)?;
+        Ok(Self {
+            context: Rc::new(ContextHandle(context)),
+            width,
+            height,
+        })
+    }
+
     #[cfg(target_os = "macos")]
     pub fn adapter_name(&self) -> Result<String, NativeRendererError> {
         let mut name = [0 as c_char; 256];
@@ -885,6 +896,8 @@ mod ffi {
         pub fn rive_ffi_context_make_metal(width: u32, height: u32) -> *mut Context;
         #[cfg(all(feature = "dawn", target_os = "macos"))]
         pub fn rive_ffi_context_make_dawn(width: u32, height: u32) -> *mut Context;
+        #[cfg(all(feature = "vulkan", target_os = "macos"))]
+        pub fn rive_ffi_context_make_vulkan(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_delete(context: *mut Context);
         pub fn rive_ffi_context_begin_frame_mode_metrics(
             context: *mut Context,

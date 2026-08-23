@@ -9,6 +9,7 @@ fn main() {
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_private.hpp");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_metal.mm");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_dawn.cpp");
+    println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_vulkan.cpp");
     println!("cargo:rerun-if-env-changed=RIVE_RUNTIME_DIR");
     println!("cargo:rerun-if-env-changed=RIVE_RENDERER_OUT_DIR");
     println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
@@ -21,15 +22,20 @@ fn main() {
         .map(|target_os| target_os == "macos")
         .unwrap_or(false);
     let has_dawn = env::var_os("CARGO_FEATURE_DAWN").is_some();
+    let has_vulkan = env::var_os("CARGO_FEATURE_VULKAN").is_some();
     let has_perf_counters = env::var_os("CARGO_FEATURE_PERF_COUNTERS").is_some();
+
+    if has_dawn && has_vulkan {
+        panic!("the Dawn and Vulkan source-oracle bridges are separate build roots");
+    }
 
     let runtime_dir = env::var("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
 
     let profile = env::var("PROFILE").unwrap_or_else(|_| String::from("debug"));
-    if has_dawn && (!target_is_macos || profile != "release") {
-        panic!("the Dawn renderer bridge requires a release build on macOS");
+    if (has_dawn || has_vulkan) && (!target_is_macos || profile != "release") {
+        panic!("the Dawn and Vulkan renderer bridges require a release build on macOS");
     }
     let renderer_out_dir = if let Some(path) = env::var_os("RIVE_RENDERER_OUT_DIR") {
         PathBuf::from(path)
@@ -137,6 +143,18 @@ fn main() {
             build
                 .define("RIVE_DESKTOP_GL", None)
                 .define("RIVE_DAWN", None);
+        } else if has_vulkan {
+            for define in [
+                "RIVE_VULKAN",
+                "VK_NO_PROTOTYPES",
+                "VMA_STATIC_VULKAN_FUNCTIONS=0",
+                "VMA_DYNAMIC_VULKAN_FUNCTIONS=1",
+                "RIVE_DESKTOP_GL",
+                "RIVE_DECODERS",
+                "RIVE_KTX2",
+            ] {
+                build.define(define, None);
+            }
         } else {
             for define in [
                 "RIVE_DESKTOP_GL",
@@ -188,6 +206,31 @@ fn main() {
         if has_perf_counters {
             build.define("RIVE_FFI_PERF_COUNTERS", None);
         }
+    }
+
+    if has_vulkan {
+        let vulkan_headers =
+            runtime_dir.join("dependencies/KhronosGroup_Vulkan-Headers_vulkan-sdk-1.4.321/include");
+        let vulkan_memory_allocator = runtime_dir
+            .join("dependencies/GPUOpen-LibrariesAndSDKs_VulkanMemoryAllocator_v3.3.0/include");
+        let bootstrap_dir = runtime_dir.join("renderer/rive_vk_bootstrap");
+        let bootstrap_sources = [
+            "vulkan_debug_callbacks.cpp",
+            "vulkan_device.cpp",
+            "vulkan_frame_synchronizer.cpp",
+            "vulkan_headless_frame_synchronizer.cpp",
+            "vulkan_instance.cpp",
+            "vulkan_library.cpp",
+            "vulkan_swapchain.cpp",
+        ];
+        build
+            .file("cpp/rive_renderer_ffi_vulkan.cpp")
+            .include(bootstrap_dir.join("include"))
+            .include(bootstrap_dir.join("src"))
+            .include(vulkan_headers)
+            .include(vulkan_memory_allocator)
+            .define("RIVE_FFI_HAS_VULKAN", None)
+            .files(bootstrap_sources.map(|source| bootstrap_dir.join("src").join(source)));
     }
 
     if !renderer_lib.exists() {
@@ -331,9 +374,17 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=Cocoa");
         println!("cargo:rustc-link-lib=framework=Foundation");
         println!("cargo:rustc-link-lib=framework=IOKit");
-        if has_dawn {
+        if has_dawn || has_vulkan {
             println!("cargo:rustc-link-lib=framework=IOSurface");
+        }
+        if has_dawn {
             println!("cargo:rustc-link-lib=framework=Security");
+        }
+        if has_vulkan {
+            let moltenvk_dir = runtime_dir.join(
+                "renderer/dependencies/MoltenVK/Package/Release/MoltenVK/dynamic/dylib/macOS",
+            );
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", moltenvk_dir.display());
         }
     }
 }

@@ -23,8 +23,24 @@ secondary_oracles = ["rust-metal", "rust-webgpu-exact"]
 required_modes = ["msaa", "clockwise-atomic"]
 corpus_entries = 1469
 rooted_native_runner = "tools/renderer-replay"
-primary_root_status = "pending"
+primary_root_status = "green"
 candidate_root_contract_status = "frozen"
+source_runtime_revision = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+moltenvk_repository = "https://github.com/rive-app/MoltenVK.git"
+moltenvk_branch_named_by_upstream = "VK_EXT_rasterization_order_attachment_access"
+moltenvk_revision = "7de494443641fc4f81d8232fe379c336face30ab"
+rive_vulkan_headers_revision = "2cd90f9d20df57eac214c148f3aed885372ddcfe"
+rive_vulkan_memory_allocator_revision = "1d8f600fd424278486eade7ed3e877c99f0846b1"
+moltenvk_transitive_revisions = [
+  "SPIRV-Cross@68d401117c85219ee6b2aba9a0cded314c55798f",
+  "Volk@466085407d5d2f50583fd663c1d65f93a7709d3e",
+  "Vulkan-Headers@fc6c06ac529e4b4b6e34c17cc650a8f62dee2eb0",
+  "Vulkan-Tools@b47676a03827fc0c287409b243b1fd62886e79c0",
+  "cereal@51cbda5f30e56c801c07fe3d3aba5d7fb9e6cca4",
+  "glslang@fa9c3deb49e035a8abcabe366f26aac010f6cbfb",
+]
+captured_replay_sha256 = "bc1505f6bbb1c654e1b6af0687fd0538029b6017c9c1854021b79bda294d2beb"
+execution_environment = "MVK_CONFIG_LOG_LEVEL=0 and DYLD_LIBRARY_PATH=$RIVE_RUNTIME_DIR/renderer/dependencies/MoltenVK/Package/Release/MoltenVK/dynamic/dylib/macOS"
 
 [[backend]]
 id = "webgpu"
@@ -58,7 +74,7 @@ id = "vulkan-macos-moltenvk-apple-m5-max"
 backend = "vulkan"
 environment = "macOS Apple M5 Max through pinned MoltenVK"
 requirement = "local-blocking"
-primary_status = "available-unrun"
+primary_status = "green"
 candidate_status = "pending-translation"
 
 [[platform]]

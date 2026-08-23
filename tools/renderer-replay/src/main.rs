@@ -48,9 +48,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         #[cfg(all(feature = "perf-dawn", target_os = "macos"))]
         "ffi-dawn" => replay_ffi_dawn(&stream, options.frame, width, height, clear, &options.mode)?,
+        #[cfg(all(feature = "ffi-vulkan", target_os = "macos"))]
+        "ffi-vulkan" => {
+            replay_ffi_vulkan(&stream, options.frame, width, height, clear, &options.mode)?
+        }
         backend => {
             return Err(format!(
-                "backend `{backend}` is unavailable; use `stub`{}{}{}{}",
+                "backend `{backend}` is unavailable; use `stub`{}{}{}{}{}",
                 if cfg!(feature = "rust-wgpu") {
                     " or `rust-wgpu`"
                 } else {
@@ -68,6 +72,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 },
                 if cfg!(all(feature = "perf-dawn", target_os = "macos")) {
                     " or `ffi-dawn`"
+                } else {
+                    ""
+                },
+                if cfg!(all(feature = "ffi-vulkan", target_os = "macos")) {
+                    " or `ffi-vulkan`"
                 } else {
                     ""
                 }
@@ -209,6 +218,23 @@ fn replay_ffi_dawn(
     ))
 }
 
+#[cfg(all(feature = "ffi-vulkan", target_os = "macos"))]
+fn replay_ffi_vulkan(
+    stream: &RenderStream,
+    frame_index: usize,
+    width: u32,
+    height: u32,
+    clear: u32,
+    mode: &str,
+) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
+    let factory = nuxie_renderer_ffi::FfiFactory::new_vulkan(width, height)?;
+    let adapter = factory.adapter_name()?;
+    Ok((
+        replay_ffi(stream, frame_index, factory, clear, mode)?,
+        Some(adapter),
+    ))
+}
+
 #[cfg(all(feature = "ffi", target_os = "macos"))]
 fn replay_ffi(
     stream: &RenderStream,
@@ -300,7 +326,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]

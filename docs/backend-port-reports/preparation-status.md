@@ -50,8 +50,16 @@ Result: **RED; translation is not admitted**
   tolerances.
 - A 4,407-row source-repeatability ledger reserves every corpus row for all
   three primary backends. WebGPU is captured and frozen at 1,469/1,469
-  byte-identical source reruns with 0/0 per-row budgets on Apple M5 Max;
-  Vulkan and WebGL2 remain explicitly pending.
+  byte-identical source reruns with 0/0 per-row budgets on Apple M5 Max.
+  Vulkan is captured and frozen at 1,469/1,469 repeatable source reruns on the
+  same machine: 1,289 are byte-identical, and 180 freeze their observed
+  one-channel-value variation with zero pixels beyond the corpus threshold.
+  WebGL2 remains explicitly pending.
+- The Vulkan source root is green through pinned Rive Vulkan plus the exact
+  `rive-app/MoltenVK` commit
+  `7de494443641fc4f81d8232fe379c336face30ab`. The upstream helper names a
+  moving MoltenVK branch, so the resolved commit and every fetched transitive
+  Git revision are frozen explicitly in the oracle contract.
 
 The source, ownership, dependency, and unit-order ledgers are generated from
 the pinned upstream checkout. Their checks fail on source drift, stale output,
@@ -60,13 +68,13 @@ an incomplete unit graph.
 
 ## Remaining preparation blockers
 
-1. Build the Vulkan and WebGL2 primary replay roots. The WebGPU/Dawn primary
-   root is green; all three candidate root contracts are already frozen.
-2. Capture two independent source-only repeatability runs for Vulkan and WebGL2
-   (WebGPU is complete) and freeze comparison budgets without viewing candidate
-   output.
-3. Run the available local Vulkan/MoltenVK and Chromium/WebGL2 primary platform
-   gates. The native WebGPU/Dawn primary platform gate is green.
+1. Build the WebGL2 primary browser replay root. Vulkan and WebGPU primary
+   roots are green; all three candidate root contracts are already frozen.
+2. Capture two independent source-only repeatability runs for WebGL2 (Vulkan
+   and WebGPU are complete) and freeze comparison budgets without viewing
+   candidate output.
+3. Run the available local Chromium/WebGL2 primary platform gate. The native
+   Vulkan/MoltenVK and WebGPU/Dawn primary platform gates are green.
 
 No compiler integration, fixture-driven implementation, or backend translation
 is allowed while this report remains red.

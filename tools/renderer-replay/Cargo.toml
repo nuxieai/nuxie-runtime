@@ -24,6 +24,7 @@ native-ore-metal = [
 apple-msl-replay = ["rust-wgpu", "nuxie-renderer/apple-msl-replay"]
 ffi = ["dep:nuxie-renderer-ffi"]
 perf-dawn = ["ffi", "nuxie-renderer-ffi/dawn"]
+ffi-vulkan = ["ffi", "nuxie-renderer-ffi/vulkan"]
 perf-diagnostics = ["rust-wgpu", "nuxie-renderer/perf-diagnostics"]
 perf-counters = [
   "perf-dawn",

@@ -58,6 +58,7 @@ typedef struct rive_ffi_backend_work_metrics
 rive_ffi_context* rive_ffi_context_make_null(uint32_t width, uint32_t height);
 rive_ffi_context* rive_ffi_context_make_metal(uint32_t width, uint32_t height);
 rive_ffi_context* rive_ffi_context_make_dawn(uint32_t width, uint32_t height);
+rive_ffi_context* rive_ffi_context_make_vulkan(uint32_t width, uint32_t height);
 void rive_ffi_context_delete(rive_ffi_context*);
 int rive_ffi_context_begin_frame(rive_ffi_context*,
                                  uint32_t width,

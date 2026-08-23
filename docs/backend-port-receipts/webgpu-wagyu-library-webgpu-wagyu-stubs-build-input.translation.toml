@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:wagyu:library_webgpu_wagyu_stubs"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/webgpu/wagyu-port/src/library_webgpu_wagyu_stubs.js"
+source_sha256 = "a04bea9294c796afaae2c874433ddd68a2fe105aedbbacc8d8926cc558896413"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_src_library_webgpu_wagyu_stubs_js__compat_build_input.rs"
+target_sha256 = "6f2e4600936c5b84d7b04b4c17c537ddaaf8c4c1396bfb7fe41287f9c7f5549f"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_webgpu_wagyu-port_src_library_webgpu_wagyu_stubs.js"
+source_snapshot_sha256 = "a04bea9294c796afaae2c874433ddd68a2fe105aedbbacc8d8926cc558896413"
+dependency_units = []
+source_lines = 82
+source_bytes = 4088
+configuration_authorities = 0
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::library_webgpu_wagyu_stubs_build_input"
+scope_note = "Preserves the complete Emscripten Wagyu extension link input as dependency authority: all 74 unique host-provided symbols remain explicitly undefined and the single LibraryWebGPUExtensions registration is retained, including PLS, external-texture, synchronous-request, callback, cache, readback, and surface extension requirements without invented Rust stubs or fallback behavior."

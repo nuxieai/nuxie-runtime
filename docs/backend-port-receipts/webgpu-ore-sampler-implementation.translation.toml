@@ -1,0 +1,20 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:sampler"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_sampler_wgpu.cpp"
+source_sha256 = "8cc83496c99cbc7af33242775267969f8684b1db5ff606b506fd21cd3dc0008a"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_cpp__impl.rs"
+target_sha256 = "78ebfc2dff8f82bb9ffe4ca5e861d9f8e75f1b8ffbf7b78c6bf8cae45a55a00a"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_sampler_wgpu.cpp"
+source_snapshot_sha256 = "8cc83496c99cbc7af33242775267969f8684b1db5ff606b506fd21cd3dc0008a"
+dependency_units = ["webgpu:wagyu:webgpu_cpp"]
+dependency_artifacts = [
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs", sha256 = "e5ac46c5f331f42638093654f74a0f8ad6c1491b55690d90dee9b016d08b03da" },
+]
+source_lines = 5
+source_bytes = 63
+configuration_authorities = 1
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_sampler_wgpu"
+scope_note = "Preserves the complete intentionally include-only implementation owner: one declaration include and zero out-of-line definitions. The empty unit is recorded explicitly rather than inferred away."

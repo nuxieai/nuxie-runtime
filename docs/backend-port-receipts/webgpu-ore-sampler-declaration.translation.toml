@@ -1,0 +1,20 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:sampler"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_sampler_wgpu.hpp"
+source_sha256 = "b5e6eca633ed6dfb7893761d7a6d398ea495fec2b4f30bdaf9278047308e91bd"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs"
+target_sha256 = "e5ac46c5f331f42638093654f74a0f8ad6c1491b55690d90dee9b016d08b03da"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_sampler_wgpu.hpp"
+source_snapshot_sha256 = "b5e6eca633ed6dfb7893761d7a6d398ea495fec2b4f30bdaf9278047308e91bd"
+dependency_units = ["webgpu:wagyu:webgpu_cpp"]
+dependency_artifacts = [
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs", sha256 = "55f62f7b418155379a88a36674c08140ef16ace16203cb6d35e0e39eb8f79def" },
+]
+source_lines = 19
+source_bytes = 421
+configuration_authorities = 2
+lifecycle_authorities = 2
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_sampler_wgpu"
+scope_note = "Preserves the complete SamplerWGPU declaration: offset-zero ORE Sampler base, default-null value-owned Wagyu Sampler, friend construction boundary, source-equivalent Send eligibility for deferred destruction, and the exact RAII-derived-field-before-base release order without any legacy Rust-WGPU handle."

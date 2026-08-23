@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-097"
+units = ["webgl2:renderer:pls_impl_webgl"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g4-component-097-20260823"
+review_wave = "g4"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/gl/pls_impl_webgl.cpp"
+sha256 = "72332a776d363a5bc81360a3a152f525dd74b7f0456903c69522884a6f268bb7"
+citation = "source:renderer/src/gl/pls_impl_webgl.cpp:1-337"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_pls_impl_webgl_cpp__impl.rs"
+sha256 = "972baaa524b370e777108868eeddbacefe32f5a02ff723a3b3b54fe61c316b15"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_pls_impl_webgl_cpp__impl.rs:1-1127"

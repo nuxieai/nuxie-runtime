@@ -1,0 +1,258 @@
+schema_version = 1
+component_id = "component-109"
+units = ["webgpu:ore:bind_group", "webgpu:ore:buffer", "webgpu:ore:context", "webgpu:ore:render_pass", "webgpu:renderer:render_context_webgpu_impl"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g4-component-109-20260823"
+review_wave = "g4"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 12
+
+[[findings]]
+id = "SR-C109-01"
+severity = "P1"
+summary = "The target emits exported/minified feature keys such as DB and GB, but concatenates raw generated GLSL payloads whose conditionals still use long identifiers such as VERTEX, FRAGMENT, and POST_INVERT_Y. Source uses export-substituted generated headers, so the target's selected stage and feature branches are not activated consistently in Wagyu shader families."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:249-264",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:793-817",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:1093-1142",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:1382-1464",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:146-210",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:1698-1862",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:2738-2756",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:2948-2985",
+]
+
+[[findings]]
+id = "SR-C109-02"
+severity = "P1"
+summary = "Source explicitly excludes clockwiseAtomic from using_pls and therefore does not attach Wagyu input-attachment or EXT-PLS state for that mode. Target routes clockwiseAtomic through PLSDrawRenderPass, enables capability-selected PLS state without the source guard, and always chains the Wagyu descriptor."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:290-303",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:3633-3722",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:4028-4043",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:2229-2325",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:2674-2690",
+]
+
+[[findings]]
+id = "SR-C109-03"
+severity = "P1"
+summary = "Source creates and indexes the four input-attachment states only when usingPLSInputAttachments is true. Target unconditionally constructs four states from colorAttachments[0..3]; ordinary atomic, MSAA, and non-input-attachment PLS pipelines have a one-element list and panic at index 1 before the later guard."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:3448-3464",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:1517-1575",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:1605-1624",
+]
+
+[[findings]]
+id = "SR-C109-04"
+severity = "P1"
+summary = "Source computes storage-texture copy row pitch using frozen STORAGE_TEXTURE_WIDTH, whose imported value is 128. Target hardcodes 2048, producing a 16x row pitch while copying the same extent and therefore reading incorrect rows or out-of-range bytes for multirow uploads."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:16-16",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:2815-2839",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:711-732",
+]
+
+[[findings]]
+id = "SR-C109-05"
+severity = "P2"
+summary = "Source creates specialized framebuffer pipelines in BGRA-then-RGBA order; target reverses this to RGBA-then-BGRA. This changes first failure reporting and partial pipeline population when creation fails."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:1708-1723",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:2097-2118",
+]
+
+[[findings]]
+id = "SR-C109-06"
+severity = "P2"
+summary = "Source forces draw-pipeline-layout creation and validation before acquiring the encoder or recording storage copies and passes. Target performs copies and offscreen commands first and resolves the layout only later, changing failure order and allowing partial command recording before the corresponding layout failure."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:4073-4091",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:4017-4076",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:4147-4151",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:4255-4262",
+]
+
+[[findings]]
+id = "SR-C109-07"
+severity = "P2"
+summary = "For offscreen passes, source begins the render pass and binds its pipeline and buffers before creating the bind group. Target creates the bind group first. Bind-group failure therefore occurs at a different point and after different partial command state."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:4213-4228",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:4236-4280",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:4283-4358",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:3507-3537",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:3548-3610",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:3612-3719",
+]
+
+[[findings]]
+id = "SR-C109-08"
+severity = "P3"
+summary = "Source does not mark ETC2 compressed for its debug-only automatic-mipmap assertion, while target does. An ETC2 request with generateRemainingMips proceeds in source debug builds but debug-panics in the target."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:2615-2657",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:843-873",
+]
+
+[[findings]]
+id = "SR-C109-09"
+severity = "P3"
+summary = "The disabled-atomic-mode warning changes output stream from source printf/stdout to target eprint/stderr."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:1865-1871",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:1198-1203",
+]
+
+[[findings]]
+id = "SR-C109-10"
+severity = "P3"
+summary = "Authored default-call forms are absent. Source permits omitted error outputs, buffer offsets, dynamic-offset arrays and counts, viewport depths, and draw arguments; target requires every corresponding argument explicitly and supplies no convenience forms."
+citations = [
+  "source:renderer/include/rive/renderer/ore/ore_context_wgpu.hpp:35-41",
+  "source:renderer/src/ore/wgpu/ore_render_pass_wgpu.hpp:15-46",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_context_wgpu_cpp__impl.rs:1267-1282",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_render_pass_wgpu_hpp__decl.rs:113-214",
+]
+
+[[findings]]
+id = "SR-C109-11"
+severity = "P3"
+summary = "Source uses each selected generated WGSL shader's variant-specific embedded label. Target supplies generic handwritten labels that collapse storage/no-storage, clip/no-clip, and fixed-color variants, changing shader-module labels and associated diagnostics."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:230-241",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:1588-1612",
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:1695-1705",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:1992-2090",
+]
+
+[[findings]]
+id = "SR-C109-12"
+severity = "P3"
+summary = "Source computes premultiplied clear channels in float32 and then widens them into WebGPU doubles. Target performs division and premultiplication directly in float64, so partial-alpha colors can submit numerically different clear values."
+citations = [
+  "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:185-190",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:2135-2143",
+]
+
+[[sources]]
+path = "renderer/include/rive/renderer/ore/ore_context_wgpu.hpp"
+sha256 = "905e38d3e78df123c33810bb69539e1d0f39edbc173ecd72618b0d8097dc6e1d"
+citation = "source:renderer/include/rive/renderer/ore/ore_context_wgpu.hpp:1-99"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp"
+sha256 = "7dbd287cf90ecb984ae96a6cc9006ca578b72ddbe825cd1861efc679e17b7d3a"
+citation = "source:renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp:1-344"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_bind_group_wgpu.cpp"
+sha256 = "9fd6ad5ff61abbb26bedd3c980ac0adaa81fcdc61b523b4bbe14d0583885ec76"
+citation = "source:renderer/src/ore/wgpu/ore_bind_group_wgpu.cpp:1-81"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_bind_group_wgpu.hpp"
+sha256 = "1ef4fbf6cd94f64b0d0b1109f15a18092d93e63c37a7bfbf42bb787a0fa94772"
+citation = "source:renderer/src/ore/wgpu/ore_bind_group_wgpu.hpp:1-70"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_buffer_wgpu.cpp"
+sha256 = "bcfb293d34346dde8a908952a647353cdd9543e9786bda8c442204f03fb5d2c1"
+citation = "source:renderer/src/ore/wgpu/ore_buffer_wgpu.cpp:1-85"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_buffer_wgpu.hpp"
+sha256 = "0d7e8a7e0f752a98877f3efc5d6d0f6c060a2bbbf0d70800099351ddbe29bf74"
+citation = "source:renderer/src/ore/wgpu/ore_buffer_wgpu.hpp:1-64"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_context_wgpu.cpp"
+sha256 = "8c9e010b8c5e1037e3a38387f696e65fa9b68103d2af1071f7ec50bab84c84a9"
+citation = "source:renderer/src/ore/wgpu/ore_context_wgpu.cpp:1-1268"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_render_pass_wgpu.cpp"
+sha256 = "5ae0cecc7d292a5efa7f422c699f940b99f5ab0534096cd147c3946add749844"
+citation = "source:renderer/src/ore/wgpu/ore_render_pass_wgpu.cpp:1-221"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/wgpu/ore_render_pass_wgpu.hpp"
+sha256 = "0bee65c2a1c29c0723979541b1bc674ea4c48760e9a56d273eb36632eecce975"
+citation = "source:renderer/src/ore/wgpu/ore_render_pass_wgpu.hpp:1-66"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/webgpu/render_context_webgpu_impl.cpp"
+sha256 = "55985534a5af096756ac23a8ba0c9e2f87c1ace07cf11c906b6b5b9c47aed740"
+citation = "source:renderer/src/webgpu/render_context_webgpu_impl.cpp:1-4837"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_include_rive_renderer_ore_ore_context_wgpu_hpp__decl.rs"
+sha256 = "150dc4ce80dad4134074996c840f49601df4dc291767fac5f163a7fdef05a4d3"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_include_rive_renderer_ore_ore_context_wgpu_hpp__decl.rs:1-136"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_include_rive_renderer_webgpu_render_context_webgpu_impl_hpp__decl.rs"
+sha256 = "5a1531d895293159f6bf75493e80a2f537e95e464a2784d19d2622fb63bf4a41"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_include_rive_renderer_webgpu_render_context_webgpu_impl_hpp__decl.rs:1-553"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_bind_group_wgpu_cpp__impl.rs"
+sha256 = "22bb0a8f6f0f3fa5bd25b7d6da104562f9f6c849b2cddafce9e7ee79e5b86745"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_bind_group_wgpu_cpp__impl.rs:1-121"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_bind_group_wgpu_hpp__decl.rs"
+sha256 = "919fcc6f015e76daf1ab2dfbe7a4a8b150e62d207058da32f894a9b322e697e7"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_bind_group_wgpu_hpp__decl.rs:1-162"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_buffer_wgpu_cpp__impl.rs"
+sha256 = "51ace7abe33a760630d421c29c2eab38ed255acc5550fabb14a7a8aac66315c4"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_buffer_wgpu_cpp__impl.rs:1-137"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_buffer_wgpu_hpp__decl.rs"
+sha256 = "950287787edfe7fe9d5f77544d6585f742832f6a25c49c6876d472f13c6626f1"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_buffer_wgpu_hpp__decl.rs:1-156"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_context_wgpu_cpp__impl.rs"
+sha256 = "fed4835e63eec80e1e61b1fe311e0a09a0c5358bceea0a5eac48415e7ced4f19"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_context_wgpu_cpp__impl.rs:1-1335"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_render_pass_wgpu_cpp__impl.rs"
+sha256 = "2a2d5ffdee94e56d8940edc9fcf73b2f65d542cb65f00aada6394f8a1ce85df1"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_render_pass_wgpu_cpp__impl.rs:1-244"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_render_pass_wgpu_hpp__decl.rs"
+sha256 = "a75bf918ce436d0bb1e244c25d91781f08eec02cd30d9fc0b5f15a682382f574"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_render_pass_wgpu_hpp__decl.rs:1-239"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs"
+sha256 = "99ffce157c6c0943c6f525e244c417d28cb352440b425db78d908889a2b8e5b5"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs:1-4593"

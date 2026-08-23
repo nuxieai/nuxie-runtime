@@ -1,0 +1,15 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:vkutil"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/vulkan/vkutil.cpp"
+source_sha256 = "a6f5db5e1190c435a2475cf30fb765219cc114c15adbd7f28f5bf1eddb3d2fd7"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vkutil_cpp__impl.rs"
+target_sha256 = "fd913adb90d47dbf2a106190b2b4a48a3fbe4d04d8191b47e7374b569dc7f150"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_vulkan_vkutil.cpp"
+source_snapshot_sha256 = "a6f5db5e1190c435a2475cf30fb765219cc114c15adbd7f28f5bf1eddb3d2fd7"
+dependency_units = ["vulkan:renderer:vulkan_context"]
+source_lines = 593
+source_bytes = 19021
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-vulkan-experimental mechanical_port::vulkan --lib"
+scope_note = "Preserves complete result handling, mapped-buffer allocation and visibility, FIFO buffer pooling, normal/lazy/external image ownership, image-view ownership, texture uploads and mip barriers, descriptor caching, framebuffer lifetime, exact failure policy, and explicit source destruction order."

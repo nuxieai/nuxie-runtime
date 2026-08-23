@@ -1,0 +1,15 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:vulkan_context"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/vulkan/vulkan_context.hpp"
+source_sha256 = "d1491ee3c8c551e628c1189d8461aa72618e74248380f6b582ac9a9fa7729777"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_vulkan_context_hpp__decl.rs"
+target_sha256 = "f44827a1a4a76da14fdff76741690a387441398068b30453d26624eb2b63bd22"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_include_rive_renderer_vulkan_vulkan_context.hpp"
+source_snapshot_sha256 = "d1491ee3c8c551e628c1189d8461aa72618e74248380f6b582ac9a9fa7729777"
+dependency_units = ["vulkan:renderer:vkutil"]
+source_lines = 245
+source_bytes = 11904
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-vulkan-experimental mechanical_port::vulkan --lib"
+scope_note = "Preserves all Vulkan feature defaults, the complete 5-instance/59-device command denominator, optional extension-command nullability, immutable native handles and feature state, allocator ownership, physical-device properties, depth-format support, and explicit resource-manager shutdown contract."

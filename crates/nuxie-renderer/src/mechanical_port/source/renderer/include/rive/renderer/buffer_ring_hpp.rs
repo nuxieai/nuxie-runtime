@@ -158,6 +158,15 @@ pub trait BufferRingContract {
 
     /// Backend source owners expose the submitted native buffer only at the
     /// concrete Metal seam; generic heap rings intentionally return none.
+    #[cfg(all(
+        feature = "native-metal-experimental",
+        any(
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "tvos",
+            target_os = "visionos"
+        )
+    ))]
     fn submittedHandle(&self) -> Option<crate::mechanical_port::source::renderer::src::metal::render_context_metal_impl_mm::source_execution::Handle> {
         None
     }

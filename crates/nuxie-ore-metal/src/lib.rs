@@ -73,3 +73,26 @@ pub fn new_shader_module_backend_base() -> shader_module::ShaderModule {
 pub fn new_bind_group_layout_backend_base() -> bind_group_layout::BindGroupLayout {
     bind_group_layout::BindGroupLayout::new()
 }
+
+/// Backend integration seam for exact concrete `GPUResource` subclasses.
+#[doc(hidden)]
+pub fn new_gpu_resource_backend_base() -> gpu_resource::GPUResource {
+    gpu_resource::GPUResource::new(None)
+}
+
+/// Backend integration seam for an exact embedded `GPUResourcePool` base.
+#[doc(hidden)]
+pub fn new_gpu_resource_pool_backend_base(
+    manager: gpu_resource::GPUResourceManager,
+    max_pool_size: usize,
+) -> gpu_resource::GPUResourcePool {
+    let mut base = gpu_resource::GPUResource::new(None);
+    base.install_manager(Some(manager));
+    gpu_resource::GPUResourcePool {
+        base: std::mem::ManuallyDrop::new(base),
+        members: std::mem::ManuallyDrop::new(gpu_resource::GPUResourcePoolMembers {
+            m_maxPoolCount: max_pool_size,
+            m_pool: std::mem::ManuallyDrop::new(Default::default()),
+        }),
+    }
+}

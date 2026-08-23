@@ -1,0 +1,15 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:vkutil"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/vulkan/vkutil.hpp"
+source_sha256 = "a953efddf15863a2bd98e4e747581785bd1e852ae1f6491693ee2e30a568115c"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_vkutil_hpp__decl.rs"
+target_sha256 = "87f74e6df20b7c2bce3883f5e5420725b39e947a56117d8a7c6e61a052ecf9fc"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_include_rive_renderer_vulkan_vkutil.hpp"
+source_snapshot_sha256 = "a953efddf15863a2bd98e4e747581785bd1e852ae1f6491693ee2e30a568115c"
+dependency_units = ["vulkan:renderer:vulkan_context"]
+source_lines = 530
+source_bytes = 16325
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-vulkan-experimental mechanical_port::vulkan --lib"
+scope_note = "Preserves every vkutil declaration, source enum representation, intrusive base at offset zero, embedded GPUResourcePool identity, intrusive Texture/rcp identity, retained Vulkan context, native handle, access-state, upload, descriptor-cache, and derived-before-base destruction contract."

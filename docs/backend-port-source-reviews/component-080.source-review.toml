@@ -1,0 +1,439 @@
+schema_version = 1
+component_id = "component-080"
+units = ["vulkan:ore:bind_group", "vulkan:ore:context", "vulkan:ore:pipeline", "vulkan:ore:render_pass", "vulkan:ore:texture", "vulkan:renderer:draw_pipeline", "vulkan:renderer:draw_pipeline_layout", "vulkan:renderer:pipeline_manager", "vulkan:renderer:render_context_vulkan_impl", "vulkan:renderer:render_pass", "vulkan:renderer:render_target"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g6-component-080-20260823"
+review_wave = "g6"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 17
+
+[[findings]]
+id = "SR-C080-01"
+severity = "P1"
+summary = "ORE Canvas texture wrapping dispatches the Canvas-created render target as the wrong concrete variant. Source creates RenderTargetVulkanTexture and accesses it polymorphically through RenderTargetVulkan; target also creates RenderTargetVulkanTexture but wrapCanvasTexture explicitly selects RenderTargetVulkanImpl, so the actual Canvas target's texture-backed operations are not dispatched."
+citations = [
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:250-326",
+  "source:renderer/src/ore/vulkan/ore_context_vulkan.cpp:1604-1619",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:537-580",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_context_vulkan_cpp__impl.rs:1347-1367",
+]
+
+[[findings]]
+id = "SR-C080-02"
+severity = "P2"
+summary = "Draw-pipeline shader lookup and failure ordering changed. Source computes pipeline state and subpass, looks up the vertex shader, and returns immediately on a missing vertex module before touching the fragment cache; synthesized pipeline failure also returns before either lookup. Target eagerly obtains both shaders in the manager before entering the constructor and then performs a combined null check, changing fragment-cache side effects and first-failure ordering."
+citations = [
+  "source:renderer/src/vulkan/draw_pipeline_vulkan.cpp:183-225",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_pipeline_manager_vulkan_cpp__impl.rs:465-495",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_vulkan_cpp__impl.rs:183-219",
+]
+
+[[findings]]
+id = "SR-C080-03"
+severity = "P2"
+summary = "The graphics-pipeline depth/stencil descriptor is present in modes where source deliberately supplies null. Source sets pDepthStencilState only for MSAA; target attaches depthStencilState unconditionally for every interlock mode."
+citations = [
+  "source:renderer/src/vulkan/draw_pipeline_vulkan.cpp:460-478",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_vulkan_cpp__impl.rs:432-449",
+]
+
+[[findings]]
+id = "SR-C080-04"
+severity = "P2"
+summary = "Apple sparse-format configuration is not preserved. Source excludes A1B5G5R5, A8, and the ARM/NV sparse formats on Apple because the selected MoltenVK headers do not define them; target includes all corresponding raw numeric formats unconditionally."
+citations = [
+  "source:renderer/src/vulkan/render_pass_vulkan.cpp:115-139",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_pass_vulkan_cpp__impl.rs:128-153",
+]
+
+[[findings]]
+id = "SR-C080-05"
+severity = "P2"
+summary = "Direct TextureApi::upload is converted from a functional upload operation into an unconditional error for otherwise valid input. Source virtual upload validates, stages, and queues the upload directly. Target's authored upload entry passes owner=None, and the implementation rejects that before the remaining validation or queueing; only the target-added uploadWithOwner path can proceed."
+citations = [
+  "source:renderer/src/ore/vulkan/ore_texture_vulkan.cpp:56-65",
+  "source:renderer/src/ore/vulkan/ore_texture_vulkan.cpp:187-245",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_texture_vulkan_hpp__decl.rs:102-110",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_texture_vulkan_cpp__impl.rs:57-83",
+]
+
+[[findings]]
+id = "SR-C080-06"
+severity = "P2"
+summary = "RenderPassVulkan::setPipeline reverses compatibility validation and concrete-backend validation. Source first runs checkPipelineCompat and returns on incompatibility, only then casting to PipelineVulkan; target requires a successful PipelineVulkan downcast before performing the compatibility check, so an incompatible non-Vulkan pipeline panics before the source error-and-return path."
+citations = [
+  "source:renderer/src/ore/vulkan/ore_render_pass_vulkan.cpp:29-38",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_render_pass_vulkan_cpp__impl.rs:21-32",
+]
+
+[[findings]]
+id = "SR-C080-07"
+severity = "P2"
+summary = "makePipeline can return before source's missing-fragment validation and diagnostic. Source runs binding-map and validateColorRequiresFragment validation before shader-stage extraction, populating outError or lastError. Target's vertexModule.or(fragmentModule)? and concrete downcast occur first; when both modules are absent, it returns None without the source error."
+citations = [
+  "source:renderer/src/ore/vulkan/ore_pipeline_vulkan.cpp:272-296",
+  "source:renderer/src/ore/vulkan/ore_pipeline_vulkan.cpp:329-340",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_pipeline_vulkan_cpp__impl.rs:191-239",
+]
+
+[[findings]]
+id = "SR-C080-08"
+severity = "P2"
+summary = "Descriptor-pool reset failure handling changed from ignored-result continuation to fatal abort. Source invokes ResetDescriptorPool without checking its result and returns; target wraps the reset in vk_check, aborting on an error."
+citations = [
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:1901-1904",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:2156-2162",
+]
+
+[[findings]]
+id = "SR-C080-09"
+severity = "P3"
+summary = "Unsupported sparse-format fallback changed in non-asserting builds. Source debug-asserts and then returns its reserved sentinel, while target always panics."
+citations = [
+  "source:renderer/src/vulkan/render_pass_vulkan.cpp:140-145",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_pass_vulkan_cpp__impl.rs:156-162",
+]
+
+[[findings]]
+id = "SR-C080-10"
+severity = "P3"
+summary = "Authored default-call forms are absent from translated APIs. This includes ORE context outError defaults, ORE render-pass offset/dynamic-offset/viewport/draw defaults, the three Vulkan render-target preserveContents defaults, and the four makeImageTexture defaults; target callers must supply every argument explicitly."
+citations = [
+  "source:renderer/include/rive/renderer/ore/ore_context_vulkan.hpp:98-104",
+  "source:renderer/src/ore/vulkan/ore_render_pass_vulkan.hpp:23-53",
+  "source:renderer/include/rive/renderer/vulkan/render_target_vulkan.hpp:34-70",
+  "source:renderer/include/rive/renderer/vulkan/render_context_vulkan_impl.hpp:83-91",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_ore_ore_context_vulkan_hpp__decl.rs:199-205",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_ore_ore_context_vulkan_hpp__decl.rs:244-250",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_render_pass_vulkan_cpp__impl.rs:458-547",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_render_target_vulkan_hpp__decl.rs:23-34",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:4271-4295",
+]
+
+[[findings]]
+id = "SR-C080-11"
+severity = "P3"
+summary = "makeImageTexture conflates a non-null zero-length data value with source's null-pointer/no-upload case. Source branches only when imageData is null; a non-null pointer takes the upload path. Target accepts a slice and returns without upload whenever image_data.is_empty(), collapsing the two source-visible states."
+citations = [
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:97-107",
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:152-170",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:332-386",
+]
+
+[[findings]]
+id = "SR-C080-12"
+severity = "P3"
+summary = "Four authored Vulkan pipeline debug labels are omitted. Source assigns labels to Color Ramp, Tessellation, Feather Atlas Fill, and Feather Atlas Stroke pipelines immediately after creation; target creates and stores those pipelines without assigning the labels, changing diagnostic object names."
+citations = [
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:621-629",
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:777-785",
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:916-938",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:818-827",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:952-973",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:1038-1090",
+]
+
+[[findings]]
+id = "SR-C080-13"
+severity = "P3"
+summary = "The Android API-level query configuration differs. For builds targeting API 29 or newer, source calls android_get_device_api_level; only older-target builds use __system_property_get. Target always uses the deprecated system-property path for Android."
+citations = [
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:4010-4020",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:4435-4453",
+]
+
+[[findings]]
+id = "SR-C080-14"
+severity = "P3"
+summary = "Android rejection diagnostics no longer emit source's logcat copy. Source's Android error macro writes each rejection to both Android logcat and stderr; target uses stderr only."
+citations = [
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:4005-4008",
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:4022-4028",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:4454-4457",
+]
+
+[[findings]]
+id = "SR-C080-15"
+severity = "P3"
+summary = "Several authored debug validation checks are omitted while their associated Vulkan commands remain: coalesced resolve must be atomic, MSAA seed load/view identities, clear-value/view parity, seed-descriptor preconditions, and barrier/interlock/draw-type legality."
+citations = [
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:2103-2113",
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:2127-2135",
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:3310-3324",
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:3593-3602",
+  "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:3610-3650",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:2401-2429",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:3513-3523",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:3786-3820",
+]
+
+[[findings]]
+id = "SR-C080-16"
+severity = "P3"
+summary = "colorAttachmentCount turns source release-mode computation into unconditional panic behavior for out-of-domain subpass indices. Source uses C assertions, which disappear under NDEBUG, then evaluates the return expression; target uses unconditional assert! and assert_eq! checks."
+citations = [
+  "source:renderer/src/vulkan/draw_pipeline_layout_vulkan.cpp:148-174",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_layout_vulkan_cpp__impl.rs:169-199",
+]
+
+[[findings]]
+id = "SR-C080-17"
+severity = "P3"
+summary = "Texture-upload size overflow arithmetic changed. Source performs unchecked unsigned 64-bit multiplication and then compares the wrapped result with UINT32_MAX; target uses checked_mul, maps overflow to u64::MAX, and reliably returns SizeOverflow. Inputs whose source multiplication wraps to a small value therefore follow different behavior."
+citations = [
+  "source:renderer/src/ore/vulkan/ore_texture_vulkan.cpp:167-185",
+  "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_texture_vulkan_cpp__impl.rs:192-210",
+]
+
+[[sources]]
+path = "renderer/include/rive/renderer/ore/ore_context_vulkan.hpp"
+sha256 = "2a72affe28481f467a249185998c6dfbe325bfb75663ff524ae9b025930672fd"
+citation = "source:renderer/include/rive/renderer/ore/ore_context_vulkan.hpp:1-224"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/include/rive/renderer/vulkan/render_context_vulkan_impl.hpp"
+sha256 = "3e11537fd433b50b59ca30e34a7688aba931f372c57e4ca14322b5307eaae294"
+citation = "source:renderer/include/rive/renderer/vulkan/render_context_vulkan_impl.hpp:1-477"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/include/rive/renderer/vulkan/render_target_vulkan.hpp"
+sha256 = "b9ad83d61ac6c283b24549e6c6f4d8af81fcdb97c0d0dba7e161ddb11c4c871b"
+citation = "source:renderer/include/rive/renderer/vulkan/render_target_vulkan.hpp:1-152"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_bind_group_vulkan.cpp"
+sha256 = "08371ecffdaffb2d668e0dbe260d14f3c13cd7997a55e4f368cf4382ce579a7b"
+citation = "source:renderer/src/ore/vulkan/ore_bind_group_vulkan.cpp:1-106"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_bind_group_vulkan.hpp"
+sha256 = "e0579ebf40af1789cd74908acd14bc468ff9583431ae0c064999f194dfa40b37"
+citation = "source:renderer/src/ore/vulkan/ore_bind_group_vulkan.hpp:1-65"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_context_vulkan.cpp"
+sha256 = "4b3241f851fbc7ffddcce0eed366c80431471a8f143500a8d2f26a9133538a5a"
+citation = "source:renderer/src/ore/vulkan/ore_context_vulkan.cpp:1-1727"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_pipeline_vulkan.cpp"
+sha256 = "900f7e071cd388b206f180ddd5f440d1263068881da2d638a567bca5557503e1"
+citation = "source:renderer/src/ore/vulkan/ore_pipeline_vulkan.cpp:1-552"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_pipeline_vulkan.hpp"
+sha256 = "163aedaefc7047fbb16bc02ecfff9d0d059c434eab3a2108bb043076b1a4835c"
+citation = "source:renderer/src/ore/vulkan/ore_pipeline_vulkan.hpp:1-31"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_render_pass_vulkan.cpp"
+sha256 = "36fd46d0547dc2d55e0e8c8d2f770cc0de227f1bef3c87dd7a0a203ba1a010b4"
+citation = "source:renderer/src/ore/vulkan/ore_render_pass_vulkan.cpp:1-432"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_render_pass_vulkan.hpp"
+sha256 = "154f154fd27609f68636ed4c3cb9e1be7d9d5edec668a045a4243f6423f7026e"
+citation = "source:renderer/src/ore/vulkan/ore_render_pass_vulkan.hpp:1-101"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_texture_vulkan.cpp"
+sha256 = "cd66477edf66d149ccd62738475ff4fe005a61736a52cdc9a308e51a3fe61e9c"
+citation = "source:renderer/src/ore/vulkan/ore_texture_vulkan.cpp:1-265"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/ore/vulkan/ore_texture_vulkan.hpp"
+sha256 = "ee5cb5071865fcc72e23a165fa02d4cc5a14ccf5f8d6d89e54b2ea4152296f2f"
+citation = "source:renderer/src/ore/vulkan/ore_texture_vulkan.hpp:1-52"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/draw_pipeline_layout_vulkan.cpp"
+sha256 = "87b23fe1b5b29998eb23b1b28b5d4259cadcc15e0e8c69a742d27efd0fb43dc3"
+citation = "source:renderer/src/vulkan/draw_pipeline_layout_vulkan.cpp:1-176"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/draw_pipeline_layout_vulkan.hpp"
+sha256 = "eb0d68eb2db0c64680e70ee9c2c223266a182612b26af2e40cde3302ba9261a0"
+citation = "source:renderer/src/vulkan/draw_pipeline_layout_vulkan.hpp:1-56"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/draw_pipeline_vulkan.cpp"
+sha256 = "31126c9461a205c4574f064d6999ac27b0dcc06895012263c4b6b48cc15af806"
+citation = "source:renderer/src/vulkan/draw_pipeline_vulkan.cpp:1-554"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/draw_pipeline_vulkan.hpp"
+sha256 = "13c76fa90bdeb3713f465ab078d1b1871234dfe94c3ee924b96d23b5abc7d80e"
+citation = "source:renderer/src/vulkan/draw_pipeline_vulkan.hpp:1-74"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/pipeline_manager_vulkan.cpp"
+sha256 = "37c7d4b63edfb0edccf1991b01607dc274b1e2518f1754e46f22d39f02338051"
+citation = "source:renderer/src/vulkan/pipeline_manager_vulkan.cpp:1-657"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/pipeline_manager_vulkan.hpp"
+sha256 = "1c3ab80e28d67f6a4921e52a53f686fb42639218c5f3a9db8e38440a8c9a8072"
+citation = "source:renderer/src/vulkan/pipeline_manager_vulkan.hpp:1-144"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/render_context_vulkan_impl.cpp"
+sha256 = "89037c61d58dba7d94a6c8bdce6a0e337e23fdedcd5cc8b6e2b975a470061b38"
+citation = "source:renderer/src/vulkan/render_context_vulkan_impl.cpp:1-4069"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/render_pass_vulkan.cpp"
+sha256 = "9c95185c5e653ef0b4a51725fede34642ddea2a62167fc620ddcb3e909149b79"
+citation = "source:renderer/src/vulkan/render_pass_vulkan.cpp:1-896"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/render_pass_vulkan.hpp"
+sha256 = "a1b01d9aa4d2d8b4795786a093346357fd270090e613e916fa7a4b2495b11be7"
+citation = "source:renderer/src/vulkan/render_pass_vulkan.hpp:1-106"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/vulkan/render_target_vulkan.cpp"
+sha256 = "58f01c640d775669756bd0ba03b9bef67cb0cad0f7fe61dd2a5bb3bf04f41a59"
+citation = "source:renderer/src/vulkan/render_target_vulkan.cpp:1-176"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_ore_ore_context_vulkan_hpp__decl.rs"
+sha256 = "97ec0e686210fff51ab31d4a123d39b40096b521720dacd23f6eca87c787792b"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_ore_ore_context_vulkan_hpp__decl.rs:1-309"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_render_context_vulkan_impl_hpp__decl.rs"
+sha256 = "f0d5a2f85ea0501455d4d5ac2a8a9eb4c6117f4232cf99316a347312cc425ac5"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_render_context_vulkan_impl_hpp__decl.rs:1-325"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_render_target_vulkan_hpp__decl.rs"
+sha256 = "1b2a4a0e1bc2a6c49eed9beb5ea95a2f88fbd95d4da71e70903c382cf0095d39"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_include_rive_renderer_vulkan_render_target_vulkan_hpp__decl.rs:1-177"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_bind_group_vulkan_cpp__impl.rs"
+sha256 = "cda858d2e6a167bb6038cbab1904d4ebf65007d478e8d43b2163987babc83b2b"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_bind_group_vulkan_cpp__impl.rs:1-105"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_bind_group_vulkan_hpp__decl.rs"
+sha256 = "6db6ca1573e92a71b91b1fc0afaaf7f28afaf86a18140d693615533b4bd83e41"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_bind_group_vulkan_hpp__decl.rs:1-133"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_context_vulkan_cpp__impl.rs"
+sha256 = "4c591654ca05e054e9ad7b72c04a07910d356d8830295555f17f8d8a26d28244"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_context_vulkan_cpp__impl.rs:1-1743"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_pipeline_vulkan_cpp__impl.rs"
+sha256 = "04374abf495368b61093930e76b46005c4e74cefe6fe236870bb62cb0b74df4c"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_pipeline_vulkan_cpp__impl.rs:1-476"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_pipeline_vulkan_hpp__decl.rs"
+sha256 = "7bd2f5c86534dae1e36e3ee45e937c3e815934cbff27b009c817358d9df4fbfa"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_pipeline_vulkan_hpp__decl.rs:1-67"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_render_pass_vulkan_cpp__impl.rs"
+sha256 = "275a28b22d7435c1d611f6b280540eb499d1cd9695bc70f208f87040bfc6328f"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_render_pass_vulkan_cpp__impl.rs:1-570"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_render_pass_vulkan_hpp__decl.rs"
+sha256 = "13c53709eb80d014209458d88e94a184e0b5e597061ea2a725bef0454a98ec67"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_render_pass_vulkan_hpp__decl.rs:1-160"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_texture_vulkan_cpp__impl.rs"
+sha256 = "7fbd5469ef9ac5b0699da6e5f1e66e2fdd9558795e30587eb27db775765fe253"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_texture_vulkan_cpp__impl.rs:1-364"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_texture_vulkan_hpp__decl.rs"
+sha256 = "3b2fe1112cd99d612e78fc00509613e618c711b915f1f49356ddfa57180204fa"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_ore_vulkan_ore_texture_vulkan_hpp__decl.rs:1-160"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_layout_vulkan_cpp__impl.rs"
+sha256 = "7a313c8ebaad0bf009f2bdf01cca742e32bdc17a2d5cbde9bc8694553871c13b"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_layout_vulkan_cpp__impl.rs:1-269"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_layout_vulkan_hpp__decl.rs"
+sha256 = "256ec9bbfa1949d7baf11b20ca7457f649d20016331bb06b3ea320fddc181327"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_layout_vulkan_hpp__decl.rs:1-54"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_vulkan_cpp__impl.rs"
+sha256 = "a453ce4dceef85c79e5e07cef2f07f33675716007c62c844e9107f694afea949"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_vulkan_cpp__impl.rs:1-571"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_vulkan_hpp__decl.rs"
+sha256 = "116f7add678f706e4c2fba3a3304283f000188c1311e8a732d2b6974aa09fcec"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_draw_pipeline_vulkan_hpp__decl.rs:1-64"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_pipeline_manager_vulkan_cpp__impl.rs"
+sha256 = "49c71c736e756f59ce77098d75bf2bff2d81c76da3a39f7edb7d74418c54ce81"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_pipeline_manager_vulkan_cpp__impl.rs:1-1054"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_pipeline_manager_vulkan_hpp__decl.rs"
+sha256 = "5027622377dc4212a982bad7824375e560866496d52f28e7f2b00cfefda47f1f"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_pipeline_manager_vulkan_hpp__decl.rs:1-214"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs"
+sha256 = "ef6f5879ec51f791679f310ce7100996089cfe2d5c0889942dec10c26c5f1684"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs:1-4576"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_pass_vulkan_cpp__impl.rs"
+sha256 = "1fa58988a847a05ab50d1bf8ba30aa49dc3afd3517f31ab6dab0b1f9b5ac3270"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_pass_vulkan_cpp__impl.rs:1-823"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_pass_vulkan_hpp__decl.rs"
+sha256 = "5862a084bc8d9ae798caeb9ca2b350f7cb16c145747ca353fcbe9aed06bb0088"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_pass_vulkan_hpp__decl.rs:1-106"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_target_vulkan_cpp__impl.rs"
+sha256 = "b2ab068fd9705d180487136b1042ad9cbf899170863e11a194e84dfd0ea134cd"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_render_target_vulkan_cpp__impl.rs:1-239"

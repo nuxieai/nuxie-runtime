@@ -6,6 +6,7 @@
 use super::webgpu_cpp_decl::BindGroupLayout as WagyuBindGroupLayout;
 use nuxie_ore_metal::bind_group_layout::BindGroupLayout;
 use nuxie_ore_metal::gpu_resource::{GPUResource, GpuResourcePayload};
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
 pub(crate) const PINNED_SOURCE: &str = include_str!(
@@ -20,15 +21,24 @@ pub(crate) const PINNED_SOURCE: &str = include_str!(
 /// object begins teardown and before the embedded ORE base is destroyed.
 #[repr(C)]
 pub(crate) struct BindGroupLayoutWGPU {
-    base: BindGroupLayout,
-    pub(crate) m_wgpuBGL: WagyuBindGroupLayout,
+    base: ManuallyDrop<BindGroupLayout>,
+    pub(crate) m_wgpuBGL: ManuallyDrop<WagyuBindGroupLayout>,
 }
 
 impl BindGroupLayoutWGPU {
     pub(crate) fn new() -> Self {
         Self {
-            base: nuxie_ore_metal::new_bind_group_layout_backend_base(),
-            m_wgpuBGL: WagyuBindGroupLayout::default(),
+            base: ManuallyDrop::new(nuxie_ore_metal::new_bind_group_layout_backend_base()),
+            m_wgpuBGL: ManuallyDrop::new(WagyuBindGroupLayout::default()),
+        }
+    }
+}
+
+impl Drop for BindGroupLayoutWGPU {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.m_wgpuBGL);
+            ManuallyDrop::drop(&mut self.base);
         }
     }
 }

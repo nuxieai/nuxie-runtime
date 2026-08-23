@@ -10,7 +10,7 @@ source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/
 source_snapshot_sha256 = "8cc83496c99cbc7af33242775267969f8684b1db5ff606b506fd21cd3dc0008a"
 dependency_units = ["webgpu:wagyu:webgpu_cpp"]
 dependency_artifacts = [
-  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs", sha256 = "e5ac46c5f331f42638093654f74a0f8ad6c1491b55690d90dee9b016d08b03da" },
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs", sha256 = "362022deadd3f58ad995a70cdc815f5a40cebd6c46a07008772d229c7b8b1052" },
 ]
 source_lines = 5
 source_bytes = 63

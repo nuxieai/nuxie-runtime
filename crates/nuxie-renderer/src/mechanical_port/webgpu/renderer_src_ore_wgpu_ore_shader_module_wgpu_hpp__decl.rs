@@ -6,6 +6,7 @@
 use super::webgpu_cpp_decl::ShaderModule as WagyuShaderModule;
 use nuxie_ore_metal::gpu_resource::{GPUResource, GpuResourcePayload};
 use nuxie_ore_metal::shader_module::ShaderModule;
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
 pub(crate) const PINNED_SOURCE: &str =
@@ -17,15 +18,24 @@ pub(crate) const PINNED_SOURCE: &str =
 /// the same null default, add-reference/copy, acquire/move, and release rules.
 #[repr(C)]
 pub(crate) struct ShaderModuleWGPU {
-    base: ShaderModule,
-    pub(crate) m_wgpuShaderModule: WagyuShaderModule,
+    base: ManuallyDrop<ShaderModule>,
+    pub(crate) m_wgpuShaderModule: ManuallyDrop<WagyuShaderModule>,
 }
 
 impl ShaderModuleWGPU {
     pub(crate) fn new() -> Self {
         Self {
-            base: nuxie_ore_metal::new_shader_module_backend_base(),
-            m_wgpuShaderModule: WagyuShaderModule::default(),
+            base: ManuallyDrop::new(nuxie_ore_metal::new_shader_module_backend_base()),
+            m_wgpuShaderModule: ManuallyDrop::new(WagyuShaderModule::default()),
+        }
+    }
+}
+
+impl Drop for ShaderModuleWGPU {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.m_wgpuShaderModule);
+            ManuallyDrop::drop(&mut self.base);
         }
     }
 }

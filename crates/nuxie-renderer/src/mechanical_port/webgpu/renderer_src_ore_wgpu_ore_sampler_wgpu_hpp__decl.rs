@@ -6,6 +6,7 @@
 use super::webgpu_cpp_decl::Sampler as WagyuSampler;
 use nuxie_ore_metal::gpu_resource::{GPUResource, GpuResourcePayload};
 use nuxie_ore_metal::sampler::Sampler;
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
 pub(crate) const PINNED_SOURCE: &str =
@@ -18,15 +19,24 @@ pub(crate) const PINNED_SOURCE: &str =
 /// the already-frozen `webgpu_cpp.h` owner.
 #[repr(C)]
 pub(crate) struct SamplerWGPU {
-    base: Sampler,
-    pub(crate) m_wgpuSampler: WagyuSampler,
+    base: ManuallyDrop<Sampler>,
+    pub(crate) m_wgpuSampler: ManuallyDrop<WagyuSampler>,
 }
 
 impl SamplerWGPU {
     pub(crate) fn new() -> Self {
         Self {
-            base: nuxie_ore_metal::new_sampler_backend_base(),
-            m_wgpuSampler: WagyuSampler::default(),
+            base: ManuallyDrop::new(nuxie_ore_metal::new_sampler_backend_base()),
+            m_wgpuSampler: ManuallyDrop::new(WagyuSampler::default()),
+        }
+    }
+}
+
+impl Drop for SamplerWGPU {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.m_wgpuSampler);
+            ManuallyDrop::drop(&mut self.base);
         }
     }
 }

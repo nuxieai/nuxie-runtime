@@ -81,8 +81,11 @@ def source_from_location(
         return inherited
     filename = location.get("file")
     if isinstance(filename, str):
+        path = Path(filename)
+        if not path.is_absolute():
+            path = upstream_root / path
         try:
-            relative = Path(filename).resolve().relative_to(upstream_root).as_posix()
+            relative = path.resolve().relative_to(upstream_root).as_posix()
         except ValueError:
             return None
         return relative if relative in allowed else None
@@ -122,14 +125,35 @@ def extract_fields(
     upstream_root: Path,
     source_units: dict[str, str],
     source_dispositions: dict[str, str],
+    source_contents: dict[str, bytes],
     starts: dict[str, list[int]],
 ) -> list[Field]:
     campaign = profile["campaign"]
     allowed = set(source_units)
     fields: list[Field] = []
+    source_cursor: str | None = None
 
-    def visit(node: dict, parents: tuple[str, ...], inherited_source: str | None) -> None:
-        source = source_from_location(node.get("loc"), upstream_root, allowed, inherited_source)
+    def consume_location(location: object) -> None:
+        """Advance Clang's global JSON source-location cursor."""
+        nonlocal source_cursor
+        if not isinstance(location, dict):
+            return
+        if isinstance(location.get("file"), str):
+            source_cursor = source_from_location(
+                location, upstream_root, allowed, None
+            )
+        # Macro locations serialize spelling and expansion locations in this
+        # order and each participates in Clang's filename elision cursor.
+        consume_location(location.get("spellingLoc"))
+        consume_location(location.get("expansionLoc"))
+
+    def visit(node: dict, parents: tuple[str, ...]) -> None:
+        consume_location(node.get("loc"))
+        source = source_cursor
+        source_range = node.get("range")
+        if isinstance(source_range, dict):
+            consume_location(source_range.get("begin"))
+            consume_location(source_range.get("end"))
         kind = node.get("kind")
         name = node.get("name")
         next_parents = parents
@@ -143,6 +167,23 @@ def extract_fields(
             if not isinstance(children, list):
                 children = []
             if source in allowed:
+                # A filename recovered from Clang's elision cursor must still
+                # identify the bytes that spell this record. Fail closed if
+                # dumper ordering ever changes instead of silently assigning
+                # a transitive/system record to an owned header.
+                location = node.get("loc")
+                if isinstance(name, str) and name and isinstance(location, dict):
+                    offset = location.get("offset")
+                    token_length = location.get("tokLen")
+                    if isinstance(offset, int) and isinstance(token_length, int):
+                        token = source_contents[source][
+                            offset : offset + token_length
+                        ]
+                        if token != name.encode():
+                            raise ValueError(
+                                "Clang source cursor mismatch: "
+                                f"{qualified} was attributed to {source}"
+                            )
                 order = 0
                 for child in children:
                     if not isinstance(child, dict) or child.get("kind") != "FieldDecl":
@@ -180,9 +221,9 @@ def extract_fields(
         if isinstance(children, list):
             for child in children:
                 if isinstance(child, dict):
-                    visit(child, next_parents, source)
+                    visit(child, next_parents)
 
-    visit(ast, (), None)
+    visit(ast, ())
     return fields
 
 
@@ -198,12 +239,17 @@ def compile_profile(
         row["source_path"]: row["port_disposition"] for row in headers
     }
     starts: dict[str, list[int]] = {}
+    source_contents: dict[str, bytes] = {}
     for row in headers:
         path = upstream_root / row["source_path"]
         if digest(path) != row["source_sha256"]:
             raise ValueError(f"pinned source drift: {row['source_path']}")
         data = path.read_bytes()
-        starts[row["source_path"]] = [0, *(index + 1 for index, byte in enumerate(data) if byte == 10)]
+        source_contents[row["source_path"]] = data
+        starts[row["source_path"]] = [
+            0,
+            *(index + 1 for index, byte in enumerate(data) if byte == 10),
+        ]
 
     with tempfile.TemporaryDirectory(prefix=f"backend-fields-{profile['id']}-") as temporary:
         temp = Path(temporary)
@@ -236,7 +282,16 @@ def compile_profile(
             ),
             str(translation_unit),
         ]
-        process = subprocess.run(command, capture_output=True, text=True)
+        # Clang may spell AST source locations relative to its working
+        # directory even when the include search paths are absolute. Anchor
+        # those spellings to the pinned upstream tree so source_from_location
+        # can resolve every directly or transitively included owner.
+        process = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            cwd=upstream_root,
+        )
         if process.returncode:
             raise RuntimeError(
                 f"Clang field extraction failed for {profile['id']}:\n{process.stderr}"
@@ -247,6 +302,7 @@ def compile_profile(
             upstream_root,
             source_units,
             source_dispositions,
+            source_contents,
             starts,
         )
 

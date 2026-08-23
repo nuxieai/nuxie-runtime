@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:gl_state"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/gl/gl_state.hpp"
+source_sha256 = "3d241850b33604888c5d7f1e5a3fac6e692f7d5f358b2e9ce5a319e191e07ac0"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_gl_state_hpp__decl.rs"
+target_sha256 = "a12233a94031835924adb3a8205c033bc9b561747a69340707bd19335943835d"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_include_rive_renderer_gl_gl_state.hpp"
+source_snapshot_sha256 = "3d241850b33604888c5d7f1e5a3fac6e692f7d5f358b2e9ce5a319e191e07ac0"
+dependency_units = ["shader:source:constants", "webgl2:renderer:gles3"]
+source_lines = 95
+source_bytes = 2781
+configuration_authorities = 0
+lifecycle_authorities = 3
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete GL state-cache declaration: all 15 owner fields, all 11 anonymous validity fields, exact scissor action representation, capability ownership, cached bindings, pipeline-state surface, and deletion entrypoints."

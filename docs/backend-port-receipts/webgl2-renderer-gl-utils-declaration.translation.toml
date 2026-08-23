@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:gl_utils"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/gl/gl_utils.hpp"
+source_sha256 = "042cad789ccceb91c4982d5150778b7ad4467da9d98ec852d3fc988b4299cdee"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_gl_utils_hpp__decl.rs"
+target_sha256 = "1b65fa0201f359545b0b86c4796cf50e5f919617132e9817ce7943e8a30c1848"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_include_rive_renderer_gl_gl_utils.hpp"
+source_snapshot_sha256 = "042cad789ccceb91c4982d5150778b7ad4467da9d98ec852d3fc988b4299cdee"
+dependency_units = ["shader:source:glsl", "webgl2:renderer:gles3"]
+source_lines = 271
+source_bytes = 6803
+configuration_authorities = 3
+lifecycle_authorities = 24
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves every utility declaration, the exact fallback base-instance uniform, noncopyable GLObject handle ownership, all seven concrete RAII object shapes, move-assignment/reset surfaces, retained Program shader fields, compile/link overloads, sampling, blit, and uniform entrypoints."

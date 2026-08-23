@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:load_gles_extensions"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/gl/load_gles_extensions.hpp"
+source_sha256 = "b7b26a500a5bb931c18acf18e68c4821e8ec1cf3e9f6800b959392677e3f6700"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs"
+target_sha256 = "6bd6e1836ac046de4e46c645c270b67772fdf719d7d205347f79505e7363018c"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_include_rive_renderer_gl_load_gles_extensions.hpp"
+source_snapshot_sha256 = "b7b26a500a5bb931c18acf18e68c4821e8ec1cf3e9f6800b959392677e3f6700"
+dependency_units = ["webgl2:renderer:gles3"]
+source_lines = 10
+source_bytes = 242
+configuration_authorities = 0
+lifecycle_authorities = 0
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete WebGL2 header bridge to the pinned gles3 type and extension surface. Its native EGL implementation is retained only as frozen exclusion evidence because the pinned WebGL2 build does not compile it."

@@ -66,6 +66,16 @@ pub(crate) mod backend_port_wgsl_header_generator;
 pub(crate) mod webgl2 {
     #[path = "renderer_include_rive_renderer_gl_gles3_hpp__decl.rs"]
     pub(crate) mod gles3_decl;
+    #[path = "renderer_include_rive_renderer_gl_gl_state_hpp__decl.rs"]
+    pub(crate) mod gl_state_decl;
+    #[path = "renderer_src_gl_gl_state_cpp__impl.rs"]
+    pub(crate) mod gl_state_impl;
+    #[path = "renderer_include_rive_renderer_gl_gl_utils_hpp__decl.rs"]
+    pub(crate) mod gl_utils_decl;
+    #[path = "renderer_src_gl_gl_utils_cpp__impl.rs"]
+    pub(crate) mod gl_utils_impl;
+    #[path = "renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs"]
+    pub(crate) mod load_gles_extensions_decl;
     #[path = "renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs"]
     pub(crate) mod load_store_actions_ext_decl;
     #[path = "renderer_src_gl_load_store_actions_ext_cpp__impl.rs"]

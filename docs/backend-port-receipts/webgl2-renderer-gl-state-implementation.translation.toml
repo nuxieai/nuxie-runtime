@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:gl_state"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/gl/gl_state.cpp"
+source_sha256 = "c359a715949c276cce9dcd406919c308a9d743ce5c10631a0bf33834f2e47cec"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_gl_state_cpp__impl.rs"
+target_sha256 = "c163ce80b20282596df45242b35a9b39efda84035b151210786e0ca356068328"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_gl_gl_state.cpp"
+source_snapshot_sha256 = "c359a715949c276cce9dcd406919c308a9d743ce5c10631a0bf33834f2e47cec"
+dependency_units = ["shader:source:constants", "webgl2:renderer:gles3"]
+source_lines = 491
+source_bytes = 15295
+configuration_authorities = 71
+lifecycle_authorities = 9
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2"
+scope_note = "Preserves the complete frozen WebGL2 state implementation: exact invalidate baseline and WebGL exclusions, Y-flipped scissor, cached enable/write/blend/cull/binding transitions, every stencil and advanced-blend lowering, and bound-handle cache correction on deletion."

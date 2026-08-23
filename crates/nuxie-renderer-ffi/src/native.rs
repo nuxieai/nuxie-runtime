@@ -5,10 +5,10 @@ use nuxie_render_api::{
 };
 use std::any::Any;
 use std::error::Error;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "emscripten"))]
 use std::ffi::CStr;
 use std::fmt;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "emscripten"))]
 use std::os::raw::c_char;
 use std::ptr::NonNull;
 use std::rc::Rc;
@@ -29,7 +29,7 @@ impl fmt::Display for NativeRendererError {
             Self::CreateContext => write!(f, "failed to create native renderer context"),
             Self::BeginFrame => write!(f, "failed to begin native renderer frame"),
             Self::EndFrame => write!(f, "failed to complete native renderer frame"),
-            Self::AdapterIdentity => write!(f, "failed to query the native Metal adapter"),
+            Self::AdapterIdentity => write!(f, "failed to query the native renderer adapter"),
             Self::MissingRenderer => write!(f, "native renderer frame is not open"),
             Self::ReadPixels { expected, actual } => write!(
                 f,
@@ -203,7 +203,18 @@ impl FfiFactory {
         })
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(feature = "webgl2", target_os = "emscripten"))]
+    pub fn new_webgl2(width: u32, height: u32) -> Result<Self, NativeRendererError> {
+        let context = unsafe { ffi::rive_ffi_context_make_webgl2(width, height) };
+        let context = NonNull::new(context).ok_or(NativeRendererError::CreateContext)?;
+        Ok(Self {
+            context: Rc::new(ContextHandle(context)),
+            width,
+            height,
+        })
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "emscripten"))]
     pub fn adapter_name(&self) -> Result<String, NativeRendererError> {
         let mut name = [0 as c_char; 256];
         let required = unsafe {
@@ -898,6 +909,8 @@ mod ffi {
         pub fn rive_ffi_context_make_dawn(width: u32, height: u32) -> *mut Context;
         #[cfg(all(feature = "vulkan", target_os = "macos"))]
         pub fn rive_ffi_context_make_vulkan(width: u32, height: u32) -> *mut Context;
+        #[cfg(all(feature = "webgl2", target_os = "emscripten"))]
+        pub fn rive_ffi_context_make_webgl2(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_delete(context: *mut Context);
         pub fn rive_ffi_context_begin_frame_mode_metrics(
             context: *mut Context,
@@ -919,7 +932,7 @@ mod ffi {
             context: *mut Context,
             out: *mut FfiBackendWorkMetrics,
         );
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "emscripten"))]
         pub fn rive_ffi_context_adapter_name(
             context: *mut Context,
             out: *mut std::os::raw::c_char,

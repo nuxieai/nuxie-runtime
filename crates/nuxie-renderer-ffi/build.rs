@@ -10,6 +10,7 @@ fn main() {
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_metal.mm");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_dawn.cpp");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_vulkan.cpp");
+    println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_webgl2.cpp");
     println!("cargo:rerun-if-env-changed=RIVE_RUNTIME_DIR");
     println!("cargo:rerun-if-env-changed=RIVE_RENDERER_OUT_DIR");
     println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
@@ -21,12 +22,21 @@ fn main() {
     let target_is_macos = env::var("CARGO_CFG_TARGET_OS")
         .map(|target_os| target_os == "macos")
         .unwrap_or(false);
+    let target_is_emscripten = env::var("CARGO_CFG_TARGET_OS")
+        .map(|target_os| target_os == "emscripten")
+        .unwrap_or(false);
     let has_dawn = env::var_os("CARGO_FEATURE_DAWN").is_some();
     let has_vulkan = env::var_os("CARGO_FEATURE_VULKAN").is_some();
+    let has_webgl2 = env::var_os("CARGO_FEATURE_WEBGL2").is_some();
     let has_perf_counters = env::var_os("CARGO_FEATURE_PERF_COUNTERS").is_some();
 
-    if has_dawn && has_vulkan {
-        panic!("the Dawn and Vulkan source-oracle bridges are separate build roots");
+    if [has_dawn, has_vulkan, has_webgl2]
+        .into_iter()
+        .filter(|enabled| *enabled)
+        .count()
+        > 1
+    {
+        panic!("the Dawn, Vulkan, and WebGL2 source-oracle bridges are separate build roots");
     }
 
     let runtime_dir = env::var("RIVE_RUNTIME_DIR")
@@ -37,6 +47,9 @@ fn main() {
     if (has_dawn || has_vulkan) && (!target_is_macos || profile != "release") {
         panic!("the Dawn and Vulkan renderer bridges require a release build on macOS");
     }
+    if has_webgl2 && (!target_is_emscripten || profile != "release") {
+        panic!("the WebGL2 renderer bridge requires a release wasm32-unknown-emscripten build");
+    }
     let renderer_out_dir = if let Some(path) = env::var_os("RIVE_RENDERER_OUT_DIR") {
         PathBuf::from(path)
     } else if has_dawn {
@@ -44,6 +57,11 @@ fn main() {
             .join("renderer")
             .join("out")
             .join("cpp-atlas-mask-oracle")
+    } else if has_webgl2 {
+        runtime_dir
+            .join("renderer")
+            .join("out")
+            .join("cpp-webgl2-oracle")
     } else {
         let unified = runtime_dir.join("tests").join("out").join(&profile);
         if unified.join("librive_pls_renderer.a").exists() {
@@ -155,6 +173,19 @@ fn main() {
             ] {
                 build.define(define, None);
             }
+        } else if has_webgl2 {
+            for define in [
+                "RIVE_WEBGL",
+                "ORE_BACKEND_GL",
+                "RIVE_ORE",
+                "WITH_RIVE_TEXT",
+                "RIVE_CANVAS",
+                "WITH_RIVE_LAYOUT",
+                "RIVE_DECODERS",
+                "RIVE_KTX2",
+            ] {
+                build.define(define, None);
+            }
         } else {
             for define in [
                 "RIVE_DESKTOP_GL",
@@ -231,6 +262,20 @@ fn main() {
             .include(vulkan_memory_allocator)
             .define("RIVE_FFI_HAS_VULKAN", None)
             .files(bootstrap_sources.map(|source| bootstrap_dir.join("src").join(source)));
+    }
+
+    if has_webgl2 {
+        let emscripten_dir =
+            runtime_dir.join("build/dependencies/emsdk_3.1.61/upstream/emscripten");
+        let compiler = emscripten_dir.join("em++");
+        if !compiler.exists() {
+            panic!("missing pinned Emscripten compiler {}", compiler.display());
+        }
+        build
+            .compiler(compiler)
+            .file("cpp/rive_renderer_ffi_webgl2.cpp")
+            .define("RIVE_FFI_HAS_WEBGL2", None)
+            .flag("-msimd128");
     }
 
     if !renderer_lib.exists() {

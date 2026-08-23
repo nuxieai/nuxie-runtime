@@ -159,6 +159,13 @@ extern "C" rive_ffi_context* rive_ffi_context_make_vulkan(uint32_t, uint32_t)
 }
 #endif
 
+#if !defined(RIVE_FFI_HAS_WEBGL2)
+extern "C" rive_ffi_context* rive_ffi_context_make_webgl2(uint32_t, uint32_t)
+{
+    return nullptr;
+}
+#endif
+
 extern "C" void rive_ffi_context_delete(rive_ffi_context* ctx) { delete ctx; }
 
 extern "C" int rive_ffi_context_begin_frame(rive_ffi_context* ctx,

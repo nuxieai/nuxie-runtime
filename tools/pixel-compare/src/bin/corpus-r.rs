@@ -1525,11 +1525,11 @@ impl Options {
         if reference_backend.as_deref().is_some_and(|backend| {
             !matches!(
                 backend,
-                "ffi-metal" | "ffi-dawn" | "ffi-vulkan" | "rust-wgpu"
+                "ffi-metal" | "ffi-dawn" | "ffi-vulkan" | "ffi-webgl2" | "rust-wgpu"
             )
         }) {
             return Err(
-                "--reference-backend must be `ffi-metal`, `ffi-dawn`, `ffi-vulkan`, or `rust-wgpu`"
+                "--reference-backend must be `ffi-metal`, `ffi-dawn`, `ffi-vulkan`, `ffi-webgl2`, or `rust-wgpu`"
                     .into(),
             );
         }
@@ -1565,7 +1565,7 @@ fn path_str(path: &Path) -> Result<&str, Box<dyn Error + Send + Sync>> {
 }
 
 fn usage() -> &'static str {
-    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn|ffi-vulkan] [--reference-replay FILE --reference-backend ffi-metal|ffi-dawn|ffi-vulkan|rust-wgpu] [--reference-input-manifest FILE] [--output-dir DIR] [--jobs N] [--replay-timeout-seconds N] [--expect-all-fail] [--report-divergences] [--entry ID ...] [--probe-gated ID ...]"
+    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--reference-replay FILE --reference-backend ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2|rust-wgpu] [--reference-input-manifest FILE] [--output-dir DIR] [--jobs N] [--replay-timeout-seconds N] [--expect-all-fail] [--report-divergences] [--entry ID ...] [--probe-gated ID ...]"
 }
 
 #[cfg(test)]
@@ -2211,6 +2211,15 @@ mod tests {
         .unwrap();
         assert_eq!(metal.dynamic_reference().unwrap().backend, "ffi-metal");
 
+        let webgl2 = Options::parse_args([
+            "--reference-replay".to_owned(),
+            "webgl2-replay-client.py".to_owned(),
+            "--reference-backend".to_owned(),
+            "ffi-webgl2".to_owned(),
+        ])
+        .unwrap();
+        assert_eq!(webgl2.dynamic_reference().unwrap().backend, "ffi-webgl2");
+
         let error = Options::parse_args([
             "--reference-replay".to_owned(),
             "renderer-replay".to_owned(),
@@ -2220,7 +2229,7 @@ mod tests {
         .err()
         .unwrap();
         assert!(error.to_string().contains(
-            "--reference-backend must be `ffi-metal`, `ffi-dawn`, `ffi-vulkan`, or `rust-wgpu`"
+            "--reference-backend must be `ffi-metal`, `ffi-dawn`, `ffi-vulkan`, `ffi-webgl2`, or `rust-wgpu`"
         ));
     }
 }

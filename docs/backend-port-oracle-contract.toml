@@ -7,7 +7,7 @@ corpus_exclusions = []
 comparison = "fresh-primary-source-frame-versus-candidate-frame"
 adapter_contract = "both runners must report the same nonempty backend, adapter/device, driver where available, browser build where applicable, mode, dimensions, stream SHA, generated-artifact identity, and source revision"
 tolerance_authority = "two independent primary-source reruns before candidate translation"
-tolerance_status = "pending-source-repeatability-capture"
+tolerance_status = "frozen-source-repeatability"
 candidate_derived_tolerances = false
 static_cross_backend_pngs = "diagnostic-only"
 structural_oracles = "exact"
@@ -66,8 +66,21 @@ required_modes = ["msaa", "clockwise-atomic"]
 corpus_entries = 1469
 rooted_browser_runner = "tools/browser-renderer-smoke"
 web_editor_selection = "webgl2"
-primary_root_status = "pending"
+primary_root_status = "green"
 candidate_root_contract_status = "frozen"
+source_runtime_revision = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+source_root_manifest = "docs/backend-port-webgl2-source-root.toml"
+emsdk_revision = "e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59"
+emscripten_release_revision = "28e4a74b579b4157bda5fc34f23c7d3905a8bd6c"
+emscripten_version = "3.1.61"
+rust_toolchain = "rustc 1.91.1 (ed61e7d7e 2025-11-07)"
+playwright_version = "1.55.0"
+browser_version = "Google Chrome 151.0.7922.173"
+reported_adapter = "WebKit WebGL"
+captured_replay_client_sha256 = "86a5e4874f39e4e8d51fdcdf5cff8789182127133e4e00a2db8c0a4acd24216b"
+captured_replay_js_sha256 = "38658b8abff6fc1c1a600292a8ea27b21ddfe4c70dbd83bd50f112edd74e724e"
+captured_replay_wasm_sha256 = "a415d20bc72a8d84f38121b33520b67e9ac34dae8af2c81f40c5b1ae436c67f9"
+execution_environment = "Playwright 1.55.0 installed Chrome channel; WebGL2 only; sealed Wasm module reload every 16 source renders"
 
 [[platform]]
 id = "vulkan-macos-moltenvk-apple-m5-max"
@@ -138,7 +151,7 @@ id = "webgl2-chromium-macos"
 backend = "webgl2"
 environment = "current pinned Chromium browser build on macOS"
 requirement = "local-blocking"
-primary_status = "available-unrun"
+primary_status = "green"
 candidate_status = "pending-translation"
 
 [[platform]]

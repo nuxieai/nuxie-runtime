@@ -1,7 +1,7 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 active_queue = "preparation"
-preparation_status = "red"
+preparation_status = "green"
 ignored_skills = ["implement", "tdd"]
 queue_order = [
   "audit",
@@ -87,7 +87,7 @@ product_disposition = "web-editor-selectable-browser-backend"
 primary_oracle = "pinned C++ WebGL2 in the same browser and reported GPU"
 secondary_oracles = ["Rust WebGPU", "pinned C++ native GL where applicable"]
 translation_status = "pending"
-preparation_status = "red"
+preparation_status = "green"
 source_roots = [
   "renderer/include/rive/renderer/gl",
   "renderer/src/gl",
@@ -111,4 +111,4 @@ extra_sources = [
   "renderer/make_moltenvk.sh",
   "renderer/make_swiftshader.sh",
 ]
-classification_status = "pending"
+classification_status = "frozen"

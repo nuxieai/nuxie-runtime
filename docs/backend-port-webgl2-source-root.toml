@@ -1,0 +1,80 @@
+schema_version = 1
+backend = "ffi-webgl2"
+source_runtime_revision = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+emsdk_revision = "e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59"
+emscripten_release_revision = "28e4a74b579b4157bda5fc34f23c7d3905a8bd6c"
+emscripten_version = "3.1.61"
+rust_toolchain = "rustc 1.91.1 (ed61e7d7e 2025-11-07)"
+playwright_version = "1.55.0"
+browser = "Google Chrome 151.0.7922.173"
+reported_adapter = "WebKit WebGL"
+browser_selection = "installed-chrome-channel"
+link_contract = "WebGL2-only; MIN_WEBGL_VERSION=2; MAX_WEBGL_VERSION=2; no automatic fallback"
+
+[[artifact]]
+path = "target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer-replay.js"
+sha256 = "38658b8abff6fc1c1a600292a8ea27b21ddfe4c70dbd83bd50f112edd74e724e"
+
+[[artifact]]
+path = "target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer_replay.wasm"
+sha256 = "a415d20bc72a8d84f38121b33520b67e9ac34dae8af2c81f40c5b1ae436c67f9"
+
+[[artifact]]
+path = "tools/backend-port/webgl2-source-oracle.html"
+sha256 = "4d827cdecfb9fbe6d16c88b7564956b46fbdd543733c2cb9b0f8977b612828cf"
+
+[[artifact]]
+path = "tools/backend-port/webgl2-oracle-server.cjs"
+sha256 = "1414eb83f588addb061b02e4ffd536b6193b8fb56f4b1f3bdec1750679f6390f"
+
+[[artifact]]
+path = "tools/backend-port/webgl2-replay-client.py"
+sha256 = "86a5e4874f39e4e8d51fdcdf5cff8789182127133e4e00a2db8c0a4acd24216b"
+
+[[artifact]]
+path = "tools/backend-port/build-webgl2-source-oracle.sh"
+sha256 = "bd2675421de7a135004dcd77b8edbc716bc80890dcdaed7e9ca1edffe7859960"
+
+[[artifact]]
+path = "crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi_webgl2.cpp"
+sha256 = "c0bf3acfa07ce3b2f0fe349139307bd93cde2ea3ebe599c94667716981dfadfa"
+
+[[upstream_archive]]
+name = "rive_pls_renderer"
+sha256 = "b067ca398baa44c7d780bd5731ee166a3b455c647f1c4aaf095a048e085e9121"
+
+[[upstream_archive]]
+name = "rive"
+sha256 = "d52faf4a1b0830b827c9889e4f0c31df2db23c0df7fb0a8f07c3fc9e1d558ea4"
+
+[[upstream_archive]]
+name = "rive_decoders"
+sha256 = "d7c2d1a8a4a1e55e3f6d1b353261b2b1c8b84b275dc1e438b93344dda900d9de"
+
+[[upstream_archive]]
+name = "libpng"
+sha256 = "d6d4fdff9e66e251d5a4d72d7dc78360357bb730db7b109c1ea461dfe84494d6"
+
+[[upstream_archive]]
+name = "zlib"
+sha256 = "2b116db969d63837318cfe090dab0c446a29d112063c2ef1bf4ce2f8fc29bb7e"
+
+[[upstream_archive]]
+name = "libjpeg"
+sha256 = "d9abe546d212aa7595f57ab24d5797b2733eeb5d75269add4ca48baad6658b69"
+
+[[upstream_archive]]
+name = "libwebp"
+sha256 = "d3658d586dfde490e65e2cccd8b9a383c8189b89f0242ed1e1a28c898d1c3d0b"
+
+[[upstream_archive]]
+name = "rive_harfbuzz"
+sha256 = "d2dd28400dad5617bcf754988358ee6fc5941deb6b767fe84e85a6fe6815c4f9"
+
+[[upstream_archive]]
+name = "rive_sheenbidi"
+sha256 = "0e542ba7f28fbda24146b26129d4bf425d01c2eb9b48d86b66bd9f462ab1b3f8"
+
+[[upstream_archive]]
+name = "rive_yoga"
+sha256 = "0bfa681148a5424173f76dd5b0b81c9d0bec6da57f79f17773979567a6fc19fa"

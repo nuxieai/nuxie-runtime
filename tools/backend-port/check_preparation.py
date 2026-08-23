@@ -135,6 +135,43 @@ def main() -> int:
 
     oracle_path = repo / manifest["oracle_contract"]
     oracle = tomllib.loads(oracle_path.read_text())
+    webgl2 = next(backend for backend in oracle["backend"] if backend["id"] == "webgl2")
+    webgl2_root_path = repo / webgl2["source_root_manifest"]
+    webgl2_root = tomllib.loads(webgl2_root_path.read_text())
+    require(
+        webgl2_root["source_runtime_revision"] == oracle["upstream_ref"],
+        "WebGL2 source root revision drift",
+    )
+    for artifact in webgl2_root["artifact"]:
+        artifact_path = repo / artifact["path"]
+        require(
+            artifact_path.is_file() and digest(artifact_path) == artifact["sha256"],
+            f"WebGL2 source root artifact drift: {artifact['path']}",
+        )
+    archive_paths = {
+        "rive_pls_renderer": "renderer/out/cpp-webgl2-oracle/librive_pls_renderer.a",
+        "rive": "renderer/out/cpp-webgl2-oracle/librive.a",
+        "rive_decoders": "renderer/out/cpp-webgl2-oracle/librive_decoders.a",
+        "libpng": "renderer/out/cpp-webgl2-oracle/liblibpng.a",
+        "zlib": "renderer/out/cpp-webgl2-oracle/libzlib.a",
+        "libjpeg": "renderer/out/cpp-webgl2-oracle/liblibjpeg.a",
+        "libwebp": "renderer/out/cpp-webgl2-oracle/liblibwebp.a",
+        "rive_harfbuzz": "renderer/out/cpp-webgl2-oracle/librive_harfbuzz.a",
+        "rive_sheenbidi": "renderer/out/cpp-webgl2-oracle/librive_sheenbidi.a",
+        "rive_yoga": "renderer/out/cpp-webgl2-oracle/librive_yoga.a",
+    }
+    frozen_archives = {archive["name"]: archive for archive in webgl2_root["upstream_archive"]}
+    require(
+        set(frozen_archives) == set(archive_paths),
+        "WebGL2 source root archive denominator drift",
+    )
+    for name, relative_path in archive_paths.items():
+        archive_path = args.upstream_root / relative_path
+        require(
+            archive_path.is_file()
+            and digest(archive_path) == frozen_archives[name]["sha256"],
+            f"WebGL2 source root archive drift: {name}",
+        )
     corpus = repo / oracle["corpus"]
     require(digest(corpus) == oracle["corpus_sha256"], "oracle corpus hash drift")
     corpus_rows = tomllib.loads(corpus.read_text())["entry"]

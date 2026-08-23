@@ -10,6 +10,7 @@ default = []
 native = []
 dawn = ["native"]
 vulkan = ["native"]
+webgl2 = ["native"]
 perf-counters = ["dawn"]
 decode-oracle = ["native"]
 

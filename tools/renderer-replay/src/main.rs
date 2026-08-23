@@ -52,9 +52,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         "ffi-vulkan" => {
             replay_ffi_vulkan(&stream, options.frame, width, height, clear, &options.mode)?
         }
+        #[cfg(all(feature = "ffi-webgl2", target_os = "emscripten"))]
+        "ffi-webgl2" => {
+            replay_ffi_webgl2(&stream, options.frame, width, height, clear, &options.mode)?
+        }
         backend => {
             return Err(format!(
-                "backend `{backend}` is unavailable; use `stub`{}{}{}{}{}",
+                "backend `{backend}` is unavailable; use `stub`{}{}{}{}{}{}",
                 if cfg!(feature = "rust-wgpu") {
                     " or `rust-wgpu`"
                 } else {
@@ -77,6 +81,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 },
                 if cfg!(all(feature = "ffi-vulkan", target_os = "macos")) {
                     " or `ffi-vulkan`"
+                } else {
+                    ""
+                },
+                if cfg!(all(feature = "ffi-webgl2", target_os = "emscripten")) {
+                    " or `ffi-webgl2`"
                 } else {
                     ""
                 }
@@ -235,7 +244,26 @@ fn replay_ffi_vulkan(
     ))
 }
 
-#[cfg(all(feature = "ffi", target_os = "macos"))]
+#[cfg(all(feature = "ffi-webgl2", target_os = "emscripten"))]
+fn replay_ffi_webgl2(
+    stream: &RenderStream,
+    frame_index: usize,
+    width: u32,
+    height: u32,
+    clear: u32,
+    mode: &str,
+) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
+    let factory = nuxie_renderer_ffi::FfiFactory::new_webgl2(width, height)?;
+    let adapter = factory.adapter_name()?;
+    let mut pixels = replay_ffi(stream, frame_index, factory, clear, mode)?;
+    flip_rows(&mut pixels, width, height);
+    Ok((pixels, Some(adapter)))
+}
+
+#[cfg(any(
+    all(feature = "ffi", target_os = "macos"),
+    all(feature = "ffi-webgl2", target_os = "emscripten")
+))]
 fn replay_ffi(
     stream: &RenderStream,
     frame_index: usize,
@@ -326,7 +354,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]

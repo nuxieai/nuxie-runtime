@@ -49,6 +49,7 @@ exclude = [
     "vendor/wgpu-core-deps-wasm-30.0.0",
     "vendor/wgpu-core-deps-windows-linux-android-30.0.0",
     "vendor/wgpu-hal-30.0.0",
+    "vendor/vk-mem-0.5.0",
 ]
 resolver = "3"
 
@@ -80,6 +81,10 @@ symphonia-bundle-flac = { path = "vendor/symphonia-bundle-flac-0.5.5" }
 symphonia-bundle-mp3 = { path = "vendor/symphonia-bundle-mp3-0.5.5" }
 symphonia-format-riff = { path = "vendor/symphonia-format-riff-0.5.5" }
 symphonia-utils-xiph = { path = "vendor/symphonia-utils-xiph-0.5.5" }
+
+# Vulkan campaign fork: vk-mem 0.5.0 with Rive's exact pinned VMA 3.3.0
+# header, Vulkan SDK 1.4.321 headers, and authored dynamic-function predicate.
+vk-mem = { path = "vendor/vk-mem-0.5.0" }
 
 # Panic-freedom lint discipline for the runtime crates.
 # Opted into per-crate via `lints.workspace = true` by the SDK runtime crates

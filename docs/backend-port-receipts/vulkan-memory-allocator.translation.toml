@@ -1,0 +1,21 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:vulkan_memory_allocator"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/vulkan/vulkan_memory_allocator.cpp"
+source_sha256 = "56d006a5e6364a6d1bc4c8e1a6b0010c236bf935fd2613b08f07c7336d9a4bc7"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs"
+target_sha256 = "15adee3fd7453c413e6960639b892e069841adc9cbdec185ef531608a33d0746"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_vulkan_vulkan_memory_allocator.cpp"
+source_snapshot_sha256 = "56d006a5e6364a6d1bc4c8e1a6b0010c236bf935fd2613b08f07c7336d9a4bc7"
+dependency_units = []
+source_lines = 2
+source_bytes = 53
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features --features native-vulkan-experimental"
+scope_note = "Roots the actual one-definition VMA C++ implementation through the vendored vk-mem wrapper, compiled against Rive's byte-exact VMA 3.3.0 and Vulkan SDK 1.4.321 headers with the exact authored static/dynamic function predicates."
+dependency_artifacts = [
+  { path = "vendor/vk-mem-0.5.0/wrapper.cpp", sha256 = "c5784cb2d475291fc68735ab32357a7a739d4257f7956b7edc5ba265ab1fc3c5" },
+  { path = "vendor/vk-mem-0.5.0/build.rs", sha256 = "ac2fb970751a249f170029ecc87dccde4f6a333f7455a34e20ed18f5494065a5" },
+  { path = "vendor/vk-mem-0.5.0/vendor/VulkanMemoryAllocator/include/vk_mem_alloc.h", sha256 = "90ce12fc4a2466235a09ae02905dd0c13aee80c1bbf11b331ab61230c2ceb112" },
+  { path = "vendor/vk-mem-0.5.0/vendor/Vulkan-Headers/include", tree_sha256 = "cf45a9c19d3db4f56da563c2ca5a70ab350be6b7858a37b262b32f97b6fbe98c" },
+]

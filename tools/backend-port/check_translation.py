@@ -54,6 +54,16 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def tree_digest(path: Path) -> str:
+    hasher = hashlib.sha256()
+    for child in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
+        hasher.update(child.relative_to(path).as_posix().encode())
+        hasher.update(b"\0")
+        hasher.update(child.read_bytes())
+        hasher.update(b"\0")
+    return hasher.hexdigest()
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
@@ -129,6 +139,26 @@ def main() -> int:
             set(receipt["dependency_units"]) == expected_dependencies,
             f"receipt dependency drift: {source_path}",
         )
+        for artifact in receipt.get("dependency_artifacts", []):
+            artifact_path = repo / artifact["path"]
+            if "tree_sha256" in artifact:
+                require(
+                    artifact_path.is_dir(),
+                    f"translation dependency tree is missing: {artifact_path}",
+                )
+                require(
+                    tree_digest(artifact_path) == artifact["tree_sha256"],
+                    f"translation dependency tree drift: {artifact_path}",
+                )
+                continue
+            require(
+                artifact_path.is_file(),
+                f"translation dependency artifact is missing: {artifact_path}",
+            )
+            require(
+                digest(artifact_path) == artifact["sha256"],
+                f"translation dependency artifact drift: {artifact_path}",
+            )
         completed_sources.add(source_path)
         target_paths.add(owner["target_path"])
 

@@ -73,6 +73,8 @@ pub(crate) mod vulkan {
     pub(crate) mod ore_shader_module_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs"]
     pub(crate) mod ore_vulkan_dsl;
+    #[path = "renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs"]
+    pub(crate) mod vulkan_memory_allocator_impl;
 }
 
 #[cfg(all(

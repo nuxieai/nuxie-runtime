@@ -17,7 +17,7 @@ apple-authored-msl = ["rust-wgpu", "dep:wgpu-hal"]
 # select the established wgpu renderer by default.
 native-metal-experimental = []
 # Builds the exact pinned Vulkan campaign without selecting it for shipping.
-native-vulkan-experimental = ["dep:ash", "dep:nuxie-ore-metal"]
+native-vulkan-experimental = ["dep:ash", "dep:nuxie-ore-metal", "dep:vk-mem"]
 with-rive-tools = ["nuxie-ore-metal?/with-rive-tools"]
 track-rive-shader-id = ["nuxie-ore-metal?/track-rive-shader-id"]
 # Wires the pinned RIVE_CANVAS ORE constructor to the exact native renderer
@@ -58,6 +58,7 @@ regex = "1"
 ash = { version = "=0.38.0", optional = true }
 nuxie-ore-metal = { path = "../nuxie-ore-metal", optional = true }
 pollster = "0.4"
+vk-mem = { version = "=0.5.0", path = "../../vendor/vk-mem-0.5.0", optional = true }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos", target_os = "tvos", target_os = "visionos"))'.dependencies]
 block2 = "0.6.2"

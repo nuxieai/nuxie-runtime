@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:stencil_draw"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/stencil_draw.glsl"
+source_sha256 = "9df944e40e0f66f0a7f4e2114fe2644d426a44bc236eab969e3bdf75bb70c0bd"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_stencil_draw_glsl__generated_input.rs"
+target_sha256 = "4919a3eef7cc7f54d5a4d42640ed0e4428db35241ad25aaf44b20ae7cee9c938"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_stencil_draw_glsl__generated_input.source"
+source_snapshot_sha256 = "9df944e40e0f66f0a7f4e2114fe2644d426a44bc236eab969e3bdf75bb70c0bd"
+dependency_units = []
+source_lines = 31
+source_bytes = 763
+configuration_authorities = 4
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

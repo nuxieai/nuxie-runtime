@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:color_ramp"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/color_ramp.glsl"
+source_sha256 = "65d0e8610193de1a7bf02722bcc153f04474e0d57644a35fd56291333ee8fde1"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_color_ramp_glsl__generated_input.rs"
+target_sha256 = "dc44481cc07fe26e3f0d0e0c985f8d081baa29f9584ee7ba61d7fda09628fbdd"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_color_ramp_glsl__generated_input.source"
+source_snapshot_sha256 = "65d0e8610193de1a7bf02722bcc153f04474e0d57644a35fd56291333ee8fde1"
+dependency_units = ["shader:source:common", "shader:source:constants", "shader:source:flush_uniforms", "shader:source:glsl"]
+source_lines = 107
+source_bytes = 3167
+configuration_authorities = 14
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

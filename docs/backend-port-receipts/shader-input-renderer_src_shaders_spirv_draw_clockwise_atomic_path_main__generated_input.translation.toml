@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_clockwise_atomic_path"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/draw_clockwise_atomic_path.main"
+source_sha256 = "3583898b993ad489e57f8435ce6bac84dd48f0ed0ba6740d2b716e48bc1f4fcf"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_path_main__generated_input.rs"
+target_sha256 = "70e1dc996657332b0138e234a335aee3362aec5646dd63518baef32bfb66fc65"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_draw_clockwise_atomic_path_main__generated_input.source"
+source_snapshot_sha256 = "3583898b993ad489e57f8435ce6bac84dd48f0ed0ba6740d2b716e48bc1f4fcf"
+dependency_units = ["shader:source:advanced_blend", "shader:source:common", "shader:source:constants", "shader:source:draw_path", "shader:source:draw_path_common", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:specialization"]
+source_lines = 20
+source_bytes = 708
+configuration_authorities = 5
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

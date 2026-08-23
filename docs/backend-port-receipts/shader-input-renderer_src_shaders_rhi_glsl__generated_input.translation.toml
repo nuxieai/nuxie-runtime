@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:rhi"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/rhi.glsl"
+source_sha256 = "b08bc3a81cd7e88eb82ffba447fd073630aaa51f996641e8f7cd367678617f96"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_rhi_glsl__generated_input.rs"
+target_sha256 = "2ccb4b16288fd41e14226b398c3c7e52d18c750d8d50a2e01300cf7e2fe24c3a"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_rhi_glsl__generated_input.source"
+source_snapshot_sha256 = "b08bc3a81cd7e88eb82ffba447fd073630aaa51f996641e8f7cd367678617f96"
+dependency_units = []
+source_lines = 560
+source_bytes = 22901
+configuration_authorities = 59
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

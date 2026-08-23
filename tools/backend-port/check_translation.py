@@ -116,7 +116,7 @@ def main() -> int:
         require(receipt["translation_kind"] == "complete-source-owner", f"partial translation receipt: {source_path}")
         expected_dependencies = {
             value
-            for value in unit_order[owner["ownership_unit"]]["dependency_units"].split(",")
+            for value in unit_order[owner["ownership_unit"]]["dependency_units"].split(";")
             if value
         }
         require(
@@ -143,7 +143,7 @@ def main() -> int:
 
     for unit in completed_units:
         row = unit_order[unit]
-        dependencies = {value for value in row["dependency_units"].split(",") if value}
+        dependencies = {value for value in row["dependency_units"].split(";") if value}
         require(dependencies <= completed_units, f"translated before dependencies: {unit}")
     if completed_units:
         highest_group = max(int(unit_order[unit]["order_group"]) for unit in completed_units)
@@ -152,6 +152,7 @@ def main() -> int:
             for unit, row in unit_order.items()
             if int(row["order_group"]) < highest_group
             and unit in sources_by_unit
+            and row["campaign"] in QUEUE_CAMPAIGNS[manifest["active_queue"]]
             and unit not in completed_units
         }
         require(not unfinished_earlier, "translation skipped an earlier dependency group")

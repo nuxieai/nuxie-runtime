@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_clockwise_clip"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/draw_clockwise_clip.frag"
+source_sha256 = "85c10fcfd0c66df4796ade0f0c3b33f1d633138cfd2548462e545e804e18307e"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_draw_clockwise_clip_frag__generated_input.rs"
+target_sha256 = "f365167303662b6d056e5eab870b93c77fe465eb427d99a7a8ce8f93fe018279"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_draw_clockwise_clip_frag__generated_input.source"
+source_snapshot_sha256 = "85c10fcfd0c66df4796ade0f0c3b33f1d633138cfd2548462e545e804e18307e"
+dependency_units = ["shader:source:advanced_blend", "shader:source:common", "shader:source:constants", "shader:source:draw_path", "shader:source:draw_path_common", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:specialization"]
+source_lines = 101
+source_bytes = 3061
+configuration_authorities = 18
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

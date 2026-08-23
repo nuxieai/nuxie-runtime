@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_path_common"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/draw_path_common.glsl"
+source_sha256 = "3a6e72e80eec81b2eb467134f62188e2a86f7debfb0798a8c4ed5873beb7e86e"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_draw_path_common_glsl__generated_input.rs"
+target_sha256 = "0bb000557f615fcea6a8812e9247a5c996be3141351059133b59a6d366476f1b"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_draw_path_common_glsl__generated_input.source"
+source_snapshot_sha256 = "3a6e72e80eec81b2eb467134f62188e2a86f7debfb0798a8c4ed5873beb7e86e"
+dependency_units = []
+source_lines = 914
+source_bytes = 39516
+configuration_authorities = 66
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

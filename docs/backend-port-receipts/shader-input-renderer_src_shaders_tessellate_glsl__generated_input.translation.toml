@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:tessellate"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/tessellate.glsl"
+source_sha256 = "ecf7b979552b7bf7af6ff17a3fc8a0f5666942f7f7febda96fb4255640deee2f"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_tessellate_glsl__generated_input.rs"
+target_sha256 = "d1ea66de675719cbe1a780238677d6901a6c01627bee6f40ecb829a19ec225dd"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_tessellate_glsl__generated_input.source"
+source_snapshot_sha256 = "ecf7b979552b7bf7af6ff17a3fc8a0f5666942f7f7febda96fb4255640deee2f"
+dependency_units = ["shader:source:bezier_utils", "shader:source:common", "shader:source:constants", "shader:source:flush_uniforms", "shader:source:glsl"]
+source_lines = 560
+source_bytes = 24329
+configuration_authorities = 17
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

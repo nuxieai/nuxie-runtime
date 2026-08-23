@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:bezier_utils"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/bezier_utils.glsl"
+source_sha256 = "c18b0d2aac6f33dff72a6f17bdcc4b40ee337651fa0ecdd104e85641701e385f"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_bezier_utils_glsl__generated_input.rs"
+target_sha256 = "530862d4d32dcbe24ee181ade1c6fc8d3c478db05ac233fd95564dc288d5bd86"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_bezier_utils_glsl__generated_input.source"
+source_snapshot_sha256 = "c18b0d2aac6f33dff72a6f17bdcc4b40ee337651fa0ecdd104e85641701e385f"
+dependency_units = []
+source_lines = 245
+source_bytes = 8281
+configuration_authorities = 7
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

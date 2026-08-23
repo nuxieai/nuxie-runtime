@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:init_clockwise_atomic_workaround"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/init_clockwise_atomic_workaround.frag"
+source_sha256 = "092a1f498d0f6ff336edecdc73f96c46c1b3a51d494249839fe9934203dd53a3"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_init_clockwise_atomic_workaround_frag__generated_input.rs"
+target_sha256 = "887b18314ecb99f82876721002cfcfe7b6bf455c7774fb9cbbb27a8202059888"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_init_clockwise_atomic_workaround_frag__generated_input.source"
+source_snapshot_sha256 = "092a1f498d0f6ff336edecdc73f96c46c1b3a51d494249839fe9934203dd53a3"
+dependency_units = ["shader:source:common", "shader:source:constants", "shader:source:draw_path_common", "shader:source:glsl"]
+source_lines = 33
+source_bytes = 1082
+configuration_authorities = 8
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

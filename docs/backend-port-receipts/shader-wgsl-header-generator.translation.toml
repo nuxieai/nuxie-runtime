@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:wgsl_header_generator"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/wgsl_to_header.py"
+source_sha256 = "74d8f360cda602df5dac16664a5175d6ddae35d360728e22905373175857e7e7"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_wgsl_to_header_py__generator.rs"
+target_sha256 = "46bdc429220ea002552873941fd09f268fbefd84598184a0fc95b46750379698"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_wgsl_to_header_py.source"
+source_snapshot_sha256 = "74d8f360cda602df5dac16664a5175d6ddae35d360728e22905373175857e7e7"
+dependency_units = []
+source_lines = 188
+source_bytes = 7593
+configuration_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves exact transformation order, identifier allocator, specialization reachability, raw-mode, header emission, and failure contracts plus byte-exact source."

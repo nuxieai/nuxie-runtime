@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:atomic_draw"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/atomic_draw.glsl"
+source_sha256 = "fad587733e5990e4ba77e194326dacaf27022026f9621e58a1aac2c131935849"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_atomic_draw_glsl__generated_input.rs"
+target_sha256 = "1b83232c6e8d4914b78b8a2acacf68f7d218d39a8d643db15f1a5723f9a4ee69"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_atomic_draw_glsl__generated_input.source"
+source_snapshot_sha256 = "fad587733e5990e4ba77e194326dacaf27022026f9621e58a1aac2c131935849"
+dependency_units = []
+source_lines = 1104
+source_bytes = 37201
+configuration_authorities = 264
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

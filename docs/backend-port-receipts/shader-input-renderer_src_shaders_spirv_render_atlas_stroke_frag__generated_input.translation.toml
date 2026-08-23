@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:render_atlas_stroke"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/render_atlas_stroke.frag"
+source_sha256 = "03993d7ed74efdbf0f5db9e576b24b7be3661bd66bb66483b5752de77426d8aa"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_stroke_frag__generated_input.rs"
+target_sha256 = "6c5a267f1265d3cb81db6d0c3375b70c3210addf0ccd68326cc8c691f68d24c0"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_render_atlas_stroke_frag__generated_input.source"
+source_snapshot_sha256 = "03993d7ed74efdbf0f5db9e576b24b7be3661bd66bb66483b5752de77426d8aa"
+dependency_units = ["shader:source:render_atlas_common"]
+source_lines = 4
+source_bytes = 129
+configuration_authorities = 1
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

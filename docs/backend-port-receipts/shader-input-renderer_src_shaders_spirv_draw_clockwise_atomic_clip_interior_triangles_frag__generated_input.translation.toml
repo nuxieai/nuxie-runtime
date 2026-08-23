@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_clockwise_atomic_clip_interior_triangles"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/draw_clockwise_atomic_clip_interior_triangles.frag"
+source_sha256 = "f8d9022ff95749f3df108983687b860b216a03a009bbbd314d4d1fe10ff1a269"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_clip_interior_triangles_frag__generated_input.rs"
+target_sha256 = "49d5a934185f9b794543ed793930d5dfb9aa4887abd34a9ec778e625ad29096b"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_draw_clockwise_atomic_clip_interior_triangles_frag__generated_input.source"
+source_snapshot_sha256 = "f8d9022ff95749f3df108983687b860b216a03a009bbbd314d4d1fe10ff1a269"
+dependency_units = ["shader:source:advanced_blend", "shader:source:common", "shader:source:constants", "shader:source:draw_clockwise_atomic_clip", "shader:source:draw_path", "shader:source:draw_path_common", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:specialization"]
+source_lines = 16
+source_bytes = 614
+configuration_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

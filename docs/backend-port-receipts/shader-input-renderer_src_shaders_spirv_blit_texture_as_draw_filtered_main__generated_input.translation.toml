@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:blit_texture_as_draw_filtered"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main"
+source_sha256 = "f94fff896ffcde07a3cf5ab06932284a4fa9dc6b87e48bb8256e018939bef0ea"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_blit_texture_as_draw_filtered_main__generated_input.rs"
+target_sha256 = "079f68876bfcef4e7d09d2ea6eecd39204f2b3858b168325cbc96977e5f73b64"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_blit_texture_as_draw_filtered_main__generated_input.source"
+source_snapshot_sha256 = "f94fff896ffcde07a3cf5ab06932284a4fa9dc6b87e48bb8256e018939bef0ea"
+dependency_units = ["shader:source:blit_texture_as_draw", "shader:source:common", "shader:source:constants", "shader:source:flush_uniforms", "shader:source:glsl"]
+source_lines = 9
+source_bytes = 325
+configuration_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

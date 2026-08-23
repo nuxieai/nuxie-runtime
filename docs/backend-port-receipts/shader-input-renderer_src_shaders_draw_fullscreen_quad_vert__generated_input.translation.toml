@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_fullscreen_quad"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/draw_fullscreen_quad.vert"
+source_sha256 = "6a9842803e8472ab8f756a191c6a6d60a7c28db5587ee22c5e9bddb000c49cc2"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_draw_fullscreen_quad_vert__generated_input.rs"
+target_sha256 = "f57e3fa8d42a0767fda5c8867224f6dce779a606e056fc965256202cec3ad563"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_draw_fullscreen_quad_vert__generated_input.source"
+source_snapshot_sha256 = "6a9842803e8472ab8f756a191c6a6d60a7c28db5587ee22c5e9bddb000c49cc2"
+dependency_units = ["shader:source:common", "shader:source:constants", "shader:source:flush_uniforms", "shader:source:glsl"]
+source_lines = 15
+source_bytes = 335
+configuration_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

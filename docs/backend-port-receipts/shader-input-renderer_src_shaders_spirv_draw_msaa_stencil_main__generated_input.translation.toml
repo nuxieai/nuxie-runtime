@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_msaa_stencil"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/draw_msaa_stencil.main"
+source_sha256 = "738afb5d5a358ab3a25285b7e1472a8212833594cceb29665160a6652ba5dc4b"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_stencil_main__generated_input.rs"
+target_sha256 = "c416607b167dce4764c9bccdd4401f915d79090caf7c33a3a9a06c6353eebb96"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_draw_msaa_stencil_main__generated_input.source"
+source_snapshot_sha256 = "738afb5d5a358ab3a25285b7e1472a8212833594cceb29665160a6652ba5dc4b"
+dependency_units = ["shader:source:advanced_blend", "shader:source:common", "shader:source:constants", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:specialization", "shader:source:stencil_draw"]
+source_lines = 17
+source_bytes = 629
+configuration_authorities = 3
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

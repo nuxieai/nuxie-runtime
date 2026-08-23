@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_image_mesh"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/draw_image_mesh.main"
+source_sha256 = "5b0ebe856998c737fd47caffaffffea5b6a59677a4dfb8a825f3cb77f0eec220"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_image_mesh_main__generated_input.rs"
+target_sha256 = "3be995824b9817dd01b8fd4ed95eda23bf0c1c7736ab72228ed67194f3c564f6"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_draw_image_mesh_main__generated_input.source"
+source_snapshot_sha256 = "5b0ebe856998c737fd47caffaffffea5b6a59677a4dfb8a825f3cb77f0eec220"
+dependency_units = ["shader:source:advanced_blend", "shader:source:common", "shader:source:constants", "shader:source:draw_mesh", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:specialization"]
+source_lines = 14
+source_bytes = 485
+configuration_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

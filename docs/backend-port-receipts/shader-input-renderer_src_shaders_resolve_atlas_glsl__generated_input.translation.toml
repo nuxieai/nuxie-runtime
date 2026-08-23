@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:resolve_atlas"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/resolve_atlas.glsl"
+source_sha256 = "a31d945c9b29dd4ba74cff3c9c9010e108f5cd82bb0b82474b199725e59aa04f"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_resolve_atlas_glsl__generated_input.rs"
+target_sha256 = "0955fd3142e31584b3fbc4425507e385674f522d35fea5197a6832e0034852ba"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_resolve_atlas_glsl__generated_input.source"
+source_snapshot_sha256 = "a31d945c9b29dd4ba74cff3c9c9010e108f5cd82bb0b82474b199725e59aa04f"
+dependency_units = []
+source_lines = 93
+source_bytes = 2615
+configuration_authorities = 17
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

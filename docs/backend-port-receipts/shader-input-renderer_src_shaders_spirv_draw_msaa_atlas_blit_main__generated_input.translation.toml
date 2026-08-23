@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_msaa_atlas_blit"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/draw_msaa_atlas_blit.main"
+source_sha256 = "f62ec4cec844501391fd09af5d9cc10a4a73871f4a49ade2173ba1c1d210e3f8"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_atlas_blit_main__generated_input.rs"
+target_sha256 = "d64b226965a7967df7d3f32f2886073423175e021de9eadea2c952b499cf15a9"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_draw_msaa_atlas_blit_main__generated_input.source"
+source_snapshot_sha256 = "f62ec4cec844501391fd09af5d9cc10a4a73871f4a49ade2173ba1c1d210e3f8"
+dependency_units = ["shader:source:advanced_blend", "shader:source:common", "shader:source:constants", "shader:source:draw_msaa_object", "shader:source:draw_path", "shader:source:draw_path_common", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:specialization"]
+source_lines = 16
+source_bytes = 569
+configuration_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

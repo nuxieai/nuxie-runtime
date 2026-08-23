@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:build_graph"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/Makefile"
+source_sha256 = "ec5d0d98d78051e98cda80f92cd67858cb1fb70be64cddd8ad13bcd4ad5f50fc"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_makefile__build_input.rs"
+target_sha256 = "fafa1d5a26af3fa28068b67921a3a6b1563ea20502d69bce1fbbcf924e858a41"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_makefile.source"
+source_snapshot_sha256 = "ec5d0d98d78051e98cda80f92cd67858cb1fb70be64cddd8ad13bcd4ad5f50fc"
+dependency_units = []
+source_lines = 502
+source_bytes = 22079
+configuration_authorities = 2
+generated_artifacts = 520
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Compiles the prior complete Rust build-graph translation independently and binds it to the exact current source snapshot and frozen artifact denominator."

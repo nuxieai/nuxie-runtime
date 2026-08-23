@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_clockwise_atomic_borrowed_coverage_interior_triangles"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/draw_clockwise_atomic_borrowed_coverage_interior_triangles.frag"
+source_sha256 = "e565d01b95b2be36f3e9a0f52ce294d9b7a45240f45a068b7226be070a7625e6"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_borrowed_coverage_interior_triangles_frag__generated_input.rs"
+target_sha256 = "f0101374f397d3981103a8431690435cc207cc34a8337322b03d06d40e1d22c2"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_draw_clockwise_atomic_borrowed_coverage_interior_triangles_frag__generated_input.source"
+source_snapshot_sha256 = "e565d01b95b2be36f3e9a0f52ce294d9b7a45240f45a068b7226be070a7625e6"
+dependency_units = ["shader:source:advanced_blend", "shader:source:common", "shader:source:constants", "shader:source:draw_clockwise_atomic_borrowed_coverage", "shader:source:draw_path", "shader:source:draw_path_common", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:specialization"]
+source_lines = 16
+source_bytes = 627
+configuration_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

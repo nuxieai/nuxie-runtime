@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:atomic_resolve"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/atomic_resolve.main"
+source_sha256 = "40fa708b2c8d1750c12353519998cadf129a4872ccb5798d21ccbf97e145781b"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_resolve_main__generated_input.rs"
+target_sha256 = "81b9746560ed5c7000b664155511635738f64b4f364a90417fb08ac09547aed9"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_atomic_resolve_main__generated_input.source"
+source_snapshot_sha256 = "40fa708b2c8d1750c12353519998cadf129a4872ccb5798d21ccbf97e145781b"
+dependency_units = ["shader:source:atomic_base"]
+source_lines = 5
+source_bytes = 151
+configuration_authorities = 1
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

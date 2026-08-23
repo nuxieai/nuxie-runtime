@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:init_clockwise_atomic_workaround"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/init_clockwise_atomic_workaround.frag"
+source_sha256 = "50e907b11d07529b7be4ec09435fc7baf2618faff646008d89769a1379583f1f"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_init_clockwise_atomic_workaround_frag__generated_input.rs"
+target_sha256 = "57431dfe6a5231345b0c8865b76278c68bff65419f36750b97371bcc01a9f8f2"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_init_clockwise_atomic_workaround_frag__generated_input.source"
+source_snapshot_sha256 = "50e907b11d07529b7be4ec09435fc7baf2618faff646008d89769a1379583f1f"
+dependency_units = ["shader:source:common", "shader:source:constants", "shader:source:draw_path_common", "shader:source:glsl"]
+source_lines = 11
+source_bytes = 493
+configuration_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

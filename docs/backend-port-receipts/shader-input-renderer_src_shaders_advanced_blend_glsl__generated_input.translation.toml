@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:advanced_blend"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/advanced_blend.glsl"
+source_sha256 = "d7f8d9cec8e095c7e6d331a9f3ba48cdb18ea63f961d9223e3dfc509bcd8794b"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_advanced_blend_glsl__generated_input.rs"
+target_sha256 = "88f594e8845e40d73949ce0e6fcfe1e8162f88aa7e7a9e87e25b4e17ce55dd62"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_advanced_blend_glsl__generated_input.source"
+source_snapshot_sha256 = "d7f8d9cec8e095c7e6d331a9f3ba48cdb18ea63f961d9223e3dfc509bcd8794b"
+dependency_units = []
+source_lines = 330
+source_bytes = 13219
+configuration_authorities = 13
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:render_atlas_common"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/render_atlas_common.glsl"
+source_sha256 = "95ffda17e87a1a09be1be4440e6905ae67ae9083fcb3d6467ca603d2e8494cd7"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_common_glsl__generated_input.rs"
+target_sha256 = "7f544bdc313774b284637ccb651eedf5b2fbef27923ee8e747e4ded9e5ad6f7a"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_render_atlas_common_glsl__generated_input.source"
+source_snapshot_sha256 = "95ffda17e87a1a09be1be4440e6905ae67ae9083fcb3d6467ca603d2e8494cd7"
+dependency_units = ["shader:source:common", "shader:source:constants", "shader:source:draw_path_common", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:render_atlas"]
+source_lines = 11
+source_bytes = 380
+configuration_authorities = 1
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

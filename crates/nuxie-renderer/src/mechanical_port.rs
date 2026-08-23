@@ -20,6 +20,9 @@
 #[doc(hidden)]
 mod target_inventory;
 
+#[doc(hidden)]
+mod backend_shader_authority_inventory;
+
 #[path = "mechanical_port/shader-build-authority/renderer_premake5_pls_renderer_lua__build_input.rs"]
 pub(crate) mod backend_port_build_pls_renderer;
 
@@ -34,6 +37,18 @@ pub(crate) mod backend_port_dependency_moltenvk;
 
 #[path = "mechanical_port/shader-build-authority/renderer_make_swiftshader_sh__build_input.rs"]
 pub(crate) mod backend_port_dependency_swiftshader;
+
+#[path = "mechanical_port/shader-build-authority/renderer_src_shaders_makefile__build_input.rs"]
+pub(crate) mod backend_port_shader_build_graph;
+
+#[path = "mechanical_port/shader-build-authority/renderer_src_shaders_minify_py__generator.rs"]
+pub(crate) mod backend_port_shader_minifier;
+
+#[path = "mechanical_port/shader-build-authority/renderer_src_shaders_spirv_binary_to_header_py__generator.rs"]
+pub(crate) mod backend_port_spirv_header_generator;
+
+#[path = "mechanical_port/shader-build-authority/renderer_src_shaders_wgsl_to_header_py__generator.rs"]
+pub(crate) mod backend_port_wgsl_header_generator;
 
 pub(crate) mod source {
     pub(crate) mod decoders {

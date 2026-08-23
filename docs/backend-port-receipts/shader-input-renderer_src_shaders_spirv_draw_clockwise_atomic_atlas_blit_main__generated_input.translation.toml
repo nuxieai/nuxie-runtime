@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_clockwise_atomic_atlas_blit"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/draw_clockwise_atomic_atlas_blit.main"
+source_sha256 = "101db04b19c4da1ecdbfd2cbeeb5b7848750d75d5770857d9e88a54a4ccf259f"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_clockwise_atomic_atlas_blit_main__generated_input.rs"
+target_sha256 = "ce95c857531175a4d5600076273678776218a3e4515d4e68551f8231b3f6f86d"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_draw_clockwise_atomic_atlas_blit_main__generated_input.source"
+source_snapshot_sha256 = "101db04b19c4da1ecdbfd2cbeeb5b7848750d75d5770857d9e88a54a4ccf259f"
+dependency_units = ["shader:source:advanced_blend", "shader:source:common", "shader:source:constants", "shader:source:draw_mesh", "shader:source:draw_path", "shader:source:draw_path_common", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:specialization"]
+source_lines = 16
+source_bytes = 572
+configuration_authorities = 2
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

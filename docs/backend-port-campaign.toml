@@ -113,3 +113,7 @@ extra_sources = [
   "renderer/make_swiftshader.sh",
 ]
 classification_status = "frozen"
+translation_status = "complete"
+translation_sources = 87
+translation_units = 72
+translation_receipt_gate = "green"

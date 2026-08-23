@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "shader:source:draw_msaa_color_seed_attachment"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag"
+source_sha256 = "0baeda14de63ded97fc2247240b01b71f891be7235b3c73a2a950810402c44d5"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.rs"
+target_sha256 = "8122045673a115e371f0afac22f0c7e7831a19f1e47cdbff8440aafd709be2ed"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.source"
+source_snapshot_sha256 = "0baeda14de63ded97fc2247240b01b71f891be7235b3c73a2a950810402c44d5"
+dependency_units = ["shader:source:common", "shader:source:constants", "shader:source:draw_input_attachment", "shader:source:flush_uniforms", "shader:source:glsl"]
+source_lines = 8
+source_bytes = 304
+configuration_authorities = 1
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the complete shader program byte-for-byte; generated outputs remain governed by the frozen 520-row artifact ledger."

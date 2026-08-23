@@ -501,408 +501,408 @@ webgpu	webgpu-wagyu-v1	renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp	rive::or
 webgpu	webgpu-wagyu-v1	renderer/src/ore/wgpu/ore_texture_wgpu.hpp	rive::ore::TextureViewWGPU	1	m_wgpuTextureView	wgpu::TextureView	33	webgpu:ore:texture	value-lifetime-review-required
 webgpu	webgpu-wagyu-v1	renderer/src/ore/wgpu/ore_texture_wgpu.hpp	rive::ore::TextureWGPU	1	m_wgpuTexture	wgpu::Texture	18	webgpu:ore:texture	value-lifetime-review-required
 webgpu	webgpu-wagyu-v1	renderer/src/ore/wgpu/ore_texture_wgpu.hpp	rive::ore::TextureWGPU	2	m_wgpuQueue	wgpu::Queue	19	webgpu:ore:texture	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu.h	WGPUStringView	1	data	const char *	106	webgpu:wagyu:webgpu	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu.h	WGPUStringView	2	length	size_t	107	webgpu:wagyu:webgpu	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	1	nextInChain	ChainedStructOut *	1743	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	2	vendor	const StringView	1744	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	3	architecture	const StringView	1745	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	4	device	const StringView	1746	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	5	description	const StringView	1747	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	6	backendType	const BackendType	1748	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	7	adapterType	const AdapterType	1749	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	8	vendorID	const uint32_t	1750	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	9	deviceID	const uint32_t	1751	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	10	subgroupMinSize	const uint32_t	1752	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	11	subgroupMaxSize	const uint32_t	1753	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	1	nextInChain	const ChainedStruct *	2247	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	2	label	StringView	2248	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	3	layout	BindGroupLayout	2249	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	4	entryCount	size_t	2250	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	5	entries	const BindGroupEntry *	2251	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	1	nextInChain	const ChainedStruct *	1763	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	2	binding	uint32_t	1764	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	3	buffer	Buffer	1765	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	4	offset	uint64_t	1766	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	5	size	uint64_t	1767	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	6	sampler	Sampler	1768	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	7	textureView	TextureView	1769	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutDescriptor	1	nextInChain	const ChainedStruct *	2467	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutDescriptor	2	label	StringView	2468	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutDescriptor	3	entryCount	size_t	2469	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutDescriptor	4	entries	const BindGroupLayoutEntry *	2470	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	1	nextInChain	const ChainedStruct *	2257	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	2	binding	uint32_t	2258	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	3	visibility	ShaderStage	2259	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	4	bindingArraySize	uint32_t	2260	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	5	buffer	BufferBindingLayout	2261	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	6	sampler	SamplerBindingLayout	2262	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	7	texture	TextureBindingLayout	2263	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	8	storageTexture	StorageTextureBindingLayout	2264	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendComponent	1	operation	BlendOperation	1775	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendComponent	2	srcFactor	BlendFactor	1776	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendComponent	3	dstFactor	BlendFactor	1777	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendState	1	color	BlendComponent	2270	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendState	2	alpha	BlendComponent	2271	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Bool	1	mValue	WGPUBool	806	webgpu:wagyu:webgpu_cpp	native-handle-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferBindingLayout	1	nextInChain	const ChainedStruct *	1783	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferBindingLayout	2	type	BufferBindingType	1784	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferBindingLayout	3	hasDynamicOffset	Bool	1785	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferBindingLayout	4	minBindingSize	uint64_t	1786	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	1	nextInChain	const ChainedStruct *	1792	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	2	label	StringView	1793	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	3	usage	BufferUsage	1794	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	4	size	uint64_t	1795	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	5	mappedAtCreation	Bool	1796	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Color	1	r	double	1802	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Color	2	g	double	1803	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Color	3	b	double	1804	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Color	4	a	double	1805	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ColorTargetState	1	nextInChain	const ChainedStruct *	2476	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ColorTargetState	2	format	TextureFormat	2477	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ColorTargetState	3	blend	const BlendState *	2478	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ColorTargetState	4	writeMask	ColorWriteMask	2479	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CommandBufferDescriptor	1	nextInChain	const ChainedStruct *	1811	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CommandBufferDescriptor	2	label	StringView	1812	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CommandEncoderDescriptor	1	nextInChain	const ChainedStruct *	1818	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CommandEncoderDescriptor	2	label	StringView	1819	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompatibilityModeLimits	1	maxStorageBuffersInVertexStage	uint32_t	1831	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompatibilityModeLimits	2	maxStorageTexturesInVertexStage	uint32_t	1832	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompatibilityModeLimits	3	maxStorageBuffersInFragmentStage	uint32_t	1833	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompatibilityModeLimits	4	maxStorageTexturesInFragmentStage	uint32_t	1834	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationInfo	1	nextInChain	const ChainedStruct *	2485	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationInfo	2	messageCount	size_t	2486	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationInfo	3	messages	const CompilationMessage *	2487	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	1	nextInChain	const ChainedStruct *	2277	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	2	message	StringView	2278	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	3	type	CompilationMessageType	2279	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	4	lineNum	uint64_t	2280	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	5	linePos	uint64_t	2281	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	6	offset	uint64_t	2282	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	7	length	uint64_t	2283	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePassDescriptor	1	nextInChain	const ChainedStruct *	2289	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePassDescriptor	2	label	StringView	2290	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePassDescriptor	3	timestampWrites	const PassTimestampWrites *	2291	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePipelineDescriptor	1	nextInChain	const ChainedStruct *	2493	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePipelineDescriptor	2	label	StringView	2494	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePipelineDescriptor	3	layout	PipelineLayout	2495	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePipelineDescriptor	4	compute	ComputeState	2496	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	1	nextInChain	const ChainedStruct *	2297	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	2	module	ShaderModule	2298	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	3	entryPoint	StringView	2299	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	4	constantCount	size_t	2300	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	5	constants	const ConstantEntry *	2301	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ConstantEntry	1	nextInChain	const ChainedStruct *	1840	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ConstantEntry	2	key	StringView	1841	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ConstantEntry	3	value	double	1842	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ConvertibleStatus	1	status	Status	880	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DawnCompilationMessageUtf16	1	linePos	uint64_t	1854	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DawnCompilationMessageUtf16	2	offset	uint64_t	1855	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DawnCompilationMessageUtf16	3	length	uint64_t	1856	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	1	nextInChain	const ChainedStruct *	2307	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	2	format	TextureFormat	2308	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	3	depthWriteEnabled	OptionalBool	2309	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	4	depthCompare	CompareFunction	2310	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	5	stencilFront	StencilFaceState	2311	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	6	stencilBack	StencilFaceState	2312	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	7	stencilReadMask	uint32_t	2313	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	8	stencilWriteMask	uint32_t	2314	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	9	depthBias	int32_t	2315	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	10	depthBiasSlopeScale	float	2316	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	11	depthBiasClamp	float	2317	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::EmscriptenSurfaceSourceCanvasHTMLSelector	1	selector	StringView	1868	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Extent3D	1	width	uint32_t	1874	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Extent3D	2	height	uint32_t	1875	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Extent3D	3	depthOrArrayLayers	uint32_t	1876	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	1	nextInChain	const ChainedStruct *	2541	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	2	module	ShaderModule	2542	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	3	entryPoint	StringView	2543	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	4	constantCount	size_t	2544	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	5	constants	const ConstantEntry *	2545	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	6	targetCount	size_t	2546	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	7	targets	const ColorTargetState *	2547	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Future	1	id	uint64_t	1882	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FutureWaitInfo	1	future	Future	2323	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FutureWaitInfo	2	completed	Bool	2324	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::INTERNAL_HAVE_EMDAWNWEBGPU_HEADER	1	unused	Bool	1895	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	2873	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	2901	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3157	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3177	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3243	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3267	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3540	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3640	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	4044	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStructOut *	2826	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	const ChainedStruct *	4323	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	code	StringView	3268	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	codeSize	uint32_t	3244	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	colorSpace	PredefinedColorSpace	3541	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	label	StringView	4324	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	linePos	uint64_t	2874	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	maxDrawCount	uint64_t	3158	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	maxStorageBuffersInVertexStage	uint32_t	2827	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	selector	StringView	2902	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	swizzle	TextureComponentSwizzle	4045	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	textureBindingViewDimension	TextureViewDimension	3641	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	xrCompatible	Bool	3178	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	code	const uint32_t *	3245	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	maxStorageTexturesInVertexStage	uint32_t	2828	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	offset	uint64_t	2875	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	requiredFeatureCount	size_t	4325	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	toneMappingMode	ToneMappingMode	3542	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	4	length	uint64_t	2876	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	4	maxStorageBuffersInFragmentStage	uint32_t	2829	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	4	requiredFeatures	const FeatureName *	4326	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	5	maxStorageTexturesInFragmentStage	uint32_t	2830	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	5	requiredLimits	const Limits *	4327	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	6	defaultQueue	QueueDescriptor	4328	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceDescriptor	1	nextInChain	const ChainedStruct *	2330	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceDescriptor	2	requiredFeatureCount	size_t	2331	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceDescriptor	3	requiredFeatures	const InstanceFeatureName *	2332	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceDescriptor	4	requiredLimits	const InstanceLimits *	2333	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceLimits	1	nextInChain	ChainedStructOut *	1888	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceLimits	2	timedWaitAnyMaxCount	size_t	1889	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	1	nextInChain	ChainedStructOut *	2339	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	2	maxTextureDimension1D	uint32_t	2340	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	3	maxTextureDimension2D	uint32_t	2341	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	4	maxTextureDimension3D	uint32_t	2342	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	5	maxTextureArrayLayers	uint32_t	2343	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	6	maxBindGroups	uint32_t	2344	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	7	maxBindGroupsPlusVertexBuffers	uint32_t	2345	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	8	maxBindingsPerBindGroup	uint32_t	2346	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	9	maxDynamicUniformBuffersPerPipelineLayout	uint32_t	2347	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	10	maxDynamicStorageBuffersPerPipelineLayout	uint32_t	2348	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	11	maxSampledTexturesPerShaderStage	uint32_t	2349	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	12	maxSamplersPerShaderStage	uint32_t	2350	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	13	maxStorageBuffersPerShaderStage	uint32_t	2351	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	14	maxStorageTexturesPerShaderStage	uint32_t	2352	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	15	maxUniformBuffersPerShaderStage	uint32_t	2353	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	16	maxUniformBufferBindingSize	uint64_t	2354	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	17	maxStorageBufferBindingSize	uint64_t	2355	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	18	minUniformBufferOffsetAlignment	uint32_t	2356	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	19	minStorageBufferOffsetAlignment	uint32_t	2357	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	20	maxVertexBuffers	uint32_t	2358	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	21	maxBufferSize	uint64_t	2359	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	22	maxVertexAttributes	uint32_t	2360	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	23	maxVertexBufferArrayStride	uint32_t	2361	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	24	maxInterStageShaderVariables	uint32_t	2362	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	25	maxColorAttachments	uint32_t	2363	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	26	maxColorAttachmentBytesPerSample	uint32_t	2364	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	27	maxComputeWorkgroupStorageSize	uint32_t	2365	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	28	maxComputeInvocationsPerWorkgroup	uint32_t	2366	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	29	maxComputeWorkgroupSizeX	uint32_t	2367	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	30	maxComputeWorkgroupSizeY	uint32_t	2368	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	31	maxComputeWorkgroupSizeZ	uint32_t	2369	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	32	maxComputeWorkgroupsPerDimension	uint32_t	2370	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	33	maxImmediateSize	uint32_t	2371	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::MultisampleState	1	nextInChain	const ChainedStruct *	1901	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::MultisampleState	2	count	uint32_t	1902	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::MultisampleState	3	mask	uint32_t	1903	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::MultisampleState	4	alphaToCoverageEnabled	Bool	1904	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ObjectBase::ObjectBase	1	mHandle	CType	955	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::OptionalBool	1	mValue	WGPUOptionalBool	860	webgpu:wagyu:webgpu_cpp	native-handle-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Origin3D	1	x	uint32_t	1910	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Origin3D	2	y	uint32_t	1911	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Origin3D	3	z	uint32_t	1912	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PassTimestampWrites	1	nextInChain	const ChainedStruct *	1918	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PassTimestampWrites	2	querySet	QuerySet	1919	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PassTimestampWrites	3	beginningOfPassWriteIndex	uint32_t	1920	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PassTimestampWrites	4	endOfPassWriteIndex	uint32_t	1921	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	1	nextInChain	const ChainedStruct *	1927	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	2	label	StringView	1928	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	3	bindGroupLayoutCount	size_t	1929	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	4	bindGroupLayouts	const BindGroupLayout *	1930	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	5	immediateSize	uint32_t	1931	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	1	nextInChain	const ChainedStruct *	1937	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	2	topology	PrimitiveTopology	1938	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	3	stripIndexFormat	IndexFormat	1939	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	4	frontFace	FrontFace	1940	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	5	cullMode	CullMode	1941	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	6	unclippedDepth	Bool	1942	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QuerySetDescriptor	1	nextInChain	const ChainedStruct *	1948	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QuerySetDescriptor	2	label	StringView	1949	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QuerySetDescriptor	3	type	QueryType	1950	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QuerySetDescriptor	4	count	uint32_t	1951	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QueueDescriptor	1	nextInChain	const ChainedStruct *	1957	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QueueDescriptor	2	label	StringView	1958	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleDescriptor	1	nextInChain	const ChainedStruct *	1964	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleDescriptor	2	label	StringView	1965	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	1	nextInChain	const ChainedStruct *	1971	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	2	label	StringView	1972	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	3	colorFormatCount	size_t	1973	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	4	colorFormats	const TextureFormat *	1974	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	5	depthStencilFormat	TextureFormat	1975	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	6	sampleCount	uint32_t	1976	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	7	depthReadOnly	Bool	1977	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	8	stencilReadOnly	Bool	1978	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	1	nextInChain	const ChainedStruct *	2377	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	2	view	TextureView	2378	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	3	depthSlice	uint32_t	2379	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	4	resolveTarget	TextureView	2380	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	5	loadOp	LoadOp	2381	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	6	storeOp	StoreOp	2382	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	7	clearValue	Color	2383	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	1	nextInChain	const ChainedStruct *	1984	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	2	view	TextureView	1985	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	3	depthLoadOp	LoadOp	1986	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	4	depthStoreOp	StoreOp	1987	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	5	depthClearValue	float	1988	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	6	depthReadOnly	Bool	1989	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	7	stencilLoadOp	LoadOp	1990	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	8	stencilStoreOp	StoreOp	1991	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	9	stencilClearValue	uint32_t	1992	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	10	stencilReadOnly	Bool	1993	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	1	nextInChain	const ChainedStruct *	2502	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	2	label	StringView	2503	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	3	colorAttachmentCount	size_t	2504	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	4	colorAttachments	const RenderPassColorAttachment *	2505	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	5	depthStencilAttachment	const RenderPassDepthStencilAttachment *	2506	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	6	occlusionQuerySet	QuerySet	2507	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	7	timestampWrites	const PassTimestampWrites *	2508	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassMaxDrawCount	1	maxDrawCount	uint64_t	2005	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	1	nextInChain	const ChainedStruct *	2553	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	2	label	StringView	2554	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	3	layout	PipelineLayout	2555	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	4	vertex	VertexState	2556	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	5	primitive	PrimitiveState	2557	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	6	depthStencil	const DepthStencilState *	2558	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	7	multisample	MultisampleState	2559	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	8	fragment	const FragmentState *	2560	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	1	nextInChain	const ChainedStruct *	2389	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	2	featureLevel	FeatureLevel	2390	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	3	powerPreference	PowerPreference	2391	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	4	forceFallbackAdapter	Bool	2392	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	5	backendType	BackendType	2393	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	6	compatibleSurface	Surface	2394	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterWebXROptions	1	xrCompatible	Bool	2017	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerBindingLayout	1	nextInChain	const ChainedStruct *	2023	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerBindingLayout	2	type	SamplerBindingType	2024	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	1	nextInChain	const ChainedStruct *	2030	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	2	label	StringView	2031	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	3	addressModeU	AddressMode	2032	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	4	addressModeV	AddressMode	2033	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	5	addressModeW	AddressMode	2034	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	6	magFilter	FilterMode	2035	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	7	minFilter	FilterMode	2036	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	8	mipmapFilter	MipmapFilterMode	2037	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	9	lodMinClamp	float	2038	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	10	lodMaxClamp	float	2039	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	11	compare	CompareFunction	2040	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	12	maxAnisotropy	uint16_t	2041	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderModuleDescriptor	1	nextInChain	const ChainedStruct *	2400	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderModuleDescriptor	2	label	StringView	2401	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderSourceSPIRV	1	codeSize	uint32_t	2053	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderSourceSPIRV	2	code	const uint32_t *	2054	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderSourceWGSL	1	code	StringView	2066	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StencilFaceState	1	compare	CompareFunction	2072	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StencilFaceState	2	failOp	StencilOperation	2073	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StencilFaceState	3	depthFailOp	StencilOperation	2074	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StencilFaceState	4	passOp	StencilOperation	2075	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StorageTextureBindingLayout	1	nextInChain	const ChainedStruct *	2081	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StorageTextureBindingLayout	2	access	StorageTextureAccess	2082	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StorageTextureBindingLayout	3	format	TextureFormat	2083	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StorageTextureBindingLayout	4	viewDimension	TextureViewDimension	2084	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StringView	1	data	const char *	1066	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StringView	2	length	size_t	1067	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedFeatures	1	featureCount	const size_t	2096	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedFeatures	2	features	const FeatureName *const	2097	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedInstanceFeatures	1	featureCount	const size_t	2113	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedInstanceFeatures	2	features	const InstanceFeatureName *const	2114	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedWGSLLanguageFeatures	1	featureCount	const size_t	2130	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedWGSLLanguageFeatures	2	features	const WGSLLanguageFeatureName *const	2131	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	1	nextInChain	ChainedStructOut *	2147	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	2	usages	const TextureUsage	2148	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	3	formatCount	const size_t	2149	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	4	formats	const TextureFormat *const	2150	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	5	presentModeCount	const size_t	2151	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	6	presentModes	const PresentMode *const	2152	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	7	alphaModeCount	const size_t	2153	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	8	alphaModes	const CompositeAlphaMode *const	2154	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceColorManagement	1	colorSpace	PredefinedColorSpace	2170	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceColorManagement	2	toneMappingMode	ToneMappingMode	2171	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	1	nextInChain	const ChainedStruct *	2177	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	2	device	Device	2178	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	3	format	TextureFormat	2179	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	4	usage	TextureUsage	2180	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	5	width	uint32_t	2181	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	6	height	uint32_t	2182	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	7	viewFormatCount	size_t	2183	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	8	viewFormats	const TextureFormat *	2184	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	9	alphaMode	CompositeAlphaMode	2185	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	10	presentMode	PresentMode	2186	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceDescriptor	1	nextInChain	const ChainedStruct *	2407	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceDescriptor	2	label	StringView	2408	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceTexture	1	nextInChain	ChainedStructOut *	2192	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceTexture	2	texture	Texture	2193	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceTexture	3	status	SurfaceGetCurrentTextureStatus	2194	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferInfo	1	layout	TexelCopyBufferLayout	2414	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferInfo	2	buffer	Buffer	2415	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferLayout	1	offset	uint64_t	2200	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferLayout	2	bytesPerRow	uint32_t	2201	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferLayout	3	rowsPerImage	uint32_t	2202	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyTextureInfo	1	texture	Texture	2421	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyTextureInfo	2	mipLevel	uint32_t	2422	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyTextureInfo	3	origin	Origin3D	2423	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyTextureInfo	4	aspect	TextureAspect	2424	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingLayout	1	nextInChain	const ChainedStruct *	2208	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingLayout	2	sampleType	TextureSampleType	2209	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingLayout	3	viewDimension	TextureViewDimension	2210	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingLayout	4	multisampled	Bool	2211	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingViewDimensionDescriptor	1	textureBindingViewDimension	TextureViewDimension	2223	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzle	1	r	ComponentSwizzle	2229	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzle	2	g	ComponentSwizzle	2230	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzle	3	b	ComponentSwizzle	2231	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzle	4	a	ComponentSwizzle	2232	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzleDescriptor	1	swizzle	TextureComponentSwizzle	2436	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	1	nextInChain	const ChainedStruct *	2442	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	2	label	StringView	2443	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	3	usage	TextureUsage	2444	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	4	dimension	TextureDimension	2445	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	5	size	Extent3D	2446	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	6	format	TextureFormat	2447	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	7	mipLevelCount	uint32_t	2448	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	8	sampleCount	uint32_t	2449	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	9	viewFormatCount	size_t	2450	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	10	viewFormats	const TextureFormat *	2451	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	1	nextInChain	const ChainedStruct *	2514	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	2	label	StringView	2515	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	3	format	TextureFormat	2516	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	4	dimension	TextureViewDimension	2517	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	5	baseMipLevel	uint32_t	2518	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	6	mipLevelCount	uint32_t	2519	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	7	baseArrayLayer	uint32_t	2520	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	8	arrayLayerCount	uint32_t	2521	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	9	aspect	TextureAspect	2522	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	10	usage	TextureUsage	2523	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexAttribute	1	nextInChain	const ChainedStruct *	2238	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexAttribute	2	format	VertexFormat	2239	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexAttribute	3	offset	uint64_t	2240	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexAttribute	4	shaderLocation	uint32_t	2241	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	1	nextInChain	const ChainedStruct *	2457	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	2	stepMode	VertexStepMode	2458	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	3	arrayStride	uint64_t	2459	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	4	attributeCount	size_t	2460	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	5	attributes	const VertexAttribute *	2461	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	1	nextInChain	const ChainedStruct *	2529	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	2	module	ShaderModule	2530	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	3	entryPoint	StringView	2531	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	4	constantCount	size_t	2532	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	5	constants	const ConstantEntry *	2533	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	6	bufferCount	size_t	2534	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	7	buffers	const VertexBufferLayout *	2535	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	1	nextInChain	const ChainedStruct *	2566	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	2	label	StringView	2567	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	3	requiredFeatureCount	size_t	2568	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	4	requiredFeatures	const FeatureName *	2569	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	5	requiredLimits	const Limits *	2570	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	6	defaultQueue	QueueDescriptor	2571	webgpu:wagyu:webgpu_cpp	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	7	deviceLostCallbackInfo	WGPUDeviceLostCallbackInfo	2572	webgpu:wagyu:webgpu_cpp	callback-or-async-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	8	uncapturedErrorCallbackInfo	WGPUUncapturedErrorCallbackInfo	2573	webgpu:wagyu:webgpu_cpp	callback-or-async-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::StringViewAdapter	1	sv	WGPUStringView	1151	webgpu:wagyu:webgpu_cpp	native-handle-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::StringViewAdapter	2	nullTerminated	char *	1152	webgpu:wagyu:webgpu_cpp	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h	wgpu::ChainedStruct	1	nextInChain	const ChainedStruct *	43	webgpu:wagyu:webgpu_cpp_chained_struct	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h	wgpu::ChainedStruct	2	sType	SType	44	webgpu:wagyu:webgpu_cpp_chained_struct	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h	wgpu::ChainedStructOut	1	nextInChain	ChainedStructOut *	48	webgpu:wagyu:webgpu_cpp_chained_struct	borrow-or-pointer-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h	wgpu::ChainedStructOut	2	sType	SType	49	webgpu:wagyu:webgpu_cpp_chained_struct	value-lifetime-review-required
-webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h	wgpu::BoolConvertible::BoolConvertible	1	value	Integral	73	webgpu:wagyu:webgpu_enum_class_bitmasks	value-lifetime-review-required
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu.h	WGPUStringView	1	data	const char *	106	webgpu:wagyu:webgpu	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu.h	WGPUStringView	2	length	size_t	107	webgpu:wagyu:webgpu	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	1	nextInChain	ChainedStructOut *	1743	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	2	vendor	const StringView	1744	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	3	architecture	const StringView	1745	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	4	device	const StringView	1746	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	5	description	const StringView	1747	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	6	backendType	const BackendType	1748	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	7	adapterType	const AdapterType	1749	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	8	vendorID	const uint32_t	1750	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	9	deviceID	const uint32_t	1751	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	10	subgroupMinSize	const uint32_t	1752	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::AdapterInfo	11	subgroupMaxSize	const uint32_t	1753	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	1	nextInChain	const ChainedStruct *	2247	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	2	label	StringView	2248	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	3	layout	BindGroupLayout	2249	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	4	entryCount	size_t	2250	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupDescriptor	5	entries	const BindGroupEntry *	2251	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	1	nextInChain	const ChainedStruct *	1763	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	2	binding	uint32_t	1764	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	3	buffer	Buffer	1765	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	4	offset	uint64_t	1766	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	5	size	uint64_t	1767	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	6	sampler	Sampler	1768	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupEntry	7	textureView	TextureView	1769	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutDescriptor	1	nextInChain	const ChainedStruct *	2467	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutDescriptor	2	label	StringView	2468	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutDescriptor	3	entryCount	size_t	2469	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutDescriptor	4	entries	const BindGroupLayoutEntry *	2470	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	1	nextInChain	const ChainedStruct *	2257	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	2	binding	uint32_t	2258	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	3	visibility	ShaderStage	2259	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	4	bindingArraySize	uint32_t	2260	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	5	buffer	BufferBindingLayout	2261	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	6	sampler	SamplerBindingLayout	2262	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	7	texture	TextureBindingLayout	2263	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BindGroupLayoutEntry	8	storageTexture	StorageTextureBindingLayout	2264	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendComponent	1	operation	BlendOperation	1775	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendComponent	2	srcFactor	BlendFactor	1776	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendComponent	3	dstFactor	BlendFactor	1777	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendState	1	color	BlendComponent	2270	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BlendState	2	alpha	BlendComponent	2271	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Bool	1	mValue	WGPUBool	806	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferBindingLayout	1	nextInChain	const ChainedStruct *	1783	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferBindingLayout	2	type	BufferBindingType	1784	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferBindingLayout	3	hasDynamicOffset	Bool	1785	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferBindingLayout	4	minBindingSize	uint64_t	1786	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	1	nextInChain	const ChainedStruct *	1792	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	2	label	StringView	1793	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	3	usage	BufferUsage	1794	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	4	size	uint64_t	1795	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::BufferDescriptor	5	mappedAtCreation	Bool	1796	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Color	1	r	double	1802	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Color	2	g	double	1803	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Color	3	b	double	1804	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Color	4	a	double	1805	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ColorTargetState	1	nextInChain	const ChainedStruct *	2476	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ColorTargetState	2	format	TextureFormat	2477	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ColorTargetState	3	blend	const BlendState *	2478	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ColorTargetState	4	writeMask	ColorWriteMask	2479	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CommandBufferDescriptor	1	nextInChain	const ChainedStruct *	1811	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CommandBufferDescriptor	2	label	StringView	1812	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CommandEncoderDescriptor	1	nextInChain	const ChainedStruct *	1818	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CommandEncoderDescriptor	2	label	StringView	1819	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompatibilityModeLimits	1	maxStorageBuffersInVertexStage	uint32_t	1831	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompatibilityModeLimits	2	maxStorageTexturesInVertexStage	uint32_t	1832	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompatibilityModeLimits	3	maxStorageBuffersInFragmentStage	uint32_t	1833	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompatibilityModeLimits	4	maxStorageTexturesInFragmentStage	uint32_t	1834	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationInfo	1	nextInChain	const ChainedStruct *	2485	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationInfo	2	messageCount	size_t	2486	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationInfo	3	messages	const CompilationMessage *	2487	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	1	nextInChain	const ChainedStruct *	2277	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	2	message	StringView	2278	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	3	type	CompilationMessageType	2279	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	4	lineNum	uint64_t	2280	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	5	linePos	uint64_t	2281	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	6	offset	uint64_t	2282	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::CompilationMessage	7	length	uint64_t	2283	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePassDescriptor	1	nextInChain	const ChainedStruct *	2289	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePassDescriptor	2	label	StringView	2290	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePassDescriptor	3	timestampWrites	const PassTimestampWrites *	2291	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePipelineDescriptor	1	nextInChain	const ChainedStruct *	2493	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePipelineDescriptor	2	label	StringView	2494	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePipelineDescriptor	3	layout	PipelineLayout	2495	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputePipelineDescriptor	4	compute	ComputeState	2496	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	1	nextInChain	const ChainedStruct *	2297	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	2	module	ShaderModule	2298	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	3	entryPoint	StringView	2299	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	4	constantCount	size_t	2300	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ComputeState	5	constants	const ConstantEntry *	2301	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ConstantEntry	1	nextInChain	const ChainedStruct *	1840	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ConstantEntry	2	key	StringView	1841	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ConstantEntry	3	value	double	1842	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ConvertibleStatus	1	status	Status	880	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DawnCompilationMessageUtf16	1	linePos	uint64_t	1854	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DawnCompilationMessageUtf16	2	offset	uint64_t	1855	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DawnCompilationMessageUtf16	3	length	uint64_t	1856	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	1	nextInChain	const ChainedStruct *	2307	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	2	format	TextureFormat	2308	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	3	depthWriteEnabled	OptionalBool	2309	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	4	depthCompare	CompareFunction	2310	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	5	stencilFront	StencilFaceState	2311	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	6	stencilBack	StencilFaceState	2312	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	7	stencilReadMask	uint32_t	2313	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	8	stencilWriteMask	uint32_t	2314	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	9	depthBias	int32_t	2315	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	10	depthBiasSlopeScale	float	2316	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::DepthStencilState	11	depthBiasClamp	float	2317	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::EmscriptenSurfaceSourceCanvasHTMLSelector	1	selector	StringView	1868	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Extent3D	1	width	uint32_t	1874	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Extent3D	2	height	uint32_t	1875	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Extent3D	3	depthOrArrayLayers	uint32_t	1876	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	1	nextInChain	const ChainedStruct *	2541	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	2	module	ShaderModule	2542	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	3	entryPoint	StringView	2543	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	4	constantCount	size_t	2544	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	5	constants	const ConstantEntry *	2545	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	6	targetCount	size_t	2546	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FragmentState	7	targets	const ColorTargetState *	2547	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Future	1	id	uint64_t	1882	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FutureWaitInfo	1	future	Future	2323	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::FutureWaitInfo	2	completed	Bool	2324	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::INTERNAL_HAVE_EMDAWNWEBGPU_HEADER	1	unused	Bool	1895	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	2873	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	2901	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3157	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3177	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3243	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3267	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3540	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	3640	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStruct *const	4044	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	ChainedStructOut *	2826	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	1	nextInChain	const ChainedStruct *	4323	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	code	StringView	3268	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	codeSize	uint32_t	3244	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	colorSpace	PredefinedColorSpace	3541	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	label	StringView	4324	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	linePos	uint64_t	2874	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	maxDrawCount	uint64_t	3158	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	maxStorageBuffersInVertexStage	uint32_t	2827	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	selector	StringView	2902	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	swizzle	TextureComponentSwizzle	4045	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	textureBindingViewDimension	TextureViewDimension	3641	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	2	xrCompatible	Bool	3178	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	code	const uint32_t *	3245	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	maxStorageTexturesInVertexStage	uint32_t	2828	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	offset	uint64_t	2875	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	requiredFeatureCount	size_t	4325	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	3	toneMappingMode	ToneMappingMode	3542	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	4	length	uint64_t	2876	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	4	maxStorageBuffersInFragmentStage	uint32_t	2829	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	4	requiredFeatures	const FeatureName *	4326	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	5	maxStorageTexturesInFragmentStage	uint32_t	2830	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	5	requiredLimits	const Limits *	4327	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Init	6	defaultQueue	QueueDescriptor	4328	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceDescriptor	1	nextInChain	const ChainedStruct *	2330	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceDescriptor	2	requiredFeatureCount	size_t	2331	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceDescriptor	3	requiredFeatures	const InstanceFeatureName *	2332	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceDescriptor	4	requiredLimits	const InstanceLimits *	2333	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceLimits	1	nextInChain	ChainedStructOut *	1888	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::InstanceLimits	2	timedWaitAnyMaxCount	size_t	1889	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	1	nextInChain	ChainedStructOut *	2339	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	2	maxTextureDimension1D	uint32_t	2340	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	3	maxTextureDimension2D	uint32_t	2341	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	4	maxTextureDimension3D	uint32_t	2342	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	5	maxTextureArrayLayers	uint32_t	2343	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	6	maxBindGroups	uint32_t	2344	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	7	maxBindGroupsPlusVertexBuffers	uint32_t	2345	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	8	maxBindingsPerBindGroup	uint32_t	2346	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	9	maxDynamicUniformBuffersPerPipelineLayout	uint32_t	2347	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	10	maxDynamicStorageBuffersPerPipelineLayout	uint32_t	2348	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	11	maxSampledTexturesPerShaderStage	uint32_t	2349	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	12	maxSamplersPerShaderStage	uint32_t	2350	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	13	maxStorageBuffersPerShaderStage	uint32_t	2351	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	14	maxStorageTexturesPerShaderStage	uint32_t	2352	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	15	maxUniformBuffersPerShaderStage	uint32_t	2353	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	16	maxUniformBufferBindingSize	uint64_t	2354	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	17	maxStorageBufferBindingSize	uint64_t	2355	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	18	minUniformBufferOffsetAlignment	uint32_t	2356	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	19	minStorageBufferOffsetAlignment	uint32_t	2357	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	20	maxVertexBuffers	uint32_t	2358	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	21	maxBufferSize	uint64_t	2359	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	22	maxVertexAttributes	uint32_t	2360	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	23	maxVertexBufferArrayStride	uint32_t	2361	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	24	maxInterStageShaderVariables	uint32_t	2362	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	25	maxColorAttachments	uint32_t	2363	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	26	maxColorAttachmentBytesPerSample	uint32_t	2364	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	27	maxComputeWorkgroupStorageSize	uint32_t	2365	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	28	maxComputeInvocationsPerWorkgroup	uint32_t	2366	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	29	maxComputeWorkgroupSizeX	uint32_t	2367	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	30	maxComputeWorkgroupSizeY	uint32_t	2368	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	31	maxComputeWorkgroupSizeZ	uint32_t	2369	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	32	maxComputeWorkgroupsPerDimension	uint32_t	2370	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Limits	33	maxImmediateSize	uint32_t	2371	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::MultisampleState	1	nextInChain	const ChainedStruct *	1901	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::MultisampleState	2	count	uint32_t	1902	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::MultisampleState	3	mask	uint32_t	1903	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::MultisampleState	4	alphaToCoverageEnabled	Bool	1904	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ObjectBase::ObjectBase	1	mHandle	CType	955	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::OptionalBool	1	mValue	WGPUOptionalBool	860	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Origin3D	1	x	uint32_t	1910	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Origin3D	2	y	uint32_t	1911	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::Origin3D	3	z	uint32_t	1912	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PassTimestampWrites	1	nextInChain	const ChainedStruct *	1918	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PassTimestampWrites	2	querySet	QuerySet	1919	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PassTimestampWrites	3	beginningOfPassWriteIndex	uint32_t	1920	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PassTimestampWrites	4	endOfPassWriteIndex	uint32_t	1921	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	1	nextInChain	const ChainedStruct *	1927	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	2	label	StringView	1928	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	3	bindGroupLayoutCount	size_t	1929	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	4	bindGroupLayouts	const BindGroupLayout *	1930	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PipelineLayoutDescriptor	5	immediateSize	uint32_t	1931	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	1	nextInChain	const ChainedStruct *	1937	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	2	topology	PrimitiveTopology	1938	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	3	stripIndexFormat	IndexFormat	1939	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	4	frontFace	FrontFace	1940	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	5	cullMode	CullMode	1941	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::PrimitiveState	6	unclippedDepth	Bool	1942	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QuerySetDescriptor	1	nextInChain	const ChainedStruct *	1948	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QuerySetDescriptor	2	label	StringView	1949	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QuerySetDescriptor	3	type	QueryType	1950	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QuerySetDescriptor	4	count	uint32_t	1951	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QueueDescriptor	1	nextInChain	const ChainedStruct *	1957	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::QueueDescriptor	2	label	StringView	1958	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleDescriptor	1	nextInChain	const ChainedStruct *	1964	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleDescriptor	2	label	StringView	1965	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	1	nextInChain	const ChainedStruct *	1971	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	2	label	StringView	1972	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	3	colorFormatCount	size_t	1973	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	4	colorFormats	const TextureFormat *	1974	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	5	depthStencilFormat	TextureFormat	1975	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	6	sampleCount	uint32_t	1976	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	7	depthReadOnly	Bool	1977	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderBundleEncoderDescriptor	8	stencilReadOnly	Bool	1978	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	1	nextInChain	const ChainedStruct *	2377	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	2	view	TextureView	2378	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	3	depthSlice	uint32_t	2379	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	4	resolveTarget	TextureView	2380	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	5	loadOp	LoadOp	2381	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	6	storeOp	StoreOp	2382	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassColorAttachment	7	clearValue	Color	2383	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	1	nextInChain	const ChainedStruct *	1984	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	2	view	TextureView	1985	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	3	depthLoadOp	LoadOp	1986	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	4	depthStoreOp	StoreOp	1987	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	5	depthClearValue	float	1988	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	6	depthReadOnly	Bool	1989	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	7	stencilLoadOp	LoadOp	1990	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	8	stencilStoreOp	StoreOp	1991	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	9	stencilClearValue	uint32_t	1992	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDepthStencilAttachment	10	stencilReadOnly	Bool	1993	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	1	nextInChain	const ChainedStruct *	2502	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	2	label	StringView	2503	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	3	colorAttachmentCount	size_t	2504	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	4	colorAttachments	const RenderPassColorAttachment *	2505	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	5	depthStencilAttachment	const RenderPassDepthStencilAttachment *	2506	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	6	occlusionQuerySet	QuerySet	2507	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassDescriptor	7	timestampWrites	const PassTimestampWrites *	2508	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPassMaxDrawCount	1	maxDrawCount	uint64_t	2005	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	1	nextInChain	const ChainedStruct *	2553	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	2	label	StringView	2554	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	3	layout	PipelineLayout	2555	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	4	vertex	VertexState	2556	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	5	primitive	PrimitiveState	2557	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	6	depthStencil	const DepthStencilState *	2558	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	7	multisample	MultisampleState	2559	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RenderPipelineDescriptor	8	fragment	const FragmentState *	2560	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	1	nextInChain	const ChainedStruct *	2389	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	2	featureLevel	FeatureLevel	2390	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	3	powerPreference	PowerPreference	2391	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	4	forceFallbackAdapter	Bool	2392	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	5	backendType	BackendType	2393	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterOptions	6	compatibleSurface	Surface	2394	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::RequestAdapterWebXROptions	1	xrCompatible	Bool	2017	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerBindingLayout	1	nextInChain	const ChainedStruct *	2023	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerBindingLayout	2	type	SamplerBindingType	2024	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	1	nextInChain	const ChainedStruct *	2030	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	2	label	StringView	2031	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	3	addressModeU	AddressMode	2032	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	4	addressModeV	AddressMode	2033	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	5	addressModeW	AddressMode	2034	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	6	magFilter	FilterMode	2035	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	7	minFilter	FilterMode	2036	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	8	mipmapFilter	MipmapFilterMode	2037	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	9	lodMinClamp	float	2038	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	10	lodMaxClamp	float	2039	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	11	compare	CompareFunction	2040	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SamplerDescriptor	12	maxAnisotropy	uint16_t	2041	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderModuleDescriptor	1	nextInChain	const ChainedStruct *	2400	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderModuleDescriptor	2	label	StringView	2401	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderSourceSPIRV	1	codeSize	uint32_t	2053	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderSourceSPIRV	2	code	const uint32_t *	2054	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::ShaderSourceWGSL	1	code	StringView	2066	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StencilFaceState	1	compare	CompareFunction	2072	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StencilFaceState	2	failOp	StencilOperation	2073	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StencilFaceState	3	depthFailOp	StencilOperation	2074	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StencilFaceState	4	passOp	StencilOperation	2075	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StorageTextureBindingLayout	1	nextInChain	const ChainedStruct *	2081	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StorageTextureBindingLayout	2	access	StorageTextureAccess	2082	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StorageTextureBindingLayout	3	format	TextureFormat	2083	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StorageTextureBindingLayout	4	viewDimension	TextureViewDimension	2084	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StringView	1	data	const char *	1066	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::StringView	2	length	size_t	1067	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedFeatures	1	featureCount	const size_t	2096	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedFeatures	2	features	const FeatureName *const	2097	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedInstanceFeatures	1	featureCount	const size_t	2113	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedInstanceFeatures	2	features	const InstanceFeatureName *const	2114	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedWGSLLanguageFeatures	1	featureCount	const size_t	2130	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SupportedWGSLLanguageFeatures	2	features	const WGSLLanguageFeatureName *const	2131	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	1	nextInChain	ChainedStructOut *	2147	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	2	usages	const TextureUsage	2148	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	3	formatCount	const size_t	2149	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	4	formats	const TextureFormat *const	2150	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	5	presentModeCount	const size_t	2151	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	6	presentModes	const PresentMode *const	2152	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	7	alphaModeCount	const size_t	2153	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceCapabilities	8	alphaModes	const CompositeAlphaMode *const	2154	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceColorManagement	1	colorSpace	PredefinedColorSpace	2170	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceColorManagement	2	toneMappingMode	ToneMappingMode	2171	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	1	nextInChain	const ChainedStruct *	2177	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	2	device	Device	2178	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	3	format	TextureFormat	2179	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	4	usage	TextureUsage	2180	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	5	width	uint32_t	2181	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	6	height	uint32_t	2182	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	7	viewFormatCount	size_t	2183	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	8	viewFormats	const TextureFormat *	2184	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	9	alphaMode	CompositeAlphaMode	2185	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceConfiguration	10	presentMode	PresentMode	2186	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceDescriptor	1	nextInChain	const ChainedStruct *	2407	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceDescriptor	2	label	StringView	2408	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceTexture	1	nextInChain	ChainedStructOut *	2192	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceTexture	2	texture	Texture	2193	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::SurfaceTexture	3	status	SurfaceGetCurrentTextureStatus	2194	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferInfo	1	layout	TexelCopyBufferLayout	2414	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferInfo	2	buffer	Buffer	2415	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferLayout	1	offset	uint64_t	2200	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferLayout	2	bytesPerRow	uint32_t	2201	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyBufferLayout	3	rowsPerImage	uint32_t	2202	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyTextureInfo	1	texture	Texture	2421	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyTextureInfo	2	mipLevel	uint32_t	2422	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyTextureInfo	3	origin	Origin3D	2423	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TexelCopyTextureInfo	4	aspect	TextureAspect	2424	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingLayout	1	nextInChain	const ChainedStruct *	2208	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingLayout	2	sampleType	TextureSampleType	2209	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingLayout	3	viewDimension	TextureViewDimension	2210	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingLayout	4	multisampled	Bool	2211	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureBindingViewDimensionDescriptor	1	textureBindingViewDimension	TextureViewDimension	2223	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzle	1	r	ComponentSwizzle	2229	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzle	2	g	ComponentSwizzle	2230	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzle	3	b	ComponentSwizzle	2231	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzle	4	a	ComponentSwizzle	2232	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureComponentSwizzleDescriptor	1	swizzle	TextureComponentSwizzle	2436	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	1	nextInChain	const ChainedStruct *	2442	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	2	label	StringView	2443	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	3	usage	TextureUsage	2444	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	4	dimension	TextureDimension	2445	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	5	size	Extent3D	2446	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	6	format	TextureFormat	2447	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	7	mipLevelCount	uint32_t	2448	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	8	sampleCount	uint32_t	2449	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	9	viewFormatCount	size_t	2450	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureDescriptor	10	viewFormats	const TextureFormat *	2451	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	1	nextInChain	const ChainedStruct *	2514	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	2	label	StringView	2515	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	3	format	TextureFormat	2516	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	4	dimension	TextureViewDimension	2517	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	5	baseMipLevel	uint32_t	2518	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	6	mipLevelCount	uint32_t	2519	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	7	baseArrayLayer	uint32_t	2520	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	8	arrayLayerCount	uint32_t	2521	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	9	aspect	TextureAspect	2522	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::TextureViewDescriptor	10	usage	TextureUsage	2523	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexAttribute	1	nextInChain	const ChainedStruct *	2238	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexAttribute	2	format	VertexFormat	2239	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexAttribute	3	offset	uint64_t	2240	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexAttribute	4	shaderLocation	uint32_t	2241	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	1	nextInChain	const ChainedStruct *	2457	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	2	stepMode	VertexStepMode	2458	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	3	arrayStride	uint64_t	2459	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	4	attributeCount	size_t	2460	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexBufferLayout	5	attributes	const VertexAttribute *	2461	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	1	nextInChain	const ChainedStruct *	2529	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	2	module	ShaderModule	2530	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	3	entryPoint	StringView	2531	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	4	constantCount	size_t	2532	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	5	constants	const ConstantEntry *	2533	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	6	bufferCount	size_t	2534	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::VertexState	7	buffers	const VertexBufferLayout *	2535	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	1	nextInChain	const ChainedStruct *	2566	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	2	label	StringView	2567	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	3	requiredFeatureCount	size_t	2568	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	4	requiredFeatures	const FeatureName *	2569	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	5	requiredLimits	const Limits *	2570	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	6	defaultQueue	QueueDescriptor	2571	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	7	deviceLostCallbackInfo	WGPUDeviceLostCallbackInfo	2572	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::DeviceDescriptor	8	uncapturedErrorCallbackInfo	WGPUUncapturedErrorCallbackInfo	2573	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::StringViewAdapter	1	sv	WGPUStringView	1151	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h	wgpu::detail::StringViewAdapter	2	nullTerminated	char *	1152	webgpu:wagyu:webgpu_cpp	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h	wgpu::ChainedStruct	1	nextInChain	const ChainedStruct *	43	webgpu:wagyu:webgpu_cpp_chained_struct	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h	wgpu::ChainedStruct	2	sType	SType	44	webgpu:wagyu:webgpu_cpp_chained_struct	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h	wgpu::ChainedStructOut	1	nextInChain	ChainedStructOut *	48	webgpu:wagyu:webgpu_cpp_chained_struct	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp_chained_struct.h	wgpu::ChainedStructOut	2	sType	SType	49	webgpu:wagyu:webgpu_cpp_chained_struct	abi-authority-recorded
+webgpu	webgpu-wagyu-v1	renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_enum_class_bitmasks.h	wgpu::BoolConvertible::BoolConvertible	1	value	Integral	73	webgpu:wagyu:webgpu_enum_class_bitmasks	abi-authority-recorded

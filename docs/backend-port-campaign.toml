@@ -34,6 +34,7 @@ field_inventory = "docs/backend-port-fields.tsv"
 lifecycle_inventory = "docs/backend-port-lifecycle-events.tsv"
 oracle_contract = "docs/backend-port-oracle-contract.toml"
 legacy_wgpu_inventory = "docs/backend-port-legacy-wgpu.tsv"
+owner_contracts = "docs/backend-port-owner-contracts.toml"
 
 [denominator]
 sources = 200

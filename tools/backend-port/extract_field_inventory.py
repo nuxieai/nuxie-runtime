@@ -121,6 +121,7 @@ def extract_fields(
     profile: dict,
     upstream_root: Path,
     source_units: dict[str, str],
+    source_dispositions: dict[str, str],
     starts: dict[str, list[int]],
 ) -> list[Field]:
     campaign = profile["campaign"]
@@ -168,7 +169,10 @@ def extract_fields(
                             declared_type,
                             field_line,
                             source_units[source],
-                            review_class(declared_type),
+                            "abi-authority-recorded"
+                            if source_dispositions[source]
+                            in {"dependency-authority", "evidence-only"}
+                            else review_class(declared_type),
                         )
                     )
             next_parents = (*parents, record_name)
@@ -190,6 +194,9 @@ def compile_profile(
     campaign_rows = [row for row in rows if row["campaign"] == profile["campaign"]]
     headers = [row for row in campaign_rows if row["source_role"] == "declaration"]
     source_units = {row["source_path"]: row["ownership_unit"] for row in headers}
+    source_dispositions = {
+        row["source_path"]: row["port_disposition"] for row in headers
+    }
     starts: dict[str, list[int]] = {}
     for row in headers:
         path = upstream_root / row["source_path"]
@@ -235,7 +242,12 @@ def compile_profile(
                 f"Clang field extraction failed for {profile['id']}:\n{process.stderr}"
             )
         return extract_fields(
-            json.loads(process.stdout), profile, upstream_root, source_units, starts
+            json.loads(process.stdout),
+            profile,
+            upstream_root,
+            source_units,
+            source_dispositions,
+            starts,
         )
 
 

@@ -72,7 +72,7 @@ def render(upstream_root: Path, ownership_inventory: Path) -> str:
     with ownership_inventory.open(newline="") as handle:
         sources = list(csv.DictReader(handle, delimiter="\t"))
     rows: list[Row] = []
-    symbols: dict[tuple[str, str, str, str], list[tuple[int, str]]] = {}
+    symbols: dict[tuple[str, str, str, str, str], list[tuple[int, str]]] = {}
     for source in sources:
         path = upstream_root / source["source_path"]
         if digest(path) != source["source_sha256"]:
@@ -94,7 +94,15 @@ def render(upstream_root: Path, ownership_inventory: Path) -> str:
                         expression,
                         condition(stack),
                         source["ownership_unit"],
-                        "derived",
+                        "authority-recorded"
+                        if source["port_disposition"]
+                        in {
+                            "shared-authority",
+                            "dependency-authority",
+                            "evidence-only",
+                            "source-exclusion-non-webgl2-build",
+                        }
+                        else "review-required",
                     )
                 )
                 if directive in {"if", "ifdef", "ifndef"}:
@@ -115,11 +123,12 @@ def render(upstream_root: Path, ownership_inventory: Path) -> str:
                     source["source_path"],
                     token,
                     source["ownership_unit"],
+                    source["port_disposition"],
                 )
                 symbols.setdefault(key, []).append((line_number, condition(stack)))
         if stack:
             raise ValueError(f"unterminated preprocessor branch: {source['source_path']}")
-    for (campaign, source_path, token, unit), occurrences in symbols.items():
+    for (campaign, source_path, token, unit, disposition), occurrences in symbols.items():
         lines = [line for line, _ in occurrences]
         enclosing = ";".join(sorted(set(value for _, value in occurrences)))
         rows.append(
@@ -133,7 +142,15 @@ def render(upstream_root: Path, ownership_inventory: Path) -> str:
                 token,
                 enclosing,
                 unit,
-                "review-required",
+                "authority-recorded"
+                if disposition
+                in {
+                    "shared-authority",
+                    "dependency-authority",
+                    "evidence-only",
+                    "source-exclusion-non-webgl2-build",
+                }
+                else "review-required",
             )
         )
     rows.sort()

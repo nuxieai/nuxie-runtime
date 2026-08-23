@@ -115,6 +115,15 @@ def port_disposition(campaign: str, role: str, source_path: str) -> str:
         return "shared-authority"
     if "/wagyu-port/" in source_path:
         return "dependency-authority"
+    webgl2_exclusions = {
+        "renderer/src/gl/load_gles_extensions.cpp",
+        "renderer/src/gl/pls_impl_ext_native.cpp",
+        "renderer/src/gl/pls_impl_rw_texture.cpp",
+    }
+    if campaign == "webgl2" and (
+        role == "platform-implementation" or source_path in webgl2_exclusions
+    ):
+        return "source-exclusion-non-webgl2-build"
     return "translate"
 
 
@@ -174,6 +183,12 @@ def render(source_inventory: Path) -> str:
                 source_role=role,
                 port_disposition=port_disposition(campaign, role, source_path_value),
                 target_path=target,
+                translation_status=(
+                    "excluded-by-pinned-build"
+                    if port_disposition(campaign, role, source_path_value)
+                    == "source-exclusion-non-webgl2-build"
+                    else "pending"
+                ),
             )
         )
     ownership_rows.sort()

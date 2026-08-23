@@ -107,6 +107,14 @@ def render(upstream_root: Path, ownership_path: Path) -> str:
                             token,
                             evidence,
                             source["ownership_unit"],
+                            "authority-recorded"
+                            if source["port_disposition"]
+                            in {
+                                "dependency-authority",
+                                "evidence-only",
+                                "source-exclusion-non-webgl2-build",
+                            }
+                            else "review-required",
                         )
                     )
     rows.sort()

@@ -92,10 +92,39 @@ def main() -> int:
     targets = [row["target_path"] for row in ownership]
     require(len(set(targets)) == len(targets), "overlapping target ownership")
     require(all(row["mapping_status"] == "exclusive" for row in ownership), "nonexclusive mapping")
-    require(all(row["translation_status"] == "pending" for row in ownership), "translation started before admission")
+    require(
+        all(
+            row["translation_status"]
+            in {"pending", "excluded-by-pinned-build"}
+            for row in ownership
+        ),
+        "translation started before admission",
+    )
+    require(
+        all(
+            (row["port_disposition"] == "source-exclusion-non-webgl2-build")
+            == (row["translation_status"] == "excluded-by-pinned-build")
+            for row in ownership
+        ),
+        "source exclusion and translation status disagree",
+    )
     units = {row["ownership_unit"] for row in ownership}
     ordered_units = {row["ownership_unit"] for row in tables["ownership_unit_order"]}
     require(units == ordered_units, "ownership order omits or invents units")
+    owner_contracts = tomllib.loads((repo / manifest["owner_contracts"]).read_text())
+    reviewed_units: set[str] = set()
+    for family in owner_contracts["family"]:
+        require(family["review_status"] == "reviewed", f"owner family not reviewed: {family['id']}")
+        matched = {
+            unit
+            for unit in units
+            if any(unit.startswith(prefix) for prefix in family["unit_prefixes"])
+            and any(row["campaign"] == family["campaign"] and row["ownership_unit"] == unit for row in ownership)
+        }
+        require(matched, f"owner family matches no units: {family['id']}")
+        require(not (reviewed_units & matched), f"owner family overlap: {family['id']}")
+        reviewed_units.update(matched)
+    require(reviewed_units == units, "owner contracts omit or invent ownership units")
     for table in ("configuration_inventory", "field_inventory", "lifecycle_inventory"):
         require(
             {row["ownership_unit"] for row in tables[table]} <= units,
@@ -137,7 +166,11 @@ def main() -> int:
         ("field_inventory", "ownership_review"),
         ("lifecycle_inventory", "review_status"),
     ):
-        pending = sum("review-required" in row[status_column] for row in tables[table])
+        pending = sum(
+            "review-required" in row[status_column]
+            and row["ownership_unit"] not in reviewed_units
+            for row in tables[table]
+        )
         if pending:
             blockers.append(f"{table} has {pending} review-required rows")
     if blockers:

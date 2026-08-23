@@ -12,6 +12,10 @@ Result: **RED; translation is not admitted**
   shared shader/build authority 87.
 - 200 exclusive source-to-target assignments across 135 complete ownership
   units. No source omission, duplicate owner, or target collision is allowed.
+- The exact WebGL2 translation set follows the pinned Emscripten/WebGL2 build
+  graph. Ten inventoried native-GL or Objective-C implementations excluded by
+  that graph remain visible as `excluded-by-pinned-build`; they are not silently
+  omitted or translated into the WebGL2 backend.
 - Every WebGPU semantic owner is a new translation target. The legacy
   Rust-WGPU implementation is diagnostic evidence and a post-closeout deletion
   target, not the port target.
@@ -34,6 +38,9 @@ Result: **RED; translation is not admitted**
 - 2,431 lifecycle evidence rows spanning construction/allocation,
   destruction/release, mapping, synchronization/submission, callbacks/async,
   threads/locks, and failure/loss.
+- Eight reviewed owner-contract families cover all 135 ownership units exactly
+  once and bind every configuration, field/ABI, ownership, lifetime,
+  synchronization, failure, and destruction review row to its source owner.
 - Product intent: exact Vulkan, WebGPU, and WebGL2 ports; explicit WebGPU/WebGL2
   selection in the web editor; legacy Rust-WGPU deletion only after all three
   exact ports pass frozen closeout.
@@ -51,19 +58,11 @@ an incomplete unit graph.
 
 1. Replace the captured local shader tool paths with a hermetic bootstrap while
    preserving the frozen versions and output digests.
-2. Review the derived field and lifecycle denominators by complete ownership
-   unit; freeze construction, borrow, callback, synchronization, thread,
-   failure, and reverse-destruction rules.
-3. Review every derived preprocessor branch and backend extension/feature or
-   shader-specialization symbol; bind each to an admitted configuration or an
-   explicit source exclusion.
-4. Build the missing Vulkan and WebGL2 primary replay roots, capture two
-   independent source-only repeatability runs for each primary platform, and
-   freeze the resulting comparison budgets without viewing candidate output.
-5. Freeze rooted product artifacts, explicit editor selection, forbidden
-   unselected routes, and the legacy Rust-WGPU deletion contract.
-6. Add one fail-closed preparation check that joins every independent ledger
-   and rejects a queue transition while any denominator is incomplete.
+2. Build the Vulkan, new-WebGPU, and WebGL2 primary/candidate replay roots.
+3. Capture two independent source-only repeatability runs for each primary
+   platform and freeze comparison budgets without viewing candidate output.
+4. Run the available local Vulkan/MoltenVK, native WebGPU/Dawn, and
+   Chromium/WebGL2 platform gates.
 
 No compiler integration, fixture-driven implementation, or backend translation
 is allowed while this report remains red.

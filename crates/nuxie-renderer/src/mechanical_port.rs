@@ -77,15 +77,6 @@ pub(crate) mod vulkan {
     pub(crate) mod vulkan_memory_allocator_impl;
 }
 
-#[cfg(all(
-    feature = "native-metal-experimental",
-    any(
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "tvos",
-        target_os = "visionos"
-    )
-))]
 pub(crate) mod source {
     pub(crate) mod decoders {
         pub(crate) mod include {
@@ -135,6 +126,15 @@ pub(crate) mod source {
                     pub(crate) mod rive_renderer_hpp;
                     pub(crate) mod texture_hpp;
 
+                    #[cfg(all(
+                        feature = "native-metal-experimental",
+                        any(
+                            target_os = "ios",
+                            target_os = "macos",
+                            target_os = "tvos",
+                            target_os = "visionos"
+                        )
+                    ))]
                     pub(crate) mod metal {
                         pub(crate) mod render_context_metal_impl_h;
                     }
@@ -157,6 +157,15 @@ pub(crate) mod source {
             pub(crate) mod rive_render_path_hpp;
             pub(crate) mod rive_renderer_cpp;
 
+            #[cfg(all(
+                feature = "native-metal-experimental",
+                any(
+                    target_os = "ios",
+                    target_os = "macos",
+                    target_os = "tvos",
+                    target_os = "visionos"
+                )
+            ))]
             pub(crate) mod metal {
                 pub(crate) mod background_shader_compiler_h;
                 pub(crate) mod background_shader_compiler_mm;
@@ -201,6 +210,15 @@ pub(crate) mod source {
                 pub(crate) mod stencil_draw_glsl;
                 pub(crate) mod tessellate_glsl;
 
+                #[cfg(all(
+                    feature = "native-metal-experimental",
+                    any(
+                        target_os = "ios",
+                        target_os = "macos",
+                        target_os = "tvos",
+                        target_os = "visionos"
+                    )
+                ))]
                 pub(crate) mod metal {
                     pub(crate) mod color_ramp_metal;
                     pub(crate) mod draw_metal;

@@ -1,6 +1,6 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_queue = "source-review"
+active_queue = "ownership-review"
 preparation_status = "green"
 ignored_skills = ["implement", "tdd"]
 translation_receipt_directory = "docs/backend-port-receipts"
@@ -8,7 +8,7 @@ source_review_plan = "docs/backend-port-source-review-plan.toml"
 source_review_schema = "docs/backend-port-source-review-schema.md"
 source_review_receipt_directory = "docs/backend-port-source-reviews"
 source_review_support_inventory = "docs/backend-port-source-review-support.tsv"
-source_review_status = "active"
+source_review_status = "complete"
 queue_order = [
   "audit",
   "preparation",

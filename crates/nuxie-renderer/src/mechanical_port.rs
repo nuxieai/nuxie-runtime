@@ -67,6 +67,10 @@ pub(crate) mod webgpu {
     pub(crate) mod ore_sampler_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_sampler_wgpu_cpp__impl.rs"]
     pub(crate) mod ore_sampler_wgpu_impl;
+    #[path = "renderer_src_ore_wgpu_ore_shader_module_wgpu_hpp__decl.rs"]
+    pub(crate) mod ore_shader_module_wgpu_decl;
+    #[path = "renderer_src_ore_wgpu_ore_shader_module_wgpu_cpp__impl.rs"]
+    pub(crate) mod ore_shader_module_wgpu_impl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs"]
     pub(crate) mod webgpu_decl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs"]

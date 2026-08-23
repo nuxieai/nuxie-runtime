@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:renderer:render_context_webgpu_impl"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/webgpu/render_context_webgpu_impl.hpp"
+source_sha256 = "7dbd287cf90ecb984ae96a6cc9006ca578b72ddbe825cd1861efc679e17b7d3a"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_include_rive_renderer_webgpu_render_context_webgpu_impl_hpp__decl.rs"
+target_sha256 = "5a1531d895293159f6bf75493e80a2f537e95e464a2784d19d2622fb63bf4a41"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_include_rive_renderer_webgpu_render_context_webgpu_impl.hpp"
+source_snapshot_sha256 = "7dbd287cf90ecb984ae96a6cc9006ca578b72ddbe825cd1861efc679e17b7d3a"
+dependency_units = ["shader:source:advanced_blend", "shader:source:atomic_draw_atlas_blit", "shader:source:atomic_draw_image_mesh", "shader:source:atomic_draw_image_rect", "shader:source:atomic_draw_interior_triangles", "shader:source:atomic_draw_path", "shader:source:atomic_init", "shader:source:atomic_resolve", "shader:source:atomic_resolve_coalesced", "shader:source:bezier_utils", "shader:source:blit_texture_as_draw_filtered", "shader:source:color_ramp", "shader:source:common", "shader:source:constants", "shader:source:draw_clockwise_clip", "shader:source:draw_clockwise_path", "shader:source:draw_image_mesh", "shader:source:draw_mesh", "shader:source:draw_msaa_atlas_blit", "shader:source:draw_msaa_image_mesh", "shader:source:draw_msaa_path", "shader:source:draw_msaa_stencil", "shader:source:draw_path", "shader:source:draw_path_common", "shader:source:draw_raster_order_path", "shader:source:flush_uniforms", "shader:source:glsl", "shader:source:render_atlas", "shader:source:render_atlas_fill", "shader:source:render_atlas_stroke", "shader:source:tessellate", "webgl2:renderer:load_store_actions_ext", "webgpu:ore:context", "webgpu:renderer:webgpu_compat", "webgpu:wagyu:webgpu_cpp", "webgpu:wagyu:webgpu_wagyu"]
+source_lines = 344
+source_bytes = 12778
+configuration_authorities = 16
+lifecycle_authorities = 14
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu"
+scope_note = "Preserves the complete WebGPU renderer state denominator, capabilities, pipeline owners, buffer and texture owners, render targets, public factory surface, and C++ member destruction order."

@@ -93,6 +93,24 @@ def main() -> int:
     require(len(owner_by_source) == len(ownership), "duplicate frozen source owner")
     require(len(unit_order) == len(order), "duplicate frozen ownership unit")
 
+    # A backend may compile an owner classified under a later backend. Admit
+    # only the transitive frozen dependency closure of the active/prior
+    # campaigns, rather than either rejecting a required cross-backend owner
+    # or opening the entire later campaign. The pinned WebGPU build, for
+    # example, compiles GL's load_store_actions_ext.cpp directly.
+    allowed_units = {
+        unit
+        for unit, row in unit_order.items()
+        if row["campaign"] in QUEUE_CAMPAIGNS[manifest["active_queue"]]
+    }
+    pending_dependencies = list(allowed_units)
+    while pending_dependencies:
+        unit = pending_dependencies.pop()
+        for dependency in unit_order[unit]["dependency_units"].split(";"):
+            if dependency and dependency in unit_order and dependency not in allowed_units:
+                allowed_units.add(dependency)
+                pending_dependencies.append(dependency)
+
     receipt_dir = repo / manifest["translation_receipt_directory"]
     receipts = [] if not receipt_dir.exists() else sorted(receipt_dir.glob("*.translation.toml"))
     completed_sources: set[str] = set()
@@ -106,11 +124,11 @@ def main() -> int:
         owner = owner_by_source[source_path]
         require(source_path not in completed_sources, f"duplicate source receipt: {source_path}")
         require(receipt["campaign"] == owner["campaign"], f"receipt campaign drift: {source_path}")
-        require(
-            receipt["campaign"] in QUEUE_CAMPAIGNS[manifest["active_queue"]],
-            f"receipt campaign is ahead of active queue: {source_path}",
-        )
         require(receipt["ownership_unit"] == owner["ownership_unit"], f"receipt unit drift: {source_path}")
+        require(
+            receipt["ownership_unit"] in allowed_units,
+            f"receipt unit is ahead of active queue dependency closure: {source_path}",
+        )
         require(receipt["source_sha256"] == owner["source_sha256"], f"receipt source hash drift: {source_path}")
         require(digest(upstream / source_path) == owner["source_sha256"], f"upstream source drift: {source_path}")
         require(receipt["target_path"] == owner["target_path"], f"receipt target drift: {source_path}")

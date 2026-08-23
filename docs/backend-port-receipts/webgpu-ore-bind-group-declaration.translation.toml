@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:bind_group"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_bind_group_wgpu.hpp"
+source_sha256 = "1ef4fbf6cd94f64b0d0b1109f15a18092d93e63c37a7bfbf42bb787a0fa94772"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_bind_group_wgpu_hpp__decl.rs"
+target_sha256 = "919fcc6f015e76daf1ab2dfbe7a4a8b150e62d207058da32f894a9b322e697e7"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_bind_group_wgpu.hpp"
+source_snapshot_sha256 = "1ef4fbf6cd94f64b0d0b1109f15a18092d93e63c37a7bfbf42bb787a0fa94772"
+dependency_units = ["webgpu:ore:buffer", "webgpu:ore:context", "webgpu:wagyu:webgpu_cpp"]
+source_lines = 70
+source_bytes = 2063
+configuration_authorities = 1
+lifecycle_authorities = 2
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_bind_group_wgpu"
+scope_note = "Preserves the complete concrete bind-group state, dynamic offset capacity and count, native handle, retained resources, and reverse destruction contract."

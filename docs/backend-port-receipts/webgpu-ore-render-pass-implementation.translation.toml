@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:render_pass"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_render_pass_wgpu.cpp"
+source_sha256 = "5ae0cecc7d292a5efa7f422c699f940b99f5ab0534096cd147c3946add749844"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_render_pass_wgpu_cpp__impl.rs"
+target_sha256 = "2a2d5ffdee94e56d8940edc9fcf73b2f65d542cb65f00aada6394f8a1ce85df1"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_render_pass_wgpu.cpp"
+source_snapshot_sha256 = "5ae0cecc7d292a5efa7f422c699f940b99f5ab0534096cd147c3946add749844"
+dependency_units = ["webgpu:ore:bind_group", "webgpu:ore:buffer", "webgpu:ore:context", "webgpu:ore:pipeline", "webgpu:ore:sampler", "webgpu:ore:texture", "webgpu:wagyu:webgpu_cpp"]
+source_lines = 221
+source_bytes = 7023
+configuration_authorities = 0
+lifecycle_authorities = 13
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_render_pass_wgpu"
+scope_note = "Preserves complete render-pass descriptor lowering, attachment load/store and resolve behavior, pipeline and bind-group binding, dynamic offsets, draws, copies, and pass finalization."

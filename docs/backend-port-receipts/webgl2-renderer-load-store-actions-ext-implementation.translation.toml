@@ -1,0 +1,20 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:load_store_actions_ext"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/gl/load_store_actions_ext.cpp"
+source_sha256 = "3cce30a21bc26edea4832d6de9177bfb86ea0140a8aa1f318ab33cb914e9266a"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_load_store_actions_ext_cpp__impl.rs"
+target_sha256 = "ce77c1b66f06aff959dd57210a28b127ef927bc274573ec8135a2cf6843ada08"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_gl_load_store_actions_ext.cpp"
+source_snapshot_sha256 = "3cce30a21bc26edea4832d6de9177bfb86ea0140a8aa1f318ab33cb914e9266a"
+dependency_units = ["shader:source:pls_load_store_ext"]
+dependency_artifacts = [
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/generated_glsl/pls_load_store_ext.minified.glsl", sha256 = "51692804c411be352739e972b5fe95b11f7d3681b6a5e158abda6a5ae1bbe1fa" },
+]
+source_lines = 61
+source_bytes = 1843
+configuration_authorities = 0
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2::load_store_actions_ext_impl"
+scope_note = "Preserves exact FlushDescriptor action selection, premultiplied clear-color unpacking, clipping selection, generated define order and names, and the immutable minified PLS shader payload compiled by both upstream WebGPU and WebGL2."

@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:context"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/ore/ore_context_wgpu.hpp"
+source_sha256 = "905e38d3e78df123c33810bb69539e1d0f39edbc173ecd72618b0d8097dc6e1d"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_include_rive_renderer_ore_ore_context_wgpu_hpp__decl.rs"
+target_sha256 = "150dc4ce80dad4134074996c840f49601df4dc291767fac5f163a7fdef05a4d3"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_include_rive_renderer_ore_ore_context_wgpu.hpp"
+source_snapshot_sha256 = "905e38d3e78df123c33810bb69539e1d0f39edbc173ecd72618b0d8097dc6e1d"
+dependency_units = ["webgpu:ore:bind_group", "webgpu:ore:bind_group_layout", "webgpu:ore:buffer", "webgpu:ore:pipeline", "webgpu:ore:render_pass", "webgpu:ore:sampler", "webgpu:ore:shader_module", "webgpu:ore:texture", "webgpu:ore:wgpu_layout", "webgpu:renderer:render_context_webgpu_impl", "webgpu:wagyu:webgpu_cpp", "webgpu:wagyu:webgpu_wagyu"]
+source_lines = 99
+source_bytes = 3796
+configuration_authorities = 4
+lifecycle_authorities = 5
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu"
+scope_note = "Preserves the complete ORE WebGPU context declaration, device and queue ownership, concrete factory surface, feature contract, and source-shaped reverse teardown."

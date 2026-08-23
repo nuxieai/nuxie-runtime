@@ -1,6 +1,6 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_queue = "webgpu-translation"
+active_queue = "webgl2-translation"
 preparation_status = "green"
 ignored_skills = ["implement", "tdd"]
 translation_receipt_directory = "docs/backend-port-receipts"
@@ -72,7 +72,7 @@ upstream_name = "Rive WebGPU renderer, Wagyu browser port, and ORE WGPU"
 product_disposition = "new-exact-browser-backend-replaces-legacy-rust-wgpu-after-all-ports-close"
 primary_oracle = "pinned C++ Dawn WebGPU on the same reported adapter"
 secondary_oracles = ["legacy Rust-WGPU", "Rust native Metal", "future Rust Vulkan"]
-translation_status = "active"
+translation_status = "complete"
 preparation_status = "green"
 source_roots = [
   "renderer/include/rive/renderer/webgpu",
@@ -87,7 +87,7 @@ upstream_name = "Rive GL renderer WebGL2 configuration and ORE GL"
 product_disposition = "web-editor-selectable-browser-backend"
 primary_oracle = "pinned C++ WebGL2 in the same browser and reported GPU"
 secondary_oracles = ["Rust WebGPU", "pinned C++ native GL where applicable"]
-translation_status = "pending"
+translation_status = "active"
 preparation_status = "green"
 source_roots = [
   "renderer/include/rive/renderer/gl",

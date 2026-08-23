@@ -59,6 +59,17 @@ pub(crate) mod backend_port_spirv_header_generator;
 #[path = "mechanical_port/shader-build-authority/renderer_src_shaders_wgsl_to_header_py__generator.rs"]
 pub(crate) mod backend_port_wgsl_header_generator;
 
+// The pinned WebGPU product compiles GL's load_store_actions_ext.cpp as a
+// direct source dependency. Keep its exclusive WebGL2 owner in the assigned
+// target and compile that prerequisite for WebGPU as well.
+#[cfg(feature = "native-webgpu-experimental")]
+pub(crate) mod webgl2 {
+    #[path = "renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs"]
+    pub(crate) mod load_store_actions_ext_decl;
+    #[path = "renderer_src_gl_load_store_actions_ext_cpp__impl.rs"]
+    pub(crate) mod load_store_actions_ext_impl;
+}
+
 #[cfg(feature = "native-webgpu-experimental")]
 pub(crate) mod webgpu {
     #[path = "renderer_include_rive_renderer_webgpu_render_context_webgpu_impl_hpp__decl.rs"]

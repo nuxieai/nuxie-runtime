@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:buffer"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_buffer_wgpu.cpp"
+source_sha256 = "bcfb293d34346dde8a908952a647353cdd9543e9786bda8c442204f03fb5d2c1"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_buffer_wgpu_cpp__impl.rs"
+target_sha256 = "51ace7abe33a760630d421c29c2eab38ed255acc5550fabb14a7a8aac66315c4"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_buffer_wgpu.cpp"
+source_snapshot_sha256 = "bcfb293d34346dde8a908952a647353cdd9543e9786bda8c442204f03fb5d2c1"
+dependency_units = ["webgpu:ore:context", "webgpu:wagyu:webgpu_cpp"]
+source_lines = 85
+source_bytes = 2668
+configuration_authorities = 0
+lifecycle_authorities = 5
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_buffer_wgpu"
+scope_note = "Preserves complete mapped and queue-write update paths, backing-buffer acquisition and recycling, alignment, native ownership, and source failure invariants."

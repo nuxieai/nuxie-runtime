@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgpu"
+ownership_unit = "webgpu:ore:buffer"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/wgpu/ore_buffer_wgpu.hpp"
+source_sha256 = "0d7e8a7e0f752a98877f3efc5d6d0f6c060a2bbbf0d70800099351ddbe29bf74"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_buffer_wgpu_hpp__decl.rs"
+target_sha256 = "950287787edfe7fe9d5f77544d6585f742832f6a25c49c6876d472f13c6626f1"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_buffer_wgpu.hpp"
+source_snapshot_sha256 = "0d7e8a7e0f752a98877f3efc5d6d0f6c060a2bbbf0d70800099351ddbe29bf74"
+dependency_units = ["webgpu:ore:context", "webgpu:wagyu:webgpu_cpp"]
+source_lines = 64
+source_bytes = 2099
+configuration_authorities = 0
+lifecycle_authorities = 3
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgpu::ore_buffer_wgpu"
+scope_note = "Preserves the complete buffer state denominator, usage and map mode, fixed backing capacity, active backing identity, context relationship, and reverse destruction."

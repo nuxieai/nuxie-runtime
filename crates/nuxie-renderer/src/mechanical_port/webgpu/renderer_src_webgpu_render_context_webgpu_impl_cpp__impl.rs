@@ -37,6 +37,10 @@ use super::webgpu_wagyu_decl::{
     WGPUTextureUsage_WagyuInputAttachment, WGPUTextureUsage_WagyuMSAAResolveSource,
     WGPUTextureUsage_WagyuTransientAttachment, WGPUWagyuStringArray,
 };
+use crate::mechanical_port::webgl2::load_store_actions_ext_decl::LoadStoreActionsEXT;
+use crate::mechanical_port::webgl2::load_store_actions_ext_impl::{
+    BuildLoadActionsEXT, BuildLoadStoreEXTGLSL,
+};
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::LiteRttiTypeId;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{static_rcp_cast, RefCntTarget};
@@ -210,41 +214,6 @@ fn appendGlslParts(output: &mut String, parts: &[&str]) {
         output.push_str(part);
         output.push('\n');
     }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct LoadStoreActionsEXT(u32);
-
-impl LoadStoreActionsEXT {
-    const none: Self = Self(0);
-    const clearColor: Self = Self(1 << 0);
-    const loadColor: Self = Self(1 << 1);
-    const storeColor: Self = Self(1 << 2);
-    const clearCoverage: Self = Self(1 << 3);
-    const clearClip: Self = Self(1 << 4);
-
-    fn has(self, other: Self) -> bool {
-        self.0 & other.0 != 0
-    }
-}
-
-fn buildLoadStoreEXTGLSL(actions: LoadStoreActionsEXT) -> String {
-    let mut shader = String::new();
-    for (action, name) in [
-        (LoadStoreActionsEXT::clearColor, GLSL_CLEAR_COLOR),
-        (LoadStoreActionsEXT::loadColor, GLSL_LOAD_COLOR),
-        (LoadStoreActionsEXT::storeColor, GLSL_STORE_COLOR),
-        (LoadStoreActionsEXT::clearCoverage, GLSL_CLEAR_COVERAGE),
-        (LoadStoreActionsEXT::clearClip, GLSL_CLEAR_CLIP),
-    ] {
-        if actions.has(action) {
-            shader.push_str("#define ");
-            shader.push_str(name);
-            shader.push('\n');
-        }
-    }
-    shader.push_str(GLSL_PLS_LOAD_STORE_EXT);
-    shader
 }
 
 fn loadStoreEXTPipelineKey(actions: LoadStoreActionsEXT, format: TextureFormat) -> u32 {
@@ -442,7 +411,7 @@ fn newLoadStoreEXTPipeline(
     let mut fragmentSource = format!(
         "#version 310 es\n#define {GLSL_FRAGMENT} true\n#define {GLSL_ENABLE_CLIPPING} true\n"
     );
-    fragmentSource.push_str(&buildLoadStoreEXTGLSL(actions));
+    BuildLoadStoreEXTGLSL(&mut fragmentSource, actions);
     let fragmentModule = compileShaderModuleWagyuRaw(&device, &fragmentSource);
     let mut colorTarget = WGPUColorTargetState::default();
     colorTarget.format = framebufferFormat.into();
@@ -2747,31 +2716,6 @@ unsafe fn updateWebGPUStorageTexture<T>(
     };
 }
 
-fn buildLoadActionsEXT(
-    desc: &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::FlushDescriptor,
-) -> (LoadStoreActionsEXT, [f32; 4]) {
-    use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-        LoadAction, ShaderFeatures,
-    };
-    let mut actions = LoadStoreActionsEXT::clearCoverage;
-    let color = wgpuColorPremul(desc.colorClearValue);
-    let clearColor = [
-        color.r as f32,
-        color.g as f32,
-        color.b as f32,
-        color.a as f32,
-    ];
-    if desc.colorLoadAction == LoadAction::clear {
-        actions.0 |= LoadStoreActionsEXT::clearColor.0;
-    } else if desc.colorLoadAction == LoadAction::preserveRenderTarget {
-        actions.0 |= LoadStoreActionsEXT::loadColor.0;
-    }
-    if desc.combinedShaderFeatures.0 & ShaderFeatures::ENABLE_CLIPPING.0 != 0 {
-        actions.0 |= LoadStoreActionsEXT::clearClip.0;
-    }
-    (actions, clearColor)
-}
-
 pub(crate) fn newColorRampPipeline(
     context: &mut RenderContextWebGPUImpl,
 ) -> super::render_context_webgpu_decl::ColorRampPipeline {
@@ -3198,7 +3142,7 @@ pub(crate) fn initGPUObjects(context: &mut RenderContextWebGPUImpl) {
         let mut source = format!(
             "#version 310 es\n#define {GLSL_VERTEX} true\n#ifndef GL_EXT_shader_pixel_local_storage\n#define gl_VertexID gl_VertexIndex\n#endif\n#define {GLSL_ENABLE_CLIPPING} true\n"
         );
-        source.push_str(&buildLoadStoreEXTGLSL(LoadStoreActionsEXT::none));
+        BuildLoadStoreEXTGLSL(&mut source, LoadStoreActionsEXT::none);
         *context.m_loadStoreEXTVertexShader = compileShaderModuleWagyuRaw(&device, &source);
         *context.m_loadStoreEXTUniforms = Some(makeUniformBufferRing(
             context,
@@ -4260,7 +4204,8 @@ pub(crate) unsafe fn flush(
                 )
             };
         } else {
-            let (loadActions, clearColor) = buildLoadActionsEXT(desc);
+            let mut clearColor = [0.0; 4];
+            let loadActions = BuildLoadActionsEXT(desc, &mut clearColor);
             let key = loadStoreEXTPipelineKey(loadActions, renderTarget.framebufferFormat());
             if !context.m_loadStoreEXTPipelines.contains_key(&key) {
                 let pipeline =

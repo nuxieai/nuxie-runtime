@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:load_store_actions_ext"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/gl/load_store_actions_ext.hpp"
+source_sha256 = "1257e79033825a39b8004f2258733cfdadbee99e6cbd9777e1679d0a70349ecf"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs"
+target_sha256 = "590b5b861be1cd5cc93f62f0ee41f18086e0139ba6b4e82c2d4e9b885ad081dd"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_include_rive_renderer_gl_load_store_actions_ext.hpp"
+source_snapshot_sha256 = "1257e79033825a39b8004f2258733cfdadbee99e6cbd9777e1679d0a70349ecf"
+dependency_units = ["shader:source:pls_load_store_ext"]
+source_lines = 36
+source_bytes = 1059
+configuration_authorities = 0
+lifecycle_authorities = 1
+compile_evidence = "cargo test -p nuxie-renderer --lib --no-default-features --features native-webgpu-experimental mechanical_port::webgl2::load_store_actions_ext_impl"
+scope_note = "Preserves the complete cross-backend load/store action bit contract, exact bit count, FlushDescriptor lowering declaration, shader assembly declaration, and source namespace boundary."

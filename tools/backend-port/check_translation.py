@@ -18,22 +18,38 @@ TRANSLATION_QUEUES = {
     "webgpu-translation",
     "webgl2-translation",
 }
+POST_TRANSLATION_QUEUES = {
+    "source-review",
+    "ownership-review",
+    "correction",
+    "compiler",
+    "rooted-execution",
+    "behavior-platform",
+    "frozen-byte-closeout",
+    "product-cutover",
+    "post-green",
+}
+ALL_TRANSLATION_CAMPAIGNS = {
+    "shader-build-authority",
+    "vulkan",
+    "webgpu",
+    "webgl2",
+}
 QUEUE_CAMPAIGNS = {
     "translation-admission": {"shader-build-authority"},
     "vulkan-translation": {"shader-build-authority", "vulkan"},
     "webgpu-translation": {"shader-build-authority", "vulkan", "webgpu"},
     "webgl2-translation": {
-        "shader-build-authority",
-        "vulkan",
-        "webgpu",
-        "webgl2",
+        *ALL_TRANSLATION_CAMPAIGNS,
     },
+    **{queue: ALL_TRANSLATION_CAMPAIGNS for queue in POST_TRANSLATION_QUEUES},
 }
 PRIOR_CAMPAIGNS = {
     "translation-admission": set(),
     "vulkan-translation": {"shader-build-authority"},
     "webgpu-translation": {"shader-build-authority", "vulkan"},
     "webgl2-translation": {"shader-build-authority", "vulkan", "webgpu"},
+    **{queue: ALL_TRANSLATION_CAMPAIGNS for queue in POST_TRANSLATION_QUEUES},
 }
 
 
@@ -75,7 +91,10 @@ def main() -> int:
     upstream = args.upstream_root.resolve()
     manifest_path = args.manifest if args.manifest.is_absolute() else repo / args.manifest
     manifest = tomllib.loads(manifest_path.read_text())
-    require(manifest["active_queue"] in TRANSLATION_QUEUES, "active queue is not translation")
+    require(
+        manifest["active_queue"] in TRANSLATION_QUEUES | POST_TRANSLATION_QUEUES,
+        "active queue precedes translation or is unknown",
+    )
     require(manifest["preparation_status"] == "green", "preparation is not green")
     require(manifest["ignored_skills"] == ["implement", "tdd"], "ignored-skill contract drift")
     actual_ref = subprocess.run(

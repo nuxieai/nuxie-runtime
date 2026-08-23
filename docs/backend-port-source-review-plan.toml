@@ -1,0 +1,381 @@
+schema_version = 1
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+review_kind = "global-source-semantics"
+review_mode = "independent-read-only-scc-waves"
+receipt_directory = "docs/backend-port-source-reviews"
+source_denominator = 200
+translated_source_denominator = 188
+excluded_source_denominator = 12
+logical_source_line_denominator = 55916
+translated_logical_source_line_denominator = 55125
+excluded_logical_source_line_denominator = 791
+source_byte_denominator = 2277054
+translated_source_byte_denominator = 2246991
+excluded_source_byte_denominator = 30063
+unit_denominator = 135
+translated_unit_denominator = 131
+excluded_only_unit_denominator = 4
+component_denominator = 115
+translated_component_denominator = 111
+excluded_only_component_denominator = 4
+component_receipt_denominator = 115
+semantic_dependency_rows = 900
+semantic_configuration_rows = 5386
+generated_artifacts = 520
+retained_generated_artifacts = 514
+ephemeral_generated_artifacts = 6
+retained_generated_logical_lines = 114637
+retained_generated_bytes = 9459764
+pinned_external_dependency_files = 35
+pinned_external_dependency_logical_lines = 7957
+pinned_external_dependency_bytes = 271592
+semantic_generated_owner_edges = 438
+translation_snapshot_denominator = 188
+translation_dependency_file_denominator = 17
+translation_dependency_tree_denominator = 4
+translation_dependency_tree_file_denominator = 259
+support_artifact_denominator = 52
+support_artifact_logical_line_denominator = 97253
+overlay_denominator = 9
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+severity_order = ["P0", "P1", "P2", "P3"]
+finding_id_rule = "SR-C<component number>-<two-digit nonzero ordinal>"
+
+[rules]
+authority = "Pinned source, frozen build/configuration/generated authority, and exclusive source-owner mapping are primary. Other backends and existing tests are diagnostic only."
+read_only = "Review contexts do not edit source, target, receipts, or authority and do not use compiler diagnostics, fixtures, or features to choose review work."
+complete_lines = "Every owned source and every translated target receives one exact full-file 1-N citation and current SHA-256 binding."
+complete_semantics = "Review declarations, executable bodies, conditionals, include/import owners, configuration branches, generated inputs/outputs, failure order, and source-visible behavior."
+exclusions = "Every nontranslated row is independently revalidated against the pinned build graph; an exclusion has no translated target evidence and cannot hide a semantic owner compiled by the selected backend."
+no_phase_jump = "A contract-shaped executor seam may defer physical platform execution to its declared later gate, but disconnected types, inert owners, stubs, placeholders, success-returning no-ops, and missing source branches are findings."
+finding_stability = "Every finding receives a stable ID, severity, summary, and exact source/target citations; no finding is corrected until both global review passes finish."
+skill_exclusion = "Actively ignore and do not use the implement or tdd skills."
+wave_order = "Review order_group 0 through 6 in order. Within one wave, parallelize only by complete component_id; never split an SCC. No backend-specific completion can advance the global gate."
+component_atomicity = "One canonical receipt covers the complete source and target union of one frozen SCC component; a component is never issued, cited, or closed as separate ownership units."
+overlay_gate = "After all seven component waves and support review close structurally, one explicit overlay receipt covers all nine derived cross-seam authorities before the global source pass closes."
+product_scope = "Port Vulkan, WebGPU, and WebGL2 exactly; expose WebGPU and WebGL2 as explicit editor choices; retain legacy Rust-WGPU until all three ports independently pass frozen closeout, then delete it."
+
+[changed_byte_closure]
+base_ref = "aa25e76acdbe0ad0f4099f8a360937bd74d856f9"
+head_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+diff_filter = "ACDMRT"
+category_order = [
+  "translated_target",
+  "source_snapshot",
+  "dependency_tree_member",
+  "dependency_file",
+  "source_review_support",
+  "campaign_documentation",
+  "campaign_tooling",
+  "ownership_only_evidence",
+  "explicit_deletion",
+]
+campaign_tooling_paths = [
+  "Makefile",
+  "tools/backend-port/check_translation.py",
+  "tools/backend-port/import_source_owner_snapshots.py",
+]
+ownership_only_paths = ["tools/backend-port/extract_field_inventory.py"]
+explicit_deleted_paths = []
+changed_path_denominator = 813
+translated_target = 186
+source_snapshot = 186
+dependency_tree_member = 193
+dependency_file = 5
+source_review_support = 47
+campaign_documentation = 192
+campaign_tooling = 3
+ownership_only_evidence = 1
+explicit_deletion = 0
+
+[[wave]]
+id = "g0"
+order_group = 0
+source_count = 53
+translated_source_count = 51
+excluded_source_count = 2
+logical_source_lines = 16300
+translated_logical_source_lines = 16250
+excluded_logical_source_lines = 50
+unit_count = 47
+translated_unit_count = 45
+excluded_only_unit_count = 2
+component_count = 45
+translated_component_count = 43
+excluded_only_component_count = 2
+
+[[wave]]
+id = "g1"
+order_group = 1
+source_count = 36
+translated_source_count = 35
+excluded_source_count = 1
+logical_source_lines = 9615
+translated_logical_source_lines = 9478
+excluded_logical_source_lines = 137
+unit_count = 21
+translated_unit_count = 21
+excluded_only_unit_count = 0
+component_count = 20
+translated_component_count = 20
+excluded_only_component_count = 0
+
+[[wave]]
+id = "g2"
+order_group = 2
+source_count = 55
+translated_source_count = 50
+excluded_source_count = 5
+logical_source_lines = 2461
+translated_logical_source_lines = 2446
+excluded_logical_source_lines = 15
+unit_count = 36
+translated_unit_count = 36
+excluded_only_unit_count = 0
+component_count = 36
+translated_component_count = 36
+excluded_only_component_count = 0
+
+[[wave]]
+id = "g3"
+order_group = 3
+source_count = 17
+translated_source_count = 15
+excluded_source_count = 2
+logical_source_lines = 7276
+translated_logical_source_lines = 7270
+excluded_logical_source_lines = 6
+unit_count = 10
+translated_unit_count = 10
+excluded_only_unit_count = 0
+component_count = 7
+translated_component_count = 7
+excluded_only_component_count = 0
+
+[[wave]]
+id = "g4"
+order_group = 4
+source_count = 15
+translated_source_count = 13
+excluded_source_count = 2
+logical_source_lines = 8643
+translated_logical_source_lines = 8060
+excluded_logical_source_lines = 583
+unit_count = 9
+translated_unit_count = 7
+excluded_only_unit_count = 2
+component_count = 5
+translated_component_count = 3
+excluded_only_component_count = 2
+
+[[wave]]
+id = "g5"
+order_group = 5
+source_count = 2
+translated_source_count = 2
+excluded_source_count = 0
+logical_source_lines = 529
+translated_logical_source_lines = 529
+excluded_logical_source_lines = 0
+unit_count = 1
+translated_unit_count = 1
+excluded_only_unit_count = 0
+component_count = 1
+translated_component_count = 1
+excluded_only_component_count = 0
+
+[[wave]]
+id = "g6"
+order_group = 6
+source_count = 22
+translated_source_count = 22
+excluded_source_count = 0
+logical_source_lines = 11092
+translated_logical_source_lines = 11092
+excluded_logical_source_lines = 0
+unit_count = 11
+translated_unit_count = 11
+excluded_only_unit_count = 0
+component_count = 1
+translated_component_count = 1
+excluded_only_component_count = 0
+
+[[overlay]]
+id = "shared-authority-consumers"
+rule = "Review every shared shader/build unit edge into Vulkan, WebGPU, and WebGL2, including constants, bindings, transforms, generated byte identity, and consumer selection."
+component_count = 68
+support_count = 0
+dependency_record_count = 305
+semantic_dependency_record_count = 297
+configuration_record_count = 0
+build_predicate_record_count = 0
+generated_record_count = 0
+browser_bridge_record_count = 0
+physical_generated_record_count = 0
+external_record_count = 0
+artifact_record_count = 0
+tree_count = 0
+excluded_source_count = 0
+authority_record_count = 373
+authority_sha256 = "cd31ec1195880aa8756ee66eacc59628433974907e7531796060d073dad7d6a1"
+
+[[overlay]]
+id = "webgpu-to-webgl2-load-store"
+rule = "Review the sole backend-to-backend edge from webgpu:renderer:render_context_webgpu_impl to webgl2:renderer:load_store_actions_ext; component094 precedes component109."
+component_count = 2
+support_count = 0
+dependency_record_count = 2
+semantic_dependency_record_count = 2
+configuration_record_count = 0
+build_predicate_record_count = 0
+generated_record_count = 0
+browser_bridge_record_count = 0
+physical_generated_record_count = 0
+external_record_count = 0
+artifact_record_count = 0
+tree_count = 0
+excluded_source_count = 0
+authority_record_count = 4
+authority_sha256 = "b45f4d9b77e9856bdea375e3ca6e96f4192f30214a21c98505d1a47796e83e60"
+
+[[overlay]]
+id = "generated-authority"
+rule = "Review generated-input ownership, immutable outputs, exact digests, generator transformations, and backend consumer selection."
+component_count = 67
+support_count = 4
+dependency_record_count = 791
+semantic_dependency_record_count = 787
+configuration_record_count = 0
+build_predicate_record_count = 0
+generated_record_count = 520
+browser_bridge_record_count = 0
+physical_generated_record_count = 514
+external_record_count = 0
+artifact_record_count = 14
+tree_count = 3
+excluded_source_count = 0
+authority_record_count = 1913
+authority_sha256 = "1b1a49bfb5ec429acaed62de858f1772d5c7652e405bb7835d6dc3d327cc3175"
+
+[[overlay]]
+id = "webgpu-abi"
+rule = "Review Wagyu v1 C/C++/JavaScript/generator authority and Dawn-v2 headers/compatibility aliases through renderer and ORE-WGPU consumers."
+component_count = 17
+support_count = 2
+dependency_record_count = 39
+semantic_dependency_record_count = 39
+configuration_record_count = 0
+build_predicate_record_count = 0
+generated_record_count = 0
+browser_bridge_record_count = 0
+physical_generated_record_count = 0
+external_record_count = 0
+artifact_record_count = 12
+tree_count = 0
+excluded_source_count = 0
+authority_record_count = 70
+authority_sha256 = "12da060a0a297d35bd28b6970668d4d9c52cfbc0f5995d3d2c11fdef6ed3d2a7"
+
+[[overlay]]
+id = "shared-ore-contracts"
+rule = "Review shared generic ORE contracts against each distinct Vulkan, WebGPU, and GL concrete owner without inventing a shared concrete backend or fallback."
+component_count = 21
+support_count = 7
+dependency_record_count = 70
+semantic_dependency_record_count = 70
+configuration_record_count = 0
+build_predicate_record_count = 0
+generated_record_count = 0
+browser_bridge_record_count = 0
+physical_generated_record_count = 0
+external_record_count = 12
+artifact_record_count = 0
+tree_count = 0
+excluded_source_count = 0
+authority_record_count = 110
+authority_sha256 = "2eaecaa75c637e2cab436cef72d579cbee280bc762dad4b3e67b5dbaa64f842e"
+
+[[overlay]]
+id = "shared-renderer-contracts"
+rule = "Review every backend-port change to the previously audited generic renderer and native Metal contract bytes, including exact interface adaptation and absence of backend-specific fallback."
+component_count = 15
+support_count = 14
+dependency_record_count = 147
+semantic_dependency_record_count = 147
+configuration_record_count = 0
+build_predicate_record_count = 0
+generated_record_count = 0
+browser_bridge_record_count = 0
+physical_generated_record_count = 0
+external_record_count = 23
+artifact_record_count = 0
+tree_count = 0
+excluded_source_count = 0
+authority_record_count = 199
+authority_sha256 = "09b8fb1087ff555294e277326b71c419e510be1b837150b82fb9ffd5fbb8baac"
+
+[[overlay]]
+id = "vulkan-vma-adaptation"
+rule = "Review the vendored vk-mem Rust/C++/header adaptation, Cargo/build wiring, VMA ABI, and every Vulkan allocation call against the pinned VMA and Vulkan header authority."
+component_count = 4
+support_count = 11
+dependency_record_count = 24
+semantic_dependency_record_count = 24
+configuration_record_count = 0
+build_predicate_record_count = 0
+generated_record_count = 0
+browser_bridge_record_count = 0
+physical_generated_record_count = 0
+external_record_count = 0
+artifact_record_count = 3
+tree_count = 1
+excluded_source_count = 0
+authority_record_count = 43
+authority_sha256 = "8dad68730becd028c4652b24951a6db769c4e36610c9ea44989052748f2c3fe2"
+
+[[overlay]]
+id = "backend-identity-and-browser-bridges"
+rule = "Review source-level context/factory/module wiring plus WebGPU and WebGL browser bridge/query/command semantics; physical browser execution, editor selection, and legacy deletion remain later gates."
+component_count = 10
+support_count = 6
+dependency_record_count = 0
+semantic_dependency_record_count = 0
+configuration_record_count = 0
+build_predicate_record_count = 0
+generated_record_count = 0
+browser_bridge_record_count = 472
+physical_generated_record_count = 0
+external_record_count = 0
+artifact_record_count = 0
+tree_count = 0
+excluded_source_count = 0
+authority_record_count = 488
+authority_sha256 = "906e203bfd09cd484a06eacf3cc90ca69390d40b4d8b5e34598252d56f29994c"
+
+[[overlay]]
+id = "classification-boundary"
+rule = "Review all 12 nontranslated rows against exact evidence-only or pinned-build predicates and prove they are neither silently implemented nor used as fallback."
+component_count = 13
+support_count = 8
+dependency_record_count = 0
+semantic_dependency_record_count = 0
+configuration_record_count = 1
+build_predicate_record_count = 18
+generated_record_count = 0
+browser_bridge_record_count = 0
+physical_generated_record_count = 0
+external_record_count = 0
+artifact_record_count = 0
+tree_count = 0
+excluded_source_count = 12
+authority_record_count = 52
+authority_sha256 = "22d78d511bef480af6c9ab696a401271e2e2614beb21615c434bea9ee09aa702"

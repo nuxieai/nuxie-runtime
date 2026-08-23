@@ -61,12 +61,32 @@ pub(crate) mod backend_port_wgsl_header_generator;
 
 #[cfg(feature = "native-webgpu-experimental")]
 pub(crate) mod webgpu {
+    #[path = "renderer_include_rive_renderer_webgpu_render_context_webgpu_impl_hpp__decl.rs"]
+    pub(crate) mod render_context_webgpu_decl;
+    #[path = "renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs"]
+    pub(crate) mod render_context_webgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_bind_group_layout_wgpu_hpp__decl.rs"]
     pub(crate) mod ore_bind_group_layout_wgpu_decl;
+    #[path = "renderer_src_ore_wgpu_ore_bind_group_wgpu_hpp__decl.rs"]
+    pub(crate) mod ore_bind_group_wgpu_decl;
+    #[path = "renderer_src_ore_wgpu_ore_bind_group_wgpu_cpp__impl.rs"]
+    pub(crate) mod ore_bind_group_wgpu_impl;
+    #[path = "renderer_src_ore_wgpu_ore_buffer_wgpu_hpp__decl.rs"]
+    pub(crate) mod ore_buffer_wgpu_decl;
+    #[path = "renderer_src_ore_wgpu_ore_buffer_wgpu_cpp__impl.rs"]
+    pub(crate) mod ore_buffer_wgpu_impl;
+    #[path = "renderer_include_rive_renderer_ore_ore_context_wgpu_hpp__decl.rs"]
+    pub(crate) mod ore_context_wgpu_decl;
+    #[path = "renderer_src_ore_wgpu_ore_context_wgpu_cpp__impl.rs"]
+    pub(crate) mod ore_context_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_pipeline_wgpu_hpp__decl.rs"]
     pub(crate) mod ore_pipeline_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_pipeline_wgpu_cpp__impl.rs"]
     pub(crate) mod ore_pipeline_wgpu_impl;
+    #[path = "renderer_src_ore_wgpu_ore_render_pass_wgpu_hpp__decl.rs"]
+    pub(crate) mod ore_render_pass_wgpu_decl;
+    #[path = "renderer_src_ore_wgpu_ore_render_pass_wgpu_cpp__impl.rs"]
+    pub(crate) mod ore_render_pass_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs"]
     pub(crate) mod ore_sampler_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_sampler_wgpu_cpp__impl.rs"]

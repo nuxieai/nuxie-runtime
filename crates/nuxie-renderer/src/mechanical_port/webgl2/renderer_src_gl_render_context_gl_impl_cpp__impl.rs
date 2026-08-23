@@ -824,6 +824,34 @@ fn newContextOwner(
     owner
 }
 
+#[cfg(test)]
+pub(crate) fn newComponent097TestContextOwner(
+    capabilities: GLCapabilities,
+    executionDomain: GLExecutionDomain,
+) -> Box<RenderContextGLImpl> {
+    newContextOwner(
+        b"WebGL component097 test renderer\0".to_vec(),
+        capabilities,
+        None,
+        ShaderCompilationMode::standard,
+        executionDomain,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn newComponent097SelectedContextOwner(
+    options: ContextOptions,
+    executionDomain: GLExecutionDomain,
+) -> Option<Box<RenderContextGLImpl>> {
+    executionDomain.withCurrent(|| {
+        makeContextOwnerInCurrent(
+            options,
+            executionDomain.clone(),
+            Some(&super::pls_impl_webgl_impl::PLS_IMPL_WEBGL_FACTORY),
+        )
+    })
+}
+
 fn initializeContext(context: &mut RenderContextGLImpl) {
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
@@ -2746,6 +2774,14 @@ unsafe fn renderTargetGL<'a>(
     }
 }
 
+pub(crate) unsafe fn withRenderTargetGL<R>(
+    target: core::ptr::NonNull<RenderTarget>,
+    execution: &GLExecutionStamp,
+    callback: impl FnOnce(&mut dyn RenderTargetGLApi) -> R,
+) -> R {
+    callback(unsafe { renderTargetGL(target, execution) })
+}
+
 unsafe fn textureGL<'a>(
     texture: core::ptr::NonNull<gpu::Texture>,
     execution: &GLExecutionStamp,
@@ -2759,6 +2795,50 @@ unsafe fn textureGL<'a>(
         "RenderContextGLImpl received a non-GL, stale, or foreign texture"
     );
     unsafe { &*texture.as_ptr().cast::<TextureGLImpl>() }
+}
+
+/// Temporarily moves the final PLS owner out of `RenderContextGLImpl` while
+/// source virtual callbacks receive the complete mutable context. The C++
+/// object model permits that callback shape; keeping a Rust borrow into
+/// `m_plsImpl` at the same time would alias the whole-context borrow.
+struct DetachedPixelLocalStorage<'a> {
+    context: &'a mut RenderContextGLImpl,
+    value: Option<Box<dyn PixelLocalStorageImpl>>,
+}
+
+impl<'a> DetachedPixelLocalStorage<'a> {
+    fn take(context: &'a mut RenderContextGLImpl) -> Self {
+        let value = context.m_plsImpl.take();
+        Self { context, value }
+    }
+
+    fn call<R>(
+        &mut self,
+        message: &str,
+        callback: impl FnOnce(&mut dyn PixelLocalStorageImpl, &mut RenderContextGLImpl) -> R,
+    ) -> R {
+        let Self { context, value } = self;
+        callback(value.as_deref_mut().expect(message), context)
+    }
+}
+
+impl Drop for DetachedPixelLocalStorage<'_> {
+    fn drop(&mut self) {
+        assert!(
+            self.context.m_plsImpl.is_none(),
+            "detached PLS slot must stay empty during source callbacks"
+        );
+        *self.context.m_plsImpl = self.value.take();
+    }
+}
+
+fn withDetachedPixelLocalStorage<R>(
+    context: &mut RenderContextGLImpl,
+    message: &str,
+    callback: impl FnOnce(&mut dyn PixelLocalStorageImpl, &mut RenderContextGLImpl) -> R,
+) -> R {
+    let mut detached = DetachedPixelLocalStorage::take(context);
+    detached.call(message, callback)
 }
 
 fn intersectScissor(a: gpu::AABBu16, b: gpu::AABBu16) -> gpu::AABBu16 {
@@ -2814,7 +2894,7 @@ fn intersectBounds(a: gpu::IAABB, b: gpu::IAABB) -> gpu::IAABB {
     }
 }
 
-fn unpackColorToRGBA32FPremul(color: u32) -> [f32; 4] {
+pub(crate) fn unpackColorToRGBA32FPremul(color: u32) -> [f32; 4] {
     let alpha = ((color >> 24) & 0xff) as f32 * (1.0 / 255.0);
     [
         ((color >> 16) & 0xff) as f32 * (1.0 / 255.0) * alpha,
@@ -3105,12 +3185,12 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| unsafe {
         assert_ne!(desc.interlockMode, gpu::InterlockMode::clockwiseAtomic);
-        let mut renderTarget = renderTargetGL(
-            desc.renderTarget
-                .expect("RenderContextGLImpl flush requires a render target"),
-            &execution,
-        );
-        renderTarget.base().assertSameExecution(&execution);
+        let renderTargetHandle = desc
+            .renderTarget
+            .expect("RenderContextGLImpl flush requires a render target");
+        renderTargetGL(renderTargetHandle, &execution)
+            .base()
+            .assertSameExecution(&execution);
 
         recordGLCommand(GLCommand::BindBufferRange {
             target: GL_UNIFORM_BUFFER,
@@ -3489,8 +3569,12 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             });
         }
 
-        let targetWidth = renderTarget.base().width();
-        let targetHeight = renderTarget.base().height();
+        let targetWidth = renderTargetGL(renderTargetHandle, &execution)
+            .base()
+            .width();
+        let targetHeight = renderTargetGL(renderTargetHandle, &execution)
+            .base()
+            .height();
         recordGLCommand(GLCommand::Viewport(
             0,
             0,
@@ -3500,29 +3584,31 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
         let mut msaaResolveAction = MSAAResolveAction::automatic;
         let mut msaaDepthStencilColor = [GL_NONE; 3];
         let mut clipPlanesEnabled = false;
-        let pls = context
-            .m_plsImpl
-            .as_deref_mut()
-            .map(core::ptr::NonNull::from);
-
         if desc.interlockMode != gpu::InterlockMode::msaa {
             assert_eq!(desc.msaaSampleCount, 0);
-            let mut pls = pls.expect("non-MSAA GL flush requires final PLS implementation");
-            pls.as_mut().activatePixelLocalStorage(context, desc);
+            withDetachedPixelLocalStorage(
+                context,
+                "non-MSAA GL flush requires final PLS implementation",
+                |pls, context| pls.activatePixelLocalStorage(context, desc),
+            );
             if desc.interlockMode == gpu::InterlockMode::atomics {
-                pls.as_mut()
-                    .ensureRasterOrderingEnabled(context, desc, false);
+                withDetachedPixelLocalStorage(
+                    context,
+                    "atomic mode requires final PLS implementation",
+                    |pls, context| pls.ensureRasterOrderingEnabled(context, desc, false),
+                );
             }
         } else {
             assert!(desc.msaaSampleCount > 0);
             let preserve = desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget;
             let mut isFBO0 = false;
-            msaaResolveAction = renderTarget.bindMSAAFramebuffer(
-                context,
-                desc.msaaSampleCount,
-                preserve.then_some(&desc.renderTargetUpdateBounds),
-                Some(&mut isFBO0),
-            );
+            msaaResolveAction = renderTargetGL(renderTargetHandle, &execution)
+                .bindMSAAFramebuffer(
+                    context,
+                    desc.msaaSampleCount,
+                    preserve.then_some(&desc.renderTargetUpdateBounds),
+                    Some(&mut isFBO0),
+                );
             msaaDepthStencilColor = if isFBO0 {
                 [GL_DEPTH, GL_STENCIL, GL_COLOR]
             } else {
@@ -3551,7 +3637,9 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 if context.m_capabilities.KHR_blend_equation_advanced_coherent {
                     recordGLCommand(GLCommand::Enable(GL_BLEND_ADVANCED_COHERENT_KHR));
                 } else {
-                    let texture = renderTarget.baseMut().dstColorTexture();
+                    let texture = renderTargetGL(renderTargetHandle, &execution)
+                        .baseMut()
+                        .dstColorTexture();
                     recordGLCommand(GLCommand::ActiveTexture(
                         GL_TEXTURE0 + DST_COLOR_TEXTURE_IDX,
                     ));
@@ -3575,8 +3663,11 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             };
             let mut shaderMiscFlags = batch.shaderMiscFlags;
             if desc.interlockMode != gpu::InterlockMode::msaa {
-                let pls = pls.expect("non-MSAA GL flush requires final PLS implementation");
-                shaderMiscFlags |= pls.as_ref().shaderMiscFlags(desc, drawType);
+                shaderMiscFlags |= context
+                    .m_plsImpl
+                    .as_deref()
+                    .expect("non-MSAA GL flush requires final PLS implementation")
+                    .shaderMiscFlags(desc, drawType);
             }
             let props = StandardPipelineProps {
                 drawType,
@@ -3611,15 +3702,18 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     desc.interlockMode,
                     desc.fixedFunctionColorOutput,
                     context.platformFeatures(),
-                );
+            );
             if desc.interlockMode != gpu::InterlockMode::msaa {
-                let pls = pls.expect("non-MSAA GL flush requires final PLS implementation");
-                pls.as_ref().applyPipelineStateOverrides(
-                    batch,
-                    desc,
-                    context.platformFeatures(),
-                    &mut pipelineState,
-                );
+                context
+                    .m_plsImpl
+                    .as_deref()
+                    .expect("non-MSAA GL flush requires final PLS implementation")
+                    .applyPipelineStateOverrides(
+                        batch,
+                        desc,
+                        context.platformFeatures(),
+                        &mut pipelineState,
+                    );
             } else {
                 let needsClipPlanes = hasShaderFeature(
                     shaderFeatures,
@@ -3647,8 +3741,11 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 != 0
             {
                 assert_eq!(desc.interlockMode, gpu::InterlockMode::atomics);
-                let mut pls = pls.expect("atomic barrier requires final PLS implementation");
-                pls.as_mut().barrier(desc);
+                context
+                    .m_plsImpl
+                    .as_deref_mut()
+                    .expect("atomic barrier requires final PLS implementation")
+                    .barrier(desc);
             } else if batch.barriers.0 & gpu::BarrierFlags::dstBlend.0 != 0 {
                 assert!(!context.m_capabilities.KHR_blend_equation_advanced_coherent);
                 if context.m_capabilities.KHR_blend_equation_advanced {
@@ -3656,7 +3753,9 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 } else {
                     assert_eq!(desc.interlockMode, gpu::InterlockMode::msaa);
                     assert!(batch.dstReadList.is_some());
-                    renderTarget.baseMut().bindDstColorFramebuffer(GL_DRAW_FRAMEBUFFER);
+                    renderTargetGL(renderTargetHandle, &execution)
+                        .baseMut()
+                        .bindDstColorFramebuffer(GL_DRAW_FRAMEBUFFER);
                     context.m_state.borrow_mut().disableScissor();
                     if context.m_capabilities.avoidPartialFramebufferBlits {
                         glutils::BlitFramebuffer(
@@ -3681,12 +3780,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                             draw = (*draw).nextDstRead();
                         }
                     }
-                    let _ = renderTarget.bindMSAAFramebuffer(
-                        context,
-                        desc.msaaSampleCount,
-                        None,
-                        None,
-                    );
+                    let _ = renderTargetGL(renderTargetHandle, &execution)
+                        .bindMSAAFramebuffer(context, desc.msaaSampleCount, None, None);
                 }
             }
 
@@ -3716,8 +3811,13 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 | gpu::DrawType::msaaOuterCubics => {
                     context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
                     if desc.interlockMode == gpu::InterlockMode::rasterOrdering {
-                        let mut pls = pls.expect("raster ordering requires final PLS implementation");
-                        pls.as_mut().ensureRasterOrderingEnabled(context, desc, true);
+                        withDetachedPixelLocalStorage(
+                            context,
+                            "raster ordering requires final PLS implementation",
+                            |pls, context| {
+                                pls.ensureRasterOrderingEnabled(context, desc, true)
+                            },
+                        );
                     }
                     drawIndexedInstancedNoInstancedAttribs(
                         context,
@@ -3747,11 +3847,14 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         .borrow_mut()
                         .bindVAO(context.m_trianglesVAO.id());
                     if desc.interlockMode == gpu::InterlockMode::rasterOrdering {
-                        let mut pls = pls.expect("raster ordering requires final PLS implementation");
-                        pls.as_mut().ensureRasterOrderingEnabled(
+                        withDetachedPixelLocalStorage(
                             context,
-                            desc,
-                            drawType != gpu::DrawType::interiorTriangulation,
+                            "raster ordering requires final PLS implementation",
+                            |pls, context| pls.ensureRasterOrderingEnabled(
+                                context,
+                                desc,
+                                drawType != gpu::DrawType::interiorTriangulation,
+                            ),
                         );
                     }
                     recordGLCommand(GLCommand::DrawArrays {
@@ -3762,15 +3865,19 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     if desc.interlockMode == gpu::InterlockMode::rasterOrdering
                         && drawType != gpu::DrawType::featherAtlasBlit
                     {
-                        let mut pls = pls.expect("raster ordering requires final PLS implementation");
-                        pls.as_mut().barrier(desc);
+                        context
+                            .m_plsImpl
+                            .as_deref_mut()
+                            .expect("raster ordering requires final PLS implementation")
+                            .barrier(desc);
                     }
                 }
                 gpu::DrawType::imageRect => {
                     assert_eq!(desc.interlockMode, gpu::InterlockMode::atomics);
-                    assert!(pls
+                    assert!(context
+                        .m_plsImpl
+                        .as_deref()
                         .expect("atomic image draw requires final PLS implementation")
-                        .as_ref()
                         .rasterOrderingKnownDisabled());
                     assert_ne!(context.m_imageRectVAO.id(), 0);
                     let mut state = context.m_state.borrow_mut();
@@ -3856,8 +3963,13 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         .borrow_mut()
                         .bindBuffer(GL_ELEMENT_ARRAY_BUFFER, index.bufferID());
                     if desc.interlockMode == gpu::InterlockMode::rasterOrdering {
-                        let mut pls = pls.expect("raster ordering requires final PLS implementation");
-                        pls.as_mut().ensureRasterOrderingEnabled(context, desc, true);
+                        withDetachedPixelLocalStorage(
+                            context,
+                            "raster ordering requires final PLS implementation",
+                            |pls, context| {
+                                pls.ensureRasterOrderingEnabled(context, desc, true)
+                            },
+                        );
                     }
                     recordGLCommand(GLCommand::DrawElementsInstanced {
                         mode: GL_TRIANGLES,
@@ -3872,9 +3984,10 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 }
                 gpu::DrawType::renderPassResolve => {
                     assert_eq!(desc.interlockMode, gpu::InterlockMode::atomics);
-                    assert!(pls
+                    assert!(context
+                        .m_plsImpl
+                        .as_deref()
                         .expect("atomic resolve requires final PLS implementation")
-                        .as_ref()
                         .rasterOrderingKnownDisabled());
                     context.m_state.borrow_mut().bindVAO(context.m_emptyVAO.id());
                     recordGLCommand(GLCommand::DrawArrays {
@@ -3890,15 +4003,19 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
         }
 
         if desc.interlockMode != gpu::InterlockMode::msaa {
-            let mut pls = pls.expect("non-MSAA GL flush requires final PLS implementation");
-            pls.as_mut().deactivatePixelLocalStorage(context, desc);
+            withDetachedPixelLocalStorage(
+                context,
+                "non-MSAA GL flush requires final PLS implementation",
+                |pls, context| pls.deactivatePixelLocalStorage(context, desc),
+            );
         } else {
             recordGLCommand(GLCommand::InvalidateFramebuffer {
                 target: GL_FRAMEBUFFER,
                 attachments: msaaDepthStencilColor[..2].to_vec(),
             });
             if msaaResolveAction == MSAAResolveAction::framebufferBlit {
-                renderTarget.bindDestinationFramebuffer(GL_DRAW_FRAMEBUFFER);
+                renderTargetGL(renderTargetHandle, &execution)
+                    .bindDestinationFramebuffer(GL_DRAW_FRAMEBUFFER);
                 context
                     .m_state
                     .borrow_mut()
@@ -3933,7 +4050,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
         }
 
         recordGLCommand(GLCommand::Flush);
-        let targetTexture = renderTarget.renderTexture();
+        let targetTexture = renderTargetGL(renderTargetHandle, &execution).renderTexture();
         blitMirrorIfRegistered(context, targetTexture);
     });
 }
@@ -3992,11 +4109,11 @@ fn parseAdrenoSeries(renderer: &str) -> u32 {
         .unwrap_or(0)
 }
 
-fn makeContextInCurrent(
+fn makeContextOwnerInCurrent(
     options: ContextOptions,
     executionDomain: GLExecutionDomain,
     finalPLSFactory: Option<&dyn PixelLocalStorageFactory>,
-) -> Option<std::pin::Pin<Box<RenderContext>>> {
+) -> Option<Box<RenderContextGLImpl>> {
     let glVersionBytes = executionDomain
         .getString(GL_VERSION)
         .expect("source dereferences non-null glGetString(GL_VERSION)");
@@ -4055,11 +4172,11 @@ fn makeContextInCurrent(
         capabilities.OES_shader_image_atomic = true;
     }
 
-    if executionDomain.enableWebGLExtension("WEBGL_shader_pixel_local_storage_coherent") {
+    if super::pls_impl_webgl_impl::webglEnableShaderPixelLocalStorageCoherent(&executionDomain) {
         capabilities.ANGLE_shader_pixel_local_storage = true;
         capabilities.ANGLE_shader_pixel_local_storage_coherent = true;
     }
-    if executionDomain.enableWebGLExtension("WEBGL_provoking_vertex") {
+    if super::pls_impl_webgl_impl::webglEnableProvokingVertex(&executionDomain) {
         capabilities.ANGLE_provoking_vertex = true;
     }
     capabilities.EXT_clip_cull_distance =
@@ -4139,16 +4256,23 @@ fn makeContextInCurrent(
         None
     };
 
-    let implementation = newContextOwner(
+    Some(newContextOwner(
         rendererBytes,
         capabilities,
         plsImpl,
         options.shaderCompilationMode,
         executionDomain,
-    );
-    Some(<RenderContext as RenderContextContract>::new(
-        implementation,
     ))
+}
+
+fn makeContextInCurrent(
+    options: ContextOptions,
+    executionDomain: GLExecutionDomain,
+    finalPLSFactory: Option<&dyn PixelLocalStorageFactory>,
+) -> Option<std::pin::Pin<Box<RenderContext>>> {
+    let implementation =
+        makeContextOwnerInCurrent(options, executionDomain, finalPLSFactory)?;
+    Some(<RenderContext as RenderContextContract>::new(implementation))
 }
 
 pub(crate) fn MakeContext(
@@ -4156,8 +4280,13 @@ pub(crate) fn MakeContext(
     provider: Box<dyn GLExecutionProvider>,
 ) -> Option<std::pin::Pin<Box<RenderContext>>> {
     let executionDomain = GLExecutionDomain::new(provider);
-    let result = executionDomain
-        .withCurrent(|| makeContextInCurrent(options, executionDomain.clone(), None));
+    let result = executionDomain.withCurrent(|| {
+        makeContextInCurrent(
+            options,
+            executionDomain.clone(),
+            Some(&super::pls_impl_webgl_impl::PLS_IMPL_WEBGL_FACTORY),
+        )
+    });
     if result.is_none() {
         executionDomain.shutdown();
     }

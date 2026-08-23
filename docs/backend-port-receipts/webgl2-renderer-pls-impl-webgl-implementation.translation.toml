@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:pls_impl_webgl"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/gl/pls_impl_webgl.cpp"
+source_sha256 = "72332a776d363a5bc81360a3a152f525dd74b7f0456903c69522884a6f268bb7"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_pls_impl_webgl_cpp__impl.rs"
+target_sha256 = "972baaa524b370e777108868eeddbacefe32f5a02ff723a3b3b54fe61c316b15"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_gl_pls_impl_webgl.cpp"
+source_snapshot_sha256 = "72332a776d363a5bc81360a3a152f525dd74b7f0456903c69522884a6f268bb7"
+dependency_units = ["shader:source:constants", "shader:source:glsl", "webgl2:renderer:gl_utils", "webgl2:renderer:render_context_gl_impl", "webgl2:renderer:render_target"]
+source_lines = 337
+source_bytes = 11347
+configuration_authorities = 20
+lifecycle_authorities = 7
+compile_evidence = "cargo test -p nuxie-renderer --lib mechanical_port::webgl2 --no-default-features --features native-webgpu-experimental,ore-gl,with-rive-tools"
+scope_note = "Preserves the complete RIVE_WEBGL owner: all eight EM_JS bridges and eight C wrappers; the four-state coherent-PLS acceptance matrix, exact deprecated-version warning, retained gl.pls/gl.pv executor contracts, texture-table lookup, absent-extension no-ops and zero query; exact load/store arrays, plane bindings, premultiplied clear, external-framebuffer pre-blit/copy-back ordering, shader define, capability mutation, and fresh factory ownership."

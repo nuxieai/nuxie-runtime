@@ -32,6 +32,18 @@ pub(crate) enum GLObjectKind {
     VertexArray,
 }
 
+/// Exact observable outcomes of the source's draft WebGL PLS admission
+/// helper. The browser provider performs the JavaScript object inspection and
+/// retains the extension only for `Enabled`; Rust preserves the distinctions
+/// so browser conformance cannot collapse the acceptance matrix to one bool.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WebGLShaderPixelLocalStorageEnableResult {
+    ExtensionUnavailable,
+    NonCoherent,
+    DeprecatedVersion,
+    Enabled,
+}
+
 pub(crate) const GL_NONE: GLenum = 0;
 pub(crate) const GL_FALSE: GLboolean = 0;
 pub(crate) const GL_TRUE: GLboolean = 1;
@@ -245,6 +257,8 @@ pub(crate) enum GLCommand {
     BindFramebufferFromQuery(GLenum, u64),
     BindRenderbuffer(GLenum, GLuint),
     BindSampler(GLuint, GLuint),
+    /// Provider forwards through retained `gl.pv`; absent extension is a
+    /// source-specified silent no-op.
     ProvokingVertex(GLenum),
     Scissor(u32, u32, u32, u32),
     Viewport(i32, i32, i32, i32),
@@ -370,6 +384,8 @@ pub(crate) enum GLCommand {
         attachments: Vec<GLenum>,
     },
     LineWidth(f32),
+    /// Provider forwards through retained `gl.pls` and resolves the numeric
+    /// name through the Emscripten/WebGL texture table; absent PLS is a no-op.
     FramebufferTexturePixelLocalStorageANGLE {
         plane: GLint,
         backing_texture: GLuint,
@@ -377,9 +393,21 @@ pub(crate) enum GLCommand {
         layer: GLint,
         usage: GLenum,
     },
+    /// Provider forwards a fresh four-float value through retained `gl.pls`;
+    /// absent PLS is a source-specified silent no-op.
+    FramebufferPixelLocalClearValuefvANGLE {
+        plane: GLint,
+        value: [GLfloat; 4],
+    },
+    /// Exact synchronous `HEAPU32` operation range after Rust ownership
+    /// conversion. Providers consume every element before returning and
+    /// silently no-op when no `gl.pls` object has been retained.
     BeginPixelLocalStorageANGLE {
         load_ops: Vec<GLenum>,
     },
+    /// Exact synchronous `HEAPU32` operation range after Rust ownership
+    /// conversion. Providers consume every element before returning and
+    /// silently no-op when no `gl.pls` object has been retained.
     EndPixelLocalStorageANGLE {
         store_ops: Vec<GLenum>,
     },
@@ -557,6 +585,53 @@ pub(crate) trait GLExecutionProvider {
     fn getString(&mut self, parameter: GLenum) -> Option<Vec<u8>>;
     fn getExtension(&mut self, index: GLuint) -> Option<Vec<u8>>;
     fn enableWebGLExtension(&mut self, name: &str) -> bool;
+
+    /// Implements `enable_WEBGL_shader_pixel_local_storage_coherent` exactly:
+    /// request `WEBGL_shader_pixel_local_storage`, require `isCoherent()`,
+    /// require the 2026 five-argument framebuffer-texture entry point, warn on
+    /// deprecated arity using the supplied exact source warning, and retain
+    /// the accepted extension on this context. The four-valued result prevents
+    /// a browser adapter from hiding any source branch behind one bool.
+    #[cfg(not(test))]
+    fn enableWebGLShaderPixelLocalStorageCoherent(
+        &mut self,
+        deprecatedVersionWarning: &'static str,
+    ) -> WebGLShaderPixelLocalStorageEnableResult;
+    #[cfg(test)]
+    fn enableWebGLShaderPixelLocalStorageCoherent(
+        &mut self,
+        _deprecatedVersionWarning: &'static str,
+    ) -> WebGLShaderPixelLocalStorageEnableResult {
+        WebGLShaderPixelLocalStorageEnableResult::ExtensionUnavailable
+    }
+
+    /// Implements `enable_WEBGL_provoking_vertex` exactly: request the
+    /// extension, retain the returned object as this context's `gl.pv`, and
+    /// return its JavaScript truthiness. Later `ProvokingVertex` commands must
+    /// forward through that retained object and silently no-op when absent.
+    #[cfg(not(test))]
+    fn enableWebGLProvokingVertex(&mut self) -> bool;
+    #[cfg(test)]
+    fn enableWebGLProvokingVertex(&mut self) -> bool {
+        false
+    }
+
+    /// Synchronous `gl.pls.getFramebufferPixelLocalStorageParameterWEBGL`
+    /// bridge. Providers return zero when no retained `gl.pls` exists.
+    #[cfg(not(test))]
+    fn getFramebufferPixelLocalStorageParameter(
+        &mut self,
+        plane: GLint,
+        parameter: GLenum,
+    ) -> GLint;
+    #[cfg(test)]
+    fn getFramebufferPixelLocalStorageParameter(
+        &mut self,
+        _plane: GLint,
+        _parameter: GLenum,
+    ) -> GLint {
+        0
+    }
     fn isObject(&mut self, kind: GLObjectKind, name: GLuint) -> bool;
     fn checkFramebufferStatus(&mut self, target: GLenum) -> GLenum;
     fn shaderParameter(&mut self, shader: GLuint, parameter: GLenum) -> GLint;
@@ -1036,6 +1111,29 @@ impl GLExecutionDomain {
 
     pub(crate) fn enableWebGLExtension(&self, name: &str) -> bool {
         self.withProvider(|provider| provider.enableWebGLExtension(name))
+    }
+
+    pub(crate) fn enableWebGLShaderPixelLocalStorageCoherent(
+        &self,
+        deprecatedVersionWarning: &'static str,
+    ) -> WebGLShaderPixelLocalStorageEnableResult {
+        self.withProvider(|provider| {
+            provider.enableWebGLShaderPixelLocalStorageCoherent(deprecatedVersionWarning)
+        })
+    }
+
+    pub(crate) fn enableWebGLProvokingVertex(&self) -> bool {
+        self.withProvider(|provider| provider.enableWebGLProvokingVertex())
+    }
+
+    pub(crate) fn getFramebufferPixelLocalStorageParameter(
+        &self,
+        plane: GLint,
+        parameter: GLenum,
+    ) -> GLint {
+        self.withProvider(|provider| {
+            provider.getFramebufferPixelLocalStorageParameter(plane, parameter)
+        })
     }
 
     pub(crate) fn isObject(&self, kind: GLObjectKind, name: GLuint) -> bool {

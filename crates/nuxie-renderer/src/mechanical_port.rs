@@ -85,6 +85,9 @@ pub(crate) mod webgl2 {
     #[path = "renderer_src_gl_render_context_gl_impl_cpp__impl.rs"]
     pub(crate) mod render_context_gl_impl;
     #[cfg(feature = "ore-gl")]
+    #[path = "renderer_src_gl_pls_impl_webgl_cpp__impl.rs"]
+    pub(crate) mod pls_impl_webgl_impl;
+    #[cfg(feature = "ore-gl")]
     #[path = "renderer_include_rive_renderer_gl_render_target_gl_hpp__decl.rs"]
     pub(crate) mod render_target_gl_decl;
     #[cfg(feature = "ore-gl")]

@@ -13,7 +13,7 @@ barrier is checkpointed**
   receipts.
 - 22/22 Vulkan ownership units are complete in the frozen SCC and dependency
   order.
-- 14,690/14,690 pinned source lines have compiled source-shaped targets and
+- 14,691/14,691 pinned logical source lines have compiled source-shaped targets and
   byte-exact in-repository source snapshots.
 - The complete Vulkan render context includes every buffer, texture, external
   target, texture-backed RenderCanvas, and ORE factory; every resource

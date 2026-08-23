@@ -37,12 +37,16 @@ def sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def logical_line_count(content: bytes) -> int:
+    return len(content.splitlines())
+
+
 def rust_string(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def target_content(owner: dict[str, str], snapshot_name: str, content: bytes) -> bytes:
-    line_count = content.count(b"\n")
+    line_count = logical_line_count(content)
     text = f'''//! Exact generated-input translation of {owner["source_path"]}.
 //!
 //! Shader behavior is retained as the unchanged pinned byte program. Backend
@@ -84,7 +88,7 @@ target_sha256 = {rust_string(target_hash)}
 source_snapshot_path = {rust_string(snapshot_path)}
 source_snapshot_sha256 = {rust_string(owner["source_sha256"])}
 dependency_units = [{dependencies}]
-source_lines = {content.count(b"\n")}
+source_lines = {logical_line_count(content)}
 source_bytes = {len(content)}
 configuration_authorities = {configuration_count}
 compile_evidence = "cargo check -p nuxie-renderer --no-default-features"

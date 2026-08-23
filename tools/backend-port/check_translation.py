@@ -70,6 +70,10 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def logical_line_count(path: Path) -> int:
+    return len(path.read_bytes().splitlines())
+
+
 def tree_digest(path: Path) -> str:
     hasher = hashlib.sha256()
     for child in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
@@ -150,6 +154,14 @@ def main() -> int:
         )
         require(receipt["source_sha256"] == owner["source_sha256"], f"receipt source hash drift: {source_path}")
         require(digest(upstream / source_path) == owner["source_sha256"], f"upstream source drift: {source_path}")
+        require(
+            receipt["source_lines"] == logical_line_count(upstream / source_path),
+            f"receipt logical source-line count drift: {source_path}",
+        )
+        require(
+            receipt["source_bytes"] == (upstream / source_path).stat().st_size,
+            f"receipt source-byte count drift: {source_path}",
+        )
         require(receipt["target_path"] == owner["target_path"], f"receipt target drift: {source_path}")
         target = repo / owner["target_path"]
         require(target.is_file(), f"translated target is missing: {target}")

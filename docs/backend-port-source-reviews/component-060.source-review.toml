@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-060"
+units = ["shader:source:init_clockwise_atomic_workaround"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-060-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/init_clockwise_atomic_workaround.frag"
+sha256 = "092a1f498d0f6ff336edecdc73f96c46c1b3a51d494249839fe9934203dd53a3"
+citation = "source:renderer/src/shaders/init_clockwise_atomic_workaround.frag:1-33"
+disposition = "shared-authority"
+
+[[sources]]
+path = "renderer/src/shaders/spirv/init_clockwise_atomic_workaround.frag"
+sha256 = "50e907b11d07529b7be4ec09435fc7baf2618faff646008d89769a1379583f1f"
+citation = "source:renderer/src/shaders/spirv/init_clockwise_atomic_workaround.frag:1-11"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_init_clockwise_atomic_workaround_frag__generated_input.rs"
+sha256 = "887b18314ecb99f82876721002cfcfe7b6bf455c7774fb9cbbb27a8202059888"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_init_clockwise_atomic_workaround_frag__generated_input.rs:1-17"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_init_clockwise_atomic_workaround_frag__generated_input.rs"
+sha256 = "57431dfe6a5231345b0c8865b76278c68bff65419f36750b97371bcc01a9f8f2"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_init_clockwise_atomic_workaround_frag__generated_input.rs:1-17"

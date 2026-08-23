@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-048"
+units = ["shader:source:draw_fullscreen_quad"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-048-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/draw_fullscreen_quad.vert"
+sha256 = "6a9842803e8472ab8f756a191c6a6d60a7c28db5587ee22c5e9bddb000c49cc2"
+citation = "source:renderer/src/shaders/draw_fullscreen_quad.vert:1-15"
+disposition = "shared-authority"
+
+[[sources]]
+path = "renderer/src/shaders/spirv/draw_fullscreen_quad.vert"
+sha256 = "4b321cfed79e4faa7238e7b94d65e8196541e614de304d3f1c53c8152b296859"
+citation = "source:renderer/src/shaders/spirv/draw_fullscreen_quad.vert:1-7"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_draw_fullscreen_quad_vert__generated_input.rs"
+sha256 = "f57e3fa8d42a0767fda5c8867224f6dce779a606e056fc965256202cec3ad563"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_draw_fullscreen_quad_vert__generated_input.rs:1-17"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_fullscreen_quad_vert__generated_input.rs"
+sha256 = "a77f2c1b126a7e62297004f5322cf6dbfc390f06ea31a736ba0b81ad8aaa4c2e"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_fullscreen_quad_vert__generated_input.rs:1-17"

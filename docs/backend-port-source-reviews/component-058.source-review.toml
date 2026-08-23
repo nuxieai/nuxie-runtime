@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-058"
+units = ["shader:source:draw_msaa_stencil"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-058-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/spirv/draw_msaa_stencil.main"
+sha256 = "738afb5d5a358ab3a25285b7e1472a8212833594cceb29665160a6652ba5dc4b"
+citation = "source:renderer/src/shaders/spirv/draw_msaa_stencil.main:1-17"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_stencil_main__generated_input.rs"
+sha256 = "c416607b167dce4764c9bccdd4401f915d79090caf7c33a3a9a06c6353eebb96"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_stencil_main__generated_input.rs:1-17"

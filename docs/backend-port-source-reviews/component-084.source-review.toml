@@ -1,0 +1,45 @@
+schema_version = 1
+component_id = "component-084"
+units = ["webgl2:renderer:load_gles_extensions"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-084-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 1
+
+[[findings]]
+id = "SR-C084-01"
+severity = "P3"
+summary = "The source bridge exposes the complete included gles3.hpp type, constant, and function surface to downstream Ore GL headers. The target narrows that import owner to only GLCapabilities, GLenum, GLint, and GLuint, omitting the remainder of the included GL surface."
+citations = [
+  "source:renderer/include/rive/renderer/gl/load_gles_extensions.hpp:5-10",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs:4-7",
+]
+
+[[sources]]
+path = "renderer/include/rive/renderer/gl/load_gles_extensions.hpp"
+sha256 = "b7b26a500a5bb931c18acf18e68c4821e8ec1cf3e9f6800b959392677e3f6700"
+citation = "source:renderer/include/rive/renderer/gl/load_gles_extensions.hpp:1-10"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/gl/load_gles_extensions.cpp"
+sha256 = "3f5e89610af7119bc329a837a137ad961452d194e5962243418443d6795265f6"
+citation = "source:renderer/src/gl/load_gles_extensions.cpp:1-137"
+disposition = "source-exclusion-non-webgl2-build"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs"
+sha256 = "6bd6e1836ac046de4e46c645c270b67772fdf719d7d205347f79505e7363018c"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs:1-21"

@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-068"
+units = ["shader:source:tessellate"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-068-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/spirv/tessellate.main"
+sha256 = "9a50cb20894f19978864152d4852293a2052cba80573b80246dbce5f2f5a55a0"
+citation = "source:renderer/src/shaders/spirv/tessellate.main:1-9"
+disposition = "shared-authority"
+
+[[sources]]
+path = "renderer/src/shaders/tessellate.glsl"
+sha256 = "ecf7b979552b7bf7af6ff17a3fc8a0f5666942f7f7febda96fb4255640deee2f"
+citation = "source:renderer/src/shaders/tessellate.glsl:1-560"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_tessellate_main__generated_input.rs"
+sha256 = "54f45ace3a5a26409efb43cd660417bcfe9849e2497af6cf269743f092493b0d"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_tessellate_main__generated_input.rs:1-17"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_tessellate_glsl__generated_input.rs"
+sha256 = "d1ea66de675719cbe1a780238677d6901a6c01627bee6f40ecb829a19ec225dd"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_tessellate_glsl__generated_input.rs:1-17"

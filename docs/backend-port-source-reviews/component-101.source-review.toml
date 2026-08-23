@@ -1,0 +1,111 @@
+schema_version = 1
+component_id = "component-101"
+units = ["webgpu:wagyu:webgpu_cpp"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-101-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 6
+
+[[findings]]
+id = "SR-C101-01"
+severity = "P1"
+summary = "The typed callback facade is not executable in the target. The source defines callback families and branchy setters/async overloads that build callback-info, select StringView versus const char* adaptation, populate mode/userdata, and enforce one-time DeviceDescriptor callback installation. The target aliases DeviceDescriptor to the raw C descriptor and reduces async methods to calls accepting prebuilt C callback-info; template methods are otherwise only name/count metadata."
+citations = [
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:1173-1213",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:4342-4418",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:4584-4644",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2173-2185",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2363-2363",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2598-2600",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:3716-3725",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:4147-4151",
+]
+
+[[findings]]
+id = "SR-C101-02"
+severity = "P2"
+summary = "BindGroupLayoutEntry default construction does not preserve the authored inactive-binding defaults. The source selects BindingNotUsed for all four binding alternatives and e2D for the texture/storage view dimensions. The target composes ordinary child defaults, producing Undefined binding/sample/access values and Undefined view dimensions."
+citations = [
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:2254-2265",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:1412-1420",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:1677-1683",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:1735-1743",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:1835-1843",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:1889-1900",
+]
+
+[[findings]]
+id = "SR-C101-03"
+severity = "P2"
+summary = "Six output-producing wrappers omit the source-mandated assignment to a fresh default output before entering the raw API: Adapter::{GetFeatures, GetInfo}, Device::{GetAdapterInfo, GetFeatures}, Instance::GetWGSLLanguageFeatures, and Surface::GetCapabilities. The target forwards the caller's existing output state directly, changing pre-call state and operation order."
+citations = [
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:4426-4434",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2454-2459",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:5002-5010",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2914-2919",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:5117-5120",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2979-2981",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:5640-5643",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:3503-3505",
+]
+
+[[findings]]
+id = "SR-C101-04"
+severity = "P2"
+summary = "The five source facade functions CreateInstance, GetInstanceFeatures, GetInstanceLimits, HasInstanceFeature, and GetProcAddress have no executable Rust wrapper counterparts. The target transitions directly from object wrappers to source-symbol metadata and merely lists the underlying raw C entry points."
+citations = [
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:5755-5774",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:3607-3651",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:4134-4145",
+]
+
+[[findings]]
+id = "SR-C101-05"
+severity = "P2"
+summary = "StringView is collapsed to a raw WGPUStringView alias with only Default. The source constructors from string views, C strings, explicit data/length, WGPUStringView, nullptr, and nullopt, together with IsUndefined and the WGPU_STRLEN-aware conversion branches, have no executable target counterpart."
+citations = [
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:1065-1135",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:1242-1249",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2291-2293",
+]
+
+[[findings]]
+id = "SR-C101-06"
+severity = "P3"
+summary = "Several source-call affordances are absent: authored default arguments for mapped-range and encoder operations, the single-Future Instance::WaitAny overload, and TextureComponentSwizzle equality/inequality. Target methods require every raw argument, expose only general WaitAny, and alias the swizzle aggregate without those operators."
+citations = [
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:1276-1293",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:1323-1359",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:1553-1602",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2580-2600",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2686-2728",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:3202-3241",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:3276-3345",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:5189-5197",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2988-2993",
+  "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:5806-5811",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:2331-2335",
+]
+
+[[sources]]
+path = "renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h"
+sha256 = "d58a0553dd853995594f2ccac691c7e02228263582ce5202f0fd931d48fc5f13"
+citation = "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:1-5833"
+disposition = "dependency-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs"
+sha256 = "55f62f7b418155379a88a36674c08140ef16ace16203cb6d35e0e39eb8f79def"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs:1-4201"

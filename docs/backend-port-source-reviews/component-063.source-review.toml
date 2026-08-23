@@ -1,0 +1,53 @@
+schema_version = 1
+component_id = "component-063"
+units = ["shader:source:render_atlas", "shader:source:render_atlas_common"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-063-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/render_atlas.glsl"
+sha256 = "9d720063cf3360342205dcfa385e5c43e034aef3dfbd22014991de7aef61e4e6"
+citation = "source:renderer/src/shaders/render_atlas.glsl:1-249"
+disposition = "shared-authority"
+
+[[sources]]
+path = "renderer/src/shaders/spirv/render_atlas.vert"
+sha256 = "109e973cde4ace814cc88b472a9b3c1d85152a85b0068108027b9fbecfd552cb"
+citation = "source:renderer/src/shaders/spirv/render_atlas.vert:1-3"
+disposition = "shared-authority"
+
+[[sources]]
+path = "renderer/src/shaders/spirv/render_atlas_common.glsl"
+sha256 = "95ffda17e87a1a09be1be4440e6905ae67ae9083fcb3d6467ca603d2e8494cd7"
+citation = "source:renderer/src/shaders/spirv/render_atlas_common.glsl:1-11"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_render_atlas_glsl__generated_input.rs"
+sha256 = "a750a002b423c4994e086c9541a86b92f05af066d682f240976cd63c9c048cb9"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_render_atlas_glsl__generated_input.rs:1-17"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_common_glsl__generated_input.rs"
+sha256 = "7f544bdc313774b284637ccb651eedf5b2fbef27923ee8e747e4ded9e5ad6f7a"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_common_glsl__generated_input.rs:1-17"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_vert__generated_input.rs"
+sha256 = "71c20d32831a0f8cfd5e7d394ad0333269415d6bc8468d2d19bab4531f1428f5"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_vert__generated_input.rs:1-17"

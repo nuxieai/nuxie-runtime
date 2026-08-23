@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-028"
+units = ["shader:source:color_ramp"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-028-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/color_ramp.glsl"
+sha256 = "65d0e8610193de1a7bf02722bcc153f04474e0d57644a35fd56291333ee8fde1"
+citation = "source:renderer/src/shaders/color_ramp.glsl:1-107"
+disposition = "shared-authority"
+
+[[sources]]
+path = "renderer/src/shaders/spirv/color_ramp.main"
+sha256 = "076d5d45b3af0d27a138f41ac6fc32fd7411384cccc74c9a7b85c2cf376ea2e5"
+citation = "source:renderer/src/shaders/spirv/color_ramp.main:1-7"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_color_ramp_glsl__generated_input.rs"
+sha256 = "dc44481cc07fe26e3f0d0e0c985f8d081baa29f9584ee7ba61d7fda09628fbdd"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_color_ramp_glsl__generated_input.rs:1-17"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_color_ramp_main__generated_input.rs"
+sha256 = "1080e2edb92c0d0bc82723ae5e5b83d95d6f4f695880c2ef2fa3619aa51e3f1c"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_color_ramp_main__generated_input.rs:1-17"

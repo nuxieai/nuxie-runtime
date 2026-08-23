@@ -1,0 +1,42 @@
+schema_version = 1
+component_id = "component-091"
+units = ["webgl2:renderer:gl_state"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-091-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/include/rive/renderer/gl/gl_state.hpp"
+sha256 = "3d241850b33604888c5d7f1e5a3fac6e692f7d5f358b2e9ce5a319e191e07ac0"
+citation = "source:renderer/include/rive/renderer/gl/gl_state.hpp:1-95"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/gl/gl_state.cpp"
+sha256 = "c359a715949c276cce9dcd406919c308a9d743ce5c10631a0bf33834f2e47cec"
+citation = "source:renderer/src/gl/gl_state.cpp:1-491"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_gl_state_hpp__decl.rs"
+sha256 = "58d57307329f1239e549e2e2e32857cbf018aaa8cf88f318a00cb776da38e038"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_gl_state_hpp__decl.rs:1-252"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_gl_state_cpp__impl.rs"
+sha256 = "c163ce80b20282596df45242b35a9b39efda84035b151210786e0ca356068328"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_gl_state_cpp__impl.rs:1-414"

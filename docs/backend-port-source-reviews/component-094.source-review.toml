@@ -1,0 +1,61 @@
+schema_version = 1
+component_id = "component-094"
+units = ["webgl2:renderer:load_store_actions_ext"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-094-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 2
+
+[[findings]]
+id = "SR-C094-01"
+severity = "P3"
+summary = "BuildLoadActionsEXT dereferences clearColor4f only for LoadAction::clear, permitting a null output pointer for non-clear actions. The target unconditionally requires &mut [f32; 4], narrowing that source-visible contract."
+citations = [
+  "source:renderer/include/rive/renderer/gl/load_store_actions_ext.hpp:28-31",
+  "source:renderer/src/gl/load_store_actions_ext.cpp:11-23",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_load_store_actions_ext_cpp__impl.rs:22-40",
+]
+
+[[findings]]
+id = "SR-C094-02"
+severity = "P1"
+summary = "The target emits minified action defines QE, SE, ZD, AE, and QF, but its retained payload tests the unminified identifiers CLEAR_COLOR, LOAD_COLOR, STORE_COLOR, CLEAR_COVERAGE, and CLEAR_CLIP. The requested clear/load/store branches therefore never activate."
+citations = [
+  "source:renderer/src/gl/load_store_actions_ext.cpp:32-59",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_load_store_actions_ext_cpp__impl.rs:14-20",
+  "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_load_store_actions_ext_cpp__impl.rs:47-65",
+]
+
+[[sources]]
+path = "renderer/include/rive/renderer/gl/load_store_actions_ext.hpp"
+sha256 = "1257e79033825a39b8004f2258733cfdadbee99e6cbd9777e1679d0a70349ecf"
+citation = "source:renderer/include/rive/renderer/gl/load_store_actions_ext.hpp:1-36"
+disposition = "translate"
+
+[[sources]]
+path = "renderer/src/gl/load_store_actions_ext.cpp"
+sha256 = "3cce30a21bc26edea4832d6de9177bfb86ea0140a8aa1f318ab33cb914e9266a"
+citation = "source:renderer/src/gl/load_store_actions_ext.cpp:1-61"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs"
+sha256 = "590b5b861be1cd5cc93f62f0ee41f18086e0139ba6b4e82c2d4e9b885ad081dd"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs:1-40"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_load_store_actions_ext_cpp__impl.rs"
+sha256 = "ce77c1b66f06aff959dd57210a28b127ef927bc274573ec8135a2cf6843ada08"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_load_store_actions_ext_cpp__impl.rs:1-86"

@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-026"
+units = ["shader:source:blit_texture_as_draw_filtered"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-026-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main"
+sha256 = "f94fff896ffcde07a3cf5ab06932284a4fa9dc6b87e48bb8256e018939bef0ea"
+citation = "source:renderer/src/shaders/spirv/blit_texture_as_draw_filtered.main:1-9"
+disposition = "shared-authority"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_blit_texture_as_draw_filtered_main__generated_input.rs"
+sha256 = "079f68876bfcef4e7d09d2ea6eecd39204f2b3858b168325cbc96977e5f73b64"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_blit_texture_as_draw_filtered_main__generated_input.rs:1-17"

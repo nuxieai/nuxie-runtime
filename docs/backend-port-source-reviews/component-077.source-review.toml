@@ -1,0 +1,31 @@
+schema_version = 1
+component_id = "component-077"
+units = ["vulkan:renderer:common_layouts"]
+receipt_kind = "source-review-component"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-g1-component-077-20260823"
+review_wave = "g1"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+findings = []
+open_findings = 0
+
+[[sources]]
+path = "renderer/src/vulkan/common_layouts.hpp"
+sha256 = "c2f0e3dbe79c0361e290a8b6e2cf9066787f011e900244ea8885c8921109de57"
+citation = "source:renderer/src/vulkan/common_layouts.hpp:1-281"
+disposition = "translate"
+
+[[targets]]
+path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_common_layouts_hpp__decl.rs"
+sha256 = "793d34c2da514444f9c32f4d001dbad63990d8cf0c84a5459094a6948a61b5ad"
+citation = "target:crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_common_layouts_hpp__decl.rs:1-430"

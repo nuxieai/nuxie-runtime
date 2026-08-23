@@ -26,6 +26,15 @@ pub(crate) mod backend_port_build_pls_renderer;
 #[path = "mechanical_port/shader-build-authority/renderer_premake5_lua__build_input.rs"]
 pub(crate) mod backend_port_build_renderer;
 
+#[path = "mechanical_port/shader-build-authority/renderer_make_dawn_sh__build_input.rs"]
+pub(crate) mod backend_port_dependency_dawn;
+
+#[path = "mechanical_port/shader-build-authority/renderer_make_moltenvk_sh__build_input.rs"]
+pub(crate) mod backend_port_dependency_moltenvk;
+
+#[path = "mechanical_port/shader-build-authority/renderer_make_swiftshader_sh__build_input.rs"]
+pub(crate) mod backend_port_dependency_swiftshader;
+
 pub(crate) mod source {
     pub(crate) mod decoders {
         pub(crate) mod include {

@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "dependency:moltenvk"
+translation_kind = "complete-source-owner"
+source_path = "renderer/make_moltenvk.sh"
+source_sha256 = "10e70a3f5f378fff23f09ffc11d853c48ddc044fd310f2b3fb71a79b5683f80b"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_moltenvk_sh__build_input.rs"
+target_sha256 = "47dfd0c0fd323956731e55d7817f467a7e9d2fe9760552706efc39aa6d32dcf0"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_make_moltenvk.sh"
+source_snapshot_sha256 = "10e70a3f5f378fff23f09ffc11d853c48ddc044fd310f2b3fb71a79b5683f80b"
+dependency_units = []
+source_lines = 22
+source_bytes = 569
+source_steps = 5
+resolved_revision = "7de494443641fc4f81d8232fe379c336face30ab"
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the moving upstream branch command while binding the separately frozen primary-oracle revision."

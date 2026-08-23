@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "dependency:swiftshader"
+translation_kind = "complete-source-owner"
+source_path = "renderer/make_swiftshader.sh"
+source_sha256 = "c046e447bd6d0753829b69e0824679b07ed4f0329bad7c651b2b917edf1aabe2"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_swiftshader_sh__build_input.rs"
+target_sha256 = "7624a9d914bb9bbcbda7e28e8b9ca937d64cfad8b2241efc80f13354f39ccdcb"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_make_swiftshader.sh"
+source_snapshot_sha256 = "c046e447bd6d0753829b69e0824679b07ed4f0329bad7c651b2b917edf1aabe2"
+dependency_units = []
+source_lines = 19
+source_bytes = 376
+source_steps = 4
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the moving diagnostic bootstrap exactly; no primary oracle or shipping backend consumes an unpinned SwiftShader checkout."

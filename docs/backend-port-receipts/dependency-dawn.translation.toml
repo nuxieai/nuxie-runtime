@@ -1,0 +1,16 @@
+schema_version = 1
+campaign = "shader-build-authority"
+ownership_unit = "dependency:dawn"
+translation_kind = "complete-source-owner"
+source_path = "renderer/make_dawn.sh"
+source_sha256 = "d858f043c468c9c256e985b3a8a81f62dbd884d79c9ef7000cbcd7c884da7aa0"
+target_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_make_dawn_sh__build_input.rs"
+target_sha256 = "684c911404cefc09eb4eba5eabc4e9ed852dff564ae6cf343626b0d72648fc99"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_make_dawn.sh"
+source_snapshot_sha256 = "d858f043c468c9c256e985b3a8a81f62dbd884d79c9ef7000cbcd7c884da7aa0"
+dependency_units = []
+source_lines = 51
+source_bytes = 1340
+source_steps = 6
+compile_evidence = "cargo check -p nuxie-renderer --no-default-features"
+scope_note = "Preserves the exact destructive upstream bootstrap as inert source authority; translation never executes it."

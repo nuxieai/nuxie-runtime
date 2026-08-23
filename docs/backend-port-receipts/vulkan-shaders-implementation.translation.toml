@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "vulkan"
+ownership_unit = "vulkan:renderer:vulkan_shaders"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/vulkan/vulkan_shaders.cpp"
+source_sha256 = "722738d1c6e60fcc4edc4133fd336431d3ea8ed8fc03680085bf4e41e8cc8629"
+target_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_shaders_cpp__impl.rs"
+target_sha256 = "0cec3469c76a9575c42d6683465d94fec3c583de8049ac74ae6bc72d4eb0cfb4"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/vulkan/source/renderer_src_vulkan_vulkan_shaders.cpp"
+source_snapshot_sha256 = "722738d1c6e60fcc4edc4133fd336431d3ea8ed8fc03680085bf4e41e8cc8629"
+dependency_units = ["shader:source:atomic_draw_atlas_blit", "shader:source:atomic_draw_image_mesh", "shader:source:atomic_draw_image_rect", "shader:source:atomic_draw_interior_triangles", "shader:source:atomic_draw_path", "shader:source:atomic_resolve", "shader:source:atomic_resolve_coalesced", "shader:source:clear_clockwise_atomic_clip", "shader:source:color_ramp", "shader:source:draw_atlas_blit", "shader:source:draw_clockwise_atlas_blit", "shader:source:draw_clockwise_atomic_atlas_blit", "shader:source:draw_clockwise_atomic_borrowed_coverage", "shader:source:draw_clockwise_atomic_borrowed_coverage_interior_triangles", "shader:source:draw_clockwise_atomic_clip", "shader:source:draw_clockwise_atomic_clip_interior_triangles", "shader:source:draw_clockwise_atomic_image_mesh", "shader:source:draw_clockwise_atomic_interior_triangles", "shader:source:draw_clockwise_atomic_path", "shader:source:draw_clockwise_clip", "shader:source:draw_clockwise_clip_interior_triangles", "shader:source:draw_clockwise_image_mesh", "shader:source:draw_clockwise_interior_triangles", "shader:source:draw_clockwise_path", "shader:source:draw_fullscreen_quad", "shader:source:draw_image_mesh", "shader:source:draw_input_attachment", "shader:source:draw_interior_triangles", "shader:source:draw_msaa_atlas_blit", "shader:source:draw_msaa_color_seed_attachment", "shader:source:draw_msaa_image_mesh", "shader:source:draw_msaa_path", "shader:source:draw_msaa_resolve", "shader:source:draw_msaa_stencil", "shader:source:draw_path", "shader:source:init_clockwise_atomic_workaround", "shader:source:render_atlas", "shader:source:render_atlas_fill", "shader:source:render_atlas_stroke", "shader:source:tessellate"]
+source_lines = 456
+source_bytes = 26210
+configuration_authorities = 7
+lifecycle_authorities = 80
+compile_evidence = "cargo test -p nuxie-renderer --no-default-features --features native-vulkan-experimental mechanical_port::vulkan::vulkan_shaders_impl --lib"
+scope_note = "Preserves all 93 exact frozen generated SPIR-V headers, 93 embedded definitions (77 on Android), 94 source hotload reads (78 on Android), length-prefixed span parsing, and exact assignment order. The pinned duplicate draw_clockwise_atomic_atlas_blit_vert assignment consumes and overwrites its first span exactly; the absent init_clockwise_atomic_workaround_vert definition remains absent. The build generator validates header count and SPIR-V magic and emits native u32 arrays without runtime fallback."

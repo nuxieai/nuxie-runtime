@@ -18,6 +18,10 @@ fn main() {
     for source in TRANSLATED_BUILD_RULE_PATHS {
         println!("cargo:rerun-if-changed={source}");
     }
+    if env::var_os("CARGO_FEATURE_NATIVE_VULKAN_EXPERIMENTAL").is_some() {
+        generate_vulkan_spirv_module()
+            .unwrap_or_else(|error| panic!("materialize frozen Vulkan SPIR-V module: {error}"));
+    }
     if env::var_os("CARGO_FEATURE_NATIVE_METAL_EXPERIMENTAL").is_none() {
         return;
     }
@@ -220,6 +224,71 @@ fn main() {
         output.join(source_metallib_name),
     )
     .unwrap_or_else(|error| panic!("publish translated source metallib: {error}"));
+}
+
+fn generate_vulkan_spirv_module() -> io::Result<()> {
+    let source_dir = PathBuf::from("src/mechanical_port/vulkan/generated/spirv");
+    println!("cargo:rerun-if-changed={}", source_dir.display());
+
+    let declaration = regex::Regex::new(r"(?s)const uint32_t ([A-Za-z0-9_]+)\[\]\s*=\s*\{(.*?)\};")
+        .expect("static generated-header declaration regex");
+    let word = regex::Regex::new(r"0x[0-9a-fA-F]{8}").expect("static SPIR-V word regex");
+    let mut headers = fs::read_dir(&source_dir)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("h"))
+        .collect::<Vec<_>>();
+    headers.sort();
+    if headers.len() != 93 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("expected 93 frozen SPIR-V headers, found {}", headers.len()),
+        ));
+    }
+
+    let mut generated = String::from(
+        "// Generated from the frozen upstream SPIR-V headers.\n\
+         // Do not edit: tools/backend-port/import_vulkan_spirv_headers.py owns the inputs.\n",
+    );
+    let mut names = std::collections::BTreeSet::new();
+    for header in headers {
+        let source = fs::read_to_string(&header)?;
+        let captures = declaration.captures(&source).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("missing uint32_t shader array in {}", header.display()),
+            )
+        })?;
+        let name = captures.get(1).unwrap().as_str();
+        if !names.insert(name.to_owned()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("duplicate frozen SPIR-V symbol {name}"),
+            ));
+        }
+        let words = word
+            .find_iter(captures.get(2).unwrap().as_str())
+            .map(|value| value.as_str())
+            .collect::<Vec<_>>();
+        if words.first() != Some(&"0x07230203") {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{name} does not begin with the SPIR-V magic word"),
+            ));
+        }
+        generated.push_str("pub(crate) static ");
+        generated.push_str(name);
+        generated.push_str(": &[u32] = &[\n");
+        for chunk in words.chunks(8) {
+            generated.push_str("    ");
+            generated.push_str(&chunk.join(", "));
+            generated.push_str(",\n");
+        }
+        generated.push_str("];\n");
+    }
+
+    let output = PathBuf::from(env::var_os("OUT_DIR").unwrap());
+    fs::write(output.join("vulkan_spirv_embedded.rs"), generated)
 }
 
 fn shader_batch_inputs(shader_dir: &std::path::Path) -> io::Result<Vec<PathBuf>> {

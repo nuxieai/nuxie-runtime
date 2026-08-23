@@ -1,0 +1,614 @@
+schema_version = 1
+receipt_kind = "source-review-support"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "5967e72706cf63702ecbc84a982e4172b8d6245f"
+role = "sol-high"
+review_run_id = "source-review-support-20260823"
+review_wave = "support"
+coverage = [
+  "owned-source-lines",
+  "translated-target-lines",
+  "declarations",
+  "conditionals",
+  "include-owners",
+  "source-semantics",
+  "pinned-build-exclusions",
+]
+open_findings = 6
+
+[[findings]]
+id = "SR-SUP-01"
+severity = "P1"
+summary = "The shared RenderContext and Factory canvas contract is wired as Metal/Vulkan-only even though the shared OreContext identity enum has WGPU and GL variants. Under native WebGPU or WebGL2, RenderContext has no ORE slot or canvas/ORE methods, Factory::ore returns null, and the helper contract omits native WebGPU entirely, so the exact WGPU and GL implementations cannot expose their authored canvas/ORE surface through the generic factory."
+citations = [
+  "support:crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs:109-135",
+  "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_hpp.rs:2183-2188",
+  "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_hpp.rs:2408-2445",
+  "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs:342-356",
+  "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs:436-450",
+  "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_cpp.rs:4480-4497",
+  "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_cpp.rs:7491-7501",
+  "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_cpp.rs:7577-7583",
+]
+
+[[findings]]
+id = "SR-SUP-02"
+severity = "P1"
+summary = "The WebGPU C++ support generator cannot materialize the complete facade it claims to generate. It reduces all 288 parsed C++ method definitions to owner/name metadata, while executable object methods are synthesized only from the 199 raw C entry points; StringView is only a raw alias, and raw free functions are emitted only as name metadata. Because the generator writes the integrated webgpu_cpp facade module as its sole output, source-required signature and method-body behavior cannot reach that facade. Observable losses include typed callback setup and overloads, StringView construction/conversion, output initialization before raw calls, namespace facade functions, and authored overload/default-argument affordances."
+citations = [
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:2-9",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:203-216",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:241-247",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:299-360",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:386-404",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:466-478",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:501-520",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:581-581",
+  "support:crates/nuxie-renderer/src/mechanical_port.rs:186-189",
+]
+
+[[findings]]
+id = "SR-SUP-03"
+severity = "P2"
+summary = "The backend-neutral RenderPass::populateAttachmentMetadata implementation hard-downcasts every color and depth attachment to TextureViewMetal. Vulkan, WGPU, and GL TextureView objects are skipped, leaving shared color/depth formats and sample count at defaults unless each backend bypasses the authored shared operation and injects metadata through a separate side channel."
+citations = [
+  "support:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_hpp.rs:44-45",
+  "support:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_hpp.rs:460-498",
+  "support:crates/nuxie-ore-metal/src/lib.rs:313-325",
+]
+
+[[findings]]
+id = "SR-SUP-04"
+severity = "P2"
+summary = "The WebGPU C++ support generator derives structure Default implementations exclusively from C-header initializer macros and aliases ordinary C++ facade aggregates to raw C structs; it never parses or emits C++ member initializers. The generated facade therefore cannot preserve C++-authored aggregate defaults, including BindGroupLayoutEntry's inactive BindingNotUsed values and e2D view-dimension defaults."
+citations = [
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:85-123",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:164-182",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:386-396",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:431-478",
+  "support:tools/backend-port/generate_webgpu_cpp_binding.py:581-581",
+]
+
+[[findings]]
+id = "SR-SUP-05"
+severity = "P2"
+summary = "The advertised linked-only vk-mem feature leaves pVulkanFunctions null while native VMA is always built with static loading disabled and dynamic loading enabled. Allocator initialization therefore reaches the dynamic importer with a zeroed table, causing debug builds to fail its missing-proc-address assertion and non-asserting builds to call a null vkGetInstanceProcAddr."
+citations = [
+  "support:vendor/vk-mem-0.5.0/Cargo.toml:60-64",
+  "support:vendor/vk-mem-0.5.0/build.rs:17-26",
+  "support:vendor/vk-mem-0.5.0/src/lib.rs:69-103",
+  "support:vendor/vk-mem-0.5.0/src/lib.rs:160-166",
+  "support:vendor/vk-mem-0.5.0/vendor/VulkanMemoryAllocator/include/vk_mem_alloc.h:13087-13102",
+  "support:vendor/vk-mem-0.5.0/vendor/VulkanMemoryAllocator/include/vk_mem_alloc.h:13189-13204",
+  "support:vendor/vk-mem-0.5.0/vendor/VulkanMemoryAllocator/include/vk_mem_alloc.h:13312-13330",
+]
+
+[[findings]]
+id = "SR-SUP-06"
+severity = "P2"
+summary = "vk-mem get_physical_device_properties passes a struct address as a pointer-to-pointer output, so VMA overwrites the struct prefix with an internal pointer and the wrapper returns corrupted properties instead of dereferencing the returned pointer."
+citations = [
+  "support:vendor/vk-mem-0.5.0/src/ffi.rs:552-557",
+  "support:vendor/vk-mem-0.5.0/src/lib.rs:172-181",
+  "support:vendor/vk-mem-0.5.0/vendor/VulkanMemoryAllocator/include/vk_mem_alloc.h:15257-15263",
+]
+
+[[artifacts]]
+path = "Cargo.lock"
+sha256 = "5f525f173c78e3dae0525712574269d57fbf888ca6961124d5b1bf6cdbefe7e4"
+logical_lines = 3096
+citation = "support:Cargo.lock:1-3096"
+artifact_role = "cargo-integration"
+review_overlay = "backend-identity-and-browser-bridges"
+source_authority = "workspace-cargo-graph"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "Cargo.toml"
+sha256 = "d4500e3df7d67fe6ad130cf94a0b040062ccb27b24ad82eb018e77b775a66ee3"
+logical_lines = 132
+citation = "support:Cargo.toml:1-132"
+artifact_role = "cargo-integration"
+review_overlay = "backend-identity-and-browser-bridges"
+source_authority = "workspace-cargo-graph"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/Cargo.toml"
+sha256 = "622eeb204dc265007cfd71a05f1827f96a97b29dbea94eec996d47985324d5af"
+logical_lines = 101
+citation = "support:crates/nuxie-renderer/Cargo.toml:1-101"
+artifact_role = "cargo-integration"
+review_overlay = "backend-identity-and-browser-bridges"
+source_authority = "workspace-cargo-graph"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/Cargo.toml"
+sha256 = "2680b1ca492c7cfdf0e99b23265e4e8a5f47eaffc53a35c954df19cc4b0c783e"
+logical_lines = 88
+citation = "support:vendor/vk-mem-0.5.0/Cargo.toml:1-88"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-ore-metal/src/lib.rs"
+sha256 = "6b234a9f4896da2b5ec9f662eb4f7221a264ca57d46e9a967649aa137074e77c"
+logical_lines = 373
+citation = "support:crates/nuxie-ore-metal/src/lib.rs:1-373"
+artifact_role = "shared-ore-contract-adaptation"
+review_overlay = "shared-ore-contracts"
+source_authority = "shared-generic-metal-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/gpu_resource_hpp.rs"
+sha256 = "5a3932b903bb3a7b3dec48cce16175f80d7489f0f67ad4917340560257882c80"
+logical_lines = 2680
+citation = "support:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/gpu_resource_hpp.rs:1-2680"
+artifact_role = "shared-ore-contract-adaptation"
+review_overlay = "shared-ore-contracts"
+source_authority = "shared-generic-metal-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_hpp.rs"
+sha256 = "2cdd2b2713078a50c027c0f71f16b97b242c8156b079bfddcc4f4f12dd13e4fa"
+logical_lines = 261
+citation = "support:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_hpp.rs:1-261"
+artifact_role = "shared-ore-contract-adaptation"
+review_overlay = "shared-ore-contracts"
+source_authority = "shared-generic-metal-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_layout_hpp.rs"
+sha256 = "209d37fb53e89c14a922519bfe7283c60d74f7589891ea22800a4cdb1c3d2144"
+logical_lines = 509
+citation = "support:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_bind_group_layout_hpp.rs:1-509"
+artifact_role = "shared-ore-contract-adaptation"
+review_overlay = "shared-ore-contracts"
+source_authority = "shared-generic-metal-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_hpp.rs"
+sha256 = "0347a24d72bb9fea98a11a7baef17023d5c67a1bf1ceb825db5ce5d5c4c53488"
+logical_lines = 627
+citation = "support:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_context_hpp.rs:1-627"
+artifact_role = "shared-ore-contract-adaptation"
+review_overlay = "shared-ore-contracts"
+source_authority = "shared-generic-metal-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_texture_hpp.rs"
+sha256 = "cf404f3225ae7dff830dd1daf5ce4fa98765c720fa821869086725472baac9e9"
+logical_lines = 475
+citation = "support:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/include/rive/renderer/ore/ore_texture_hpp.rs:1-475"
+artifact_role = "shared-ore-contract-adaptation"
+review_overlay = "shared-ore-contracts"
+source_authority = "shared-generic-metal-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_bind_group_layout_cpp.rs"
+sha256 = "1e9f17bf8f1be8e310a066a9dc606ea10bdbb2f6991c47a8fd40b76302c6a5a0"
+logical_lines = 329
+citation = "support:crates/nuxie-ore-metal/src/mechanical_port/source/renderer/src/ore/ore_bind_group_layout_cpp.rs:1-329"
+artifact_role = "shared-ore-contract-adaptation"
+review_overlay = "shared-ore-contracts"
+source_authority = "shared-generic-metal-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/build.rs"
+sha256 = "af5d7def5b106a99702d3abc9575b7f4d22bccf37a9922055ace3a9498e821a7"
+logical_lines = 656
+citation = "support:crates/nuxie-renderer/build.rs:1-656"
+artifact_role = "generated-authority-integration"
+review_overlay = "generated-authority"
+source_authority = "pinned-shader-build-graph"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/draw.rs"
+sha256 = "2d7587179844b4258bb551b6273e9908e2ac3c3de0fd372edfee1b0aacaf3321"
+logical_lines = 4184
+citation = "support:crates/nuxie-renderer/src/draw.rs:1-4184"
+artifact_role = "renderer-integration-glue"
+review_overlay = "backend-identity-and-browser-bridges"
+source_authority = "exclusive-backend-module-wiring"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/lib.rs"
+sha256 = "7eba680231f3a59e8ce36a3b5bad2bcd7f2958b040a2cf202eab95aaefe4479f"
+logical_lines = 26862
+citation = "support:crates/nuxie-renderer/src/lib.rs:1-26862"
+artifact_role = "renderer-integration-glue"
+review_overlay = "backend-identity-and-browser-bridges"
+source_authority = "exclusive-backend-module-wiring"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port.rs"
+sha256 = "5881b04a7f727c8bd577080ee6d181b2f0012c2d2866bec23dcb814f8238e60f"
+logical_lines = 441
+citation = "support:crates/nuxie-renderer/src/mechanical_port.rs:1-441"
+artifact_role = "renderer-integration-glue"
+review_overlay = "backend-identity-and-browser-bridges"
+source_authority = "exclusive-backend-module-wiring"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/backend_shader_authority_inventory.rs"
+sha256 = "65f64640d98e6da2a6cdbbbc3ab8c9d360f017ac154f4ec7e0180709347f56eb"
+logical_lines = 236
+citation = "support:crates/nuxie-renderer/src/mechanical_port/backend_shader_authority_inventory.rs:1-236"
+artifact_role = "generated-authority-integration"
+review_overlay = "generated-authority"
+source_authority = "pinned-shader-build-graph"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs"
+sha256 = "378c2e193bb88f08ecd167d6148ee68e16fc2ac5acd1268e851dacfdb93a2455"
+logical_lines = 269
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/include/rive/factory_hpp.rs:1-269"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/include/rive/renderer_hpp.rs"
+sha256 = "796f9ba61267ec5c7dcd835b99dc91d7ea21870d6a2900899393459792d6a399"
+logical_lines = 1127
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/include/rive/renderer_hpp.rs:1-1127"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/buffer_ring_hpp.rs"
+sha256 = "10287a4fa07d06ffb3c87cea3c208dc733095378fd6be5c261af1191015a84d1"
+logical_lines = 334
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/buffer_ring_hpp.rs:1-334"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs"
+sha256 = "bec143fe781842c56b961f21afc1c5b57dc0318a3e47bbc89c8264af0a9b7625"
+logical_lines = 681
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_helper_impl_hpp.rs:1-681"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_hpp.rs"
+sha256 = "02e3a5690f72d87fa75b19635ab020c15b0b8b9b60f5fe5949bc9cf42656245f"
+logical_lines = 2781
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_hpp.rs:1-2781"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_impl_hpp.rs"
+sha256 = "32c6bce92b56b7e1b7beb1a779a0f67967789cff3e65ff81046a15d9470f0c23"
+logical_lines = 664
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_context_impl_hpp.rs:1-664"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_target_hpp.rs"
+sha256 = "74cad04e1fcfced3bee1bbc40a1c5ec0862f91f0e611802f5c1683162735f346"
+logical_lines = 235
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/render_target_hpp.rs:1-235"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/texture_hpp.rs"
+sha256 = "c36fe7c1334afd58dfa91e5e2f17282e374e44ef673c8bb23f9905c74fda8b71"
+logical_lines = 226
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/include/rive/renderer/texture_hpp.rs:1-226"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs"
+sha256 = "ebffa4ed62daa3b3dc4ea67952d781e8c75d34ad0dab921b13d4cfc081cb79f3"
+logical_lines = 15204
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs:1-15204"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_cpp.rs"
+sha256 = "8ec2376e6b798dcb05ac01a92ae5338b98d3c0605963e5a2c6719492fceaadd2"
+logical_lines = 7828
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_cpp.rs:1-7828"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_helper_impl_cpp.rs"
+sha256 = "ca9b5d54eb13ba2dd33bda342e44679be26c7e066918504bd8da771a6359c887"
+logical_lines = 365
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/render_context_helper_impl_cpp.rs:1-365"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_image_cpp.rs"
+sha256 = "c7813814cb77b0a7d4c93163399beb37ace766ff2760a2eea7daeb7a74fce032"
+logical_lines = 68
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/renderer/src/rive_render_image_cpp.rs:1-68"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/source/src/renderer_cpp.rs"
+sha256 = "481162b41e0849d174bf8b1ca26449ca7b363f517a82dcec96acb1f2a51ae316"
+logical_lines = 708
+citation = "support:crates/nuxie-renderer/src/mechanical_port/source/src/renderer_cpp.rs:1-708"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/native_metal/mechanical_render_context.rs"
+sha256 = "ab2e2be7ce4ed433de3f8317b775a0b800a26f85f6e610ec50e09198509616bd"
+logical_lines = 1417
+citation = "support:crates/nuxie-renderer/src/native_metal/mechanical_render_context.rs:1-1417"
+artifact_role = "shared-renderer-contract-adaptation"
+review_overlay = "shared-renderer-contracts"
+source_authority = "shared-generic-renderer-authority"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/src/definitions.rs"
+sha256 = "acda79fcff3fd5f4c7be63332fb5f532e102428ed4975a3bc50e59b5d440e9d0"
+logical_lines = 843
+citation = "support:vendor/vk-mem-0.5.0/src/definitions.rs:1-843"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/src/defragmentation.rs"
+sha256 = "b12d1dca48ea22135222ca81c6c7a656a29d6da79290b05602c55f4045830a52"
+logical_lines = 82
+citation = "support:vendor/vk-mem-0.5.0/src/defragmentation.rs:1-82"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/src/ffi.rs"
+sha256 = "2ce728e6ea88173959a3bdfb0a622725f6c656e0e62e46c14ebb2e0c1c4dd079"
+logical_lines = 1060
+citation = "support:vendor/vk-mem-0.5.0/src/ffi.rs:1-1060"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/src/lib.rs"
+sha256 = "cbcf33ccf39466aa07c9d03ef51a4149249d34894e36260f48c3ce9dfc602379"
+logical_lines = 589
+citation = "support:vendor/vk-mem-0.5.0/src/lib.rs:1-589"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/src/pool.rs"
+sha256 = "36d82c2e6a401a1c93410c4cfa8c863949e16bab18f85db602a2a12b8588ea0e"
+logical_lines = 444
+citation = "support:vendor/vk-mem-0.5.0/src/pool.rs:1-444"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/src/virtual_block.rs"
+sha256 = "6c1ad8f867889bd8522620389ddb417a350450165efc82e846517ac707fe9b58"
+logical_lines = 105
+citation = "support:vendor/vk-mem-0.5.0/src/virtual_block.rs:1-105"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "tools/backend-port/generate_wagyu_bindings.py"
+sha256 = "621d6c2d642afecc7e3f38c3342dec6e64a292daec5d56f58f650e2875537f1c"
+logical_lines = 391
+citation = "support:tools/backend-port/generate_wagyu_bindings.py:1-391"
+artifact_role = "webgpu-binding-generator"
+review_overlay = "webgpu-abi"
+source_authority = "pinned-wagyu-api"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "tools/backend-port/generate_webgpu_cpp_binding.py"
+sha256 = "12160fe8d3fb205e14d4d1e3e7f779ca3500815c7f88c870945be0a89c093744"
+logical_lines = 585
+citation = "support:tools/backend-port/generate_webgpu_cpp_binding.py:1-585"
+artifact_role = "webgpu-binding-generator"
+review_overlay = "webgpu-abi"
+source_authority = "pinned-wagyu-api"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/build.rs"
+sha256 = "ac2fb970751a249f170029ecc87dccde4f6a333f7455a34e20ed18f5494065a5"
+logical_lines = 172
+citation = "support:vendor/vk-mem-0.5.0/build.rs:1-172"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/wrapper.cpp"
+sha256 = "c5784cb2d475291fc68735ab32357a7a739d4257f7956b7edc5ba265ab1fc3c5"
+logical_lines = 2
+citation = "support:vendor/vk-mem-0.5.0/wrapper.cpp:1-2"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/vendor/VulkanMemoryAllocator/include/vk_mem_alloc.h"
+sha256 = "90ce12fc4a2466235a09ae02905dd0c13aee80c1bbf11b331ab61230c2ceb112"
+logical_lines = 19530
+citation = "support:vendor/vk-mem-0.5.0/vendor/VulkanMemoryAllocator/include/vk_mem_alloc.h:1-19530"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "vendor/vk-mem-0.5.0/NUXIE_PATCH.md"
+sha256 = "5b4993878e1667b7882db15f6911b93e60da8fb34782c350aee5fc755bf50a1c"
+logical_lines = 18
+citation = "support:vendor/vk-mem-0.5.0/NUXIE_PATCH.md:1-18"
+artifact_role = "vulkan-memory-adaptation"
+review_overlay = "vulkan-vma-adaptation"
+source_authority = "pinned-vma-and-vulkan-headers"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "tools/backend-port/build_shader_authority_translations.py"
+sha256 = "01cd8f54064e2bdfbd9173067e84e79705b7a0c1356ebe996025023fc7fe758e"
+logical_lines = 207
+citation = "support:tools/backend-port/build_shader_authority_translations.py:1-207"
+artifact_role = "shader-authority-generator"
+review_overlay = "generated-authority"
+source_authority = "pinned-shader-build-graph"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "tools/backend-port/import_vulkan_spirv_headers.py"
+sha256 = "eb06a8e8ffd12c71713e151aa1474a380ebf33d0a05e8b62d72abf1e4a810571"
+logical_lines = 110
+citation = "support:tools/backend-port/import_vulkan_spirv_headers.py:1-110"
+artifact_role = "vulkan-spirv-importer"
+review_overlay = "generated-authority"
+source_authority = "pinned-vulkan-shader-build-graph"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_gl_load_gles_extensions.cpp"
+sha256 = "3f5e89610af7119bc329a837a137ad961452d194e5962243418443d6795265f6"
+logical_lines = 137
+citation = "support:crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_gl_load_gles_extensions.cpp:1-137"
+artifact_role = "excluded-source-snapshot"
+review_overlay = "classification-boundary"
+source_authority = "pinned-webgl2-build-exclusion"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_buffer_gl.mm"
+sha256 = "3a6a064a2602d059472f1d452a681cd7d149c1f1dcb1637c26f119f486692f04"
+logical_lines = 3
+citation = "support:crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_buffer_gl.mm:1-3"
+artifact_role = "excluded-source-snapshot"
+review_overlay = "classification-boundary"
+source_authority = "pinned-webgl2-build-exclusion"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_context_gl.mm"
+sha256 = "47f05e2e92adc3d7c9f283800734dfcaba76206dcb2c563f4f162df697930a34"
+logical_lines = 3
+citation = "support:crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_context_gl.mm:1-3"
+artifact_role = "excluded-source-snapshot"
+review_overlay = "classification-boundary"
+source_authority = "pinned-webgl2-build-exclusion"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_pipeline_gl.mm"
+sha256 = "14dc4a761b1f1588c20beb6d93a7072243fcfea0e72bcf55b324b31d423350f5"
+logical_lines = 3
+citation = "support:crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_pipeline_gl.mm:1-3"
+artifact_role = "excluded-source-snapshot"
+review_overlay = "classification-boundary"
+source_authority = "pinned-webgl2-build-exclusion"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_render_pass_gl.mm"
+sha256 = "973cd79234b06bebb397b28357ab042ca52f3a27dac5f5e4009290c03032cd7d"
+logical_lines = 3
+citation = "support:crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_render_pass_gl.mm:1-3"
+artifact_role = "excluded-source-snapshot"
+review_overlay = "classification-boundary"
+source_authority = "pinned-webgl2-build-exclusion"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_sampler_gl.mm"
+sha256 = "8f235053ddaccde3261a85861e94c7e2bab7ba82a0c4fe8fdb9914c92c9e3a67"
+logical_lines = 3
+citation = "support:crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_sampler_gl.mm:1-3"
+artifact_role = "excluded-source-snapshot"
+review_overlay = "classification-boundary"
+source_authority = "pinned-webgl2-build-exclusion"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_shader_module_gl.mm"
+sha256 = "1612b74089d148b62a68aa1c08f30d4bf33cd5b563a30ea05293e9e828b475b0"
+logical_lines = 3
+citation = "support:crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_shader_module_gl.mm:1-3"
+artifact_role = "excluded-source-snapshot"
+review_overlay = "classification-boundary"
+source_authority = "pinned-webgl2-build-exclusion"
+disposition = "review-full-source-semantics"
+
+[[artifacts]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_texture_gl.mm"
+sha256 = "a6f198d2840ea065288718431caf921081599b92ce6bd5d9b53e273c32418c37"
+logical_lines = 3
+citation = "support:crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_texture_gl.mm:1-3"
+artifact_role = "excluded-source-snapshot"
+review_overlay = "classification-boundary"
+source_authority = "pinned-webgl2-build-exclusion"
+disposition = "review-full-source-semantics"

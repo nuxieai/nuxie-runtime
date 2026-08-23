@@ -19,6 +19,11 @@
 #![allow(non_upper_case_globals)]
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCnt, RefCntTarget};
+#[cfg(any(
+    feature = "native-webgpu-experimental",
+    feature = "ore-gl"
+))]
+use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalReleaseRoute};
 
 // `IAABB` is the `TAABB<int32_t>` value returned by the pinned source.  The
 // source-shaped declaration is kept local to this header translation because
@@ -83,6 +88,20 @@ pub struct RenderTarget {
     m_width: u32,
     // uint32_t m_height;
     m_height: u32,
+
+    // Rust-only safety sidecar after the complete source prefix. WebGL uses
+    // this optional route because `rcp<RenderTarget>` erases the concrete
+    // thread-affine owner before its atomic zero transition.
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    rust_final_release_route: Option<OwnerThreadFinalReleaseRoute>,
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    rust_execution_identity: Option<(u64, u64)>,
 }
 
 // SAFETY: `base` is the offset-zero field and `destroy_complete` deletes the
@@ -99,7 +118,25 @@ unsafe impl RefCntTarget for RenderTarget {
     }
 
     unsafe fn onRefCntReachedZero(ptr: *const Self) {
-        unsafe { ((*ptr).destroy_complete)(ptr.cast_mut()) };
+        let ptr = ptr.cast_mut();
+        #[cfg(any(
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        ))]
+        if let Some(route) = unsafe { &*ptr }.rust_final_release_route.as_ref() {
+            unsafe fn destroy_on_owner_thread(payload: usize) {
+                let ptr = payload as *mut RenderTarget;
+                unsafe { ((*ptr).destroy_complete)(ptr) };
+            }
+            let release =
+                unsafe { OwnerThreadFinalRelease::new(ptr as usize, destroy_on_owner_thread) };
+            // A closed/dead route deliberately quarantines the complete
+            // allocation. Executing its concrete destructor here could touch
+            // an Rc-backed GL context on this arbitrary releasing thread.
+            let _ = route.release_or_defer(release);
+            return;
+        }
+        unsafe { ((*ptr).destroy_complete)(ptr) };
     }
 }
 
@@ -153,6 +190,46 @@ impl RenderTarget {
             destroy_complete: |ptr| unsafe { drop(Box::from_raw(ptr)) },
             m_width: width,
             m_height: height,
+            #[cfg(any(
+                feature = "native-webgpu-experimental",
+                feature = "ore-gl"
+            ))]
+            rust_final_release_route: None,
+            #[cfg(any(
+                feature = "native-webgpu-experimental",
+                feature = "ore-gl"
+            ))]
+            rust_execution_identity: None,
         }
+    }
+
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    pub(crate) fn install_owner_thread_execution(
+        &mut self,
+        route: OwnerThreadFinalReleaseRoute,
+        domain: u64,
+        generation: u64,
+    ) {
+        assert!(
+            self.rust_final_release_route.is_none() && self.rust_execution_identity.is_none(),
+            "RenderTarget accepts one owner-thread execution identity"
+        );
+        self.rust_final_release_route = Some(route);
+        self.rust_execution_identity = Some((domain, generation));
+    }
+
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    pub(crate) fn belongs_to_owner_thread_execution(
+        &self,
+        domain: u64,
+        generation: u64,
+    ) -> bool {
+        self.rust_execution_identity == Some((domain, generation))
     }
 }

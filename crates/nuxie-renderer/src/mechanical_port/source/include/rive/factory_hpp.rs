@@ -112,17 +112,25 @@ use super::renderer_hpp::{
 /// the same crate.
 #[cfg(any(
     feature = "native-ore-metal-experimental",
-    feature = "native-ore-vulkan-experimental"
+    feature = "native-ore-vulkan-experimental",
+    feature = "native-webgpu-experimental",
+    feature = "ore-gl"
 ))]
 pub enum OreContext {
     #[cfg(feature = "native-ore-metal-experimental")]
     Metal(Box<nuxie_ore_metal::metal::context::ContextMetal>),
     #[cfg(feature = "native-ore-vulkan-experimental")]
     Vulkan(Box<crate::mechanical_port::vulkan::ore_context_vulkan_decl::ContextVulkan>),
+    #[cfg(feature = "native-webgpu-experimental")]
+    WGPU(Box<crate::mechanical_port::webgpu::ore_context_wgpu_decl::ContextWGPU>),
+    #[cfg(feature = "ore-gl")]
+    GL(Box<crate::mechanical_port::webgl2::ore_context_gl_decl::ContextGL>),
 }
 #[cfg(not(any(
     feature = "native-ore-metal-experimental",
-    feature = "native-ore-vulkan-experimental"
+    feature = "native-ore-vulkan-experimental",
+    feature = "native-webgpu-experimental",
+    feature = "ore-gl"
 )))]
 pub enum OreContext {}
 

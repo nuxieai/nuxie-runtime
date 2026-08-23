@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:render_target"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/gl/render_target_gl.cpp"
+source_sha256 = "5bc3b3868eddb24dd62d628319963e7ecb3e8789da7c4423bba7b21ce9f5456b"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_target_gl_cpp__impl.rs"
+target_sha256 = "226d868fa017ec37444c66186261cbff906d57facc790a7acc9cf8973d443ae0"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_gl_render_target_gl.cpp"
+source_snapshot_sha256 = "5bc3b3868eddb24dd62d628319963e7ecb3e8789da7c4423bba7b21ce9f5456b"
+dependency_units = ["shader:source:constants", "webgl2:renderer:gl_utils", "webgl2:renderer:gles3", "webgl2:renderer:render_context_gl_impl"]
+source_lines = 373
+source_bytes = 13587
+configuration_authorities = 75
+lifecycle_authorities = 12
+compile_evidence = "cargo test -p nuxie-renderer --lib mechanical_port::webgl2 --no-default-features --features native-webgpu-experimental,ore-gl,with-rive-tools"
+scope_note = "Preserves the complete configured render-target implementation: client texture and framebuffer adoption, destination and headless bindings, framebuffer-blit and render-to-texture paths, MSAA allocation and resolve, WebGL PLS backing, exact owned-name deletion order, borrowed-name preservation, worker final-release routing, and context-generation quarantine."

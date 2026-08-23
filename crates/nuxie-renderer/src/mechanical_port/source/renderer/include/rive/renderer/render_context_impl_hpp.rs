@@ -264,7 +264,11 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
     DrawContents, FlushDescriptor, InterlockMode, PlatformFeatures, StorageBufferStructure, IAABB,
 };
-#[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+#[cfg(any(
+    feature = "native-ore-metal-experimental",
+    feature = "native-ore-vulkan-experimental",
+    feature = "ore-gl"
+))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::OreContext;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, RenderContext,
@@ -272,7 +276,11 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
 
-#[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+#[cfg(any(
+    feature = "native-ore-metal-experimental",
+    feature = "native-ore-vulkan-experimental",
+    feature = "ore-gl"
+))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 #[cfg(feature = "ore-gl")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
@@ -406,7 +414,11 @@ pub trait RenderContextImplContract {
         )
     }
 
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "ore-gl"
+    ))]
     // #ifdef RIVE_CANVAS
     // virtual rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
     //                                             uint32_t height)
@@ -420,7 +432,11 @@ pub trait RenderContextImplContract {
         rcp::new()
     }
 
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "ore-gl"
+    ))]
     // virtual std::unique_ptr<rive::ore::Context> makeOreContext() = 0;
     fn makeOreContext(&mut self) -> Option<Box<OreContext>>;
 

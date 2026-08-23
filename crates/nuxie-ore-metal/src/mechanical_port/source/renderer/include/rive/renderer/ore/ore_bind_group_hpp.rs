@@ -158,7 +158,7 @@ impl BindGroup {
     pub fn groupIndex(&self) -> u32 {
         self.m_layoutRef
             .as_ref()
-            .and_then(|layout| layout.downcast_ref::<BindGroupLayout>())
+            .and_then(AnyResourceHandle::bindGroupLayoutBase)
             .map_or(0, BindGroupLayout::groupIndex)
     }
 

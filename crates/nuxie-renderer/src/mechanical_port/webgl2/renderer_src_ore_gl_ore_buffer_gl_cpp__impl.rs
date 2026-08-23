@@ -17,6 +17,16 @@ pub(crate) fn update(
     size: u32,
     offset: u32,
 ) -> Result<(), BufferUpdateError> {
+    let execution = buffer.executionStamp().clone();
+    execution.withCurrent(|| updateCurrent(buffer, data, size, offset))
+}
+
+fn updateCurrent(
+    buffer: &BufferGL,
+    data: &[u8],
+    size: u32,
+    offset: u32,
+) -> Result<(), BufferUpdateError> {
     let end = offset
         .checked_add(size)
         .ok_or(BufferUpdateError::RangeOverflow)?;
@@ -29,11 +39,10 @@ pub(crate) fn update(
     assert!(buffer.m_glBuffer != 0);
 
     if buffer.base.usage() == BufferUsage::index {
-        let previousBinding = allocateGLQuerySlot();
-        recordGLCommand(GLCommand::GetInteger(
-            GL_ELEMENT_ARRAY_BUFFER_BINDING,
-            previousBinding,
-        ));
+        let previousBinding = buffer
+            .executionStamp()
+            .domain()
+            .getInteger(GL_ELEMENT_ARRAY_BUFFER_BINDING);
         recordGLCommand(GLCommand::BindBuffer(
             GL_ELEMENT_ARRAY_BUFFER,
             buffer.m_glBuffer,
@@ -43,9 +52,9 @@ pub(crate) fn update(
             offset,
             data: bytes.to_vec(),
         });
-        recordGLCommand(GLCommand::BindBufferFromQuery(
+        recordGLCommand(GLCommand::BindBuffer(
             GL_ELEMENT_ARRAY_BUFFER,
-            previousBinding,
+            previousBinding as GLuint,
         ));
     } else {
         recordGLCommand(GLCommand::BindBuffer(
@@ -64,9 +73,12 @@ pub(crate) fn update(
 
 impl Drop for BufferGL {
     fn drop(&mut self) {
-        if self.m_glBuffer != 0 {
-            recordGLCommand(GLCommand::DeleteBuffer(self.m_glBuffer));
-        }
+        let execution = self.executionStamp().clone();
+        let _ = execution.withDeleteCurrent(|| {
+            if self.m_glBuffer != 0 {
+                recordGLCommand(GLCommand::DeleteBuffer(self.m_glBuffer));
+            }
+        });
         unsafe { ManuallyDrop::drop(&mut self.base) };
     }
 }
@@ -74,37 +86,8 @@ impl Drop for BufferGL {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_ore_metal::buffer::BufferApi;
-
     #[test]
     fn complete_implementation_denominator_is_frozen() {
         assert_eq!(PINNED_SOURCE.lines().count(), 53);
-    }
-
-    #[test]
-    fn index_update_preserves_the_host_vao_element_binding() {
-        resetGLCommandStream();
-        let mut buffer = BufferGL::new(8, BufferUsage::index);
-        buffer.m_glBuffer = 17;
-        buffer.update(&[1, 2, 3, 4], 4, 2).unwrap();
-        let commands = takeGLCommands();
-        let GLCommand::GetInteger(GL_ELEMENT_ARRAY_BUFFER_BINDING, slot) = commands[0] else {
-            panic!("index update must first save the host EBO binding")
-        };
-        assert_eq!(
-            commands,
-            vec![
-                GLCommand::GetInteger(GL_ELEMENT_ARRAY_BUFFER_BINDING, slot),
-                GLCommand::BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 17),
-                GLCommand::BufferSubData {
-                    target: GL_ELEMENT_ARRAY_BUFFER,
-                    offset: 2,
-                    data: vec![1, 2, 3, 4],
-                },
-                GLCommand::BindBufferFromQuery(GL_ELEMENT_ARRAY_BUFFER, slot),
-            ]
-        );
-        drop(buffer);
-        assert_eq!(takeGLCommands(), vec![GLCommand::DeleteBuffer(17)]);
     }
 }

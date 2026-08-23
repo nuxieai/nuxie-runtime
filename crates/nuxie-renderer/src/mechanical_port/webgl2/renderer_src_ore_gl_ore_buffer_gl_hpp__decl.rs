@@ -9,6 +9,8 @@ use nuxie_ore_metal::types::BufferUsage;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
+use super::gles3_decl::GLExecutionStamp;
+
 pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_ore_gl_ore_buffer_gl.hpp");
 
 #[repr(C)]
@@ -16,17 +18,24 @@ pub(crate) struct BufferGL {
     pub(crate) base: ManuallyDrop<Buffer>,
     pub(crate) m_glBuffer: u32,
     pub(crate) m_glTarget: u32,
+    /// Rust execution/lifetime sidecar after the complete source prefix.
+    pub(crate) rust_execution: GLExecutionStamp,
 }
 
 impl BufferGL {
-    pub(crate) fn new(size: u32, usage: BufferUsage) -> Self {
+    pub(crate) fn new(size: u32, usage: BufferUsage, execution: GLExecutionStamp) -> Self {
         Self {
             base: ManuallyDrop::new(nuxie_ore_metal::new_buffer_backend_base_without_manager(
                 size, usage,
             )),
             m_glBuffer: 0,
             m_glTarget: 0,
+            rust_execution: execution,
         }
+    }
+
+    pub(crate) fn executionStamp(&self) -> &GLExecutionStamp {
+        &self.rust_execution
     }
 }
 
@@ -78,9 +87,7 @@ mod tests {
             offset_of!(BufferGL, m_glBuffer),
             std::mem::size_of::<Buffer>()
         );
-        assert!(BufferGL::new(8, BufferUsage::index)
-            .gpu_resource()
-            .manager()
-            .is_none());
+        assert!(offset_of!(BufferGL, rust_execution) > offset_of!(BufferGL, m_glTarget));
+        assert!(std::mem::size_of::<BufferGL>() > std::mem::size_of::<Buffer>() + 8);
     }
 }

@@ -5,12 +5,12 @@ translation_kind = "complete-source-owner"
 source_path = "renderer/src/ore/wgpu/ore_pipeline_wgpu.hpp"
 source_sha256 = "df2f453288fd0e51ea867f7ea7f0c56389daf43185436b2b45f2e972b94c3e39"
 target_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_pipeline_wgpu_hpp__decl.rs"
-target_sha256 = "345339dc174783816ec7df668bac64f2d35beaaf9d4444cbf0edfee10259e65a"
+target_sha256 = "6939422c19fa606dbb03be3be7a96e231faa0ad4500053d56b9c040ec1f56aba"
 source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgpu/source/renderer_src_ore_wgpu_ore_pipeline_wgpu.hpp"
 source_snapshot_sha256 = "df2f453288fd0e51ea867f7ea7f0c56389daf43185436b2b45f2e972b94c3e39"
 dependency_units = ["webgpu:ore:bind_group_layout", "webgpu:wagyu:webgpu_cpp"]
 dependency_artifacts = [
-  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_bind_group_layout_wgpu_hpp__decl.rs", sha256 = "5e8830e9c5c3e75af0542f16b10fa7ada913fdbb42ed7967b302d34b23aaaf8a" },
+  { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_bind_group_layout_wgpu_hpp__decl.rs", sha256 = "c0cb57ae17a70fbd6ac6c8562ab18ac4120e7938c5aef99545392375a33b2843" },
   { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs", sha256 = "55f62f7b418155379a88a36674c08140ef16ace16203cb6d35e0e39eb8f79def" },
 ]
 source_lines = 22

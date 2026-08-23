@@ -324,6 +324,7 @@ pub(crate) fn build_feather_tessellation_with_direction(
 /// repeating it would soften large-feather fills twice.
 #[cfg(any(
     test,
+    feature = "ore-gl",
     all(
         feature = "native-metal-experimental",
         any(
@@ -417,6 +418,7 @@ pub(crate) fn feather_pixel_bounds(
 /// `RiveRenderer::drawPath`.
 #[cfg(any(
     test,
+    feature = "ore-gl",
     all(
         feature = "native-metal-experimental",
         any(

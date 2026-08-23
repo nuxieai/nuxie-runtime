@@ -17,6 +17,11 @@
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCnt, RefCntTarget};
 use core::ffi::c_void;
+#[cfg(any(
+    feature = "native-webgpu-experimental",
+    feature = "ore-gl"
+))]
+use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalReleaseRoute};
 
 pub type NativeHandleFn = unsafe fn(*const Texture) -> *mut c_void;
 
@@ -79,6 +84,22 @@ pub struct Texture {
     // base constructor installs the null implementation; a derived backend
     // installs its override while constructing the complete object.
     pub(crate) m_nativeHandle: NativeHandleFn,
+
+    // Rust-only safety sidecars after the complete source prefix. GL textures
+    // are erased behind `rcp<Texture>` and can reach zero on a worker. The
+    // weak route returns destruction to the owner thread, while the scalar
+    // identity allows raw native-name adoption to reject a stale or foreign
+    // context before invoking `nativeHandle()`.
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    pub(crate) rust_final_release_route: Option<OwnerThreadFinalReleaseRoute>,
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    pub(crate) rust_execution_identity: Option<(u64, u64)>,
 }
 
 // SAFETY: `base` is the first `#[repr(C)]` field and final release dispatches
@@ -95,7 +116,24 @@ unsafe impl RefCntTarget for Texture {
     }
 
     unsafe fn onRefCntReachedZero(ptr: *const Self) {
-        unsafe { ((*ptr).destroy_complete)(ptr.cast_mut()) };
+        let ptr = ptr.cast_mut();
+        #[cfg(any(
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        ))]
+        if let Some(route) = unsafe { &*ptr }.rust_final_release_route.as_ref() {
+            unsafe fn destroy_on_owner_thread(payload: usize) {
+                let ptr = payload as *mut Texture;
+                unsafe { ((*ptr).destroy_complete)(ptr) };
+            }
+            let release =
+                unsafe { OwnerThreadFinalRelease::new(ptr as usize, destroy_on_owner_thread) };
+            // A closed route deliberately quarantines the complete allocation
+            // rather than running an Rc-backed concrete destructor here.
+            let _ = route.release_or_defer(release);
+            return;
+        }
+        unsafe { ((*ptr).destroy_complete)(ptr) };
     }
 }
 
@@ -139,6 +177,36 @@ impl Texture {
 
     pub(crate) fn setNativeHandleDispatch(&mut self, dispatch: NativeHandleFn) {
         self.m_nativeHandle = dispatch;
+    }
+
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    pub(crate) fn install_owner_thread_execution(
+        &mut self,
+        route: OwnerThreadFinalReleaseRoute,
+        domain: u64,
+        generation: u64,
+    ) {
+        assert!(
+            self.rust_final_release_route.is_none() && self.rust_execution_identity.is_none(),
+            "Texture accepts one owner-thread execution identity"
+        );
+        self.rust_final_release_route = Some(route);
+        self.rust_execution_identity = Some((domain, generation));
+    }
+
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    pub(crate) fn belongs_to_owner_thread_execution(
+        &self,
+        domain: u64,
+        generation: u64,
+    ) -> bool {
+        self.rust_execution_identity == Some((domain, generation))
     }
 }
 

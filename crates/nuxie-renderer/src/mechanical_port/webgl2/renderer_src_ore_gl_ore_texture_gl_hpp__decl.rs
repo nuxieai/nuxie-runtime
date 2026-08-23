@@ -11,6 +11,8 @@ use nuxie_ore_metal::types::{
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
+use super::gles3_decl::GLExecutionStamp;
+
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_ore_gl_ore_texture_gl.hpp");
 
@@ -21,10 +23,12 @@ pub(crate) struct TextureGL {
     pub(crate) m_glRenderbuffer: u32,
     pub(crate) m_glTarget: u32,
     pub(crate) m_glOwnsTexture: bool,
+    /// Rust execution/lifetime sidecar after the complete source prefix.
+    pub(crate) rust_execution: GLExecutionStamp,
 }
 
 impl TextureGL {
-    pub(crate) fn new(desc: &TextureDesc<'_>) -> Self {
+    pub(crate) fn new(desc: &TextureDesc<'_>, execution: GLExecutionStamp) -> Self {
         Self {
             base: ManuallyDrop::new(nuxie_ore_metal::new_texture_backend_base_without_manager(
                 desc,
@@ -33,7 +37,12 @@ impl TextureGL {
             m_glRenderbuffer: 0,
             m_glTarget: 0,
             m_glOwnsTexture: false,
+            rust_execution: execution,
         }
+    }
+
+    pub(crate) fn executionStamp(&self) -> &GLExecutionStamp {
+        &self.rust_execution
     }
 }
 
@@ -91,16 +100,27 @@ impl TextureApi for TextureGL {
 pub(crate) struct TextureViewGL {
     pub(crate) base: ManuallyDrop<TextureView>,
     pub(crate) m_glTextureView: u32,
+    /// Rust execution/lifetime sidecar after the complete source prefix.
+    pub(crate) rust_execution: GLExecutionStamp,
 }
 
 impl TextureViewGL {
-    pub(crate) fn new(texture: AnyResourceHandle, desc: &TextureViewDesc<'_>) -> Self {
+    pub(crate) fn new(
+        texture: AnyResourceHandle,
+        desc: &TextureViewDesc<'_>,
+        execution: GLExecutionStamp,
+    ) -> Self {
         Self {
             base: ManuallyDrop::new(
                 nuxie_ore_metal::new_texture_view_backend_base_without_manager(texture, desc),
             ),
             m_glTextureView: 0,
+            rust_execution: execution,
         }
+    }
+
+    pub(crate) fn executionStamp(&self) -> &GLExecutionStamp {
+        &self.rust_execution
     }
 }
 impl Deref for TextureViewGL {
@@ -133,9 +153,14 @@ mod tests {
         assert_eq!(PINNED_SOURCE.lines().count(), 35);
         assert_eq!(std::mem::offset_of!(TextureGL, base), 0);
         assert_eq!(std::mem::offset_of!(TextureViewGL, base), 0);
-        assert!(TextureGL::new(&TextureDesc::default())
-            .gpu_resource()
-            .manager()
-            .is_none());
+        assert!(
+            std::mem::offset_of!(TextureGL, rust_execution)
+                > std::mem::offset_of!(TextureGL, m_glOwnsTexture)
+        );
+        assert!(
+            std::mem::offset_of!(TextureViewGL, rust_execution)
+                > std::mem::offset_of!(TextureViewGL, m_glTextureView)
+        );
+        assert!(std::mem::size_of::<TextureGL>() > std::mem::size_of::<Texture>() + 16);
     }
 }

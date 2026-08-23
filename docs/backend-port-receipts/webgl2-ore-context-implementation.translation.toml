@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:context"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_context_gl.cpp"
+source_sha256 = "3cd5d53b34f159dc6fa5cd54d630c07485e8fa56fda58c001b99e3c0fed0d33d"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_context_gl_cpp__impl.rs"
+target_sha256 = "806283aae544822b29f63a271dc1a3fe5e401e39d710a0316946e4a0e1f9f32e"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_context_gl.cpp"
+source_snapshot_sha256 = "3cd5d53b34f159dc6fa5cd54d630c07485e8fa56fda58c001b99e3c0fed0d33d"
+dependency_units = ["webgl2:ore:bind_group", "webgl2:ore:buffer", "webgl2:ore:pipeline", "webgl2:ore:render_pass", "webgl2:ore:sampler", "webgl2:ore:shader_module", "webgl2:ore:texture", "webgl2:renderer:load_gles_extensions", "webgl2:renderer:render_target"]
+source_lines = 1221
+source_bytes = 44512
+configuration_authorities = 177
+lifecycle_authorities = 33
+compile_evidence = "cargo test -p nuxie-renderer --lib mechanical_port::webgl2 --no-default-features --features native-webgpu-experimental,ore-gl,with-rive-tools"
+scope_note = "Preserves the complete configured ORE GL context implementation: real provider names and synchronous queries, exact format conversion and upload state, buffer/texture/layout/pipeline factories, pass state capture, domain and generation identity, source-order owner destruction, worker final-release routing, and context-loss quarantine."

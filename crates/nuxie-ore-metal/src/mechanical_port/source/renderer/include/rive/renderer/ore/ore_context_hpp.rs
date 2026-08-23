@@ -34,7 +34,9 @@ use std::ptr::NonNull;
 use std::rc::Weak as RcWeak;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use super::super::gpu_resource_hpp::{AnyResourceHandle, GPUResourceManager, ResourceDomain};
+use super::super::gpu_resource_hpp::{
+    AnyResourceHandle, GPUResourceManager, ResourceDomain, ResourceFinalReleaseDrain,
+};
 use super::ore_types_hpp::{
     BindGroupDesc, BindGroupLayoutDesc, BufferDesc, Features, PipelineDesc, RenderPassDesc,
     SamplerDesc, ShaderModuleDesc, TextureDesc, TextureFormat, TextureViewDesc,
@@ -69,7 +71,11 @@ pub trait ActiveRenderPass {
 /// Cross-cutting Context state. The source active-pass pointer becomes a weak
 /// token, and resources receive only a weak error sink plus cloned manager.
 pub struct ContextState {
-    domain: Arc<()>,
+    // Rust safety sidecars. Identity remains tied to this source Context;
+    // a concrete backend may clone only the drain into its execution root so
+    // destruction can finish after the ORE Context has gone away.
+    domainIdentity: Arc<()>,
+    domainFinalReleases: ResourceFinalReleaseDrain,
     // Rust declaration order matches the required source destruction order.
     manager: Option<GPUResourceManager>,
     lastError: Mutex<String>,
@@ -78,8 +84,18 @@ pub struct ContextState {
 
 impl ContextState {
     pub fn new(features: Features, manager: Option<GPUResourceManager>) -> Arc<Self> {
+        Self::newWithFinalReleaseDrain(features, manager, ResourceFinalReleaseDrain::new())
+    }
+
+    #[doc(hidden)]
+    pub fn newWithFinalReleaseDrain(
+        features: Features,
+        manager: Option<GPUResourceManager>,
+        domainFinalReleases: ResourceFinalReleaseDrain,
+    ) -> Arc<Self> {
         Arc::new(Self {
-            domain: Arc::new(()),
+            domainIdentity: Arc::new(()),
+            domainFinalReleases,
             manager,
             lastError: Mutex::new(String::new()),
             features: Mutex::new(features),
@@ -104,7 +120,12 @@ impl ContextState {
     }
 
     pub fn resourceDomain(&self) -> ResourceDomain {
-        ResourceDomain::new(&self.domain)
+        self.domainFinalReleases
+            .resource_domain(&self.domainIdentity)
+    }
+
+    pub fn resourceFinalReleaseDrain(&self) -> ResourceFinalReleaseDrain {
+        self.domainFinalReleases.clone()
     }
 
     pub fn lastError(&self) -> String {
@@ -360,8 +381,17 @@ impl Context {
     //     m_manager(std::move(manager))
     // {}
     pub(crate) fn new(features: Features, manager: Option<GPUResourceManager>) -> Self {
+        Self::newWithFinalReleaseDrain(features, manager, ResourceFinalReleaseDrain::new())
+    }
+
+    #[doc(hidden)]
+    pub(crate) fn newWithFinalReleaseDrain(
+        features: Features,
+        manager: Option<GPUResourceManager>,
+        domainFinalReleases: ResourceFinalReleaseDrain,
+    ) -> Self {
         Self {
-            state: ContextState::new(features, manager),
+            state: ContextState::newWithFinalReleaseDrain(features, manager, domainFinalReleases),
             activeRenderPass: RefCell::new(None),
         }
     }

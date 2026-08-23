@@ -23,35 +23,32 @@ const GLSL_TESS_TEXTURE_FLOATING_POINT: &str = "GF";
 const GLSL_GL_RENDERER_MALI: &str = "HF";
 const GLSL_GLSL: &str = include_str!("../webgpu/source/generated_glsl/glsl.minified.glsl");
 
-fn generatedObject(command: impl FnOnce(GLuint) -> GLCommand) -> GLObject {
-    let id = allocateGLName();
-    recordGLCommand(command(id));
-    GLObject::fromAdoptedID(id)
+fn generatedObject(kind: GLObjectKind) -> GLObject {
+    GLObject::fromAdoptedID(generateGLObject(kind))
 }
 
 pub(crate) fn newBuffer() -> Buffer {
-    Buffer(generatedObject(GLCommand::GenerateBuffer))
+    Buffer(generatedObject(GLObjectKind::Buffer))
 }
 
 pub(crate) fn newTexture() -> Texture {
-    Texture(generatedObject(GLCommand::GenerateTexture))
+    Texture(generatedObject(GLObjectKind::Texture))
 }
 
 pub(crate) fn newFramebuffer() -> Framebuffer {
-    Framebuffer(generatedObject(GLCommand::GenerateFramebuffer))
+    Framebuffer(generatedObject(GLObjectKind::Framebuffer))
 }
 
 pub(crate) fn newRenderbuffer() -> Renderbuffer {
-    Renderbuffer(generatedObject(GLCommand::GenerateRenderbuffer))
+    Renderbuffer(generatedObject(GLObjectKind::Renderbuffer))
 }
 
 pub(crate) fn newVAO() -> VAO {
-    VAO(generatedObject(GLCommand::GenerateVertexArray))
+    VAO(generatedObject(GLObjectKind::VertexArray))
 }
 
 pub(crate) fn newProgram() -> Program {
-    let id = allocateGLName();
-    recordGLCommand(GLCommand::CreateProgram(id));
+    let id = createGLProgram();
     Program {
         m_object: GLObject::fromAdoptedID(id),
         m_vertexShader: Shader::default(),
@@ -264,11 +261,7 @@ pub(crate) fn CompileShaderParts(
         shaderSource.push('\n');
     }
 
-    CompileRawGLSL(
-        shaderType,
-        &shaderSource,
-        debugPrintErrorAndAbort,
-    )
+    CompileRawGLSL(shaderType, &shaderSource, debugPrintErrorAndAbort)
 }
 
 pub(crate) fn CompileRawGLSL(
@@ -290,8 +283,7 @@ pub(crate) fn CompileRawGLSLWithConfiguration(
     debugPrintErrorAndAbort: DebugPrintErrorAndAbort,
     configuration: GLUtilsSourceConfiguration,
 ) -> GLuint {
-    let shader = allocateGLName();
-    recordGLCommand(GLCommand::CreateShader(shaderType, shader));
+    let shader = createGLShader(shaderType);
     if configuration.bypassEmscriptenShaderParser {
         let minimalSource = if shaderType == GL_VERTEX_SHADER {
             "#version 300 es\nvoid main() { gl_Position = vec4(0); }"
@@ -320,10 +312,7 @@ pub(crate) fn PrintShaderCompilationErrors(shader: GLuint) {
     recordGLCommand(GLCommand::PrintShaderCompilationErrors(shader));
 }
 
-pub(crate) fn LinkProgram(
-    program: GLuint,
-    debugPrintErrorAndAbort: DebugPrintErrorAndAbort,
-) {
+pub(crate) fn LinkProgram(program: GLuint, debugPrintErrorAndAbort: DebugPrintErrorAndAbort) {
     LinkProgramWithConfiguration(
         program,
         debugPrintErrorAndAbort,
@@ -377,7 +366,10 @@ pub(crate) fn compileAndAttachOwnedShader(
         &mut program.m_fragmentShader
     };
     internalShader.compileParts(shaderType, defines, sources, capabilities);
-    recordGLCommand(GLCommand::AttachShader(program.m_object.m_id, internalShader.id()));
+    recordGLCommand(GLCommand::AttachShader(
+        program.m_object.m_id,
+        internalShader.id(),
+    ));
 }
 
 pub(crate) fn SetTexture2DSamplingParams(minFilter: GLenum, magFilter: GLenum) {
@@ -440,11 +432,7 @@ pub(crate) fn SetTexture2DSamplingParamsFromSampler(samplingParams: ImageSampler
         (GL_TEXTURE_WRAP_S, glWrapFromImageWrap(samplingParams.wrapX)),
         (GL_TEXTURE_WRAP_T, glWrapFromImageWrap(samplingParams.wrapY)),
     ] {
-        recordGLCommand(GLCommand::TextureParameter(
-            GL_TEXTURE_2D,
-            parameter,
-            value,
-        ));
+        recordGLCommand(GLCommand::TextureParameter(GL_TEXTURE_2D, parameter, value));
     }
 }
 
@@ -475,7 +463,10 @@ pub(crate) fn BlitFramebuffer(bounds: IAABB, renderTargetHeight: u32, mask: GLbi
 pub(crate) fn Uniform1iByName(programID: GLuint, name: &str, value: GLint) {
     // The browser executor resolves this name and must assert a non--1
     // location before issuing uniform1i, exactly as the source requires.
-    assert!(!name.is_empty(), "uniform name must resolve to a real location");
+    assert!(
+        !name.is_empty(),
+        "uniform name must resolve to a real location"
+    );
     recordGLCommand(GLCommand::Uniform1iByName(
         programID,
         name.to_owned(),
@@ -489,7 +480,10 @@ mod tests {
 
     #[test]
     fn complete_source_and_generated_input_denominators_are_frozen() {
-        assert_eq!(super::super::gl_utils_decl::PINNED_SOURCE.lines().count(), 271);
+        assert_eq!(
+            super::super::gl_utils_decl::PINNED_SOURCE.lines().count(),
+            271
+        );
         assert_eq!(PINNED_SOURCE.lines().count(), 373);
         assert_eq!(GLSL_GLSL.as_bytes().len(), 11121);
     }
@@ -549,8 +543,8 @@ mod tests {
                 GLCommand::CreateShader(GL_VERTEX_SHADER, shader),
                 GLCommand::ShaderSourceBypassingEmscripten {
                     shader,
-                    minimal_source:
-                        "#version 300 es\nvoid main() { gl_Position = vec4(0); }".to_owned(),
+                    minimal_source: "#version 300 es\nvoid main() { gl_Position = vec4(0); }"
+                        .to_owned(),
                     raw_source: "real shader".to_owned(),
                 },
                 GLCommand::CompileShader(shader),
@@ -613,11 +607,7 @@ mod tests {
                     GL_TEXTURE_MAG_FILTER,
                     GL_LINEAR as GLint,
                 ),
-                GLCommand::TextureParameter(
-                    GL_TEXTURE_2D,
-                    GL_TEXTURE_WRAP_S,
-                    GL_REPEAT as GLint,
-                ),
+                GLCommand::TextureParameter(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT as GLint,),
                 GLCommand::TextureParameter(
                     GL_TEXTURE_2D,
                     GL_TEXTURE_WRAP_T,

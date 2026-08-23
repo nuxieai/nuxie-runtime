@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:render_target"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/gl/render_target_gl.hpp"
+source_sha256 = "b4fb2dc670ba5889393b5f5eb1d60960edd30c7461f04a49564ea17b05544887"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_render_target_gl_hpp__decl.rs"
+target_sha256 = "fe3f616de9482508261db5474fc7ed0bac2d27bd87efc18e7fb30a1e2b73d53b"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_include_rive_renderer_gl_render_target_gl.hpp"
+source_snapshot_sha256 = "b4fb2dc670ba5889393b5f5eb1d60960edd30c7461f04a49564ea17b05544887"
+dependency_units = ["shader:source:constants", "webgl2:renderer:gl_utils", "webgl2:renderer:gles3", "webgl2:renderer:render_context_gl_impl"]
+source_lines = 210
+source_bytes = 8357
+configuration_authorities = 12
+lifecycle_authorities = 6
+compile_evidence = "cargo test -p nuxie-renderer --lib mechanical_port::webgl2 --no-default-features --features native-webgpu-experimental,ore-gl,with-rive-tools"
+scope_note = "Preserves the complete RenderTargetGL declaration and both concrete target subclasses: lite-RTTI identities, borrowed client handles, owned framebuffer/texture/renderbuffer fields, MSAA and WebGL PLS state, bind/resolve operations, source field order, and retained execution generation."

@@ -51,6 +51,16 @@ impl Texture {
             // authored, observable value after wraparound and must not panic.
             m_textureResourceHash,
             m_nativeHandle: null_native_handle,
+            #[cfg(any(
+                feature = "native-webgpu-experimental",
+                feature = "ore-gl"
+            ))]
+            rust_final_release_route: None,
+            #[cfg(any(
+                feature = "native-webgpu-experimental",
+                feature = "ore-gl"
+            ))]
+            rust_execution_identity: None,
         }
     }
 }

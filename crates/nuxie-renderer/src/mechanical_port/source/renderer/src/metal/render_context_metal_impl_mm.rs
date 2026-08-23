@@ -7077,6 +7077,11 @@ mod source_owner_regressions {
             m_mapCount: 0,
             #[cfg(debug_assertions)]
             m_unmapCount: 0,
+            #[cfg(any(
+                feature = "native-webgpu-experimental",
+                feature = "ore-gl"
+            ))]
+            rust_final_release_route: None,
         })
     }
 

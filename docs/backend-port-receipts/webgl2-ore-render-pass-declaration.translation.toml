@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:render_pass"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_render_pass_gl.hpp"
+source_sha256 = "130be44d0403b69e73d0f979c2b30614a3b86fb5974961d4c5ec851ed0cb6587"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_render_pass_gl_hpp__decl.rs"
+target_sha256 = "e9d43b8d26083f1bcc198bb3d62fa96f39f80fdc29c4262feeeed23bf2bdd7a3"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_render_pass_gl.hpp"
+source_snapshot_sha256 = "130be44d0403b69e73d0f979c2b30614a3b86fb5974961d4c5ec851ed0cb6587"
+dependency_units = ["webgl2:ore:bind_group", "webgl2:ore:buffer", "webgl2:ore:context", "webgl2:ore:pipeline", "webgl2:ore:texture", "webgl2:renderer:load_gles_extensions"]
+source_lines = 86
+source_bytes = 3006
+configuration_authorities = 1
+lifecycle_authorities = 2
+compile_evidence = "cargo test -p nuxie-renderer --lib mechanical_port::webgl2 --no-default-features --features native-webgpu-experimental,ore-gl,with-rive-tools"
+scope_note = "Preserves the complete ORE GL render-pass declaration: exact inherited pass base, captured framebuffer and vertex-array state, attachment ownership, bound resource slots, draw-state fields, finish contract, and declaration-order lifetime layout."

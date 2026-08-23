@@ -57,6 +57,9 @@ unsafe impl GpuResourcePayload for PipelineVulkan {
     fn gpu_resource_mut(&mut self) -> &mut GPUResource {
         self.base.gpu_resource_mut()
     }
+    fn pipeline_base(&self) -> Option<&Pipeline> {
+        Some(&self.base)
+    }
 }
 
 // Source GPU resources may be reclaimed on the manager's purgatory thread;

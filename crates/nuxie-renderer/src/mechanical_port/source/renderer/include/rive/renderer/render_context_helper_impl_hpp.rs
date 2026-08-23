@@ -125,9 +125,17 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
     DrawContents, FlushDescriptor, InterlockMode, IAABB,
 };
-#[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+#[cfg(any(
+    feature = "native-ore-metal-experimental",
+    feature = "native-ore-vulkan-experimental",
+    feature = "ore-gl"
+))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
-#[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+#[cfg(any(
+    feature = "native-ore-metal-experimental",
+    feature = "native-ore-vulkan-experimental",
+    feature = "ore-gl"
+))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::OreContext;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, RenderContext,
@@ -213,16 +221,23 @@ pub trait RenderContextHelperImplAccess {
     fn renderContextHelperImplMut(&mut self) -> &mut RenderContextHelperImpl;
 }
 
-// These three pure virtuals remain backend-owned. The helper never invents a
-// buffer-ring implementation; a concrete backend supplies this contract.
+// These three pure virtuals remain backend-owned. The source unique_ptr return
+// is nullable (the GL factories return nullptr for zero capacity), so the
+// shared carrier must preserve None instead of inventing a dummy ring.
 pub trait RenderContextHelperBufferFactoryContract {
-    fn makeUniformBufferRing(&mut self, capacityInBytes: usize) -> Box<dyn BufferRingContract>;
+    fn makeUniformBufferRing(
+        &mut self,
+        capacityInBytes: usize,
+    ) -> Option<Box<dyn BufferRingContract>>;
     fn makeStorageBufferRing(
         &mut self,
         capacityInBytes: usize,
         bufferStructure: StorageBufferStructure,
-    ) -> Box<dyn BufferRingContract>;
-    fn makeVertexBufferRing(&mut self, capacityInBytes: usize) -> Box<dyn BufferRingContract>;
+    ) -> Option<Box<dyn BufferRingContract>>;
+    fn makeVertexBufferRing(
+        &mut self,
+        capacityInBytes: usize,
+    ) -> Option<Box<dyn BufferRingContract>>;
 }
 
 pub trait RenderContextHelperImplContract:
@@ -324,12 +339,20 @@ pub trait RenderContextHelperBackendContract:
         srgb: bool,
         generate_mips: bool,
     ) -> rcp<Texture>;
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "ore-gl"
+    ))]
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
         let _ = (width, height);
         rcp::new()
     }
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "ore-gl"
+    ))]
     fn makeOreContext(&mut self) -> Option<Box<OreContext>>;
     unsafe fn preBeginFrame(&mut self, context: *mut RenderContext) {
         let _ = context;
@@ -410,11 +433,19 @@ where
     ) -> rcp<Texture> {
         RenderContextHelperBackendContract::makeImageTexture(self, w, h, l, f, d, bw, bh, s, g)
     }
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "ore-gl"
+    ))]
     fn makeRenderCanvas(&mut self, w: u32, h: u32) -> rcp<RenderCanvas> {
         RenderContextHelperBackendContract::makeRenderCanvas(self, w, h)
     }
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "ore-gl"
+    ))]
     fn makeOreContext(&mut self) -> Option<Box<OreContext>> {
         RenderContextHelperBackendContract::makeOreContext(self)
     }

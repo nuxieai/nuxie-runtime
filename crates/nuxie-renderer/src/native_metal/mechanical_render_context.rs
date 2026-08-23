@@ -1228,6 +1228,10 @@ impl MechanicalRenderContext {
             OreContext::Metal(context) => Some(callback(context)),
             #[cfg(feature = "native-ore-vulkan-experimental")]
             OreContext::Vulkan(_) => None,
+            #[cfg(feature = "native-webgpu-experimental")]
+            OreContext::WGPU(_) => None,
+            #[cfg(feature = "ore-gl")]
+            OreContext::GL(_) => None,
         }
     }
 

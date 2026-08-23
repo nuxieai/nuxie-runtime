@@ -4,12 +4,12 @@
 #![allow(non_snake_case)]
 
 use super::gl_state_decl::GLState;
-use super::gles3_decl::{GLenum, GLuint};
+use super::gles3_decl::{GLExecutionStamp, GLenum, GLuint};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBufferContract, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    CONST_ID, LiteRttiCastFrom, LiteRttiTypeId,
+    LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RiveRenderBuffer;
 use std::cell::RefCell;
@@ -29,6 +29,9 @@ pub(crate) struct RenderBufferGLImpl {
     pub(crate) m_bufferID: GLuint,
     pub(crate) m_fallbackMappedMemory: ManuallyDrop<Option<Vec<u8>>>,
     pub(crate) m_state: ManuallyDrop<Option<GLStateOwner>>,
+
+    /// Rust-only creation identity after the complete source field prefix.
+    pub(crate) rust_execution: ManuallyDrop<Option<GLExecutionStamp>>,
 }
 impl RenderBufferGLImpl {
     pub(crate) fn new(
@@ -59,6 +62,7 @@ impl RenderBufferGLImpl {
             m_bufferID: 0,
             m_fallbackMappedMemory: ManuallyDrop::new(None),
             m_state: ManuallyDrop::new(None),
+            rust_execution: ManuallyDrop::new(None),
         }
     }
 
@@ -79,6 +83,12 @@ impl RenderBufferGLImpl {
             .as_ref()
             .expect("RenderBufferGLImpl source state is initialized")
     }
+
+    pub(crate) fn executionStamp(&self) -> &GLExecutionStamp {
+        self.rust_execution
+            .as_ref()
+            .expect("RenderBufferGLImpl execution stamp is initialized")
+    }
 }
 
 impl Deref for RenderBufferGLImpl {
@@ -97,9 +107,8 @@ impl LiteRttiTypeId for RenderBufferGLImpl {
     const LITE_RTTI_TYPE_ID: u32 = CONST_ID("RenderBufferGLImpl");
 }
 
-impl LiteRttiCastFrom<
-    crate::mechanical_port::source::include::rive::renderer_hpp::RenderBuffer,
-> for RenderBufferGLImpl
+impl LiteRttiCastFrom<crate::mechanical_port::source::include::rive::renderer_hpp::RenderBuffer>
+    for RenderBufferGLImpl
 {
     unsafe fn from_base(
         base: *mut crate::mechanical_port::source::include::rive::renderer_hpp::RenderBuffer,
@@ -126,5 +135,13 @@ mod tests {
     fn complete_header_denominator_and_base_layout_are_frozen() {
         assert_eq!(PINNED_SOURCE.lines().count(), 59);
         assert_eq!(std::mem::offset_of!(RenderBufferGLImpl, base), 0);
+        assert!(
+            std::mem::offset_of!(RenderBufferGLImpl, m_state)
+                > std::mem::offset_of!(RenderBufferGLImpl, m_fallbackMappedMemory)
+        );
+        assert!(
+            std::mem::offset_of!(RenderBufferGLImpl, rust_execution)
+                > std::mem::offset_of!(RenderBufferGLImpl, m_state)
+        );
     }
 }

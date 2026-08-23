@@ -110,6 +110,16 @@ pub fn context_backend_domain(context: &context::Context) -> gpu_resource::Resou
     context.state.resourceDomain()
 }
 
+/// Clones the Rust safety-sidecar destruction drain into a concrete backend's
+/// execution authority. The handle may outlive the ORE Context and must be
+/// drained on its owner thread before the backend API context/device teardown.
+#[doc(hidden)]
+pub fn context_resource_final_release_drain(
+    context: &context::Context,
+) -> gpu_resource::ResourceFinalReleaseDrain {
+    context.state.resourceFinalReleaseDrain()
+}
+
 /// Constructs the protected backend-independent Context base for a concrete
 /// backend subclass implemented in a sibling crate.
 #[doc(hidden)]
@@ -118,6 +128,17 @@ pub fn new_context_backend_base(
     manager: Option<gpu_resource::GPUResourceManager>,
 ) -> context::Context {
     context::Context::new(features, manager)
+}
+
+/// Constructs a backend Context whose resources route into a final-release
+/// drain already owned by the concrete execution authority.
+#[doc(hidden)]
+pub fn new_context_backend_base_with_final_release_drain(
+    features: types::Features,
+    manager: Option<gpu_resource::GPUResourceManager>,
+    drain: gpu_resource::ResourceFinalReleaseDrain,
+) -> context::Context {
+    context::Context::newWithFinalReleaseDrain(features, manager, drain)
 }
 
 /// Backend integration seam for exact concrete ORE texture subclasses.
@@ -200,6 +221,15 @@ pub fn install_bind_group_backend_parts(
     base.m_retainedSamplers = retained_samplers;
 }
 
+/// Installs the source non-owning `BindGroup::m_context` back-pointer.
+#[doc(hidden)]
+pub fn install_bind_group_backend_context(
+    base: &mut bind_group::BindGroup,
+    context: &context::Context,
+) {
+    base.m_context = std::sync::Arc::downgrade(&context.state);
+}
+
 /// Installs the protected source members authored by
 /// `Context::makeBindGroupLayout`.
 #[doc(hidden)]
@@ -218,6 +248,13 @@ pub fn install_bind_group_layout_backend_parts(
 #[doc(hidden)]
 pub fn new_render_pass_backend_base(context: &context::Context) -> render_pass::RenderPass {
     render_pass::RenderPass::new(std::sync::Arc::downgrade(&context.state))
+}
+
+/// Backend integration seam for the source default `RenderPass` constructor,
+/// whose context back-pointer is null.
+#[doc(hidden)]
+pub fn new_render_pass_backend_base_without_context() -> render_pass::RenderPass {
+    render_pass::RenderPass::new(std::sync::Weak::new())
 }
 
 /// Protected RenderPass seams used by concrete backends implemented in a
@@ -239,6 +276,23 @@ pub fn render_pass_is_finished(pass: &render_pass::RenderPass) -> bool {
 #[doc(hidden)]
 pub fn render_pass_set_finished(pass: &mut render_pass::RenderPass, finished: bool) {
     pass.m_finished = finished;
+}
+
+#[doc(hidden)]
+pub fn render_pass_has_context(pass: &render_pass::RenderPass) -> bool {
+    pass.m_context.upgrade().is_some()
+}
+
+#[doc(hidden)]
+pub fn render_pass_clear_bound_groups(pass: &mut render_pass::RenderPass) {
+    for group in &mut pass.m_boundGroups {
+        *group = None;
+    }
+}
+
+#[doc(hidden)]
+pub fn render_pass_clear_context(pass: &mut render_pass::RenderPass) {
+    pass.m_context = std::sync::Weak::new();
 }
 
 #[doc(hidden)]

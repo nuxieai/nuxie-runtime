@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:ore:render_pass"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/ore/gl/ore_render_pass_gl.cpp"
+source_sha256 = "1c0f9d62dfd86b713967a02f3a5d389632db5e410e8c318c6bb139d37933d8b6"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_render_pass_gl_cpp__impl.rs"
+target_sha256 = "fe9437a14813357ebefd1d0252960650bca2e874f0ae625cb0184a075460481d"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_ore_gl_ore_render_pass_gl.cpp"
+source_snapshot_sha256 = "1c0f9d62dfd86b713967a02f3a5d389632db5e410e8c318c6bb139d37933d8b6"
+dependency_units = ["webgl2:ore:bind_group", "webgl2:ore:buffer", "webgl2:ore:context", "webgl2:ore:pipeline", "webgl2:ore:texture", "webgl2:renderer:load_gles_extensions"]
+source_lines = 631
+source_bytes = 20041
+configuration_authorities = 142
+lifecycle_authorities = 16
+compile_evidence = "cargo test -p nuxie-renderer --lib mechanical_port::webgl2 --no-default-features --features native-webgpu-experimental,ore-gl,with-rive-tools"
+scope_note = "Preserves the complete configured ORE GL render-pass implementation: attachment setup, pipeline and bind-group ownership, dynamic state, vertex/index binding, exact draw lowering, captured-state restoration, idempotent finish, and source RAII ordering in which a solely owned pipeline program is deleted before finish-time unbinds."

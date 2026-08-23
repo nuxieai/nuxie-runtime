@@ -272,6 +272,11 @@ use super::super::utils::lite_rtti_hpp::{LiteRttiBase, LiteRttiCastFrom, LiteRtt
 use super::refcnt_hpp::{rcp, RefCnt, RefCntTarget};
 use super::shapes::paint::image_sampler_hpp::ImageSampler;
 use crate::mechanical_port::source::src::renderer_cpp::computeAlignment;
+#[cfg(any(
+    feature = "native-webgpu-experimental",
+    feature = "ore-gl"
+))]
+use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalReleaseRoute};
 use nuxie_render_api::{
     Aabb as AABB, BlendMode, ColorInt, FillRule, Fit, Mat2D, RawPath, StrokeCap, StrokeJoin, Vec2D,
 };
@@ -348,6 +353,16 @@ pub struct RenderBuffer {
     // RIVE_DEBUG_CODE(size_t m_unmapCount = 0;)
     #[cfg(debug_assertions)]
     pub(crate) m_unmapCount: usize,
+
+    // Rust-only safety sidecar after the complete source prefix. A WebGL
+    // RenderBuffer is erased behind `rcp<RenderBuffer>`, whose atomic last
+    // release may occur on a worker. This weak route returns complete-object
+    // destruction to the GL owner thread without retaining the context.
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    pub(crate) rust_final_release_route: Option<OwnerThreadFinalReleaseRoute>,
 }
 
 impl LiteRttiBase for RenderBuffer {
@@ -369,7 +384,25 @@ unsafe impl RefCntTarget for RenderBuffer {
         unsafe { self.base.unref() };
     }
     unsafe fn onRefCntReachedZero(ptr: *const Self) {
-        unsafe { ((*ptr).destroy_complete)(ptr.cast_mut()) };
+        let ptr = ptr.cast_mut();
+        #[cfg(any(
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        ))]
+        if let Some(route) = unsafe { &*ptr }.rust_final_release_route.as_ref() {
+            unsafe fn destroy_on_owner_thread(payload: usize) {
+                let ptr = payload as *mut RenderBuffer;
+                unsafe { ((*ptr).destroy_complete)(ptr) };
+            }
+            let release =
+                unsafe { OwnerThreadFinalRelease::new(ptr as usize, destroy_on_owner_thread) };
+            // Once the route is closed, the allocation is deliberately
+            // quarantined. Running the concrete destructor on this arbitrary
+            // releasing thread could touch Rc-backed GL state.
+            let _ = route.release_or_defer(release);
+            return;
+        }
+        unsafe { ((*ptr).destroy_complete)(ptr) };
     }
 }
 
@@ -394,6 +427,21 @@ impl RenderBuffer {
     // size_t sizeInBytes() const { return m_sizeInBytes; }
     pub fn sizeInBytes(&self) -> usize {
         self.m_sizeInBytes
+    }
+
+    #[cfg(any(
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    pub(crate) fn install_owner_thread_final_release_route(
+        &mut self,
+        route: OwnerThreadFinalReleaseRoute,
+    ) {
+        assert!(
+            self.rust_final_release_route.is_none(),
+            "RenderBuffer accepts one owner-thread final-release route"
+        );
+        self.rust_final_release_route = Some(route);
     }
 
     // void* map();

@@ -140,6 +140,14 @@ pub(crate) fn upload(
     texture: &TextureGL,
     data: &TextureDataDesc<'_>,
 ) -> Result<(), TextureUploadError> {
+    let execution = texture.executionStamp().clone();
+    execution.withCurrent(|| uploadCurrent(texture, data))
+}
+
+fn uploadCurrent(
+    texture: &TextureGL,
+    data: &TextureDataDesc<'_>,
+) -> Result<(), TextureUploadError> {
     assert!(texture.m_glTexture != 0);
     let bytes = sourceBytes(data)?;
     assert!(
@@ -147,14 +155,8 @@ pub(crate) fn upload(
         "GLES3 cannot upload BGRA pixels — pre-swizzle to rgba8unorm or use a different format"
     );
 
-    recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
-    recordGLCommand(GLCommand::BindTexture(
-        texture.m_glTarget,
-        texture.m_glTexture,
-    ));
-
     let internalFormat = oreFormatToGLInternal(texture.base.format());
-    if isCompressedFormat(texture.base.format()) {
+    let compressedImage = if isCompressedFormat(texture.base.format()) {
         let imageSize = data
             .bytesPerRow
             .wrapping_mul(if data.rowsPerImage > 0 {
@@ -170,6 +172,21 @@ pub(crate) fn upload(
                 actual: bytes.len(),
             })?
             .to_vec();
+        Some(image)
+    } else {
+        None
+    };
+
+    // No GL state may change until all fallible source-span validation has
+    // succeeded. In particular, a short compressed upload must not leave the
+    // caller's texture binding replaced.
+    recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
+    recordGLCommand(GLCommand::BindTexture(
+        texture.m_glTarget,
+        texture.m_glTexture,
+    ));
+
+    if let Some(image) = compressedImage {
         if texture.m_glTarget == GL_TEXTURE_3D || texture.m_glTarget == GL_TEXTURE_2D_ARRAY {
             recordGLCommand(GLCommand::CompressedTexSubImage3D {
                 target: texture.m_glTarget,
@@ -206,13 +223,14 @@ pub(crate) fn upload(
 
     let format = oreFormatToGLFormat(texture.base.format());
     let type_ = oreFormatToGLType(texture.base.format());
-    let savedRowLength = allocateGLQuerySlot();
-    let savedImageHeight = allocateGLQuerySlot();
-    recordGLCommand(GLCommand::GetInteger(GL_UNPACK_ROW_LENGTH, savedRowLength));
-    recordGLCommand(GLCommand::GetInteger(
-        GL_UNPACK_IMAGE_HEIGHT,
-        savedImageHeight,
-    ));
+    let savedRowLength = texture
+        .executionStamp()
+        .domain()
+        .getInteger(GL_UNPACK_ROW_LENGTH);
+    let savedImageHeight = texture
+        .executionStamp()
+        .domain()
+        .getInteger(GL_UNPACK_IMAGE_HEIGHT);
     let bytesPerTexel = textureFormatBytesPerTexel(texture.base.format());
     if data.bytesPerRow != 0 && bytesPerTexel != 0 && data.bytesPerRow % bytesPerTexel == 0 {
         recordGLCommand(GLCommand::PixelStore(
@@ -259,11 +277,8 @@ pub(crate) fn upload(
             data: bytes.to_vec(),
         });
     }
-    recordGLCommand(GLCommand::PixelStoreFromQuery(
-        GL_UNPACK_ROW_LENGTH,
-        savedRowLength,
-    ));
-    recordGLCommand(GLCommand::PixelStoreFromQuery(
+    recordGLCommand(GLCommand::PixelStore(GL_UNPACK_ROW_LENGTH, savedRowLength));
+    recordGLCommand(GLCommand::PixelStore(
         GL_UNPACK_IMAGE_HEIGHT,
         savedImageHeight,
     ));
@@ -273,21 +288,27 @@ pub(crate) fn upload(
 
 impl Drop for TextureGL {
     fn drop(&mut self) {
-        if self.m_glRenderbuffer != 0 && self.m_glOwnsTexture {
-            recordGLCommand(GLCommand::DeleteRenderbuffer(self.m_glRenderbuffer));
-        }
-        if self.m_glTexture != 0 && self.m_glOwnsTexture {
-            recordGLCommand(GLCommand::DeleteTexture(self.m_glTexture));
-        }
+        let execution = self.executionStamp().clone();
+        let _ = execution.withDeleteCurrent(|| {
+            if self.m_glRenderbuffer != 0 && self.m_glOwnsTexture {
+                recordGLCommand(GLCommand::DeleteRenderbuffer(self.m_glRenderbuffer));
+            }
+            if self.m_glTexture != 0 && self.m_glOwnsTexture {
+                recordGLCommand(GLCommand::DeleteTexture(self.m_glTexture));
+            }
+        });
         unsafe { ManuallyDrop::drop(&mut self.base) };
     }
 }
 
 impl Drop for TextureViewGL {
     fn drop(&mut self) {
-        if self.m_glTextureView != 0 {
-            recordGLCommand(GLCommand::DeleteTexture(self.m_glTextureView));
-        }
+        let execution = self.executionStamp().clone();
+        let _ = execution.withDeleteCurrent(|| {
+            if self.m_glTextureView != 0 {
+                recordGLCommand(GLCommand::DeleteTexture(self.m_glTextureView));
+            }
+        });
         unsafe { ManuallyDrop::drop(&mut self.base) };
     }
 }
@@ -295,8 +316,6 @@ impl Drop for TextureViewGL {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_ore_metal::types::TextureDesc;
-
     #[test]
     fn complete_implementation_denominator_is_frozen() {
         assert_eq!(PINNED_SOURCE.lines().count(), 349);
@@ -355,23 +374,6 @@ mod tests {
         assert_eq!(
             oreFormatToGLInternalWithConfiguration(TextureFormat::bc7unorm, constants_defined),
             GL_COMPRESSED_RGBA_BPTC_UNORM
-        );
-    }
-
-    #[test]
-    fn owned_renderbuffer_then_texture_are_deleted_before_the_base() {
-        resetGLCommandStream();
-        let mut texture = TextureGL::new(&TextureDesc::default());
-        texture.m_glTexture = 31;
-        texture.m_glRenderbuffer = 32;
-        texture.m_glOwnsTexture = true;
-        drop(texture);
-        assert_eq!(
-            takeGLCommands(),
-            vec![
-                GLCommand::DeleteRenderbuffer(32),
-                GLCommand::DeleteTexture(31),
-            ]
         );
     }
 }

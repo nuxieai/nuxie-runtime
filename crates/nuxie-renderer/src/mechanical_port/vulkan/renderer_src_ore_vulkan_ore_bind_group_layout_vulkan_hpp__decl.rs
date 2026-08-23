@@ -70,4 +70,8 @@ unsafe impl GpuResourcePayload for BindGroupLayoutVulkan {
     fn gpu_resource_mut(&mut self) -> &mut GPUResource {
         self.base.gpu_resource_mut()
     }
+
+    fn bind_group_layout_base(&self) -> Option<&BindGroupLayout> {
+        Some(&self.base)
+    }
 }

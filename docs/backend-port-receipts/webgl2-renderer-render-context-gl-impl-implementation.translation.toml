@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:render_context_gl_impl"
+translation_kind = "complete-source-owner"
+source_path = "renderer/src/gl/render_context_gl_impl.cpp"
+source_sha256 = "a41d565bb96d0f4308e16f239bc9538be1049947332bfc4273e3fbc2bbcc10c1"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_gl_render_context_gl_impl_cpp__impl.rs"
+target_sha256 = "d2c34dab6792f455cd3ece61dae21e0583f2f090010ccd3333b439dbfa63d090"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_src_gl_render_context_gl_impl.cpp"
+source_snapshot_sha256 = "a41d565bb96d0f4308e16f239bc9538be1049947332bfc4273e3fbc2bbcc10c1"
+dependency_units = ["shader:source:advanced_blend", "shader:source:atomic_draw", "shader:source:bezier_utils", "shader:source:blit_texture_as_draw", "shader:source:color_ramp", "shader:source:common", "shader:source:constants", "shader:source:draw_clockwise_clip", "shader:source:draw_clockwise_path", "shader:source:draw_image_mesh", "shader:source:draw_mesh", "shader:source:draw_msaa_object", "shader:source:draw_path", "shader:source:draw_path_common", "shader:source:draw_raster_order_path", "shader:source:flush_uniforms", "shader:source:render_atlas", "shader:source:resolve_atlas", "shader:source:stencil_draw", "shader:source:tessellate", "webgl2:ore:context", "webgl2:renderer:gl_state", "webgl2:renderer:gl_utils", "webgl2:renderer:render_buffer_gl_impl", "webgl2:renderer:render_target"]
+source_lines = 3985
+source_bytes = 153801
+configuration_authorities = 554
+lifecycle_authorities = 148
+compile_evidence = "cargo test -p nuxie-renderer --lib mechanical_port::webgl2 --no-default-features --features native-webgpu-experimental,ore-gl,with-rive-tools"
+scope_note = "Preserves the complete RIVE_WEBGL RenderContextGLImpl implementation across initialization, shader/program construction, atlas and buffer setup, all draw and flush branches, PLS and MSAA paths, image and canvas texture lifetimes, state restoration, exact source-field teardown, and split renderer-retirement versus context-loss authority for surviving external handles."

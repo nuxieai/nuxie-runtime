@@ -1,0 +1,17 @@
+schema_version = 1
+campaign = "webgl2"
+ownership_unit = "webgl2:renderer:render_context_gl_impl"
+translation_kind = "complete-source-owner"
+source_path = "renderer/include/rive/renderer/gl/render_context_gl_impl.hpp"
+source_sha256 = "0463fb7021de6a5cc50a3798138a8494ebbef731535dddfb02a88a375f116414"
+target_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_include_rive_renderer_gl_render_context_gl_impl_hpp__decl.rs"
+target_sha256 = "9043cc0ea1d8918bebc772daca1e97dbedbb674e254283bd28d36d8d3687bcb8"
+source_snapshot_path = "crates/nuxie-renderer/src/mechanical_port/webgl2/source/renderer_include_rive_renderer_gl_render_context_gl_impl.hpp"
+source_snapshot_sha256 = "0463fb7021de6a5cc50a3798138a8494ebbef731535dddfb02a88a375f116414"
+dependency_units = ["shader:source:advanced_blend", "shader:source:atomic_draw", "shader:source:bezier_utils", "shader:source:blit_texture_as_draw", "shader:source:color_ramp", "shader:source:common", "shader:source:constants", "shader:source:draw_clockwise_clip", "shader:source:draw_clockwise_path", "shader:source:draw_image_mesh", "shader:source:draw_mesh", "shader:source:draw_msaa_object", "shader:source:draw_path", "shader:source:draw_path_common", "shader:source:draw_raster_order_path", "shader:source:flush_uniforms", "shader:source:render_atlas", "shader:source:resolve_atlas", "shader:source:stencil_draw", "shader:source:tessellate", "webgl2:ore:context", "webgl2:renderer:gl_state", "webgl2:renderer:gl_utils", "webgl2:renderer:render_buffer_gl_impl", "webgl2:renderer:render_target"]
+source_lines = 580
+source_bytes = 21790
+configuration_authorities = 19
+lifecycle_authorities = 34
+compile_evidence = "cargo test -p nuxie-renderer --lib mechanical_port::webgl2 --no-default-features --features native-webgpu-experimental,ore-gl,with-rive-tools"
+scope_note = "Preserves the complete WebGL-configured RenderContextGLImpl declaration: exact RenderContextImpl inheritance, source field order, shader and buffer inventories, render-target and texture ownership, canvas mirror registry, flush and draw interfaces, capability state, and destruction denominator."

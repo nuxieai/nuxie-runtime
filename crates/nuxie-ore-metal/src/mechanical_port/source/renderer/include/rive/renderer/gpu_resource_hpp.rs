@@ -21,10 +21,12 @@ use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
+use super::ore::ore_bind_group_layout_hpp::BindGroupLayout;
 use super::ore::ore_buffer_hpp::{BufferApi, BufferUpdateError};
+use super::ore::ore_pipeline_hpp::Pipeline;
 use super::ore::ore_texture_hpp::{TextureApi, TextureUploadError};
 use super::ore::ore_types_hpp::{BufferUsage, TextureDataDesc, TextureFormat, TextureType};
 
@@ -32,19 +34,420 @@ use super::ore::ore_types_hpp::{BufferUsage, TextureDataDesc, TextureFormat, Tex
 
 pub(crate) const SHUTDOWN_FRAME_NUMBER: u64 = u64::MAX;
 
+/// Rust safety sidecar shared by one source `Context` and any backend
+/// execution authority that must finish concrete resource destruction after
+/// the ORE context itself has gone away.
+struct ResourceDomainFinalReleaseState {
+    owner_thread: std::thread::ThreadId,
+    always_defer: Arc<AtomicBool>,
+    closed: AtomicBool,
+    drain_active: AtomicBool,
+    bound_execution_domain: AtomicU64,
+    deferred_final_releases: Mutex<VecDeque<DeferredFinalRelease>>,
+    wake: Mutex<Option<Arc<dyn ResourceFinalReleaseWake>>>,
+}
+
+/// Host/event-loop notification used when an owner-thread final release is
+/// enqueued. Implementations must post asynchronously to the creation thread;
+/// they must never invoke the installed drain ingress inline from `post()`.
+pub trait ResourceFinalReleaseWake: Send + Sync {
+    fn post(&self);
+}
+
+enum DeferredFinalRelease {
+    Resource(ResourceOwner),
+    OwnerThread(OwnerThreadFinalRelease),
+}
+
+/// Type-erased final destruction that may touch a thread-affine backend only
+/// after its execution authority has made the owner thread current.
+///
+/// Dropping this value is intentionally inert. If its route is already closed
+/// or gone, callers quarantine the pointed-to allocation by abandoning this
+/// token rather than executing the callback on the wrong thread.
+pub struct OwnerThreadFinalRelease {
+    payload: usize,
+    release: unsafe fn(usize),
+}
+
+// SAFETY: the payload is never dereferenced while crossing threads. `release`
+// runs only from ResourceFinalReleaseDrain::drain on the recorded owner thread.
+unsafe impl Send for OwnerThreadFinalRelease {}
+
+impl OwnerThreadFinalRelease {
+    /// # Safety
+    /// `payload` must remain valid until `release(payload)` runs, and the
+    /// callback must consume that ownership exactly once.
+    pub unsafe fn new(payload: usize, release: unsafe fn(usize)) -> Self {
+        Self { payload, release }
+    }
+
+    unsafe fn run(self) {
+        unsafe { (self.release)(self.payload) };
+    }
+}
+
 /// Opaque execution-domain identity for safe Rust resource entry points.
 /// Pinned C++ carries this as the implicit `Context*`/backend precondition;
-/// the weak token preserves that non-owning relationship without widening it.
+/// the identity weak token preserves that non-owning relationship without
+/// widening it. The separate final-release route may intentionally outlive
+/// that source-context identity.
 #[derive(Clone)]
-pub struct ResourceDomain(Weak<()>);
+pub struct ResourceDomain {
+    identity: Weak<()>,
+    final_release_route: Weak<ResourceDomainFinalReleaseState>,
+    always_defer_final_release: Arc<AtomicBool>,
+}
 
 impl ResourceDomain {
-    pub(crate) fn new(owner: &Arc<()>) -> Self {
-        Self(Arc::downgrade(owner))
+    pub(crate) fn new(identity: &Arc<()>, owner: &ResourceFinalReleaseDrain) -> Self {
+        Self {
+            identity: Arc::downgrade(identity),
+            final_release_route: Arc::downgrade(&owner.state),
+            always_defer_final_release: Arc::clone(&owner.state.always_defer),
+        }
     }
 
     fn matches(&self, other: &Self) -> bool {
-        Weak::ptr_eq(&self.0, &other.0) && self.0.strong_count() != 0
+        Weak::ptr_eq(&self.identity, &other.identity) && self.identity.strong_count() != 0
+    }
+
+    fn should_defer_final_release(&self, is_recording_thread: bool) -> bool {
+        !is_recording_thread || self.always_defer_final_release.load(Ordering::Acquire)
+    }
+
+    fn assert_recording_thread(&self) {
+        let Some(state) = self.final_release_route.upgrade() else {
+            panic!("cannot construct a GPU resource after its final-release route expired");
+        };
+        assert_eq!(
+            state.owner_thread,
+            std::thread::current().id(),
+            "domain GPU resources must be constructed on the recording thread"
+        );
+        assert!(
+            !state.closed.load(Ordering::Acquire),
+            "cannot construct a GPU resource after final-release shutdown"
+        );
+    }
+
+    fn defer_final_release(&self, owner: ResourceOwner) -> Result<(), ResourceOwner> {
+        let Some(state) = self.final_release_route.upgrade() else {
+            return Err(owner);
+        };
+        match state.enqueue(DeferredFinalRelease::Resource(owner)) {
+            Ok(()) => Ok(()),
+            Err(DeferredFinalRelease::Resource(owner)) => Err(owner),
+            Err(DeferredFinalRelease::OwnerThread(_)) => unreachable!(),
+        }
+    }
+}
+
+impl ResourceDomainFinalReleaseState {
+    fn enqueue(&self, release: DeferredFinalRelease) -> Result<(), DeferredFinalRelease> {
+        let wake = {
+            let mut queue = self
+                .deferred_final_releases
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if self.closed.load(Ordering::Acquire)
+                && !(self.drain_active.load(Ordering::Acquire)
+                    && self.owner_thread == std::thread::current().id())
+            {
+                return Err(release);
+            }
+            queue.push_back(release);
+            self.wake
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        };
+        if let Some(wake) = wake {
+            wake.post();
+        }
+        Ok(())
+    }
+
+    fn close(&self) {
+        let _queue = self
+            .deferred_final_releases
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.closed.store(true, Ordering::Release);
+    }
+}
+
+/// Cloneable Rust safety-sidecar handle for owner-thread final destruction.
+///
+/// Backends whose API teardown must run under an additional execution scope
+/// retain this handle beyond the source `Context`, then call `drain()` inside
+/// that scope before destroying the device/context. The caller must stop all
+/// final-release producers before its terminal drain.
+#[derive(Clone)]
+pub struct ResourceFinalReleaseDrain {
+    state: Arc<ResourceDomainFinalReleaseState>,
+}
+
+/// Non-forgeable authority returned exactly once when a backend binds a
+/// final-release route to its execution domain. Raw drain clones deliberately
+/// do not carry this token, so they cannot close or consume a GL-owned FIFO.
+pub struct ResourceFinalReleaseExecutionDomain {
+    state: Weak<ResourceDomainFinalReleaseState>,
+    domain: u64,
+}
+
+/// Send-safe weak route installed in source-shaped intrusive owners whose
+/// concrete destructor is thread-affine. It never keeps the backend alive by
+/// itself and never executes a callback while enqueueing.
+#[derive(Clone)]
+pub struct OwnerThreadFinalReleaseRoute {
+    state: Weak<ResourceDomainFinalReleaseState>,
+}
+
+impl OwnerThreadFinalReleaseRoute {
+    /// Preserve source RAII order on the owning thread and route only a
+    /// genuinely cross-thread last release through the host FIFO. The
+    /// concrete callback is allowed to establish any additional backend
+    /// execution scope retained by its allocation.
+    pub fn release_or_defer(
+        &self,
+        release: OwnerThreadFinalRelease,
+    ) -> Result<(), OwnerThreadFinalRelease> {
+        let Some(state) = self.state.upgrade() else {
+            return Err(release);
+        };
+        if state.owner_thread == std::thread::current().id() {
+            {
+                let _queue = state
+                    .deferred_final_releases
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if state.closed.load(Ordering::Acquire)
+                    && !state.drain_active.load(Ordering::Acquire)
+                {
+                    return Err(release);
+                }
+            }
+            unsafe { release.run() };
+            return Ok(());
+        }
+        match state.enqueue(DeferredFinalRelease::OwnerThread(release)) {
+            Ok(()) => Ok(()),
+            Err(DeferredFinalRelease::OwnerThread(release)) => Err(release),
+            Err(DeferredFinalRelease::Resource(_)) => unreachable!(),
+        }
+    }
+
+    pub fn defer(&self, release: OwnerThreadFinalRelease) -> Result<(), OwnerThreadFinalRelease> {
+        let Some(state) = self.state.upgrade() else {
+            return Err(release);
+        };
+        match state.enqueue(DeferredFinalRelease::OwnerThread(release)) {
+            Ok(()) => Ok(()),
+            Err(DeferredFinalRelease::OwnerThread(release)) => Err(release),
+            Err(DeferredFinalRelease::Resource(_)) => unreachable!(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResourceFinalReleaseBindError {
+    AlreadyBound { existing_domain: u64 },
+}
+
+/// A final-release drain is rejected without touching its FIFO when invoked
+/// from any thread other than the domain's recording thread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResourceFinalReleaseDrainError {
+    WrongThread,
+    WrongExecutionDomain {
+        expected_domain: u64,
+        actual_domain: u64,
+    },
+}
+
+impl ResourceFinalReleaseDrain {
+    #[doc(hidden)]
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(ResourceDomainFinalReleaseState {
+                owner_thread: std::thread::current().id(),
+                always_defer: Arc::new(AtomicBool::new(false)),
+                closed: AtomicBool::new(false),
+                drain_active: AtomicBool::new(false),
+                bound_execution_domain: AtomicU64::new(0),
+                deferred_final_releases: Mutex::new(VecDeque::new()),
+                wake: Mutex::new(None),
+            }),
+        }
+    }
+
+    pub(crate) fn resource_domain(&self, identity: &Arc<()>) -> ResourceDomain {
+        ResourceDomain::new(identity, self)
+    }
+
+    /// Select the WebGL-style routing policy. This is deliberately one-way:
+    /// once a backend requires an ambient execution scope for destruction,
+    /// every final release remains queued for that scope.
+    pub fn set_always_defer(&self) {
+        self.state.always_defer.store(true, Ordering::Release);
+    }
+
+    /// Install the backend host notification that schedules an asynchronous
+    /// owner-thread drain. Installation is one-shot and deliberately separate
+    /// from the non-forgeable close/drain authority.
+    pub fn install_wake(&self, wake: Arc<dyn ResourceFinalReleaseWake>) {
+        let mut installed = self
+            .state
+            .wake
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(
+            installed.is_none(),
+            "a final-release route accepts one host wake"
+        );
+        *installed = Some(wake);
+    }
+
+    pub fn bind_execution_domain(
+        &self,
+        domain: u64,
+    ) -> Result<ResourceFinalReleaseExecutionDomain, ResourceFinalReleaseBindError> {
+        assert_ne!(domain, 0, "zero is not a GL execution-domain identity");
+        match self.state.bound_execution_domain.compare_exchange(
+            0,
+            domain,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => Ok(ResourceFinalReleaseExecutionDomain {
+                state: Arc::downgrade(&self.state),
+                domain,
+            }),
+            Err(existing_domain) => {
+                Err(ResourceFinalReleaseBindError::AlreadyBound { existing_domain })
+            }
+        }
+    }
+
+    pub fn owner_thread_route(&self) -> OwnerThreadFinalReleaseRoute {
+        OwnerThreadFinalReleaseRoute {
+            state: Arc::downgrade(&self.state),
+        }
+    }
+
+    /// Atomically rejects every future external producer. Already-enqueued
+    /// releases remain available to the terminal owner-thread drain, and a
+    /// destructor running inside that drain may append its own nested release
+    /// to the same FIFO tail.
+    pub fn close(&self) -> Result<(), ResourceFinalReleaseDrainError> {
+        self.reject_bound_execution_domain()?;
+        self.validate_owner_thread()?;
+        self.state.close();
+        Ok(())
+    }
+
+    /// Close a bound route without consuming it. The same authority remains
+    /// valid for the terminal drain and for reentrant releases appended by a
+    /// destructor already running inside that drain.
+    pub fn close_in_execution_domain(
+        &self,
+        execution_domain: &ResourceFinalReleaseExecutionDomain,
+    ) -> Result<(), ResourceFinalReleaseDrainError> {
+        self.validate_execution_domain(execution_domain)?;
+        self.validate_owner_thread()?;
+        self.state.close();
+        Ok(())
+    }
+
+    /// Destroy every currently queued payload exactly once, in enqueue order.
+    /// Destructors run outside the queue lock so reentrant releases append at
+    /// the FIFO tail and are drained by the same call.
+    pub fn drain(&self) -> Result<usize, ResourceFinalReleaseDrainError> {
+        self.reject_bound_execution_domain()?;
+        self.drain_authorized()
+    }
+
+    /// Destroy a bound route's FIFO under its backend's retained execution
+    /// authority. This intentionally does not require a live ambient GL scope:
+    /// lost-context shutdown must still release stale Rust ownership while the
+    /// concrete destructors suppress invalid GL commands by generation stamp.
+    pub fn drain_in_execution_domain(
+        &self,
+        execution_domain: &ResourceFinalReleaseExecutionDomain,
+    ) -> Result<usize, ResourceFinalReleaseDrainError> {
+        self.validate_execution_domain(execution_domain)?;
+        self.drain_authorized()
+    }
+
+    fn reject_bound_execution_domain(&self) -> Result<(), ResourceFinalReleaseDrainError> {
+        let expected_domain = self.state.bound_execution_domain.load(Ordering::Acquire);
+        if expected_domain != 0 {
+            return Err(ResourceFinalReleaseDrainError::WrongExecutionDomain {
+                expected_domain,
+                actual_domain: 0,
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_execution_domain(
+        &self,
+        execution_domain: &ResourceFinalReleaseExecutionDomain,
+    ) -> Result<(), ResourceFinalReleaseDrainError> {
+        let expected_domain = self.state.bound_execution_domain.load(Ordering::Acquire);
+        let same_route = Weak::ptr_eq(&execution_domain.state, &Arc::downgrade(&self.state));
+        if expected_domain == 0
+            || execution_domain.domain != expected_domain
+            || !same_route
+            || execution_domain.state.strong_count() == 0
+        {
+            return Err(ResourceFinalReleaseDrainError::WrongExecutionDomain {
+                expected_domain,
+                actual_domain: execution_domain.domain,
+            });
+        }
+        Ok(())
+    }
+
+    fn drain_authorized(&self) -> Result<usize, ResourceFinalReleaseDrainError> {
+        self.validate_owner_thread()?;
+        if self.state.drain_active.swap(true, Ordering::AcqRel) {
+            return Ok(0);
+        }
+        struct DrainGuard<'a>(&'a AtomicBool);
+        impl Drop for DrainGuard<'_> {
+            fn drop(&mut self) {
+                self.0.store(false, Ordering::Release);
+            }
+        }
+        let _guard = DrainGuard(&self.state.drain_active);
+
+        let mut drained = 0;
+        loop {
+            let owner = self
+                .state
+                .deferred_final_releases
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .pop_front();
+            let Some(owner) = owner else {
+                break;
+            };
+            match owner {
+                DeferredFinalRelease::Resource(owner) => owner.destroy_now(),
+                DeferredFinalRelease::OwnerThread(release) => unsafe { release.run() },
+            }
+            drained += 1;
+        }
+        Ok(drained)
+    }
+
+    fn validate_owner_thread(&self) -> Result<(), ResourceFinalReleaseDrainError> {
+        if std::thread::current().id() != self.state.owner_thread {
+            return Err(ResourceFinalReleaseDrainError::WrongThread);
+        }
+        Ok(())
     }
 }
 
@@ -187,6 +590,23 @@ impl Drop for GPUResource {
 pub unsafe trait GpuResourcePayload: Any + Send {
     fn gpu_resource(&self) -> &GPUResource;
     fn gpu_resource_mut(&mut self) -> &mut GPUResource;
+
+    /// Optional projection to the source's offset-zero `ore::Pipeline` base.
+    ///
+    /// C++ render passes accept `Pipeline*` before performing backend RTTI.
+    /// The erased Rust owner therefore needs this base-kind projection in
+    /// addition to exact concrete `TypeId` downcasts. Non-pipeline resources
+    /// deliberately return `None`.
+    fn pipeline_base(&self) -> Option<&Pipeline> {
+        None
+    }
+
+    /// Optional projection to the source's offset-zero `ore::BindGroupLayout`
+    /// base. Backend layouts retain this base through type erasure, so source
+    /// APIs must not require an exact concrete Rust downcast to recover it.
+    fn bind_group_layout_base(&self) -> Option<&BindGroupLayout> {
+        None
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -214,6 +634,9 @@ type BufferUpdateDispatch =
 type TextureInfoDispatch = unsafe fn(NonNull<GPUResource>) -> TextureInfo;
 type TextureUploadDispatch =
     for<'a> unsafe fn(&ResourcePointer, &TextureDataDesc<'a>) -> Result<(), TextureUploadError>;
+type PipelineBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<Pipeline>>;
+type BindGroupLayoutBaseDispatch =
+    unsafe fn(NonNull<GPUResource>) -> Option<NonNull<BindGroupLayout>>;
 
 #[derive(Clone, Copy)]
 pub(crate) struct ResourceVTable {
@@ -223,6 +646,8 @@ pub(crate) struct ResourceVTable {
     buffer_update: Option<BufferUpdateDispatch>,
     texture_info: Option<TextureInfoDispatch>,
     texture_upload: Option<TextureUploadDispatch>,
+    pipeline_base: PipelineBaseDispatch,
+    bind_group_layout_base: BindGroupLayoutBaseDispatch,
 }
 
 unsafe fn destroy_resource<T: GpuResourcePayload>(base: NonNull<GPUResource>) {
@@ -231,6 +656,20 @@ unsafe fn destroy_resource<T: GpuResourcePayload>(base: NonNull<GPUResource>) {
 
 fn type_id<T: GpuResourcePayload>() -> TypeId {
     TypeId::of::<T>()
+}
+
+unsafe fn pipeline_base<T: GpuResourcePayload>(
+    base: NonNull<GPUResource>,
+) -> Option<NonNull<Pipeline>> {
+    let payload = unsafe { base.cast::<T>().as_ref() };
+    payload.pipeline_base().map(NonNull::from)
+}
+
+unsafe fn bind_group_layout_base<T: GpuResourcePayload>(
+    base: NonNull<GPUResource>,
+) -> Option<NonNull<BindGroupLayout>> {
+    let payload = unsafe { base.cast::<T>().as_ref() };
+    payload.bind_group_layout_base().map(NonNull::from)
 }
 
 unsafe fn buffer_info<T: GpuResourcePayload + BufferApi>(base: NonNull<GPUResource>) -> BufferInfo {
@@ -285,6 +724,8 @@ fn plain_vtable<T: GpuResourcePayload>() -> ResourceVTable {
         buffer_update: None,
         texture_info: None,
         texture_upload: None,
+        pipeline_base: pipeline_base::<T>,
+        bind_group_layout_base: bind_group_layout_base::<T>,
     }
 }
 
@@ -356,13 +797,45 @@ impl ResourceOwner {
             .take()
             .expect("resource owner transfers one allocation")
     }
+
+    fn destroy_now(mut self) {
+        let pointer = self
+            .pointer
+            .take()
+            .expect("resource owner destroys one allocation");
+        assert!(
+            pointer.is_recording_thread(),
+            "deferred GPU resource destruction is confined to its recording thread"
+        );
+        unsafe { (pointer.vtable.destroy)(pointer.base) };
+    }
 }
 
 impl Drop for ResourceOwner {
     fn drop(&mut self) {
-        if let Some(pointer) = self.pointer.take() {
-            unsafe { (pointer.vtable.destroy)(pointer.base) };
+        let Some(pointer) = self.pointer.take() else {
+            return;
+        };
+        let is_recording_thread = pointer.is_recording_thread();
+        let domain = pointer.domain.clone();
+        if let Some(domain) = domain
+            && domain.should_defer_final_release(is_recording_thread)
+        {
+            match domain.defer_final_release(ResourceOwner::new(pointer)) {
+                Ok(()) => return,
+                Err(owner) => {
+                    // The backend violated the drain-handle lifetime contract:
+                    // the only authority capable of restoring the recording
+                    // execution scope is already gone. Quarantine the complete
+                    // allocation instead of ever invoking a concrete GPU/API
+                    // destructor on this wrong thread. Correct teardown retains
+                    // the drain and therefore never enters this terminal path.
+                    std::mem::forget(owner);
+                    return;
+                }
+            }
         }
+        unsafe { (pointer.vtable.destroy)(pointer.base) };
     }
 }
 
@@ -427,6 +900,9 @@ impl<T: GpuResourcePayload> ResourceHandle<T> {
         mut payload: T,
         vtable: ResourceVTable,
     ) -> Self {
+        if let Some(domain) = domain.as_ref() {
+            domain.assert_recording_thread();
+        }
         payload.gpu_resource_mut().install_manager(manager);
         let complete = NonNull::from(Box::leak(Box::new(payload)));
         let base = NonNull::from(unsafe { complete.as_ref() }.gpu_resource());
@@ -501,6 +977,26 @@ impl AnyResourceHandle {
             .domain
             .as_ref()
             .is_some_and(|resource_domain| resource_domain.matches(domain))
+    }
+
+    /// Checked source-base projection used before backend-specific pipeline
+    /// RTTI. Payload access remains confined to the recording thread.
+    pub fn pipelineBase(&self) -> Option<&Pipeline> {
+        let pointer = self.pointer();
+        if !pointer.is_recording_thread() {
+            return None;
+        }
+        unsafe { (pointer.vtable.pipeline_base)(pointer.base).map(|base| base.as_ref()) }
+    }
+
+    /// Checked source-base projection for a retained backend bind-group
+    /// layout. Payload access remains confined to the recording thread.
+    pub fn bindGroupLayoutBase(&self) -> Option<&BindGroupLayout> {
+        let pointer = self.pointer();
+        if !pointer.is_recording_thread() {
+            return None;
+        }
+        unsafe { (pointer.vtable.bind_group_layout_base)(pointer.base).map(|base| base.as_ref()) }
     }
 
     pub fn size(&self) -> Option<u32> {
@@ -860,7 +1356,7 @@ impl fmt::Debug for GPUResourceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::sync::atomic::AtomicUsize;
     use std::sync::{Barrier, Weak};
     use std::thread;
@@ -1418,6 +1914,379 @@ mod tests {
         assert!(dropped(&drops).is_empty());
         owner.shutdown();
         assert_eq!(dropped(&drops), [5]);
+    }
+
+    #[test]
+    fn domain_defers_worker_final_release_until_owner_drain() {
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let drain = ResourceFinalReleaseDrain::new();
+        let identity = Arc::new(());
+        let resource = ResourceHandle::new_in_domain(
+            None,
+            drain.resource_domain(&identity),
+            DropProbe::new(11, &drops),
+        );
+
+        thread::spawn(move || drop(resource))
+            .join()
+            .expect("worker final release");
+        assert!(dropped(&drops).is_empty());
+        assert_eq!(drain.drain(), Ok(1));
+        assert_eq!(dropped(&drops), [11]);
+    }
+
+    #[test]
+    fn owner_drain_is_exactly_once_fifo_and_rejects_wrong_thread() {
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let drain = ResourceFinalReleaseDrain::new();
+        let identity = Arc::new(());
+        let domain = drain.resource_domain(&identity);
+        let resources = (1..=3)
+            .map(|id| {
+                ResourceHandle::new_in_domain(None, domain.clone(), DropProbe::new(id, &drops))
+            })
+            .collect::<Vec<_>>();
+
+        thread::spawn(move || {
+            for resource in resources {
+                drop(resource);
+            }
+        })
+        .join()
+        .expect("ordered worker final releases");
+
+        let worker_drain = drain.clone();
+        assert_eq!(
+            thread::spawn(move || worker_drain.drain())
+                .join()
+                .expect("wrong-thread drain result"),
+            Err(ResourceFinalReleaseDrainError::WrongThread)
+        );
+        assert!(dropped(&drops).is_empty());
+
+        assert_eq!(drain.drain(), Ok(3));
+        assert_eq!(dropped(&drops), [1, 2, 3]);
+        assert_eq!(drain.drain(), Ok(0));
+        assert_eq!(dropped(&drops), [1, 2, 3]);
+    }
+
+    #[test]
+    fn drain_handle_outlives_context_state_without_orphaning_manager_release() {
+        use crate::context::ContextState;
+
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let owner = GPUResourceManagerOwner::new();
+        let manager = owner.manager();
+        manager.advanceFrameNumber(1, 1);
+        let context = ContextState::new(crate::types::Features::default(), Some(manager.clone()));
+        let drain = context.resourceFinalReleaseDrain();
+        let domain = context.resourceDomain();
+        let resource = ResourceHandle::new_in_domain(
+            Some(manager),
+            domain.clone(),
+            DropProbe::new(17, &drops),
+        )
+        .erase();
+        assert!(resource.belongsTo(&domain));
+        drop(context);
+        assert!(
+            !resource.belongsTo(&domain),
+            "source Context identity expires independently of its retained drain route"
+        );
+
+        thread::spawn(move || drop(resource))
+            .join()
+            .expect("manager release after ORE Context drop");
+        assert!(dropped(&drops).is_empty());
+        assert_eq!(drain.drain(), Ok(1));
+        assert_eq!(dropped(&drops), [17]);
+        owner.shutdown();
+    }
+
+    #[test]
+    fn expired_context_and_drain_never_destroy_payload_on_worker() {
+        use crate::context::ContextState;
+
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let context = ContextState::new(crate::types::Features::default(), None);
+        let resource = ResourceHandle::new_in_domain(
+            None,
+            context.resourceDomain(),
+            DropProbe::new(18, &drops),
+        );
+        drop(context);
+
+        thread::spawn(move || drop(resource))
+            .join()
+            .expect("expired-domain worker final release");
+        assert!(
+            dropped(&drops).is_empty(),
+            "an expired drain route must quarantine rather than destroy on a worker"
+        );
+    }
+
+    #[test]
+    fn expired_always_defer_route_never_destroys_on_unscoped_owner() {
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let identity = Arc::new(());
+        let drain = ResourceFinalReleaseDrain::new();
+        drain.set_always_defer();
+        let resource = ResourceHandle::new_in_domain(
+            None,
+            drain.resource_domain(&identity),
+            DropProbe::new(181, &drops),
+        );
+        drop(drain);
+
+        drop(resource);
+        assert!(
+            dropped(&drops).is_empty(),
+            "always-deferred payloads require their backend execution scope even on the owner thread"
+        );
+    }
+
+    #[test]
+    fn worker_pool_owner_destruction_routes_nested_payloads_to_domain_drain() {
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let owner = GPUResourceManagerOwner::new();
+        let manager = owner.manager();
+        manager.advanceFrameNumber(1, 1);
+        let drain = ResourceFinalReleaseDrain::new();
+        let identity = Arc::new(());
+        let domain = drain.resource_domain(&identity);
+        let pool = ResourceHandle::new_in_domain(
+            Some(manager.clone()),
+            domain.clone(),
+            GPUResourcePool::newPayload(&manager, 1),
+        );
+        pool.recycle(Some(
+            ResourceHandle::new_in_domain(Some(manager), domain, DropProbe::new(19, &drops))
+                .erase(),
+        ));
+
+        thread::spawn(move || drop(pool))
+            .join()
+            .expect("worker pool final release");
+        assert!(dropped(&drops).is_empty());
+        assert_eq!(drain.drain(), Ok(1));
+        assert_eq!(dropped(&drops), [19]);
+        owner.shutdown();
+    }
+
+    #[test]
+    fn always_defer_routes_owner_release_through_execution_scope_drain() {
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let drain = ResourceFinalReleaseDrain::new();
+        let identity = Arc::new(());
+        drain.set_always_defer();
+        let resource = ResourceHandle::new_in_domain(
+            None,
+            drain.resource_domain(&identity),
+            DropProbe::new(23, &drops),
+        );
+
+        drop(resource);
+        assert!(dropped(&drops).is_empty());
+        assert_eq!(drain.drain(), Ok(1));
+        assert_eq!(dropped(&drops), [23]);
+    }
+
+    #[test]
+    fn owner_thread_final_release_route_defers_opaque_destructor() {
+        unsafe fn destroy_probe(payload: usize) {
+            unsafe { drop(Box::from_raw(payload as *mut DropProbe)) };
+        }
+
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let drain = ResourceFinalReleaseDrain::new();
+        let route = drain.owner_thread_route();
+        let pointer = Box::into_raw(Box::new(DropProbe::new(29, &drops)));
+        let release = unsafe { OwnerThreadFinalRelease::new(pointer as usize, destroy_probe) };
+
+        assert!(
+            thread::spawn(move || route.defer(release))
+                .join()
+                .expect("worker final-release enqueue")
+                .is_ok()
+        );
+        assert!(dropped(&drops).is_empty());
+        assert_eq!(drain.drain(), Ok(1));
+        assert_eq!(dropped(&drops), [29]);
+    }
+
+    #[test]
+    fn release_or_defer_preserves_owner_raii_and_routes_worker_release() {
+        unsafe fn destroy_probe(payload: usize) {
+            unsafe { drop(Box::from_raw(payload as *mut DropProbe)) };
+        }
+
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let drain = ResourceFinalReleaseDrain::new();
+        let route = drain.owner_thread_route();
+        let ownerPointer = Box::into_raw(Box::new(DropProbe::new(30, &drops)));
+        let ownerRelease =
+            unsafe { OwnerThreadFinalRelease::new(ownerPointer as usize, destroy_probe) };
+        assert!(route.release_or_defer(ownerRelease).is_ok());
+        assert_eq!(dropped(&drops), [30]);
+
+        let workerPointer = Box::into_raw(Box::new(DropProbe::new(301, &drops)));
+        let workerRelease =
+            unsafe { OwnerThreadFinalRelease::new(workerPointer as usize, destroy_probe) };
+        assert!(
+            thread::spawn(move || route.release_or_defer(workerRelease))
+                .join()
+                .expect("worker final-release enqueue")
+                .is_ok()
+        );
+        assert_eq!(dropped(&drops), [30]);
+        assert_eq!(drain.drain(), Ok(1));
+        assert_eq!(dropped(&drops), [30, 301]);
+    }
+
+    #[test]
+    fn closed_owner_thread_route_rejects_future_producers() {
+        unsafe fn destroy_probe(payload: usize) {
+            unsafe { drop(Box::from_raw(payload as *mut DropProbe)) };
+        }
+
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let drain = ResourceFinalReleaseDrain::new();
+        let route = drain.owner_thread_route();
+        assert_eq!(drain.close(), Ok(()));
+        let pointer = Box::into_raw(Box::new(DropProbe::new(31, &drops)));
+        let release = unsafe { OwnerThreadFinalRelease::new(pointer as usize, destroy_probe) };
+        let rejected = route
+            .defer(release)
+            .expect_err("closed route must reject the producer");
+        assert_eq!(drain.drain(), Ok(0));
+        assert!(dropped(&drops).is_empty());
+
+        // The production caller quarantines this allocation. The test owns
+        // the callback and runs it directly on the recorded owner only to
+        // reclaim its probe allocation.
+        unsafe { rejected.run() };
+        assert_eq!(dropped(&drops), [31]);
+    }
+
+    #[test]
+    fn closed_terminal_drain_accepts_owner_thread_reentrant_release() {
+        struct ReentrantProbe {
+            route: OwnerThreadFinalReleaseRoute,
+            drops: Arc<Mutex<Vec<usize>>>,
+        }
+
+        unsafe fn destroy_leaf(payload: usize) {
+            unsafe { drop(Box::from_raw(payload as *mut DropProbe)) };
+        }
+
+        unsafe fn destroy_parent(payload: usize) {
+            let parent = unsafe { Box::from_raw(payload as *mut ReentrantProbe) };
+            parent.drops.lock().unwrap().push(41);
+            let leaf = Box::into_raw(Box::new(DropProbe::new(42, &parent.drops)));
+            let release = unsafe { OwnerThreadFinalRelease::new(leaf as usize, destroy_leaf) };
+            assert!(
+                parent.route.defer(release).is_ok(),
+                "a terminal owner-thread destructor may append its nested release"
+            );
+        }
+
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let drain = ResourceFinalReleaseDrain::new();
+        let route = drain.owner_thread_route();
+        let parent = Box::into_raw(Box::new(ReentrantProbe {
+            route: route.clone(),
+            drops: Arc::clone(&drops),
+        }));
+        assert!(
+            route
+                .defer(unsafe { OwnerThreadFinalRelease::new(parent as usize, destroy_parent) })
+                .is_ok()
+        );
+
+        assert_eq!(drain.close(), Ok(()));
+        assert_eq!(drain.drain(), Ok(2));
+        assert_eq!(dropped(&drops), [41, 42]);
+        assert_eq!(drain.drain(), Ok(0));
+    }
+
+    #[test]
+    fn final_release_drain_binds_to_exactly_one_execution_domain() {
+        let drain = ResourceFinalReleaseDrain::new();
+        let executionDomain = drain
+            .bind_execution_domain(41)
+            .expect("first execution-domain bind succeeds");
+        assert!(matches!(
+            drain.bind_execution_domain(43),
+            Err(ResourceFinalReleaseBindError::AlreadyBound {
+                existing_domain: 41,
+            })
+        ));
+        assert_eq!(
+            drain.close(),
+            Err(ResourceFinalReleaseDrainError::WrongExecutionDomain {
+                expected_domain: 41,
+                actual_domain: 0,
+            })
+        );
+        assert_eq!(
+            drain.drain(),
+            Err(ResourceFinalReleaseDrainError::WrongExecutionDomain {
+                expected_domain: 41,
+                actual_domain: 0,
+            })
+        );
+        assert_eq!(drain.close_in_execution_domain(&executionDomain), Ok(()));
+        assert_eq!(drain.drain_in_execution_domain(&executionDomain), Ok(0));
+    }
+
+    #[test]
+    fn final_release_close_rejects_wrong_thread_for_raw_and_bound_routes() {
+        let rawDrain = ResourceFinalReleaseDrain::new();
+        let rawWorkerDrain = rawDrain.clone();
+        assert_eq!(
+            thread::spawn(move || rawWorkerDrain.close())
+                .join()
+                .expect("wrong-thread raw close result"),
+            Err(ResourceFinalReleaseDrainError::WrongThread)
+        );
+        assert_eq!(rawDrain.close(), Ok(()));
+
+        let boundDrain = ResourceFinalReleaseDrain::new();
+        let executionDomain = boundDrain
+            .bind_execution_domain(47)
+            .expect("execution-domain bind succeeds");
+        let workerDrain = boundDrain.clone();
+        let (executionDomain, closeResult) = thread::spawn(move || {
+            let result = workerDrain.close_in_execution_domain(&executionDomain);
+            (executionDomain, result)
+        })
+        .join()
+        .expect("wrong-thread bound close result");
+        assert_eq!(
+            closeResult,
+            Err(ResourceFinalReleaseDrainError::WrongThread)
+        );
+        assert_eq!(
+            boundDrain.close_in_execution_domain(&executionDomain),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn domain_resource_construction_rejects_foreign_thread() {
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let drain = ResourceFinalReleaseDrain::new();
+        let identity = Arc::new(());
+        let domain = drain.resource_domain(&identity);
+        let worker_drops = Arc::clone(&drops);
+        assert!(
+            thread::spawn(move || {
+                ResourceHandle::new_in_domain(None, domain, DropProbe::new(37, &worker_drops))
+            })
+            .join()
+            .is_err()
+        );
+        assert_eq!(dropped(&drops), [37]);
     }
 
     #[test]

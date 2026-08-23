@@ -104,6 +104,10 @@ unsafe impl GpuResourcePayload for BindGroupLayout {
     fn gpu_resource_mut(&mut self) -> &mut GPUResource {
         &mut self.base
     }
+
+    fn bind_group_layout_base(&self) -> Option<&BindGroupLayout> {
+        Some(self)
+    }
 }
 
 impl BindGroupLayout {

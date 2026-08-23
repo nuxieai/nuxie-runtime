@@ -3,9 +3,9 @@
 
 #![allow(non_camel_case_types, non_snake_case)]
 
-use super::gles3_decl::{GLCapabilities, GLenum, GLuint};
+use super::gles3_decl::{GLCapabilities, GLExecutionDomain, GLExecutionStamp, GLenum, GLuint};
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    BlendEquation, IAABB, PipelineState, AABBu16,
+    AABBu16, BlendEquation, PipelineState, IAABB,
 };
 
 pub(crate) const PINNED_SOURCE: &str =
@@ -50,10 +50,30 @@ pub(crate) struct GLState {
     pub(crate) m_boundArrayBufferID: GLuint,
     pub(crate) m_boundUniformBufferID: GLuint,
     pub(crate) m_validState: ValidState,
+    /// Rust-only retained execution authority after the exact source prefix.
+    pub(crate) m_executionDomain: Option<GLExecutionDomain>,
+    pub(crate) m_executionGeneration: u64,
 }
 
 impl GLState {
     pub(crate) fn new(capabilities: GLCapabilities) -> Self {
+        Self::newWithExecutionDomain(capabilities, None)
+    }
+
+    pub(crate) fn newInDomain(
+        capabilities: GLCapabilities,
+        executionDomain: GLExecutionDomain,
+    ) -> Self {
+        Self::newWithExecutionDomain(capabilities, Some(executionDomain))
+    }
+
+    fn newWithExecutionDomain(
+        capabilities: GLCapabilities,
+        executionDomain: Option<GLExecutionDomain>,
+    ) -> Self {
+        let executionGeneration = executionDomain
+            .as_ref()
+            .map_or(0, GLExecutionDomain::generation);
         let mut state = Self {
             m_capabilities: capabilities,
             m_scissorBox: [0; 4],
@@ -70,6 +90,8 @@ impl GLState {
             m_boundArrayBufferID: 0,
             m_boundUniformBufferID: 0,
             m_validState: ValidState::default(),
+            m_executionDomain: executionDomain,
+            m_executionGeneration: executionGeneration,
         };
         state.invalidate();
         state
@@ -79,32 +101,72 @@ impl GLState {
         &self.m_capabilities
     }
 
+    pub(crate) fn executionDomain(&self) -> Option<GLExecutionDomain> {
+        self.m_executionDomain.clone()
+    }
+
+    pub(crate) fn executionStamp(&self) -> Option<GLExecutionStamp> {
+        self.m_executionDomain.as_ref().map(|executionDomain| {
+            assert_eq!(
+                self.m_executionGeneration,
+                executionDomain.generation(),
+                "GLState belongs to a stale WebGL context generation"
+            );
+            executionDomain.stamp()
+        })
+    }
+
+    fn withExecutionDomain<R>(&mut self, callback: impl FnOnce(&mut Self) -> R) -> R {
+        if let Some(executionDomain) = self.m_executionDomain.clone() {
+            assert_eq!(
+                self.m_executionGeneration,
+                executionDomain.generation(),
+                "GLState belongs to a stale WebGL context generation"
+            );
+            // `self` is commonly held through `RefCell::borrow_mut()` here.
+            // Enter the GL domain without treating this live source borrow as
+            // a final-release safe point: a queued RenderBuffer destructor can
+            // otherwise reborrow the same GLState and panic.
+            executionDomain.withCurrentWhileSourceBorrowed(|| callback(self))
+        } else {
+            callback(self)
+        }
+    }
+
     pub(crate) fn invalidate(&mut self) {
-        super::gl_state_impl::invalidate(self)
+        self.withExecutionDomain(super::gl_state_impl::invalidate)
     }
 
     pub(crate) fn setScissor(&mut self, scissor: IAABB, renderTargetHeight: u32) {
-        super::gl_state_impl::setScissor(self, scissor, renderTargetHeight)
+        self.withExecutionDomain(|state| {
+            super::gl_state_impl::setScissor(state, scissor, renderTargetHeight)
+        })
     }
 
     pub(crate) fn setScissorU16(&mut self, scissor: AABBu16, renderTargetHeight: u32) {
-        super::gl_state_impl::setScissorU16(self, scissor, renderTargetHeight)
+        self.withExecutionDomain(|state| {
+            super::gl_state_impl::setScissorU16(state, scissor, renderTargetHeight)
+        })
     }
 
     pub(crate) fn setScissorRaw(&mut self, left: u32, top: u32, width: u32, height: u32) {
-        super::gl_state_impl::setScissorRaw(self, left, top, width, height)
+        self.withExecutionDomain(|state| {
+            super::gl_state_impl::setScissorRaw(state, left, top, width, height)
+        })
     }
 
     pub(crate) fn disableScissor(&mut self) {
-        super::gl_state_impl::disableScissor(self)
+        self.withExecutionDomain(super::gl_state_impl::disableScissor)
     }
 
     pub(crate) fn setDepthStencilEnabled(&mut self, depthEnabled: bool, stencilEnabled: bool) {
-        super::gl_state_impl::setDepthStencilEnabled(self, depthEnabled, stencilEnabled)
+        self.withExecutionDomain(|state| {
+            super::gl_state_impl::setDepthStencilEnabled(state, depthEnabled, stencilEnabled)
+        })
     }
 
     pub(crate) fn setCullFace(&mut self, cullFace: GLenum) {
-        super::gl_state_impl::setCullFace(self, cullFace)
+        self.withExecutionDomain(|state| super::gl_state_impl::setCullFace(state, cullFace))
     }
 
     pub(crate) fn setWriteMasks(
@@ -113,16 +175,20 @@ impl GLState {
         depthWriteMask: bool,
         stencilWriteMask: u8,
     ) {
-        super::gl_state_impl::setWriteMasks(
-            self,
-            colorWriteMask,
-            depthWriteMask,
-            stencilWriteMask,
-        )
+        self.withExecutionDomain(|state| {
+            super::gl_state_impl::setWriteMasks(
+                state,
+                colorWriteMask,
+                depthWriteMask,
+                stencilWriteMask,
+            )
+        })
     }
 
     pub(crate) fn setBlendEquation(&mut self, blendEquation: BlendEquation) {
-        super::gl_state_impl::setBlendEquation(self, blendEquation)
+        self.withExecutionDomain(|state| {
+            super::gl_state_impl::setBlendEquation(state, blendEquation)
+        })
     }
 
     pub(crate) fn disableBlending(&mut self) {
@@ -134,30 +200,53 @@ impl GLState {
         pipelineState: &PipelineState,
         scissorAction: ScissorAction,
     ) {
-        super::gl_state_impl::setPipelineState(self, pipelineState, scissorAction)
+        self.withExecutionDomain(|state| {
+            super::gl_state_impl::setPipelineState(state, pipelineState, scissorAction)
+        })
     }
 
     pub(crate) fn bindProgram(&mut self, programID: GLuint) {
-        super::gl_state_impl::bindProgram(self, programID)
+        self.withExecutionDomain(|state| super::gl_state_impl::bindProgram(state, programID))
     }
 
     pub(crate) fn bindVAO(&mut self, vao: GLuint) {
-        super::gl_state_impl::bindVAO(self, vao)
+        self.withExecutionDomain(|state| super::gl_state_impl::bindVAO(state, vao))
     }
 
     pub(crate) fn bindBuffer(&mut self, target: GLenum, bufferID: GLuint) {
-        super::gl_state_impl::bindBuffer(self, target, bufferID)
+        self.withExecutionDomain(|state| super::gl_state_impl::bindBuffer(state, target, bufferID))
     }
 
     pub(crate) fn deleteProgram(&mut self, programID: GLuint) {
-        super::gl_state_impl::deleteProgram(self, programID)
+        if self
+            .m_executionDomain
+            .as_ref()
+            .is_some_and(|domain| self.m_executionGeneration != domain.generation())
+        {
+            return;
+        }
+        self.withExecutionDomain(|state| super::gl_state_impl::deleteProgram(state, programID))
     }
 
     pub(crate) fn deleteVAO(&mut self, vao: GLuint) {
-        super::gl_state_impl::deleteVAO(self, vao)
+        if self
+            .m_executionDomain
+            .as_ref()
+            .is_some_and(|domain| self.m_executionGeneration != domain.generation())
+        {
+            return;
+        }
+        self.withExecutionDomain(|state| super::gl_state_impl::deleteVAO(state, vao))
     }
 
     pub(crate) fn deleteBuffer(&mut self, bufferID: GLuint) {
-        super::gl_state_impl::deleteBuffer(self, bufferID)
+        if self
+            .m_executionDomain
+            .as_ref()
+            .is_some_and(|domain| self.m_executionGeneration != domain.generation())
+        {
+            return;
+        }
+        self.withExecutionDomain(|state| super::gl_state_impl::deleteBuffer(state, bufferID))
     }
 }

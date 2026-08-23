@@ -78,6 +78,18 @@ pub(crate) mod webgl2 {
     pub(crate) mod render_buffer_gl_impl_decl;
     #[path = "renderer_src_gl_render_buffer_gl_impl_cpp__impl.rs"]
     pub(crate) mod render_buffer_gl_impl_impl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_include_rive_renderer_gl_render_context_gl_impl_hpp__decl.rs"]
+    pub(crate) mod render_context_gl_decl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_src_gl_render_context_gl_impl_cpp__impl.rs"]
+    pub(crate) mod render_context_gl_impl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_include_rive_renderer_gl_render_target_gl_hpp__decl.rs"]
+    pub(crate) mod render_target_gl_decl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_src_gl_render_target_gl_cpp__impl.rs"]
+    pub(crate) mod render_target_gl_impl;
     #[path = "renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs"]
     pub(crate) mod load_gles_extensions_decl;
     #[path = "renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs"]
@@ -92,10 +104,20 @@ pub(crate) mod webgl2 {
     pub(crate) mod ore_buffer_gl_decl;
     #[path = "renderer_src_ore_gl_ore_buffer_gl_cpp__impl.rs"]
     pub(crate) mod ore_buffer_gl_impl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_include_rive_renderer_ore_ore_context_gl_hpp__decl.rs"]
+    pub(crate) mod ore_context_gl_decl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_src_ore_gl_ore_context_gl_cpp__impl.rs"]
+    pub(crate) mod ore_context_gl_impl;
     #[path = "renderer_src_ore_gl_ore_pipeline_gl_hpp__decl.rs"]
     pub(crate) mod ore_pipeline_gl_decl;
     #[path = "renderer_src_ore_gl_ore_pipeline_gl_cpp__impl.rs"]
     pub(crate) mod ore_pipeline_gl_impl;
+    #[path = "renderer_src_ore_gl_ore_render_pass_gl_hpp__decl.rs"]
+    pub(crate) mod ore_render_pass_gl_decl;
+    #[path = "renderer_src_ore_gl_ore_render_pass_gl_cpp__impl.rs"]
+    pub(crate) mod ore_render_pass_gl_impl;
     #[path = "renderer_src_ore_gl_ore_sampler_gl_hpp__decl.rs"]
     pub(crate) mod ore_sampler_gl_decl;
     #[path = "renderer_src_ore_gl_ore_sampler_gl_cpp__impl.rs"]

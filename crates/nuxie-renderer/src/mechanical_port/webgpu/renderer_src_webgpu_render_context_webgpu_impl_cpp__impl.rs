@@ -4361,46 +4361,52 @@ impl RenderContextHelperImplAccess for RenderContextWebGPUImpl {
 }
 
 impl RenderContextHelperBufferFactoryContract for RenderContextWebGPUImpl {
-    fn makeUniformBufferRing(&mut self, capacityInBytes: usize) -> Box<dyn BufferRingContract> {
+    fn makeUniformBufferRing(
+        &mut self,
+        capacityInBytes: usize,
+    ) -> Option<Box<dyn BufferRingContract>> {
         let capacity = capacityInBytes.max(256);
         assert_eq!(capacity % 256, 0);
-        Box::new(BufferWebGPU::new(
+        Some(Box::new(BufferWebGPU::new(
             (&*self.m_device).clone(),
             (&*self.m_queue).clone(),
             capacity,
             super::webgpu_cpp_decl::BufferUsage::Uniform,
-        ))
+        )))
     }
 
     fn makeStorageBufferRing(
         &mut self,
         capacityInBytes: usize,
         bufferStructure: StorageBufferStructure,
-    ) -> Box<dyn BufferRingContract> {
+    ) -> Option<Box<dyn BufferRingContract>> {
         if self.m_capabilities.polyfillVertexStorageBuffers {
-            Box::new(StorageTextureBufferWebGPU::new(
+            Some(Box::new(StorageTextureBufferWebGPU::new(
                 (&*self.m_device).clone(),
                 (&*self.m_queue).clone(),
                 capacityInBytes,
                 bufferStructure,
-            ))
+            )))
         } else {
-            Box::new(BufferWebGPU::new(
+            Some(Box::new(BufferWebGPU::new(
                 (&*self.m_device).clone(),
                 (&*self.m_queue).clone(),
                 capacityInBytes,
                 super::webgpu_cpp_decl::BufferUsage::Storage,
-            ))
+            )))
         }
     }
 
-    fn makeVertexBufferRing(&mut self, capacityInBytes: usize) -> Box<dyn BufferRingContract> {
-        Box::new(BufferWebGPU::new(
+    fn makeVertexBufferRing(
+        &mut self,
+        capacityInBytes: usize,
+    ) -> Option<Box<dyn BufferRingContract>> {
+        Some(Box::new(BufferWebGPU::new(
             (&*self.m_device).clone(),
             (&*self.m_queue).clone(),
             capacityInBytes,
             super::webgpu_cpp_decl::BufferUsage::Vertex,
-        ))
+        )))
     }
 }
 
@@ -4438,6 +4444,23 @@ impl RenderContextHelperBackendContract for RenderContextWebGPUImpl {
             srgb,
             generateRemainingMips,
         )
+    }
+
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "ore-gl"
+    ))]
+    fn makeOreContext(
+        &mut self,
+    ) -> Option<Box<crate::mechanical_port::source::include::rive::factory_hpp::OreContext>> {
+        makeOreContext(self).map(|context| {
+            Box::new(
+                crate::mechanical_port::source::include::rive::factory_hpp::OreContext::WGPU(
+                    context,
+                ),
+            )
+        })
     }
 
     fn resizeGradientTexture(&mut self, width: u32, height: u32) {

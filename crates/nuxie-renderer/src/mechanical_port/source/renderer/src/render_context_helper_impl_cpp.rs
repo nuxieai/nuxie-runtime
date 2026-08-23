@@ -62,7 +62,7 @@ where
         // m_flushUniformBuffer = makeUniformBufferRing(sizeInBytes);
         let ring =
             RenderContextHelperBufferFactoryContract::makeUniformBufferRing(self, sizeInBytes);
-        *self.renderContextHelperImplMut().m_flushUniformBuffer = Some(ring);
+        *self.renderContextHelperImplMut().m_flushUniformBuffer = ring;
     }
 
     // void RenderContextHelperImpl::resizePathBuffer(
@@ -75,7 +75,7 @@ where
             sizeInBytes,
             bufferStructure,
         );
-        *self.renderContextHelperImplMut().m_pathBuffer = Some(ring);
+        *self.renderContextHelperImplMut().m_pathBuffer = ring;
     }
 
     // void RenderContextHelperImpl::resizePaintBuffer(
@@ -88,7 +88,7 @@ where
             sizeInBytes,
             bufferStructure,
         );
-        *self.renderContextHelperImplMut().m_paintBuffer = Some(ring);
+        *self.renderContextHelperImplMut().m_paintBuffer = ring;
     }
 
     // void RenderContextHelperImpl::resizePaintAuxBuffer(
@@ -105,7 +105,7 @@ where
             sizeInBytes,
             bufferStructure,
         );
-        *self.renderContextHelperImplMut().m_paintAuxBuffer = Some(ring);
+        *self.renderContextHelperImplMut().m_paintAuxBuffer = ring;
     }
 
     // void RenderContextHelperImpl::resizeContourBuffer(
@@ -118,7 +118,7 @@ where
             sizeInBytes,
             bufferStructure,
         );
-        *self.renderContextHelperImplMut().m_contourBuffer = Some(ring);
+        *self.renderContextHelperImplMut().m_contourBuffer = ring;
     }
 
     // void RenderContextHelperImpl::resizeGradSpanBuffer(size_t sizeInBytes)
@@ -126,7 +126,7 @@ where
         // m_gradSpanBuffer = makeVertexBufferRing(sizeInBytes);
         let ring =
             RenderContextHelperBufferFactoryContract::makeVertexBufferRing(self, sizeInBytes);
-        *self.renderContextHelperImplMut().m_gradSpanBuffer = Some(ring);
+        *self.renderContextHelperImplMut().m_gradSpanBuffer = ring;
     }
 
     // void RenderContextHelperImpl::resizeTessVertexSpanBuffer(size_t sizeInBytes)
@@ -134,7 +134,7 @@ where
         // m_tessSpanBuffer = makeVertexBufferRing(sizeInBytes);
         let ring =
             RenderContextHelperBufferFactoryContract::makeVertexBufferRing(self, sizeInBytes);
-        *self.renderContextHelperImplMut().m_tessSpanBuffer = Some(ring);
+        *self.renderContextHelperImplMut().m_tessSpanBuffer = ring;
     }
 
     // void RenderContextHelperImpl::resizeTriangleVertexBuffer(size_t sizeInBytes)
@@ -142,7 +142,7 @@ where
         // m_triangleBuffer = makeVertexBufferRing(sizeInBytes);
         let ring =
             RenderContextHelperBufferFactoryContract::makeVertexBufferRing(self, sizeInBytes);
-        *self.renderContextHelperImplMut().m_triangleBuffer = Some(ring);
+        *self.renderContextHelperImplMut().m_triangleBuffer = ring;
     }
 
     // void RenderContextHelperImpl::resizeImageDrawInstanceBuffer(size_t sizeInBytes)
@@ -150,7 +150,7 @@ where
         // m_imageDrawInstanceBuffer = makeVertexBufferRing(sizeInBytes);
         let ring =
             RenderContextHelperBufferFactoryContract::makeVertexBufferRing(self, sizeInBytes);
-        *self.renderContextHelperImplMut().m_imageDrawInstanceBuffer = Some(ring);
+        *self.renderContextHelperImplMut().m_imageDrawInstanceBuffer = ring;
     }
 
     // void* RenderContextHelperImpl::mapFlushUniformBuffer(size_t mapSizeInBytes)

@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 52
+max_pending = 51
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -264,9 +264,9 @@ note = "The sole entry.riv case is directly ported across the public default-sce
 [[file]]
 upstream = "tests/unit_tests/runtime/distance_constraint_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_constraint_smoke.rs::distance_constraints_move_items_as_expected"]
+note = "Direct fixture port preserves both named Shape/type assertions, A's single DistanceConstraint and mode 1 assertions, the literal B x/y writes, zero-second advance, expected A world translation, and 0.001 Euclidean-distance tolerance."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/draw_order_test.cpp"

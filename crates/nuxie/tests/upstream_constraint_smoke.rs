@@ -24,6 +24,23 @@ fn named_local(file: &File, name: &str) -> usize {
         .local_id
 }
 
+fn property_key(type_name: &str, property_name: &str) -> u16 {
+    let definition = nuxie_schema::definition_by_name(type_name).expect("schema definition");
+    definition
+        .properties
+        .iter()
+        .chain(definition.ancestors.iter().flat_map(|ancestor| {
+            nuxie_schema::definition_by_name(ancestor)
+                .expect("ancestor definition")
+                .properties
+                .iter()
+        }))
+        .find(|property| property.name == property_name)
+        .unwrap_or_else(|| panic!("property {type_name}.{property_name}"))
+        .key
+        .int
+}
+
 fn decompose(matrix: Mat2D) -> (f32, f32, f32, f32, f32) {
     let [m0, m1, m2, m3, x, y] = matrix.0;
     let rotation = m1.atan2(m0);
@@ -160,4 +177,49 @@ fn ik_with_skinned_bones_orders_correctly() {
     assert!(
         skin.graph_order.expect("skin graph order") > two.graph_order.expect("Two graph order")
     );
+}
+
+#[test]
+fn distance_constraints_move_items_as_expected() {
+    let file = File::import(&pinned_fixture("distance_constraint.riv")).expect("import fixture");
+    let graph = file.default_artboard().expect("default artboard").graph();
+    let a = graph.component_named("A").expect("shape A");
+    assert_eq!(a.type_name, "Shape");
+    let b = graph.component_named("B").expect("shape B");
+    assert_eq!(b.type_name, "Shape");
+    assert_eq!(a.constraint_locals.len(), 1);
+    let constraint = graph
+        .components
+        .iter()
+        .find(|component| component.local_id == a.constraint_locals[0])
+        .expect("A constraint");
+    assert_eq!(constraint.type_name, "DistanceConstraint");
+    assert_eq!(
+        file.runtime()
+            .object(constraint.global_id as usize)
+            .and_then(|object| object.uint_property("modeValue")),
+        Some(1)
+    );
+    let mut artboard = file
+        .default_artboard()
+        .expect("default artboard")
+        .instantiate()
+        .expect("instantiate artboard");
+
+    assert!(
+        artboard
+            .raw_mut()
+            .set_double_property(b.local_id, property_key("Node", "x"), 259.31)
+    );
+    assert!(
+        artboard
+            .raw_mut()
+            .set_double_property(b.local_id, property_key("Node", "y"), 137.87)
+    );
+    artboard.advance(0.0);
+
+    let [_, _, _, _, x, y] = artboard.world_transform(a.local_id).expect("A transform").0;
+    let expected_x = 259.280_88;
+    let expected_y = 62.870_003;
+    assert!(((x - expected_x).powi(2) + (y - expected_y).powi(2)).sqrt() < 0.001);
 }

@@ -2363,78 +2363,103 @@ pub(crate) type RenderPipelineDescriptor = WGPURenderPipelineDescriptor;
 pub(crate) type DeviceDescriptor = WGPUDeviceDescriptor;
 
 #[repr(transparent)]
-pub(crate) struct AdapterInfo(pub(crate) WGPUAdapterInfo);
+pub(crate) struct AdapterInfo(WGPUAdapterInfo);
 impl AdapterInfo {
     pub(crate) fn asRaw(&self) -> &WGPUAdapterInfo { &self.0 }
-    pub(crate) fn asRawMut(&mut self) -> &mut WGPUAdapterInfo { &mut self.0 }
+    fn resetForOutput(&mut self) -> *mut WGPUAdapterInfo {
+        self.freeMembers();
+        self.0 = WGPUAdapterInfo::default();
+        &mut self.0
+    }
+    fn freeMembers(&mut self) {
+        if !self.0.vendor.data.is_null() || !self.0.architecture.data.is_null() || !self.0.device.data.is_null() || !self.0.description.data.is_null() { unsafe { wgpuAdapterInfoFreeMembers(std::ptr::read(&self.0)); } }
+    }
 }
 impl Default for AdapterInfo {
     fn default() -> Self { Self(WGPUAdapterInfo::default()) }
 }
 impl Drop for AdapterInfo {
-    fn drop(&mut self) {
-        if !self.0.vendor.data.is_null() || !self.0.architecture.data.is_null() || !self.0.device.data.is_null() || !self.0.description.data.is_null() { unsafe { wgpuAdapterInfoFreeMembers(std::ptr::read(&self.0)); } }
-    }
+    fn drop(&mut self) { self.freeMembers(); }
 }
 
 #[repr(transparent)]
-pub(crate) struct SupportedFeatures(pub(crate) WGPUSupportedFeatures);
+pub(crate) struct SupportedFeatures(WGPUSupportedFeatures);
 impl SupportedFeatures {
     pub(crate) fn asRaw(&self) -> &WGPUSupportedFeatures { &self.0 }
-    pub(crate) fn asRawMut(&mut self) -> &mut WGPUSupportedFeatures { &mut self.0 }
+    fn resetForOutput(&mut self) -> *mut WGPUSupportedFeatures {
+        self.freeMembers();
+        self.0 = WGPUSupportedFeatures::default();
+        &mut self.0
+    }
+    fn freeMembers(&mut self) {
+        if !self.0.features.is_null() { unsafe { wgpuSupportedFeaturesFreeMembers(std::ptr::read(&self.0)); } }
+    }
 }
 impl Default for SupportedFeatures {
     fn default() -> Self { Self(WGPUSupportedFeatures::default()) }
 }
 impl Drop for SupportedFeatures {
-    fn drop(&mut self) {
-        if !self.0.features.is_null() { unsafe { wgpuSupportedFeaturesFreeMembers(std::ptr::read(&self.0)); } }
-    }
+    fn drop(&mut self) { self.freeMembers(); }
 }
 
 #[repr(transparent)]
-pub(crate) struct SupportedInstanceFeatures(pub(crate) WGPUSupportedInstanceFeatures);
+pub(crate) struct SupportedInstanceFeatures(WGPUSupportedInstanceFeatures);
 impl SupportedInstanceFeatures {
     pub(crate) fn asRaw(&self) -> &WGPUSupportedInstanceFeatures { &self.0 }
-    pub(crate) fn asRawMut(&mut self) -> &mut WGPUSupportedInstanceFeatures { &mut self.0 }
+    fn resetForOutput(&mut self) -> *mut WGPUSupportedInstanceFeatures {
+        self.freeMembers();
+        self.0 = WGPUSupportedInstanceFeatures::default();
+        &mut self.0
+    }
+    fn freeMembers(&mut self) {
+        if !self.0.features.is_null() { unsafe { wgpuSupportedInstanceFeaturesFreeMembers(std::ptr::read(&self.0)); } }
+    }
 }
 impl Default for SupportedInstanceFeatures {
     fn default() -> Self { Self(WGPUSupportedInstanceFeatures::default()) }
 }
 impl Drop for SupportedInstanceFeatures {
-    fn drop(&mut self) {
-        if !self.0.features.is_null() { unsafe { wgpuSupportedInstanceFeaturesFreeMembers(std::ptr::read(&self.0)); } }
-    }
+    fn drop(&mut self) { self.freeMembers(); }
 }
 
 #[repr(transparent)]
-pub(crate) struct SupportedWGSLLanguageFeatures(pub(crate) WGPUSupportedWGSLLanguageFeatures);
+pub(crate) struct SupportedWGSLLanguageFeatures(WGPUSupportedWGSLLanguageFeatures);
 impl SupportedWGSLLanguageFeatures {
     pub(crate) fn asRaw(&self) -> &WGPUSupportedWGSLLanguageFeatures { &self.0 }
-    pub(crate) fn asRawMut(&mut self) -> &mut WGPUSupportedWGSLLanguageFeatures { &mut self.0 }
+    fn resetForOutput(&mut self) -> *mut WGPUSupportedWGSLLanguageFeatures {
+        self.freeMembers();
+        self.0 = WGPUSupportedWGSLLanguageFeatures::default();
+        &mut self.0
+    }
+    fn freeMembers(&mut self) {
+        if !self.0.features.is_null() { unsafe { wgpuSupportedWGSLLanguageFeaturesFreeMembers(std::ptr::read(&self.0)); } }
+    }
 }
 impl Default for SupportedWGSLLanguageFeatures {
     fn default() -> Self { Self(WGPUSupportedWGSLLanguageFeatures::default()) }
 }
 impl Drop for SupportedWGSLLanguageFeatures {
-    fn drop(&mut self) {
-        if !self.0.features.is_null() { unsafe { wgpuSupportedWGSLLanguageFeaturesFreeMembers(std::ptr::read(&self.0)); } }
-    }
+    fn drop(&mut self) { self.freeMembers(); }
 }
 
 #[repr(transparent)]
-pub(crate) struct SurfaceCapabilities(pub(crate) WGPUSurfaceCapabilities);
+pub(crate) struct SurfaceCapabilities(WGPUSurfaceCapabilities);
 impl SurfaceCapabilities {
     pub(crate) fn asRaw(&self) -> &WGPUSurfaceCapabilities { &self.0 }
-    pub(crate) fn asRawMut(&mut self) -> &mut WGPUSurfaceCapabilities { &mut self.0 }
+    fn resetForOutput(&mut self) -> *mut WGPUSurfaceCapabilities {
+        self.freeMembers();
+        self.0 = WGPUSurfaceCapabilities::default();
+        &mut self.0
+    }
+    fn freeMembers(&mut self) {
+        if !self.0.formats.is_null() || !self.0.presentModes.is_null() || !self.0.alphaModes.is_null() { unsafe { wgpuSurfaceCapabilitiesFreeMembers(std::ptr::read(&self.0)); } }
+    }
 }
 impl Default for SurfaceCapabilities {
     fn default() -> Self { Self(WGPUSurfaceCapabilities::default()) }
 }
 impl Drop for SurfaceCapabilities {
-    fn drop(&mut self) {
-        if !self.0.formats.is_null() || !self.0.presentModes.is_null() || !self.0.alphaModes.is_null() { unsafe { wgpuSurfaceCapabilitiesFreeMembers(std::ptr::read(&self.0)); } }
-    }
+    fn drop(&mut self) { self.freeMembers(); }
 }
 
 #[repr(transparent)]
@@ -2451,11 +2476,11 @@ impl Adapter {
         self.handle = std::ptr::null_mut();
         handle
     }
-    pub(crate) unsafe fn GetFeatures(&self, arg1: *mut WGPUSupportedFeatures) {
-        wgpuAdapterGetFeatures(self.handle, arg1)
+    pub(crate) unsafe fn GetFeatures(&self, output: &mut SupportedFeatures) {
+        wgpuAdapterGetFeatures(self.handle, output.resetForOutput())
     }
-    pub(crate) unsafe fn GetInfo(&self, arg1: *mut WGPUAdapterInfo) -> ConvertibleStatus {
-        ConvertibleStatus(Status::from(wgpuAdapterGetInfo(self.handle, arg1)))
+    pub(crate) unsafe fn GetInfo(&self, output: &mut AdapterInfo) -> ConvertibleStatus {
+        ConvertibleStatus(Status::from(wgpuAdapterGetInfo(self.handle, output.resetForOutput())))
     }
     pub(crate) unsafe fn GetLimits(&self, arg1: *mut WGPULimits) -> ConvertibleStatus {
         ConvertibleStatus(Status::from(wgpuAdapterGetLimits(self.handle, arg1)))
@@ -2911,11 +2936,11 @@ impl Device {
     pub(crate) unsafe fn Destroy(&self) {
         wgpuDeviceDestroy(self.handle)
     }
-    pub(crate) unsafe fn GetAdapterInfo(&self, arg1: *mut WGPUAdapterInfo) -> ConvertibleStatus {
-        ConvertibleStatus(Status::from(wgpuDeviceGetAdapterInfo(self.handle, arg1)))
+    pub(crate) unsafe fn GetAdapterInfo(&self, output: &mut AdapterInfo) -> ConvertibleStatus {
+        ConvertibleStatus(Status::from(wgpuDeviceGetAdapterInfo(self.handle, output.resetForOutput())))
     }
-    pub(crate) unsafe fn GetFeatures(&self, arg1: *mut WGPUSupportedFeatures) {
-        wgpuDeviceGetFeatures(self.handle, arg1)
+    pub(crate) unsafe fn GetFeatures(&self, output: &mut SupportedFeatures) {
+        wgpuDeviceGetFeatures(self.handle, output.resetForOutput())
     }
     pub(crate) unsafe fn GetLimits(&self, arg1: *mut WGPULimits) -> ConvertibleStatus {
         ConvertibleStatus(Status::from(wgpuDeviceGetLimits(self.handle, arg1)))
@@ -2976,8 +3001,8 @@ impl Instance {
     pub(crate) unsafe fn CreateSurface(&self, arg1: *const WGPUSurfaceDescriptor) -> Surface {
         Surface::Acquire(wgpuInstanceCreateSurface(self.handle, arg1))
     }
-    pub(crate) unsafe fn GetWGSLLanguageFeatures(&self, arg1: *mut WGPUSupportedWGSLLanguageFeatures) {
-        wgpuInstanceGetWGSLLanguageFeatures(self.handle, arg1)
+    pub(crate) unsafe fn GetWGSLLanguageFeatures(&self, output: &mut SupportedWGSLLanguageFeatures) {
+        wgpuInstanceGetWGSLLanguageFeatures(self.handle, output.resetForOutput())
     }
     pub(crate) unsafe fn HasWGSLLanguageFeature(&self, arg1: WGPUWGSLLanguageFeatureName) -> Bool {
         Bool::from(wgpuInstanceHasWGSLLanguageFeature(self.handle, arg1))
@@ -3500,8 +3525,8 @@ impl Surface {
     pub(crate) unsafe fn Configure(&self, arg1: *const WGPUSurfaceConfiguration) {
         wgpuSurfaceConfigure(self.handle, arg1)
     }
-    pub(crate) unsafe fn GetCapabilities(&self, arg1: WGPUAdapter, arg2: *mut WGPUSurfaceCapabilities) -> ConvertibleStatus {
-        ConvertibleStatus(Status::from(wgpuSurfaceGetCapabilities(self.handle, arg1, arg2)))
+    pub(crate) unsafe fn GetCapabilities(&self, adapter: WGPUAdapter, output: &mut SurfaceCapabilities) -> ConvertibleStatus {
+        ConvertibleStatus(Status::from(wgpuSurfaceGetCapabilities(self.handle, adapter, output.resetForOutput())))
     }
     pub(crate) unsafe fn GetCurrentTexture(&self, arg1: *mut WGPUSurfaceTexture) {
         wgpuSurfaceGetCurrentTexture(self.handle, arg1)
@@ -3641,6 +3666,27 @@ impl PartialEq for TextureView {
     fn eq(&self, other: &Self) -> bool { self.handle == other.handle }
 }
 impl Eq for TextureView {}
+
+pub(crate) unsafe fn CreateInstance(descriptor: Option<&InstanceDescriptor>) -> Instance {
+    let raw = descriptor.map_or(std::ptr::null(), core::ptr::from_ref);
+    unsafe { Instance::Acquire(wgpuCreateInstance(raw)) }
+}
+
+pub(crate) unsafe fn GetInstanceFeatures(output: &mut SupportedInstanceFeatures) {
+    unsafe { wgpuGetInstanceFeatures(output.resetForOutput()) };
+}
+
+pub(crate) unsafe fn GetInstanceLimits(output: &mut InstanceLimits) -> Status {
+    unsafe { Status::from(wgpuGetInstanceLimits(output)) }
+}
+
+pub(crate) unsafe fn HasInstanceFeature(feature: InstanceFeatureName) -> Bool {
+    unsafe { Bool::from(wgpuHasInstanceFeature(feature.into())) }
+}
+
+pub(crate) unsafe fn GetProcAddress(procName: StringView) -> Proc {
+    unsafe { wgpuGetProcAddress(procName) }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct SourceSymbol {

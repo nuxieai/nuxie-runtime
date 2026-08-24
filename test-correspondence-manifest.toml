@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 55
+max_pending = 54
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -620,9 +620,9 @@ note = "Both intrusive-refcount cases are direct safe-Rust adaptations over Rc a
 [[file]]
 upstream = "tests/unit_tests/runtime/render_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "solid_affects_has_changed is sampled only at time zero in the generic corpus; it does not port the upstream case's repeated 0.1-second advance/didChange assertions."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_render_change.rs"]
+note = "Direct fixture port preserves default-artboard/state-machine/view-model construction and binding, the initial 0.1-second advance and draw, and all ten repeated 0.1-second advance/didChange/draw assertions. It is expected-red because the first repeated advance leaves Rust Artboard::did_change false."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/rive_testing.cpp"

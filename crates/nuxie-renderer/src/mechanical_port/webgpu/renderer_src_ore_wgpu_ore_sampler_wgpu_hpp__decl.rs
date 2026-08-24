@@ -20,7 +20,7 @@ pub(crate) const PINNED_SOURCE: &str =
 #[repr(C)]
 pub(crate) struct SamplerWGPU {
     base: ManuallyDrop<Sampler>,
-    pub(crate) m_wgpuSampler: ManuallyDrop<WagyuSampler>,
+    m_wgpuSampler: ManuallyDrop<WagyuSampler>,
 }
 
 impl SamplerWGPU {
@@ -29,6 +29,14 @@ impl SamplerWGPU {
             base: ManuallyDrop::new(nuxie_ore_metal::new_sampler_backend_base()),
             m_wgpuSampler: ManuallyDrop::new(WagyuSampler::default()),
         }
+    }
+
+    pub(crate) fn native(&self) -> &WagyuSampler {
+        &self.m_wgpuSampler
+    }
+
+    pub(crate) fn setNative(&mut self, native: WagyuSampler) {
+        *self.m_wgpuSampler = native;
     }
 }
 

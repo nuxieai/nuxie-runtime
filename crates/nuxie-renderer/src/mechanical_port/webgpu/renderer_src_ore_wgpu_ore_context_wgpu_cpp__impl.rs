@@ -401,7 +401,7 @@ pub(crate) fn makeTexture(
 ) -> Option<AnyResourceHandle> {
     let (manager, domain) = managerAndDomain(context)?;
     let mut texture = TextureWGPU::new(manager.clone(), desc);
-    *texture.m_wgpuQueue = (&*context.m_wgpuQueue).clone();
+    texture.setQueue((&*context.m_wgpuQueue).clone());
 
     let mut usage = WgpuTextureUsage::TextureBinding | WgpuTextureUsage::CopyDst;
     let mut usage = usage.intoBitmask();
@@ -418,7 +418,7 @@ pub(crate) fn makeTexture(
     wDesc.format = oreFormatToWGPU(desc.format).into();
     wDesc.mipLevelCount = desc.numMipmaps;
     wDesc.sampleCount = desc.sampleCount;
-    *texture.m_wgpuTexture = unsafe { context.m_wgpuDevice.CreateTexture(&wDesc) };
+    texture.setNativeTexture(unsafe { context.m_wgpuDevice.CreateTexture(&wDesc) });
     Some(ResourceHandle::new_texture_in_domain(Some(manager), domain, texture).erase())
 }
 
@@ -438,7 +438,7 @@ pub(crate) fn makeTextureView(
     wDesc.baseArrayLayer = desc.baseLayer;
     wDesc.arrayLayerCount = desc.layerCount;
     wDesc.format = oreViewFormatForAspect(texture.base.format(), desc.aspect).into();
-    *view.m_wgpuTextureView = unsafe { texture.m_wgpuTexture.CreateView(&wDesc) };
+    view.setNative(unsafe { texture.nativeTexture().CreateView(&wDesc) });
     Some(ResourceHandle::new_in_domain(Some(manager), domain, view).erase())
 }
 
@@ -460,7 +460,7 @@ pub(crate) fn makeSampler(
     wDesc.lodMaxClamp = desc.maxLod;
     wDesc.compare = oreCompareFunctionToWGPU(desc.compare).into();
     wDesc.maxAnisotropy = desc.maxAnisotropy.max(1) as u16;
-    *sampler.m_wgpuSampler = unsafe { context.m_wgpuDevice.CreateSampler(&wDesc) };
+    sampler.setNative(unsafe { context.m_wgpuDevice.CreateSampler(&wDesc) });
     Some(ResourceHandle::new_in_domain(Some(manager), domain, sampler).erase())
 }
 
@@ -526,10 +526,14 @@ pub(crate) fn makeShaderModule(
     };
     let (manager, domain) = managerAndDomain(context)?;
     let mut module = ShaderModuleWGPU::new();
-    *module.m_wgpuShaderModule =
-        compileWagyuShader(&context.m_wgpuDevice, source, codeSize, language);
+    module.setNative(compileWagyuShader(
+        &context.m_wgpuDevice,
+        source,
+        codeSize,
+        language,
+    ));
     assert!(
-        !module.m_wgpuShaderModule.Get().is_null(),
+        !module.native().Get().is_null(),
         "Ore WGPU wagyu shader compilation failed"
     );
     module.applyBindingMapFromDesc(desc);
@@ -587,7 +591,7 @@ pub(crate) fn makePipeline(
     // derived-to-base ShaderModule binding-map copy performed by Pipeline.
     *pipeline.m_bindingMap = vertexModule.m_bindingMap.clone();
     let mut vertexState = WGPUVertexState::default();
-    vertexState.module = vertexModule.m_wgpuShaderModule.Get();
+    vertexState.module = vertexModule.native().Get();
     vertexState.entryPoint = stringView(desc.vertexEntryPoint);
     vertexState.bufferCount = vertexBufferCount;
     vertexState.buffers = if vertexBufferCount > 0 {
@@ -669,7 +673,7 @@ pub(crate) fn makePipeline(
         let fragmentModule = fragmentModuleOwner
             .downcast_ref::<ShaderModuleWGPU>()
             .expect("WebGPU pipeline fragment module must be ShaderModuleWGPU");
-        fragmentState.module = fragmentModule.m_wgpuShaderModule.Get();
+        fragmentState.module = fragmentModule.native().Get();
         fragmentState.entryPoint = stringView(desc.fragmentEntryPoint);
         fragmentState.targetCount = desc.colorCount as usize;
         fragmentState.targets = if desc.colorCount > 0 {
@@ -711,7 +715,7 @@ pub(crate) fn makePipeline(
     {
         if let Some(layout) = layout.and_then(|layout| layout.downcast_ref::<BindGroupLayoutWGPU>())
         {
-            rawBGLs[index] = layout.m_wgpuBGL.Get();
+            rawBGLs[index] = layout.native().Get();
         }
     }
     let mut plDesc = WGPUPipelineLayoutDescriptor::default();
@@ -722,11 +726,11 @@ pub(crate) fn makePipeline(
     } else {
         std::ptr::null()
     };
-    *pipeline.m_wgpuPipelineLayout = unsafe { context.m_wgpuDevice.CreatePipelineLayout(&plDesc) };
+    pipeline.setNativeLayout(unsafe { context.m_wgpuDevice.CreatePipelineLayout(&plDesc) });
 
     let mut rpDesc = WGPURenderPipelineDescriptor::default();
     rpDesc.label = stringView(desc.label);
-    rpDesc.layout = pipeline.m_wgpuPipelineLayout.Get();
+    rpDesc.layout = pipeline.nativeLayout().Get();
     rpDesc.vertex = vertexState;
     rpDesc.primitive = primitiveState;
     rpDesc.depthStencil = if hasDepth {
@@ -740,9 +744,9 @@ pub(crate) fn makePipeline(
     } else {
         std::ptr::null()
     };
-    *pipeline.m_wgpuDevice = (&*context.m_wgpuDevice).clone();
-    *pipeline.m_wgpuPipeline = unsafe { context.m_wgpuDevice.CreateRenderPipeline(&rpDesc) };
-    if pipeline.m_wgpuPipeline.Get().is_null() {
+    pipeline.setDevice((&*context.m_wgpuDevice).clone());
+    pipeline.setNativePipeline(unsafe { context.m_wgpuDevice.CreateRenderPipeline(&rpDesc) });
+    if pipeline.nativePipeline().Get().is_null() {
         if let Some(output) = outError.as_deref_mut() {
             *output = "CreateRenderPipeline returned null".to_owned();
         }
@@ -771,9 +775,11 @@ pub(crate) fn makeBindGroupLayout(
         desc.groupIndex,
         desc.entries[..entryCount].to_vec(),
     );
-    *layout.m_wgpuBGL =
-        super::ore_wgpu_layout_decl::buildWGPUBindGroupLayoutFromDesc(&context.m_wgpuDevice, desc);
-    if layout.m_wgpuBGL.Get().is_null() {
+    layout.setNative(super::ore_wgpu_layout_decl::buildWGPUBindGroupLayoutFromDesc(
+        &context.m_wgpuDevice,
+        desc,
+    ));
+    if layout.native().Get().is_null() {
         context.setLastError(&format!(
             "makeBindGroupLayout: CreateBindGroupLayout returned null (group={})",
             desc.groupIndex
@@ -887,7 +893,7 @@ pub(crate) fn makeBindGroup(
             .expect("WebGPU texture entry requires TextureViewWGPU");
         nativeTextures.push(NativeTexEntry {
             binding: texture.slot,
-            view: (&*view.m_wgpuTextureView).clone(),
+            view: view.native().clone(),
         });
         retainedViews.push(owner);
     }
@@ -904,13 +910,13 @@ pub(crate) fn makeBindGroup(
             .expect("WebGPU sampler entry requires SamplerWGPU");
         nativeSamplers.push(NativeSampEntry {
             binding: samplerEntry.slot,
-            sampler: (&*samplerResource.m_wgpuSampler).clone(),
+            sampler: samplerResource.native().clone(),
         });
         retainedSamplers.push(owner);
     }
 
     let (manager, domain) = managerAndDomain(context)?;
-    let nativeLayout = (&*layout.m_wgpuBGL).clone();
+    let nativeLayout = layout.native().clone();
     let mut group = BindGroupWGPU::new(manager.clone());
     nuxie_ore_metal::install_bind_group_backend_parts(
         &mut group,
@@ -958,7 +964,7 @@ pub(crate) fn beginRenderPass(
             .view
             .and_then(|owner| owner.downcast_ref::<TextureViewWGPU>())
         {
-            target.view = view.m_wgpuTextureView.Get();
+            target.view = view.native().Get();
             if let Some(texture) = view.texture().downcast_ref::<TextureWGPU>() {
                 colorFormats[index] = texture.base.format();
                 sampleCount = texture.base.sampleCount();
@@ -968,7 +974,7 @@ pub(crate) fn beginRenderPass(
             .resolveTarget
             .and_then(|owner| owner.downcast_ref::<TextureViewWGPU>())
         {
-            target.resolveTarget = resolveTarget.m_wgpuTextureView.Get();
+            target.resolveTarget = resolveTarget.native().Get();
         }
         target.loadOp = if source.loadOp == LoadOp::clear {
             WGPULoadOp_Clear
@@ -1003,7 +1009,7 @@ pub(crate) fn beginRenderPass(
         if desc.colorCount == 0 {
             sampleCount = texture.base.sampleCount();
         }
-        depthStencilAttachment.view = view.m_wgpuTextureView.Get();
+        depthStencilAttachment.view = view.native().Get();
         depthStencilAttachment.depthLoadOp = if source.depthLoadOp == LoadOp::clear {
             WGPULoadOp_Clear
         } else {
@@ -1084,7 +1090,7 @@ pub(crate) unsafe fn wrapCanvasTexture(
     };
     let (manager, domain) = managerAndDomain(context)?;
     let mut texture = TextureWGPU::new(manager.clone(), &textureDesc);
-    *texture.m_wgpuTexture = target.targetTexture();
+    texture.setNativeTexture(target.targetTexture());
     let textureOwner =
         ResourceHandle::new_texture_in_domain(Some(manager.clone()), domain.clone(), texture)
             .erase();
@@ -1098,7 +1104,7 @@ pub(crate) unsafe fn wrapCanvasTexture(
         layerCount: 1,
     };
     let mut view = TextureViewWGPU::new(manager.clone(), textureOwner.clone(), &viewDesc);
-    *view.m_wgpuTextureView = target.targetTextureView();
+    view.setNative(target.targetTextureView());
     Some(ResourceHandle::new_in_domain(Some(manager), domain, view).erase())
 }
 
@@ -1128,7 +1134,7 @@ pub(crate) unsafe fn wrapRiveTexture(
     };
     let (manager, domain) = managerAndDomain(context)?;
     let mut texture = TextureWGPU::new(manager.clone(), &textureDesc);
-    *texture.m_wgpuTexture = nativeTexture;
+    texture.setNativeTexture(nativeTexture);
     let textureOwner =
         ResourceHandle::new_texture_in_domain(Some(manager.clone()), domain.clone(), texture)
             .erase();
@@ -1149,9 +1155,9 @@ pub(crate) unsafe fn wrapRiveTexture(
     nativeViewDesc.mipLevelCount = 1;
     nativeViewDesc.baseArrayLayer = 0;
     nativeViewDesc.arrayLayerCount = 1;
-    let nativeView = unsafe { texture.m_wgpuTexture.CreateView(&nativeViewDesc) };
+    let nativeView = unsafe { texture.nativeTexture().CreateView(&nativeViewDesc) };
     let mut view = TextureViewWGPU::new(manager.clone(), textureOwner.clone(), &viewDesc);
-    *view.m_wgpuTextureView = nativeView;
+    view.setNative(nativeView);
     Some(ResourceHandle::new_in_domain(Some(manager), domain, view).erase())
 }
 

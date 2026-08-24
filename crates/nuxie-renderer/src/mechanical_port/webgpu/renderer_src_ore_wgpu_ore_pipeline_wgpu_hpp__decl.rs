@@ -19,9 +19,9 @@ pub(crate) const PINNED_SOURCE: &str =
 #[repr(C)]
 pub(crate) struct PipelineWGPU {
     pub(crate) base: ManuallyDrop<Pipeline>,
-    pub(crate) m_wgpuDevice: ManuallyDrop<WagyuDevice>,
-    pub(crate) m_wgpuPipeline: ManuallyDrop<WagyuRenderPipeline>,
-    pub(crate) m_wgpuPipelineLayout: ManuallyDrop<WagyuPipelineLayout>,
+    m_wgpuDevice: ManuallyDrop<WagyuDevice>,
+    m_wgpuPipeline: ManuallyDrop<WagyuRenderPipeline>,
+    m_wgpuPipelineLayout: ManuallyDrop<WagyuPipelineLayout>,
 }
 
 impl PipelineWGPU {
@@ -32,6 +32,30 @@ impl PipelineWGPU {
             m_wgpuPipeline: ManuallyDrop::new(WagyuRenderPipeline::default()),
             m_wgpuPipelineLayout: ManuallyDrop::new(WagyuPipelineLayout::default()),
         })
+    }
+
+    pub(crate) fn device(&self) -> &WagyuDevice {
+        &self.m_wgpuDevice
+    }
+
+    pub(crate) fn nativePipeline(&self) -> &WagyuRenderPipeline {
+        &self.m_wgpuPipeline
+    }
+
+    pub(crate) fn nativeLayout(&self) -> &WagyuPipelineLayout {
+        &self.m_wgpuPipelineLayout
+    }
+
+    pub(crate) fn setDevice(&mut self, device: WagyuDevice) {
+        *self.m_wgpuDevice = device;
+    }
+
+    pub(crate) fn setNativePipeline(&mut self, pipeline: WagyuRenderPipeline) {
+        *self.m_wgpuPipeline = pipeline;
+    }
+
+    pub(crate) fn setNativeLayout(&mut self, layout: WagyuPipelineLayout) {
+        *self.m_wgpuPipelineLayout = layout;
     }
 }
 

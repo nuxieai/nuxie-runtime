@@ -77,13 +77,13 @@ pub(crate) fn upload(
     texture: &TextureWGPU,
     data: &TextureDataDesc<'_>,
 ) -> Result<(), TextureUploadError> {
-    if texture.m_wgpuTexture.Get().is_null() {
+    if texture.nativeTexture().Get().is_null() {
         return Err(TextureUploadError::MissingNativeTexture);
     }
     let bytes = data.data.ok_or(TextureUploadError::NullData)?;
     let plan = planUpload(data, textureFormatBytesPerTexel(texture.base.format()))?;
     let mut dst = WGPUTexelCopyTextureInfo::default();
-    dst.texture = texture.m_wgpuTexture.Get();
+    dst.texture = texture.nativeTexture().Get();
     dst.mipLevel = data.mipLevel;
     dst.origin = WGPUOrigin3D { x: data.x, y: data.y, z: data.layer };
     dst.aspect = WGPUTextureAspect_All;
@@ -118,7 +118,7 @@ pub(crate) fn upload(
                 dst.origin.y = data.y.wrapping_add(y);
                 let offset = y as usize * actualBytesPerRow as usize;
                 unsafe {
-                    texture.m_wgpuQueue.WriteTexture(
+                    texture.queue().WriteTexture(
                         &dst,
                         bytes.as_ptr().add(offset).cast(),
                         packedRowBytes as usize,
@@ -149,7 +149,7 @@ pub(crate) fn upload(
                 depthOrArrayLayers: data.depth,
             };
             unsafe {
-                texture.m_wgpuQueue.WriteTexture(
+                texture.queue().WriteTexture(
                     &dst,
                     bytes.as_ptr().cast(),
                     required,

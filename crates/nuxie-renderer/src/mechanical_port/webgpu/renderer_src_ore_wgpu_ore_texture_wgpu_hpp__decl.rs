@@ -21,9 +21,9 @@ pub(crate) const PINNED_SOURCE: &str =
 #[repr(C)]
 pub(crate) struct TextureWGPU {
     pub(crate) base: ManuallyDrop<Texture>,
-    pub(crate) m_wgpuTexture: ManuallyDrop<WagyuTexture>,
+    m_wgpuTexture: ManuallyDrop<WagyuTexture>,
     /// Source "weak ref" comment means a copied, addref'd queue wrapper.
-    pub(crate) m_wgpuQueue: ManuallyDrop<WagyuQueue>,
+    m_wgpuQueue: ManuallyDrop<WagyuQueue>,
 }
 
 impl TextureWGPU {
@@ -34,6 +34,11 @@ impl TextureWGPU {
             m_wgpuQueue: ManuallyDrop::new(WagyuQueue::default()),
         }
     }
+
+    pub(crate) fn nativeTexture(&self) -> &WagyuTexture { &self.m_wgpuTexture }
+    pub(crate) fn queue(&self) -> &WagyuQueue { &self.m_wgpuQueue }
+    pub(crate) fn setNativeTexture(&mut self, texture: WagyuTexture) { *self.m_wgpuTexture = texture; }
+    pub(crate) fn setQueue(&mut self, queue: WagyuQueue) { *self.m_wgpuQueue = queue; }
 }
 
 impl Drop for TextureWGPU {
@@ -78,7 +83,7 @@ impl TextureApi for TextureWGPU {
 #[repr(C)]
 pub(crate) struct TextureViewWGPU {
     pub(crate) base: ManuallyDrop<TextureView>,
-    pub(crate) m_wgpuTextureView: ManuallyDrop<WagyuTextureView>,
+    m_wgpuTextureView: ManuallyDrop<WagyuTextureView>,
 }
 
 impl TextureViewWGPU {
@@ -94,6 +99,9 @@ impl TextureViewWGPU {
             m_wgpuTextureView: ManuallyDrop::new(WagyuTextureView::default()),
         }
     }
+
+    pub(crate) fn native(&self) -> &WagyuTextureView { &self.m_wgpuTextureView }
+    pub(crate) fn setNative(&mut self, view: WagyuTextureView) { *self.m_wgpuTextureView = view; }
 }
 
 impl Drop for TextureViewWGPU {

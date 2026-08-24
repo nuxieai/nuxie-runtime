@@ -36,7 +36,7 @@ pub(crate) fn setPipeline(pass: &mut RenderPassWGPUState, owner: Option<&AnyReso
     *pass.m_currentPipeline = Some(owner.clone());
     unsafe {
         pass.m_wgpuPassEncoder
-            .SetPipeline(pipeline.m_wgpuPipeline.Get())
+            .SetPipeline(pipeline.nativePipeline().Get())
     };
 }
 

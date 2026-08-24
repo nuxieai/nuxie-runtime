@@ -22,7 +22,7 @@ pub(crate) const PINNED_SOURCE: &str = include_str!(
 #[repr(C)]
 pub(crate) struct BindGroupLayoutWGPU {
     base: ManuallyDrop<BindGroupLayout>,
-    pub(crate) m_wgpuBGL: ManuallyDrop<WagyuBindGroupLayout>,
+    m_wgpuBGL: ManuallyDrop<WagyuBindGroupLayout>,
 }
 
 impl BindGroupLayoutWGPU {
@@ -31,6 +31,14 @@ impl BindGroupLayoutWGPU {
             base: ManuallyDrop::new(nuxie_ore_metal::new_bind_group_layout_backend_base()),
             m_wgpuBGL: ManuallyDrop::new(WagyuBindGroupLayout::default()),
         }
+    }
+
+    pub(crate) fn native(&self) -> &WagyuBindGroupLayout {
+        &self.m_wgpuBGL
+    }
+
+    pub(crate) fn setNative(&mut self, native: WagyuBindGroupLayout) {
+        *self.m_wgpuBGL = native;
     }
 }
 

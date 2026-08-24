@@ -19,7 +19,7 @@ pub(crate) const PINNED_SOURCE: &str =
 #[repr(C)]
 pub(crate) struct ShaderModuleWGPU {
     base: ManuallyDrop<ShaderModule>,
-    pub(crate) m_wgpuShaderModule: ManuallyDrop<WagyuShaderModule>,
+    m_wgpuShaderModule: ManuallyDrop<WagyuShaderModule>,
 }
 
 impl ShaderModuleWGPU {
@@ -28,6 +28,14 @@ impl ShaderModuleWGPU {
             base: ManuallyDrop::new(nuxie_ore_metal::new_shader_module_backend_base()),
             m_wgpuShaderModule: ManuallyDrop::new(WagyuShaderModule::default()),
         }
+    }
+
+    pub(crate) fn native(&self) -> &WagyuShaderModule {
+        &self.m_wgpuShaderModule
+    }
+
+    pub(crate) fn setNative(&mut self, native: WagyuShaderModule) {
+        *self.m_wgpuShaderModule = native;
     }
 }
 

@@ -88,7 +88,7 @@ pub(crate) unsafe fn enumtable(ctx: *mut EnumContext, h: *mut LuaTable) {
                     if ttisstring!(&n.key) {
                         enumedge(ctx, obj, gcvalue!(&n.val), svalue!(&n.key));
                     } else if ttisnumber!(&n.key) {
-                        let mut buf = [0i8; 32];
+                        let mut buf = [0 as c_char; 32];
                         let nvalue_ptr = nvalue!(&n.key);
                         extern "C" {
                             fn snprintf(
@@ -106,7 +106,7 @@ pub(crate) unsafe fn enumtable(ctx: *mut EnumContext, h: *mut LuaTable) {
                         );
                         enumedge(ctx, obj, gcvalue!(&n.val), buf.as_ptr());
                     } else {
-                        let mut buf = [0i8; 32];
+                        let mut buf = [0 as c_char; 32];
                         let tt = n.key.tt();
                         let global = (*(*ctx).L).global;
                         let ttname_ptr = (*global).ttname.as_ptr().add(tt as usize);

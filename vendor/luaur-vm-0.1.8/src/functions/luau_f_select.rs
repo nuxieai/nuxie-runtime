@@ -27,7 +27,8 @@ pub unsafe fn luau_f_select(
             (*(*l).ci).p
         } else {
             let cl = clvalue!(func);
-            let lcl = core::ptr::addr_of!((*cl).inner.l).cast::<crate::records::closure::LClosure>();
+            let lcl =
+                core::ptr::addr_of!((*cl).inner.l).cast::<crate::records::closure::LClosure>();
             (*lcl).p
         };
         let n = cast_int!((*l).base.offset_from(func) as i32) - (*p).numparams as i32 - 1;
@@ -39,7 +40,7 @@ pub unsafe fn luau_f_select(
                 setobj_2_s!(l, res, (*l).base.offset((-n + (i - 1)) as isize));
                 return 1;
             }
-        } else if ttisstring!(arg0) && *svalue!(arg0) == b'#' as i8 {
+        } else if ttisstring!(arg0) && *svalue!(arg0) == b'#' as core::ffi::c_char {
             setnvalue!(res, n as f64);
             return 1;
         }

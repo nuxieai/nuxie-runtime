@@ -46,7 +46,7 @@ pub unsafe fn luau_f_tostring(
                 if luaC_needsGC!(l) {
                     return -1;
                 }
-                let mut s = [0i8; LUAI_MAXNUM2STR as usize];
+                let mut s = [0 as core::ffi::c_char; LUAI_MAXNUM2STR as usize];
                 let e = luai_num2str(s.as_mut_ptr(), nvalue!(arg0));
                 setsvalue!(
                     l,
@@ -63,7 +63,7 @@ pub unsafe fn luau_f_tostring(
                 if luaC_needsGC!(l) {
                     return -1;
                 }
-                let mut s = [0i8; LUAI_MAXINT2STR as usize];
+                let mut s = [0 as core::ffi::c_char; LUAI_MAXINT2STR as usize];
                 let e = luai_int2str(s.as_mut_ptr(), lvalue!(arg0));
                 setsvalue!(
                     l,

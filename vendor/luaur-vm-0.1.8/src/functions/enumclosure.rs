@@ -39,7 +39,7 @@ pub(crate) unsafe fn enumclosure(ctx: *mut EnumContext, cl: *mut Closure) {
         );
     } else {
         let p: *mut Proto = cl_ref.inner.l.p;
-        let mut buf = [0i8; LUA_IDSIZE as usize];
+        let mut buf = [0 as c_char; LUA_IDSIZE as usize];
 
         let unnamed = c"unnamed".as_ptr();
         let debug_name = if !(*p).debugname.is_null() {

@@ -90,9 +90,22 @@ impl WgpuPresentationSurface {
                     "selected WebGPU adapter cannot present to the platform target".into(),
                 )
             })?;
+        // Honor the requested alpha contract only when the platform surface
+        // actually supports it: forcing an unsupported composite mode makes
+        // wgpu's configure fail as an uncaptured validation error and every
+        // later acquire panics with "Surface is not configured" (seen on
+        // Android GLES, which typically exposes only Auto/Opaque).
+        let capabilities = surface.get_capabilities(&context.adapter);
         configuration.alpha_mode = match alpha {
             WgpuPresentationAlpha::Straight => wgpu::CompositeAlphaMode::Auto,
-            WgpuPresentationAlpha::Premultiplied => wgpu::CompositeAlphaMode::PreMultiplied,
+            WgpuPresentationAlpha::Premultiplied
+                if capabilities
+                    .alpha_modes
+                    .contains(&wgpu::CompositeAlphaMode::PreMultiplied) =>
+            {
+                wgpu::CompositeAlphaMode::PreMultiplied
+            }
+            WgpuPresentationAlpha::Premultiplied => wgpu::CompositeAlphaMode::Auto,
         };
         surface.configure(&context.device, &configuration);
         let presenter = Arc::new(PresentPipeline::new(

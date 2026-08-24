@@ -202,7 +202,7 @@ jobs:
   # scorecard evidence, so this job no longer re-runs that floor on a second
   # hosted runner. During the exact-renderer cutover it carries only the
   # Apple-target compile gates; legacy renderer size/probe CI is tracked in
-  # teambasis/universe#126.
+  # UNIV-2635.
   parity-runtime-evidence:
     name: Apple exact-renderer compile
     if: ${{ inputs.backend_port_browser_closeout != true }}
@@ -476,7 +476,7 @@ jobs:
   renderer-golden:
     name: Renderer pixel golden (deferred)
     # The former WGPU-era renderer job is deliberately dormant while the exact
-    # renderer CI contract is redesigned in teambasis/universe#126.
+    # renderer CI contract is redesigned in UNIV-2635.
     if: ${{ false }}
     runs-on: macos-14
     # Worst observed pass is ~90 minutes with warm Dawn caches; a cold Dawn
@@ -731,7 +731,7 @@ jobs:
     # Push-only alongside the heavy evidence jobs it aggregates; on PRs the
     # golden/renderer/perf evidence deliberately does not exist.
     # Legacy renderer/size evidence producers were retired with Rust-WGPU.
-    # Re-enable the aggregate only after teambasis/universe#126 defines the
+    # Re-enable the aggregate only after UNIV-2635 defines the
     # exact-renderer evidence set.
     if: ${{ false }}
     needs:

@@ -126,7 +126,7 @@ class ParityScorecardCliTests(unittest.TestCase):
     def test_ci_defers_legacy_renderer_scorecard_and_keeps_exact_same_runner(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 
-        self.assertIn("teambasis/universe#126", workflow)
+        self.assertIn("UNIV-2635", workflow)
         self.assertNotIn("-- make renderer-golden", workflow)
         self.assertIn(
             "- name: Verify same-runner renderer pixels (non-scorecard)",

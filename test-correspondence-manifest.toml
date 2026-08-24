@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 54
+max_pending = 53
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -354,9 +354,9 @@ note = "The exhaustive FL-B/FL-C table identifies the listed names as fully cove
 [[file]]
 upstream = "tests/unit_tests/runtime/ik_constraint_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_constraint_smoke.rs::ik_with_skinned_bones_orders_correctly"]
+note = "Direct fixture port preserves both named Bone lookups, the first Skin lookup, Two's first-constraint IK type assertion, and both exact graph-order comparisons."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/ik_test.cpp"

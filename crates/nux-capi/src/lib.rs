@@ -643,11 +643,10 @@ enum HandleKind {
     ViewModel,
     Result,
     PlayerStepResult,
-    #[cfg(any(
-        all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
-        feature = "android-vulkan"
-    ))]
+    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
     Renderer,
+    #[cfg(feature = "android-vulkan")]
+    AndroidVulkanRenderer,
     #[cfg(feature = "android-vulkan")]
     AndroidVulkanFrame,
     ViewModelCatalog,

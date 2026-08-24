@@ -420,10 +420,9 @@ note = "All five pinned cases are executable direct Rust ports. Grid line offset
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_participant_test.cpp"
 test_case_count = 19
-status = "partial"
-evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::s4_layout_foundation_fixtures_import_and_settle", "crates/nuxie-runtime/src/draw.rs::a_participant_animates_its_slot_under_an_animated_layout", "crates/nuxie-runtime/src/draw.rs::a_participant_retargets_an_in_flight_layout_animation", "crates/nuxie-runtime/src/draw.rs::disabling_a_layouts_interpolation_makes_the_participant_snap", "crates/nuxie-runtime/src/draw.rs::a_participant_animates_its_slot_with_a_cubic_interpolator"]
-covered_test_cases = ["a fill participant fills a stack cell from a .riv file", "a Solo's active child is laid out through it from a .riv file", "a hug participant hugs its content from a .riv file", "a fixed-size participant keeps its size from a .riv file", "a display:none participant collapses and leaves the flow from a .riv file", "min/max constraints clamp a participant slot from a .riv file", "participants size to grid cells from a .riv file", "a participant animates its slot under an animated layout", "a participant re-targets an in-flight layout animation", "disabling a layout's interpolation frees participant animation", "a participant animates its slot with a cubic interpolator"]
-note = "S4-38 directly asserts the seven fixture outcomes; the four animation cases are F15/UNIV-1603 direct ports (linear, retarget, disable, cubic). Still unclaimed: cubic retarget-while-smoothing, Solo index helpers, transparent-container, component-list, and custom-path cases."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::s4_layout_foundation_fixtures_import_and_settle", "crates/nuxie-runtime/src/draw.rs::{a_participant_animates_its_slot_under_an_animated_layout,a_participant_retargets_an_in_flight_layout_animation,disabling_a_layouts_interpolation_makes_the_participant_snap,a_participant_animates_its_slot_with_a_cubic_interpolator,solo_layout_provider_selection_follows_retained_hierarchy,upstream_cubic_participant_retargets_while_smoothing,upstream_grouped_participants_are_discovered_from_exact_fixtures,upstream_component_list_inside_a_group_stays_out_of_layout,upstream_flagged_component_list_joins_layout_through_a_group,upstream_custom_path_participant_measures_before_paths_are_built,upstream_empty_path_participant_keeps_a_sane_world_transform}"]
+note = "All 19 cases now execute directly against the pinned fixtures. The flagged-list decode and pre-advance custom-path measurement discrepancies remain honestly ignored-red; no runtime behavior was changed."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_scroll_test.cpp"

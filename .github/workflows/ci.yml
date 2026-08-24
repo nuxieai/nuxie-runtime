@@ -269,8 +269,8 @@ jobs:
         run: make crate-seams-browser-check
 
 
-      - name: Compile exact WebGPU source root
-        run: cargo check --locked -p nuxie-renderer --no-default-features --features renderer-webgpu
+      - name: Compile exact WebGPU browser artifact
+        run: cargo check --locked -p webgpu-renderer-replay --target wasm32-unknown-unknown
 
       - name: Compile exact WebGL2 browser artifact
         run: cargo check --locked -p webgl2-renderer-replay --target wasm32-unknown-unknown
@@ -359,7 +359,7 @@ jobs:
           CARGO="$(rustup which --toolchain 1.94.1 cargo)"
           RUSTC="$(rustup which --toolchain 1.94.1 rustc)"
           export CARGO RUSTC
-          tools/webgpu-renderer-emscripten/build.sh
+          tools/webgpu-renderer-replay/build.sh
           unset RUSTC
           tools/backend-port/build-webgpu-source-oracle.sh
 
@@ -375,12 +375,13 @@ jobs:
         run: |
           echo 'bc672c453937e29f717d40b864ab40e23a37b05a8abbbe7aa152db2a24830849  target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer-replay.js' | sha256sum --check
           echo '08b95e1c271d109648c138e5647600a0a3db5f81197dce443cae9d39dc9c127b  target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer_replay.wasm' | sha256sum --check
-          echo 'eac250f648fee47320e3b0e18da3b25b3140d3e5fb097c19863eaf6cce5a0da4  tools/webgpu-renderer-emscripten/pkg/renderer-replay.js' | sha256sum --check
-          echo '8475ba3ec4f257c0e9c4f9dde6c303a5f9262a29d87f894b22082c11d4fcd122  tools/webgpu-renderer-emscripten/pkg/renderer_replay.wasm' | sha256sum --check
+          echo '344db643f55d500ba770f16c2f2262faa70b0106d5175d43105698636ee68f02  tools/webgpu-renderer-replay/pkg/webgpu_renderer_replay.js' | sha256sum --check
+          echo '833a5c991a311b0770239256693f559c47123cef4123c2dee4611730e08497c9  tools/webgpu-renderer-replay/pkg/webgpu_renderer_replay_bg.wasm' | sha256sum --check
+          echo 'c4c1a9f21d85948fe6e78917756c9bb108a4848204382dd9bc16d77e6794d4b8  tools/webgpu-renderer-replay/webgpu-host.js' | sha256sum --check
           echo '38658b8abff6fc1c1a600292a8ea27b21ddfe4c70dbd83bd50f112edd74e724e  target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer-replay.js' | sha256sum --check
           echo 'fbd8598fbedf9bd009b73299ce10be0100236ab8a2837116abf8f4fe800c61c5  target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer_replay.wasm' | sha256sum --check
-          echo 'b98aa322214396d4ef843e9ad51f66af59e957410a8271207470e4f0c1870ca7  tools/webgl2-renderer-replay/pkg/webgl2_renderer_replay.js' | sha256sum --check
-          echo '011ee8972c1b5e2b50707b54ab200d8a2871fb7f8316f7fb50fc4b9f8c76eb89  tools/webgl2-renderer-replay/pkg/webgl2_renderer_replay_bg.wasm' | sha256sum --check
+          echo '1c02d2de5a5e525807721870de4462219cccefed221dbe254b0a66081e4ca7f6  tools/webgl2-renderer-replay/pkg/webgl2_renderer_replay.js' | sha256sum --check
+          echo '435b661193e4faca6e78dc18cf9f20891a07d974d6acb71e9f1fc73a4d979075  tools/webgl2-renderer-replay/pkg/webgl2_renderer_replay_bg.wasm' | sha256sum --check
 
       - name: Upload identical browser products
         uses: actions/upload-artifact@v4
@@ -389,8 +390,10 @@ jobs:
           path: |
             target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer-replay.js
             target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer_replay.wasm
-            tools/webgpu-renderer-emscripten/pkg/renderer-replay.js
-            tools/webgpu-renderer-emscripten/pkg/renderer_replay.wasm
+            tools/webgpu-renderer-replay/index.html
+            tools/webgpu-renderer-replay/webgpu-host.js
+            tools/webgpu-renderer-replay/pkg/webgpu_renderer_replay.js
+            tools/webgpu-renderer-replay/pkg/webgpu_renderer_replay_bg.wasm
             target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer-replay.js
             target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer_replay.wasm
             tools/webgl2-renderer-replay/pkg/webgl2_renderer_replay.js

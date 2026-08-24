@@ -16,17 +16,25 @@ const pagePath = path.join(
   repo,
   isSource
     ? "tools/backend-port/webgpu-source-oracle.html"
-    : "tools/webgpu-renderer-emscripten/replay.html",
+    : "tools/webgpu-renderer-replay/index.html",
 );
 const artifactDir = isSource
   ? "target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release"
-  : "tools/webgpu-renderer-emscripten/pkg";
-const jsPath = path.join(repo, artifactDir, "renderer-replay.js");
-const wasmPath = path.join(repo, artifactDir, "renderer_replay.wasm");
+  : "tools/webgpu-renderer-replay/pkg";
+const jsPath = path.join(
+  repo,
+  artifactDir,
+  isSource ? "renderer-replay.js" : "webgpu_renderer_replay.js",
+);
+const wasmPath = path.join(
+  repo,
+  artifactDir,
+  isSource ? "renderer_replay.wasm" : "webgpu_renderer_replay_bg.wasm",
+);
 const acceptedBackend = isSource ? "ffi-dawn" : "rust-webgpu-exact";
 const workerPath = isSource
   ? "/tools/backend-port/webgpu-source-oracle.html?source-worker"
-  : "/tools/webgpu-renderer-emscripten/replay.html?candidate-worker";
+  : "/tools/webgpu-renderer-replay/index.html?candidate-worker";
 
 function sha256(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
@@ -40,6 +48,13 @@ const artifactIdentity = {
   harness_html_sha256: sha256(pagePath),
   replay_js_sha256: sha256(jsPath),
   replay_wasm_sha256: sha256(wasmPath),
+  ...(isSource
+    ? {}
+    : {
+        webgpu_host_js_sha256: sha256(
+          path.join(repo, "tools/webgpu-renderer-replay/webgpu-host.js"),
+        ),
+      }),
 };
 let browserIdentity;
 let nextJobId = 1;

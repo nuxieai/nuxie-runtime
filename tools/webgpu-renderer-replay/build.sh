@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 RUST_TOOLCHAIN=1.94.1
 PINNED_CARGO="${CARGO:-$(rustup which --toolchain "$RUST_TOOLCHAIN" cargo)}"
 export RUSTC="${RUSTC:-$(rustup which --toolchain "$RUST_TOOLCHAIN" rustc)}"
+export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=--export-table"
 
 WASM_BINDGEN_VERSION=0.2.126
 TOOLS_ROOT="$ROOT/target/browser-tools"
@@ -19,10 +20,14 @@ fi
 
 "$PINNED_CARGO" build \
   --release \
-  --package webgl2-renderer-replay \
+  --package webgpu-renderer-replay \
   --target wasm32-unknown-unknown
 
 "$WASM_BINDGEN" \
-  "$ROOT/target/wasm32-unknown-unknown/release/webgl2_renderer_replay.wasm" \
-  --out-dir "$ROOT/tools/webgl2-renderer-replay/pkg" \
-  --target web
+  "$ROOT/target/wasm32-unknown-unknown/release/webgpu_renderer_replay.wasm" \
+  --out-dir "$ROOT/tools/webgpu-renderer-replay/pkg" \
+  --target web \
+  --keep-lld-exports
+
+python3 "$ROOT/tools/webgpu-renderer-replay/inject_webgpu_imports.py" \
+  "$ROOT/tools/webgpu-renderer-replay/pkg/webgpu_renderer_replay.js"

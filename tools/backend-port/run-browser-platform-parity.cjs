@@ -238,7 +238,7 @@ async function main() {
     const workerUrl = `http://127.0.0.1:${port}/${backend === "webgpu"
         ? role === "source"
           ? "tools/backend-port/webgpu-source-oracle.html?source-worker"
-          : "tools/webgpu-renderer-emscripten/replay.html?candidate-worker"
+          : "tools/webgpu-renderer-replay/index.html?candidate-worker"
         : role === "source"
           ? "tools/backend-port/webgl2-source-oracle.html?source-worker"
           : "tools/webgl2-renderer-replay/index.html?candidate-worker"}`;

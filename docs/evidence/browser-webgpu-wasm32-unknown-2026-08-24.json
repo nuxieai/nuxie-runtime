@@ -1,0 +1,38 @@
+{
+  "schema": "nuxie-browser-webgpu-wasm32-unknown-closeout-v1",
+  "date": "2026-08-24",
+  "platform": "darwin",
+  "backend": "webgpu",
+  "browser": {
+    "name": "chrome",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+    "webgpu": true
+  },
+  "adapter": "apple   (WebGPU)",
+  "source_artifacts": {
+    "harness_html_sha256": "b51e191be0f761bcc7ca7bbfe236a0cf0d32ef8409a8e5e4c95268f970aadc1f",
+    "replay_js_sha256": "bc672c453937e29f717d40b864ab40e23a37b05a8abbbe7aa152db2a24830849",
+    "replay_wasm_sha256": "08b95e1c271d109648c138e5647600a0a3db5f81197dce443cae9d39dc9c127b"
+  },
+  "candidate_artifacts": {
+    "target": "wasm32-unknown-unknown",
+    "harness_html_sha256": "8989913b18801ac07faaae3b9f4f9f5282e1904896b350728e27796d30217790",
+    "replay_js_sha256": "344db643f55d500ba770f16c2f2262faa70b0106d5175d43105698636ee68f02",
+    "replay_wasm_sha256": "833a5c991a311b0770239256693f559c47123cef4123c2dee4611730e08497c9",
+    "webgpu_host_js_sha256": "c4c1a9f21d85948fe6e78917756c9bb108a4848204382dd9bc16d77e6794d4b8",
+    "emscripten_product_dependency": false,
+    "renderer_fallback": false
+  },
+  "full_corpus": {
+    "counts": {
+      "exact": 1469,
+      "byte_exact": 1412,
+      "diverges": 0,
+      "gated": 0,
+      "total": 1469
+    },
+    "corpus_log_sha256": "d54c9690fe4d186506dd05711cf4215dc18d83ee60af12d4655729ed5b455015"
+  },
+  "source_oracle_uses_emscripten": true,
+  "source_oracle_is_shipping_product": false
+}

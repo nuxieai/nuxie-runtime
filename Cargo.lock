@@ -2097,10 +2097,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "webgpu-renderer-emscripten"
+name = "webgpu-renderer-replay"
 version = "0.1.0"
 dependencies = [
+ "nuxie-render-stream",
  "nuxie-renderer",
+ "wasm-bindgen",
 ]
 
 [[package]]

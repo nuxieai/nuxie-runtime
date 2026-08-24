@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Exact WebGPU candidate replay</title>
+  </head>
+  <body data-status="loading">
+    <canvas id="canvas" width="1" height="1"></canvas>
+    <pre id="status">loading exact WebGPU candidate</pre>
+    <script type="module">
+      import init, { run_webgpu_replay } from "./pkg/webgpu_renderer_replay.js";
+      import {
+        captureWebGpuPixels,
+        prepareWebGpu,
+        releaseWebGpu,
+        waitForWebGpu,
+      } from "./webgpu-host.js";
+
+      const canvas = document.querySelector("#canvas");
+      const status = document.querySelector("#status");
+      window.webgpuReplayReady = init().then(() => {
+        document.body.dataset.status = "ready";
+        status.textContent = "ready: exact Rust WebGPU candidate";
+      });
+
+      const crcTable = Array.from({ length: 256 }, (_, value) => {
+        let crc = value;
+        for (let bit = 0; bit < 8; bit += 1) {
+          crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+        }
+        return crc >>> 0;
+      });
+      const pngChunk = (name, data) => {
+        const type = new TextEncoder().encode(name);
+        const chunk = new Uint8Array(12 + data.length);
+        new DataView(chunk.buffer).setUint32(0, data.length);
+        chunk.set(type, 4);
+        chunk.set(data, 8);
+        let crc = 0xffffffff;
+        for (const byte of chunk.subarray(4, 8 + data.length)) {
+          crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+        }
+        new DataView(chunk.buffer).setUint32(8 + data.length, (crc ^ 0xffffffff) >>> 0);
+        return chunk;
+      };
+      const encodePng = async ({ width, height, pixels }) => {
+        const rowBytes = width * 4;
+        const scanlines = new Uint8Array((rowBytes + 1) * height);
+        for (let row = 0; row < height; row += 1) {
+          scanlines.set(
+            pixels.subarray(row * rowBytes, (row + 1) * rowBytes),
+            row * (rowBytes + 1) + 1,
+          );
+        }
+        const stream = new Blob([scanlines]).stream().pipeThrough(
+          new CompressionStream("deflate"),
+        );
+        const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+        const header = new Uint8Array(13);
+        const headerView = new DataView(header.buffer);
+        headerView.setUint32(0, width);
+        headerView.setUint32(4, height);
+        header.set([8, 6, 0, 0, 0], 8);
+        const parts = [
+          new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+          pngChunk("IHDR", header),
+          pngChunk("IDAT", compressed),
+          pngChunk("IEND", new Uint8Array()),
+        ];
+        const png = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
+        let offset = 0;
+        for (const part of parts) {
+          png.set(part, offset);
+          offset += part.length;
+        }
+        return png;
+      };
+
+      window.runWebgpuReplay = async ({ stream, mode, frame = 0 }) => {
+        await window.webgpuReplayReady;
+        await prepareWebGpu(canvas);
+        const result = run_webgpu_replay(stream, mode, frame);
+        try {
+          await waitForWebGpu();
+          const png = await encodePng(await captureWebGpuPixels());
+          const digest = await crypto.subtle.digest("SHA-256", png);
+          const sha256 = Array.from(new Uint8Array(digest), (byte) =>
+            byte.toString(16).padStart(2, "0"),
+          ).join("");
+          let binary = "";
+          for (let offset = 0; offset < png.length; offset += 32768) {
+            binary += String.fromCharCode(...png.subarray(offset, offset + 32768));
+          }
+          return {
+            exitCode: 0,
+            stdout: [
+              `adapter=${result.adapter}`,
+              `backend=rust-webgpu-exact mode=${mode} frame=${frame} size=${result.width}x${result.height} output=browser-canvas.png`,
+            ],
+            stderr: [],
+            pngBase64: btoa(binary),
+            pngBytes: png.length,
+            sha256,
+          };
+        } finally {
+          releaseWebGpu();
+          result.free();
+        }
+      };
+
+      if (new URLSearchParams(location.search).has("candidate-worker")) {
+        let completedRenders = 0;
+        const delay = (milliseconds) =>
+          new Promise((resolve) => setTimeout(resolve, milliseconds));
+        const postJson = (path, payload) =>
+          fetch(path, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+        const work = async () => {
+          await window.webgpuReplayReady;
+          const registration = await postJson("/worker/register", {
+            name: "chrome",
+            user_agent: navigator.userAgent,
+            webgpu: Boolean(navigator.gpu),
+          });
+          if (!registration.ok) {
+            throw new Error(`candidate registration failed: ${registration.status}`);
+          }
+          document.body.dataset.status = "worker-ready";
+          status.textContent = "ready: exact Rust WebGPU corpus worker";
+
+          for (;;) {
+            const response = await fetch("/worker/next", { cache: "no-store" });
+            if (response.status === 204) {
+              await delay(10);
+              continue;
+            }
+            if (!response.ok) {
+              throw new Error(`candidate work request failed: ${response.status}`);
+            }
+            const job = await response.json();
+            try {
+              const replay = await window.runWebgpuReplay(job);
+              const completion = await postJson("/worker/complete", {
+                id: job.id,
+                result: replay,
+              });
+              if (!completion.ok) {
+                throw new Error(`candidate completion failed: ${completion.status}`);
+              }
+            } catch (error) {
+              await postJson("/worker/complete", {
+                id: job.id,
+                error: error?.stack || String(error),
+              });
+            }
+            completedRenders += 1;
+            if (completedRenders >= 16) {
+              location.reload();
+              return;
+            }
+          }
+        };
+        work().catch((error) => {
+          document.body.dataset.status = "worker-failed";
+          status.textContent = error?.stack || String(error);
+        });
+      }
+    </script>
+  </body>
+</html>

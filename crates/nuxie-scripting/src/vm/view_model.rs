@@ -2446,6 +2446,16 @@ mod tests {
     }
 
     #[test]
+    fn advance_detached_view_models_tolerates_the_safe_rust_null_adaptation() {
+        // Pinned C++ constructs ScriptedViewModel(..., nullptr). Rust's
+        // ScriptViewModel cannot contain a null retained instance, so the
+        // exact safe-Rust state is an empty frame context: no registration is
+        // created, and advancing it is a no-op.
+        let context = ScriptViewModelFrameContext::default();
+        assert!(!context.advance_detached());
+    }
+
+    #[test]
     fn only_parentless_roots_advance_and_registered_roots_recurse_to_children() {
         let (parent, list) = model_with_property(ScriptViewModelProperty::List);
         let (child, trigger) = model_with_property(ScriptViewModelProperty::Trigger);

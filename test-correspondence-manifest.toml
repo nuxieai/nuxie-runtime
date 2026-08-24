@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 35
+max_pending = 34
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -410,9 +410,9 @@ note = "The sole fixture action sequence and all authored masks are directly por
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
 test_case_count = 6
-status = "pending"
-evidence = []
-note = "The combined grid/stack fixture is enrolled as not-yet; no complete direct or differential correspondence is claimed for these six silver cases."
+status = "ported-differential"
+evidence = ["silver-corpus.toml::{layout_grid_stack_grid_with_layouts,layout_grid_stack_stack_with_layouts,layout_grid_stack_grid_with_layouts_size_changing,layout_grid_stack_grid_with_layouts_span,layout_grid_stack_grid_with_layouts_size_span_changing,layout_grid_stack_grid_with_layout_participants}"]
+note = "All six cases retain the pinned layout_grid_stack.riv artboard, initial zero-time settle, draw, and 120 advance/draw frames with their upstream .sriv expectations and exact TEST_CASE provenance. Size-changing matches exactly; four rows retain their first demonstrated stream divergence; layout participants is explicit unsupported-feature red."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_grid_test.cpp"

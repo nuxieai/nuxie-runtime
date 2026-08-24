@@ -1,6 +1,25 @@
 //! Direct ports from `tests/unit_tests/runtime/raw_path_test.cpp`.
 
-use nuxie_render_api::{Aabb, Mat2D, PathVerb, RawPath};
+use nuxie_render_api::{Aabb, Mat2D, PathVerb, RawPath, Vec2D};
+
+struct UpstreamRand(u64);
+
+impl UpstreamRand {
+    fn new(seed: u32) -> Self {
+        Self(u64::from(seed.wrapping_sub(1)))
+    }
+
+    fn next(&mut self) -> u32 {
+        self.0 = 6_364_136_223_846_793_005_u64
+            .wrapping_mul(self.0)
+            .wrapping_add(1);
+        (self.0 >> 33) as u32
+    }
+
+    fn signed_unit(&mut self) -> f32 {
+        self.next() as f32 / (2_147_483_647.0 * 0.5) - 1.0
+    }
+}
 
 fn cpp_bounds(path: &RawPath) -> Aabb {
     path.bounds()
@@ -146,5 +165,129 @@ fn add_path_backwards() {
         path.cubic_to(27.0, 7.0, 23.0, 84.0, 7.0, 89.0);
         path.close();
         check_path_reversal(&path);
+    }
+}
+
+type PathMaker = fn(&mut RawPath);
+
+fn make_empty(_path: &mut RawPath) {}
+
+fn make_line(path: &mut RawPath) {
+    path.move_to(1.0, 2.0);
+    path.line_to(3.0, 4.0);
+}
+
+fn make_closed_line(path: &mut RawPath) {
+    make_line(path);
+    path.close();
+}
+
+fn make_all_verbs(path: &mut RawPath) {
+    path.move_to(1.0, 2.0);
+    path.line_to(3.0, 4.0);
+    path.quad_to(5.0, 6.0, 7.0, 8.0);
+    path.cubic_to(9.0, 10.0, 11.0, 12.0, 13.0, 14.0);
+    path.close();
+}
+
+#[test]
+fn add_path() {
+    let makers: [PathMaker; 4] = [make_empty, make_line, make_closed_line, make_all_verbs];
+    let transform = Mat2D([2.0, 0.0, 0.0, 3.0, 0.0, 0.0]);
+
+    for first in makers {
+        for second in makers {
+            let mut direct = RawPath::new();
+            first(&mut direct);
+            second(&mut direct);
+
+            let mut appended = RawPath::new();
+            let mut temporary = RawPath::new();
+            first(&mut temporary);
+            appended.add_path(&temporary, Mat2D::IDENTITY);
+            temporary.rewind();
+            second(&mut temporary);
+            appended.add_path(&temporary, Mat2D::IDENTITY);
+            assert_eq!(direct, appended);
+
+            let expected_points = direct
+                .points()
+                .iter()
+                .map(|point| Vec2D::new(point.x * 2.0, point.y * 3.0))
+                .collect::<Vec<_>>();
+            let mut transformed = RawPath::new();
+            let mut temporary = RawPath::new();
+            first(&mut temporary);
+            transformed.add_path(&temporary, transform);
+            temporary.rewind();
+            second(&mut temporary);
+            transformed.add_path(&temporary, transform);
+            assert_eq!(transformed.verbs(), direct.verbs());
+            assert_eq!(transformed.points(), expected_points);
+        }
+    }
+}
+
+fn include(bounds: &mut Aabb, point: Vec2D) {
+    bounds.min_x = bounds.min_x.min(point.x);
+    bounds.min_y = bounds.min_y.min(point.y);
+    bounds.max_x = bounds.max_x.max(point.x);
+    bounds.max_y = bounds.max_y.max(point.y);
+}
+
+#[test]
+fn bounds() {
+    let mut path = RawPath::new();
+    let mut random = UpstreamRand::new(0);
+
+    for number_of_verbs in (0..16).map(|shift| 1usize << shift) {
+        path.rewind();
+        let mut expected = Aabb::new(f32::INFINITY, f32::INFINITY, -f32::INFINITY, -f32::INFINITY);
+        for _ in 0..number_of_verbs {
+            match random.next() % 5 {
+                0 => {
+                    let point = Vec2D::new(random.signed_unit(), random.signed_unit());
+                    include(&mut expected, point);
+                    path.move_to(point.x, point.y);
+                }
+                1 => {
+                    if path.verbs().is_empty() {
+                        expected = Aabb::new(0.0, 0.0, 0.0, 0.0);
+                    }
+                    let point = Vec2D::new(random.signed_unit(), random.signed_unit());
+                    include(&mut expected, point);
+                    path.line_to(point.x, point.y);
+                }
+                2 => {
+                    if path.verbs().is_empty() {
+                        expected = Aabb::new(0.0, 0.0, 0.0, 0.0);
+                    }
+                    let control = Vec2D::new(random.signed_unit(), random.signed_unit());
+                    let end = Vec2D::new(random.signed_unit(), random.signed_unit());
+                    include(&mut expected, control);
+                    include(&mut expected, end);
+                    path.quad_to(control.x, control.y, end.x, end.y);
+                }
+                3 => {
+                    if path.verbs().is_empty() {
+                        expected = Aabb::new(0.0, 0.0, 0.0, 0.0);
+                    }
+                    let outer = Vec2D::new(random.signed_unit(), random.signed_unit());
+                    let inner = Vec2D::new(random.signed_unit(), random.signed_unit());
+                    let end = Vec2D::new(random.signed_unit(), random.signed_unit());
+                    include(&mut expected, outer);
+                    include(&mut expected, inner);
+                    include(&mut expected, end);
+                    path.cubic_to(outer.x, outer.y, inner.x, inner.y, end.x, end.y);
+                }
+                4 => path.close(),
+                _ => unreachable!(),
+            }
+        }
+        let actual = path.bounds().unwrap_or(expected);
+        assert_eq!(actual.min_x, expected.min_x);
+        assert_eq!(actual.min_y, expected.min_y);
+        assert_eq!(actual.max_x, expected.max_x);
+        assert_eq!(actual.max_y, expected.max_y);
     }
 }

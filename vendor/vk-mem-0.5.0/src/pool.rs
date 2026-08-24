@@ -35,7 +35,7 @@ impl Allocator {
                 maxBlockCount: create_info.max_block_count,
                 priority: create_info.priority,
                 minAllocationAlignment: create_info.min_allocation_alignment,
-                pMemoryAllocateNext: create_info.memory_allocate_next as *mut std::ffi::c_void,
+                pMemoryAllocateNext: create_info.memory_allocate_next() as *mut std::ffi::c_void,
             };
             ffi::vmaCreatePool(self.internal(), &raw_info, &mut ffi_pool).result()?;
             Ok(AllocatorPool {

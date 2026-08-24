@@ -520,6 +520,10 @@ impl<'a> PoolCreateInfo<'a> {
         let info = info.push_next(next);
         self.memory_allocate_next = info.p_next;
     }
+
+    pub(crate) fn memory_allocate_next(&self) -> *const std::ffi::c_void {
+        self.memory_allocate_next
+    }
 }
 impl Default for PoolCreateInfo<'_> {
     fn default() -> Self {

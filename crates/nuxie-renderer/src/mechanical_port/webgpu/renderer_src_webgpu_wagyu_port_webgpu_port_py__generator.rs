@@ -145,35 +145,78 @@ pub(crate) struct BuildPortRequest {
     pub(crate) sources: Vec<PathBuf>,
 }
 
+pub(crate) trait PortBuilder {
+    fn buildPort(&mut self, request: &BuildPortRequest, finalArchive: &Path) -> io::Result<()>;
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct CachedPortRequest {
-    pub(crate) libraryName: String,
-    pub(crate) what: &'static str,
-    pub(crate) build: BuildPortRequest,
+pub(crate) struct CachedLibrary {
+    pub(crate) path: PathBuf,
+    pub(crate) cacheHit: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PortCache {
+    directory: PathBuf,
+}
+
+impl PortCache {
+    pub(crate) fn new(directory: impl Into<PathBuf>) -> Self {
+        Self { directory: directory.into() }
+    }
+
+    fn getLib(
+        &mut self,
+        libraryName: &str,
+        request: &BuildPortRequest,
+        builder: &mut impl PortBuilder,
+    ) -> io::Result<CachedLibrary> {
+        fs::create_dir_all(&self.directory)?;
+        let path = self.directory.join(libraryName);
+        if path.is_file() {
+            return Ok(CachedLibrary { path, cacheHit: true });
+        }
+        builder.buildPort(request, &path)?;
+        if !path.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "port builder did not publish the requested archive",
+            ));
+        }
+        Ok(CachedLibrary { path, cacheHit: false })
+    }
+
+    fn eraseLib(&mut self, libraryName: &str) -> io::Result<bool> {
+        let path = self.directory.join(libraryName);
+        match fs::remove_file(path) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
 }
 
 pub(crate) fn get(
     layout: &PortLayout,
     settings: &LinkerSettings,
-) -> io::Result<Vec<CachedPortRequest>> {
+    cache: &mut PortCache,
+    builder: &mut impl PortBuilder,
+) -> io::Result<Vec<CachedLibrary>> {
     if settings.allowedSettings {
         return Ok(Vec::new());
     }
-    Ok(vec![CachedPortRequest {
-        libraryName: layout.libraryName()?,
-        what: "port",
-        build: BuildPortRequest {
-            sourceDir: layout.srcDir(),
-            portName: "webgpu",
-            includes: vec![layout.includeDir()],
-            flags: Vec::new(),
-            sources: layout.sources(),
-        },
-    }])
+    let request = BuildPortRequest {
+        sourceDir: layout.srcDir(),
+        portName: "webgpu",
+        includes: vec![layout.includeDir()],
+        flags: Vec::new(),
+        sources: layout.sources(),
+    };
+    Ok(vec![cache.getLib(&layout.libraryName()?, &request, builder)?])
 }
 
-pub(crate) fn clear(layout: &PortLayout) -> io::Result<String> {
-    layout.libraryName()
+pub(crate) fn clear(layout: &PortLayout, cache: &mut PortCache) -> io::Result<bool> {
+    cache.eraseLib(&layout.libraryName()?)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -214,6 +257,13 @@ const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct PanicBuilder;
+    impl PortBuilder for PanicBuilder {
+        fn buildPort(&mut self, _request: &BuildPortRequest, _finalArchive: &Path) -> io::Result<()> {
+            panic!("allowed-settings query must not build")
+        }
+    }
 
     #[test]
     fn source_option_default_validation_and_case_folding_are_preserved() {
@@ -278,6 +328,7 @@ mod tests {
     fn allowed_settings_query_short_circuits_port_build() {
         let layout = PortLayout::new("/does/not/need/to/exist");
         let settings = LinkerSettings { allowedSettings: true, ..Default::default() };
-        assert_eq!(get(&layout, &settings).unwrap(), []);
+        let mut cache = PortCache::new("/does/not/need/to/exist");
+        assert_eq!(get(&layout, &settings, &mut cache, &mut PanicBuilder).unwrap(), []);
     }
 }

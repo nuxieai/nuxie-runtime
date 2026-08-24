@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 51
+max_pending = 50
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -63,9 +63,9 @@ note = "All five upstream assertion sequences are direct Rust ports: the public 
 [[file]]
 upstream = "tests/unit_tests/runtime/bound_bones_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_bound_bones.rs"]
+note = "Direct fixture port preserves the named Shape/type lookup, its one PointsPath, non-null Skin, exact two Tendons with non-null Bones, and the non-null Weight assertion over every path vertex."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/bounds_test.cpp"

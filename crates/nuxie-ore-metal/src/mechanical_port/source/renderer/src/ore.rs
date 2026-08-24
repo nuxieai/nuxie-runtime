@@ -1,3 +1,4 @@
+#[cfg(target_vendor = "apple")]
 pub mod metal;
 #[path = "ore/ore_bind_group_layout_cpp.rs"]
 pub mod ore_bind_group_layout_cpp;

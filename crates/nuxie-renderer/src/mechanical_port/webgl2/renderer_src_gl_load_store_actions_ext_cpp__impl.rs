@@ -17,7 +17,7 @@ const GLSL_STORE_COLOR: &str = "ZD";
 const GLSL_CLEAR_COVERAGE: &str = "AE";
 const GLSL_CLEAR_CLIP: &str = "QF";
 const GLSL_PLS_LOAD_STORE_EXT: &str =
-    include_str!("../webgpu/source/generated_glsl/pls_load_store_ext.minified.glsl");
+    include_str!("source/generated_glsl_embedded/pls_load_store_ext.minified.glsl");
 
 pub(crate) fn BuildLoadActionsEXT(
     desc: &FlushDescriptor,

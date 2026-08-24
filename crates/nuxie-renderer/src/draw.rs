@@ -1084,11 +1084,11 @@ fn append_cubic_at_uniform_rotation(
     let d = subtract(cubic[2], cubic[1]);
     let b = subtract(d, c);
     let e = subtract(cubic[3], cubic[0]);
-    // The pinned source is built with fast floating-point contraction, so its
-    // `CubicCoeffs::A = -3.f * D + E` is one fused operation per lane.
+    // Emscripten lowers this SIMD source expression to a multiply followed by
+    // an add. Other source targets contract it according to their platform.
     let a = Vec2D::new(
-        (-3.0f32).mul_add(d.x, e.x),
-        (-3.0f32).mul_add(d.y, e.y),
+        source_multiply_add(-3.0, d.x, e.x),
+        source_multiply_add(-3.0, d.y, e.y),
     );
     let mut tangent = tangents[0];
     let mut max_t: f32 = 0.0;
@@ -1098,12 +1098,10 @@ fn append_cubic_at_uniform_rotation(
             cos_rotation * tangent.x - sin_rotation * tangent.y,
             sin_rotation * tangent.x + cos_rotation * tangent.y,
         );
-        // These are the pinned source's contracted SIMD cross products.
-        let qa = a.x.mul_add(tangent.y, -a.y * tangent.x);
-        let qb = b.x.mul_add(tangent.y, -b.y * tangent.x);
-        let qc = c.x.mul_add(tangent.y, -c.y * tangent.x);
-        // Preserve the pinned source's contracted `qb * qb - qa * qc`.
-        let discriminant = qb.mul_add(qb, -qa * qc);
+        let qa = source_multiply_add(a.x, tangent.y, -a.y * tangent.x);
+        let qb = source_multiply_add(b.x, tangent.y, -b.y * tangent.x);
+        let qc = source_multiply_add(c.x, tangent.y, -c.y * tangent.x);
+        let discriminant = source_multiply_add(qb, qb, -qa * qc);
         let q = -qb - discriminant.sqrt().copysign(qb);
         let root = qc / q;
         if root > max_t + 1e-4 && root < 1.0 - 1e-4 {
@@ -1243,16 +1241,14 @@ pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool
     let e = subtract(points[3], points[0]);
     let b_vector = subtract(d, c_vector);
     let a_vector = Vec2D::new(
-        (-3.0f32).mul_add(d.x, e.x),
-        (-3.0f32).mul_add(d.y, e.y),
+        source_multiply_add(-3.0, d.x, e.x),
+        source_multiply_add(-3.0, d.y, e.y),
     );
     let mut a = vector_cross(a_vector, b_vector);
     let b = vector_cross(a_vector, c_vector);
     let mut c = vector_cross(b_vector, c_vector);
     let mut b_over_minus_2 = -0.5 * b;
-    // Preserve the pinned source's contracted
-    // `b_over_minus_2 * b_over_minus_2 - a * c`.
-    let mut discriminant_over_4 = b_over_minus_2.mul_add(b_over_minus_2, -a * c);
+    let mut discriminant_over_4 = source_multiply_add(b_over_minus_2, b_over_minus_2, -a * c);
     let cusp_threshold = (a * (TESS_EPSILON * 0.5)).powi(2);
     // The source's first two range checks use the unsigned IEEE-bit test
     // `(uint32_t)(root - epsilon) < one_minus_2_epsilon`, which includes the
@@ -1292,9 +1288,8 @@ pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool
         a = dot(tangent0, a_vector);
         b_over_minus_2 = -dot(tangent0, b_vector);
         c = dot(tangent0, c_vector);
-        discriminant_over_4 = b_over_minus_2
-            .mul_add(b_over_minus_2, -a * c)
-            .max(0.0);
+        discriminant_over_4 =
+            source_multiply_add(b_over_minus_2, b_over_minus_2, -a * c).max(0.0);
     }
     let q = discriminant_over_4.sqrt().copysign(b_over_minus_2) + b_over_minus_2;
     let inside = |root: f32| root > TESS_EPSILON && root < 1.0 - TESS_EPSILON;
@@ -1487,6 +1482,18 @@ mod fast_acos_tests {
 
 fn subtract(a: Vec2D, b: Vec2D) -> Vec2D {
     Vec2D::new(a.x - b.x, a.y - b.y)
+}
+
+#[inline]
+fn source_multiply_add(a: f32, b: f32, c: f32) -> f32 {
+    #[cfg(all(target_arch = "wasm32", feature = "native-webgl2-experimental"))]
+    {
+        a * b + c
+    }
+    #[cfg(not(all(target_arch = "wasm32", feature = "native-webgl2-experimental")))]
+    {
+        a.mul_add(b, c)
+    }
 }
 
 fn negate(vector: Vec2D) -> Vec2D {
@@ -2437,7 +2444,10 @@ fn interior_cubic_contours(path: &RawPath) -> Vec<Vec<[Vec2D; 4]>> {
 fn line_cubic(start: Vec2D, end: Vec2D) -> [Vec2D; 4] {
     let mix_one_third = |a: Vec2D, b: Vec2D| {
         let t = 1.0 / 3.0;
-        Vec2D::new((b.x - a.x).mul_add(t, a.x), (b.y - a.y).mul_add(t, a.y))
+        Vec2D::new(
+            source_multiply_add(b.x - a.x, t, a.x),
+            source_multiply_add(b.y - a.y, t, a.y),
+        )
     };
     [
         start,
@@ -2785,7 +2795,10 @@ fn eval_cubic(points: [Vec2D; 4], t: f32) -> Vec2D {
 }
 
 fn lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
-    Vec2D::new((b.x - a.x).mul_add(t, a.x), (b.y - a.y).mul_add(t, a.y))
+    Vec2D::new(
+        source_multiply_add(b.x - a.x, t, a.x),
+        source_multiply_add(b.y - a.y, t, a.y),
+    )
 }
 
 #[cfg(test)]

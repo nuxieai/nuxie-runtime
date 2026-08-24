@@ -27,6 +27,7 @@ use super::ore_types_hpp::{
     ColorTargetState, CullMode, DepthStencilState, FaceWinding, IndexFormat, PipelineDesc,
     PrimitiveTopology, StencilFaceState, VertexAttribute, VertexStepMode, kMaxBindGroups,
 };
+#[cfg(target_vendor = "apple")]
 use crate::mechanical_port::source::renderer::src::ore::metal::ore_shader_module_metal_hpp::ShaderModuleMetal;
 
 #[derive(Clone)]
@@ -169,9 +170,14 @@ impl Pipeline {
         let mut m_bindingMap = BindingMap::default();
         let module = desc.vertexModule.or(desc.fragmentModule);
         if let Some(module) = module {
+            #[cfg(target_vendor = "apple")]
             if let Some(module) = module.downcast_ref::<ShaderModuleMetal>() {
                 m_bindingMap = module.base.m_bindingMap.clone();
             } else if let Some(module) = module.downcast_ref::<ShaderModule>() {
+                m_bindingMap = module.m_bindingMap.clone();
+            }
+            #[cfg(not(target_vendor = "apple"))]
+            if let Some(module) = module.downcast_ref::<ShaderModule>() {
                 m_bindingMap = module.m_bindingMap.clone();
             }
         }

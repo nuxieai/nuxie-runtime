@@ -4106,6 +4106,507 @@ fn make_sort_key(draw: &Draw, group: i16, scissor: i16, subpass: i8) -> i64 {
         | ((subpass as u64) & 7) << SORT_SUBPASS_SHIFT) as i64
 }
 
+// The pinned Emscripten WebGL2 build sorts DrawSortEntry with libc++'s
+// non-branchless std::sort implementation. Equal sort keys are observable in
+// overlapping draws, so Rust's unrelated unstable-sort permutation is not an
+// exact translation of this platform owner.
+fn emscripten_libcpp_sort_draw_entries(entries: &mut [DrawSortEntry]) {
+    fn less(entries: &[DrawSortEntry], a: usize, b: usize) -> bool {
+        entries[a].sortKey < entries[b].sortKey
+    }
+
+    fn less_value(a: DrawSortEntry, b: DrawSortEntry) -> bool {
+        a.sortKey < b.sortKey
+    }
+
+    fn sort3(entries: &mut [DrawSortEntry], x: usize, y: usize, z: usize) {
+        if !less(entries, y, x) {
+            if !less(entries, z, y) {
+                return;
+            }
+            entries.swap(y, z);
+            if less(entries, y, x) {
+                entries.swap(x, y);
+            }
+            return;
+        }
+        if less(entries, z, y) {
+            entries.swap(x, z);
+            return;
+        }
+        entries.swap(x, y);
+        if less(entries, z, y) {
+            entries.swap(y, z);
+        }
+    }
+
+    fn sort4(entries: &mut [DrawSortEntry], x1: usize, x2: usize, x3: usize, x4: usize) {
+        sort3(entries, x1, x2, x3);
+        if less(entries, x4, x3) {
+            entries.swap(x3, x4);
+            if less(entries, x3, x2) {
+                entries.swap(x2, x3);
+                if less(entries, x2, x1) {
+                    entries.swap(x1, x2);
+                }
+            }
+        }
+    }
+
+    fn sort5(
+        entries: &mut [DrawSortEntry],
+        x1: usize,
+        x2: usize,
+        x3: usize,
+        x4: usize,
+        x5: usize,
+    ) {
+        sort4(entries, x1, x2, x3, x4);
+        if less(entries, x5, x4) {
+            entries.swap(x4, x5);
+            if less(entries, x4, x3) {
+                entries.swap(x3, x4);
+                if less(entries, x3, x2) {
+                    entries.swap(x2, x3);
+                    if less(entries, x2, x1) {
+                        entries.swap(x1, x2);
+                    }
+                }
+            }
+        }
+    }
+
+    fn insertion_sort(entries: &mut [DrawSortEntry], first: usize, last: usize) {
+        if first == last {
+            return;
+        }
+        for i in first + 1..last {
+            let j = i - 1;
+            if less(entries, i, j) {
+                let value = entries[i];
+                let mut destination = i;
+                let mut source = j;
+                loop {
+                    entries[destination] = entries[source];
+                    destination = source;
+                    if destination == first {
+                        break;
+                    }
+                    source -= 1;
+                    if !less_value(value, entries[source]) {
+                        break;
+                    }
+                }
+                entries[destination] = value;
+            }
+        }
+    }
+
+    fn insertion_sort_unguarded(entries: &mut [DrawSortEntry], first: usize, last: usize) {
+        if first == last {
+            return;
+        }
+        for i in first + 1..last {
+            let j = i - 1;
+            if less(entries, i, j) {
+                let value = entries[i];
+                let mut destination = i;
+                let mut source = j;
+                loop {
+                    entries[destination] = entries[source];
+                    destination = source;
+                    source -= 1;
+                    if !less_value(value, entries[source]) {
+                        break;
+                    }
+                }
+                entries[destination] = value;
+            }
+        }
+    }
+
+    fn insertion_sort_incomplete(
+        entries: &mut [DrawSortEntry],
+        first: usize,
+        last: usize,
+    ) -> bool {
+        match last - first {
+            0 | 1 => return true,
+            2 => {
+                if less(entries, last - 1, first) {
+                    entries.swap(first, last - 1);
+                }
+                return true;
+            }
+            3 => {
+                sort3(entries, first, first + 1, last - 1);
+                return true;
+            }
+            4 => {
+                sort4(entries, first, first + 1, first + 2, last - 1);
+                return true;
+            }
+            5 => {
+                sort5(entries, first, first + 1, first + 2, first + 3, last - 1);
+                return true;
+            }
+            _ => {}
+        }
+
+        let mut previous = first + 2;
+        sort3(entries, first, first + 1, previous);
+        let mut count = 0;
+        let mut i = previous + 1;
+        while i != last {
+            if less(entries, i, previous) {
+                let value = entries[i];
+                let mut destination = i;
+                let mut source = previous;
+                loop {
+                    entries[destination] = entries[source];
+                    destination = source;
+                    if destination == first {
+                        break;
+                    }
+                    source -= 1;
+                    if !less_value(value, entries[source]) {
+                        break;
+                    }
+                }
+                entries[destination] = value;
+                count += 1;
+                if count == 8 {
+                    return i + 1 == last;
+                }
+            }
+            previous = i;
+            i += 1;
+        }
+        true
+    }
+
+    fn partition_equals_right(
+        entries: &mut [DrawSortEntry],
+        first: usize,
+        mut last: usize,
+    ) -> (usize, bool) {
+        let begin = first;
+        let pivot = entries[first];
+        let mut scan = first + 1;
+        while less_value(entries[scan], pivot) {
+            scan += 1;
+        }
+
+        if begin == scan - 1 {
+            while scan < last {
+                last -= 1;
+                if less_value(entries[last], pivot) {
+                    break;
+                }
+            }
+        } else {
+            loop {
+                last -= 1;
+                if less_value(entries[last], pivot) {
+                    break;
+                }
+            }
+        }
+
+        let already_partitioned = scan >= last;
+        while scan < last {
+            entries.swap(scan, last);
+            loop {
+                scan += 1;
+                if !less_value(entries[scan], pivot) {
+                    break;
+                }
+            }
+            loop {
+                last -= 1;
+                if less_value(entries[last], pivot) {
+                    break;
+                }
+            }
+        }
+
+        let pivot_position = scan - 1;
+        if begin != pivot_position {
+            entries[begin] = entries[pivot_position];
+        }
+        entries[pivot_position] = pivot;
+        (pivot_position, already_partitioned)
+    }
+
+    fn partition_equals_left(
+        entries: &mut [DrawSortEntry],
+        first: usize,
+        mut last: usize,
+    ) -> usize {
+        let begin = first;
+        let pivot = entries[first];
+        let mut scan = first;
+        if less_value(pivot, entries[last - 1]) {
+            loop {
+                scan += 1;
+                if less_value(pivot, entries[scan]) {
+                    break;
+                }
+            }
+        } else {
+            loop {
+                scan += 1;
+                if scan >= last || less_value(pivot, entries[scan]) {
+                    break;
+                }
+            }
+        }
+
+        if scan < last {
+            loop {
+                last -= 1;
+                if !less_value(pivot, entries[last]) {
+                    break;
+                }
+            }
+        }
+        while scan < last {
+            entries.swap(scan, last);
+            loop {
+                scan += 1;
+                if less_value(pivot, entries[scan]) {
+                    break;
+                }
+            }
+            loop {
+                last -= 1;
+                if !less_value(pivot, entries[last]) {
+                    break;
+                }
+            }
+        }
+
+        let pivot_position = scan - 1;
+        if begin != pivot_position {
+            entries[begin] = entries[pivot_position];
+        }
+        entries[pivot_position] = pivot;
+        scan
+    }
+
+    fn sift_down(entries: &mut [DrawSortEntry], first: usize, len: usize, start: usize) {
+        let mut child = start - first;
+        if len < 2 || (len - 2) / 2 < child {
+            return;
+        }
+        child = 2 * child + 1;
+        let mut child_index = first + child;
+        if child + 1 < len && less(entries, child_index, child_index + 1) {
+            child_index += 1;
+            child += 1;
+        }
+        if less(entries, child_index, start) {
+            return;
+        }
+
+        let top = entries[start];
+        let mut hole = start;
+        loop {
+            entries[hole] = entries[child_index];
+            hole = child_index;
+            if (len - 2) / 2 < child {
+                break;
+            }
+            child = 2 * child + 1;
+            child_index = first + child;
+            if child + 1 < len && less(entries, child_index, child_index + 1) {
+                child_index += 1;
+                child += 1;
+            }
+            if less_value(entries[child_index], top) {
+                break;
+            }
+        }
+        entries[hole] = top;
+    }
+
+    fn sift_up(entries: &mut [DrawSortEntry], first: usize, mut last: usize, len: usize) {
+        if len <= 1 {
+            return;
+        }
+        let mut parent = (len - 2) / 2;
+        let mut parent_index = first + parent;
+        last -= 1;
+        if less(entries, parent_index, last) {
+            let value = entries[last];
+            loop {
+                entries[last] = entries[parent_index];
+                last = parent_index;
+                if parent == 0 {
+                    break;
+                }
+                parent = (parent - 1) / 2;
+                parent_index = first + parent;
+                if !less_value(entries[parent_index], value) {
+                    break;
+                }
+            }
+            entries[last] = value;
+        }
+    }
+
+    fn floyd_sift_down(entries: &mut [DrawSortEntry], first: usize, len: usize) -> usize {
+        let mut hole = first;
+        let mut child_index = first;
+        let mut child = 0;
+        loop {
+            child_index += child + 1;
+            child = 2 * child + 1;
+            if child + 1 < len && less(entries, child_index, child_index + 1) {
+                child_index += 1;
+                child += 1;
+            }
+            entries[hole] = entries[child_index];
+            hole = child_index;
+            if child > (len - 2) / 2 {
+                return hole;
+            }
+        }
+    }
+
+    fn pop_heap(entries: &mut [DrawSortEntry], first: usize, last: usize, len: usize) {
+        if len <= 1 {
+            return;
+        }
+        let top = entries[first];
+        let hole = floyd_sift_down(entries, first, len);
+        let new_last = last - 1;
+        if hole == new_last {
+            entries[hole] = top;
+        } else {
+            entries[hole] = entries[new_last];
+            entries[new_last] = top;
+            sift_up(entries, first, hole + 1, hole + 1 - first);
+        }
+    }
+
+    fn heap_sort(entries: &mut [DrawSortEntry], first: usize, last: usize) {
+        let len = last - first;
+        if len > 1 {
+            let mut start = (len - 2) / 2;
+            loop {
+                sift_down(entries, first, len, first + start);
+                if start == 0 {
+                    break;
+                }
+                start -= 1;
+            }
+        }
+        let mut heap_last = last;
+        let mut heap_len = len;
+        while heap_len > 1 {
+            pop_heap(entries, first, heap_last, heap_len);
+            heap_last -= 1;
+            heap_len -= 1;
+        }
+    }
+
+    fn introsort(
+        entries: &mut [DrawSortEntry],
+        mut first: usize,
+        mut last: usize,
+        mut depth: usize,
+        mut leftmost: bool,
+    ) {
+        loop {
+            let len = last - first;
+            match len {
+                0 | 1 => return,
+                2 => {
+                    if less(entries, last - 1, first) {
+                        entries.swap(first, last - 1);
+                    }
+                    return;
+                }
+                3 => {
+                    sort3(entries, first, first + 1, last - 1);
+                    return;
+                }
+                4 => {
+                    sort4(entries, first, first + 1, first + 2, last - 1);
+                    return;
+                }
+                5 => {
+                    sort5(entries, first, first + 1, first + 2, first + 3, last - 1);
+                    return;
+                }
+                _ => {}
+            }
+
+            if len < 24 {
+                if leftmost {
+                    insertion_sort(entries, first, last);
+                } else {
+                    insertion_sort_unguarded(entries, first, last);
+                }
+                return;
+            }
+            if depth == 0 {
+                heap_sort(entries, first, last);
+                return;
+            }
+            depth -= 1;
+
+            let half_len = len / 2;
+            if len > 128 {
+                sort3(entries, first, first + half_len, last - 1);
+                sort3(entries, first + 1, first + half_len - 1, last - 2);
+                sort3(entries, first + 2, first + half_len + 1, last - 3);
+                sort3(
+                    entries,
+                    first + half_len - 1,
+                    first + half_len,
+                    first + half_len + 1,
+                );
+                entries.swap(first, first + half_len);
+            } else {
+                sort3(entries, first + half_len, first, last - 1);
+            }
+
+            if !leftmost && !less(entries, first - 1, first) {
+                first = partition_equals_left(entries, first, last);
+                continue;
+            }
+
+            let (pivot, already_partitioned) = partition_equals_right(entries, first, last);
+            if already_partitioned {
+                let first_sorted = insertion_sort_incomplete(entries, first, pivot);
+                if insertion_sort_incomplete(entries, pivot + 1, last) {
+                    if first_sorted {
+                        return;
+                    }
+                    last = pivot;
+                    continue;
+                } else if first_sorted {
+                    first = pivot + 1;
+                    continue;
+                }
+            }
+
+            introsort(entries, first, pivot, depth, leftmost);
+            leftmost = false;
+            first = pivot + 1;
+        }
+    }
+
+    let depth = if entries.is_empty() {
+        0
+    } else {
+        2 * entries.len().ilog2() as usize
+    };
+    introsort(entries, 0, entries.len(), depth, true);
+}
+
 fn patch_indices(draw_type: gpu::DrawType) -> (u32, u32) {
     use gpu::DrawType::*;
     match draw_type {
@@ -6422,11 +6923,10 @@ impl LogicalFlush {
                 context.m_indirect_draw_list.len(),
                 self.m_draw_pass_count as usize
             );
-            context
-                .m_indirect_draw_list
-                // std::sort is not stable. Equal keys deliberately have no
-                // relative-order guarantee in the source owner.
-                .sort_unstable_by_key(|entry| entry.sortKey);
+            #[cfg(all(target_arch = "wasm32", feature = "native-webgl2-experimental"))]
+            emscripten_libcpp_sort_draw_entries(&mut context.m_indirect_draw_list);
+            #[cfg(not(all(target_arch = "wasm32", feature = "native-webgl2-experimental")))]
+            context.m_indirect_draw_list.sort_unstable_by_key(|entry| entry.sortKey);
             self.writeSortedDrawsExecutable(&features);
         }
 

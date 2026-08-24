@@ -62,8 +62,25 @@ pub(crate) mod backend_port_wgsl_header_generator;
 // The pinned WebGPU product compiles GL's load_store_actions_ext.cpp as a
 // direct source dependency. Keep its exclusive WebGL2 owner in the assigned
 // target and compile that prerequisite for WebGPU as well.
-#[cfg(feature = "native-webgpu-experimental")]
+#[cfg(any(
+    feature = "native-webgpu-experimental",
+    feature = "native-webgl2-experimental"
+))]
 pub(crate) mod webgl2 {
+    #[cfg(all(
+        feature = "native-webgl2-experimental",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ))]
+    #[path = "browser_provider.rs"]
+    mod browser_provider;
+    #[cfg(all(
+        feature = "native-webgl2-experimental",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ))]
+    #[path = "product_root.rs"]
+    mod product_root;
     // This module is the Rust equivalent of the source's member/friend
     // boundary. Only the cross-backend load/store dependency and opaque
     // ContextGL type escape; coupled GL owner records stay unnameable outside
@@ -140,6 +157,12 @@ pub(crate) mod webgl2 {
 
     #[cfg(feature = "ore-gl")]
     pub(crate) use ore_context_gl_decl::ContextGL;
+    #[cfg(all(
+        feature = "native-webgl2-experimental",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ))]
+    pub(crate) use product_root::WebGl2ProductBackend;
 }
 
 #[cfg(feature = "native-webgpu-experimental")]

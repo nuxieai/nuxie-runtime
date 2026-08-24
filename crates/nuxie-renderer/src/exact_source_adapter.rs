@@ -7,6 +7,8 @@
 
 use std::any::Any;
 use std::cell::RefCell;
+#[cfg(feature = "rive-decoders")]
+use std::io::Cursor;
 use std::pin::Pin;
 use std::rc::Rc;
 
@@ -36,8 +38,49 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 struct ExactBitmapDecoder;
 
 #[cfg(feature = "rive-decoders")]
+fn decode_source_png(encoded: &[u8]) -> Option<BitmapDecodeResult> {
+    let mut decoder = png::Decoder::new(Cursor::new(encoded));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().ok()?;
+    let mut decoded = vec![0; reader.output_buffer_size()?];
+    let info = reader.next_frame(&mut decoded).ok()?;
+    decoded.truncate(info.buffer_size());
+    let mut bytes = match (info.color_type, info.bit_depth) {
+        (png::ColorType::Rgba, png::BitDepth::Eight) => decoded,
+        (png::ColorType::Rgb, png::BitDepth::Eight) => decoded
+            .chunks_exact(3)
+            .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
+            .collect(),
+        (png::ColorType::Grayscale, png::BitDepth::Eight) => decoded
+            .into_iter()
+            .flat_map(|gray| [gray, gray, gray, 255])
+            .collect(),
+        (png::ColorType::GrayscaleAlpha, png::BitDepth::Eight) => decoded
+            .chunks_exact(2)
+            .flat_map(|gray_alpha| [gray_alpha[0], gray_alpha[0], gray_alpha[0], gray_alpha[1]])
+            .collect(),
+        _ => return None,
+    };
+    for pixel in bytes.chunks_exact_mut(4) {
+        let alpha = u16::from(pixel[3]);
+        for channel in &mut pixel[..3] {
+            *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
+        }
+    }
+    Some(BitmapDecodeResult {
+        width: info.width,
+        height: info.height,
+        pixel_format: BitmapPixelFormat::rgbaPremul,
+        bytes,
+    })
+}
+
+#[cfg(feature = "rive-decoders")]
 impl BitmapDecoderContract for ExactBitmapDecoder {
     fn decodeBitmap(&mut self, encoded: &[u8]) -> Option<BitmapDecodeResult> {
+        if encoded.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return decode_source_png(encoded);
+        }
         let dimensions = nuxie_image_codec::preflight_encoded_image(encoded)?;
         let decoded = nuxie_image_codec::decode_image_rgba(encoded)?;
         if decoded.width != dimensions.width || decoded.height != dimensions.height {

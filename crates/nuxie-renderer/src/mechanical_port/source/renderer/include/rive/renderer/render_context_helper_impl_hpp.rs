@@ -111,7 +111,10 @@
 
 use core::ffi::c_void;
 use core::mem::ManuallyDrop;
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::time::Instant;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use web_time::Instant;
 
 // Mapped source dependency: renderer/include/rive/renderer/render_context_impl.hpp.
 // The complete RenderContextImpl base owner is supplied by that source-shaped

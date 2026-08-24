@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Exact WebGL2 candidate replay</title>
+  </head>
+  <body data-status="loading">
+    <pre id="status">loading exact WebGL2 candidate</pre>
+    <script type="module">
+      import init, { run_webgl2_replay } from "./pkg/webgl2_renderer_replay.js";
+
+      const status = document.querySelector("#status");
+      window.webgl2CandidateReady = init().then(() => {
+        document.body.dataset.status = "ready";
+        status.textContent = "ready: exact Rust WebGL2 candidate";
+      });
+
+      window.runWebgl2Candidate = async ({ stream, mode, frame = 0 }) => {
+        await window.webgl2CandidateReady;
+        const canvas = document.createElement("canvas");
+        const result = run_webgl2_replay(canvas, stream, mode, frame);
+        try {
+          const png = result.png;
+          const digest = await crypto.subtle.digest("SHA-256", png);
+          const sha256 = Array.from(new Uint8Array(digest), (byte) =>
+            byte.toString(16).padStart(2, "0"),
+          ).join("");
+          let binary = "";
+          for (let offset = 0; offset < png.length; offset += 32768) {
+            binary += String.fromCharCode(...png.subarray(offset, offset + 32768));
+          }
+          return {
+            adapter: result.adapter,
+            width: result.width,
+            height: result.height,
+            pngBase64: btoa(binary),
+            pngBytes: png.length,
+            sha256,
+          };
+        } finally {
+          result.free();
+        }
+      };
+    </script>
+  </body>
+</html>

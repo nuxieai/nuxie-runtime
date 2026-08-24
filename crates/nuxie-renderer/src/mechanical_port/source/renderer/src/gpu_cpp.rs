@@ -2210,7 +2210,9 @@ use nuxie_render_api::{Aabb as AABB, BlendMode, ColorInt, Mat2D, Vec2D};
 // upstream spelling and width; the owner is wired later by the compiler queue.
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::*;
 
-const STORAGE_TEXTURE_WIDTH: u32 = 2048;
+// Exact source-owned value from renderer/src/shaders/constants.glsl, which
+// gpu.cpp includes directly and the generated shaders pair with shift 7/mask 0x7f.
+const STORAGE_TEXTURE_WIDTH: u32 = 128;
 const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = 4.0;
 const GLSL_ENABLE_CLIPPING: &[u8] = b"ENABLE_CLIPPING\0";
 const GLSL_ENABLE_CLIP_RECT: &[u8] = b"ENABLE_CLIP_RECT\0";

@@ -642,6 +642,15 @@ pub(crate) trait GLExecutionProvider {
     fn uniformLocation(&mut self, program: GLuint, name: &[u8]) -> GLint;
     fn readPixelsRGBA8(&mut self, x: i32, y: i32, width: u32, height: u32) -> Vec<u8>;
 
+    /// Exact browser bridge for the source oracle's post-flush `glFinish()`
+    /// followed immediately by `glGetError()`.
+    #[cfg(not(test))]
+    fn finishAndGetError(&mut self) -> GLenum;
+    #[cfg(test)]
+    fn finishAndGetError(&mut self) -> GLenum {
+        GL_NONE
+    }
+
     fn contextLost(&mut self, nextGeneration: u64);
 }
 
@@ -1170,6 +1179,10 @@ impl GLExecutionDomain {
 
     pub(crate) fn readPixelsRGBA8(&self, x: i32, y: i32, width: u32, height: u32) -> Vec<u8> {
         self.withProvider(|provider| provider.readPixelsRGBA8(x, y, width, height))
+    }
+
+    pub(crate) fn finishAndGetError(&self) -> GLenum {
+        self.withProvider(|provider| provider.finishAndGetError())
     }
 
     pub(crate) fn markContextLost(&self) {

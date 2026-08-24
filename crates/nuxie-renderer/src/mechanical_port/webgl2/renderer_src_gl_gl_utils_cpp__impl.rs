@@ -21,7 +21,7 @@ const GLSL_FRAGMENT: &str = "GB";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "YD";
 const GLSL_TESS_TEXTURE_FLOATING_POINT: &str = "GF";
 const GLSL_GL_RENDERER_MALI: &str = "HF";
-const GLSL_GLSL: &str = include_str!("../webgpu/source/generated_glsl/glsl.minified.glsl");
+const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 
 fn generatedObject(kind: GLObjectKind) -> GLObject {
     GLObject::fromAdoptedID(generateGLObject(kind))
@@ -499,7 +499,7 @@ mod tests {
             271
         );
         assert_eq!(PINNED_SOURCE.lines().count(), 373);
-        assert_eq!(GLSL_GLSL.as_bytes().len(), 11121);
+        assert_eq!(GLSL_GLSL.as_bytes().len(), 10326);
     }
 
     #[test]

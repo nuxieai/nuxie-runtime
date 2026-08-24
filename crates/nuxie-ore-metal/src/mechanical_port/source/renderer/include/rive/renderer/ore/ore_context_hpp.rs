@@ -41,7 +41,9 @@ use super::ore_types_hpp::{
     BindGroupDesc, BindGroupLayoutDesc, BufferDesc, Features, PipelineDesc, RenderPassDesc,
     SamplerDesc, ShaderModuleDesc, TextureDesc, TextureFormat, TextureViewDesc,
 };
+#[cfg(target_vendor = "apple")]
 use crate::mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::BufferErrorSink;
+#[cfg(target_vendor = "apple")]
 use crate::mechanical_port::source::renderer::src::ore::metal::ore_texture_metal_hpp::TextureViewMetal;
 
 // namespace rive::gpu
@@ -149,6 +151,7 @@ impl ContextState {
     }
 }
 
+#[cfg(target_vendor = "apple")]
 impl BufferErrorSink for ContextState {
     fn setBufferError(&self, message: &str) {
         self.setLastError(message);
@@ -496,6 +499,7 @@ pub mod raw_abi {
 
 // inline void RenderPass::populateAttachmentMetadata(const RenderPassDesc& desc)
 impl RenderPass {
+    #[cfg(target_vendor = "apple")]
     pub(crate) fn populateAttachmentMetadata(&mut self, desc: &RenderPassDesc<'_>) {
         // m_colorCount = desc.colorCount;
         self.m_colorCount = desc.colorCount;

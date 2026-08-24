@@ -14,6 +14,7 @@ pub mod ore_buffer_hpp;
 #[path = "ore/ore_context_hpp.rs"]
 pub mod ore_context_hpp;
 #[path = "ore/ore_context_metal_hpp.rs"]
+#[cfg(target_vendor = "apple")]
 pub mod ore_context_metal_hpp;
 #[path = "ore/ore_pipeline_hpp.rs"]
 pub mod ore_pipeline_hpp;
@@ -35,6 +36,7 @@ pub use ore_bind_group_layout_hpp::*;
 pub use ore_binding_map_hpp::*;
 pub use ore_buffer_hpp::*;
 pub use ore_context_hpp::*;
+#[cfg(target_vendor = "apple")]
 pub use ore_context_metal_hpp::*;
 pub use ore_pipeline_hpp::*;
 pub use ore_render_pass_hpp::*;

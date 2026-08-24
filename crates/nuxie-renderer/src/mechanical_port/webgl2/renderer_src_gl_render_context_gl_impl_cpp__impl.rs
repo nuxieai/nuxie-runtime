@@ -121,159 +121,46 @@ const GLSL_pathBuffer: &str = "PB";
 const GLSL_sourceTexture: &str = "JC";
 const GLSL_tessVertexTexture: &str = "LC";
 
-const GLSL_GLSL: &str = include_str!("../webgpu/source/generated_glsl/glsl.minified.glsl");
+const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 const GLSL_CONSTANTS: &str =
-    include_str!("../webgpu/source/generated_glsl/constants.minified.glsl");
+    include_str!("source/generated_glsl_embedded/constants.minified.glsl");
 const GLSL_FLUSH_UNIFORMS: &str =
-    include_str!("../webgpu/source/generated_glsl/flush_uniforms.minified.glsl");
-const GLSL_COMMON: &str = include_str!("../webgpu/source/generated_glsl/common.minified.glsl");
+    include_str!("source/generated_glsl_embedded/flush_uniforms.minified.glsl");
+const GLSL_COMMON: &str = include_str!("source/generated_glsl_embedded/common.minified.glsl");
 const GLSL_COLOR_RAMP: &str =
-    include_str!("../webgpu/source/generated_glsl/color_ramp.minified.glsl");
+    include_str!("source/generated_glsl_embedded/color_ramp.minified.glsl");
 const GLSL_BEZIER_UTILS: &str =
-    include_str!("../webgpu/source/generated_glsl/bezier_utils.minified.glsl");
+    include_str!("source/generated_glsl_embedded/bezier_utils.minified.glsl");
 const GLSL_TESSELLATE: &str =
-    include_str!("../webgpu/source/generated_glsl/tessellate.minified.glsl");
+    include_str!("source/generated_glsl_embedded/tessellate.minified.glsl");
 const GLSL_RENDER_ATLAS: &str =
-    include_str!("../webgpu/source/generated_glsl/render_atlas.minified.glsl");
+    include_str!("source/generated_glsl_embedded/render_atlas.minified.glsl");
 const GLSL_ADVANCED_BLEND: &str =
-    include_str!("../webgpu/source/generated_glsl/advanced_blend.minified.glsl");
+    include_str!("source/generated_glsl_embedded/advanced_blend.minified.glsl");
 const GLSL_DRAW_PATH_COMMON: &str =
-    include_str!("../webgpu/source/generated_glsl/draw_path_common.minified.glsl");
+    include_str!("source/generated_glsl_embedded/draw_path_common.minified.glsl");
 const GLSL_DRAW_PATH_VERT: &str =
-    include_str!("../webgpu/source/generated_glsl/draw_path.minified.vert");
+    include_str!("source/generated_glsl_embedded/draw_path.minified.vert");
 const GLSL_DRAW_RASTER_ORDER_PATH_FRAG: &str =
-    include_str!("../webgpu/source/generated_glsl/draw_raster_order_path.minified.frag");
+    include_str!("source/generated_glsl_embedded/draw_raster_order_path.minified.frag");
 const GLSL_DRAW_CLOCKWISE_PATH_FRAG: &str =
-    include_str!("../webgpu/source/generated_glsl/draw_clockwise_path.minified.frag");
+    include_str!("source/generated_glsl_embedded/draw_clockwise_path.minified.frag");
 const GLSL_DRAW_CLOCKWISE_CLIP_FRAG: &str =
-    include_str!("../webgpu/source/generated_glsl/draw_clockwise_clip.minified.frag");
+    include_str!("source/generated_glsl_embedded/draw_clockwise_clip.minified.frag");
 const GLSL_DRAW_IMAGE_MESH_VERT: &str =
-    include_str!("../webgpu/source/generated_glsl/draw_image_mesh.minified.vert");
+    include_str!("source/generated_glsl_embedded/draw_image_mesh.minified.vert");
 const GLSL_DRAW_MESH_FRAG: &str =
-    include_str!("../webgpu/source/generated_glsl/draw_mesh.minified.frag");
-const GLSL_ATOMIC_DRAW: &str = "";
-
-const GLSL_RESOLVE_ATLAS: &str = r#"#ifdef DB
-y1(SF,e0,F,B,r){g U;U.x=(B!=2)?-1.:3.;U.y=(B!=1)?-1.:3.;U.zw=d(.0,1.);z1(U);}
-#endif
-#ifdef GB
-e ivec2 Vd(){return ivec2(floor(gl_FragCoord));}
-#ifdef TD
-layout(location=0)inout G p0;layout(location=1)out i i4;void main(){i4.x=uintBitsToFloat(p0.x);}
-#elif defined(UD)
-#ifdef AE
-__pixel_local_outEXT R1{layout(r32f)float p0;};
-#else
-__pixel_local_inEXT R1{layout(r32f)float p0;};layout(location=0)out i i4;
-#endif
-void main(){
-#ifdef AE
-p0=.0;
-#else
-i4.x=p0;
-#endif
-}
-#elif defined(EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE)
-layout(binding=0,r32ui)uniform highp upixelLocalANGLE p0;layout(location=0)out i i4;void main(){i4.x=uintBitsToFloat(pixelLocalLoadANGLE(p0).x);}
-#elif defined(VD)
-layout(binding=0,r32i)uniform highp coherent iimage2D S8;layout(location=0)out i i4;void main(){i4.x=float(imageLoad(S8,Vd()).x)*(1./Xc);}
-#elif defined(TE)
-X2(a3,0,WE);layout(location=0)out i i4;void main(){i P=q1(WE,Vd());i4.x=(P.x-P.y)*pa+(P.z-P.w)*255.;}
-#endif
-#endif
-"#;
-
-const GLSL_BLIT_TEXTURE_AS_DRAW: &str = r#"k2
-#ifdef CD
-J0 W(0,d,X1);
-#endif
-f2
-#ifdef DB
-R3 S3 y4 z4 g1(e0)h1 y1(DF,e0,F,B,r){d m2;m2.x=(B&1)==0?-1.:1.;m2.y=(B&2)==0?-1.:1.;
-#ifdef CD
-V(X1,d);X1.x=m2.x*.5+.5;X1.y=m2.y*-.5+.5;a0(X1);
-#endif
-g U=g(m2,0,1);z1(U);}
-#endif
-#ifdef GB
-B3
-#ifdef ND
-rf(Y4,T3,JC);
-#else
-X2(Y4,T3,JC);
-#endif
-C3
-#ifdef CD
-Z4 U3(vf)a5
-#endif
-Y2(i,KE){i f8;
-#ifdef CD
-A(X1,d);f8=N6(JC,vf,X1,.0);
-#elif defined(ND)
-f8=(g8(JC,0,X(floor(Y.xy)))+g8(JC,1,X(floor(Y.xy)))+g8(JC,2,X(floor(Y.xy)))+g8(JC,3,X(floor(Y.xy))))*0.25;
-#else
-f8=q1(JC,X(floor(Y.xy)));
-#endif
-G2(f8);}
-#endif
-"#;
-
-const GLSL_STENCIL_DRAW: &str = r#"#ifdef DB
-g1(e0)L(0,K3,KB);h1 R3 S3 y4 z4 y1(VF,e0,F,B,r){M(B,F,KB,K3);g U=J3(KB.xy);uint ha=floatBitsToUint(KB.z)&0xffffu;U.z=ga(ha);z1(U);}
-#endif
-#ifdef GB
-B3 C3 Y2(i,KE){G2(C0(.0));}
-#endif
-"#;
-
-const GLSL_DRAW_MSAA_OBJECT_FRAG: &str = r#"#ifdef GB
-#ifdef OB
-B3 X2(Y4,T3,IC);
-#ifdef AB
-d7(SD);
-#endif
-C3 Z4 U3(R5)a5
-#endif
-Y2(i,JB){
-#ifdef OB
-A(D5,d);A(H1,c);
-#ifdef AB
-A(A1,N);
-#endif
-#else
-A(f1,g);
-#ifdef FB
-A(C2,d);
-#endif
-#ifdef AB
-A(e2,c);
-#endif
-#endif
-#ifdef OB
-i j=r7(IC,R5,D5,n.Bd)*H1;
-#else
-c o=
-#ifdef FB
-clamp(n2(BD,M9,C2,.0).x,G0(.0),G0(1.));
-#else
-1.;
-#endif
-i j=G7(f1,o S2);
-#endif
-#if defined(AB)&&!defined(Q)
-#ifdef OB
-j.xyz=B6(j);N Q3=A1;
-#else
-N Q3=W5(e2);
-#endif
-i K1=N8(SD);j.xyz=P4(j.xyz,K1,Q3);j.xyz*=j.w;
-#endif
-#ifdef BC
-if(BC){j=k3(j);}
-#endif
-j.xyz=E2(j.xyz,j.w,Y.xy,n.y3,n.z3);G2(j);}
-#endif
-"#;
+    include_str!("source/generated_glsl_embedded/draw_mesh.minified.frag");
+const GLSL_ATOMIC_DRAW: &str =
+    include_str!("source/generated_glsl_embedded/atomic_draw.minified.glsl");
+const GLSL_RESOLVE_ATLAS: &str =
+    include_str!("source/generated_glsl_embedded/resolve_atlas.minified.glsl");
+const GLSL_BLIT_TEXTURE_AS_DRAW: &str =
+    include_str!("source/generated_glsl_embedded/blit_texture_as_draw.minified.glsl");
+const GLSL_STENCIL_DRAW: &str =
+    include_str!("source/generated_glsl_embedded/stencil_draw.minified.glsl");
+const GLSL_DRAW_MSAA_OBJECT_FRAG: &str =
+    include_str!("source/generated_glsl_embedded/draw_msaa_object.minified.frag");
 
 fn isTessellationDraw(drawType: gpu::DrawType) -> bool {
     matches!(
@@ -685,8 +572,12 @@ impl TexelBufferRingWebGL {
 
     fn bindToRenderContext(&self, bindingIdx: GLuint, bindingSize: usize, offset: usize) {
         let (width, height) = StorageTextureSize(bindingSize, self.m_bufferStructure);
+        let uploadSize = width as usize
+            * height as usize
+            * gpu::StorageBufferElementSizeInBytes(self.m_bufferStructure) as usize;
+        assert!(offset + uploadSize <= self.base.capacityInBytes());
         let bytes = unsafe {
-            std::slice::from_raw_parts(self.base.shadowBuffer().add(offset), bindingSize).to_vec()
+            std::slice::from_raw_parts(self.base.shadowBuffer().add(offset), uploadSize).to_vec()
         };
         let execution = (&*self.rust_execution).clone();
         execution.withCurrent(|| {

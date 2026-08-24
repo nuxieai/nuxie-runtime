@@ -21,6 +21,16 @@ native-vulkan-experimental = ["dep:ash", "dep:nuxie-ore-metal", "dep:vk-mem"]
 # Builds the exact pinned Dawn/Wagyu WebGPU campaign without selecting it for
 # shipping or sharing authority with the legacy Rust-WGPU renderer.
 native-webgpu-experimental = ["dep:libc", "dep:nuxie-ore-metal"]
+# Builds the exact pinned WebGL2 campaign for the browser without selecting it
+# implicitly or sharing product authority with WebGPU.
+native-webgl2-experimental = [
+    "ore-gl",
+    "dep:js-sys",
+    "dep:nuxie-ore-metal",
+    "dep:wasm-bindgen",
+    "dep:web-time",
+    "dep:web-sys",
+]
 # Retains the pinned vendor-Wagyu conditional branches independently from the
 # native Dawn/WebGPU product selection.
 native-wagyu-experimental = ["native-webgpu-experimental"]
@@ -53,6 +63,7 @@ libc = { version = "0.2", optional = true }
 nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-render-api = { path = "../nuxie-render-api" }
 naga = { version = "30.0.0", features = ["wgsl-in"], optional = true }
+png = "0.18"
 regex = "1"
 smallvec = "1.15.2"
 sha2 = "0.10"
@@ -82,7 +93,12 @@ wgpu-hal = { version = "=30.0.0", path = "../../vendor/wgpu-hal-30.0.0", optiona
 objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["CFCGTypes", "objc2"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { version = "0.3", optional = true }
+nuxie-ore-metal = { path = "../nuxie-ore-metal", optional = true }
 raw-window-handle = "0.6"
+wasm-bindgen = { version = "0.2", optional = true }
+web-time = { version = "1.1.0", optional = true }
+web-sys = { version = "0.3", optional = true, features = ["Event", "EventTarget", "HtmlCanvasElement", "WebGl2RenderingContext"] }
 
 [dev-dependencies]
 criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
@@ -91,7 +107,6 @@ nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-runtime = { path = "../nuxie-runtime" }
-png = "0.18"
 wgpu = { version = "=30.0.0", path = "../../vendor/wgpu-30.0.0" }
 
 [[example]]

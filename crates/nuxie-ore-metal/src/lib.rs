@@ -42,6 +42,7 @@ pub mod context {
 pub mod gpu_resource {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::*;
 }
+#[cfg(target_vendor = "apple")]
 pub mod metal;
 pub mod pipeline {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_pipeline_hpp::*;

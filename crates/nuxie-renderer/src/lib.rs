@@ -7,7 +7,8 @@ mod renderer_types;
 pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};
 #[cfg(any(
     feature = "native-vulkan-experimental",
-    feature = "native-webgpu-experimental"
+    feature = "native-webgpu-experimental",
+    feature = "native-webgl2-experimental"
 ))]
 mod exact_source_adapter;
 #[cfg(feature = "native-vulkan-experimental")]
@@ -18,6 +19,18 @@ pub use native_vulkan::{NativeVulkanFactory, NativeVulkanFrame};
 mod native_webgpu;
 #[cfg(feature = "native-webgpu-experimental")]
 pub use native_webgpu::{NativeWebGpuFactory, NativeWebGpuFrame};
+#[cfg(all(
+    feature = "native-webgl2-experimental",
+    target_arch = "wasm32",
+    target_os = "unknown"
+))]
+mod native_webgl2;
+#[cfg(all(
+    feature = "native-webgl2-experimental",
+    target_arch = "wasm32",
+    target_os = "unknown"
+))]
+pub use native_webgl2::{WebGl2Factory, WebGl2Frame};
 mod tessellation_relocation;
 pub(crate) use tessellation_relocation::relocate_tessellation_logically;
 #[cfg(test)]
@@ -76,6 +89,7 @@ mod logical_flush;
 #[cfg(any(
     feature = "native-vulkan-experimental",
     feature = "native-webgpu-experimental",
+    feature = "native-webgl2-experimental",
     all(
         feature = "native-metal-experimental",
         any(

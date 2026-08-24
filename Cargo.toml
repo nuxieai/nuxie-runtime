@@ -23,6 +23,7 @@ members = [
     "tools/renderer-fuzz-replay",
     "tools/renderer-replay",
     "tools/browser-renderer-smoke",
+    "tools/webgl2-renderer-replay",
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",
     "tools/silver-corpus",
@@ -38,6 +39,7 @@ exclude = [
     "vendor/luaur-compiler-0.1.8",
     "vendor/luaur-rt-0.1.8",
     "vendor/luaur-vm-0.1.8",
+    "vendor/jpeg-decoder-0.3.2-rive-v9f",
     "vendor/symphonia-bundle-flac-0.5.5",
     "vendor/symphonia-bundle-mp3-0.5.5",
     "vendor/symphonia-format-riff-0.5.5",
@@ -72,6 +74,10 @@ luaur-common = { path = "vendor/luaur-common-0.1.8" }
 luaur-compiler = { path = "vendor/luaur-compiler-0.1.8" }
 luaur-rt = { path = "vendor/luaur-rt-0.1.8" }
 luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
+
+# Browser WebGL2 source-parity fork: jpeg-decoder 0.3.2 with the pinned IJG
+# libjpeg v9f component-scaling and integer-IDCT behavior.
+jpeg-decoder = { path = "vendor/jpeg-decoder-0.3.2-rive-v9f" }
 
 # Metadata-free audio fork (docs/symphonia-fork.md): the Apple runtime decodes
 # audio samples but never exposes container tags or artwork. These component

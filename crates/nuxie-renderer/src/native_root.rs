@@ -28,6 +28,7 @@ mod native_apple_surface;
 #[cfg(any(
     feature = "native-vulkan-experimental",
     feature = "native-webgpu-experimental",
+    feature = "native-webgl2-experimental",
     all(
         feature = "native-metal-experimental",
         any(

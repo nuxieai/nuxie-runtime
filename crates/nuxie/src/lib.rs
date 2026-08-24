@@ -8839,8 +8839,10 @@ mod owned_instance_tests {
     fn hosted_image_cdn_descriptor_matches_pinned_cpp() {
         let file =
             File::import(&external_fixture("hosted_image_file.riv")).expect("hosted image imports");
+        assert_eq!(file.runtime().file_assets().len(), 1);
         let asset = file.runtime().file_assets()[0];
         assert_eq!(asset.type_name, "ImageAsset");
+        assert_eq!(asset.bytes_property("cdnUuid").map(<[u8]>::len), Some(16));
         assert_eq!(
             asset.file_asset_cdn_uuid_string().as_deref(),
             Some("edcb1816-8405-4983-acd2-16db48d85df4")
@@ -8853,12 +8855,14 @@ mod owned_instance_tests {
             asset.file_asset_unique_filename().as_deref(),
             Some("one-45008.png")
         );
+        assert_eq!(asset.file_asset_extension(), Some("png"));
     }
 
     #[test]
     fn hosted_font_cdn_descriptor_matches_pinned_cpp() {
         let file =
             File::import(&external_fixture("hosted_font_file.riv")).expect("hosted font imports");
+        assert_eq!(file.runtime().file_assets().len(), 1);
         let asset = file.runtime().file_assets()[0];
         assert_eq!(asset.type_name, "FontAsset");
         assert_eq!(asset.bytes_property("cdnUuid").map(<[u8]>::len), Some(16));
@@ -8870,6 +8874,7 @@ mod owned_instance_tests {
             asset.file_asset_unique_filename().as_deref(),
             Some("Inter-43276.ttf")
         );
+        assert_eq!(asset.file_asset_extension(), Some("ttf"));
     }
 
     #[test]

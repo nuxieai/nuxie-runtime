@@ -47,7 +47,7 @@ native_cpp_combined_link = "not rerun: the pinned checkout has no native WebGPU-
 
 [[artifact]]
 path = "tools/webgpu-renderer-emscripten/build.sh"
-sha256 = "1f09fb15bcd55919792bdd15e7a490739926d01ff5d0ab73a6d53ef5eeb94c13"
+sha256 = "79716f284dd8d82c1ce82ab8eda355630d17ec526816413948c93aed651a3f6c"
 
 [[artifact]]
 path = "tools/webgpu-renderer-emscripten/index.html"

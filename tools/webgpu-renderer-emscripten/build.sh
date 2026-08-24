@@ -17,7 +17,7 @@ if [[ ! -d "$dawn_dir/.git" ]]; then
     mkdir -p "$(dirname "$dawn_dir")"
     git clone https://dawn.googlesource.com/dawn "$dawn_dir"
     git -C "$dawn_dir" checkout --detach "$expected_dawn_revision"
-    python3 "$dawn_dir/tools/fetch_dawn_dependencies.py"
+    python3 "$dawn_dir/tools/fetch_dawn_dependencies.py" --directory "$dawn_dir"
 fi
 
 for command in cmake git ninja rustup; do

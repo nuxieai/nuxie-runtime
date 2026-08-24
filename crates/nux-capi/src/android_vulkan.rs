@@ -424,15 +424,6 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                         ),
                     ));
                 }
-                player
-                    .artboard
-                    .acknowledge_presented(rendered_revision)
-                    .map_err(|status| {
-                        ApiFailure::new(
-                            status,
-                            "presented player revision no longer matches the rendered occurrence",
-                        )
-                    })?;
                 let pending = PendingHandlePublication::new(
                     NuxAndroidVulkanFrame {
                         pixels: pixels.into_boxed_slice(),
@@ -448,6 +439,18 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                     thread::current().id(),
                 );
                 unsafe { *out_frame = pending.finish() };
+                // Publication only proves the headless host received the pixels. True
+                // window-presentation acknowledgement needs an explicit host call and
+                // belongs with the needsFrame/wake/idle contract.
+                player
+                    .artboard
+                    .acknowledge_presented(rendered_revision)
+                    .map_err(|status| {
+                        ApiFailure::new(
+                            status,
+                            "presented player revision no longer matches the rendered occurrence",
+                        )
+                    })?;
                 Ok(())
             })();
             match result {

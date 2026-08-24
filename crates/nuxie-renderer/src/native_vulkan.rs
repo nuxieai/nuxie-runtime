@@ -45,6 +45,12 @@ impl NativeVulkanFactory {
             .begin_frame(clear_color, mode)
             .map(|core| NativeVulkanFrame { core })
     }
+
+    #[cfg(test)]
+    fn fail_next_finish_for_test(&self) {
+        self.core
+            .with_backend_mut_for_test(VulkanProductBackend::fail_next_finish_for_test);
+    }
 }
 
 impl Factory for NativeVulkanFactory {
@@ -201,6 +207,28 @@ mod tests {
 
         assert_eq!(pixels.len(), 3 * 2 * 4);
         assert_eq!(&pixels[..4], &[16, 32, 48, 255]);
+    }
+
+    #[test]
+    fn failed_finish_leaves_the_renderer_reusable() {
+        let _live_vulkan_test = lock_live_vulkan_test();
+        let Ok(factory) = NativeVulkanFactory::new(2, 2) else {
+            return;
+        };
+
+        factory.fail_next_finish_for_test();
+        let failure = factory
+            .begin_frame(0xff102030, RenderMode::Msaa)
+            .expect("begin frame whose finish will fail")
+            .finish();
+        assert!(failure.is_err(), "finish failure was not injected");
+
+        let pixels = factory
+            .begin_frame(0xff405060, RenderMode::Msaa)
+            .expect("begin frame after failed finish")
+            .finish()
+            .expect("finish frame after failed finish");
+        assert_eq!(&pixels[..4], &[64, 80, 96, 255]);
     }
 
     #[test]

@@ -2962,7 +2962,8 @@ impl Buffer {
             F: FnOnce(MapAsyncStatus, WGPUStringView) + 'static,
         {
             // SAFETY: MapAsync transfers one boxed one-shot completion.
-            unsafe { Box::from_raw(callback.cast::<F>()) }(MapAsyncStatus::from(status), message);
+            let callback = unsafe { Box::from_raw(callback.cast::<F>()) };
+            callback(MapAsyncStatus::from(status), message);
         }
 
         let mut callbackInfo = WGPUBufferMapCallbackInfo::default();
@@ -3264,7 +3265,8 @@ impl Device {
         unsafe extern "C" fn invoke<F>(status: WGPUCreatePipelineAsyncStatus, pipeline: WGPUComputePipeline, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
         where F: FnOnce(CreatePipelineAsyncStatus, ComputePipeline, WGPUStringView) + 'static {
             // SAFETY: The callback owns one capture and the returned handle.
-            unsafe { Box::from_raw(callback.cast::<F>()) }(
+            let callback = unsafe { Box::from_raw(callback.cast::<F>()) };
+            callback(
                 CreatePipelineAsyncStatus::from(status),
                 unsafe { ComputePipeline::Acquire(pipeline) },
                 message,
@@ -3296,7 +3298,8 @@ impl Device {
         unsafe extern "C" fn invoke<F>(status: WGPUCreatePipelineAsyncStatus, pipeline: WGPURenderPipeline, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
         where F: FnOnce(CreatePipelineAsyncStatus, RenderPipeline, WGPUStringView) + 'static {
             // SAFETY: The callback owns one capture and the returned handle.
-            unsafe { Box::from_raw(callback.cast::<F>()) }(
+            let callback = unsafe { Box::from_raw(callback.cast::<F>()) };
+            callback(
                 CreatePipelineAsyncStatus::from(status),
                 unsafe { RenderPipeline::Acquire(pipeline) },
                 message,
@@ -3346,7 +3349,8 @@ impl Device {
         unsafe extern "C" fn invoke<F>(status: WGPUPopErrorScopeStatus, errorType: WGPUErrorType, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
         where F: FnOnce(PopErrorScopeStatus, ErrorType, WGPUStringView) + 'static {
             // SAFETY: PopErrorScope transfers one boxed one-shot completion.
-            unsafe { Box::from_raw(callback.cast::<F>()) }(
+            let callback = unsafe { Box::from_raw(callback.cast::<F>()) };
+            callback(
                 PopErrorScopeStatus::from(status), ErrorType::from(errorType), message,
             );
         }
@@ -3417,7 +3421,8 @@ impl Instance {
         unsafe extern "C" fn invoke<F>(status: WGPURequestAdapterStatus, adapter: WGPUAdapter, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
         where F: FnOnce(RequestAdapterStatus, Adapter, WGPUStringView) + 'static {
             // SAFETY: The callback owns one capture and the returned handle.
-            unsafe { Box::from_raw(callback.cast::<F>()) }(
+            let callback = unsafe { Box::from_raw(callback.cast::<F>()) };
+            callback(
                 RequestAdapterStatus::from(status), unsafe { Adapter::Acquire(adapter) }, message,
             );
         }
@@ -3558,7 +3563,8 @@ impl Queue {
         unsafe extern "C" fn invoke<F>(status: WGPUQueueWorkDoneStatus, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
         where F: FnOnce(QueueWorkDoneStatus, WGPUStringView) + 'static {
             // SAFETY: Queue completion transfers one boxed one-shot callback.
-            unsafe { Box::from_raw(callback.cast::<F>()) }(QueueWorkDoneStatus::from(status), message);
+            let callback = unsafe { Box::from_raw(callback.cast::<F>()) };
+            callback(QueueWorkDoneStatus::from(status), message);
         }
         let mut callbackInfo = WGPUQueueWorkDoneCallbackInfo::default();
         callbackInfo.mode = callbackMode.into();
@@ -3917,7 +3923,8 @@ impl ShaderModule {
         where F: FnOnce(CompilationInfoRequestStatus, *const WGPUCompilationInfo) + 'static {
             // SAFETY: Compilation completion transfers one boxed callback; the
             // info record remains borrowed for this invocation only.
-            unsafe { Box::from_raw(callback.cast::<F>()) }(CompilationInfoRequestStatus::from(status), info);
+            let callback = unsafe { Box::from_raw(callback.cast::<F>()) };
+            callback(CompilationInfoRequestStatus::from(status), info);
         }
         let mut callbackInfo = WGPUCompilationInfoCallbackInfo::default();
         callbackInfo.mode = callbackMode.into();

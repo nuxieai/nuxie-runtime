@@ -4546,13 +4546,7 @@ unsafe fn destroyContextSourceFields(context: &mut RenderContextGLImpl, currentG
             currentGeneration,
         )
     };
-    if !currentGeneration {
-        neutralizeProgram(&mut context.m_featherAtlasStrokeProgram.m_program);
-    }
     unsafe { ManuallyDrop::drop(&mut context.m_featherAtlasStrokeProgram.m_program) };
-    if !currentGeneration {
-        neutralizeProgram(&mut context.m_featherAtlasFillProgram.m_program);
-    }
     unsafe { ManuallyDrop::drop(&mut context.m_featherAtlasFillProgram.m_program) };
     unsafe { dropShader(&mut context.m_featherAtlasVertexShader, currentGeneration) };
 

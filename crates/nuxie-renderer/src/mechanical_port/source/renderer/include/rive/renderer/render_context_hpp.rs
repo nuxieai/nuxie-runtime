@@ -2235,16 +2235,19 @@ pub struct RenderContextMembers {
 pub struct RenderContext {
     // Source base chain: RenderContext -> RiveRenderFactory -> Factory. The
     // base remains offset zero and is destroyed explicitly after all members.
-    base: ManuallyDrop<RiveRenderFactory>,
-    members: ManuallyDrop<RenderContextMembers>,
+    pub(crate) base: ManuallyDrop<RiveRenderFactory>,
+    pub(crate) members: ManuallyDrop<RenderContextMembers>,
     // Decoder injection is a product-only extension, not a pinned source
     // member. It stays outside the source-order aggregate.
     #[cfg(feature = "rive-ktx2")]
-    m_ktx2_decoder: Option<Box<dyn Ktx2DecoderContract>>,
+    pub(crate) m_ktx2_decoder: Option<Box<dyn Ktx2DecoderContract>>,
     #[cfg(feature = "rive-decoders")]
-    m_bitmap_decoder: Option<Box<dyn BitmapDecoderContract>>,
-    _pin: PhantomPinned,
+    pub(crate) m_bitmap_decoder: Option<Box<dyn BitmapDecoderContract>>,
+    pub(crate) _pin: PhantomPinned,
+    _owner_graph_seal: RenderContextOwnerGraphSeal,
 }
+
+struct RenderContextOwnerGraphSeal;
 
 impl Deref for RenderContext {
     type Target = RenderContextMembers;
@@ -2373,6 +2376,7 @@ impl RenderContext {
             #[cfg(feature = "rive-decoders")]
             m_bitmap_decoder: None,
             _pin: PhantomPinned,
+            _owner_graph_seal: RenderContextOwnerGraphSeal,
         })
     }
 

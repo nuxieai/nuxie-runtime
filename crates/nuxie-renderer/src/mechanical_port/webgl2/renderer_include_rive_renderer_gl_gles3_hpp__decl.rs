@@ -1596,7 +1596,11 @@ macro_rules! gl_capability_bit {
         }
         pub(crate) fn $set(&mut self, value: bool) {
             let mask = 1 << $bit;
-            self.$storage = (self.$storage & !mask) | ((value as _) * mask);
+            if value {
+                self.$storage |= mask;
+            } else {
+                self.$storage &= !mask;
+            }
         }
     };
 }

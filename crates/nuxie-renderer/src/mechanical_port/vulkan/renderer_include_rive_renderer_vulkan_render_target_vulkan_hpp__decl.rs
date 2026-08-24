@@ -47,13 +47,20 @@ impl RetainedRenderTargetVulkan {
     /// `target` must be a live, heap-published intrusive render target whose
     /// offset-zero `RenderTarget` base owns the complete concrete allocation.
     pub(crate) unsafe fn fromLiveTarget(target: &mut dyn RenderTargetVulkanApi) -> Self {
-        let target_ptr = NonNull::from(&mut *target);
+        let borrowed_target_ptr = NonNull::from(&mut *target);
         let owner_ptr = core::ptr::from_mut(&mut *target.baseMut().base);
         let owner = unsafe { rcp::from_ptr(safe_ref(owner_ptr)) };
-        Self {
-            target: target_ptr,
-            owner,
-        }
+        // SAFETY: `owner` is acquired from the same offset-zero complete
+        // allocation before the borrowed lifetime is erased. It retains that
+        // allocation for the complete lifetime of this wrapper and every
+        // clone, so the trait-object pointer cannot outlive its storage.
+        let target = unsafe {
+            core::mem::transmute::<
+                NonNull<dyn RenderTargetVulkanApi + '_>,
+                NonNull<dyn RenderTargetVulkanApi>,
+            >(borrowed_target_ptr)
+        };
+        Self { target, owner }
     }
 
     pub(crate) fn targetMut(&mut self) -> &mut dyn RenderTargetVulkanApi {

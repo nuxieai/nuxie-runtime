@@ -505,12 +505,10 @@ mod tests {
     #[test]
     fn shader_assembly_preserves_define_order_and_source_branch() {
         resetGLCommandStream();
-        let mut capabilities = GLCapabilities {
-            contextVersionMajor: 3,
-            contextVersionMinor: 0,
-            needsFloatingPointTessellationTexture: true,
-            ..GLCapabilities::default()
-        };
+        let mut capabilities = GLCapabilities::default();
+        capabilities.contextVersionMajor = 3;
+        capabilities.contextVersionMinor = 0;
+        capabilities.needsFloatingPointTessellationTexture = true;
         capabilities.setIsGLES(true);
         capabilities.setIsMali(true);
         let shader = CompileShaderParts(

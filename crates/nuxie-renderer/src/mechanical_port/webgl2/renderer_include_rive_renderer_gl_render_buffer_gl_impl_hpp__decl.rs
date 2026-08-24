@@ -26,12 +26,12 @@ pub(crate) type GLStateOwner = Rc<RefCell<GLState>>;
 pub(crate) struct RenderBufferGLImpl {
     pub(crate) base: ManuallyDrop<RiveRenderBuffer>,
     pub(crate) m_target: GLenum,
-    pub(crate) m_bufferID: GLuint,
+    m_bufferID: GLuint,
     pub(crate) m_fallbackMappedMemory: ManuallyDrop<Option<Vec<u8>>>,
-    pub(crate) m_state: ManuallyDrop<Option<GLStateOwner>>,
+    m_state: ManuallyDrop<Option<GLStateOwner>>,
 
     /// Rust-only creation identity after the complete source field prefix.
-    pub(crate) rust_execution: ManuallyDrop<Option<GLExecutionStamp>>,
+    rust_execution: ManuallyDrop<Option<GLExecutionStamp>>,
 }
 impl RenderBufferGLImpl {
     pub(crate) fn new(
@@ -74,8 +74,25 @@ impl RenderBufferGLImpl {
         self.m_bufferID
     }
 
-    pub(crate) fn detachBuffer(&mut self) -> GLuint {
-        std::mem::take(&mut self.m_bufferID)
+    pub(crate) fn installNativeOwner(
+        &mut self,
+        state: GLStateOwner,
+        execution: GLExecutionStamp,
+        bufferID: GLuint,
+    ) {
+        assert!(self.m_state.is_none());
+        assert!(self.rust_execution.is_none());
+        assert_eq!(self.m_bufferID, 0);
+        assert_ne!(bufferID, 0);
+        let stateExecution = state
+            .borrow()
+            .executionStamp()
+            .expect("RenderBufferGLImpl requires stamped GLState");
+        assert!(stateExecution.sameDomain(&execution));
+        assert!(execution.isCurrentGeneration());
+        *self.m_state = Some(state);
+        *self.rust_execution = Some(execution);
+        self.m_bufferID = bufferID;
     }
 
     pub(crate) fn state(&self) -> &GLStateOwner {
@@ -85,9 +102,24 @@ impl RenderBufferGLImpl {
     }
 
     pub(crate) fn executionStamp(&self) -> &GLExecutionStamp {
-        self.rust_execution
-            .as_ref()
+        self.executionStampOption()
             .expect("RenderBufferGLImpl execution stamp is initialized")
+    }
+
+    pub(crate) fn executionStampOption(&self) -> Option<&GLExecutionStamp> {
+        self.rust_execution.as_ref()
+    }
+
+    /// # Safety
+    /// Called exactly once by Drop, after any generation-current native
+    /// deletion has completed. The complete value must not be used again.
+    pub(crate) unsafe fn dropOwnedSourceFields(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.m_state);
+            ManuallyDrop::drop(&mut self.m_fallbackMappedMemory);
+            ManuallyDrop::drop(&mut self.base);
+            ManuallyDrop::drop(&mut self.rust_execution);
+        }
     }
 }
 

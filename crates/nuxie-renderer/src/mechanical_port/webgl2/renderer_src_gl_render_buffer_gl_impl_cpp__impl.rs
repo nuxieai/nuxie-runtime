@@ -6,7 +6,6 @@
 use super::gles3_decl::*;
 use super::render_buffer_gl_impl_decl::{GLStateOwner, RenderBufferGLImpl};
 use crate::mechanical_port::source::include::rive::renderer_hpp::RenderBufferFlags;
-use std::mem::ManuallyDrop;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_buffer_gl_impl.cpp");
@@ -17,18 +16,14 @@ pub(crate) fn init(buffer: &mut RenderBufferGLImpl, state: GLStateOwner) {
         .executionStamp()
         .expect("RenderBufferGLImpl requires GLState execution authority");
     execution.withCurrent(|| {
-        assert!(buffer.m_state.is_none());
-        assert!(buffer.rust_execution.is_none());
-        assert_eq!(buffer.m_bufferID, 0);
-        *buffer.m_state = Some(state);
-        *buffer.rust_execution = Some(execution.clone());
         buffer.base.base.install_owner_thread_final_release_route(
             execution.domain().ownerThreadFinalReleaseRoute(),
         );
-        buffer.m_bufferID = generateGLObject(GLObjectKind::Buffer);
+        let bufferID = generateGLObject(GLObjectKind::Buffer);
+        buffer.installNativeOwner(state, execution.clone(), bufferID);
         let mut state = buffer.state().borrow_mut();
         state.bindVAO(0);
-        state.bindBuffer(buffer.m_target, buffer.m_bufferID);
+        state.bindBuffer(buffer.m_target, buffer.bufferID());
         recordGLCommand(GLCommand::BufferData {
             target: buffer.m_target,
             size: buffer.base.sizeInBytes(),
@@ -71,7 +66,7 @@ pub(crate) fn onUnmap(buffer: &mut RenderBufferGLImpl) {
         {
             let mut state = buffer.state().borrow_mut();
             state.bindVAO(0);
-            state.bindBuffer(buffer.m_target, buffer.m_bufferID);
+            state.bindBuffer(buffer.m_target, buffer.bufferID());
         }
         recordGLCommand(GLCommand::BufferSubData {
             target: buffer.m_target,
@@ -84,41 +79,18 @@ pub(crate) fn onUnmap(buffer: &mut RenderBufferGLImpl) {
     });
 }
 
-unsafe fn dropSourceFields(buffer: &mut RenderBufferGLImpl) {
-    unsafe {
-        // C++ destroys derived members in reverse declaration order, then its
-        // RiveRenderBuffer base.
-        ManuallyDrop::drop(&mut buffer.m_state);
-        ManuallyDrop::drop(&mut buffer.m_fallbackMappedMemory);
-        ManuallyDrop::drop(&mut buffer.base);
-    }
-}
-
 impl Drop for RenderBufferGLImpl {
     fn drop(&mut self) {
-        if let Some(execution) = self.rust_execution.as_ref().cloned() {
-            let destroyed = execution.withDeleteCurrent(|| {
-                if self.m_bufferID != 0 {
-                    self.state().borrow_mut().deleteBuffer(self.m_bufferID);
+        if let Some(execution) = self.executionStampOption().cloned() {
+            let _ = execution.withDeleteCurrent(|| {
+                if self.bufferID() != 0 {
+                    self.state().borrow_mut().deleteBuffer(self.bufferID());
                 }
-                unsafe { dropSourceFields(self) };
             });
-            // A stale generation deliberately skips the numeric GLuint
-            // delete. Its Rust source fields still dismantle in exact reverse
-            // declaration order.
-            if destroyed.is_none() {
-                unsafe { dropSourceFields(self) };
-            }
         } else {
-            assert_eq!(
-                self.m_bufferID, 0,
-                "an initialized GL buffer must retain its execution stamp"
-            );
-            unsafe { dropSourceFields(self) };
+            assert_eq!(self.bufferID(), 0);
         }
-        unsafe {
-            ManuallyDrop::drop(&mut self.rust_execution);
-        }
+        unsafe { self.dropOwnedSourceFields() };
     }
 }
 

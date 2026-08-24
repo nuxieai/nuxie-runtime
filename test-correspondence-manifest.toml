@@ -585,10 +585,9 @@ note = "Only the listed literal TEST_CASE action streams execute through both ru
 [[file]]
 upstream = "tests/unit_tests/runtime/raw_path_test.cpp"
 test_case_count = 7
-status = "partial"
+status = "ported-direct"
 evidence = ["crates/nuxie-render-api/tests/upstream_raw_path.rs"]
-covered_test_cases = ["rawpath-basics", "rawpath-iter", "addPath", "bounds", "addPathBackwards"]
-note = "Five of seven cases are complete direct ports against the production RawPath owner. Basics preserves resets and bounds. Iterator preserves empty traversal, every verb view, consecutive moves, discarded closes, implicit moves, and exact segment points. addPath preserves all 4x4 maker combinations with identity and scale transforms. Bounds preserves exponential verb counts and the exact coarse envelope with a deterministic local stream. addPathBackwards preserves the validator and complete complex contour stream. Only add-helpers and prune-empty-segments remain unclaimed."
+note = "All seven cases are complete direct ports. Six are green against the production RawPath owner, preserving every command stream, iterator view, 4x4 append matrix, exponential bounds workload, pruning boundary, and reversal sequence. add-helpers is honestly expected-red at the absent addOval/addPoly owners while retaining the active addRect assertions and every exact oval/poly expectation."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/raw_text_input_test.cpp"

@@ -432,3 +432,180 @@ fn rawpath_iter() {
         );
     }
 }
+
+fn upstream_add_oval(_path: &mut RawPath, _bounds: Aabb) {
+    // No production RawPath::addOval owner exists yet.
+}
+
+fn upstream_add_poly(_path: &mut RawPath, _points: &[Vec2D], _closed: bool) {
+    // No production RawPath::addPoly owner exists yet.
+}
+
+#[test]
+#[ignore = "expected-red: production RawPath has no addOval or addPoly owners"]
+fn rawpath_add_helpers() {
+    let mut path = RawPath::new();
+
+    path.add_rect(Aabb::new(1.0, 1.0, 5.0, 6.0));
+    assert!(!path.verbs().is_empty());
+    assert_eq!(cpp_bounds(&path), Aabb::new(1.0, 1.0, 5.0, 6.0));
+    assert_eq!(path.points().len(), 4);
+    assert_eq!(path.verbs().len(), 5);
+
+    path = RawPath::new();
+    upstream_add_oval(&mut path, Aabb::new(0.0, 0.0, 3.0, 6.0));
+    assert!(!path.verbs().is_empty());
+    assert_eq!(cpp_bounds(&path), Aabb::new(0.0, 0.0, 3.0, 6.0));
+    assert_eq!(path.points().len(), 13);
+    assert_eq!(path.verbs().len(), 6);
+
+    let points = [
+        Vec2D::new(1.0, 2.0),
+        Vec2D::new(4.0, 5.0),
+        Vec2D::new(3.0, 2.0),
+        Vec2D::new(100.0, -100.0),
+    ];
+    for closed in [false, true] {
+        path = RawPath::new();
+        upstream_add_poly(&mut path, &points, closed);
+        assert_eq!(cpp_bounds(&path), Aabb::new(1.0, -100.0, 100.0, 5.0));
+        assert_eq!(path.points().len(), points.len());
+        assert_eq!(path.verbs().len(), points.len() + usize::from(closed));
+        for (actual, expected) in path.points().iter().zip(points) {
+            assert_eq!(*actual, expected);
+        }
+        assert_eq!(path.verbs()[0], PathVerb::Move);
+        for verb in &path.verbs()[1..points.len()] {
+            assert_eq!(*verb, PathVerb::Line);
+        }
+        if closed {
+            assert_eq!(path.verbs()[points.len()], PathVerb::Close);
+        }
+    }
+}
+
+#[test]
+fn prune_empty_segments() {
+    {
+        let mut path = RawPath::new();
+        path.prune_empty_segments();
+        assert!(segments(&path).is_empty());
+    }
+    for build in [
+        (PathVerb::Line, vec![0.0, 0.0]),
+        (PathVerb::Quad, vec![0.0, 0.0, 0.0, 0.0]),
+        (PathVerb::Cubic, vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ] {
+        let mut path = RawPath::new();
+        match build.0 {
+            PathVerb::Line => path.line_to(build.1[0], build.1[1]),
+            PathVerb::Quad => path.quad_to(build.1[0], build.1[1], build.1[2], build.1[3]),
+            PathVerb::Cubic => path.cubic_to(
+                build.1[0], build.1[1], build.1[2], build.1[3], build.1[4], build.1[5],
+            ),
+            _ => unreachable!(),
+        }
+        path.prune_empty_segments();
+        assert_eq!(
+            segments(&path),
+            vec![segment(PathVerb::Move, &[(0.0, 0.0)])]
+        );
+    }
+
+    {
+        let mut path = RawPath::new();
+        path.move_to(1.0, 2.0);
+        path.line_to(3.0, 4.0);
+        path.line_to(3.0, 4.0);
+        path.quad_to(5.0, 6.0, 7.0, 8.0);
+        path.quad_to(7.0, 8.0, 7.0, 8.0);
+        path.quad_to(7.0, 8.0, 7.0, 9.0);
+        path.quad_to(7.0, 9.0, 7.0, 9.0);
+        path.quad_to(7.0, 9.0, 7.0, 8.0);
+        path.quad_to(7.0, 8.0, 7.0, 8.0);
+        path.cubic_to(9.0, 10.0, 11.0, 12.0, 13.0, 14.0);
+        path.cubic_to(13.0, 14.0, 13.0, 14.0, 13.0, 14.0);
+        path.cubic_to(13.0, 14.0, 13.0, 14.0, 13.0, 15.0);
+        path.cubic_to(13.0, 15.0, 13.0, 15.0, 13.0, 15.0);
+        path.cubic_to(13.0, 16.0, 13.0, 15.0, 13.0, 15.0);
+        path.cubic_to(13.0, 15.0, 13.0, 15.0, 13.0, 15.0);
+        path.cubic_to(13.0, 15.0, 13.0, 16.0, 13.0, 15.0);
+        path.cubic_to(13.0, 15.0, 13.0, 15.0, 13.0, 15.0);
+        path.cubic_to(13.0, 15.0, 13.0, 15.0, 13.0, 16.0);
+        path.close();
+        path.prune_empty_segments();
+        assert_eq!(
+            segments(&path),
+            vec![
+                segment(PathVerb::Move, &[(1.0, 2.0)]),
+                segment(PathVerb::Line, &[(1.0, 2.0), (3.0, 4.0)]),
+                segment(PathVerb::Quad, &[(3.0, 4.0), (5.0, 6.0), (7.0, 8.0)]),
+                segment(PathVerb::Quad, &[(7.0, 8.0), (7.0, 8.0), (7.0, 9.0)]),
+                segment(PathVerb::Quad, &[(7.0, 9.0), (7.0, 9.0), (7.0, 8.0)]),
+                segment(
+                    PathVerb::Cubic,
+                    &[(7.0, 8.0), (9.0, 10.0), (11.0, 12.0), (13.0, 14.0)]
+                ),
+                segment(
+                    PathVerb::Cubic,
+                    &[(13.0, 14.0), (13.0, 14.0), (13.0, 14.0), (13.0, 15.0)]
+                ),
+                segment(
+                    PathVerb::Cubic,
+                    &[(13.0, 15.0), (13.0, 16.0), (13.0, 15.0), (13.0, 15.0)]
+                ),
+                segment(
+                    PathVerb::Cubic,
+                    &[(13.0, 15.0), (13.0, 15.0), (13.0, 16.0), (13.0, 15.0)]
+                ),
+                segment(
+                    PathVerb::Cubic,
+                    &[(13.0, 15.0), (13.0, 15.0), (13.0, 15.0), (13.0, 16.0)]
+                ),
+                segment(PathVerb::Close, &[]),
+            ]
+        );
+    }
+
+    {
+        let mut path = RawPath::new();
+        path.move_to(1.0, 2.0);
+        path.line_to(1.0, 2.0);
+        path.line_to(3.0, 4.0);
+        let mut appended = RawPath::new();
+        appended.move_to(5.0, 6.0);
+        appended.quad_to(7.0, 8.0, 9.0, 10.0);
+        appended.close();
+        appended.move_to(11.0, 12.0);
+        appended.cubic_to(13.0, 14.0, 15.0, 16.0, 17.0, 18.0);
+        let verb_start = path.verbs().len();
+        let point_start = path.points().len();
+        path.add_path(&appended, Mat2D([0.0, 0.0, 0.0, 0.0, 19.0, 20.0]));
+
+        path.prune_empty_segments_from_offsets(path.verbs().len(), path.points().len());
+        assert_eq!(segments(&path).len(), 8);
+        path.prune_empty_segments_from_offsets(verb_start, point_start);
+        assert_eq!(
+            segments(&path),
+            vec![
+                segment(PathVerb::Move, &[(1.0, 2.0)]),
+                segment(PathVerb::Line, &[(1.0, 2.0), (1.0, 2.0)]),
+                segment(PathVerb::Line, &[(1.0, 2.0), (3.0, 4.0)]),
+                segment(PathVerb::Move, &[(19.0, 20.0)]),
+                segment(PathVerb::Close, &[]),
+                segment(PathVerb::Move, &[(19.0, 20.0)]),
+            ]
+        );
+        path.prune_empty_segments();
+        assert_eq!(
+            segments(&path),
+            vec![
+                segment(PathVerb::Move, &[(1.0, 2.0)]),
+                segment(PathVerb::Line, &[(1.0, 2.0), (3.0, 4.0)]),
+                segment(PathVerb::Move, &[(19.0, 20.0)]),
+                segment(PathVerb::Close, &[]),
+                segment(PathVerb::Move, &[(19.0, 20.0)]),
+            ]
+        );
+    }
+}

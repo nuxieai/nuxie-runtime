@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 65
+max_pending = 63
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -721,9 +721,9 @@ note = "P3-b directly covers the two non-null wrapper/tracking lifecycle cases: 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_direct_field_benchmark.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_direct_field_flag.rs"]
+note = "The exact N=1000000, three-warmup/five-run benchmark, four scripts, flag-off/flag-on action order, and faster-with-flag assertions are ported. It is honestly ignored expected-red because luaur does not expose the pinned process-global LuauDirectFieldGet FFlag seam."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_drawable_test.cpp"
@@ -742,9 +742,9 @@ note = "Both snapshot/mapping cases are direct Rust ports."
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_gc_fflag_init_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_direct_field_flag.rs"]
+note = "The flip-after-newstate sequence, return-one script, 64 temporary tables, forced full collection, and no-crash outcome are ported. It is honestly ignored expected-red because luaur does not expose the pinned process-global LuauDirectFieldGet FFlag seam."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_gradient_test.cpp"

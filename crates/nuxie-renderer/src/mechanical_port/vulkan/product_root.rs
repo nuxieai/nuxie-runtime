@@ -91,6 +91,8 @@ impl VulkanProductBackend {
             )
         }
         .ok_or_else(|| RendererError::Device("exact Vulkan context admission failed".into()))?;
+        #[cfg(feature = "rive-decoders")]
+        crate::exact_source_adapter::install_bitmap_decoder(context.as_mut());
         let context_ref = unsafe { Pin::get_unchecked_mut(context.as_mut()) };
         let implementation = unsafe {
             &mut *context_ref

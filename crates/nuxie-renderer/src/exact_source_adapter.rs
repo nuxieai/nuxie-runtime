@@ -27,6 +27,41 @@ use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRe
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 use crate::{RenderMode, RendererError};
 
+#[cfg(feature = "rive-decoders")]
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
+    BitmapDecodeResult, BitmapDecoderContract, BitmapPixelFormat,
+};
+
+#[cfg(feature = "rive-decoders")]
+struct ExactBitmapDecoder;
+
+#[cfg(feature = "rive-decoders")]
+impl BitmapDecoderContract for ExactBitmapDecoder {
+    fn decodeBitmap(&mut self, encoded: &[u8]) -> Option<BitmapDecodeResult> {
+        let dimensions = nuxie_image_codec::preflight_encoded_image(encoded)?;
+        let decoded = nuxie_image_codec::decode_image_rgba(encoded)?;
+        if decoded.width != dimensions.width || decoded.height != dimensions.height {
+            return None;
+        }
+        Some(BitmapDecodeResult {
+            width: decoded.width,
+            height: decoded.height,
+            pixel_format: BitmapPixelFormat::rgbaPremul,
+            bytes: decoded.pixels,
+        })
+    }
+
+    fn convertToRGBAPremul(&mut self, bitmap: &mut BitmapDecodeResult) {
+        bitmap.pixel_format = BitmapPixelFormat::rgbaPremul;
+    }
+}
+
+#[cfg(feature = "rive-decoders")]
+pub(crate) fn install_bitmap_decoder(mut context: Pin<&mut RenderContext>) {
+    unsafe { Pin::get_unchecked_mut(context.as_mut()) }
+        .installBitmapDecoder(Box::new(ExactBitmapDecoder));
+}
+
 pub(crate) trait ExactSourceBackend: 'static {
     fn context_mut(&mut self) -> Pin<&mut RenderContext>;
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError>;

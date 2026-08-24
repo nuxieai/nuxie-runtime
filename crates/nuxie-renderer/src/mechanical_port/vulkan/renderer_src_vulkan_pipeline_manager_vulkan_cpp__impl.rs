@@ -715,7 +715,7 @@ pub(crate) fn tryGetPipeline<'a>(
             }
             if props.shaderFeatures == ubershaderFeatures {
                 #[cfg(not(feature = "with-rive-tools"))]
-                assert!(false, "Ubershader creation failed");
+                debug_assert!(false, "Ubershader creation failed");
                 return None;
             }
             assert_ne!(props.shaderFeatures, ubershaderFeatures);

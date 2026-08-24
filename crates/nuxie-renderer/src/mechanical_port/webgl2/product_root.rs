@@ -18,6 +18,8 @@ use crate::{RenderMode, RendererError};
 pub(crate) struct WebGl2ProductBackend {
     context: Option<Pin<Box<RenderContext>>>,
     target: rcp<FramebufferRenderTargetGL>,
+    canvas: HtmlCanvasElement,
+    sample_count: u32,
     width: u32,
     height: u32,
     frame_number: u64,
@@ -40,7 +42,7 @@ impl WebGl2ProductBackend {
             });
         }
         let (provider, adapter_name, sample_count) =
-            BrowserWebGl2Provider::new(canvas, width, height)
+            BrowserWebGl2Provider::new(canvas.clone(), width, height)
                 .map_err(|error| RendererError::Adapter(js_error(error)))?;
         let mut context = super::render_context_gl_impl::MakeContext(
             ContextOptions::default(),
@@ -61,6 +63,8 @@ impl WebGl2ProductBackend {
         Ok(Self {
             context: Some(context),
             target,
+            canvas,
+            sample_count,
             width,
             height,
             frame_number: 0,
@@ -87,11 +91,82 @@ impl WebGl2ProductBackend {
     fn execution_domain(&mut self) -> GLExecutionDomain {
         self.implementation_mut().rust_execution.domain().clone()
     }
+
+    fn resize_target(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        if width == 0 || height == 0 {
+            return Err(RendererError::InvalidTextureExtent {
+                label: "WebGL2 target",
+                width,
+                height,
+                max_dimension: u32::MAX,
+            });
+        }
+        if self.active_frame {
+            return Err(RendererError::Device(
+                "cannot resize exact WebGL2 target while a frame is active".into(),
+            ));
+        }
+        if (width, height) == (self.width, self.height) {
+            return Ok(());
+        }
+        self.canvas.set_width(width);
+        self.canvas.set_height(height);
+        let execution = (&*self.implementation_mut().rust_execution).clone();
+        let replacement = make_rcp(|| {
+            FramebufferRenderTargetGL::new(width, height, 0, self.sample_count, execution)
+        });
+        self.target.operator_assign_null();
+        self.target = replacement;
+        self.implementation_mut().invalidateGLState();
+        self.width = width;
+        self.height = height;
+        Ok(())
+    }
+
+    fn finish_frame_inner(
+        &mut self,
+        frame_number: u64,
+        readback: bool,
+    ) -> Result<Option<Vec<u8>>, RendererError> {
+        if !self.active_frame || frame_number != self.frame_number {
+            return Err(RendererError::Device(
+                "exact WebGL2 frame ownership mismatch".into(),
+            ));
+        }
+        let resources = FlushResources {
+            renderTarget: self.target.get().cast(),
+            externalCommandBuffer: std::ptr::null_mut(),
+            currentFrameNumber: frame_number,
+            safeFrameNumber: frame_number.saturating_sub(1),
+        };
+        unsafe {
+            Pin::get_unchecked_mut(self.context_pin()).flushExecutable(&resources);
+        }
+        self.implementation_mut().unbindGLInternalResources();
+        if readback {
+            unsafe { &mut *self.target.get() }.bindDestinationFramebuffer(GL_READ_FRAMEBUFFER);
+        }
+        let execution = self.execution_domain();
+        let error = execution.withCurrent(|| execution.finishAndGetError());
+        self.active_frame = false;
+        if error != GL_NONE {
+            return Err(RendererError::Device(format!(
+                "exact WebGL2 post-flush error: {error:#x}"
+            )));
+        }
+        Ok(readback.then(|| {
+            execution.withCurrent(|| execution.readPixelsRGBA8(0, 0, self.width, self.height))
+        }))
+    }
 }
 
 impl ExactSourceBackend for WebGl2ProductBackend {
     fn context_mut(&mut self) -> Pin<&mut RenderContext> {
         self.context_pin()
+    }
+
+    fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        self.resize_target(width, height)
     }
 
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError> {
@@ -121,33 +196,12 @@ impl ExactSourceBackend for WebGl2ProductBackend {
     }
 
     fn finish_frame(&mut self, frame_number: u64) -> Result<Vec<u8>, RendererError> {
-        if !self.active_frame || frame_number != self.frame_number {
-            return Err(RendererError::Device(
-                "exact WebGL2 frame ownership mismatch".into(),
-            ));
-        }
-        let resources = FlushResources {
-            renderTarget: self.target.get().cast(),
-            externalCommandBuffer: std::ptr::null_mut(),
-            currentFrameNumber: frame_number,
-            safeFrameNumber: frame_number.saturating_sub(1),
-        };
-        unsafe {
-            Pin::get_unchecked_mut(self.context_pin()).flushExecutable(&resources);
-        }
-        self.implementation_mut().unbindGLInternalResources();
-        unsafe { &mut *self.target.get() }.bindDestinationFramebuffer(GL_READ_FRAMEBUFFER);
-        let execution = self.execution_domain();
-        let error = execution.withCurrent(|| execution.finishAndGetError());
-        self.active_frame = false;
-        if error != GL_NONE {
-            return Err(RendererError::Device(format!(
-                "exact WebGL2 post-flush error: {error:#x}"
-            )));
-        }
-        Ok(execution.withCurrent(|| {
-            execution.readPixelsRGBA8(0, 0, self.width, self.height)
-        }))
+        self.finish_frame_inner(frame_number, true)?
+            .ok_or_else(|| RendererError::Map("WebGL2 readback did not produce pixels".into()))
+    }
+
+    fn finish_frame_without_readback(&mut self, frame_number: u64) -> Result<(), RendererError> {
+        self.finish_frame_inner(frame_number, false).map(drop)
     }
 
     fn abort_frame(&mut self) {

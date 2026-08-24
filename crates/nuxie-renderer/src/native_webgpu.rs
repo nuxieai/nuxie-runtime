@@ -30,6 +30,11 @@ impl NativeWebGpuFactory {
         &self.adapter_name
     }
 
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        self.core.resize(width, height)
+    }
+
     pub fn begin_frame(
         &self,
         clear_color: u32,

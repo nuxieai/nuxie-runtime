@@ -31,6 +31,10 @@ impl WebGl2Factory {
         &self.adapter_name
     }
 
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        self.core.resize(width, height)
+    }
+
     pub fn begin_frame(
         &self,
         clear_color: u32,
@@ -111,6 +115,11 @@ pub struct WebGl2Frame {
 impl WebGl2Frame {
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
         self.core.finish()
+    }
+
+    /// Presents one browser frame without forcing a GPU-to-CPU readback.
+    pub fn finish_present(self) -> Result<(), RendererError> {
+        self.core.finish_without_readback()
     }
 }
 

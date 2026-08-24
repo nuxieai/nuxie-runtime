@@ -7,10 +7,13 @@ import sys
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: inject_webgpu_imports.py <wasm-bindgen-js>")
+    if len(sys.argv) not in (2, 3):
+        raise SystemExit(
+            "usage: inject_webgpu_imports.py <wasm-bindgen-js> [host-import-path]"
+        )
 
     path = Path(sys.argv[1])
+    host_import_path = sys.argv[2] if len(sys.argv) == 3 else "../webgpu-host.js"
     source = path.read_text()
     env_imports = re.findall(r'^import \* as import\d+ from "env"\n', source, re.MULTILINE)
     env_entries = re.findall(r'^        "env": import\d+,\n', source, re.MULTILINE)
@@ -21,12 +24,16 @@ def main() -> None:
         )
 
     source = re.sub(r'^import \* as import\d+ from "env"\n', "", source, flags=re.MULTILINE)
-    source = source.replace(
-        '/* @ts-self-types="./webgpu_renderer_replay.d.ts" */\n',
-        '/* @ts-self-types="./webgpu_renderer_replay.d.ts" */\n'
-        'import { createWebGpuImports } from "../webgpu-host.js";\n',
-        1,
+    source, marker_replacements = re.subn(
+        r'(/\* @ts-self-types="[^"]+" \*/\n)',
+        rf'\1import {{ createWebGpuImports }} from "{host_import_path}";\n',
+        source,
+        count=1,
     )
+    if marker_replacements != 1:
+        raise SystemExit(
+            f"expected one wasm-bindgen self-types marker, replaced {marker_replacements}"
+        )
     source, replacements = re.subn(
         r'(?:^        "env": import\d+,\n)+',
         '        "env": createWebGpuImports(() => wasm),\n',

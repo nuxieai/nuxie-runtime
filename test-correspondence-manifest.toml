@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 45
+max_pending = 44
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -941,9 +941,9 @@ note = "All 16 direct dispatch cases are ported: duplicate-preserving exact-acti
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_focus_list_test.cpp"
 test_case_count = 2
-status = "pending"
-evidence = ["P3C-report.md", "LT1SC-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
-note = "Visual-order and manager-local id algorithms are ported, and LT1SC proves exact ordered added nodes with ids and root/parent/sibling fields for the nested focus oracle. Both named upstream .riv assertions remain pending because that evidence uses the fixed focus fixture rather than focus_nodes_list_order.riv and focus_nested_artboard_order.riv."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_semantic_focus_list.rs"]
+note = "Both direct ports use focus_nodes_list_order.riv with the shared upstream ten-by-0.1 settle sequence. They preserve all four root/button assertions, visual-order sibling indices and Catch-style Approx bounds, root child-id ordering, and the independent smallest-id-is-last fixture guard. Both are expected-red: Rust's visual slots diverge and its smallest semantic id occupies slot 0 rather than slot 3."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_label_inference_test.cpp"

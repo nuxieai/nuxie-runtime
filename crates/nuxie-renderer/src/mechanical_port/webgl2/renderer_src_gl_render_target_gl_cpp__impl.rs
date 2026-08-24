@@ -194,7 +194,7 @@ fn bindHeadlessFramebufferCurrent(
 
     // GL_ANGLE_shader_pixel_local_storage is defined by the pinned RIVE_WEBGL
     // gles3.hpp, while actual calls remain gated by the runtime capability.
-    if capabilities.ANGLE_shader_pixel_local_storage && renderTarget.m_webglPLSBindingsDirty {
+    if capabilities.ANGLE_shader_pixel_local_storage() && renderTarget.m_webglPLSBindingsDirty {
         recordGLCommand(GLCommand::FramebufferTexturePixelLocalStorageANGLE {
             plane: COLOR_PLANE_IDX,
             backing_texture: renderTarget.m_externalTextureID,
@@ -341,7 +341,7 @@ fn bindTextureMSAAFramebufferCurrent(
 
     if renderContextImpl
         .capabilities()
-        .EXT_multisampled_render_to_texture
+        .EXT_multisampled_render_to_texture()
     {
         MSAAResolveAction::automatic
     } else {
@@ -569,7 +569,7 @@ fn bindFramebufferMSAAFramebufferCurrent(
             );
         } else if renderContextImpl
             .capabilities()
-            .EXT_multisampled_render_to_texture
+            .EXT_multisampled_render_to_texture()
         {
             allocateOffscreenTargetTextureCurrent(renderTarget);
         }

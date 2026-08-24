@@ -226,7 +226,7 @@ pub(crate) fn CompileShaderParts(
         "#version {}{}0{}\n#define {GLSL_GLSL_VERSION} {}{}0\n",
         capabilities.contextVersionMajor,
         capabilities.contextVersionMinor,
-        if capabilities.isGLES { " es" } else { "" },
+        if capabilities.isGLES() { " es" } else { "" },
         capabilities.contextVersionMajor,
         capabilities.contextVersionMinor,
     );
@@ -242,7 +242,7 @@ pub(crate) fn CompileShaderParts(
     for define in defines {
         shaderSource.push_str(&format!("#define {define} true\n"));
     }
-    if !capabilities.ANGLE_base_vertex_base_instance_shader_builtin {
+    if !capabilities.ANGLE_base_vertex_base_instance_shader_builtin() {
         shaderSource.push_str(&format!(
             "#define {GLSL_BASE_INSTANCE_UNIFORM_NAME} {}\n",
             super::gl_utils_decl::BASE_INSTANCE_UNIFORM_NAME
@@ -251,7 +251,7 @@ pub(crate) fn CompileShaderParts(
     if capabilities.needsFloatingPointTessellationTexture {
         shaderSource.push_str(&format!("#define {GLSL_TESS_TEXTURE_FLOATING_POINT}\n"));
     }
-    if capabilities.isMali {
+    if capabilities.isMali() {
         shaderSource.push_str(&format!("#define {GLSL_GL_RENDERER_MALI}\n"));
     }
     shaderSource.push_str(GLSL_GLSL);
@@ -491,14 +491,14 @@ mod tests {
     #[test]
     fn shader_assembly_preserves_define_order_and_source_branch() {
         resetGLCommandStream();
-        let capabilities = GLCapabilities {
-            isGLES: true,
+        let mut capabilities = GLCapabilities {
             contextVersionMajor: 3,
             contextVersionMinor: 0,
             needsFloatingPointTessellationTexture: true,
-            isMali: true,
             ..GLCapabilities::default()
         };
+        capabilities.setIsGLES(true);
+        capabilities.setIsMali(true);
         let shader = CompileShaderParts(
             0xFFFF,
             &["CUSTOM"],

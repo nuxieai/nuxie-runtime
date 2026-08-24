@@ -36,7 +36,7 @@ pub(crate) fn invalidate(state: &mut GLState) {
         recordGLCommand(GLCommand::PixelStore(parameter, value));
     }
     recordGLCommand(GLCommand::BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0));
-    if state.m_capabilities.ANGLE_provoking_vertex {
+    if state.m_capabilities.ANGLE_provoking_vertex() {
         recordGLCommand(GLCommand::ProvokingVertex(
             GL_FIRST_VERTEX_CONVENTION_ANGLE,
         ));
@@ -86,23 +86,23 @@ pub(crate) fn setScissorRaw(
     height: u32,
 ) {
     let box_ = [left, top, width, height];
-    if !state.m_validState.scissorBox || state.m_scissorBox != box_ {
+    if !state.m_validState.scissorBox() || state.m_scissorBox != box_ {
         recordGLCommand(GLCommand::Scissor(left, top, width, height));
         state.m_scissorBox = box_;
-        state.m_validState.scissorBox = true;
+        state.m_validState.setScissorBox(true);
     }
-    if !state.m_validState.scissorEnabled || !state.m_scissorEnabled {
+    if !state.m_validState.scissorEnabled() || !state.m_scissorEnabled {
         recordGLCommand(GLCommand::Enable(GL_SCISSOR_TEST));
         state.m_scissorEnabled = true;
-        state.m_validState.scissorEnabled = true;
+        state.m_validState.setScissorEnabled(true);
     }
 }
 
 pub(crate) fn disableScissor(state: &mut GLState) {
-    if !state.m_validState.scissorEnabled || state.m_scissorEnabled {
+    if !state.m_validState.scissorEnabled() || state.m_scissorEnabled {
         recordGLCommand(GLCommand::Disable(GL_SCISSOR_TEST));
         state.m_scissorEnabled = false;
-        state.m_validState.scissorEnabled = true;
+        state.m_validState.setScissorEnabled(true);
     }
 }
 
@@ -119,29 +119,29 @@ pub(crate) fn setDepthStencilEnabled(
     depthEnabled: bool,
     stencilEnabled: bool,
 ) {
-    if !state.m_validState.depthStencilEnabled || state.m_depthTestEnabled != depthEnabled {
+    if !state.m_validState.depthStencilEnabled() || state.m_depthTestEnabled != depthEnabled {
         glEnableDisable(GL_DEPTH_TEST, depthEnabled);
         state.m_depthTestEnabled = depthEnabled;
     }
-    if !state.m_validState.depthStencilEnabled || state.m_stencilTestEnabled != stencilEnabled {
+    if !state.m_validState.depthStencilEnabled() || state.m_stencilTestEnabled != stencilEnabled {
         glEnableDisable(GL_STENCIL_TEST, stencilEnabled);
         state.m_stencilTestEnabled = stencilEnabled;
     }
-    state.m_validState.depthStencilEnabled = true;
+    state.m_validState.setDepthStencilEnabled(true);
 }
 
 pub(crate) fn setCullFace(state: &mut GLState, cullFace: GLenum) {
-    if !state.m_validState.cullFace || cullFace != state.m_cullFace {
+    if !state.m_validState.cullFace() || cullFace != state.m_cullFace {
         if cullFace == GL_NONE {
             recordGLCommand(GLCommand::Disable(GL_CULL_FACE));
         } else {
-            if !state.m_validState.cullFace || state.m_cullFace == GL_NONE {
+            if !state.m_validState.cullFace() || state.m_cullFace == GL_NONE {
                 recordGLCommand(GLCommand::Enable(GL_CULL_FACE));
             }
             recordGLCommand(GLCommand::CullFace(cullFace));
         }
         state.m_cullFace = cullFace;
-        state.m_validState.cullFace = true;
+        state.m_validState.setCullFace(true);
     }
 }
 
@@ -175,10 +175,10 @@ fn glCullFace(riveCullFace: CullFace) -> GLenum {
 }
 
 pub(crate) fn setBlendEquation(state: &mut GLState, blendEquation: BlendEquation) {
-    if state.m_validState.blendEquation && blendEquation == state.m_blendEquation {
+    if state.m_validState.blendEquation() && blendEquation == state.m_blendEquation {
         return;
     }
-    if !state.m_validState.blendEquation || state.m_blendEquation == BlendEquation::none {
+    if !state.m_validState.blendEquation() || state.m_blendEquation == BlendEquation::none {
         recordGLCommand(GLCommand::Enable(GL_BLEND));
     }
     match blendEquation {
@@ -220,7 +220,7 @@ pub(crate) fn setBlendEquation(state: &mut GLState, blendEquation: BlendEquation
         }
     }
     state.m_blendEquation = blendEquation;
-    state.m_validState.blendEquation = true;
+    state.m_validState.setBlendEquation(true);
 }
 
 pub(crate) fn setWriteMasks(
@@ -229,7 +229,7 @@ pub(crate) fn setWriteMasks(
     depthWriteMask: bool,
     stencilWriteMask: u8,
 ) {
-    if !state.m_validState.writeMasks {
+    if !state.m_validState.writeMasks() {
         recordGLCommand(GLCommand::ColorMask(
             colorWriteMask,
             colorWriteMask,
@@ -241,7 +241,7 @@ pub(crate) fn setWriteMasks(
         state.m_colorWriteMask = colorWriteMask;
         state.m_depthWriteMask = depthWriteMask;
         state.m_stencilWriteMask = stencilWriteMask as u32;
-        state.m_validState.writeMasks = true;
+        state.m_validState.setWriteMasks(true);
     } else {
         if colorWriteMask != state.m_colorWriteMask {
             recordGLCommand(GLCommand::ColorMask(
@@ -321,35 +321,35 @@ pub(crate) fn setPipelineState(
 }
 
 pub(crate) fn bindProgram(state: &mut GLState, programID: GLuint) {
-    if !state.m_validState.boundProgramID || programID != state.m_boundProgramID {
+    if !state.m_validState.boundProgramID() || programID != state.m_boundProgramID {
         recordGLCommand(GLCommand::UseProgram(programID));
         state.m_boundProgramID = programID;
-        state.m_validState.boundProgramID = true;
+        state.m_validState.setBoundProgramID(true);
     }
 }
 
 pub(crate) fn bindVAO(state: &mut GLState, vao: GLuint) {
-    if !state.m_validState.boundVAO || vao != state.m_boundVAO {
+    if !state.m_validState.boundVAO() || vao != state.m_boundVAO {
         recordGLCommand(GLCommand::BindVertexArray(vao));
         state.m_boundVAO = vao;
-        state.m_validState.boundVAO = true;
+        state.m_validState.setBoundVAO(true);
     }
 }
 
 pub(crate) fn bindBuffer(state: &mut GLState, target: GLenum, bufferID: GLuint) {
     match target {
         GL_ARRAY_BUFFER => {
-            if !state.m_validState.boundArrayBufferID || bufferID != state.m_boundArrayBufferID {
+            if !state.m_validState.boundArrayBufferID() || bufferID != state.m_boundArrayBufferID {
                 recordGLCommand(GLCommand::BindBuffer(GL_ARRAY_BUFFER, bufferID));
                 state.m_boundArrayBufferID = bufferID;
-                state.m_validState.boundArrayBufferID = true;
+                state.m_validState.setBoundArrayBufferID(true);
             }
         }
         GL_UNIFORM_BUFFER => {
-            if !state.m_validState.boundUniformBufferID || bufferID != state.m_boundUniformBufferID {
+            if !state.m_validState.boundUniformBufferID() || bufferID != state.m_boundUniformBufferID {
                 recordGLCommand(GLCommand::BindBuffer(GL_UNIFORM_BUFFER, bufferID));
                 state.m_boundUniformBufferID = bufferID;
-                state.m_validState.boundUniformBufferID = true;
+                state.m_validState.setBoundUniformBufferID(true);
             }
         }
         _ => recordGLCommand(GLCommand::BindBuffer(target, bufferID)),
@@ -358,24 +358,24 @@ pub(crate) fn bindBuffer(state: &mut GLState, target: GLenum, bufferID: GLuint) 
 
 pub(crate) fn deleteProgram(state: &mut GLState, programID: GLuint) {
     recordGLCommand(GLCommand::DeleteProgram(programID));
-    if state.m_validState.boundProgramID && state.m_boundProgramID == programID {
+    if state.m_validState.boundProgramID() && state.m_boundProgramID == programID {
         state.m_boundProgramID = 0;
     }
 }
 
 pub(crate) fn deleteVAO(state: &mut GLState, vao: GLuint) {
     recordGLCommand(GLCommand::DeleteVertexArray(vao));
-    if state.m_validState.boundVAO && state.m_boundVAO == vao {
+    if state.m_validState.boundVAO() && state.m_boundVAO == vao {
         state.m_boundVAO = 0;
     }
 }
 
 pub(crate) fn deleteBuffer(state: &mut GLState, bufferID: GLuint) {
     recordGLCommand(GLCommand::DeleteBuffer(bufferID));
-    if state.m_validState.boundArrayBufferID && state.m_boundArrayBufferID == bufferID {
+    if state.m_validState.boundArrayBufferID() && state.m_boundArrayBufferID == bufferID {
         state.m_boundArrayBufferID = 0;
     }
-    if state.m_validState.boundUniformBufferID && state.m_boundUniformBufferID == bufferID {
+    if state.m_validState.boundUniformBufferID() && state.m_boundUniformBufferID == bufferID {
         state.m_boundUniformBufferID = 0;
     }
 }

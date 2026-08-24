@@ -18,20 +18,41 @@ pub(crate) enum ScissorAction {
     ignore = 1,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ValidState {
-    pub(crate) scissorBox: bool,
-    pub(crate) scissorEnabled: bool,
-    pub(crate) depthStencilEnabled: bool,
-    pub(crate) writeMasks: bool,
-    pub(crate) blendEquation: bool,
-    pub(crate) cullFace: bool,
-    pub(crate) boundProgramID: bool,
-    pub(crate) boundVAO: bool,
-    pub(crate) boundArrayBufferID: bool,
-    pub(crate) boundUniformBufferID: bool,
-    pub(crate) boundPixelUnpackBufferID: bool,
+    bits: [u8; 2],
 }
+
+macro_rules! valid_state_bit {
+    ($get:ident, $set:ident, $bit:expr) => {
+        pub(crate) const fn $get(&self) -> bool {
+            self.bits[$bit / 8] & (1 << ($bit % 8)) != 0
+        }
+        pub(crate) fn $set(&mut self, value: bool) {
+            let byte = $bit / 8;
+            let mask = 1 << ($bit % 8);
+            self.bits[byte] = (self.bits[byte] & !mask) | ((value as u8) * mask);
+        }
+    };
+}
+
+impl ValidState {
+    valid_state_bit!(scissorBox, setScissorBox, 0);
+    valid_state_bit!(scissorEnabled, setScissorEnabled, 1);
+    valid_state_bit!(depthStencilEnabled, setDepthStencilEnabled, 2);
+    valid_state_bit!(writeMasks, setWriteMasks, 3);
+    valid_state_bit!(blendEquation, setBlendEquation, 4);
+    valid_state_bit!(cullFace, setCullFace, 5);
+    valid_state_bit!(boundProgramID, setBoundProgramID, 6);
+    valid_state_bit!(boundVAO, setBoundVAO, 7);
+    valid_state_bit!(boundArrayBufferID, setBoundArrayBufferID, 8);
+    valid_state_bit!(boundUniformBufferID, setBoundUniformBufferID, 9);
+    valid_state_bit!(boundPixelUnpackBufferID, setBoundPixelUnpackBufferID, 10);
+}
+
+const _: () = assert!(core::mem::size_of::<ValidState>() == 2);
+const _: () = assert!(core::mem::align_of::<ValidState>() == 1);
 
 #[repr(C)]
 pub(crate) struct GLState {

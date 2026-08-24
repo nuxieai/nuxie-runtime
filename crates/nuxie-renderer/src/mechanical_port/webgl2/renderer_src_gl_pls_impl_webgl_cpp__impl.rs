@@ -137,8 +137,8 @@ impl PixelLocalStorageImpl for PLSImplWebGL {
         capabilities: &GLCapabilities,
         platformFeatures: &mut PlatformFeatures,
     ) {
-        assert!(capabilities.ANGLE_shader_pixel_local_storage);
-        if capabilities.ANGLE_shader_pixel_local_storage_coherent {
+        assert!(capabilities.ANGLE_shader_pixel_local_storage());
+        if capabilities.ANGLE_shader_pixel_local_storage_coherent() {
             platformFeatures.supportsRasterOrderingMode = true;
         }
     }
@@ -502,14 +502,15 @@ mod tests {
     }
 
     fn capabilities() -> GLCapabilities {
-        GLCapabilities {
-            isGLES: true,
+        let mut capabilities = GLCapabilities {
             contextVersionMajor: 3,
-            ANGLE_shader_pixel_local_storage: true,
-            ANGLE_shader_pixel_local_storage_coherent: true,
-            supportsETC2: true,
             ..GLCapabilities::default()
-        }
+        };
+        capabilities.setIsGLES(true);
+        capabilities.setANGLE_shader_pixel_local_storage(true);
+        capabilities.setANGLE_shader_pixel_local_storage_coherent(true);
+        capabilities.setSupportsETC2(true);
+        capabilities
     }
 
     fn flushDescriptor(renderTarget: NonNull<gpu::RenderTarget>) -> FlushDescriptor {
@@ -583,17 +584,15 @@ mod tests {
 
     #[test]
     fn coherent_pls_enables_raster_ordering_and_exports_exact_define() {
-        let mut capabilities = GLCapabilities {
-            ANGLE_shader_pixel_local_storage: true,
-            ANGLE_shader_pixel_local_storage_coherent: true,
-            ..GLCapabilities::default()
-        };
+        let mut capabilities = GLCapabilities::default();
+        capabilities.setANGLE_shader_pixel_local_storage(true);
+        capabilities.setANGLE_shader_pixel_local_storage_coherent(true);
         let mut features = PlatformFeatures::default();
         let pls = PLSImplWebGL::default();
         pls.getSupportedInterlockModes(&capabilities, &mut features);
         assert!(features.supportsRasterOrderingMode);
 
-        capabilities.ANGLE_shader_pixel_local_storage_coherent = false;
+        capabilities.setANGLE_shader_pixel_local_storage_coherent(false);
         features.supportsRasterOrderingMode = false;
         pls.getSupportedInterlockModes(&capabilities, &mut features);
         assert!(!features.supportsRasterOrderingMode);
@@ -687,13 +686,13 @@ mod tests {
             .expect("OpenGL ES 3.0 component097 provider creates a context");
 
             assert_eq!(
-                context.capabilities().ANGLE_shader_pixel_local_storage,
+                context.capabilities().ANGLE_shader_pixel_local_storage(),
                 expectCapability
             );
             assert_eq!(
                 context
                     .capabilities()
-                    .ANGLE_shader_pixel_local_storage_coherent,
+                    .ANGLE_shader_pixel_local_storage_coherent(),
                 expectCapability
             );
             assert_eq!(context.m_plsImpl.is_some(), expectPLS);

@@ -1556,11 +1556,8 @@ pub(crate) const GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS: GLenum = 0x90D6;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct GLCapabilities {
-    pub(crate) isGLES: bool,
-    pub(crate) isANGLESystemDriver: bool,
-    pub(crate) isAdreno: bool,
-    pub(crate) isMali: bool,
-    pub(crate) isPowerVR: bool,
+    driverFlags: u8,
+    driverFlagsPadding: [u8; 3],
     pub(crate) contextVersionMajor: u32,
     pub(crate) contextVersionMinor: u32,
     pub(crate) vendorDriverVersionMajor: u32,
@@ -1571,38 +1568,63 @@ pub(crate) struct GLCapabilities {
     pub(crate) usePixelLocalStorage2AsWorkaround: bool,
     pub(crate) avoidTexture2DArrayWithWebGLPLS: bool,
     pub(crate) avoidPartialFramebufferBlits: bool,
-    pub(crate) ANGLE_base_vertex_base_instance_shader_builtin: bool,
-    pub(crate) ANGLE_shader_pixel_local_storage: bool,
-    pub(crate) ANGLE_shader_pixel_local_storage_coherent: bool,
-    pub(crate) ANGLE_polygon_mode: bool,
-    pub(crate) ANGLE_provoking_vertex: bool,
-    pub(crate) ARM_shader_framebuffer_fetch: bool,
-    pub(crate) ARB_fragment_shader_interlock: bool,
-    pub(crate) ARB_shader_image_load_store: bool,
-    pub(crate) ARB_shader_storage_buffer_object: bool,
-    pub(crate) OES_shader_image_atomic: bool,
-    pub(crate) KHR_blend_equation_advanced: bool,
-    pub(crate) KHR_blend_equation_advanced_coherent: bool,
-    pub(crate) KHR_parallel_shader_compile: bool,
-    pub(crate) EXT_base_instance: bool,
-    pub(crate) EXT_clip_cull_distance: bool,
-    pub(crate) EXT_color_buffer_half_float: bool,
-    pub(crate) OES_texture_half_float_linear: bool,
-    pub(crate) EXT_color_buffer_float: bool,
-    pub(crate) EXT_float_blend: bool,
-    pub(crate) EXT_multisampled_render_to_texture: bool,
-    pub(crate) EXT_shader_framebuffer_fetch: bool,
-    pub(crate) EXT_shader_pixel_local_storage: bool,
-    pub(crate) EXT_shader_pixel_local_storage2: bool,
-    pub(crate) INTEL_fragment_shader_ordering: bool,
-    pub(crate) QCOM_shader_framebuffer_fetch_noncoherent: bool,
-    pub(crate) EXT_texture_compression_s3tc: bool,
-    pub(crate) EXT_texture_compression_bptc: bool,
-    pub(crate) KHR_texture_compression_astc_ldr: bool,
-    pub(crate) supportsETC2: bool,
+    extensionFlags: u32,
+}
+
+macro_rules! gl_capability_bit {
+    ($get:ident, $set:ident, $storage:ident, $bit:expr) => {
+        pub(crate) const fn $get(&self) -> bool {
+            self.$storage & (1 << $bit) != 0
+        }
+        pub(crate) fn $set(&mut self, value: bool) {
+            let mask = 1 << $bit;
+            self.$storage = (self.$storage & !mask) | ((value as _) * mask);
+        }
+    };
 }
 
 impl GLCapabilities {
+    gl_capability_bit!(isGLES, setIsGLES, driverFlags, 0);
+    gl_capability_bit!(isANGLESystemDriver, setIsANGLESystemDriver, driverFlags, 1);
+    gl_capability_bit!(isAdreno, setIsAdreno, driverFlags, 2);
+    gl_capability_bit!(isMali, setIsMali, driverFlags, 3);
+    gl_capability_bit!(isPowerVR, setIsPowerVR, driverFlags, 4);
+
+    gl_capability_bit!(
+        ANGLE_base_vertex_base_instance_shader_builtin,
+        setANGLE_base_vertex_base_instance_shader_builtin,
+        extensionFlags,
+        0
+    );
+    gl_capability_bit!(ANGLE_shader_pixel_local_storage, setANGLE_shader_pixel_local_storage, extensionFlags, 1);
+    gl_capability_bit!(ANGLE_shader_pixel_local_storage_coherent, setANGLE_shader_pixel_local_storage_coherent, extensionFlags, 2);
+    gl_capability_bit!(ANGLE_polygon_mode, setANGLE_polygon_mode, extensionFlags, 3);
+    gl_capability_bit!(ANGLE_provoking_vertex, setANGLE_provoking_vertex, extensionFlags, 4);
+    gl_capability_bit!(ARM_shader_framebuffer_fetch, setARM_shader_framebuffer_fetch, extensionFlags, 5);
+    gl_capability_bit!(ARB_fragment_shader_interlock, setARB_fragment_shader_interlock, extensionFlags, 6);
+    gl_capability_bit!(ARB_shader_image_load_store, setARB_shader_image_load_store, extensionFlags, 7);
+    gl_capability_bit!(ARB_shader_storage_buffer_object, setARB_shader_storage_buffer_object, extensionFlags, 8);
+    gl_capability_bit!(OES_shader_image_atomic, setOES_shader_image_atomic, extensionFlags, 9);
+    gl_capability_bit!(KHR_blend_equation_advanced, setKHR_blend_equation_advanced, extensionFlags, 10);
+    gl_capability_bit!(KHR_blend_equation_advanced_coherent, setKHR_blend_equation_advanced_coherent, extensionFlags, 11);
+    gl_capability_bit!(KHR_parallel_shader_compile, setKHR_parallel_shader_compile, extensionFlags, 12);
+    gl_capability_bit!(EXT_base_instance, setEXT_base_instance, extensionFlags, 13);
+    gl_capability_bit!(EXT_clip_cull_distance, setEXT_clip_cull_distance, extensionFlags, 14);
+    gl_capability_bit!(EXT_color_buffer_half_float, setEXT_color_buffer_half_float, extensionFlags, 15);
+    gl_capability_bit!(OES_texture_half_float_linear, setOES_texture_half_float_linear, extensionFlags, 16);
+    gl_capability_bit!(EXT_color_buffer_float, setEXT_color_buffer_float, extensionFlags, 17);
+    gl_capability_bit!(EXT_float_blend, setEXT_float_blend, extensionFlags, 18);
+    gl_capability_bit!(EXT_multisampled_render_to_texture, setEXT_multisampled_render_to_texture, extensionFlags, 19);
+    gl_capability_bit!(EXT_shader_framebuffer_fetch, setEXT_shader_framebuffer_fetch, extensionFlags, 20);
+    gl_capability_bit!(EXT_shader_pixel_local_storage, setEXT_shader_pixel_local_storage, extensionFlags, 21);
+    gl_capability_bit!(EXT_shader_pixel_local_storage2, setEXT_shader_pixel_local_storage2, extensionFlags, 22);
+    gl_capability_bit!(INTEL_fragment_shader_ordering, setINTEL_fragment_shader_ordering, extensionFlags, 23);
+    gl_capability_bit!(QCOM_shader_framebuffer_fetch_noncoherent, setQCOM_shader_framebuffer_fetch_noncoherent, extensionFlags, 24);
+    gl_capability_bit!(EXT_texture_compression_s3tc, setEXT_texture_compression_s3tc, extensionFlags, 25);
+    gl_capability_bit!(EXT_texture_compression_bptc, setEXT_texture_compression_bptc, extensionFlags, 26);
+    gl_capability_bit!(KHR_texture_compression_astc_ldr, setKHR_texture_compression_astc_ldr, extensionFlags, 27);
+    gl_capability_bit!(supportsETC2, setSupportsETC2, extensionFlags, 28);
+
     pub(crate) const fn IsVersionAtLeast(
         aMajor: u32,
         aMinor: u32,
@@ -1630,6 +1652,9 @@ impl GLCapabilities {
         )
     }
 }
+
+const _: () = assert!(core::mem::size_of::<GLCapabilities>() == 36);
+const _: () = assert!(core::mem::align_of::<GLCapabilities>() == 4);
 
 unsafe extern "C" {
     pub(crate) fn webgl_enable_WEBGL_shader_pixel_local_storage_coherent() -> bool;

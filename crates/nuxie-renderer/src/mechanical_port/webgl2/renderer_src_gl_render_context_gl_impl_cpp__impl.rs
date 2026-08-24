@@ -296,23 +296,23 @@ fn selectFeatherAtlasRenderType(
     capabilities: &GLCapabilities,
     desired: FeatherAtlasRenderType,
 ) -> FeatherAtlasRenderType {
-    if desired <= FeatherAtlasRenderType::r16f && capabilities.EXT_color_buffer_half_float {
+    if desired <= FeatherAtlasRenderType::r16f && capabilities.EXT_color_buffer_half_float() {
         return FeatherAtlasRenderType::r16f;
     }
     if desired <= FeatherAtlasRenderType::r32f
-        && capabilities.EXT_color_buffer_float
-        && capabilities.EXT_float_blend
+        && capabilities.EXT_color_buffer_float()
+        && capabilities.EXT_float_blend()
     {
         return FeatherAtlasRenderType::r32f;
     }
     if desired <= FeatherAtlasRenderType::r32uiFramebufferFetch
-        && capabilities.EXT_shader_framebuffer_fetch
+        && capabilities.EXT_shader_framebuffer_fetch()
     {
         return FeatherAtlasRenderType::r32uiFramebufferFetch;
     }
     // RIVE_WEBGL admits ANGLE PLS, never native EXT PLS or image atomics.
     if desired <= FeatherAtlasRenderType::r32uiPixelLocalStorageANGLE
-        && capabilities.ANGLE_shader_pixel_local_storage_coherent
+        && capabilities.ANGLE_shader_pixel_local_storage_coherent()
     {
         return FeatherAtlasRenderType::r32uiPixelLocalStorageANGLE;
     }
@@ -856,8 +856,8 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
         let renderer = String::from_utf8_lossy(&context.rust_source_renderer_string);
-        if context.m_capabilities.isANGLESystemDriver
-            && context.m_capabilities.KHR_blend_equation_advanced
+        if context.m_capabilities.isANGLESystemDriver()
+            && context.m_capabilities.KHR_blend_equation_advanced()
         {
             context.m_testForAdvancedBlendError = true;
         }
@@ -869,38 +869,38 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
             );
         }
         let features = &mut context.base.base.m_platformFeatures;
-        if context.m_capabilities.KHR_blend_equation_advanced
-            || context.m_capabilities.KHR_blend_equation_advanced_coherent
+        if context.m_capabilities.KHR_blend_equation_advanced()
+            || context.m_capabilities.KHR_blend_equation_advanced_coherent()
         {
             features.supportsBlendAdvancedKHR = true;
         }
-        if context.m_capabilities.KHR_blend_equation_advanced_coherent {
+        if context.m_capabilities.KHR_blend_equation_advanced_coherent() {
             features.supportsBlendAdvancedCoherentKHR = true;
         }
-        if context.m_capabilities.EXT_clip_cull_distance {
+        if context.m_capabilities.EXT_clip_cull_distance() {
             features.supportsClipPlanes = true;
         }
         if renderer.contains("Apple") && renderer.contains("Metal") {
             features.avoidFlatVaryings = true;
         }
-        if context.m_capabilities.isPowerVR || renderer.contains("Mali-G52") {
+        if context.m_capabilities.isPowerVR() || renderer.contains("Mali-G52") {
             features.alwaysFeatherToAtlas = true;
         }
         features.clipSpaceBottomUp = true;
         features.framebufferBottomUp = true;
         features.maxTextureSize = u32::try_from(execution.domain().getInteger(GL_MAX_TEXTURE_SIZE))
             .expect("GL_MAX_TEXTURE_SIZE is nonnegative");
-        features.supportsClipScissor = !(context.m_capabilities.isAdreno
+        features.supportsClipScissor = !(context.m_capabilities.isAdreno()
             && (600..700).contains(&context.m_capabilities.adrenoSeries)
-            || context.m_capabilities.isANGLESystemDriver);
-        features.supportsTextureCompressionBC = context.m_capabilities.EXT_texture_compression_s3tc
-            && context.m_capabilities.EXT_texture_compression_bptc;
+            || context.m_capabilities.isANGLESystemDriver());
+        features.supportsTextureCompressionBC = context.m_capabilities.EXT_texture_compression_s3tc()
+            && context.m_capabilities.EXT_texture_compression_bptc();
         features.supportsTextureCompressionASTC =
-            context.m_capabilities.KHR_texture_compression_astc_ldr;
-        features.supportsTextureCompressionETC2 = context.m_capabilities.supportsETC2;
+            context.m_capabilities.KHR_texture_compression_astc_ldr();
+        features.supportsTextureCompressionETC2 = context.m_capabilities.supportsETC2();
 
         let mut generalDefines = Vec::new();
-        if !context.m_capabilities.ARB_shader_storage_buffer_object {
+        if !context.m_capabilities.ARB_shader_storage_buffer_object() {
             generalDefines.push(GLSL_DISABLE_SHADER_STORAGE_BUFFERS);
         }
         let colorRampSources = [
@@ -964,7 +964,7 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
                 data: bytesOfSlice(table),
             });
         }
-        let filter = if context.m_capabilities.OES_texture_half_float_linear {
+        let filter = if context.m_capabilities.OES_texture_half_float_linear() {
             GL_LINEAR
         } else {
             GL_NEAREST
@@ -1001,7 +1001,7 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
             GAUSSIAN_INTEGRAL_TEXTURE_IDX as GLint,
         );
         bindUniformBlock(&execution, context.m_tessellateProgram.id());
-        if !context.m_capabilities.ARB_shader_storage_buffer_object {
+        if !context.m_capabilities.ARB_shader_storage_buffer_object() {
             glutils::Uniform1iByName(
                 context.m_tessellateProgram.id(),
                 GLSL_pathBuffer,
@@ -1549,7 +1549,7 @@ fn makeStorageBufferRing(
 ) -> Option<Box<dyn BufferRingContract>> {
     if capacityInBytes == 0 {
         None
-    } else if context.m_capabilities.ARB_shader_storage_buffer_object {
+    } else if context.m_capabilities.ARB_shader_storage_buffer_object() {
         Some(Box::new(StorageBufferRingGLImpl::new(
             capacityInBytes,
             structure,
@@ -1691,7 +1691,7 @@ fn compileFeatherAtlasProgram(
         GLSL_gaussianIntegralTexture,
         GAUSSIAN_INTEGRAL_TEXTURE_IDX as GLint,
     );
-    if !capabilities.ARB_shader_storage_buffer_object {
+    if !capabilities.ARB_shader_storage_buffer_object() {
         glutils::Uniform1iByName(
             program.m_program.id(),
             GLSL_pathBuffer,
@@ -1703,7 +1703,7 @@ fn compileFeatherAtlasProgram(
             CONTOUR_BUFFER_IDX as GLint,
         );
     }
-    if !capabilities.ANGLE_base_vertex_base_instance_shader_builtin {
+    if !capabilities.ANGLE_base_vertex_base_instance_shader_builtin() {
         program.m_baseInstanceUniformLocation = execution.domain().uniformLocation(
             program.m_program.id(),
             glutils::BASE_INSTANCE_UNIFORM_NAME.as_bytes(),
@@ -1719,7 +1719,7 @@ fn buildFeatherAtlasRenderPipelines(context: &mut RenderContextGLImpl) {
             GLSL_ENABLE_FEATHER,
             GLSL_ENABLE_INSTANCE_INDEX,
         ];
-        if !context.m_capabilities.ARB_shader_storage_buffer_object {
+        if !context.m_capabilities.ARB_shader_storage_buffer_object() {
             defines.push(GLSL_DISABLE_SHADER_STORAGE_BUFFERS);
         }
         context.m_featherAtlasFillPipelineState = gpu::FEATHER_ATLAS_FILL_PIPELINE_STATE;
@@ -1859,7 +1859,7 @@ pub(crate) fn resizeFeatherAtlasTexture(
         }
         let renderFormat = featherAtlasRenderFormat(context.m_featherAtlasRenderType);
         let canSample = renderFormat == GL_R8
-            || renderFormat == GL_R16F && context.m_capabilities.OES_texture_half_float_linear;
+            || renderFormat == GL_R16F && context.m_capabilities.OES_texture_half_float_linear();
         if !canSample {
             context
                 .m_featherAtlasRenderTexture
@@ -2067,7 +2067,7 @@ fn newDrawShader(
             );
             if interlockMode == gpu::InterlockMode::msaa
                 && feature == gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND
-                && context.m_capabilities.KHR_blend_equation_advanced
+                && context.m_capabilities.KHR_blend_equation_advanced()
             {
                 defines.push(GLSL_ENABLE_KHR_BLEND);
             } else {
@@ -2080,7 +2080,7 @@ fn newDrawShader(
     }
     assert!(context.platformFeatures().framebufferBottomUp);
     defines.push(GLSL_FRAMEBUFFER_BOTTOM_UP);
-    if !context.m_capabilities.ARB_shader_storage_buffer_object {
+    if !context.m_capabilities.ARB_shader_storage_buffer_object() {
         defines.push(GLSL_DISABLE_SHADER_STORAGE_BUFFERS);
     }
     match drawType {
@@ -2382,7 +2382,7 @@ fn advanceDrawProgram(
     assert_eq!(program.m_pipelineStatus, PipelineStatus::notReady);
     let execution = (&*context.rust_execution).clone();
     if createType == PipelineCreateType::r#async
-        && context.m_capabilities.KHR_parallel_shader_compile
+        && context.m_capabilities.KHR_parallel_shader_compile()
         && execution
             .domain()
             .programParameter(program.m_id, GL_COMPLETION_STATUS_KHR)
@@ -2462,7 +2462,7 @@ fn advanceDrawProgram(
     if isImageDraw || paintDraw && interlockMode != gpu::InterlockMode::atomics {
         glutils::Uniform1iByName(program.m_id, GLSL_imageTexture, IMAGE_TEXTURE_IDX as GLint);
     }
-    if !context.m_capabilities.ARB_shader_storage_buffer_object {
+    if !context.m_capabilities.ARB_shader_storage_buffer_object() {
         if paintDraw {
             glutils::Uniform1iByName(program.m_id, GLSL_pathBuffer, PATH_BUFFER_IDX as GLint);
         }
@@ -2484,7 +2484,7 @@ fn advanceDrawProgram(
     }
     if interlockMode == gpu::InterlockMode::msaa
         && hasShaderFeature(shaderFeatures, gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND)
-        && !context.m_capabilities.KHR_blend_equation_advanced
+        && !context.m_capabilities.KHR_blend_equation_advanced()
         && !hasMiscFlag(
             shaderMiscFlags,
             gpu::ShaderMiscFlags::fixedFunctionColorOutput,
@@ -2498,7 +2498,7 @@ fn advanceDrawProgram(
     }
     if !context
         .m_capabilities
-        .ANGLE_base_vertex_base_instance_shader_builtin
+        .ANGLE_base_vertex_base_instance_shader_builtin()
     {
         program.m_baseInstanceUniformLocation = execution
             .domain()
@@ -2731,7 +2731,7 @@ unsafe fn bindStorageBuffer(
 ) {
     assert!(!bufferRing.is_null());
     assert_ne!(bindingSizeInBytes, 0);
-    if capabilities.ARB_shader_storage_buffer_object {
+    if capabilities.ARB_shader_storage_buffer_object() {
         unsafe {
             (&*bufferRing.cast::<StorageBufferRingGLImpl>()).bindToRenderContext(
                 bindingIdx,
@@ -2917,7 +2917,7 @@ fn drawIndexedInstancedNoInstancedAttribs(
     assert_eq!(
         context
             .m_capabilities
-            .ANGLE_base_vertex_base_instance_shader_builtin,
+            .ANGLE_base_vertex_base_instance_shader_builtin(),
         baseInstanceUniformLocation < 0
     );
     let indexOffset = baseIndex
@@ -3048,7 +3048,7 @@ pub(crate) fn testingOnly_setBlendAdvancedCoherentKHRSupported(
 ) -> bool {
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
-        let previous = context.m_capabilities.KHR_blend_equation_advanced_coherent;
+        let previous = context.m_capabilities.KHR_blend_equation_advanced_coherent();
         assert_eq!(
             previous,
             context
@@ -3057,7 +3057,9 @@ pub(crate) fn testingOnly_setBlendAdvancedCoherentKHRSupported(
                 .m_platformFeatures
                 .supportsBlendAdvancedCoherentKHR
         );
-        context.m_capabilities.KHR_blend_equation_advanced_coherent = supported;
+        context
+            .m_capabilities
+            .setKHR_blend_equation_advanced_coherent(supported);
         context
             .base
             .base
@@ -3075,7 +3077,7 @@ pub(crate) fn testingOnly_setBlendAdvancedKHRSupported(
 ) -> bool {
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
-        let previous = context.m_capabilities.KHR_blend_equation_advanced;
+        let previous = context.m_capabilities.KHR_blend_equation_advanced();
         assert_eq!(
             previous,
             context
@@ -3084,7 +3086,9 @@ pub(crate) fn testingOnly_setBlendAdvancedKHRSupported(
                 .m_platformFeatures
                 .supportsBlendAdvancedKHR
         );
-        context.m_capabilities.KHR_blend_equation_advanced = supported;
+        context
+            .m_capabilities
+            .setKHR_blend_equation_advanced(supported);
         context
             .base
             .base
@@ -3164,8 +3168,12 @@ pub(crate) unsafe fn preBeginFrame(
             .max()
             .unwrap();
         if maxDiff > 40 {
-            context.m_capabilities.KHR_blend_equation_advanced_coherent = false;
-            context.m_capabilities.KHR_blend_equation_advanced = false;
+            context
+                .m_capabilities
+                .setKHR_blend_equation_advanced_coherent(false);
+            context
+                .m_capabilities
+                .setKHR_blend_equation_advanced(false);
             context
                 .base
                 .base
@@ -3238,7 +3246,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
         let mut flushInjector = GLFlushInjector::new(&context.m_capabilities);
 
         if desc.gradSpanCount > 0 {
-            if context.m_capabilities.isPowerVR {
+            if context.m_capabilities.isPowerVR() {
                 recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0 + GRAD_TEXTURE_IDX));
                 recordGLCommand(GLCommand::TexSubImage2D {
                     target: GL_TEXTURE_2D,
@@ -3634,7 +3642,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 desc.combinedShaderFeatures,
                 gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND,
             ) {
-                if context.m_capabilities.KHR_blend_equation_advanced_coherent {
+                if context.m_capabilities.KHR_blend_equation_advanced_coherent() {
                     recordGLCommand(GLCommand::Enable(GL_BLEND_ADVANCED_COHERENT_KHR));
                 } else {
                     let texture = renderTargetGL(renderTargetHandle, &execution)
@@ -3747,8 +3755,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     .expect("atomic barrier requires final PLS implementation")
                     .barrier(desc);
             } else if batch.barriers.0 & gpu::BarrierFlags::dstBlend.0 != 0 {
-                assert!(!context.m_capabilities.KHR_blend_equation_advanced_coherent);
-                if context.m_capabilities.KHR_blend_equation_advanced {
+                assert!(!context.m_capabilities.KHR_blend_equation_advanced_coherent());
+                if context.m_capabilities.KHR_blend_equation_advanced() {
                     recordGLCommand(GLCommand::BlendBarrierKHR);
                 } else {
                     assert_eq!(desc.interlockMode, gpu::InterlockMode::msaa);
@@ -4033,7 +4041,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             if hasShaderFeature(
                 desc.combinedShaderFeatures,
                 gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND,
-            ) && context.m_capabilities.KHR_blend_equation_advanced_coherent
+            ) && context.m_capabilities.KHR_blend_equation_advanced_coherent()
             {
                 recordGLCommand(GLCommand::Disable(GL_BLEND_ADVANCED_COHERENT_KHR));
             }
@@ -4129,12 +4137,12 @@ fn makeContextOwnerInCurrent(
     let renderer = glString(&rendererBytes);
 
     let mut capabilities = GLCapabilities::default();
-    capabilities.isGLES = true;
-    capabilities.isANGLESystemDriver = renderer.contains("ANGLE");
-    capabilities.isAdreno = renderer.contains("Adreno");
-    capabilities.isMali = renderer.contains("Mali");
-    capabilities.isPowerVR = renderer.contains("PowerVR");
-    if capabilities.isPowerVR {
+    capabilities.setIsGLES(true);
+    capabilities.setIsANGLESystemDriver(renderer.contains("ANGLE"));
+    capabilities.setIsAdreno(renderer.contains("Adreno"));
+    capabilities.setIsMali(renderer.contains("Mali"));
+    capabilities.setIsPowerVR(renderer.contains("PowerVR"));
+    if capabilities.isPowerVR() {
         let (major, minor, vendorMajor, vendorMinor) = parsePowerVRVersion(glVersion);
         capabilities.contextVersionMajor = major;
         capabilities.contextVersionMinor = minor;
@@ -4145,7 +4153,7 @@ fn makeContextOwnerInCurrent(
         capabilities.contextVersionMajor = major;
         capabilities.contextVersionMinor = minor;
     }
-    if capabilities.isAdreno {
+    if capabilities.isAdreno() {
         capabilities.adrenoSeries = parseAdrenoSeries(renderer);
     }
     if !capabilities.isContextVersionAtLeast(3, 0) {
@@ -4156,94 +4164,102 @@ fn makeContextOwnerInCurrent(
         return None;
     }
 
-    capabilities.maxSupportedInstancesPerFlush = if capabilities.isMali
-        || capabilities.isPowerVR
-        || capabilities.isAdreno && capabilities.adrenoSeries < 600
+    capabilities.maxSupportedInstancesPerFlush = if capabilities.isMali()
+        || capabilities.isPowerVR()
+        || capabilities.isAdreno() && capabilities.adrenoSeries < 600
     {
         (1 << 13) - 1
     } else {
         u32::MAX
     };
-    capabilities.supportsETC2 = true;
+    capabilities.setSupportsETC2(true);
     if capabilities.isContextVersionAtLeast(3, 1) {
-        capabilities.ARB_shader_storage_buffer_object = true;
+        capabilities.setARB_shader_storage_buffer_object(true);
     }
     if capabilities.isContextVersionAtLeast(3, 2) {
-        capabilities.OES_shader_image_atomic = true;
+        capabilities.setOES_shader_image_atomic(true);
     }
 
     if super::pls_impl_webgl_impl::webglEnableShaderPixelLocalStorageCoherent(&executionDomain) {
-        capabilities.ANGLE_shader_pixel_local_storage = true;
-        capabilities.ANGLE_shader_pixel_local_storage_coherent = true;
+        capabilities.setANGLE_shader_pixel_local_storage(true);
+        capabilities.setANGLE_shader_pixel_local_storage_coherent(true);
     }
     if super::pls_impl_webgl_impl::webglEnableProvokingVertex(&executionDomain) {
-        capabilities.ANGLE_provoking_vertex = true;
+        capabilities.setANGLE_provoking_vertex(true);
     }
-    capabilities.EXT_clip_cull_distance =
-        executionDomain.enableWebGLExtension("WEBGL_clip_cull_distance");
-    capabilities.EXT_color_buffer_half_float =
-        executionDomain.enableWebGLExtension("EXT_color_buffer_half_float");
-    capabilities.OES_texture_half_float_linear =
-        executionDomain.enableWebGLExtension("OES_texture_half_float_linear");
-    capabilities.EXT_color_buffer_float =
-        executionDomain.enableWebGLExtension("EXT_color_buffer_float");
-    capabilities.EXT_float_blend = executionDomain.enableWebGLExtension("EXT_float_blend");
-    capabilities.KHR_parallel_shader_compile =
-        executionDomain.enableWebGLExtension("KHR_parallel_shader_compile");
-    capabilities.EXT_texture_compression_s3tc =
-        executionDomain.enableWebGLExtension("WEBGL_compressed_texture_s3tc");
-    capabilities.EXT_texture_compression_bptc =
-        executionDomain.enableWebGLExtension("EXT_texture_compression_bptc");
-    capabilities.KHR_texture_compression_astc_ldr =
-        executionDomain.enableWebGLExtension("WEBGL_compressed_texture_astc");
+    capabilities.setEXT_clip_cull_distance(
+        executionDomain.enableWebGLExtension("WEBGL_clip_cull_distance"),
+    );
+    capabilities.setEXT_color_buffer_half_float(
+        executionDomain.enableWebGLExtension("EXT_color_buffer_half_float"),
+    );
+    capabilities.setOES_texture_half_float_linear(
+        executionDomain.enableWebGLExtension("OES_texture_half_float_linear"),
+    );
+    capabilities.setEXT_color_buffer_float(
+        executionDomain.enableWebGLExtension("EXT_color_buffer_float"),
+    );
+    capabilities.setEXT_float_blend(executionDomain.enableWebGLExtension("EXT_float_blend"));
+    capabilities.setKHR_parallel_shader_compile(
+        executionDomain.enableWebGLExtension("KHR_parallel_shader_compile"),
+    );
+    capabilities.setEXT_texture_compression_s3tc(
+        executionDomain.enableWebGLExtension("WEBGL_compressed_texture_s3tc"),
+    );
+    capabilities.setEXT_texture_compression_bptc(
+        executionDomain.enableWebGLExtension("EXT_texture_compression_bptc"),
+    );
+    capabilities.setKHR_texture_compression_astc_ldr(
+        executionDomain.enableWebGLExtension("WEBGL_compressed_texture_astc"),
+    );
 
-    if capabilities.ARB_shader_storage_buffer_object
+    if capabilities.ARB_shader_storage_buffer_object()
         && executionDomain.getInteger(GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS)
             < gpu::kMaxStorageBuffers as GLint
     {
-        capabilities.ARB_shader_storage_buffer_object = false;
+        capabilities.setARB_shader_storage_buffer_object(false);
     }
-    if capabilities.OES_shader_image_atomic
-        && (capabilities.isMali
-            || capabilities.isPowerVR
-            || capabilities.isAdreno && !renderer.contains("Adreno (TM) 640"))
+    if capabilities.OES_shader_image_atomic()
+        && (capabilities.isMali()
+            || capabilities.isPowerVR()
+            || capabilities.isAdreno() && !renderer.contains("Adreno (TM) 640"))
     {
-        capabilities.OES_shader_image_atomic = false;
+        capabilities.setOES_shader_image_atomic(false);
     }
-    if capabilities.ANGLE_base_vertex_base_instance_shader_builtin
-        && capabilities.isANGLESystemDriver
+    if capabilities.ANGLE_base_vertex_base_instance_shader_builtin()
+        && capabilities.isANGLESystemDriver()
     {
-        capabilities.ANGLE_base_vertex_base_instance_shader_builtin = false;
+        capabilities.setANGLE_base_vertex_base_instance_shader_builtin(false);
     }
-    if capabilities.EXT_clip_cull_distance && capabilities.isANGLESystemDriver {
-        capabilities.EXT_clip_cull_distance = false;
+    if capabilities.EXT_clip_cull_distance() && capabilities.isANGLESystemDriver() {
+        capabilities.setEXT_clip_cull_distance(false);
     }
-    if capabilities.EXT_multisampled_render_to_texture {
+    if capabilities.EXT_multisampled_render_to_texture() {
         if renderer.contains("Direct3D")
-            || capabilities.isPowerVR && !capabilities.isVendorDriverVersionAtLeast(1, 13)
+            || capabilities.isPowerVR() && !capabilities.isVendorDriverVersionAtLeast(1, 13)
         {
-            capabilities.EXT_multisampled_render_to_texture = false;
+            capabilities.setEXT_multisampled_render_to_texture(false);
         }
     }
     if options.disableFragmentShaderInterlock {
-        capabilities.ARB_fragment_shader_interlock = false;
-        capabilities.INTEL_fragment_shader_ordering = false;
+        capabilities.setARB_fragment_shader_interlock(false);
+        capabilities.setINTEL_fragment_shader_ordering(false);
     }
     capabilities.needsFloatingPointTessellationTexture =
-        renderer.contains("ANGLE Metal Renderer") && capabilities.EXT_color_buffer_float;
-    if capabilities.EXT_shader_pixel_local_storage2
-        && capabilities.isPowerVR
+        renderer.contains("ANGLE Metal Renderer") && capabilities.EXT_color_buffer_float();
+    if capabilities.EXT_shader_pixel_local_storage2()
+        && capabilities.isPowerVR()
         && !capabilities.isVendorDriverVersionAtLeast(1, 11)
     {
         capabilities.usePixelLocalStorage2AsWorkaround = true;
     }
-    if capabilities.ANGLE_shader_pixel_local_storage && renderer.contains("Direct3D11") {
+    if capabilities.ANGLE_shader_pixel_local_storage() && renderer.contains("Direct3D11") {
         capabilities.avoidTexture2DArrayWithWebGLPLS = true;
     }
 
     let plsImpl = if !options.disablePixelLocalStorage
-        && capabilities.ANGLE_shader_pixel_local_storage_coherent
-        && !capabilities.isAdreno
+        && capabilities.ANGLE_shader_pixel_local_storage_coherent()
+        && !capabilities.isAdreno()
     {
         let Some(factory) = finalPLSFactory else {
             eprintln!(

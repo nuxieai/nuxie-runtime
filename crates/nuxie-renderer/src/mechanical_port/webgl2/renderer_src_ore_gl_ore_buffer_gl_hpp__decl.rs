@@ -52,7 +52,6 @@ impl DerefMut for BufferGL {
     }
 }
 
-unsafe impl Send for BufferGL {}
 unsafe impl GpuResourcePayload for BufferGL {
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()

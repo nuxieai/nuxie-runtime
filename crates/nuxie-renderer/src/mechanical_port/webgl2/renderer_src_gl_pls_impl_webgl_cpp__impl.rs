@@ -725,10 +725,10 @@ mod tests {
         let execution = (&*context.rust_execution).clone();
         let mut target = TextureRenderTargetGL::new(8, 6, execution.clone());
         target.setTargetTexture(77);
-        target.m_headlessFramebuffer.0.m_id = 901;
-        target.m_webglPLSBackingR32UI.0.m_id = 801;
-        target.m_webglPLSBackingR32UIFallback.0.m_id = 802;
-        target.m_webglPLSBackingRGBA8.0.m_id = 803;
+        target.m_headlessFramebuffer.0.setSyntheticID(901);
+        target.m_webglPLSBackingR32UI.0.setSyntheticID(801);
+        target.m_webglPLSBackingR32UIFallback.0.setSyntheticID(802);
+        target.m_webglPLSBackingRGBA8.0.setSyntheticID(803);
         target.m_webglPLSBindingsDirty = true;
         let renderTarget = NonNull::from(&mut *target.base.base);
         let mut drawList = BlockAllocatedLinkedList::<gpu::DrawBatch>::default();
@@ -917,10 +917,10 @@ mod tests {
         let execution = domain.stamp();
         let mut target = TextureRenderTargetGL::new(8, 6, execution.clone());
         target.setTargetTexture(77);
-        target.m_headlessFramebuffer.0.m_id = 901;
-        target.m_webglPLSBackingR32UI.0.m_id = 801;
-        target.m_webglPLSBackingR32UIFallback.0.m_id = 802;
-        target.m_webglPLSBackingRGBA8.0.m_id = 803;
+        target.m_headlessFramebuffer.0.setSyntheticID(901);
+        target.m_webglPLSBackingR32UI.0.setSyntheticID(801);
+        target.m_webglPLSBackingR32UIFallback.0.setSyntheticID(802);
+        target.m_webglPLSBackingRGBA8.0.setSyntheticID(803);
         target.m_webglPLSBindingsDirty = true;
         let renderTarget = NonNull::from(&mut *target.base.base);
         let mut desc = flushDescriptor(renderTarget);
@@ -1015,18 +1015,18 @@ mod tests {
 
         let execution = domain.stamp();
         let mut target = FramebufferRenderTargetGL::new(8, 6, 77, 1, execution.clone());
-        target.m_offscreenTargetTexture.0.m_id = 701;
+        target.m_offscreenTargetTexture.0.setSyntheticID(701);
         target.m_textureRenderTarget.m_externalTextureID = 701;
-        target.m_textureRenderTarget.m_framebufferID.0.m_id = 902;
-        target.m_textureRenderTarget.m_headlessFramebuffer.0.m_id = 901;
+        target.m_textureRenderTarget.m_framebufferID.0.setSyntheticID(902);
+        target.m_textureRenderTarget.m_headlessFramebuffer.0.setSyntheticID(901);
         target.m_textureRenderTarget.m_framebufferTargetAttachmentDirty = false;
-        target.m_textureRenderTarget.m_webglPLSBackingR32UI.0.m_id = 801;
+        target.m_textureRenderTarget.m_webglPLSBackingR32UI.0.setSyntheticID(801);
         target
             .m_textureRenderTarget
             .m_webglPLSBackingR32UIFallback
             .0
-            .m_id = 802;
-        target.m_textureRenderTarget.m_webglPLSBackingRGBA8.0.m_id = 803;
+            .setSyntheticID(802);
+        target.m_textureRenderTarget.m_webglPLSBackingRGBA8.0.setSyntheticID(803);
         target.m_textureRenderTarget.m_webglPLSBindingsDirty = true;
         let renderTarget = NonNull::from(&mut *target.base.base);
         let mut desc = flushDescriptor(renderTarget);

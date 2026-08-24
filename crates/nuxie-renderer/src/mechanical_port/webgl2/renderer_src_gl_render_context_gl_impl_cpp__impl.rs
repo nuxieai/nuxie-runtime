@@ -349,7 +349,10 @@ impl TextureGLImpl {
         );
         Self {
             base: ManuallyDrop::new(base),
-            m_texture: ManuallyDrop::new(GLTexture::Adopt(textureID)),
+            m_texture: ManuallyDrop::new(GLTexture::AdoptInExecution(
+                textureID,
+                execution.clone(),
+            )),
             rust_execution: ManuallyDrop::new(execution),
         }
     }
@@ -369,15 +372,8 @@ unsafe impl RefCntTarget for TextureGLImpl {
 
 impl Drop for TextureGLImpl {
     fn drop(&mut self) {
-        let execution = (&*self.rust_execution).clone();
-        if execution
-            .withDeleteCurrent(|| unsafe { ManuallyDrop::drop(&mut self.m_texture) })
-            .is_none()
-        {
-            self.m_texture.0.m_id = 0;
-            unsafe { ManuallyDrop::drop(&mut self.m_texture) };
-        }
         unsafe {
+            ManuallyDrop::drop(&mut self.m_texture);
             ManuallyDrop::drop(&mut self.base);
             ManuallyDrop::drop(&mut self.rust_execution);
         }
@@ -4428,54 +4424,28 @@ impl RenderContextHelperBackendContract for RenderContextGLImpl {
     }
 }
 
-fn neutralizeProgram(program: &mut Program) {
-    program.m_fragmentShader.0.m_id = 0;
-    program.m_vertexShader.0.m_id = 0;
-    program.m_object.m_id = 0;
-}
-
-unsafe fn dropProgram(program: &mut ManuallyDrop<Program>, currentGeneration: bool) {
-    if !currentGeneration {
-        neutralizeProgram(program);
-    }
+unsafe fn dropProgram(program: &mut ManuallyDrop<Program>, _currentGeneration: bool) {
     unsafe { ManuallyDrop::drop(program) };
 }
 
-unsafe fn dropShader(shader: &mut ManuallyDrop<Shader>, currentGeneration: bool) {
-    if !currentGeneration {
-        shader.0.m_id = 0;
-    }
+unsafe fn dropShader(shader: &mut ManuallyDrop<Shader>, _currentGeneration: bool) {
     unsafe { ManuallyDrop::drop(shader) };
 }
 
-unsafe fn dropTexture(texture: &mut ManuallyDrop<GLTexture>, currentGeneration: bool) {
-    if !currentGeneration {
-        texture.0.m_id = 0;
-    }
+unsafe fn dropTexture(texture: &mut ManuallyDrop<GLTexture>, _currentGeneration: bool) {
     unsafe { ManuallyDrop::drop(texture) };
 }
 
-unsafe fn dropFramebuffer(framebuffer: &mut ManuallyDrop<Framebuffer>, currentGeneration: bool) {
-    if !currentGeneration {
-        framebuffer.0.m_id = 0;
-    }
+unsafe fn dropFramebuffer(framebuffer: &mut ManuallyDrop<Framebuffer>, _currentGeneration: bool) {
     unsafe { ManuallyDrop::drop(framebuffer) };
 }
 
-unsafe fn dropBuffer(buffer: &mut ManuallyDrop<Buffer>, currentGeneration: bool) {
-    if currentGeneration {
-        unsafe { ManuallyDrop::drop(buffer) };
-    }
-    // Buffer is one scalar GLObject. On a stale generation there is no Rust
-    // allocation to release, and invoking its source destructor would submit
-    // even GLuint 0 to the replacement context.
+unsafe fn dropBuffer(buffer: &mut ManuallyDrop<Buffer>, _currentGeneration: bool) {
+    unsafe { ManuallyDrop::drop(buffer) };
 }
 
-unsafe fn dropVAO(vao: &mut ManuallyDrop<VAO>, currentGeneration: bool) {
-    if currentGeneration {
-        unsafe { ManuallyDrop::drop(vao) };
-    }
-    // VAO has the same unconditional-delete source destructor as Buffer.
+unsafe fn dropVAO(vao: &mut ManuallyDrop<VAO>, _currentGeneration: bool) {
+    unsafe { ManuallyDrop::drop(vao) };
 }
 
 fn preparePipelineManagerForDrop(manager: &mut GLPipelineManager, currentGeneration: bool) {

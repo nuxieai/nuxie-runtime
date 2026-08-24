@@ -57,46 +57,55 @@ pub(crate) fn newProgram() -> Program {
 }
 
 pub(crate) fn resetTexture(texture: &mut Texture, adoptedID: GLuint) {
-    if texture.0.m_id != 0 {
-        recordGLCommand(GLCommand::DeleteTexture(texture.0.m_id));
+    let old = texture.0.replaceWithAdoptedID(adoptedID);
+    if old.id() != 0 {
+        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteTexture(old.id())));
     }
-    texture.0.m_id = adoptedID;
 }
 
 pub(crate) fn moveAssignTexture(texture: &mut Texture, mut rhs: Texture) {
-    let adoptedID = rhs.0.takeID();
-    resetTexture(texture, adoptedID);
+    let adopted = rhs.0.takeObject();
+    let old = texture.0.replaceWithObject(adopted);
+    if old.id() != 0 {
+        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteTexture(old.id())));
+    }
 }
 
 pub(crate) fn resetFramebuffer(framebuffer: &mut Framebuffer, adoptedID: GLuint) {
-    if framebuffer.0.m_id != 0 {
-        recordGLCommand(GLCommand::DeleteFramebuffer(framebuffer.0.m_id));
+    let old = framebuffer.0.replaceWithAdoptedID(adoptedID);
+    if old.id() != 0 {
+        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteFramebuffer(old.id())));
     }
-    framebuffer.0.m_id = adoptedID;
 }
 
 pub(crate) fn moveAssignFramebuffer(framebuffer: &mut Framebuffer, mut rhs: Framebuffer) {
-    let adoptedID = rhs.0.takeID();
-    resetFramebuffer(framebuffer, adoptedID);
+    let adopted = rhs.0.takeObject();
+    let old = framebuffer.0.replaceWithObject(adopted);
+    if old.id() != 0 {
+        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteFramebuffer(old.id())));
+    }
 }
 
 pub(crate) fn resetRenderbuffer(renderbuffer: &mut Renderbuffer, adoptedID: GLuint) {
-    if renderbuffer.0.m_id != 0 {
-        recordGLCommand(GLCommand::DeleteRenderbuffer(renderbuffer.0.m_id));
+    let old = renderbuffer.0.replaceWithAdoptedID(adoptedID);
+    if old.id() != 0 {
+        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteRenderbuffer(old.id())));
     }
-    renderbuffer.0.m_id = adoptedID;
 }
 
 pub(crate) fn moveAssignRenderbuffer(renderbuffer: &mut Renderbuffer, mut rhs: Renderbuffer) {
-    let adoptedID = rhs.0.takeID();
-    resetRenderbuffer(renderbuffer, adoptedID);
+    let adopted = rhs.0.takeObject();
+    let old = renderbuffer.0.replaceWithObject(adopted);
+    if old.id() != 0 {
+        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteRenderbuffer(old.id())));
+    }
 }
 
 pub(crate) fn resetShader(shader: &mut Shader, adoptedID: GLuint) {
-    if shader.0.m_id != 0 {
-        recordGLCommand(GLCommand::DeleteShader(shader.0.m_id));
+    let old = shader.0.replaceWithAdoptedID(adoptedID);
+    if old.id() != 0 {
+        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteShader(old.id())));
     }
-    shader.0.m_id = adoptedID;
 }
 
 pub(crate) fn resetProgram(program: &mut Program, adoptedProgramID: GLuint) {
@@ -104,26 +113,30 @@ pub(crate) fn resetProgram(program: &mut Program, adoptedProgramID: GLuint) {
     // shader, then the program itself.
     program.m_fragmentShader.reset(0);
     program.m_vertexShader.reset(0);
-    if program.m_object.m_id != 0 {
-        recordGLCommand(GLCommand::DeleteProgram(program.m_object.m_id));
+    let old = program.m_object.replaceWithAdoptedID(adoptedProgramID);
+    if old.id() != 0 {
+        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteProgram(old.id())));
     }
-    program.m_object.m_id = adoptedProgramID;
 }
 
 pub(crate) fn moveAssignProgram(program: &mut Program, mut rhs: Program) {
-    let adoptedProgramID = rhs.m_object.takeID();
-    resetProgram(program, adoptedProgramID);
+    program.m_fragmentShader.reset(0);
+    program.m_vertexShader.reset(0);
+    let adoptedProgram = rhs.m_object.takeObject();
+    let old = program.m_object.replaceWithObject(adoptedProgram);
+    if old.id() != 0 {
+        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteProgram(old.id())));
+    }
 
-    let vertexShaderID = rhs.m_vertexShader.0.takeID();
-    program.m_vertexShader.reset(vertexShaderID);
-    let fragmentShaderID = rhs.m_fragmentShader.0.takeID();
-    program.m_fragmentShader.reset(fragmentShaderID);
+    program.m_vertexShader.0 = rhs.m_vertexShader.0.takeObject();
+    program.m_fragmentShader.0 = rhs.m_fragmentShader.0.takeObject();
 }
 
 impl Drop for Buffer {
     fn drop(&mut self) {
         // The source calls glDeleteBuffers even when m_id is zero.
-        recordGLCommand(GLCommand::DeleteBuffer(self.0.m_id));
+        self.0
+            .withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteBuffer(self.0.id())));
     }
 }
 
@@ -148,7 +161,8 @@ impl Drop for Renderbuffer {
 impl Drop for VAO {
     fn drop(&mut self) {
         // The source calls glDeleteVertexArrays even when m_id is zero.
-        recordGLCommand(GLCommand::DeleteVertexArray(self.0.m_id));
+        self.0
+            .withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteVertexArray(self.0.id())));
     }
 }
 
@@ -367,7 +381,7 @@ pub(crate) fn compileAndAttachOwnedShader(
     };
     internalShader.compileParts(shaderType, defines, sources, capabilities);
     recordGLCommand(GLCommand::AttachShader(
-        program.m_object.m_id,
+        program.m_object.id(),
         internalShader.id(),
     ));
 }
@@ -562,9 +576,9 @@ mod tests {
         {
             let mut program = Program::new();
             takeGLCommands();
-            program.m_vertexShader.0.m_id = 11;
-            program.m_fragmentShader.0.m_id = 12;
-            program.m_object.m_id = 13;
+            program.m_vertexShader.0.setSyntheticID(11);
+            program.m_fragmentShader.0.setSyntheticID(12);
+            program.m_object.setSyntheticID(13);
         }
         assert_eq!(
             takeGLCommands(),

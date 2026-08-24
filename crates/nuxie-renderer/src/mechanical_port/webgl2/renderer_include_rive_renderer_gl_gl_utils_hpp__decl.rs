@@ -3,7 +3,9 @@
 
 #![allow(non_camel_case_types, non_snake_case)]
 
-use super::gles3_decl::{GLCapabilities, GLenum, GLuint};
+use super::gles3_decl::{
+    stampCurrentGLObject, GLCapabilities, GLExecutionStamp, GLenum, GLuint,
+};
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_include_rive_renderer_gl_gl_utils.hpp");
@@ -36,25 +38,84 @@ impl GLUtilsSourceConfiguration {
     };
 }
 
-#[repr(C)]
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub(crate) struct GLObject {
-    pub(crate) m_id: GLuint,
+    m_id: GLuint,
+    executionStamp: Option<GLExecutionStamp>,
 }
 
 impl GLObject {
-    pub(crate) const fn fromAdoptedID(adoptedID: GLuint) -> Self {
-        Self { m_id: adoptedID }
+    pub(crate) fn fromAdoptedID(adoptedID: GLuint) -> Self {
+        Self {
+            m_id: adoptedID,
+            executionStamp: stampCurrentGLObject(adoptedID),
+        }
+    }
+
+    pub(crate) fn fromAdoptedIDInExecution(
+        adoptedID: GLuint,
+        executionStamp: GLExecutionStamp,
+    ) -> Self {
+        assert!(
+            adoptedID == 0 || executionStamp.isCurrentGeneration(),
+            "a GL name can only be adopted into its live creation generation"
+        );
+        Self {
+            m_id: adoptedID,
+            executionStamp: (adoptedID != 0).then_some(executionStamp),
+        }
+    }
+
+    pub(crate) const fn Zero() -> Self {
+        Self {
+            m_id: 0,
+            executionStamp: None,
+        }
     }
 
     pub(crate) const fn id(&self) -> GLuint {
         self.m_id
     }
 
-    pub(crate) fn takeID(&mut self) -> GLuint {
-        std::mem::take(&mut self.m_id)
+    pub(crate) fn replaceWithAdoptedID(&mut self, adoptedID: GLuint) -> Self {
+        std::mem::replace(self, Self::fromAdoptedID(adoptedID))
+    }
+
+    pub(crate) fn replaceWithObject(&mut self, object: Self) -> Self {
+        std::mem::replace(self, object)
+    }
+
+    pub(crate) fn takeObject(&mut self) -> Self {
+        std::mem::replace(self, Self::Zero())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn setSyntheticID(&mut self, id: GLuint) {
+        assert!(self.executionStamp.is_none());
+        self.m_id = id;
+    }
+
+    pub(crate) fn withDeleteCurrent(&self, callback: impl FnOnce()) {
+        if let Some(stamp) = self.executionStamp.as_ref() {
+            let _ = stamp.withDeleteCurrent(callback);
+            return;
+        }
+
+        #[cfg(test)]
+        callback();
+
+        #[cfg(not(test))]
+        debug_assert_eq!(self.m_id, 0, "nonzero GL objects always carry an execution stamp");
     }
 }
+
+impl PartialEq for GLObject {
+    fn eq(&self, other: &Self) -> bool {
+        self.m_id == other.m_id
+    }
+}
+
+impl Eq for GLObject {}
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq)]
@@ -110,11 +171,15 @@ impl Texture {
     }
 
     pub(crate) const fn Zero() -> Self {
-        Self(GLObject::fromAdoptedID(0))
+        Self(GLObject::Zero())
     }
 
-    pub(crate) const fn Adopt(id: GLuint) -> Self {
+    pub(crate) fn Adopt(id: GLuint) -> Self {
         Self(GLObject::fromAdoptedID(id))
+    }
+
+    pub(crate) fn AdoptInExecution(id: GLuint, executionStamp: GLExecutionStamp) -> Self {
+        Self(GLObject::fromAdoptedIDInExecution(id, executionStamp))
     }
 
     pub(crate) const fn id(&self) -> GLuint {
@@ -142,7 +207,7 @@ impl Framebuffer {
     }
 
     pub(crate) const fn Zero() -> Self {
-        Self(GLObject::fromAdoptedID(0))
+        Self(GLObject::Zero())
     }
 
     pub(crate) const fn id(&self) -> GLuint {
@@ -170,7 +235,7 @@ impl Renderbuffer {
     }
 
     pub(crate) const fn Zero() -> Self {
-        Self(GLObject::fromAdoptedID(0))
+        Self(GLObject::Zero())
     }
 
     pub(crate) const fn id(&self) -> GLuint {
@@ -250,9 +315,9 @@ impl Program {
 
     pub(crate) const fn Zero() -> Self {
         Self {
-            m_object: GLObject::fromAdoptedID(0),
-            m_vertexShader: Shader(GLObject::fromAdoptedID(0)),
-            m_fragmentShader: Shader(GLObject::fromAdoptedID(0)),
+            m_object: GLObject::Zero(),
+            m_vertexShader: Shader(GLObject::Zero()),
+            m_fragmentShader: Shader(GLObject::Zero()),
         }
     }
 

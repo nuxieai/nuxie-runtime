@@ -1328,6 +1328,24 @@ fn currentGLExecutionDomain() -> Option<GLExecutionDomain> {
     })
 }
 
+/// Captures the creation/adoption identity for a nonzero GL name. Production
+/// code may only publish a name while its owning execution domain is current;
+/// command-stream tests deliberately use an unstamped synthetic domain.
+pub(crate) fn stampCurrentGLObject(id: GLuint) -> Option<GLExecutionStamp> {
+    if id == 0 {
+        return None;
+    }
+    if let Some(domain) = currentGLExecutionDomain() {
+        return Some(domain.stamp());
+    }
+
+    #[cfg(test)]
+    return None;
+
+    #[cfg(not(test))]
+    panic!("a nonzero GL name cannot be published without a current GLExecutionDomain");
+}
+
 pub(crate) fn recordGLCommand(command: GLCommand) {
     if let Some(domain) = currentGLExecutionDomain() {
         domain.submit(command);

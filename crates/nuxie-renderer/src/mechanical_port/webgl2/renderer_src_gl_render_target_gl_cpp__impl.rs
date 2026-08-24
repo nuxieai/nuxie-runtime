@@ -598,14 +598,8 @@ pub(crate) fn allocateFramebufferWebGLPLSBacking(
     });
 }
 
-unsafe fn dropRenderTargetGLSourceFields(renderTarget: &mut RenderTargetGL, deleteNames: bool) {
-    if !deleteNames {
-        renderTarget.m_dstColorFramebuffer.0.m_id = 0;
-    }
+unsafe fn dropRenderTargetGLSourceFields(renderTarget: &mut RenderTargetGL, _deleteNames: bool) {
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_dstColorFramebuffer) };
-    if !deleteNames {
-        renderTarget.m_dstColorTexture.0.m_id = 0;
-    }
     unsafe {
         ManuallyDrop::drop(&mut renderTarget.m_dstColorTexture);
         ManuallyDrop::drop(&mut renderTarget.lite_rtti);
@@ -615,39 +609,15 @@ unsafe fn dropRenderTargetGLSourceFields(renderTarget: &mut RenderTargetGL, dele
 
 unsafe fn dropTextureRenderTargetGLSourceFields(
     renderTarget: &mut TextureRenderTargetGL,
-    deleteNames: bool,
+    _deleteNames: bool,
 ) {
-    if !deleteNames {
-        renderTarget.m_msaaDepthStencilBuffer.0.m_id = 0;
-    }
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_msaaDepthStencilBuffer) };
-    if !deleteNames {
-        renderTarget.m_msaaColorBuffer.0.m_id = 0;
-    }
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_msaaColorBuffer) };
-    if !deleteNames {
-        renderTarget.m_msaaFramebuffer.0.m_id = 0;
-    }
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_msaaFramebuffer) };
-    if !deleteNames {
-        renderTarget.m_webglPLSBackingRGBA8.0.m_id = 0;
-    }
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_webglPLSBackingRGBA8) };
-    if !deleteNames {
-        renderTarget.m_webglPLSBackingR32UIFallback.0.m_id = 0;
-    }
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_webglPLSBackingR32UIFallback) };
-    if !deleteNames {
-        renderTarget.m_webglPLSBackingR32UI.0.m_id = 0;
-    }
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_webglPLSBackingR32UI) };
-    if !deleteNames {
-        renderTarget.m_headlessFramebuffer.0.m_id = 0;
-    }
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_headlessFramebuffer) };
-    if !deleteNames {
-        renderTarget.m_framebufferID.0.m_id = 0;
-    }
     unsafe {
         ManuallyDrop::drop(&mut renderTarget.m_framebufferID);
         ManuallyDrop::drop(&mut renderTarget.base);
@@ -656,11 +626,8 @@ unsafe fn dropTextureRenderTargetGLSourceFields(
 
 unsafe fn dropFramebufferRenderTargetGLSourceFields(
     renderTarget: &mut FramebufferRenderTargetGL,
-    deleteNames: bool,
+    _deleteNames: bool,
 ) {
-    if !deleteNames {
-        renderTarget.m_offscreenTargetTexture.0.m_id = 0;
-    }
     unsafe {
         ManuallyDrop::drop(&mut renderTarget.m_offscreenTargetTexture);
         ManuallyDrop::drop(&mut renderTarget.m_textureRenderTarget);
@@ -893,9 +860,9 @@ mod tests {
     fn stale_generation_tears_down_fields_without_deleting_recycled_names() {
         let (domain, log) = domain(301);
         let mut target = TextureRenderTargetGL::new(3, 3, domain.stamp());
-        target.m_framebufferID.0.m_id = 31;
-        target.m_msaaColorBuffer.0.m_id = 32;
-        target.base.m_dstColorTexture.0.m_id = 33;
+        target.m_framebufferID.0.setSyntheticID(31);
+        target.m_msaaColorBuffer.0.setSyntheticID(32);
+        target.base.m_dstColorTexture.0.setSyntheticID(33);
 
         domain.markContextLost();
         log.borrow_mut().commands.clear();
@@ -910,16 +877,16 @@ mod tests {
         let (domain, log) = domain(401);
         let mut target = TextureRenderTargetGL::new(3, 3, domain.stamp());
         target.m_externalTextureID = 999;
-        target.m_framebufferID.0.m_id = 11;
-        target.m_headlessFramebuffer.0.m_id = 12;
-        target.m_webglPLSBackingR32UI.0.m_id = 13;
-        target.m_webglPLSBackingR32UIFallback.0.m_id = 14;
-        target.m_webglPLSBackingRGBA8.0.m_id = 15;
-        target.m_msaaFramebuffer.0.m_id = 16;
-        target.m_msaaColorBuffer.0.m_id = 17;
-        target.m_msaaDepthStencilBuffer.0.m_id = 18;
-        target.base.m_dstColorTexture.0.m_id = 19;
-        target.base.m_dstColorFramebuffer.0.m_id = 20;
+        target.m_framebufferID.0.setSyntheticID(11);
+        target.m_headlessFramebuffer.0.setSyntheticID(12);
+        target.m_webglPLSBackingR32UI.0.setSyntheticID(13);
+        target.m_webglPLSBackingR32UIFallback.0.setSyntheticID(14);
+        target.m_webglPLSBackingRGBA8.0.setSyntheticID(15);
+        target.m_msaaFramebuffer.0.setSyntheticID(16);
+        target.m_msaaColorBuffer.0.setSyntheticID(17);
+        target.m_msaaDepthStencilBuffer.0.setSyntheticID(18);
+        target.base.m_dstColorTexture.0.setSyntheticID(19);
+        target.base.m_dstColorFramebuffer.0.setSyntheticID(20);
 
         drop(target);
 
@@ -961,10 +928,10 @@ mod tests {
     fn framebuffer_target_drops_outer_texture_before_embedded_target_and_base() {
         let (domain, log) = domain(551);
         let mut target = FramebufferRenderTargetGL::new(2, 2, 900, 1, domain.stamp());
-        target.m_offscreenTargetTexture.0.m_id = 41;
-        target.m_textureRenderTarget.m_framebufferID.0.m_id = 42;
-        target.m_textureRenderTarget.base.m_dstColorTexture.0.m_id = 43;
-        target.base.m_dstColorFramebuffer.0.m_id = 44;
+        target.m_offscreenTargetTexture.0.setSyntheticID(41);
+        target.m_textureRenderTarget.m_framebufferID.0.setSyntheticID(42);
+        target.m_textureRenderTarget.base.m_dstColorTexture.0.setSyntheticID(43);
+        target.base.m_dstColorFramebuffer.0.setSyntheticID(44);
 
         drop(target);
 
@@ -987,7 +954,7 @@ mod tests {
     fn render_target_zero_release_routes_complete_drop_to_owner_scope() {
         let (domain, log) = domain(601);
         let mut target = Box::new(TextureRenderTargetGL::new(2, 2, domain.stamp()));
-        target.m_framebufferID.0.m_id = 77;
+        target.m_framebufferID.0.setSyntheticID(77);
         let targetAddress = Box::into_raw(target).cast::<RenderTarget>() as usize;
         domain.retireRenderer();
         assert!(domain.isRendererRetired());

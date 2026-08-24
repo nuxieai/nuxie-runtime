@@ -57,7 +57,6 @@ impl DerefMut for TextureGL {
         &mut self.base
     }
 }
-unsafe impl Send for TextureGL {}
 unsafe impl GpuResourcePayload for TextureGL {
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
@@ -134,7 +133,6 @@ impl DerefMut for TextureViewGL {
         &mut self.base
     }
 }
-unsafe impl Send for TextureViewGL {}
 unsafe impl GpuResourcePayload for TextureViewGL {
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()

@@ -1,18 +1,49 @@
+// The Rust libc crate does not expose bionic's `srand`/`rand`/`RAND_MAX`
+// bindings for Android even though bionic provides the functions; bind them
+// directly so Android matches the same process-global C generator every
+// other native target uses.
+#[cfg(target_os = "android")]
+unsafe extern "C" {
+    fn srand(seed: libc::c_uint);
+    fn rand() -> libc::c_int;
+}
+
 pub(super) fn seed(_platform_seed: &mut u64, seed: u32) {
     // SAFETY: C++ calls the same process-global C function. The caller holds
     // the runtime provider mutex across every `srand` and `rand`.
-    unsafe { libc::srand(seed) };
+    #[cfg(not(target_os = "android"))]
+    unsafe {
+        libc::srand(seed)
+    };
+    #[cfg(target_os = "android")]
+    unsafe {
+        srand(seed)
+    };
 }
 
 pub(super) fn draw(_platform_seed: &mut u64) -> f32 {
     // SAFETY: C++ delegates to the same platform C function. The caller holds
     // the runtime provider mutex across every `srand` and `rand`.
-    unsafe { libc::rand() as f32 / platform_rand_max() }
+    #[cfg(not(target_os = "android"))]
+    unsafe {
+        libc::rand() as f32 / platform_rand_max()
+    }
+    #[cfg(target_os = "android")]
+    unsafe {
+        rand() as f32 / platform_rand_max()
+    }
 }
 
-#[cfg(not(target_os = "wasi"))]
+#[cfg(not(any(target_os = "wasi", target_os = "android")))]
 fn platform_rand_max() -> f32 {
     libc::RAND_MAX as f32
+}
+
+#[cfg(target_os = "android")]
+fn platform_rand_max() -> f32 {
+    // Bionic's stdlib.h defines RAND_MAX as 0x7fffffff; the Rust libc crate
+    // does not expose the macro for Android.
+    2_147_483_647.0
 }
 
 #[cfg(target_os = "wasi")]

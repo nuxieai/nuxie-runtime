@@ -161,6 +161,68 @@ impl Default for Mat2D {
 mod tests {
     use super::Mat2D;
 
+    struct UpstreamRand(u64);
+
+    impl UpstreamRand {
+        fn new(seed: u32) -> Self {
+            Self(u64::from(seed.wrapping_sub(1)))
+        }
+
+        fn next(&mut self) -> u32 {
+            self.0 = 6_364_136_223_846_793_005_u64
+                .wrapping_mul(self.0)
+                .wrapping_add(1);
+            (self.0 >> 33) as u32
+        }
+    }
+
+    #[test]
+    fn upstream_map_points_complete_sequence() {
+        let mut random = UpstreamRand::new(1);
+        let mut test_points = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)];
+        for _ in 0..100 {
+            test_points.push((
+                (random.next() % 201) as f32 - 100.0,
+                (random.next() % 201) as f32 - 100.0,
+            ));
+        }
+        let n = test_points.len();
+        let mut destination = vec![(0.0, 0.0); n];
+        let mut expected = vec![(0.0, 0.0); n];
+
+        let check_matrix =
+            |matrix: Mat2D, destination: &mut Vec<(f32, f32)>, expected: &mut Vec<(f32, f32)>| {
+                matrix.map_points(&mut destination[..1], &test_points[2..3]);
+                expected[0] = matrix.map_point(test_points[2].0, test_points[2].1);
+                assert_eq!(destination[0], expected[0]);
+
+                matrix.map_points(&mut destination[..n - 1], &test_points[1..]);
+                for i in 0..n - 1 {
+                    expected[i] = matrix.map_point(test_points[i + 1].0, test_points[i + 1].1);
+                }
+                assert_eq!(&destination[..n - 1], &expected[..n - 1]);
+
+                matrix.map_points(destination, &test_points);
+                for i in 0..n {
+                    expected[i] = matrix.map_point(test_points[i].0, test_points[i].1);
+                }
+                assert_eq!(destination, expected);
+            };
+
+        for matrix in [
+            Mat2D::IDENTITY,
+            Mat2D([1.0, 0.0, 0.0, 1.0, 2.0, -3.0]),
+            Mat2D([4.0, 0.0, 0.0, -5.0, 0.0, 0.0]),
+            Mat2D([4.0, 0.0, 0.0, 5.0, -6.0, 7.0]),
+            Mat2D([0.0, 8.0, 9.0, 0.0, 10.0, 11.0]),
+            Mat2D([-12.0, -13.0, -14.0, -15.0, -16.0, -17.0]),
+            Mat2D([18.0, 19.0, 20.0, 21.0, 22.0, 23.0]),
+            Mat2D([-25.0, 26.0, 27.0, -28.0, 29.0, -30.0]),
+        ] {
+            check_matrix(matrix, &mut destination, &mut expected);
+        }
+    }
+
     #[test]
     fn bulk_map_matches_scalar_for_distinct_and_in_place_buffers() {
         let matrix = Mat2D([2.0, -3.0, -4.0, 5.0, 6.0, -7.0]);

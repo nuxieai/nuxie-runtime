@@ -176,6 +176,65 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Clone, Copy, Default, PartialEq)]
+    struct UpstreamAabb {
+        left: f32,
+        top: f32,
+        right: f32,
+        bottom: f32,
+    }
+
+    impl UpstreamAabb {
+        fn from_points(points: &[(f32, f32)]) -> Self {
+            let mut bounds = Self {
+                left: 1e9,
+                top: 1e9,
+                right: -1e9,
+                bottom: -1e9,
+            };
+            for &(x, y) in points {
+                bounds.left = bounds.left.min(x);
+                bounds.top = bounds.top.min(y);
+                bounds.right = bounds.right.max(x);
+                bounds.bottom = bounds.bottom.max(y);
+            }
+            bounds
+        }
+
+        fn width(self) -> f32 {
+            self.right - self.left
+        }
+
+        fn height(self) -> f32 {
+            self.bottom - self.top
+        }
+    }
+
+    fn upstream_map_bounding_box(_matrix: Mat2D, _points: &[(f32, f32)]) -> UpstreamAabb {
+        // Mat2D has no production mapBoundingBox owner yet. The default result
+        // makes the complete upstream contract executable and observably red.
+        UpstreamAabb::default()
+    }
+
+    fn upstream_map_aabb(matrix: Mat2D, bounds: UpstreamAabb) -> UpstreamAabb {
+        upstream_map_bounding_box(
+            matrix,
+            &[
+                (bounds.left, bounds.top),
+                (bounds.left, bounds.bottom),
+                (bounds.right, bounds.bottom),
+                (bounds.right, bounds.top),
+            ],
+        )
+    }
+
+    fn assert_close(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() <= f32::EPSILON,
+            "{actual} != {expected}"
+        );
+    }
+
     #[test]
     fn upstream_map_points_complete_sequence() {
         let mut random = UpstreamRand::new(1);
@@ -221,6 +280,287 @@ mod tests {
         ] {
             check_matrix(matrix, &mut destination, &mut expected);
         }
+    }
+
+    #[test]
+    #[ignore = "expected-red: Rust Mat2D has no production mapBoundingBox owner"]
+    fn upstream_map_bounding_box_complete_sequence() {
+        let test_points = [
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (0.0, 1.0),
+            (-1.0, 0.0),
+            (0.0, -1.0),
+            (1.0, 1.0),
+            (-1.0, -1.0),
+        ];
+        let mut mapped_points = vec![(0.0, 0.0); test_points.len()];
+
+        let check_matrix = |matrix: Mat2D, mapped_points: &mut Vec<(f32, f32)>| {
+            let mut mapped = upstream_map_bounding_box(matrix, &[]);
+            assert_eq!(mapped.left, 0.0);
+            assert_eq!(mapped.top, 0.0);
+            assert_eq!(mapped.right, 0.0);
+            assert_eq!(mapped.bottom, 0.0);
+
+            for point in test_points {
+                mapped = upstream_map_bounding_box(matrix, &[point]);
+                let mapped_point = matrix.map_point(point.0, point.1);
+                assert_close(mapped.left, mapped_point.0);
+                assert_close(mapped.top, mapped_point.1);
+                assert_close(mapped.right, mapped_point.0);
+                assert_close(mapped.bottom, mapped_point.1);
+
+                mapped = upstream_map_bounding_box(matrix, std::slice::from_ref(&point));
+                assert_close(mapped.left, mapped_point.0);
+                assert_close(mapped.top, mapped_point.1);
+                assert_close(mapped.right, mapped_point.0);
+                assert_close(mapped.bottom, mapped_point.1);
+            }
+
+            matrix.map_points(
+                &mut mapped_points[..test_points.len() - 1],
+                &test_points[1..],
+            );
+            let test_bounds = UpstreamAabb::from_points(&mapped_points[..test_points.len() - 1]);
+            mapped = upstream_map_bounding_box(matrix, &test_points[1..]);
+            assert_close(mapped.left, test_bounds.left);
+            assert_close(mapped.top, test_bounds.top);
+            assert_close(mapped.right, test_bounds.right);
+            assert_close(mapped.bottom, test_bounds.bottom);
+
+            mapped = upstream_map_bounding_box(matrix, &test_points[1..]);
+            assert_close(mapped.left, test_bounds.left);
+            assert_close(mapped.top, test_bounds.top);
+            assert_close(mapped.right, test_bounds.right);
+            assert_close(mapped.bottom, test_bounds.bottom);
+
+            matrix.map_points(mapped_points, &test_points);
+            let test_bounds = UpstreamAabb::from_points(mapped_points);
+            mapped = upstream_map_bounding_box(matrix, &test_points);
+            assert_close(mapped.left, test_bounds.left);
+            assert_close(mapped.top, test_bounds.top);
+            assert_close(mapped.right, test_bounds.right);
+            assert_close(mapped.bottom, test_bounds.bottom);
+
+            mapped = upstream_map_bounding_box(matrix, &test_points);
+            assert_close(mapped.left, test_bounds.left);
+            assert_close(mapped.top, test_bounds.top);
+            assert_close(mapped.right, test_bounds.right);
+            assert_close(mapped.bottom, test_bounds.bottom);
+
+            let bbox_points = [(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)];
+            let mapped_from_points = upstream_map_bounding_box(matrix, &bbox_points);
+            let mapped_from_aabb = upstream_map_aabb(
+                matrix,
+                UpstreamAabb {
+                    left: 0.0,
+                    top: 0.0,
+                    right: 1.0,
+                    bottom: 1.0,
+                },
+            );
+            assert_close(mapped_from_points.left, mapped_from_aabb.left);
+            assert_close(mapped_from_points.top, mapped_from_aabb.top);
+            assert_close(mapped_from_points.right, mapped_from_aabb.right);
+            assert_close(mapped_from_points.bottom, mapped_from_aabb.bottom);
+        };
+
+        for matrix in [
+            Mat2D::IDENTITY,
+            Mat2D([1.0, 0.0, 0.0, 1.0, 2.0, -3.0]),
+            Mat2D([4.0, 0.0, 0.0, -5.0, 0.0, 0.0]),
+            Mat2D([4.0, 0.0, 0.0, 5.0, -6.0, 7.0]),
+            Mat2D([0.0, 8.0, 9.0, 0.0, 10.0, 11.0]),
+            Mat2D([-12.0, -13.0, -14.0, -15.0, -16.0, -17.0]),
+            Mat2D([18.0, 19.0, 20.0, 21.0, 22.0, 23.0]),
+            Mat2D([-25.0, 26.0, 27.0, -28.0, 29.0, -30.0]),
+        ] {
+            check_matrix(matrix, &mut mapped_points);
+        }
+
+        assert_eq!(
+            upstream_map_bounding_box(Mat2D::IDENTITY, &[]),
+            UpstreamAabb::default()
+        );
+        let nan = f32::NAN;
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: nan,
+                    top: nan,
+                    right: nan,
+                    bottom: nan
+                },
+            ),
+            UpstreamAabb::default()
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: -1.0,
+                    top: -1.0,
+                    right: 1.0,
+                    bottom: 1.0
+                }
+            ),
+            UpstreamAabb {
+                left: -1.0,
+                top: -1.0,
+                right: 1.0,
+                bottom: 1.0
+            }
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: nan,
+                    top: -1.0,
+                    right: 1.0,
+                    bottom: 1.0
+                }
+            ),
+            UpstreamAabb {
+                left: 1.0,
+                top: -1.0,
+                right: 1.0,
+                bottom: 1.0
+            }
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: -1.0,
+                    top: nan,
+                    right: 1.0,
+                    bottom: 1.0
+                }
+            ),
+            UpstreamAabb {
+                left: -1.0,
+                top: 1.0,
+                right: 1.0,
+                bottom: 1.0
+            }
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: -1.0,
+                    top: -1.0,
+                    right: nan,
+                    bottom: 1.0
+                }
+            ),
+            UpstreamAabb {
+                left: -1.0,
+                top: -1.0,
+                right: -1.0,
+                bottom: 1.0
+            }
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: -1.0,
+                    top: -1.0,
+                    right: 1.0,
+                    bottom: nan
+                }
+            ),
+            UpstreamAabb {
+                left: -1.0,
+                top: -1.0,
+                right: 1.0,
+                bottom: -1.0
+            }
+        );
+
+        let inf = f32::INFINITY;
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: 0.0,
+                    top: inf,
+                    right: 0.0,
+                    bottom: nan
+                }
+            )
+            .height(),
+            0.0
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: 0.0,
+                    top: -inf,
+                    right: 0.0,
+                    bottom: nan
+                }
+            )
+            .height(),
+            0.0
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: inf,
+                    top: 0.0,
+                    right: nan,
+                    bottom: 0.0
+                }
+            )
+            .width(),
+            0.0
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: -inf,
+                    top: 0.0,
+                    right: nan,
+                    bottom: 0.0
+                }
+            )
+            .width(),
+            0.0
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: inf,
+                    top: 0.0,
+                    right: inf,
+                    bottom: 0.0
+                }
+            )
+            .width(),
+            0.0
+        );
+        assert_eq!(
+            upstream_map_aabb(
+                Mat2D::IDENTITY,
+                UpstreamAabb {
+                    left: 0.0,
+                    top: -inf,
+                    right: 0.0,
+                    bottom: -inf
+                }
+            )
+            .height(),
+            0.0
+        );
     }
 
     #[test]

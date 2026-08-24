@@ -693,9 +693,9 @@ note = "The two complete direct Lua assertion sequences are active, including co
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 test_case_count = 22
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/src/vm/view_model.rs::tests::upstream_scripting_context_tests", "crates/nuxie/tests/upstream_scripting_context.rs"]
+note = "All 22 cases are explicit ports: 17 Context/VM cases preserve the pinned Luau calls and assertions in the private binding owner, and five public-facade silver cases preserve fixtures, artboard/ViewModel selection, trigger counts, timing, frame boundaries, draws, and named SRIV comparisons. Eleven private cases pass plus the external-VM Data-global regression; four remain honest red at missing ScriptedObject dirt, File-scoped image ownership, and ore/render-context inspection, two remain honest red at luaur's different invalid-method diagnostic, and all five silvers remain honest red pending exact renderer-stream parity."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"

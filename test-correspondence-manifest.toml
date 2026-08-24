@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 26
+max_pending = 25
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -227,9 +227,9 @@ note = "Only the listed literal TEST_CASE action streams execute through both ru
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_keyframes.cpp"
 test_case_count = 5
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_data_binding_keyframes.rs"]
+note = "All five fixture-backed bodies are translated with the exact source values, zero/0.016/0.2/0.5 timing, eleven-frame draw sequence, text/number/color writes, first-frame/update/interpolation assertions, and standalone-animation exclusion. The silver case is honestly expected-red only at the package-level SRIV comparator boundary."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_test.cpp"

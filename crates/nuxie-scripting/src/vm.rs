@@ -3842,6 +3842,30 @@ mod context_init_tests {
     }
 
     #[test]
+    #[ignore = "expected-red: require errors are double-wrapped and omit the pinned test_source:1 attribution"]
+    fn scripting_require_removed_module_works() {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().expect("Rive globals");
+        vm.register_source_module("utilities", "return { name = 'hello' }")
+            .expect("register utilities");
+        let source = "local util = require('utilities')\nreturn util.name";
+        let chunk = vm
+            .load("test_source", source)
+            .expect("load test source without executing it");
+
+        vm.module_cache()
+            .expect("module cache")
+            .raw_set("utilities", Value::Nil)
+            .expect("unregister utilities");
+        let error = chunk.call::<String>(()).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "runtime error: test_source:1: require could not find a script named utilities"
+        );
+    }
+
+    #[test]
     fn trusted_callbacks_do_not_accumulate_safepoints_without_an_explicit_host_cycle() {
         let vm = ScriptVm::new_with_execution_limits(
             ScriptExecutionLimits::new().with_max_interrupts_per_callback(80_000),

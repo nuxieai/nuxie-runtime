@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 43
+max_pending = 42
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -857,9 +857,9 @@ note = "All four source scripts, callback sequences, 1000-frame loop, elapsed ti
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_require_check.cpp"
 test_case_count = 11
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_require_check.rs", "crates/nuxie-scripting/src/vm.rs::context_init_tests::scripting_require_removed_module_works"]
+note = "All eleven cases preserve the literal module and test sources, registration/removal ordering, result arity, and exact assertions. Nine are green. The malformed-module and removed-module cases remain honestly expected-red because Rust double-wraps the require error and omits the pinned test_source:1 attribution; the upstream exact strings remain asserted. Module removal is exercised beside the private VM cache owner without adding a production API."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_scope_test.cpp"

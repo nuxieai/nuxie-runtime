@@ -28501,6 +28501,63 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "expected-red: Path::addRoundedRect does not apply the input AABB origin"]
+    fn upstream_rounded_rect_honours_an_offset_origin() {
+        // Exact assertion port of rounded_rect_path_test.cpp. Keep this red
+        // until the paired Path owner is corrected in the later source-audit
+        // phase; Phase 1 must not repair runtime behavior.
+        let path = runtime_layout_rect_raw_path(
+            RuntimeLayoutBounds {
+                x: 10.0,
+                y: 20.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            RuntimeLayoutCorners::default(),
+        );
+        let bounds = path.bounds().expect("rounded rectangle has bounds");
+        assert_eq!(bounds.min_x, 10.0);
+        assert_eq!(bounds.min_y, 20.0);
+        assert_eq!(bounds.max_x, 110.0);
+        assert_eq!(bounds.max_y, 70.0);
+    }
+
+    #[test]
+    fn upstream_rounded_rect_matches_through_shape_paint_path() {
+        // ShapePaintPath::addPath materializes RawPath commands and prunes
+        // empty segments. Exercise that same retained-runtime boundary for
+        // both the former Rectangle construction and the direct helper.
+        let cases = [
+            ("square corners", 200.0, 100.0, [0.0; 4]),
+            ("uniform radius", 200.0, 100.0, [12.0; 4]),
+            ("radius past clamp", 200.0, 100.0, [500.0; 4]),
+            ("zero size", 0.0, 0.0, [0.0; 4]),
+            ("zero size with radius", 0.0, 0.0, [10.0; 4]),
+            ("degenerate width", 0.0, 100.0, [5.0; 4]),
+            ("degenerate height", 200.0, 0.0, [5.0; 4]),
+        ];
+
+        for (label, width, height, radii) in cases {
+            let bounds = RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width,
+                height,
+            };
+            let corners = RuntimeLayoutCorners {
+                top_left: radii[0],
+                top_right: radii[1],
+                bottom_right: radii[2],
+                bottom_left: radii[3],
+            };
+
+            let old_way = runtime_layout_rect_path_commands_via_vertices(bounds, corners);
+            let new_way = runtime_layout_rect_path_commands(bounds, corners);
+            assert_eq!(new_way, old_way, "{label}");
+        }
+    }
+
+    #[test]
     fn mounted_child_backend_resources_clone_and_remount_cold() {
         let mut source = RuntimeOccurrenceRenderResources::default();
         source.reset_for_parent_backend_context(17);

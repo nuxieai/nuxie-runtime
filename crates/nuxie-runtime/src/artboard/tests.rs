@@ -42,6 +42,52 @@
     use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
+    fn upstream_quantize_goes_to_whole_frames() {
+        // Exact action/assertion port of
+        // tests/unit_tests/runtime/linear_animation_test.cpp.
+        let fixture = PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets/quantize_test.riv");
+        let file = read_runtime_file(&std::fs::read(&fixture).expect("read quantize fixture"))
+            .expect("import quantize fixture");
+        let graphs = GraphFile::from_runtime_file(&file).expect("build quantize graph");
+        let graph = &graphs.artboards[0];
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("instantiate quantize artboard");
+        assert!(artboard.linear_animations[0].quantize);
+
+        let shapes = graph
+            .components
+            .iter()
+            .filter(|component| component.type_name == "Shape")
+            .collect::<Vec<_>>();
+        assert_eq!(shapes.len(), 1);
+        let ellipse = shapes[0].local_id;
+
+        assert!(artboard.apply_linear_animation(0, 0.0, 1.0));
+        assert_eq!(
+            artboard.transform_property(ellipse, crate::TransformProperty::X),
+            Some(0.0)
+        );
+
+        assert!(artboard.apply_linear_animation(0, 0.5, 1.0));
+        assert_eq!(
+            artboard.transform_property(ellipse, crate::TransformProperty::X),
+            Some(160.0)
+        );
+
+        Arc::make_mut(&mut artboard.linear_animations)[0].quantize = false;
+        assert!(artboard.apply_linear_animation(0, 0.5, 1.0));
+        assert_eq!(
+            artboard.transform_property(ellipse, crate::TransformProperty::X),
+            Some(200.0)
+        );
+    }
+
+    #[test]
     fn profiler_component_list_path_is_root_to_leaf_with_logical_index() {
         let parent = vec![
             crate::ProfilePathSegment::nested_artboard("Outer"),

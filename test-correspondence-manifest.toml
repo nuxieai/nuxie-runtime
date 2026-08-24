@@ -478,10 +478,9 @@ note = "All ten cases and 115 assertions are mapped directly."
 [[file]]
 upstream = "tests/unit_tests/runtime/linear_animation_test.cpp"
 test_case_count = 6
-status = "partial"
-evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::linear_animation_test.cpp provenance findings"]
-covered_test_cases = ["LinearAnimation with positive speed have normal start and end seconds", "LinearAnimation with negative speed have reversed start and end seconds", "LinearAnimation reports when to keep going correctly", "LinearAnimation keeps initializing after missing keyed object", "Looping timeline events load correctly and report"]
-note = "The exhaustive FL-B/FL-C table identifies the listed names as fully covered TEST_CASEs; mixed or finding rows remain unclaimed."
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::linear_animation_test.cpp provenance findings", "crates/nuxie-runtime/src/artboard/tests.rs::upstream_quantize_goes_to_whole_frames"]
+note = "All six pinned cases now have executable direct Rust ports; the quantize case preserves its fixture and mutable-definition action through the crate-private test boundary."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/listener_action_flags_test.cpp"
@@ -642,10 +641,9 @@ note = "Direct fixture port preserves both named component lookups, the zero-sec
 [[file]]
 upstream = "tests/unit_tests/runtime/rounded_rect_path_test.cpp"
 test_case_count = 3
-status = "partial"
-evidence = ["crates/nuxie-runtime/src/draw.rs::layout_background_raw_path_matches_the_previous_rectangle_path"]
-covered_test_cases = ["rounded rect matches Rectangle"]
-note = "S4-41 directly compares the new raw rounded-rectangle path against the prior Rectangle construction. Offset-origin and ShapePaintPath cases remain unclaimed."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/src/draw.rs::{layout_background_raw_path_matches_the_previous_rectangle_path,upstream_rounded_rect_honours_an_offset_origin,upstream_rounded_rect_matches_through_shape_paint_path}"]
+note = "All three pinned cases are executable direct Rust ports. The offset-origin case is honestly ignored-red because the Rust helper currently drops the AABB origin; Phase 1 records rather than fixes that source discrepancy."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scale_constraint_test.cpp"

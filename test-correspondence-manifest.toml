@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 31
+max_pending = 30
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -1094,9 +1094,9 @@ note = "Direct fixture port preserves both named component lookups, the zero-sec
 [[file]]
 upstream = "tests/unit_tests/runtime/trim_test.cpp"
 test_case_count = 2
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_trim.rs"]
+note = "Both complete fixture-backed cases are translated: zero-scale mutation retains both no-crash advances and draws, and all ten named trim shapes retain their exact effect-path verb sequences."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/type_conversions_test.cpp"

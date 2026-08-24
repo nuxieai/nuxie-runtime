@@ -13,6 +13,8 @@ fn main() {
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_webgl2.cpp");
     println!("cargo:rerun-if-env-changed=RIVE_RUNTIME_DIR");
     println!("cargo:rerun-if-env-changed=RIVE_RENDERER_OUT_DIR");
+    println!("cargo:rerun-if-env-changed=EMSDK");
+    println!("cargo:rerun-if-env-changed=EMDAWNWEBGPU_PORT");
     println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
 
     if env::var_os("CARGO_FEATURE_NATIVE").is_none() {
@@ -44,8 +46,11 @@ fn main() {
         .unwrap_or_else(|_| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
 
     let profile = env::var("PROFILE").unwrap_or_else(|_| String::from("debug"));
-    if (has_dawn || has_vulkan) && (!target_is_macos || profile != "release") {
-        panic!("the Dawn and Vulkan renderer bridges require a release build on macOS");
+    if has_dawn && (!(target_is_macos || target_is_emscripten) || profile != "release") {
+        panic!("the Dawn renderer bridge requires a release build on macOS or Emscripten");
+    }
+    if has_vulkan && (!target_is_macos || profile != "release") {
+        panic!("the Vulkan renderer bridge requires a release build on macOS");
     }
     if has_webgl2 && (!target_is_emscripten || profile != "release") {
         panic!("the WebGL2 renderer bridge requires a release wasm32-unknown-emscripten build");
@@ -158,20 +163,40 @@ fn main() {
 
     if renderer_lib.exists() {
         if has_dawn {
-            for define in [
-                "RIVE_DESKTOP_GL",
-                "RIVE_DAWN",
-                "ORE_BACKEND_METAL",
-                "ORE_BACKEND_GL",
-                "ORE_BACKEND_WGPU",
-                "RIVE_ORE",
-                "WITH_RIVE_TEXT",
-                "RIVE_CANVAS",
-                "WITH_RIVE_LAYOUT",
-                "RIVE_DECODERS",
-                "RIVE_KTX2",
-            ] {
+            let defines = if target_is_emscripten {
+                [
+                    "ORE_BACKEND_WGPU",
+                    "RIVE_WEBGL",
+                    "ORE_BACKEND_GL",
+                    "RIVE_ORE",
+                    "WITH_RIVE_TOOLS",
+                    "WITH_RIVE_TEXT",
+                    "RIVE_CANVAS",
+                    "WITH_RIVE_LAYOUT",
+                    "RIVE_DECODERS",
+                    "RIVE_KTX2",
+                ]
+            } else {
+                [
+                    "RIVE_DESKTOP_GL",
+                    "RIVE_DAWN",
+                    "ORE_BACKEND_METAL",
+                    "ORE_BACKEND_GL",
+                    "ORE_BACKEND_WGPU",
+                    "RIVE_ORE",
+                    "WITH_RIVE_TEXT",
+                    "RIVE_CANVAS",
+                    "WITH_RIVE_LAYOUT",
+                    "RIVE_DECODERS",
+                ]
+            };
+            for define in defines {
                 build.define(define, None);
+            }
+            if target_is_emscripten {
+                build.define("RIVE_WEBGPU", Some("2"));
+            } else {
+                build.define("RIVE_KTX2", None);
             }
         } else if has_vulkan {
             for define in [
@@ -241,11 +266,33 @@ fn main() {
     let dawn_dir = runtime_dir.join("renderer/dependencies/dawn");
     let dawn_out_dir = dawn_dir.join("out/release");
     if has_dawn {
+        if target_is_emscripten {
+            let emsdk = env::var("EMSDK")
+                .map(PathBuf::from)
+                .expect("browser Dawn builds require the pinned EMSDK path");
+            let compiler = emsdk.join("upstream/emscripten/em++");
+            if !compiler.exists() {
+                panic!("missing pinned Emscripten compiler {}", compiler.display());
+            }
+            let port = env::var("EMDAWNWEBGPU_PORT")
+                .map(PathBuf::from)
+                .expect("browser Dawn builds require the pinned Emdawnwebgpu port");
+            if !port.exists() {
+                panic!("missing pinned Emdawnwebgpu port {}", port.display());
+            }
+            build
+                .compiler(compiler)
+                .flag("-msimd128")
+                .flag(&format!("--use-port={}", port.display()));
+        }
         build
             .file("cpp/rive_renderer_ffi_dawn.cpp")
-            .include(dawn_dir.join("include"))
-            .include(dawn_out_dir.join("gen/include"))
             .define("RIVE_FFI_HAS_DAWN", None);
+        if target_is_macos {
+            build
+                .include(dawn_dir.join("include"))
+                .include(dawn_out_dir.join("gen/include"));
+        }
         if has_perf_counters {
             build.define("RIVE_FFI_PERF_COUNTERS", None);
         }
@@ -342,7 +389,7 @@ fn main() {
         build.define("RIVE_FFI_DECODE_ORACLE", None);
     }
 
-    let clang_runtime_dir = has_dawn.then(|| {
+    let clang_runtime_dir = (has_dawn && target_is_macos).then(|| {
         let compiler = build.get_compiler();
         let output = Command::new(compiler.path())
             .arg("-print-resource-dir")
@@ -391,7 +438,7 @@ fn main() {
         }
     }
 
-    if has_dawn {
+    if has_dawn && target_is_macos {
         for directory in [
             dawn_out_dir.join("obj/src/dawn"),
             dawn_out_dir.join("obj/src/dawn/native"),
@@ -423,6 +470,12 @@ fn main() {
             clang_runtime_dir.display()
         );
         println!("cargo:rustc-link-lib=static=clang_rt.osx");
+    }
+    if has_dawn && target_is_emscripten {
+        let port = env::var("EMDAWNWEBGPU_PORT")
+            .map(PathBuf::from)
+            .expect("browser Dawn builds require the pinned Emdawnwebgpu port");
+        println!("cargo:rustc-link-arg=--use-port={}", port.display());
     }
 
     if target_is_macos {

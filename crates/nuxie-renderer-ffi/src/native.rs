@@ -191,7 +191,7 @@ impl FfiFactory {
         })
     }
 
-    #[cfg(all(feature = "dawn", target_os = "macos"))]
+    #[cfg(all(feature = "dawn", any(target_os = "macos", target_os = "emscripten")))]
     pub fn new_dawn(width: u32, height: u32) -> Result<Self, NativeRendererError> {
         let context = unsafe { ffi::rive_ffi_context_make_dawn(width, height) };
         let context = NonNull::new(context).ok_or(NativeRendererError::CreateContext)?;
@@ -915,7 +915,7 @@ mod ffi {
     unsafe extern "C" {
         pub fn rive_ffi_context_make_null(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_make_metal(width: u32, height: u32) -> *mut Context;
-        #[cfg(all(feature = "dawn", target_os = "macos"))]
+        #[cfg(all(feature = "dawn", any(target_os = "macos", target_os = "emscripten")))]
         pub fn rive_ffi_context_make_dawn(width: u32, height: u32) -> *mut Context;
         #[cfg(all(feature = "vulkan", target_os = "macos"))]
         pub fn rive_ffi_context_make_vulkan(width: u32, height: u32) -> *mut Context;

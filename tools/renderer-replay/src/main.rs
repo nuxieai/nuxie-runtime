@@ -16,6 +16,7 @@ struct Options {
             feature = "rust-wgpu",
             feature = "native-vulkan-exact",
             feature = "native-webgpu-exact",
+            feature = "browser-webgpu-exact",
             all(feature = "native-metal", target_os = "macos"),
             all(feature = "ffi", target_os = "macos")
         )),
@@ -34,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .frame_size
         .ok_or("recorded stream does not declare frameSize")?;
     let clear = options.clear.or(stream.clear_color).unwrap_or(0);
-    let (pixels, adapter): (Vec<u8>, Option<String>) = match options.backend.as_str() {
+    let (mut pixels, adapter): (Vec<u8>, Option<String>) = match options.backend.as_str() {
         "stub" => (clear_pixels(width, height, clear), None),
         #[cfg(feature = "rust-wgpu")]
         "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
@@ -42,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "rust-vulkan-exact" => {
             replay_native_vulkan(&stream, options.frame, width, height, clear, &options.mode)?
         }
-        #[cfg(feature = "native-webgpu-exact")]
+        #[cfg(any(feature = "native-webgpu-exact", feature = "browser-webgpu-exact"))]
         "rust-webgpu-exact" => {
             replay_native_webgpu(&stream, options.frame, width, height, clear, &options.mode)?
         }
@@ -56,7 +57,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         "ffi-metal" => {
             replay_ffi_metal(&stream, options.frame, width, height, clear, &options.mode)?
         }
-        #[cfg(all(feature = "perf-dawn", target_os = "macos"))]
+        #[cfg(all(
+            feature = "perf-dawn",
+            any(target_os = "macos", target_os = "emscripten")
+        ))]
         "ffi-dawn" => replay_ffi_dawn(&stream, options.frame, width, height, clear, &options.mode)?,
         #[cfg(all(feature = "ffi-vulkan", target_os = "macos"))]
         "ffi-vulkan" => {
@@ -79,7 +83,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } else {
                     ""
                 },
-                if cfg!(feature = "native-webgpu-exact") {
+                if cfg!(any(
+                    feature = "native-webgpu-exact",
+                    feature = "browser-webgpu-exact"
+                )) {
                     " or `rust-webgpu-exact`"
                 } else {
                     ""
@@ -94,7 +101,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } else {
                     ""
                 },
-                if cfg!(all(feature = "perf-dawn", target_os = "macos")) {
+                if cfg!(all(
+                    feature = "perf-dawn",
+                    any(target_os = "macos", target_os = "emscripten")
+                )) {
                     " or `ffi-dawn`"
                 } else {
                     ""
@@ -113,6 +123,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             .into());
         }
     };
+    #[cfg(all(feature = "browser-webgpu-exact", target_os = "emscripten"))]
+    if options.backend == "rust-webgpu-exact" {
+        // TestingWindowWGPU::endFrame reverses the browser readback rows, and
+        // TestHarness::savePNG then passes flipY=true to WritePNGFile. Preserve
+        // that complete source-owned output chain rather than treating the
+        // intermediate pixel buffer as the browser oracle artifact.
+        let row_bytes = width as usize * 4;
+        for top in 0..height as usize / 2 {
+            let bottom = height as usize - 1 - top;
+            let (before_bottom, from_bottom) = pixels.split_at_mut(bottom * row_bytes);
+            before_bottom[top * row_bytes..(top + 1) * row_bytes]
+                .swap_with_slice(&mut from_bottom[..row_bytes]);
+        }
+    }
     RgbaImage::new(width, height, pixels)?.write_png(&options.output)?;
     if let Some(adapter) = adapter {
         println!("adapter={adapter}");
@@ -128,7 +152,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(feature = "native-webgpu-exact")]
+#[cfg(any(feature = "native-webgpu-exact", feature = "browser-webgpu-exact"))]
 fn replay_native_webgpu(
     stream: &RenderStream,
     frame_index: usize,
@@ -137,8 +161,11 @@ fn replay_native_webgpu(
     clear: u32,
     mode: &str,
 ) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
-    // Link-host only: this does not create or invoke the C++ Dawn renderer.
-    nuxie_renderer_ffi::dawn_link_anchor();
+    #[cfg(feature = "native-webgpu-exact")]
+    {
+        // Link-host only: this does not create or invoke the C++ Dawn renderer.
+        nuxie_renderer_ffi::dawn_link_anchor();
+    }
     let mode = match mode {
         "msaa" => nuxie_renderer::RenderMode::Msaa,
         "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
@@ -274,7 +301,10 @@ fn replay_ffi_metal(
     Ok((pixels, Some(adapter)))
 }
 
-#[cfg(all(feature = "perf-dawn", target_os = "macos"))]
+#[cfg(all(
+    feature = "perf-dawn",
+    any(target_os = "macos", target_os = "emscripten")
+))]
 fn replay_ffi_dawn(
     stream: &RenderStream,
     frame_index: usize,
@@ -285,10 +315,14 @@ fn replay_ffi_dawn(
 ) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
     let factory = nuxie_renderer_ffi::FfiFactory::new_dawn(width, height)?;
     let adapter = factory.adapter_name()?;
-    Ok((
-        replay_ffi(stream, frame_index, factory, clear, mode)?,
-        Some(adapter),
-    ))
+    let mut pixels = replay_ffi(stream, frame_index, factory, clear, mode)?;
+    #[cfg(target_os = "emscripten")]
+    {
+        // Complete TestingWindowWGPU::endFrame -> TestHarness::savePNG, whose
+        // source-owned WritePNGFile(flipY=true) reverses the rows a second time.
+        flip_rows(&mut pixels, width, height);
+    }
+    Ok((pixels, Some(adapter)))
 }
 
 #[cfg(all(feature = "ffi-vulkan", target_os = "macos"))]
@@ -326,6 +360,7 @@ fn replay_ffi_webgl2(
 
 #[cfg(any(
     all(feature = "ffi", target_os = "macos"),
+    all(feature = "perf-dawn", target_os = "emscripten"),
     all(feature = "ffi-webgl2", target_os = "emscripten")
 ))]
 fn replay_ffi(

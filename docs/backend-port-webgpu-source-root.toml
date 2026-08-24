@@ -1,0 +1,106 @@
+schema_version = 1
+backend = "rust-webgpu-exact-browser"
+source_runtime_revision = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+dawn_revision = "211333b2e3e429c3508f25c81c547f602adf448c"
+emsdk_revision = "948c31acd3f369a5da276e33ab2ed57108c165e5"
+emscripten_release_revision = "6ea9c28c38cdd40c1032fa04400c9d16230ee180"
+emscripten_version = "5.0.6"
+candidate_rust_toolchain = "rustc 1.94.1 (e408947bf 2026-03-25)"
+source_oracle_rust_toolchain = "rustc 1.91.1 (ed61e7d7e 2025-11-07)"
+browser = "Codex in-app Chrome 151.0.0.0"
+reported_adapter = "apple   (WebGPU)"
+browser_selection = "codex-in-app-browser"
+configuration_owner = "renderer/premake5_pls_renderer.lua: system emscripten, with-webgpu, not with_wagyu, webgpu-version=2, --use-port=emdawnwebgpu"
+lifecycle_owner = "tests/common/testing_window_wgpu.cpp: CreateInstance(nullptr), AllowSpontaneous callbacks, emscripten_sleep, #canvas surface, resize-time TextureBinding usage, surface texture per frame, readback mapping"
+platform_owner = "renderer/dependencies/dawn/src/emdawnwebgpu plus renderer/dependencies/dawn/third_party/emdawnwebgpu"
+link_contract = "pinned local emdawnwebgpu.port.py; no built-in remote port; no Wagyu; no legacy Rust-WGPU; no automatic fallback"
+candidate_gate = "complete 1,469-row frozen corpus through the exact TestingWindowWGPU browser surface lifecycle"
+candidate_status = "green"
+primary_cpp_parity_status = "green"
+primary_cpp_parity_exact = 1469
+primary_cpp_parity_byte_exact = 1412
+primary_cpp_parity_diverges = 0
+primary_cpp_parity_gated = 0
+candidate_derived_tolerances = false
+corpus_log_sha256 = "154d084474cc04db36cb7a501822ea27a68f658756044616a85addfbbcb7567c"
+corpus_log_path = "target/backend-port/logs/webgpu-browser-source-parity-texture-binding.log"
+renderer_oracle = "pinned C++ RenderContextWebGPUImpl using an RGBA8 offscreen target in the same browser and adapter"
+platform_lifecycle_oracle = "pinned upstream tests/common/testing_window_wgpu.cpp surface lifecycle, independently exercised by representative C++ browser GMs and translated by the Rust browser root"
+
+[source_correction]
+owner = "tests/common/testing_window_wgpu.cpp:310-325"
+owner_sha256 = "37a7acde7bb7f6d85acc4566353339da6c3b7c6cd2adaa9c3f38e6afc49469c7"
+failure = "the direct-final-size Rust root copied the constructor surface usage and skipped the source resize transition that adds TextureBinding"
+observed_case = "riv-hunter_x_demo-frame-0-clockwise-atomic"
+before = "transparent 3387x1906 readback; 6,455,622 different pixels; maximum channel delta 255"
+correction = "restore TextureUsage::TextureBinding in the final-size surface configuration, exactly as TestingWindowWGPU::resize configures the corpus target"
+isolated_after = "8 different pixels at maximum channel delta 1, within the unchanged frozen allowance of 32 pixels at delta 2"
+full_after = "1,469 exact; 1,412 byte-exact; 0 divergences; 0 gated"
+
+[regression]
+browser_candidate_release_build = "green"
+browser_source_release_build = "green"
+renderer_library_tests = "612 passed; 40 ignored; 0 failed"
+native_rust_release_build = "green"
+native_cpp_bridge_compile = "green"
+native_cpp_combined_link = "not rerun: the pinned checkout has no native WebGPU-enabled librive_pls_renderer archive; the available native archive omits RenderContextWebGPUImpl"
+
+[[artifact]]
+path = "tools/webgpu-renderer-emscripten/build.sh"
+sha256 = "7f7c07cd5fbb71213c581a3492ddc5ff57a139e9b433a0636f4106a66fb9d337"
+
+[[artifact]]
+path = "tools/webgpu-renderer-emscripten/index.html"
+sha256 = "4fc662d9fdfc9457931a48de0f455255e5600029e984149055bc557787a26ae7"
+
+[[artifact]]
+path = "tools/webgpu-renderer-emscripten/replay.html"
+sha256 = "84d6e8fccce50c2b9d416bf110a20c0bb9e840fbfbe82c2e8d398abc75bde8bf"
+
+[[artifact]]
+path = "tools/webgpu-renderer-emscripten/pkg/webgpu-renderer-emscripten.js"
+sha256 = "ef37aae95272ce855769900747ec698f9f2fb3e171e05e1ba131c44af9d39456"
+
+[[artifact]]
+path = "tools/webgpu-renderer-emscripten/pkg/webgpu_renderer_emscripten.wasm"
+sha256 = "a174e8cdf29a79ead9d39191805bd864cc1d6b28dc525318f9c376749ab6bc97"
+
+[[artifact]]
+path = "tools/webgpu-renderer-emscripten/pkg/renderer-replay.js"
+sha256 = "eac250f648fee47320e3b0e18da3b25b3140d3e5fb097c19863eaf6cce5a0da4"
+
+[[artifact]]
+path = "tools/webgpu-renderer-emscripten/pkg/renderer_replay.wasm"
+sha256 = "8475ba3ec4f257c0e9c4f9dde6c303a5f9262a29d87f894b22082c11d4fcd122"
+
+[[artifact]]
+path = "crates/nuxie-renderer/src/mechanical_port/webgpu/product_root.rs"
+sha256 = "88c64851bbd9f0e073a1731a952422b5a5d07da0d63c59f98eae4e6300c78c36"
+
+[[artifact]]
+path = "tools/backend-port/build-webgpu-source-oracle.sh"
+sha256 = "7cb51003bbcbf19b6179ca8f8d456bd893d3132823cde774538aa64c8071871f"
+
+[[artifact]]
+path = "tools/backend-port/webgpu-candidate-server.cjs"
+sha256 = "b2027f2441186fe0df1067f38da4c5627ad6747a92ec20100e21474c7e6226f9"
+
+[[artifact]]
+path = "tools/backend-port/webgpu-candidate-replay-client.py"
+sha256 = "fb845742da4590728b7e1a8567fb10d006cd213ddbadd87cd8c64bb463cafcd5"
+
+[[artifact]]
+path = "tools/backend-port/webgpu-source-oracle.html"
+sha256 = "b51e191be0f761bcc7ca7bbfe236a0cf0d32ef8409a8e5e4c95268f970aadc1f"
+
+[[artifact]]
+path = "tools/backend-port/webgpu-source-replay-client.py"
+sha256 = "f296073898763bd9c773290d63afcf0bbfb4315ff45262c3216dbcbd9237c49e"
+
+[[generated_artifact]]
+path = "target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer-replay.js"
+sha256 = "bc672c453937e29f717d40b864ab40e23a37b05a8abbbe7aa152db2a24830849"
+
+[[generated_artifact]]
+path = "target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer_replay.wasm"
+sha256 = "08b95e1c271d109648c138e5647600a0a3db5f81197dce443cae9d39dc9c127b"

@@ -23,6 +23,7 @@ members = [
     "tools/renderer-fuzz-replay",
     "tools/renderer-replay",
     "tools/browser-renderer-smoke",
+    "tools/webgpu-renderer-emscripten",
     "tools/webgl2-renderer-replay",
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",

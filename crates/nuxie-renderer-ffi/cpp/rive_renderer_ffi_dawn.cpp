@@ -5,6 +5,10 @@
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
 #ifdef RIVE_FFI_PERF_COUNTERS
 #include <dawn/dawn_proc.h>
 #include <dawn/native/DawnNative.h>
@@ -307,12 +311,20 @@ bool await(WGPUInstance instance, WGPUFuture future)
            WGPUWaitStatus_Success;
 }
 
+struct AdapterRequestResult
+{
+    bool completed = false;
+    WGPUAdapter adapter = nullptr;
+};
+
 void onAdapterRequest(WGPURequestAdapterStatus status,
                       WGPUAdapter adapter,
                       WGPUStringView message,
                       void* userdata1,
                       void*)
 {
+    auto* result = static_cast<AdapterRequestResult*>(userdata1);
+    result->completed = true;
     if (status != WGPURequestAdapterStatus_Success)
     {
         std::fprintf(stderr,
@@ -321,7 +333,32 @@ void onAdapterRequest(WGPURequestAdapterStatus status,
                      message.data);
         return;
     }
-    *static_cast<WGPUAdapter*>(userdata1) = adapter;
+    result->adapter = adapter;
+}
+
+struct DeviceRequestResult
+{
+    bool completed = false;
+    WGPUDevice device = nullptr;
+};
+
+void onDeviceRequest(WGPURequestDeviceStatus status,
+                     WGPUDevice device,
+                     WGPUStringView message,
+                     void* userdata1,
+                     void*)
+{
+    auto* result = static_cast<DeviceRequestResult*>(userdata1);
+    result->completed = true;
+    if (status != WGPURequestDeviceStatus_Success)
+    {
+        std::fprintf(stderr,
+                     "rive-renderer-ffi: Dawn device request failed: %.*s\n",
+                     static_cast<int>(message.length),
+                     message.data);
+        return;
+    }
+    result->device = device;
 }
 
 void onDeviceError(WGPUDevice const*,
@@ -338,11 +375,13 @@ void onDeviceError(WGPUDevice const*,
 
 struct WorkDoneResult
 {
+    bool completed = false;
     bool succeeded = false;
 };
 
 struct MapResult
 {
+    bool completed = false;
     bool succeeded = false;
 };
 
@@ -352,6 +391,7 @@ void onMap(WGPUMapAsyncStatus status,
            void*)
 {
     auto* result = static_cast<MapResult*>(userdata1);
+    result->completed = true;
     result->succeeded = status == WGPUMapAsyncStatus_Success;
     if (!result->succeeded)
     {
@@ -368,6 +408,7 @@ void onWorkDone(WGPUQueueWorkDoneStatus status,
                 void*)
 {
     auto* result = static_cast<WorkDoneResult*>(userdata1);
+    result->completed = true;
     result->succeeded = status == WGPUQueueWorkDoneStatus_Success;
     if (!result->succeeded)
     {
@@ -384,6 +425,17 @@ std::string copyString(WGPUStringView value)
                                  : std::string(value.data, value.length);
 }
 
+#ifdef __EMSCRIPTEN__
+bool awaitBrowserCallback(const bool& completed)
+{
+    while (!completed)
+    {
+        emscripten_sleep(1);
+    }
+    return true;
+}
+#endif
+
 class rive_ffi_dawn_context : public rive_ffi_context
 {
 public:
@@ -399,44 +451,70 @@ public:
 #ifdef RIVE_FFI_PERF_COUNTERS
         installCountingProcs();
 #endif
+#ifdef __EMSCRIPTEN__
+        instance = wgpu::Instance::Acquire(wgpuCreateInstance(nullptr));
+#else
         constexpr WGPUInstanceFeatureName kTimedWaitAny =
             WGPUInstanceFeatureName_TimedWaitAny;
         WGPUInstanceDescriptor instanceDesc = {};
         instanceDesc.requiredFeatureCount = 1;
         instanceDesc.requiredFeatures = &kTimedWaitAny;
         instance = wgpu::Instance::Acquire(wgpuCreateInstance(&instanceDesc));
+#endif
         if (!instance)
         {
             return false;
         }
 
-        WGPUAdapter adapterHandle = nullptr;
+        AdapterRequestResult adapterResult;
         WGPURequestAdapterOptions adapterOptions = {};
+#ifdef __EMSCRIPTEN__
+        adapterOptions.backendType = WGPUBackendType_Undefined;
+#else
         adapterOptions.backendType = WGPUBackendType_Metal;
+#endif
         adapterOptions.powerPreference = WGPUPowerPreference_HighPerformance;
         WGPURequestAdapterCallbackInfo adapterCallback = {};
+#ifdef __EMSCRIPTEN__
+        adapterCallback.mode = WGPUCallbackMode_AllowSpontaneous;
+#else
         adapterCallback.mode = WGPUCallbackMode_WaitAnyOnly;
+#endif
         adapterCallback.callback = onAdapterRequest;
-        adapterCallback.userdata1 = &adapterHandle;
-        if (!await(instance.Get(),
-                   wgpuInstanceRequestAdapter(instance.Get(),
-                                              &adapterOptions,
-                                              adapterCallback)) ||
-            adapterHandle == nullptr)
+        adapterCallback.userdata1 = &adapterResult;
+        const WGPUFuture adapterFuture = wgpuInstanceRequestAdapter(
+            instance.Get(), &adapterOptions, adapterCallback);
+#ifdef __EMSCRIPTEN__
+        if (!awaitBrowserCallback(adapterResult.completed) ||
+            adapterResult.adapter == nullptr)
+#else
+        if (!await(instance.Get(), adapterFuture) ||
+            adapterResult.adapter == nullptr)
+#endif
         {
             return false;
         }
-        adapter = wgpu::Adapter::Acquire(adapterHandle);
+        adapter = wgpu::Adapter::Acquire(adapterResult.adapter);
 
         WGPUAdapterInfo adapterInfo = {};
         if (wgpuAdapterGetInfo(adapter.Get(), &adapterInfo) !=
                 WGPUStatus_Success ||
+#ifdef __EMSCRIPTEN__
+            adapterInfo.backendType != WGPUBackendType_WebGPU)
+#else
             adapterInfo.backendType != WGPUBackendType_Metal)
+#endif
         {
             wgpuAdapterInfoFreeMembers(adapterInfo);
             return false;
         }
+#ifdef __EMSCRIPTEN__
+        adapterNameStorage = copyString(adapterInfo.vendor) + " " +
+                             copyString(adapterInfo.device) + " " +
+                             copyString(adapterInfo.description) + " (WebGPU)";
+#else
         adapterNameStorage = copyString(adapterInfo.device);
+#endif
         wgpuAdapterInfoFreeMembers(adapterInfo);
         if (adapterNameStorage.empty())
         {
@@ -452,8 +530,23 @@ public:
         deviceDesc.requiredFeatureCount = supportsClipDistances ? 1 : 0;
         deviceDesc.requiredFeatures =
             supportsClipDistances ? &kClipDistances : nullptr;
+#ifdef __EMSCRIPTEN__
+        DeviceRequestResult deviceResult;
+        WGPURequestDeviceCallbackInfo deviceCallback = {};
+        deviceCallback.mode = WGPUCallbackMode_AllowSpontaneous;
+        deviceCallback.callback = onDeviceRequest;
+        deviceCallback.userdata1 = &deviceResult;
+        wgpuAdapterRequestDevice(adapter.Get(), &deviceDesc, deviceCallback);
+        if (!awaitBrowserCallback(deviceResult.completed) ||
+            deviceResult.device == nullptr)
+        {
+            return false;
+        }
+        device = wgpu::Device::Acquire(deviceResult.device);
+#else
         device = wgpu::Device::Acquire(
             wgpuAdapterCreateDevice(adapter.Get(), &deviceDesc));
+#endif
         if (!device)
         {
             return false;
@@ -541,6 +634,10 @@ public:
         }
         queue.Submit(1, &commandBuffer);
 
+#ifdef __EMSCRIPTEN__
+        // TestingWindowWGPU submits without a native-only queue completion wait.
+        return finishBackendWorkMetrics(true);
+#else
         WorkDoneResult result;
         WGPUQueueWorkDoneCallbackInfo callback = {};
         callback.mode = WGPUCallbackMode_WaitAnyOnly;
@@ -550,6 +647,7 @@ public:
             wgpuQueueOnSubmittedWorkDone(queue.Get(), callback);
         return finishBackendWorkMetrics(await(instance.Get(), future) &&
                                         result.succeeded);
+#endif
     }
 
     const char* adapterName() const override
@@ -602,16 +700,25 @@ public:
 
         MapResult mapResult;
         WGPUBufferMapCallbackInfo callback = {};
+#ifdef __EMSCRIPTEN__
+        callback.mode = WGPUCallbackMode_AllowSpontaneous;
+#else
         callback.mode = WGPUCallbackMode_WaitAnyOnly;
+#endif
         callback.callback = onMap;
         callback.userdata1 = &mapResult;
-        if (!await(instance.Get(),
-                   wgpuBufferMapAsync(readback.Get(),
-                                      WGPUMapMode_Read,
-                                      0,
-                                      readbackDesc.size,
-                                      callback)) ||
+        const WGPUFuture mapFuture = wgpuBufferMapAsync(readback.Get(),
+                                                        WGPUMapMode_Read,
+                                                        0,
+                                                        readbackDesc.size,
+                                                        callback);
+#ifdef __EMSCRIPTEN__
+        if (!awaitBrowserCallback(mapResult.completed) ||
             !mapResult.succeeded)
+#else
+        if (!await(instance.Get(), mapFuture) ||
+            !mapResult.succeeded)
+#endif
         {
             return 0;
         }
@@ -626,7 +733,13 @@ public:
         }
         for (uint32_t y = 0; y != height; ++y)
         {
-            std::memcpy(out + y * packedRowBytes,
+#ifdef __EMSCRIPTEN__
+            // TestingWindowWGPU::endFrame reverses browser readback rows.
+            const uint32_t outputY = height - y - 1;
+#else
+            const uint32_t outputY = y;
+#endif
+            std::memcpy(out + outputY * packedRowBytes,
                         mapped + y * paddedRowBytes,
                         packedRowBytes);
         }

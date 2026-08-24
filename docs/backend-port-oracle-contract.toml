@@ -51,10 +51,21 @@ secondary_oracles = ["legacy-rust-wgpu", "rust-metal", "rust-vulkan-exact"]
 required_modes = ["msaa", "clockwise-atomic"]
 corpus_entries = 1469
 rooted_native_runner = "tools/renderer-replay"
-rooted_browser_runner = "tools/browser-renderer-smoke"
+rooted_browser_runner = "tools/webgpu-renderer-emscripten"
 web_editor_selection = "webgpu"
 primary_root_status = "green"
 candidate_root_contract_status = "frozen"
+source_runtime_revision = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+source_root_manifest = "docs/backend-port-webgpu-source-root.toml"
+dawn_revision = "211333b2e3e429c3508f25c81c547f602adf448c"
+emsdk_revision = "948c31acd3f369a5da276e33ab2ed57108c165e5"
+emscripten_version = "5.0.6"
+browser_candidate_root_status = "green"
+browser_primary_parity_status = "green-1469-of-1469"
+browser_primary_parity_byte_exact = 1412
+browser_primary_parity_diverges = 0
+browser_primary_parity_gated = 0
+browser_link_contract = "pinned local Emdawnwebgpu; no Wagyu; no legacy Rust-WGPU; no automatic fallback"
 
 [[backend]]
 id = "webgl2"
@@ -127,8 +138,8 @@ id = "webgpu-chromium-macos"
 backend = "webgpu"
 environment = "current pinned Chromium browser build on macOS"
 requirement = "closeout-blocking"
-primary_status = "pending"
-candidate_status = "pending-translation"
+primary_status = "green"
+candidate_status = "green-1469-of-1469"
 
 [[platform]]
 id = "webgpu-firefox-macos"

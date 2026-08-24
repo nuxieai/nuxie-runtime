@@ -661,7 +661,7 @@ pub struct RenderImage {
     // This is a nullable non-owning raw-pointer link; it never deletes or
     // retains the delegate and is represented by the authority's exact
     // Option<NonNull<RenderImageDelegate>> shape.
-    m_delegate: Option<NonNull<RenderImageDelegate>>,
+    pub(crate) m_delegate: Option<NonNull<RenderImageDelegate>>,
     // #endif
 }
 

@@ -2605,6 +2605,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "webgpu-renderer-emscripten"
+version = "0.1.0"
+dependencies = [
+ "nuxie-renderer",
+]
+
+[[package]]
 name = "wgpu"
 version = "30.0.0"
 dependencies = [

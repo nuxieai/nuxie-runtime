@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 8
+max_pending = 7
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -993,9 +993,9 @@ note = "All sixteen parser and ScriptAsset action/assertion sequences are transl
 [[file]]
 upstream = "tests/unit_tests/runtime/simd_test.cpp"
 test_case_count = 23
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_simd.rs"]
+note = "All 23 cases are ported at the fixed-size Rust-array adaptation boundary for the C++ SIMD language substrate. They preserve lane patterns and ordering, swizzles, IEEE infinity/NaN comparisons, typed ternary selection, min/max/clamp NaN rules, wrapping INT_MIN abs, reductions, rounding/sign/sqrt, the optimized div255 identity, the pinned rational fast-acos constants/error/root search, casts, dot/cross, join/zip, seeded mix calls, and column-major load. All pass without imposing C++ vector ABI or optimization constraints on Rust."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/simple_array_test.cpp"

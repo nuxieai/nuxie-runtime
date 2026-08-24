@@ -288,7 +288,7 @@ windows_process_correction = "generate ephemeral .cmd launchers that invoke the 
 candidate_renderer_change = "none"
 tolerance_change = "none"
 smoke_verification = "all four WebGPU/WebGL2 x Chromium/Firefox combinations passed a same-browser, same-adapter exact representative case on macOS; WebGPU Firefox inherited its recorded headed requirement"
-closeout_verdict = "macOS browser-host parity green; Windows/Linux expansion deferred to teambasis/universe#126"
+closeout_verdict = "macOS browser-host parity green; Windows/Linux expansion deferred to UNIV-2635"
 execution_status = "nonblocking-follow-up"
 
 [cutover]
@@ -301,8 +301,8 @@ product_wiring_status = "green-explicit-exact-roots"
 renderer_crate_features = ["renderer-vulkan", "renderer-webgpu", "renderer-webgl2"]
 facade_crate_features = ["renderer-vulkan", "renderer-webgpu", "renderer-webgl2"]
 browser_artifact_contract = "explicit selection loads separate wasm32-unknown-unknown WebGPU or WebGL2 artifacts; neither shipping artifact uses Emscripten and automatic cross-backend fallback is forbidden"
-browser_wasm32_unknown_unknown_optimization = "complete-teambasis-universe-124"
-runtime_naga_ownership = "none; editor shader compilation integration is follow-up teambasis/universe#125"
+browser_wasm32_unknown_unknown_optimization = "complete-UNIV-2633"
+runtime_naga_ownership = "none; editor shader compilation integration is follow-up UNIV-2634"
 product_root_compile_evidence = "all three stable feature roots compile independently; cargo dependency trees for each contain neither legacy wgpu nor naga"
 required_proofs = [
   "explicit selection reports selected backend identity",

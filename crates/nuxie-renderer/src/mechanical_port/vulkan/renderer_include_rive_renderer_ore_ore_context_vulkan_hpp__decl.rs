@@ -142,22 +142,22 @@ pub(crate) struct VkPendingTextureUpload {
 /// Copy and assignment are absent, matching the deleted source operations.
 #[repr(C)]
 pub(crate) struct ContextVulkan {
-    pub(crate) base: ManuallyDrop<Context>,
+    pub(super) base: ManuallyDrop<Context>,
     pub(super) m_lifetime: Rc<ContextVulkanLifetime>,
-    pub(crate) m_vk: ManuallyDrop<Arc<VulkanContext>>,
-    pub(crate) m_vkQueue: vk::Queue,
-    pub(crate) m_vkQueueFamily: u32,
-    pub(crate) m_vkDepth24Stencil8Format: vk::Format,
-    pub(crate) m_vkCommandPool: vk::CommandPool,
-    pub(crate) m_vkCommandBuffer: vk::CommandBuffer,
-    pub(crate) m_vkDescriptorPool: vk::DescriptorPool,
-    pub(crate) m_vkFrameFence: vk::Fence,
-    pub(crate) m_vkCmdBufRecording: bool,
-    pub(crate) m_currentDescriptorPool: Option<Arc<DescriptorPoolGeneration>>,
-    pub(crate) m_vkEmptyDSL: vk::DescriptorSetLayout,
-    pub(crate) m_vkRenderPassCache: Vec<(VKRenderPassKey, vk::RenderPass)>,
-    pub(crate) m_vkPendingInitialTransitions: Vec<VkPendingImageTransition>,
-    pub(crate) m_vkPendingTextureUploads: Vec<VkPendingTextureUpload>,
+    pub(super) m_vk: ManuallyDrop<Arc<VulkanContext>>,
+    pub(super) m_vkQueue: vk::Queue,
+    pub(super) m_vkQueueFamily: u32,
+    pub(super) m_vkDepth24Stencil8Format: vk::Format,
+    pub(super) m_vkCommandPool: vk::CommandPool,
+    pub(super) m_vkCommandBuffer: vk::CommandBuffer,
+    pub(super) m_vkDescriptorPool: vk::DescriptorPool,
+    pub(super) m_vkFrameFence: vk::Fence,
+    pub(super) m_vkCmdBufRecording: bool,
+    pub(super) m_currentDescriptorPool: Option<Arc<DescriptorPoolGeneration>>,
+    pub(super) m_vkEmptyDSL: vk::DescriptorSetLayout,
+    pub(super) m_vkRenderPassCache: Vec<(VKRenderPassKey, vk::RenderPass)>,
+    pub(super) m_vkPendingInitialTransitions: Vec<VkPendingImageTransition>,
+    pub(super) m_vkPendingTextureUploads: Vec<VkPendingTextureUpload>,
 }
 
 impl ContextVulkan {

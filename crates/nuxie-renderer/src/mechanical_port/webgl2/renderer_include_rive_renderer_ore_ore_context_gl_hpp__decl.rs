@@ -28,9 +28,9 @@ pub(crate) struct GLSavedState {
 /// that field authority and follows the complete source prefix.
 #[repr(C)]
 pub(crate) struct ContextGL {
-    pub(crate) base: ManuallyDrop<Context>,
-    pub(crate) m_savedState: GLSavedState,
-    pub(crate) m_executionStamp: ManuallyDrop<GLExecutionStamp>,
+    pub(super) base: ManuallyDrop<Context>,
+    pub(super) m_savedState: GLSavedState,
+    pub(super) m_executionStamp: ManuallyDrop<GLExecutionStamp>,
 }
 
 impl ContextGL {

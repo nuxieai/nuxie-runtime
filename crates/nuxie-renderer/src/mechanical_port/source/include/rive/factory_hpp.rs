@@ -120,11 +120,11 @@ pub enum OreContext {
     #[cfg(feature = "native-ore-metal-experimental")]
     Metal(Box<nuxie_ore_metal::metal::context::ContextMetal>),
     #[cfg(feature = "native-ore-vulkan-experimental")]
-    Vulkan(Box<crate::mechanical_port::vulkan::ore_context_vulkan_decl::ContextVulkan>),
+    Vulkan(Box<crate::mechanical_port::vulkan::ContextVulkan>),
     #[cfg(feature = "native-webgpu-experimental")]
-    WGPU(Box<crate::mechanical_port::webgpu::ore_context_wgpu_decl::ContextWGPU>),
+    WGPU(Box<crate::mechanical_port::webgpu::ContextWGPU>),
     #[cfg(feature = "ore-gl")]
-    GL(Box<crate::mechanical_port::webgl2::ore_context_gl_decl::ContextGL>),
+    GL(Box<crate::mechanical_port::webgl2::ContextGL>),
 }
 #[cfg(not(any(
     feature = "native-ore-metal-experimental",

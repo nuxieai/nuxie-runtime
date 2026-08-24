@@ -64,223 +64,239 @@ pub(crate) mod backend_port_wgsl_header_generator;
 // target and compile that prerequisite for WebGPU as well.
 #[cfg(feature = "native-webgpu-experimental")]
 pub(crate) mod webgl2 {
+    // This module is the Rust equivalent of the source's member/friend
+    // boundary. Only the cross-backend load/store dependency and opaque
+    // ContextGL type escape; coupled GL owner records stay unnameable outside
+    // this translation zone.
     #[path = "renderer_include_rive_renderer_gl_gles3_hpp__decl.rs"]
-    pub(crate) mod gles3_decl;
+    mod gles3_decl;
     #[path = "renderer_include_rive_renderer_gl_gl_state_hpp__decl.rs"]
-    pub(crate) mod gl_state_decl;
+    mod gl_state_decl;
     #[path = "renderer_src_gl_gl_state_cpp__impl.rs"]
-    pub(crate) mod gl_state_impl;
+    mod gl_state_impl;
     #[path = "renderer_include_rive_renderer_gl_gl_utils_hpp__decl.rs"]
-    pub(crate) mod gl_utils_decl;
+    mod gl_utils_decl;
     #[path = "renderer_src_gl_gl_utils_cpp__impl.rs"]
-    pub(crate) mod gl_utils_impl;
+    mod gl_utils_impl;
     #[path = "renderer_include_rive_renderer_gl_render_buffer_gl_impl_hpp__decl.rs"]
-    pub(crate) mod render_buffer_gl_impl_decl;
+    mod render_buffer_gl_impl_decl;
     #[path = "renderer_src_gl_render_buffer_gl_impl_cpp__impl.rs"]
-    pub(crate) mod render_buffer_gl_impl_impl;
+    mod render_buffer_gl_impl_impl;
     #[cfg(feature = "ore-gl")]
     #[path = "renderer_include_rive_renderer_gl_render_context_gl_impl_hpp__decl.rs"]
-    pub(crate) mod render_context_gl_decl;
+    mod render_context_gl_decl;
     #[cfg(feature = "ore-gl")]
     #[path = "renderer_src_gl_render_context_gl_impl_cpp__impl.rs"]
-    pub(crate) mod render_context_gl_impl;
+    mod render_context_gl_impl;
     #[cfg(feature = "ore-gl")]
     #[path = "renderer_src_gl_pls_impl_webgl_cpp__impl.rs"]
-    pub(crate) mod pls_impl_webgl_impl;
+    mod pls_impl_webgl_impl;
     #[cfg(feature = "ore-gl")]
     #[path = "renderer_include_rive_renderer_gl_render_target_gl_hpp__decl.rs"]
-    pub(crate) mod render_target_gl_decl;
+    mod render_target_gl_decl;
     #[cfg(feature = "ore-gl")]
     #[path = "renderer_src_gl_render_target_gl_cpp__impl.rs"]
-    pub(crate) mod render_target_gl_impl;
+    mod render_target_gl_impl;
     #[path = "renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs"]
-    pub(crate) mod load_gles_extensions_decl;
+    mod load_gles_extensions_decl;
     #[path = "renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs"]
     pub(crate) mod load_store_actions_ext_decl;
     #[path = "renderer_src_gl_load_store_actions_ext_cpp__impl.rs"]
     pub(crate) mod load_store_actions_ext_impl;
     #[path = "renderer_src_ore_gl_ore_bind_group_gl_hpp__decl.rs"]
-    pub(crate) mod ore_bind_group_gl_decl;
+    mod ore_bind_group_gl_decl;
     #[path = "renderer_src_ore_gl_ore_bind_group_gl_cpp__impl.rs"]
-    pub(crate) mod ore_bind_group_gl_impl;
+    mod ore_bind_group_gl_impl;
     #[path = "renderer_src_ore_gl_ore_buffer_gl_hpp__decl.rs"]
-    pub(crate) mod ore_buffer_gl_decl;
+    mod ore_buffer_gl_decl;
     #[path = "renderer_src_ore_gl_ore_buffer_gl_cpp__impl.rs"]
-    pub(crate) mod ore_buffer_gl_impl;
+    mod ore_buffer_gl_impl;
     #[cfg(feature = "ore-gl")]
     #[path = "renderer_include_rive_renderer_ore_ore_context_gl_hpp__decl.rs"]
-    pub(crate) mod ore_context_gl_decl;
+    mod ore_context_gl_decl;
     #[cfg(feature = "ore-gl")]
     #[path = "renderer_src_ore_gl_ore_context_gl_cpp__impl.rs"]
-    pub(crate) mod ore_context_gl_impl;
+    mod ore_context_gl_impl;
     #[path = "renderer_src_ore_gl_ore_pipeline_gl_hpp__decl.rs"]
-    pub(crate) mod ore_pipeline_gl_decl;
+    mod ore_pipeline_gl_decl;
     #[path = "renderer_src_ore_gl_ore_pipeline_gl_cpp__impl.rs"]
-    pub(crate) mod ore_pipeline_gl_impl;
+    mod ore_pipeline_gl_impl;
     #[path = "renderer_src_ore_gl_ore_render_pass_gl_hpp__decl.rs"]
-    pub(crate) mod ore_render_pass_gl_decl;
+    mod ore_render_pass_gl_decl;
     #[path = "renderer_src_ore_gl_ore_render_pass_gl_cpp__impl.rs"]
-    pub(crate) mod ore_render_pass_gl_impl;
+    mod ore_render_pass_gl_impl;
     #[path = "renderer_src_ore_gl_ore_sampler_gl_hpp__decl.rs"]
-    pub(crate) mod ore_sampler_gl_decl;
+    mod ore_sampler_gl_decl;
     #[path = "renderer_src_ore_gl_ore_sampler_gl_cpp__impl.rs"]
-    pub(crate) mod ore_sampler_gl_impl;
+    mod ore_sampler_gl_impl;
     #[path = "renderer_src_ore_gl_ore_shader_module_gl_hpp__decl.rs"]
-    pub(crate) mod ore_shader_module_gl_decl;
+    mod ore_shader_module_gl_decl;
     #[path = "renderer_src_ore_gl_ore_shader_module_gl_cpp__impl.rs"]
-    pub(crate) mod ore_shader_module_gl_impl;
+    mod ore_shader_module_gl_impl;
     #[path = "renderer_src_ore_gl_ore_texture_gl_hpp__decl.rs"]
-    pub(crate) mod ore_texture_gl_decl;
+    mod ore_texture_gl_decl;
     #[path = "renderer_src_ore_gl_ore_texture_gl_cpp__impl.rs"]
-    pub(crate) mod ore_texture_gl_impl;
+    mod ore_texture_gl_impl;
+
+    #[cfg(feature = "ore-gl")]
+    pub(crate) use ore_context_gl_decl::ContextGL;
 }
 
 #[cfg(feature = "native-webgpu-experimental")]
 pub(crate) mod webgpu {
+    // Keep raw WebGPU handles, ManuallyDrop graphs, caches, and paired
+    // texture/view owners inside one source-member/friend translation zone.
+    // The crate sees only the opaque ContextWGPU root below.
     #[path = "renderer_include_rive_renderer_webgpu_render_context_webgpu_impl_hpp__decl.rs"]
-    pub(crate) mod render_context_webgpu_decl;
+    mod render_context_webgpu_decl;
     #[path = "renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs"]
-    pub(crate) mod render_context_webgpu_impl;
+    mod render_context_webgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_bind_group_layout_wgpu_hpp__decl.rs"]
-    pub(crate) mod ore_bind_group_layout_wgpu_decl;
+    mod ore_bind_group_layout_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_bind_group_wgpu_hpp__decl.rs"]
-    pub(crate) mod ore_bind_group_wgpu_decl;
+    mod ore_bind_group_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_bind_group_wgpu_cpp__impl.rs"]
-    pub(crate) mod ore_bind_group_wgpu_impl;
+    mod ore_bind_group_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_buffer_wgpu_hpp__decl.rs"]
-    pub(crate) mod ore_buffer_wgpu_decl;
+    mod ore_buffer_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_buffer_wgpu_cpp__impl.rs"]
-    pub(crate) mod ore_buffer_wgpu_impl;
+    mod ore_buffer_wgpu_impl;
     #[path = "renderer_include_rive_renderer_ore_ore_context_wgpu_hpp__decl.rs"]
-    pub(crate) mod ore_context_wgpu_decl;
+    mod ore_context_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_context_wgpu_cpp__impl.rs"]
-    pub(crate) mod ore_context_wgpu_impl;
+    mod ore_context_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_pipeline_wgpu_hpp__decl.rs"]
-    pub(crate) mod ore_pipeline_wgpu_decl;
+    mod ore_pipeline_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_pipeline_wgpu_cpp__impl.rs"]
-    pub(crate) mod ore_pipeline_wgpu_impl;
+    mod ore_pipeline_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_render_pass_wgpu_hpp__decl.rs"]
-    pub(crate) mod ore_render_pass_wgpu_decl;
+    mod ore_render_pass_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_render_pass_wgpu_cpp__impl.rs"]
-    pub(crate) mod ore_render_pass_wgpu_impl;
+    mod ore_render_pass_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs"]
-    pub(crate) mod ore_sampler_wgpu_decl;
+    mod ore_sampler_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_sampler_wgpu_cpp__impl.rs"]
-    pub(crate) mod ore_sampler_wgpu_impl;
+    mod ore_sampler_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_shader_module_wgpu_hpp__decl.rs"]
-    pub(crate) mod ore_shader_module_wgpu_decl;
+    mod ore_shader_module_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_shader_module_wgpu_cpp__impl.rs"]
-    pub(crate) mod ore_shader_module_wgpu_impl;
+    mod ore_shader_module_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_texture_wgpu_hpp__decl.rs"]
-    pub(crate) mod ore_texture_wgpu_decl;
+    mod ore_texture_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_texture_wgpu_cpp__impl.rs"]
-    pub(crate) mod ore_texture_wgpu_impl;
+    mod ore_texture_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_wgpu_layout_hpp__decl.rs"]
-    pub(crate) mod ore_wgpu_layout_decl;
+    mod ore_wgpu_layout_decl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs"]
-    pub(crate) mod webgpu_decl;
+    mod webgpu_decl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs"]
-    pub(crate) mod webgpu_wagyu_decl;
+    mod webgpu_wagyu_decl;
     #[path = "renderer_src_webgpu_wagyu_port_src_webgpu_c__impl.rs"]
-    pub(crate) mod webgpu_impl;
+    mod webgpu_impl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs"]
-    pub(crate) mod webgpu_cpp_chained_struct_decl;
+    mod webgpu_cpp_chained_struct_decl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs"]
-    pub(crate) mod webgpu_cpp_decl;
+    mod webgpu_cpp_decl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs"]
-    pub(crate) mod webgpu_enum_class_bitmasks_decl;
+    mod webgpu_enum_class_bitmasks_decl;
     #[path = "renderer_src_webgpu_webgpu_compat_h__decl.rs"]
-    pub(crate) mod webgpu_compat_decl;
+    mod webgpu_compat_decl;
     #[path = "renderer_src_webgpu_wagyu_port_src_library_webgpu_stubs_js__compat_build_input.rs"]
-    pub(crate) mod library_webgpu_stubs_build_input;
+    mod library_webgpu_stubs_build_input;
     #[path = "renderer_src_webgpu_wagyu_port_src_library_webgpu_wagyu_stubs_js__compat_build_input.rs"]
-    pub(crate) mod library_webgpu_wagyu_stubs_build_input;
+    mod library_webgpu_wagyu_stubs_build_input;
     #[path = "renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs"]
-    pub(crate) mod webgpu_port_generator;
+    mod webgpu_port_generator;
+
+    pub(crate) use ore_context_wgpu_decl::ContextWGPU;
 }
 
 #[cfg(feature = "native-vulkan-experimental")]
 pub(crate) mod vulkan {
+    // Vulkan native handles and reverse-teardown owner graphs are a sealed
+    // translation zone. The crate sees only the opaque ContextVulkan root.
     #[path = "renderer_src_vulkan_common_layouts_hpp__decl.rs"]
-    pub(crate) mod common_layouts_decl;
+    mod common_layouts_decl;
     #[path = "renderer_src_vulkan_draw_pipeline_layout_vulkan_hpp__decl.rs"]
-    pub(crate) mod draw_pipeline_layout_vulkan_decl;
+    mod draw_pipeline_layout_vulkan_decl;
     #[path = "renderer_src_vulkan_draw_pipeline_layout_vulkan_cpp__impl.rs"]
-    pub(crate) mod draw_pipeline_layout_vulkan_impl;
+    mod draw_pipeline_layout_vulkan_impl;
     #[path = "renderer_src_vulkan_draw_pipeline_vulkan_hpp__decl.rs"]
-    pub(crate) mod draw_pipeline_vulkan_decl;
+    mod draw_pipeline_vulkan_decl;
     #[path = "renderer_src_vulkan_draw_pipeline_vulkan_cpp__impl.rs"]
-    pub(crate) mod draw_pipeline_vulkan_impl;
+    mod draw_pipeline_vulkan_impl;
     #[path = "renderer_src_vulkan_draw_shader_vulkan_hpp__decl.rs"]
-    pub(crate) mod draw_shader_vulkan_decl;
+    mod draw_shader_vulkan_decl;
     #[path = "renderer_src_vulkan_draw_shader_vulkan_cpp__impl.rs"]
-    pub(crate) mod draw_shader_vulkan_impl;
+    mod draw_shader_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_bind_group_layout_vulkan_hpp__decl.rs"]
-    pub(crate) mod ore_bind_group_layout_vulkan_decl;
+    mod ore_bind_group_layout_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_bind_group_vulkan_hpp__decl.rs"]
-    pub(crate) mod ore_bind_group_vulkan_decl;
+    mod ore_bind_group_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_bind_group_vulkan_cpp__impl.rs"]
-    pub(crate) mod ore_bind_group_vulkan_impl;
+    mod ore_bind_group_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_buffer_vulkan_hpp__decl.rs"]
-    pub(crate) mod ore_buffer_vulkan_decl;
+    mod ore_buffer_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_buffer_vulkan_cpp__impl.rs"]
-    pub(crate) mod ore_buffer_vulkan_impl;
+    mod ore_buffer_vulkan_impl;
     #[path = "renderer_include_rive_renderer_ore_ore_context_vulkan_hpp__decl.rs"]
-    pub(crate) mod ore_context_vulkan_decl;
+    mod ore_context_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_context_vulkan_cpp__impl.rs"]
-    pub(crate) mod ore_context_vulkan_impl;
+    mod ore_context_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_pipeline_vulkan_hpp__decl.rs"]
-    pub(crate) mod ore_pipeline_vulkan_decl;
+    mod ore_pipeline_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_pipeline_vulkan_cpp__impl.rs"]
-    pub(crate) mod ore_pipeline_vulkan_impl;
+    mod ore_pipeline_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_render_pass_vulkan_hpp__decl.rs"]
-    pub(crate) mod ore_render_pass_vulkan_decl;
+    mod ore_render_pass_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_render_pass_vulkan_cpp__impl.rs"]
-    pub(crate) mod ore_render_pass_vulkan_impl;
+    mod ore_render_pass_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_sampler_vulkan_hpp__decl.rs"]
-    pub(crate) mod ore_sampler_vulkan_decl;
+    mod ore_sampler_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_sampler_vulkan_cpp__impl.rs"]
-    pub(crate) mod ore_sampler_vulkan_impl;
+    mod ore_sampler_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_shader_module_vulkan_hpp__decl.rs"]
-    pub(crate) mod ore_shader_module_vulkan_decl;
+    mod ore_shader_module_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_shader_module_vulkan_cpp__impl.rs"]
-    pub(crate) mod ore_shader_module_vulkan_impl;
+    mod ore_shader_module_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_texture_vulkan_hpp__decl.rs"]
-    pub(crate) mod ore_texture_vulkan_decl;
+    mod ore_texture_vulkan_decl;
     #[path = "renderer_src_ore_vulkan_ore_texture_vulkan_cpp__impl.rs"]
-    pub(crate) mod ore_texture_vulkan_impl;
+    mod ore_texture_vulkan_impl;
     #[path = "renderer_src_ore_vulkan_ore_vulkan_dsl_hpp__decl.rs"]
-    pub(crate) mod ore_vulkan_dsl;
+    mod ore_vulkan_dsl;
     #[path = "renderer_src_vulkan_pipeline_manager_vulkan_hpp__decl.rs"]
-    pub(crate) mod pipeline_manager_vulkan_decl;
+    mod pipeline_manager_vulkan_decl;
     #[path = "renderer_src_vulkan_pipeline_manager_vulkan_cpp__impl.rs"]
-    pub(crate) mod pipeline_manager_vulkan_impl;
+    mod pipeline_manager_vulkan_impl;
     #[path = "renderer_include_rive_renderer_vulkan_render_context_vulkan_impl_hpp__decl.rs"]
-    pub(crate) mod render_context_vulkan_decl;
+    mod render_context_vulkan_decl;
     #[path = "renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs"]
-    pub(crate) mod render_context_vulkan_impl;
+    mod render_context_vulkan_impl;
     #[path = "renderer_src_vulkan_render_pass_vulkan_hpp__decl.rs"]
-    pub(crate) mod render_pass_vulkan_decl;
+    mod render_pass_vulkan_decl;
     #[path = "renderer_src_vulkan_render_pass_vulkan_cpp__impl.rs"]
-    pub(crate) mod render_pass_vulkan_impl;
+    mod render_pass_vulkan_impl;
     #[path = "renderer_include_rive_renderer_vulkan_render_target_vulkan_hpp__decl.rs"]
-    pub(crate) mod render_target_vulkan_decl;
+    mod render_target_vulkan_decl;
     #[path = "renderer_src_vulkan_render_target_vulkan_cpp__impl.rs"]
-    pub(crate) mod render_target_vulkan_impl;
+    mod render_target_vulkan_impl;
     #[path = "renderer_include_rive_renderer_vulkan_vkutil_hpp__decl.rs"]
-    pub(crate) mod vkutil_decl;
+    mod vkutil_decl;
     #[path = "renderer_src_vulkan_vkutil_cpp__impl.rs"]
-    pub(crate) mod vkutil_impl;
+    mod vkutil_impl;
     #[path = "renderer_include_rive_renderer_vulkan_vulkan_context_hpp__decl.rs"]
-    pub(crate) mod vulkan_context_decl;
+    mod vulkan_context_decl;
     #[path = "renderer_src_vulkan_vulkan_context_cpp__impl.rs"]
-    pub(crate) mod vulkan_context_impl;
+    mod vulkan_context_impl;
     #[path = "renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs"]
-    pub(crate) mod vulkan_memory_allocator_impl;
+    mod vulkan_memory_allocator_impl;
     #[path = "renderer_src_vulkan_vulkan_shaders_hpp__decl.rs"]
-    pub(crate) mod vulkan_shaders_decl;
+    mod vulkan_shaders_decl;
     #[path = "renderer_src_vulkan_vulkan_shaders_cpp__impl.rs"]
-    pub(crate) mod vulkan_shaders_impl;
+    mod vulkan_shaders_impl;
+
+    pub(crate) use ore_context_vulkan_decl::ContextVulkan;
 }
 
 pub(crate) mod source {

@@ -35,14 +35,14 @@ impl ContextWGPULifetime {
 
 #[repr(C)]
 pub(crate) struct ContextWGPU {
-    pub(crate) base: ManuallyDrop<Context>,
-    pub(crate) m_wgpuBackend: WGPUBackend,
-    pub(crate) m_wgpuDevice: ManuallyDrop<Device>,
-    pub(crate) m_wgpuQueue: ManuallyDrop<Queue>,
-    pub(crate) m_wgpuCommandEncoder: ManuallyDrop<CommandEncoder>,
-    pub(crate) m_frameSerial: u64,
+    pub(super) base: ManuallyDrop<Context>,
+    pub(super) m_wgpuBackend: WGPUBackend,
+    pub(super) m_wgpuDevice: ManuallyDrop<Device>,
+    pub(super) m_wgpuQueue: ManuallyDrop<Queue>,
+    pub(super) m_wgpuCommandEncoder: ManuallyDrop<CommandEncoder>,
+    pub(super) m_frameSerial: u64,
     /// Rust root for resources whose source C++ base uses a null manager.
-    pub(crate) m_managerOwner: ManuallyDrop<GPUResourceManagerOwner>,
+    pub(super) m_managerOwner: ManuallyDrop<GPUResourceManagerOwner>,
     pub(super) m_lifetime: Rc<ContextWGPULifetime>,
 }
 

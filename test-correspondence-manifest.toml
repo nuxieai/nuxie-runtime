@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 66
+max_pending = 65
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -892,9 +892,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_vector_test.cpp"
 test_case_count = 13
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_vector.rs"]
+note = "All 13 upstream cases are translated one-for-one with their original scripts, action order, assertion order, constants, buffer bounds, closure capture, and benchmark workload. The Rust closure uses the safe luaur wrapper rather than C allocator/upvalue calls. The N=1000000 performance case is honestly ignored by default because performance evidence requires an explicitly stable benchmark environment."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_wake_advance_test.cpp"

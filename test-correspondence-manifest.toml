@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 6
+max_pending = 2
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -176,9 +176,9 @@ note = "All four literal action streams execute through the pinned C++ silver pr
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 test_case_count = 10
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_instance_artboard_runtime.rs::upstream_data_binding_artboard_tests", "crates/nuxie/tests/upstream_data_binding_artboards.rs", "silver-corpus.toml::data_binding_artboards_test_recursive"]
+note = "All ten cases are explicit ports. The two non-renderer runtime-property cases execute against the private owner and pass with the pinned fixture: setting a new bindable clears the retained bound ViewModel instance, and artboardName tracks ch1/ch2/empty. The other eight tests preserve every fixture, selected artboard, ViewModel operation, local/external/null artboard swap, trigger/pointer mutation, timing, frame/draw order, nested-presence assertion, and named silver comparison as executable expected-red action streams. Their red boundaries remain external bindable-artboard registration/injection, one known recursive render divergence, and missing public nested-instance inspection; Phase 1 adds no runtime behavior."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_blobs_test.cpp"

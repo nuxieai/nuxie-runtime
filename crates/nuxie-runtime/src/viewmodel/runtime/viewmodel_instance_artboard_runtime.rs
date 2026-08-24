@@ -79,3 +79,77 @@ impl ViewModelInstanceArtboardRuntime {
         &self.value
     }
 }
+
+#[cfg(test)]
+mod upstream_data_binding_artboard_tests {
+    use super::*;
+    use crate::ViewModelRuntime;
+    use nuxie_binary::read_runtime_file;
+    use std::path::PathBuf;
+
+    fn artboard_property() -> (ViewModelInstanceRuntime, ViewModelInstanceArtboardRuntime) {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/data_binding_artboards_test.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let file = Rc::new(read_runtime_file(&bytes).expect("fixture parses"));
+        let index = file
+            .view_models()
+            .iter()
+            .position(|view_model| {
+                view_model
+                    .properties
+                    .iter()
+                    .any(|property| property.string_property("name") == Some("ab"))
+            })
+            .expect("fixture has view model with ab artboard property");
+        let runtime = ViewModelRuntime::new(file, index)
+            .expect("view-model runtime")
+            .create_instance()
+            .expect("view-model instance");
+        let property = runtime.property_artboard("ab").expect("ab property");
+        (runtime, property)
+    }
+
+    #[test]
+    fn setting_a_bindable_artboard_clears_stale_bound_instance() {
+        let (runtime, property) = artboard_property();
+        let source_a = RuntimeBindableArtboard::new("ch1");
+        let source_b = RuntimeBindableArtboard::new("ch2");
+
+        assert!(property.set_value(Some(source_a)));
+        property.set_view_model_instance(Some(runtime));
+        assert!(
+            property
+                .runtime_state
+                .borrow()
+                .bound_view_model_instance
+                .is_some()
+        );
+
+        assert!(property.set_value(Some(source_b)));
+        assert!(
+            property
+                .runtime_state
+                .borrow()
+                .bound_view_model_instance
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn runtime_artboard_property_exposes_the_bound_artboard_name() {
+        let (_runtime, property) = artboard_property();
+        let source_a = RuntimeBindableArtboard::new("ch1");
+        let source_b = RuntimeBindableArtboard::new("ch2");
+
+        assert!(property.set_value(Some(source_a)));
+        assert_eq!(property.artboard_name(), "ch1");
+        assert!(property.set_value(Some(source_b)));
+        assert_eq!(property.artboard_name(), "ch2");
+        assert!(property.set_value(None));
+        assert_eq!(property.artboard_name(), "");
+    }
+}

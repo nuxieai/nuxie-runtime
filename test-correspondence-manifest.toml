@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 69
+max_pending = 67
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -684,9 +684,10 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_color_test.cpp"
 test_case_count = 3
-status = "pending"
-evidence = []
-note = "The scripted corpus loads scripted_color.riv bytecode only; no complete color TEST_CASE is corresponded."
+status = "partial"
+evidence = ["crates/nuxie-scripting/src/vm/lua_color.rs::{color_construction_and_component_overloads_match_cpp,color_opacity_lerp_and_float_conversion_match_cpp}"]
+covered_test_cases = ["color can be constructed", "color static methods work"]
+note = "The two complete direct Lua assertion sequences are active, including construction, every channel getter/setter, opacity, and lerp. Scripted color converter remains unclaimed because its exact 0/.016 fixture action stream is still pending-scripted; generic corpus sampling is not promoted as equivalent."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
@@ -784,9 +785,9 @@ note = "The backfill explicitly retains all three exact script-console/view-mode
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_mat2d_test.cpp"
 test_case_count = 5
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/src/vm/lua_mat2d.rs::upstream_tests"]
+note = "All five Lua assertion sequences are direct source-script ports. Static constructors are active and green. Constructor coefficient order, invert/isIdentity, equality, and numeric indexed setters remain four honest ignored expected-red tests bound to missing or incorrect production Mat2D behavior."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_mat4_test.cpp"

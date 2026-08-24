@@ -291,3 +291,144 @@ fn bounds() {
         assert_eq!(actual.max_y, expected.max_y);
     }
 }
+
+#[derive(Debug, PartialEq)]
+struct Segment {
+    verb: PathVerb,
+    points: Vec<Vec2D>,
+}
+
+fn segments(path: &RawPath) -> Vec<Segment> {
+    let mut result = Vec::new();
+    let mut point_index = 0;
+    let mut current = Vec2D::new(0.0, 0.0);
+    let mut contour_start = current;
+    for verb in path.verbs() {
+        let points = match verb {
+            PathVerb::Move => {
+                current = path.points()[point_index];
+                contour_start = current;
+                point_index += 1;
+                vec![current]
+            }
+            PathVerb::Line => {
+                let end = path.points()[point_index];
+                point_index += 1;
+                let points = vec![current, end];
+                current = end;
+                points
+            }
+            PathVerb::Quad => {
+                let control = path.points()[point_index];
+                let end = path.points()[point_index + 1];
+                point_index += 2;
+                let points = vec![current, control, end];
+                current = end;
+                points
+            }
+            PathVerb::Cubic => {
+                let outer = path.points()[point_index];
+                let inner = path.points()[point_index + 1];
+                let end = path.points()[point_index + 2];
+                point_index += 3;
+                let points = vec![current, outer, inner, end];
+                current = end;
+                points
+            }
+            PathVerb::Close => {
+                current = contour_start;
+                Vec::new()
+            }
+        };
+        result.push(Segment {
+            verb: *verb,
+            points,
+        });
+    }
+    result
+}
+
+fn segment(verb: PathVerb, points: &[(f32, f32)]) -> Segment {
+    Segment {
+        verb,
+        points: points.iter().map(|&(x, y)| Vec2D::new(x, y)).collect(),
+    }
+}
+
+#[test]
+fn rawpath_iter() {
+    {
+        let path = RawPath::new();
+        assert!(segments(&path).is_empty());
+    }
+    {
+        let mut path = RawPath::new();
+        path.move_to(1.0, 2.0);
+        path.line_to(3.0, 4.0);
+        path.quad_to(5.0, 6.0, 7.0, 8.0);
+        path.cubic_to(9.0, 10.0, 11.0, 12.0, 13.0, 14.0);
+        path.close();
+        assert_eq!(
+            segments(&path),
+            vec![
+                segment(PathVerb::Move, &[(1.0, 2.0)]),
+                segment(PathVerb::Line, &[(1.0, 2.0), (3.0, 4.0)]),
+                segment(PathVerb::Quad, &[(3.0, 4.0), (5.0, 6.0), (7.0, 8.0)]),
+                segment(
+                    PathVerb::Cubic,
+                    &[(7.0, 8.0), (9.0, 10.0), (11.0, 12.0), (13.0, 14.0)],
+                ),
+                segment(PathVerb::Close, &[]),
+            ]
+        );
+
+        path.rewind();
+        path.move_to(1.0, 2.0);
+        path.move_to(3.0, 4.0);
+        path.move_to(5.0, 6.0);
+        path.close();
+        assert_eq!(
+            segments(&path),
+            vec![
+                segment(PathVerb::Move, &[(1.0, 2.0)]),
+                segment(PathVerb::Move, &[(3.0, 4.0)]),
+                segment(PathVerb::Move, &[(5.0, 6.0)]),
+                segment(PathVerb::Close, &[]),
+            ]
+        );
+
+        path.rewind();
+        path.close();
+        path.close();
+        path.close();
+        path.close();
+        path.line_to(1.0, 2.0);
+        path.close();
+        path.close();
+        path.cubic_to(3.0, 4.0, 5.0, 6.0, 7.0, 8.0);
+        path.move_to(9.0, 10.0);
+        path.move_to(11.0, 12.0);
+        path.quad_to(13.0, 14.0, 15.0, 16.0);
+        path.close();
+        path.line_to(17.0, 18.0);
+        assert_eq!(
+            segments(&path),
+            vec![
+                segment(PathVerb::Move, &[(0.0, 0.0)]),
+                segment(PathVerb::Line, &[(0.0, 0.0), (1.0, 2.0)]),
+                segment(PathVerb::Close, &[]),
+                segment(PathVerb::Move, &[(0.0, 0.0)]),
+                segment(
+                    PathVerb::Cubic,
+                    &[(0.0, 0.0), (3.0, 4.0), (5.0, 6.0), (7.0, 8.0)],
+                ),
+                segment(PathVerb::Move, &[(9.0, 10.0)]),
+                segment(PathVerb::Move, &[(11.0, 12.0)]),
+                segment(PathVerb::Quad, &[(11.0, 12.0), (13.0, 14.0), (15.0, 16.0)],),
+                segment(PathVerb::Close, &[]),
+                segment(PathVerb::Move, &[(11.0, 12.0)]),
+                segment(PathVerb::Line, &[(11.0, 12.0), (17.0, 18.0)]),
+            ]
+        );
+    }
+}

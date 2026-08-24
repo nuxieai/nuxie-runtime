@@ -121,6 +121,12 @@
  *    premultiplied-sRGB within every advertised bound.
  *    Canonical CPU pixels remain file/occurrence-owned across renderer resets;
  *    only renderer-domain GPU resources are invalidated and recreated.
+ * 17. Android Vulkan renderer handles are headless and never retain an
+ *    ANativeWindow. Each successful render returns an owned frame handle whose
+ *    borrowed data is tightly packed, top-row-first RGBA8 UNORM with
+ *    premultiplied alpha. The data pointer expires when
+ *    nux_android_vulkan_frame_free succeeds. Resize preserves the renderer's
+ *    durable domain and generation, so bound players remain valid.
  *
  * PANIC SAFETY
  *

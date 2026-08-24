@@ -46,6 +46,10 @@ fn emit_build_provenance(revision: &str) {
             std::env::var_os("CARGO_FEATURE_APPLE_METAL").is_some(),
         ),
         (
+            "android-vulkan",
+            std::env::var_os("CARGO_FEATURE_ANDROID_VULKAN").is_some(),
+        ),
+        (
             "scripting",
             std::env::var_os("CARGO_FEATURE_SCRIPTING").is_some(),
         ),

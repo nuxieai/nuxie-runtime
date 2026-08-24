@@ -22,5 +22,6 @@ parse_deps = false
 # expose the declarations automatically under the platform macro.
 [defines]
 "feature = apple-metal" = "NUX_CAPI_APPLE_METAL"
+"feature = android-vulkan" = "NUX_CAPI_ANDROID_VULKAN"
 "target_os = ios" = "__APPLE__"
 "target_os = macos" = "__APPLE__"

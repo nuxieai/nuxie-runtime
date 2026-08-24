@@ -15,11 +15,17 @@ pub use asset_catalog::*;
 #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
 mod apple_metal;
 
+#[cfg(feature = "android-vulkan")]
+mod android_vulkan;
+
 #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
 mod apple_assets;
 
 #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
 pub use apple_metal::*;
+
+#[cfg(feature = "android-vulkan")]
+pub use android_vulkan::*;
 
 #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
 pub use apple_assets::*;
@@ -134,6 +140,20 @@ impl CallbackReentryFallback for u32 {
     }
 }
 
+#[cfg(feature = "android-vulkan")]
+impl CallbackReentryFallback for usize {
+    fn callback_reentry(default: Self) -> Self {
+        default
+    }
+}
+
+#[cfg(feature = "android-vulkan")]
+impl<T> CallbackReentryFallback for *const T {
+    fn callback_reentry(default: Self) -> Self {
+        default
+    }
+}
+
 impl CallbackReentryFallback for () {
     fn callback_reentry(default: Self) -> Self {
         default
@@ -191,7 +211,10 @@ struct ArtboardOccurrence {
     presented_render_revision: Cell<u64>,
     /// Last renderer generation whose invalidation was folded into the
     /// occurrence revision. Zero means no generational renderer was bound.
-    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+    #[cfg(any(
+        all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+        feature = "android-vulkan"
+    ))]
     observed_renderer_generation: Cell<u64>,
     active: Cell<bool>,
     poisoned: Cell<bool>,
@@ -240,10 +263,18 @@ impl ArtboardOccurrence {
     }
 
     fn refresh_renderer_domain_invalidation(&self) -> Result<(), NuxStatus> {
-        #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+        #[cfg(any(
+            all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+            feature = "android-vulkan"
+        ))]
         {
             let generation = match &*self.renderer_domain.borrow() {
+                #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
                 Some(RendererDomainBinding::Metal { domain, .. }) => {
+                    domain.generation.load(std::sync::atomic::Ordering::Relaxed)
+                }
+                #[cfg(feature = "android-vulkan")]
+                Some(RendererDomainBinding::AndroidVulkan { domain, .. }) => {
                     domain.generation.load(std::sync::atomic::Ordering::Relaxed)
                 }
                 _ => return Ok(()),
@@ -394,9 +425,17 @@ enum RendererDomainBinding {
         domain: Arc<RendererDomain>,
         generation: u64,
     },
+    #[cfg(feature = "android-vulkan")]
+    AndroidVulkan {
+        domain: Arc<RendererDomain>,
+        generation: u64,
+    },
 }
 
-#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+#[cfg(any(
+    all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+    feature = "android-vulkan"
+))]
 struct RendererDomain {
     id: u64,
     generation: std::sync::atomic::AtomicU64,
@@ -604,8 +643,13 @@ enum HandleKind {
     ViewModel,
     Result,
     PlayerStepResult,
-    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+    #[cfg(any(
+        all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+        feature = "android-vulkan"
+    ))]
     Renderer,
+    #[cfg(feature = "android-vulkan")]
+    AndroidVulkanFrame,
     ViewModelCatalog,
     ViewModelSnapshot,
     ViewModelMutationResult,
@@ -1477,7 +1521,10 @@ fn reclaim_published_result(out_result: *mut *mut NuxCapiResult) {
 /// A panic reclaims any partial result, then makes one bounded best-effort
 /// attempt to publish the generic runtime failure without allowing a second
 /// allocation panic to cross the C boundary.
-#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+#[cfg(any(
+    all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+    feature = "android-vulkan"
+))]
 fn ffi_guard_with_result(
     out_result: *mut *mut NuxCapiResult,
     body: impl FnOnce() -> NuxStatus,
@@ -2274,9 +2321,12 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                         renderer_domain: RefCell::new(None),
                         render_revision: Cell::new(1),
                         presented_render_revision: Cell::new(0),
-                        #[cfg(all(
-                            feature = "apple-metal",
-                            any(target_os = "ios", target_os = "macos")
+                        #[cfg(any(
+                            all(
+                                feature = "apple-metal",
+                                any(target_os = "ios", target_os = "macos")
+                            ),
+                            feature = "android-vulkan"
                         ))]
                         observed_renderer_generation: Cell::new(0),
                         active: Cell::new(false),
@@ -2439,6 +2489,10 @@ pub unsafe extern "C" fn nux_artboard_instance_draw(
             }
             #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
             Some(RendererDomainBinding::Metal { .. }) => return NuxStatus::HandleMismatch,
+            #[cfg(feature = "android-vulkan")]
+            Some(RendererDomainBinding::AndroidVulkan { .. }) => {
+                return NuxStatus::HandleMismatch;
+            }
             None => {
                 let shared_domain = if instance.occurrence.has_script_assets {
                     let Ok(shared) = instance

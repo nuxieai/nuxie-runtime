@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 21
+max_pending = 20
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -285,9 +285,9 @@ note = "Both cases are covered; only the fixture-loading case is differential, s
 [[file]]
 upstream = "tests/unit_tests/runtime/enums_test.cpp"
 test_case_count = 17
-status = "pending"
+status = "n-a"
 evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+note = "Explicit Rust-language adaptation disposition under docs/runtime-exact-parity-plan.md: all 17 cases test C++-only enum-class detection, overloaded bitwise/compound operators, underlying-type templates, and enum increment/decrement helpers. Rust deliberately does not reproduce those C++ language mechanics; no renderer/runtime observable is omitted, and this row is not counted as literal behavior coverage."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/file_test.cpp"

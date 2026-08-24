@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 1
+max_pending = 0
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -49,9 +49,9 @@ note = "P2F1/P2F2/P2F3 directly port all 13 cases. The two live headless differe
 [[file]]
 upstream = "tests/unit_tests/runtime/bezier_utils_test.cpp"
 test_case_count = 11
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs", "crates/nuxie-renderer/src/draw.rs::{chop_cubic_at_values,find_cubic_convex_180_chops,cubic_tangents,eval_cubic}", "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_bezier_utils_glsl__generated_input.source"]
+note = "All 11 TEST_CASE families are directly translated. Nine green tests preserve the chop/null-T matrices, rotation vectors, 256 corner-cubic convex-180 census, ordered line sweep, 14-cubic EvalCubic grid, coefficient/tangent grids, all 15 clamped-divide special values, and maximum-height sampling against the exact pinned GLSL authority. Four narrowly isolated expected-red bodies preserve gaps without changing production: equal interior roots are not bit-exactly degenerate, five repeated T=1 roots hit the Rust multi-chop NaN debug assertion, the deprecated convex-90 helper has no Rust owner, and local-curvature GLSL has no shader-function execution bridge. The first two are demonstrated source-port discrepancies in chop_cubic_at_values, not replacement algorithms."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/binary_reader_test.cpp"

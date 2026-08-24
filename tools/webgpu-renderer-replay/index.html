@@ -79,11 +79,16 @@
 
       window.runWebgpuReplay = async ({ stream, mode, frame = 0 }) => {
         await window.webgpuReplayReady;
-        await prepareWebGpu(canvas);
+        const sessionId = await prepareWebGpu(canvas);
         const result = run_webgpu_replay(stream, mode, frame);
         try {
-          await waitForWebGpu();
-          const png = await encodePng(await captureWebGpuPixels());
+          // Schedule the explicit readback in the same browser task that
+          // rendered the canvas texture. The texture is presented when this
+          // task yields, so waiting before issuing the copy would make the
+          // capture depend on an expired surface texture.
+          const capture = captureWebGpuPixels(sessionId);
+          await waitForWebGpu(sessionId);
+          const png = await encodePng(await capture);
           const digest = await crypto.subtle.digest("SHA-256", png);
           const sha256 = Array.from(new Uint8Array(digest), (byte) =>
             byte.toString(16).padStart(2, "0"),
@@ -104,8 +109,8 @@
             sha256,
           };
         } finally {
-          releaseWebGpu();
           result.free();
+          releaseWebGpu(sessionId);
         }
       };
 

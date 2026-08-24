@@ -258,7 +258,6 @@ impl WebGpuProductBackend {
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         let (target, target_texture, surface, surface_format) = {
             let selector = CANVAS_SELECTOR.as_ptr().cast::<std::ffi::c_char>();
-
             let mut html_selector = EmscriptenSurfaceSourceCanvasHTMLSelector::default();
             html_selector.selector = WGPUStringView {
                 data: selector,
@@ -292,20 +291,8 @@ impl WebGpuProductBackend {
             } else {
                 TextureFormat::RGBA8Unorm
             };
-            let surface_configuration = SurfaceConfiguration {
-                device: device.clone(),
-                format: surface_format.into(),
-                usage: (TextureUsage::RenderAttachment
-                    | TextureUsage::CopySrc
-                    | TextureUsage::CopyDst
-                    | TextureUsage::TextureBinding)
-                    .intoBitmask()
-                    .into(),
-                width: width as u32,
-                height: height as u32,
-                alphaMode: CompositeAlphaMode::Opaque.into(),
-                ..Default::default()
-            };
+            let surface_configuration =
+                browser_surface_configuration(&device, surface_format, width, height);
             unsafe { surface.Configure(&surface_configuration) };
             (rcp::new(), Texture::default(), surface, surface_format)
         };
@@ -337,6 +324,44 @@ impl WebGpuProductBackend {
 
     fn context_pin(&mut self) -> Pin<&mut RenderContext> {
         self.context.as_mut().expect("live WebGPU context").as_mut()
+    }
+
+    fn resize_target(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        if width == 0 || height == 0 {
+            return Err(RendererError::InvalidTextureExtent {
+                label: "WebGPU target",
+                width,
+                height,
+                max_dimension: u32::MAX,
+            });
+        }
+        if self.active_frame {
+            return Err(RendererError::Device(
+                "cannot resize exact WebGPU target while a frame is active".into(),
+            ));
+        }
+        if (width, height) == (self.width, self.height) {
+            return Ok(());
+        }
+
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        {
+            let configuration = browser_surface_configuration(
+                &self.device,
+                self.surface_format,
+                width,
+                height,
+            );
+            unsafe { self.surface.Configure(&configuration) };
+            self.width = width;
+            self.height = height;
+            Ok(())
+        }
+
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        Err(RendererError::Device(
+            "native exact WebGPU target resize is not exposed".into(),
+        ))
     }
 
     fn submit_and_wait(&self, command_buffer: &super::webgpu_cpp_decl::CommandBuffer) -> Result<(), RendererError> {
@@ -476,6 +501,10 @@ impl WebGpuProductBackend {
 impl ExactSourceBackend for WebGpuProductBackend {
     fn context_mut(&mut self) -> Pin<&mut RenderContext> {
         self.context_pin()
+    }
+
+    fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        self.resize_target(width, height)
     }
 
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError> {
@@ -632,6 +661,29 @@ impl Drop for WebGpuProductBackend {
         self.command_encoder.take();
         unsafe { self.device.Destroy() };
         let _ = (&self.adapter, &self.queue);
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn browser_surface_configuration(
+    device: &Device,
+    format: TextureFormat,
+    width: u32,
+    height: u32,
+) -> SurfaceConfiguration {
+    SurfaceConfiguration {
+        device: device.clone(),
+        format: format.into(),
+        usage: (TextureUsage::RenderAttachment
+            | TextureUsage::CopySrc
+            | TextureUsage::CopyDst
+            | TextureUsage::TextureBinding)
+            .intoBitmask()
+            .into(),
+        width,
+        height,
+        alphaMode: CompositeAlphaMode::Opaque.into(),
+        ..Default::default()
     }
 }
 

@@ -410,7 +410,7 @@ jobs:
           export SOURCE_DATE_EPOCH=1769111119
           cmake --build "$tools_build_dir" --target spirv-opt --parallel 4
           install -Dm755 "$tools_build_dir/tools/spirv-opt" "$bin_dir/spirv-opt"
-          "$bin_dir/spirv-opt" --version | grep -Fx 'SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00'
+          "$bin_dir/spirv-opt" --version 2>&1 | grep -Fx 'SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00'
           echo "$bin_dir" >> "$GITHUB_PATH"
 
       - name: Build frozen WebGPU source and candidate products

@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 59
+max_pending = 55
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -634,9 +634,9 @@ note = "This C++ support/runner translation unit declares no active TEST_CASE at
 [[file]]
 upstream = "tests/unit_tests/runtime/rotation_constraint_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_constraint_smoke.rs"]
+note = "Direct fixture port preserves both named component lookups, the zero-second advance, the pinned Mat2D decomposition, and exact rotation equality."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/rounded_rect_path_test.cpp"
@@ -649,9 +649,9 @@ note = "S4-41 directly compares the new raw rounded-rectangle path against the p
 [[file]]
 upstream = "tests/unit_tests/runtime/scale_constraint_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_constraint_smoke.rs"]
+note = "Direct fixture port preserves both named component lookups, the zero-second advance, the pinned Mat2D decomposition, and exact scale-x/scale-y equality."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
@@ -1080,16 +1080,16 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/transform_constraint_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_constraint_smoke.rs"]
+note = "Direct fixture port preserves both named component lookups, the zero-second advance, and rive_testing.cpp's exact six-element 0.0001 Mat2D tolerance."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/translation_constraint_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_constraint_smoke.rs"]
+note = "Direct fixture port preserves both named component lookups, the zero-second advance, the pinned Mat2D decomposition, and exact x/y equality."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/trim_test.cpp"

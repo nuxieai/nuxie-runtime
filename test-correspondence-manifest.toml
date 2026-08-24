@@ -16,14 +16,14 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 70
+max_pending = 69
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
 test_case_count = 9
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_aabb.rs"]
+note = "All nine literal assertion sequences are directly translated. SemanticBounds and render-api Aabb execute isEmptyOrNaN and contains. The seven missing integer, generic, join, intersection, and overlap operations are honest ignored expected-red tests whose literal vectors and assertions await primary production owners in the source-correspondence phase."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/animation_state_instance_test.cpp"

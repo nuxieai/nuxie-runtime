@@ -189,11 +189,11 @@ def historical_row_floors(
 
     Statuses may only move in the pending -> partial -> ported direction, so
     every row is ratcheted against the best status it ever held. n-a rows are
-    excluded: they exist exactly while the pinned upstream file has zero
-    TEST_CASEs, which only changes when the pin moves. Walks --full-history so
-    merge simplification cannot prune a discarded parent's promotions, and
-    fails closed on shallow clones or unreadable history, where the floors
-    would be understated.
+    excluded: zero-case support files and explicitly adjudicated C++-language
+    tests have no Rust behavior-coverage rank. Walks --full-history so merge
+    simplification cannot prune a discarded parent's promotions, and fails
+    closed on shallow clones or unreadable history, where the floors would be
+    understated.
     """
 
     try:
@@ -332,8 +332,23 @@ def check_manifest(
         note = row.get("note")
         if not isinstance(note, str) or not note.strip():
             raise CheckFailure(f"{path}.note must be a non-empty string")
-        if (declared_count == 0) != (status == "n-a"):
-            raise CheckFailure(f"{path} must use n-a exactly when TEST_CASE count is zero")
+        adaptation = row.get("adaptation")
+        if status == "n-a":
+            if declared_count == 0:
+                if adaptation is not None:
+                    raise CheckFailure(
+                        f"{path} zero-case n-a row must not declare adaptation"
+                    )
+            elif adaptation != "cxx-language-only":
+                raise CheckFailure(
+                    f"{path} nonzero n-a row requires adaptation = "
+                    '"cxx-language-only"'
+                )
+        else:
+            if declared_count == 0:
+                raise CheckFailure(f"{path} zero-case row must use n-a")
+            if adaptation is not None:
+                raise CheckFailure(f"{path} may only declare adaptation when status is n-a")
 
         covered = row.get("covered_test_cases")
         if status == "partial":

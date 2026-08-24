@@ -3,9 +3,9 @@
 
 #![allow(non_snake_case)]
 
-use super::ore_context_vulkan_decl::ContextVulkan;
+use super::ore_context_vulkan_decl::{ContextVulkan, ContextVulkanLifetime};
 use super::ore_pipeline_vulkan_decl::PipelineVulkan;
-use super::render_target_vulkan_decl::RenderTargetVulkanApi;
+use super::render_target_vulkan_decl::RetainedRenderTargetVulkan;
 use super::vkutil_decl::Framebuffer;
 use ash::vk;
 use nuxie_ore_metal::context::ActiveRenderPass;
@@ -13,7 +13,6 @@ use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPass;
 use std::cell::{RefCell, RefMut};
 use std::mem::ManuallyDrop;
-use std::ptr::NonNull;
 use std::rc::{Rc, Weak as RcWeak};
 
 pub(crate) struct ResolveTarget {
@@ -21,7 +20,7 @@ pub(crate) struct ResolveTarget {
     pub(crate) baseMip: u32,
     pub(crate) baseLayer: u32,
     pub(crate) layerCount: u32,
-    pub(crate) renderTarget: Option<NonNull<dyn RenderTargetVulkanApi>>,
+    pub(crate) renderTarget: Option<RetainedRenderTargetVulkan>,
     pub(crate) texture: Option<AnyResourceHandle>,
 }
 
@@ -42,6 +41,7 @@ impl Default for ResolveTarget {
 pub(crate) struct RenderPassVulkanState {
     pub(crate) base: ManuallyDrop<RenderPass>,
     pub(crate) m_vkContext: *mut ContextVulkan,
+    pub(super) m_contextLifetime: RcWeak<ContextVulkanLifetime>,
     pub(crate) m_currentPipeline: ManuallyDrop<Option<ResourceHandle<PipelineVulkan>>>,
     pub(crate) m_vkCmdBuf: vk::CommandBuffer,
     pub(crate) m_framebuffer: ManuallyDrop<Option<ResourceHandle<Framebuffer>>>,
@@ -52,7 +52,7 @@ pub(crate) struct RenderPassVulkanState {
     pub(crate) m_vkColorBaseLayer: [u32; 4],
     pub(crate) m_vkColorLayerCount: [u32; 4],
     pub(crate) m_vkColorCount: u32,
-    pub(crate) m_vkColorRenderTargets: [Option<NonNull<dyn RenderTargetVulkanApi>>; 4],
+    pub(crate) m_vkColorRenderTargets: [Option<RetainedRenderTargetVulkan>; 4],
     pub(crate) m_vkColorTextures: ManuallyDrop<[Option<AnyResourceHandle>; 4]>,
     pub(crate) m_vkResolveTargets: ManuallyDrop<[ResolveTarget; 4]>,
     pub(crate) m_vkDepthImage: vk::Image,
@@ -67,6 +67,7 @@ impl RenderPassVulkanState {
         Self {
             base: ManuallyDrop::new(nuxie_ore_metal::new_render_pass_backend_base(&context.base)),
             m_vkContext: context,
+            m_contextLifetime: Rc::downgrade(&context.m_lifetime),
             m_currentPipeline: ManuallyDrop::new(None),
             m_vkCmdBuf: vk::CommandBuffer::null(),
             m_framebuffer: ManuallyDrop::new(None),
@@ -77,7 +78,7 @@ impl RenderPassVulkanState {
             m_vkColorBaseLayer: [0; 4],
             m_vkColorLayerCount: [0; 4],
             m_vkColorCount: 0,
-            m_vkColorRenderTargets: [None; 4],
+            m_vkColorRenderTargets: std::array::from_fn(|_| None),
             m_vkColorTextures: ManuallyDrop::new(std::array::from_fn(|_| None)),
             m_vkResolveTargets: ManuallyDrop::new(std::array::from_fn(|_| {
                 ResolveTarget::default()
@@ -91,13 +92,27 @@ impl RenderPassVulkanState {
     }
 
     pub(super) fn context(&self) -> &ContextVulkan {
+        assert!(
+            self.contextIsLive(),
+            "RenderPassVulkan cannot access a retired ContextVulkan"
+        );
         assert!(!self.m_vkContext.is_null());
         unsafe { &*self.m_vkContext }
     }
 
     pub(super) fn contextMut(&mut self) -> &mut ContextVulkan {
+        assert!(
+            self.contextIsLive(),
+            "RenderPassVulkan cannot access a retired ContextVulkan"
+        );
         assert!(!self.m_vkContext.is_null());
         unsafe { &mut *self.m_vkContext }
+    }
+
+    pub(super) fn contextIsLive(&self) -> bool {
+        self.m_contextLifetime
+            .upgrade()
+            .is_some_and(|lifetime| lifetime.isLive())
     }
 }
 

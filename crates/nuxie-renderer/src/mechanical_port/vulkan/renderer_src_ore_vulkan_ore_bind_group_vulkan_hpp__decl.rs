@@ -4,13 +4,16 @@
 #![allow(non_snake_case)]
 
 use super::ore_buffer_vulkan_decl::BufferVulkan;
-use super::ore_context_vulkan_decl::{ContextVulkan, DescriptorPoolGeneration};
+use super::ore_context_vulkan_decl::{
+    ContextVulkan, ContextVulkanLifetime, DescriptorPoolGeneration,
+};
 use ash::vk;
 use nuxie_ore_metal::bind_group::BindGroup;
 use nuxie_ore_metal::gpu_resource::{GPUResource, GPUResourceManager, GpuResourcePayload};
 use std::cell::{Cell, UnsafeCell};
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
 pub(crate) struct UBOWrite {
@@ -43,6 +46,7 @@ pub(crate) struct BindGroupVulkan {
     // The backend-independent Rust base intentionally omits its unusable raw
     // Context pointer. Preserve that exact non-owning relationship here.
     pub(super) m_context: Cell<*mut ContextVulkan>,
+    pub(super) m_contextLifetime: Weak<ContextVulkanLifetime>,
     pub(crate) m_uboWrites: ManuallyDrop<Vec<UBOWrite>>,
     pub(crate) m_imageWrites: ManuallyDrop<Vec<ImageWrite>>,
     pub(crate) m_vkDSL: vk::DescriptorSetLayout,
@@ -50,10 +54,11 @@ pub(crate) struct BindGroupVulkan {
 }
 
 impl BindGroupVulkan {
-    pub(crate) fn new(manager: GPUResourceManager) -> Self {
+    pub(crate) fn new(manager: GPUResourceManager, context: &mut ContextVulkan) -> Self {
         Self {
             base: ManuallyDrop::new(nuxie_ore_metal::new_bind_group_backend_base(manager)),
-            m_context: Cell::new(core::ptr::null_mut()),
+            m_context: Cell::new(context),
+            m_contextLifetime: Rc::downgrade(&context.m_lifetime),
             m_uboWrites: ManuallyDrop::new(Vec::new()),
             m_imageWrites: ManuallyDrop::new(Vec::new()),
             m_vkDSL: vk::DescriptorSetLayout::null(),
@@ -61,12 +66,13 @@ impl BindGroupVulkan {
         }
     }
 
-    pub(crate) fn setContext(&self, context: *mut ContextVulkan) {
-        debug_assert!(self.m_context.get().is_null());
-        self.m_context.set(context);
-    }
-
     pub(super) fn context(&self) -> &ContextVulkan {
+        assert!(
+            self.m_contextLifetime
+                .upgrade()
+                .is_some_and(|lifetime| lifetime.isLive()),
+            "BindGroupVulkan cannot access a retired ContextVulkan"
+        );
         let context = self.m_context.get();
         assert!(
             !context.is_null(),
@@ -78,6 +84,12 @@ impl BindGroupVulkan {
     }
 
     pub(super) fn context_mut(&self) -> &mut ContextVulkan {
+        assert!(
+            self.m_contextLifetime
+                .upgrade()
+                .is_some_and(|lifetime| lifetime.isLive()),
+            "BindGroupVulkan cannot access a retired ContextVulkan"
+        );
         let context = self.m_context.get();
         assert!(
             !context.is_null(),
@@ -116,8 +128,6 @@ unsafe impl GpuResourcePayload for BindGroupVulkan {
 // Source GPUResource payloads may cross the manager's purgatory thread only
 // for refcount/final destruction; recording-thread access remains enforced by
 // ResourceHandle.
-unsafe impl Send for BindGroupVulkan {}
-
 impl Drop for BindGroupVulkan {
     fn drop(&mut self) {
         // C++ destroys derived members in reverse declaration order, then the

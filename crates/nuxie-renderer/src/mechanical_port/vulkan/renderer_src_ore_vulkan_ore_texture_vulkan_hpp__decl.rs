@@ -3,8 +3,8 @@
 
 #![allow(non_snake_case)]
 
-use super::ore_context_vulkan_decl::ContextVulkan;
-use super::render_target_vulkan_decl::RenderTargetVulkanApi;
+use super::ore_context_vulkan_decl::{ContextVulkan, ContextVulkanLifetime};
+use super::render_target_vulkan_decl::RetainedRenderTargetVulkan;
 use super::vulkan_context_decl::VulkanContext;
 use ash::vk;
 use nuxie_ore_metal::gpu_resource::{
@@ -17,7 +17,7 @@ use nuxie_ore_metal::types::{
 use std::cell::Cell;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
-use std::ptr::NonNull;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
 #[repr(C)]
@@ -29,22 +29,34 @@ pub(crate) struct TextureVulkan {
     pub(crate) m_vkDevice: vk::Device,
     pub(crate) m_vk: ManuallyDrop<Option<Arc<VulkanContext>>>,
     pub(crate) m_vkOreContext: Cell<*mut ContextVulkan>,
+    pub(super) m_contextLifetime: Weak<ContextVulkanLifetime>,
 }
 
 impl TextureVulkan {
-    pub(crate) fn new(manager: GPUResourceManager, desc: &TextureDesc<'_>) -> Self {
+    pub(crate) fn new(
+        manager: GPUResourceManager,
+        desc: &TextureDesc<'_>,
+        context: &mut ContextVulkan,
+    ) -> Self {
         Self {
             base: ManuallyDrop::new(nuxie_ore_metal::new_texture_backend_base(manager, desc)),
             m_vkImage: vk::Image::null(),
             m_vmaAllocation: None,
             m_vkLayout: Cell::new(vk::ImageLayout::UNDEFINED),
-            m_vkDevice: vk::Device::null(),
-            m_vk: ManuallyDrop::new(None),
-            m_vkOreContext: Cell::new(core::ptr::null_mut()),
+            m_vkDevice: context.m_vk.device,
+            m_vk: ManuallyDrop::new(Some(Arc::clone(&context.m_vk))),
+            m_vkOreContext: Cell::new(context),
+            m_contextLifetime: Rc::downgrade(&context.m_lifetime),
         }
     }
 
     pub(super) fn oreContextMut(&self) -> &mut ContextVulkan {
+        assert!(
+            self.m_contextLifetime
+                .upgrade()
+                .is_some_and(|lifetime| lifetime.isLive()),
+            "TextureVulkan cannot access a retired ContextVulkan"
+        );
         let context = self.m_vkOreContext.get();
         assert!(
             !context.is_null(),
@@ -73,7 +85,6 @@ unsafe impl GpuResourcePayload for TextureVulkan {
         self.base.gpu_resource_mut()
     }
 }
-unsafe impl Send for TextureVulkan {}
 impl TextureApi for TextureVulkan {
     fn width(&self) -> u32 {
         self.base.width()
@@ -117,7 +128,7 @@ pub(crate) struct TextureViewVulkan {
     pub(crate) m_vkDevice: vk::Device,
     pub(crate) m_vkImageView: vk::ImageView,
     pub(crate) m_vkDestroyImageView: Option<vk::PFN_vkDestroyImageView>,
-    pub(crate) m_vkRenderTarget: Option<NonNull<dyn RenderTargetVulkanApi>>,
+    pub(crate) m_vkRenderTarget: Option<RetainedRenderTargetVulkan>,
 }
 
 impl TextureViewVulkan {
@@ -157,4 +168,3 @@ unsafe impl GpuResourcePayload for TextureViewVulkan {
         self.base.gpu_resource_mut()
     }
 }
-unsafe impl Send for TextureViewVulkan {}

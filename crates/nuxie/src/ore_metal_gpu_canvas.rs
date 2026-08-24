@@ -297,11 +297,7 @@ impl OreMetalGpuCanvas {
             ));
         }
 
-        self.context.beginFrame(&FrameDescriptor {
-            externalCommandBuffer: None,
-            safeFrameNumber: 0,
-            currentFrameNumber: 0,
-        });
+        self.context.beginFrame(&FrameDescriptor::new(0, 0));
         let mut pass = self
             .context
             .beginRenderPass(

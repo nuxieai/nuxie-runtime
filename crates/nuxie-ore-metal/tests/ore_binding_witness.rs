@@ -307,11 +307,7 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     let frames = [(&group, 153_u8), (&repeat_group, 102_u8)];
     for (frame_index, (frame_group, expected_green)) in frames.into_iter().enumerate() {
         let expected_serial = (frame_index + 1) as u64;
-        context.beginFrame(&FrameDescriptor {
-            externalCommandBuffer: None,
-            safeFrameNumber: 0,
-            currentFrameNumber: expected_serial,
-        });
+        context.beginFrame(&FrameDescriptor::new(0, expected_serial));
         let mut pass = context
             .beginRenderPass(
                 &RenderPassDesc {

@@ -14,9 +14,31 @@ use nuxie_ore_metal::types::{
     SamplerDesc, ShaderModuleDesc, StoreOp, TextureDesc, TextureFormat, TextureViewDesc,
 };
 use std::mem::ManuallyDrop;
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 pub(crate) const MAX_DESCRIPTOR_SETS_PER_GENERATION: u32 = 256;
+
+pub(super) struct ContextVulkanLifetime {
+    live: Cell<bool>,
+}
+
+impl ContextVulkanLifetime {
+    pub(super) fn new() -> Rc<Self> {
+        Rc::new(Self {
+            live: Cell::new(true),
+        })
+    }
+
+    pub(super) fn retire(&self) {
+        self.live.set(false);
+    }
+
+    pub(super) fn isLive(&self) -> bool {
+        self.live.get()
+    }
+}
 
 /// Refcounted descriptor pool generation. The pool is destroyed in one shot
 /// after both ContextVulkan and all cached BindGroupVulkan sets release it.
@@ -121,6 +143,7 @@ pub(crate) struct VkPendingTextureUpload {
 #[repr(C)]
 pub(crate) struct ContextVulkan {
     pub(crate) base: ManuallyDrop<Context>,
+    pub(super) m_lifetime: Rc<ContextVulkanLifetime>,
     pub(crate) m_vk: ManuallyDrop<Arc<VulkanContext>>,
     pub(crate) m_vkQueue: vk::Queue,
     pub(crate) m_vkQueueFamily: u32,

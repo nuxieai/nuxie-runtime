@@ -5,13 +5,14 @@
 
 use super::vkutil_decl::{ImageAccess, ImageAccessAction, Texture2D};
 use super::vulkan_context_decl::VulkanContext;
-use crate::mechanical_port::source::include::rive::refcnt_hpp::{rcp, RefCntTarget};
+use crate::mechanical_port::source::include::rive::refcnt_hpp::{rcp, safe_ref, RefCntTarget};
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::{
     RenderTarget, IAABB,
 };
 use ash::vk;
 use nuxie_render_api::ColorInt;
 use std::mem::ManuallyDrop;
+use std::ptr::NonNull;
 use std::sync::Arc;
 
 pub(crate) trait RenderTargetVulkanApi {
@@ -32,6 +33,44 @@ pub(crate) trait RenderTargetVulkanApi {
         dst_access: ImageAccess,
         action: ImageAccessAction,
     ) -> vk::ImageView;
+}
+
+/// A Vulkan render-target interface pointer paired with the intrusive owner
+/// that keeps its complete concrete allocation alive.
+pub(crate) struct RetainedRenderTargetVulkan {
+    target: NonNull<dyn RenderTargetVulkanApi>,
+    owner: rcp<RenderTarget>,
+}
+
+impl RetainedRenderTargetVulkan {
+    /// # Safety
+    /// `target` must be a live, heap-published intrusive render target whose
+    /// offset-zero `RenderTarget` base owns the complete concrete allocation.
+    pub(crate) unsafe fn fromLiveTarget(target: &mut dyn RenderTargetVulkanApi) -> Self {
+        let target_ptr = NonNull::from(&mut *target);
+        let owner_ptr = core::ptr::from_mut(&mut *target.baseMut().base);
+        let owner = unsafe { rcp::from_ptr(safe_ref(owner_ptr)) };
+        Self {
+            target: target_ptr,
+            owner,
+        }
+    }
+
+    pub(crate) fn targetMut(&mut self) -> &mut dyn RenderTargetVulkanApi {
+        // SAFETY: every clone retains `owner`, which owns the complete target
+        // allocation. Mutable access is scoped to this exclusive wrapper
+        // borrow and never escapes it.
+        unsafe { self.target.as_mut() }
+    }
+}
+
+impl Clone for RetainedRenderTargetVulkan {
+    fn clone(&self) -> Self {
+        Self {
+            target: self.target,
+            owner: self.owner.clone(),
+        }
+    }
 }
 
 #[repr(C)]
@@ -98,7 +137,11 @@ pub(crate) struct RenderTargetVulkanImpl {
 }
 
 impl RenderTargetVulkanImpl {
-    pub(crate) fn setTargetImageView(
+    /// # Safety
+    /// `image_view` must view `image`, both must belong to this render target's
+    /// device, and the pair must remain live in `target_last_access` state for
+    /// every use of this target.
+    pub(crate) unsafe fn setTargetImageView(
         &mut self,
         image_view: vk::ImageView,
         image: vk::Image,

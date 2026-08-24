@@ -1204,8 +1204,7 @@ pub(crate) fn destroy(context: &mut ContextWGPU) {
 }
 
 pub(crate) fn beginFrame(context: &mut ContextWGPU, desc: &FrameDescriptor) {
-    let mut encoder = desc
-        .externalCommandBuffer
+    let mut encoder = unsafe { desc.externalCommandBuffer() }
         .expect("ContextWGPU::beginFrame requires an external command encoder")
         .cast::<CommandEncoder>();
     *context.m_wgpuCommandEncoder = unsafe { std::mem::take(encoder.as_mut()) };

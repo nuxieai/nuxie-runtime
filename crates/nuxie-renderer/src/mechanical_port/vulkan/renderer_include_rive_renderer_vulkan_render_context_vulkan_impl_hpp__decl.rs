@@ -200,7 +200,7 @@ pub(crate) struct RenderContextVulkanImpl {
     pub(crate) m_imageRectVertexBuffer: ManuallyDrop<Option<ResourceHandle<Buffer>>>,
     pub(crate) m_imageRectIndexBuffer: ManuallyDrop<Option<ResourceHandle<Buffer>>>,
     pub(crate) m_descriptorSetPoolPool: ManuallyDrop<Arc<DescriptorSetPoolPool>>,
-    pub(crate) m_pipelineManager: ManuallyDrop<Option<Box<PipelineManagerVulkan>>>,
+    pub(crate) m_pipelineManager: ManuallyDrop<Option<core::pin::Pin<Box<PipelineManagerVulkan>>>>,
 }
 
 impl RenderContextVulkanImpl {
@@ -227,17 +227,30 @@ impl RenderContextVulkanImpl {
         )
     }
 
-    pub(crate) fn setCanvasQueue(&mut self, queue: vk::Queue, queueFamilyIndex: u32) {
-        super::render_context_vulkan_impl::setCanvasQueue(self, queue, queueFamilyIndex)
+    /// # Safety
+    /// `queue` must belong to this context's device and `queueFamilyIndex`
+    /// must be its actual family for the complete canvas submission lifetime.
+    pub(crate) unsafe fn setCanvasQueue(&mut self, queue: vk::Queue, queueFamilyIndex: u32) {
+        unsafe {
+            super::render_context_vulkan_impl::setCanvasQueue(self, queue, queueFamilyIndex)
+        }
     }
-    pub(crate) fn adoptImageTexture(
+    /// # Safety
+    /// `image` must be a live externally owned image from this context's
+    /// device, with the supplied extent/format, until the returned texture is
+    /// no longer used.
+    pub(crate) unsafe fn adoptImageTexture(
         &self,
         image: vk::Image,
         width: u32,
         height: u32,
         format: vk::Format,
     ) -> rcp<Texture2D> {
-        super::render_context_vulkan_impl::adoptImageTexture(self, image, width, height, format)
+        unsafe {
+            super::render_context_vulkan_impl::adoptImageTexture(
+                self, image, width, height, format,
+            )
+        }
     }
     #[cfg(feature = "native-ore-vulkan-experimental")]
     pub(crate) fn makeRenderCanvas(
@@ -289,7 +302,10 @@ impl RenderContextVulkanImpl {
     }
 }
 
-pub(crate) fn MakeContext(
+/// # Safety
+/// All native handles and `pfnGetInstanceProcAddr` must form one compatible,
+/// live Vulkan ownership tuple and outlive the returned render context.
+pub(crate) unsafe fn MakeContext(
     instance: vk::Instance,
     physicalDevice: vk::PhysicalDevice,
     device: vk::Device,
@@ -297,29 +313,35 @@ pub(crate) fn MakeContext(
     pfnGetInstanceProcAddr: vk::PFN_vkGetInstanceProcAddr,
     options: ContextOptions,
 ) -> Option<std::pin::Pin<Box<RenderContext>>> {
-    super::render_context_vulkan_impl::MakeContext(
-        instance,
-        physicalDevice,
-        device,
-        features,
-        pfnGetInstanceProcAddr,
-        options,
-    )
+    unsafe {
+        super::render_context_vulkan_impl::MakeContext(
+            instance,
+            physicalDevice,
+            device,
+            features,
+            pfnGetInstanceProcAddr,
+            options,
+        )
+    }
 }
 
-pub(crate) fn MakeContextDefault(
+/// # Safety
+/// The native ownership requirements are identical to `MakeContext`.
+pub(crate) unsafe fn MakeContextDefault(
     instance: vk::Instance,
     physicalDevice: vk::PhysicalDevice,
     device: vk::Device,
     features: VulkanFeatures,
     pfnGetInstanceProcAddr: vk::PFN_vkGetInstanceProcAddr,
 ) -> Option<std::pin::Pin<Box<RenderContext>>> {
-    MakeContext(
-        instance,
-        physicalDevice,
-        device,
-        features,
-        pfnGetInstanceProcAddr,
-        ContextOptions::default(),
-    )
+    unsafe {
+        MakeContext(
+            instance,
+            physicalDevice,
+            device,
+            features,
+            pfnGetInstanceProcAddr,
+            ContextOptions::default(),
+        )
+    }
 }

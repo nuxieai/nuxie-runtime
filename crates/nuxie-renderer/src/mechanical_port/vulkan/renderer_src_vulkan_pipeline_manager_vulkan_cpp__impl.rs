@@ -30,6 +30,7 @@ use crate::mechanical_port::source::renderer::src::gpu_cpp::{
 };
 use ash::vk;
 use nuxie_render_api::BlendMode;
+use std::pin::Pin;
 use std::sync::Arc;
 
 const FLUSH_UNIFORM_BUFFER_IDX: u32 = 0;
@@ -88,7 +89,7 @@ impl PipelineManagerVulkan {
         vk: Arc<VulkanContext>,
         mode: ShaderCompilationMode,
         nullTextureView: vk::ImageView,
-    ) -> Box<Self> {
+    ) -> Pin<Box<Self>> {
         let linearInfo = vk::SamplerCreateInfo::default()
             .mag_filter(vk::Filter::LINEAR)
             .min_filter(vk::Filter::LINEAR)
@@ -223,7 +224,7 @@ impl PipelineManagerVulkan {
                 .image_view(nullTextureView)
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)],
         );
-        Box::new(Self {
+        Box::pin(Self {
             m_state: Default::default(),
             m_mode: mode,
             m_jobThread: Default::default(),
@@ -239,6 +240,7 @@ impl PipelineManagerVulkan {
             m_emptyDescriptorSetLayout: emptyDescriptorSetLayout,
             m_staticDescriptorPool: staticDescriptorPool,
             m_nullImageDescriptorSet: nullImageDescriptorSet,
+            m_pin: std::marker::PhantomPinned,
         })
     }
 }
@@ -538,6 +540,8 @@ fn queueBackgroundJob(
     {
         let mut thread = manager.m_jobThread.lock().unwrap();
         if thread.is_none() {
+            // PipelineManagerVulkan is permanently pinned before this thread
+            // can start, and Drop joins the thread before freeing the owner.
             let address = manager as *const PipelineManagerVulkan as usize;
             *thread = Some(std::thread::spawn(move || unsafe {
                 backgroundShaderCompilationThread(&*(address as *const PipelineManagerVulkan));
@@ -548,7 +552,7 @@ fn queueBackgroundJob(
     state.m_jobQueue.push_back(JobParams {
         props,
         key,
-        platformFeatures: std::ptr::from_ref(platformFeatures),
+        platformFeatures: *platformFeatures,
     });
     manager.m_newJobCV.notify_one();
 }
@@ -568,13 +572,12 @@ fn backgroundShaderCompilationThread(manager: &PipelineManagerVulkan) {
             state.m_activePipelineCreationCount += 1;
             next
         };
-        let platformFeatures = unsafe { &*nextJob.platformFeatures };
         let newPipeline = createPipeline(
             manager,
             PipelineCreateType::sync,
             nextJob.key,
             &nextJob.props,
-            platformFeatures,
+            &nextJob.platformFeatures,
         )
         .unwrap();
         let mut state = manager.m_state.lock().unwrap();
@@ -787,7 +790,8 @@ fn queuePipelineIfNotFound(
     true
 }
 
-pub(crate) fn clearCache(manager: &PipelineManagerVulkan) {
+pub(crate) fn clearCache(manager: Pin<&mut PipelineManagerVulkan>) {
+    let manager = manager.as_ref().get_ref();
     let mut state = manager.m_state.lock().unwrap();
     state.m_jobQueue.clear();
     while state.m_activePipelineCreationCount > 0 {

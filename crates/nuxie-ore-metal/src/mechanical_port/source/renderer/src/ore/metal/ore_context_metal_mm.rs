@@ -2141,11 +2141,7 @@ mod tests {
             return;
         };
         context.base.setLastError("pinned error");
-        context.beginFrame(&FrameDescriptor {
-            externalCommandBuffer: None,
-            safeFrameNumber: 99,
-            currentFrameNumber: 101,
-        });
+        context.beginFrame(&FrameDescriptor::new(99, 101));
         assert_eq!(context.currentSerial(), 1);
         assert_eq!(context.lastError(), "pinned error");
         let completion = Arc::clone(&context.m_bufferState);
@@ -2690,11 +2686,7 @@ fragment float4 fs_main() { return float4(1.0); }
         let Some(mut context) = live_context() else {
             return;
         };
-        context.beginFrame(&FrameDescriptor {
-            externalCommandBuffer: None,
-            safeFrameNumber: 0,
-            currentFrameNumber: 0,
-        });
+        context.beginFrame(&FrameDescriptor::new(0, 0));
         let texture = context
             .makeTexture(&TextureDesc {
                 width: 4,

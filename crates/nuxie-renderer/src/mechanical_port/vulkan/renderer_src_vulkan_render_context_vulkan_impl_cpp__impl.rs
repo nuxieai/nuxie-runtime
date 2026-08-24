@@ -424,7 +424,7 @@ pub(crate) fn makeImageTexture(
     texture
 }
 
-pub(crate) fn adoptImageTexture(
+pub(crate) unsafe fn adoptImageTexture(
     implementation: &RenderContextVulkanImpl,
     image: vk::Image,
     width: u32,
@@ -1967,7 +1967,7 @@ pub(crate) unsafe fn wantsManualRenderPassResolve(
     false
 }
 
-pub(crate) fn setCanvasQueue(
+pub(crate) unsafe fn setCanvasQueue(
     implementation: &mut RenderContextVulkanImpl,
     queue: vk::Queue,
     family: u32,
@@ -4158,8 +4158,9 @@ pub(crate) fn postFlush(implementation: &mut RenderContextVulkanImpl) {
 pub(crate) fn hotloadShaders(implementation: &mut RenderContextVulkanImpl, data: &[u32]) {
     implementation
         .m_pipelineManager
-        .as_ref()
+        .as_mut()
         .unwrap()
+        .as_mut()
         .clearCache();
     // The pinned API publishes spans into process-global shader slots; callers
     // are required to keep the hotload blob alive for every recreated pipeline.
@@ -4424,7 +4425,7 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
     }
 }
 
-pub(crate) fn MakeContext(
+pub(crate) unsafe fn MakeContext(
     instance: vk::Instance,
     physical_device: vk::PhysicalDevice,
     device: vk::Device,

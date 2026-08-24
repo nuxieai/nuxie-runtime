@@ -403,11 +403,44 @@ pub struct FrameDescriptor {
     // Because ore is currently imidiate mode, the command buffer must be
     // passed in on begin frame instead of end frame.
     // void* externalCommandBuffer = nullptr;
-    pub externalCommandBuffer: Option<NonNull<c_void>>,
+    externalCommandBuffer: Option<NonNull<c_void>>,
     // uint64_t safeFrameNumber;
     pub safeFrameNumber: u64,
     // uint64_t currentFrameNumber;
     pub currentFrameNumber: u64,
+}
+
+impl FrameDescriptor {
+    pub const fn new(safeFrameNumber: u64, currentFrameNumber: u64) -> Self {
+        Self {
+            externalCommandBuffer: None,
+            safeFrameNumber,
+            currentFrameNumber,
+        }
+    }
+
+    /// # Safety
+    /// `externalCommandBuffer` must identify the concrete command-buffer type
+    /// required by the selected backend, belong to that backend's live device,
+    /// and remain valid for the complete begin-frame operation.
+    pub const unsafe fn withExternalCommandBuffer(
+        externalCommandBuffer: NonNull<c_void>,
+        safeFrameNumber: u64,
+        currentFrameNumber: u64,
+    ) -> Self {
+        Self {
+            externalCommandBuffer: Some(externalCommandBuffer),
+            safeFrameNumber,
+            currentFrameNumber,
+        }
+    }
+
+    /// # Safety
+    /// The caller must uphold the backend-specific validity contract recorded
+    /// by `withExternalCommandBuffer` before interpreting or using the pointer.
+    pub unsafe fn externalCommandBuffer(&self) -> Option<NonNull<c_void>> {
+        self.externalCommandBuffer
+    }
 }
 
 /// Exact raw ABI adapter for the source-nested
@@ -432,17 +465,21 @@ pub mod raw_abi {
         /// unsafe because a non-null command-buffer pointer must remain valid
         /// under the backend-specific begin-frame contract.
         pub unsafe fn borrow(&self) -> SafeFrameDescriptor {
-            SafeFrameDescriptor {
-                externalCommandBuffer: NonNull::new(self.externalCommandBuffer),
-                safeFrameNumber: self.safeFrameNumber,
-                currentFrameNumber: self.currentFrameNumber,
+            match NonNull::new(self.externalCommandBuffer) {
+                Some(command_buffer) => unsafe {
+                    SafeFrameDescriptor::withExternalCommandBuffer(
+                        command_buffer,
+                        self.safeFrameNumber,
+                        self.currentFrameNumber,
+                    )
+                },
+                None => SafeFrameDescriptor::new(self.safeFrameNumber, self.currentFrameNumber),
             }
         }
 
         pub fn from_safe(descriptor: &SafeFrameDescriptor) -> Self {
             Self {
-                externalCommandBuffer: descriptor
-                    .externalCommandBuffer
+                externalCommandBuffer: unsafe { descriptor.externalCommandBuffer() }
                     .map_or(core::ptr::null_mut(), NonNull::as_ptr),
                 safeFrameNumber: descriptor.safeFrameNumber,
                 currentFrameNumber: descriptor.currentFrameNumber,

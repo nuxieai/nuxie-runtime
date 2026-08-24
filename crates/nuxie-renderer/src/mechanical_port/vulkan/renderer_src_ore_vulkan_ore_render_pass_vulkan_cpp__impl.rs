@@ -331,8 +331,10 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
             pass.m_vkColorBaseLayer[index],
             pass.m_vkColorLayerCount[index],
         );
-        if let Some(mut target) = pass.m_vkColorRenderTargets[index] {
-            unsafe { target.as_mut().updateLastAccess(colorAttachmentWriteAccess) };
+        if let Some(target) = pass.m_vkColorRenderTargets[index].as_mut() {
+            target
+                .targetMut()
+                .updateLastAccess(colorAttachmentWriteAccess);
         }
         if let Some(texture) = pass.m_vkColorTextures[index]
             .as_ref()
@@ -359,8 +361,10 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
         }
         transitionColorImage(pass, image, baseMip, baseLayer, layerCount);
         let resolve = &mut pass.m_vkResolveTargets[index];
-        if let Some(mut target) = resolve.renderTarget {
-            unsafe { target.as_mut().updateLastAccess(colorAttachmentWriteAccess) };
+        if let Some(target) = resolve.renderTarget.as_mut() {
+            target
+                .targetMut()
+                .updateLastAccess(colorAttachmentWriteAccess);
         }
         if let Some(texture) = resolve
             .texture
@@ -422,7 +426,14 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
 
 impl Drop for RenderPassVulkanState {
     fn drop(&mut self) {
-        finish(self);
+        if self.contextIsLive() {
+            finish(self);
+        } else {
+            // A safe retained pass may be released after its context. The
+            // native graph is already retired, so quarantine native finish
+            // work and dismantle only the pass's retained Rust owners.
+            nuxie_ore_metal::render_pass_set_finished(&mut self.base, true);
+        }
         unsafe {
             ManuallyDrop::drop(&mut self.m_vkDepthTexture);
             ManuallyDrop::drop(&mut self.m_vkResolveTargets);

@@ -13,6 +13,8 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::
 };
 use ash::vk;
 use std::collections::{HashMap, VecDeque};
+use std::marker::PhantomPinned;
+use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 
@@ -52,10 +54,8 @@ pub(crate) enum PLSBackingType {
 pub(super) struct JobParams {
     pub(super) props: PipelineProps,
     pub(super) key: u64,
-    pub(super) platformFeatures: *const PlatformFeatures,
+    pub(super) platformFeatures: PlatformFeatures,
 }
-
-unsafe impl Send for JobParams {}
 
 pub(super) struct CompletedJob {
     pub(super) key: u64,
@@ -111,6 +111,7 @@ pub(crate) struct PipelineManagerVulkan {
     pub(crate) m_emptyDescriptorSetLayout: vk::DescriptorSetLayout,
     pub(crate) m_staticDescriptorPool: vk::DescriptorPool,
     pub(crate) m_nullImageDescriptorSet: vk::DescriptorSet,
+    pub(super) m_pin: PhantomPinned,
 }
 
 // The source permits the manager and its Vulkan caches on its one owned
@@ -188,7 +189,7 @@ impl PipelineManagerVulkan {
     ) -> Option<&DrawPipelineVulkan> {
         super::pipeline_manager_vulkan_impl::tryGetPipeline(self, props, platformFeatures)
     }
-    pub(crate) fn clearCache(&self) {
+    pub(crate) fn clearCache(self: Pin<&mut Self>) {
         super::pipeline_manager_vulkan_impl::clearCache(self)
     }
     pub(crate) fn waitForAllBackgroundPipelineCreation(&self) {

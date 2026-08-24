@@ -16,7 +16,9 @@ use super::ore_shader_module_vulkan_decl::ShaderModuleVulkan;
 use super::ore_texture_vulkan_decl::TextureViewVulkan;
 use super::ore_texture_vulkan_decl::TextureVulkan;
 use super::ore_vulkan_dsl::{createDSLFromLayoutDesc, kVkMaxBindingsPerGroup};
-use super::render_target_vulkan_decl::{RenderTargetVulkanApi, RenderTargetVulkanImpl};
+use super::render_target_vulkan_decl::{
+    RenderTargetVulkanApi, RenderTargetVulkanImpl, RetainedRenderTargetVulkan,
+};
 use super::vkutil_decl::Texture2D;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 use ash::vk;
@@ -251,6 +253,7 @@ pub(crate) fn Make(
             features,
             Some(manager),
         )),
+        m_lifetime: super::ore_context_vulkan_decl::ContextVulkanLifetime::new(),
         m_vk: ManuallyDrop::new(vk_context),
         m_vkQueue: vk::Queue::null(),
         m_vkQueueFamily: 0,
@@ -270,6 +273,7 @@ pub(crate) fn Make(
 
 impl Drop for ContextVulkan {
     fn drop(&mut self) {
+        self.m_lifetime.retire();
         if self.m_vk.device != vk::Device::null() {
             unsafe {
                 if self.m_vkQueue != vk::Queue::null() {
@@ -561,8 +565,7 @@ pub(crate) fn vkFlushPendingTextureUploads(context: &mut ContextVulkan) {
 }
 
 pub(crate) fn beginFrame(context: &mut ContextVulkan, desc: &FrameDescriptor) {
-    let external = desc
-        .externalCommandBuffer
+    let external = unsafe { desc.externalCommandBuffer() }
         .expect("ContextVulkan::beginFrame requires an external command buffer");
     nuxie_ore_metal::context_backend_manager(&context.base)
         .expect("ContextVulkan requires its source manager")
@@ -669,10 +672,7 @@ pub(crate) fn makeTexture(
     desc: &TextureDesc<'_>,
 ) -> Option<AnyResourceHandle> {
     let (manager, domain) = contextResourceParts(context);
-    let mut texture = TextureVulkan::new(manager.clone(), desc);
-    texture.m_vkDevice = context.m_vk.device;
-    *texture.m_vk = Some(Arc::clone(&context.m_vk));
-    texture.m_vkOreContext.set(context);
+    let mut texture = TextureVulkan::new(manager.clone(), desc, context);
 
     let mut usage = vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST;
     if desc.renderTarget {
@@ -986,8 +986,7 @@ pub(crate) fn makeBindGroup(
         return None;
     }
     let (manager, domain) = contextResourceParts(context);
-    let mut bg = BindGroupVulkan::new(manager.clone());
-    bg.setContext(context);
+    let mut bg = BindGroupVulkan::new(manager.clone(), context);
     bg.m_vkDSL = layout.m_vkDSL;
     let dynamicCount = layout
         .entries()
@@ -1168,7 +1167,7 @@ pub(crate) fn beginRenderPass(
             state.m_vkResolveTargets[index].baseMip = resolveView.baseMipLevel();
             state.m_vkResolveTargets[index].baseLayer = resolveView.baseLayer();
             state.m_vkResolveTargets[index].layerCount = resolveView.layerCount();
-            state.m_vkResolveTargets[index].renderTarget = resolveView.m_vkRenderTarget;
+            state.m_vkResolveTargets[index].renderTarget = resolveView.m_vkRenderTarget.clone();
         }
         if key.sampleCount == 1 {
             key.sampleCount = texture.sampleCount();
@@ -1180,7 +1179,7 @@ pub(crate) fn beginRenderPass(
         state.m_vkColorImages[index] = texture.m_vkImage;
         state.m_vkColorBaseLayer[index] = view.baseLayer();
         state.m_vkColorLayerCount[index] = view.layerCount();
-        state.m_vkColorRenderTargets[index] = view.m_vkRenderTarget;
+        state.m_vkColorRenderTargets[index] = view.m_vkRenderTarget.clone();
         state.m_vkColorTextures[index] = Some(textureHandle.clone());
         if attachment.loadOp == LoadOp::load {
             context.vkQueueTransitionToLayout(
@@ -1385,9 +1384,8 @@ pub(crate) unsafe fn wrapCanvasTexture(
         ..Default::default()
     };
     let (manager, domain) = contextResourceParts(context);
-    let mut texture = TextureVulkan::new(manager.clone(), &desc);
+    let mut texture = TextureVulkan::new(manager.clone(), &desc, context);
     texture.m_vkImage = image;
-    *texture.m_vk = Some(Arc::clone(&context.m_vk));
     texture.m_vkLayout.set(vk::ImageLayout::UNDEFINED);
     let texture =
         ResourceHandle::new_texture_in_domain(Some(manager.clone()), domain.clone(), texture)
@@ -1404,7 +1402,7 @@ pub(crate) unsafe fn wrapCanvasTexture(
     let mut view = TextureViewVulkan::new(manager.clone(), texture.clone(), &viewDesc);
     view.m_vkImageView = imageView;
     let targetApi: &mut dyn RenderTargetVulkanApi = target;
-    view.m_vkRenderTarget = Some(NonNull::from(targetApi));
+    view.m_vkRenderTarget = Some(unsafe { RetainedRenderTargetVulkan::fromLiveTarget(targetApi) });
     Some(ResourceHandle::new_in_domain(Some(manager), domain, view).erase())
 }
 
@@ -1437,9 +1435,8 @@ pub(crate) unsafe fn wrapRiveTexture(
         ..Default::default()
     };
     let (manager, domain) = contextResourceParts(context);
-    let mut wrapped = TextureVulkan::new(manager.clone(), &desc);
+    let mut wrapped = TextureVulkan::new(manager.clone(), &desc, context);
     wrapped.m_vkImage = image;
-    *wrapped.m_vk = Some(Arc::clone(&context.m_vk));
     wrapped
         .m_vkLayout
         .set(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);

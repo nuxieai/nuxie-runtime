@@ -587,7 +587,7 @@ impl Drop for GPUResource {
 /// The complete object and its `GPUResource` base must have the same address,
 /// and the object must remain valid until the final intrusive release invokes
 /// its registered concrete destructor.
-pub unsafe trait GpuResourcePayload: Any + Send {
+pub unsafe trait GpuResourcePayload: Any {
     fn gpu_resource(&self) -> &GPUResource;
     fn gpu_resource_mut(&mut self) -> &mut GPUResource;
 

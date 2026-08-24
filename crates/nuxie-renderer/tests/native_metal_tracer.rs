@@ -231,11 +231,7 @@ fn native_metal_factory_makes_ore_context_from_its_retained_service() {
     let completion = factory
         .with_ore_context(|ore| {
             assert_eq!(ore.shaderTarget(), ShaderTarget::msl);
-            ore.beginFrame(&FrameDescriptor {
-                externalCommandBuffer: None,
-                safeFrameNumber: 0,
-                currentFrameNumber: 0,
-            });
+            ore.beginFrame(&FrameDescriptor::new(0, 0));
             ore.end_frame_with_completion()
                 .expect("submit the retained renderer queue's command buffer")
         })

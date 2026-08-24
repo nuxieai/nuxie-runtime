@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 27
+max_pending = 26
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -955,9 +955,9 @@ note = "All 36 direct manager cases are ported with exact derivation/absorption,
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_provider_test.cpp"
 test_case_count = 6
-status = "pending"
-evidence = ["P3C-report.md", "LT1SC-report.md", "crates/nuxie-runtime/src/semantic_provider.rs", "crates/nuxie-runtime/src/semantic_inference_registry.rs"]
-note = "Direct SemanticData precedence, Text inference, drawable/descendant/fallback bounds code is ported. LT1SC proves exact nested focus bounds and post-scroll geometry, and FTAIL closes the sampled Simpsons/data_binding_lists projection residuals. The six named upstream cases remain pending because their assertion bodies still lack a one-to-one direct test mapping."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_semantic_provider.rs", "P3C-report.md", "LT1SC-report.md", "crates/nuxie-runtime/src/semantic_provider.rs", "crates/nuxie-runtime/src/semantic_inference_registry.rs"]
+note = "All six named bodies are mapped directly: the invalid-local Rust adaptation preserves the three nullptr defaults, and the settled Simpsons fixture checks every Text inference candidate, explicit SemanticData host role/label pair, and every non-empty positive-area host bound."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_state_machine_test.cpp"

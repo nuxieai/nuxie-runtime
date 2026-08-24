@@ -115,6 +115,7 @@ class ShippedSurfaceGuardTests(unittest.TestCase):
             )
             (root / "exports-v3-portable.txt").write_text(exports)
             (root / "exports-v3-apple-metal-extension.txt").write_text("")
+            (root / "exports-v3-android-vulkan-extension.txt").write_text("")
             return subprocess.run(
                 [
                     "python3",

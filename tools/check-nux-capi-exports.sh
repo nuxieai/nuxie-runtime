@@ -23,6 +23,13 @@ case "$features" in
             LC_ALL=C sort -u > "$expected"
         feature_args="--features $features"
         ;;
+    android-vulkan|android-vulkan,scripting)
+        cat \
+            "$repo_dir/crates/nux-capi/exports-v3-portable.txt" \
+            "$repo_dir/crates/nux-capi/exports-v3-android-vulkan-extension.txt" | \
+            LC_ALL=C sort -u > "$expected"
+        feature_args="--features $features"
+        ;;
     *)
         echo "unsupported NUX_CAPI_FEATURES value: $features" >&2
         exit 2
@@ -55,14 +62,24 @@ header_actual="$work_dir/header.txt"
 grep -Eo 'nux_[A-Za-z0-9_]+[[:space:]]*\(' \
     "$repo_dir/crates/nux-capi/include/nux_capi.generated.h" | \
     sed -E 's/[[:space:]]*\($//' | sort -u > "$header_actual"
-if [ "$features" != "apple-metal" ] && [ "$features" != "apple-metal,scripting" ]; then
-    # cbindgen retains feature-gated declarations in the generated header. The
-    # portable ABI excludes the Apple renderer family and this one Apple-only
-    # import entry point; keep the latter exact so future imports fail closed.
-    grep -Ev '^(nux_renderer_|nux_file_import_(configured|with_apple_assets)$)' \
-        "$header_actual" > "$work_dir/header-portable.txt"
-    header_actual="$work_dir/header-portable.txt"
-fi
+# cbindgen retains every feature-gated declaration in the generated header.
+# Compare only the selected extension while keeping each family exact enough
+# that a new symbol fails its own feature inventory closed.
+apple_extension='^(nux_file_import_(configured|with_apple_assets)|nux_renderer_(copy_metal_device|detach|free|info|new_metal|reattach|render_player|reset_player_domain|resize))$'
+android_extension='^(nux_android_vulkan_frame_|nux_renderer_(android_vulkan_|new_android_vulkan$))'
+case "$features" in
+    apple-metal|apple-metal,scripting)
+        grep -Ev "$android_extension" "$header_actual" > "$work_dir/header-selected.txt"
+        ;;
+    android-vulkan|android-vulkan,scripting)
+        grep -Ev "$apple_extension" "$header_actual" > "$work_dir/header-selected.txt"
+        ;;
+    *)
+        grep -Ev "$apple_extension|$android_extension" \
+            "$header_actual" > "$work_dir/header-selected.txt"
+        ;;
+esac
+header_actual="$work_dir/header-selected.txt"
 diff -u "$expected" "$header_actual"
 
 echo "nux-capi ABI-v3 ${features:-portable} export inventory ok"

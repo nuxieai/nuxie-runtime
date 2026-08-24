@@ -18,7 +18,7 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 - `nuxie-render-api`: renderer-neutral traits
 - `nuxie-scripting`: optional pure-Rust Luau integration
 - `nux-capi`: the sole static-library distribution root, exposing the portable
-  C API plus narrow Apple Metal, image-decoding, and asset hooks
+  C API plus narrow Apple Metal and headless Android Vulkan extensions
 - `nuxie-project-data`: authoring/project conversion kept outside the shipped
   runtime dependency closure
 
@@ -45,7 +45,8 @@ Nuxie-specific experience, package, authentication, and SDK-session behavior
 lives above this repository's shipped runtime. `nux-capi` is the sole static
 library distribution root: its portable base composes generic scripting, and
 its Apple extension adds renderer-owned Metal presentation and image/asset
-hooks. See [Apple C runtime distribution](docs/nux-capi-apple-release.md). The
+hooks, while its Android extension returns owned headless Vulkan frames for an
+SDK to blit. See [Apple C runtime distribution](docs/nux-capi-apple-release.md). The
 iOS SDK consumes the published binary through a pure Swift package layer and
 does not compile Rust.
 

@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 20
+max_pending = 19
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -317,9 +317,9 @@ note = "Only the listed literal TEST_CASE action streams execute through both ru
 [[file]]
 upstream = "tests/unit_tests/runtime/font_test.cpp"
 test_case_count = 5
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_font.rs"]
+note = "All five font fixture matrices and their complete weight/italic, vertical-metric, fallback-shaping lifecycle, variable-axis, and OpenType-feature assertions are translated. They remain honestly expected-red because the retained Rust text pipeline has no standalone owner corresponding to the upstream public Font inspection/fallback/coordinate API; Phase 1 does not introduce a test-only substitute."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/gamepad_test.cpp"

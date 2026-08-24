@@ -2346,6 +2346,69 @@ pub(crate) type CompilationInfo = WGPUCompilationInfo;
 pub(crate) type TextureViewDescriptor = WGPUTextureViewDescriptor;
 pub(crate) type DeviceDescriptor = WGPUDeviceDescriptor;
 
+impl WGPUDeviceDescriptor {
+    pub(crate) fn SetDeviceLostCallback<F>(&mut self, callbackMode: CallbackMode, callback: F)
+    where
+        F: FnOnce(&Device, DeviceLostReason, WGPUStringView) + 'static,
+    {
+        assert!(self.deviceLostCallbackInfo.callback.is_none());
+
+        unsafe extern "C" fn invoke<F>(
+            device: *const WGPUDevice,
+            reason: WGPUDeviceLostReason,
+            message: WGPUStringView,
+            callback: *mut std::ffi::c_void,
+            _userdata: *mut std::ffi::c_void,
+        ) where
+            F: FnOnce(&Device, DeviceLostReason, WGPUStringView) + 'static,
+        {
+            // SAFETY: The callback record owns exactly one Box<F> and the ABI
+            // invokes the device-lost callback at most once.
+            let callback = unsafe { Box::from_raw(callback.cast::<F>()) };
+            // SAFETY: WebGPU supplies a live borrowed device handle. Acquire
+            // followed by MoveToCHandle preserves its borrowed refcount.
+            let device = unsafe { Device::Acquire(*device) };
+            callback(&device, DeviceLostReason::from(reason), message);
+            let _ = device.MoveToCHandle();
+        }
+
+        self.deviceLostCallbackInfo.mode = callbackMode.into();
+        self.deviceLostCallbackInfo.callback = Some(invoke::<F>);
+        self.deviceLostCallbackInfo.userdata1 = Box::into_raw(Box::new(callback)).cast();
+        self.deviceLostCallbackInfo.userdata2 = std::ptr::null_mut();
+    }
+
+    pub(crate) fn SetUncapturedErrorCallback(
+        &mut self,
+        callback: fn(&Device, ErrorType, WGPUStringView),
+    ) {
+        assert!(self.uncapturedErrorCallbackInfo.callback.is_none());
+
+        unsafe extern "C" fn invoke(
+            device: *const WGPUDevice,
+            errorType: WGPUErrorType,
+            message: WGPUStringView,
+            callback: *mut std::ffi::c_void,
+            _userdata: *mut std::ffi::c_void,
+        ) {
+            // SAFETY: SetUncapturedErrorCallback stored this exact function
+            // pointer representation for the lifetime of the descriptor.
+            let callback: fn(&Device, ErrorType, WGPUStringView) =
+                unsafe { std::mem::transmute(callback) };
+            // SAFETY: The ABI passes a live borrowed device handle. Moving the
+            // acquired wrapper back to a C handle avoids a refcount change.
+            let device = unsafe { Device::Acquire(*device) };
+            callback(&device, ErrorType::from(errorType), message);
+            let _ = device.MoveToCHandle();
+        }
+
+        self.uncapturedErrorCallbackInfo.callback = Some(invoke);
+        self.uncapturedErrorCallbackInfo.userdata1 =
+            callback as *const () as *mut std::ffi::c_void;
+        self.uncapturedErrorCallbackInfo.userdata2 = std::ptr::null_mut();
+    }
+}
+
 macro_rules! owned_aggregate_layout {
     ($name:ident, $raw:ident) => {
         impl Default for $name {
@@ -2708,8 +2771,44 @@ impl Adapter {
     pub(crate) unsafe fn HasFeature(&self, arg1: WGPUFeatureName) -> Bool {
         Bool::from(wgpuAdapterHasFeature(self.handle, arg1))
     }
-    pub(crate) unsafe fn RequestDevice(&self, arg1: *const WGPUDeviceDescriptor, arg2: WGPURequestDeviceCallbackInfo) -> WGPUFuture {
+    pub(crate) unsafe fn RequestDeviceRaw(&self, arg1: *const WGPUDeviceDescriptor, arg2: WGPURequestDeviceCallbackInfo) -> WGPUFuture {
         wgpuAdapterRequestDevice(self.handle, arg1, arg2)
+    }
+    pub(crate) unsafe fn RequestDevice<F>(
+        &self,
+        descriptor: *const WGPUDeviceDescriptor,
+        callbackMode: CallbackMode,
+        callback: F,
+    ) -> Future
+    where
+        F: FnOnce(RequestDeviceStatus, Device, WGPUStringView) + 'static,
+    {
+        unsafe extern "C" fn invoke<F>(
+            status: WGPURequestDeviceStatus,
+            device: WGPUDevice,
+            message: WGPUStringView,
+            callback: *mut std::ffi::c_void,
+            _userdata: *mut std::ffi::c_void,
+        ) where
+            F: FnOnce(RequestDeviceStatus, Device, WGPUStringView) + 'static,
+        {
+            // SAFETY: The callback info owns one Box<F> and this completion is
+            // one-shot. The returned device handle transfers into Device.
+            let callback = unsafe { Box::from_raw(callback.cast::<F>()) };
+            callback(
+                RequestDeviceStatus::from(status),
+                unsafe { Device::Acquire(device) },
+                message,
+            );
+        }
+
+        let mut callbackInfo = WGPURequestDeviceCallbackInfo::default();
+        callbackInfo.mode = callbackMode.into();
+        callbackInfo.callback = Some(invoke::<F>);
+        callbackInfo.userdata1 = Box::into_raw(Box::new(callback)).cast();
+        // SAFETY: descriptor and this adapter satisfy the underlying ABI call;
+        // callbackInfo transfers its capture to the completion trampoline.
+        unsafe { wgpuAdapterRequestDevice(self.handle, descriptor, callbackInfo) }
     }
 }
 
@@ -2840,8 +2939,39 @@ impl Buffer {
     pub(crate) unsafe fn GetUsage(&self) -> BufferUsage {
         BufferUsage::from(wgpuBufferGetUsage(self.handle))
     }
-    pub(crate) unsafe fn MapAsync(&self, arg1: WGPUMapMode, arg2: usize, arg3: usize, arg4: WGPUBufferMapCallbackInfo) -> WGPUFuture {
+    pub(crate) unsafe fn MapAsyncRaw(&self, arg1: WGPUMapMode, arg2: usize, arg3: usize, arg4: WGPUBufferMapCallbackInfo) -> WGPUFuture {
         wgpuBufferMapAsync(self.handle, arg1, arg2, arg3, arg4)
+    }
+    pub(crate) unsafe fn MapAsync<F>(
+        &self,
+        mode: WGPUMapMode,
+        offset: usize,
+        size: usize,
+        callbackMode: CallbackMode,
+        callback: F,
+    ) -> Future
+    where
+        F: FnOnce(MapAsyncStatus, WGPUStringView) + 'static,
+    {
+        unsafe extern "C" fn invoke<F>(
+            status: WGPUMapAsyncStatus,
+            message: WGPUStringView,
+            callback: *mut std::ffi::c_void,
+            _userdata: *mut std::ffi::c_void,
+        ) where
+            F: FnOnce(MapAsyncStatus, WGPUStringView) + 'static,
+        {
+            // SAFETY: MapAsync transfers one boxed one-shot completion.
+            unsafe { Box::from_raw(callback.cast::<F>()) }(MapAsyncStatus::from(status), message);
+        }
+
+        let mut callbackInfo = WGPUBufferMapCallbackInfo::default();
+        callbackInfo.mode = callbackMode.into();
+        callbackInfo.callback = Some(invoke::<F>);
+        callbackInfo.userdata1 = Box::into_raw(Box::new(callback)).cast();
+        // SAFETY: The mapping range and buffer validity remain the caller's
+        // source ABI contract; callback capture ownership is transferred.
+        unsafe { wgpuBufferMapAsync(self.handle, mode, offset, size, callbackInfo) }
     }
     pub(crate) unsafe fn ReadMappedRange(&self, arg1: usize, arg2: *mut std::ffi::c_void, arg3: usize) -> ConvertibleStatus {
         ConvertibleStatus(Status::from(wgpuBufferReadMappedRange(self.handle, arg1, arg2, arg3)))
@@ -3126,8 +3256,25 @@ impl Device {
     pub(crate) unsafe fn CreateComputePipeline(&self, arg1: *const WGPUComputePipelineDescriptor) -> ComputePipeline {
         ComputePipeline::Acquire(wgpuDeviceCreateComputePipeline(self.handle, arg1))
     }
-    pub(crate) unsafe fn CreateComputePipelineAsync(&self, arg1: *const WGPUComputePipelineDescriptor, arg2: WGPUCreateComputePipelineAsyncCallbackInfo) -> WGPUFuture {
+    pub(crate) unsafe fn CreateComputePipelineAsyncRaw(&self, arg1: *const WGPUComputePipelineDescriptor, arg2: WGPUCreateComputePipelineAsyncCallbackInfo) -> WGPUFuture {
         wgpuDeviceCreateComputePipelineAsync(self.handle, arg1, arg2)
+    }
+    pub(crate) unsafe fn CreateComputePipelineAsync<F>(&self, descriptor: *const WGPUComputePipelineDescriptor, callbackMode: CallbackMode, callback: F) -> Future
+    where F: FnOnce(CreatePipelineAsyncStatus, ComputePipeline, WGPUStringView) + 'static {
+        unsafe extern "C" fn invoke<F>(status: WGPUCreatePipelineAsyncStatus, pipeline: WGPUComputePipeline, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
+        where F: FnOnce(CreatePipelineAsyncStatus, ComputePipeline, WGPUStringView) + 'static {
+            // SAFETY: The callback owns one capture and the returned handle.
+            unsafe { Box::from_raw(callback.cast::<F>()) }(
+                CreatePipelineAsyncStatus::from(status),
+                unsafe { ComputePipeline::Acquire(pipeline) },
+                message,
+            );
+        }
+        let mut callbackInfo = WGPUCreateComputePipelineAsyncCallbackInfo::default();
+        callbackInfo.mode = callbackMode.into();
+        callbackInfo.callback = Some(invoke::<F>);
+        callbackInfo.userdata1 = Box::into_raw(Box::new(callback)).cast();
+        unsafe { wgpuDeviceCreateComputePipelineAsync(self.handle, descriptor, callbackInfo) }
     }
     pub(crate) unsafe fn CreatePipelineLayout(&self, arg1: *const WGPUPipelineLayoutDescriptor) -> PipelineLayout {
         PipelineLayout::Acquire(wgpuDeviceCreatePipelineLayout(self.handle, arg1))
@@ -3141,8 +3288,25 @@ impl Device {
     pub(crate) unsafe fn CreateRenderPipeline(&self, arg1: *const WGPURenderPipelineDescriptor) -> RenderPipeline {
         RenderPipeline::Acquire(wgpuDeviceCreateRenderPipeline(self.handle, arg1))
     }
-    pub(crate) unsafe fn CreateRenderPipelineAsync(&self, arg1: *const WGPURenderPipelineDescriptor, arg2: WGPUCreateRenderPipelineAsyncCallbackInfo) -> WGPUFuture {
+    pub(crate) unsafe fn CreateRenderPipelineAsyncRaw(&self, arg1: *const WGPURenderPipelineDescriptor, arg2: WGPUCreateRenderPipelineAsyncCallbackInfo) -> WGPUFuture {
         wgpuDeviceCreateRenderPipelineAsync(self.handle, arg1, arg2)
+    }
+    pub(crate) unsafe fn CreateRenderPipelineAsync<F>(&self, descriptor: *const WGPURenderPipelineDescriptor, callbackMode: CallbackMode, callback: F) -> Future
+    where F: FnOnce(CreatePipelineAsyncStatus, RenderPipeline, WGPUStringView) + 'static {
+        unsafe extern "C" fn invoke<F>(status: WGPUCreatePipelineAsyncStatus, pipeline: WGPURenderPipeline, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
+        where F: FnOnce(CreatePipelineAsyncStatus, RenderPipeline, WGPUStringView) + 'static {
+            // SAFETY: The callback owns one capture and the returned handle.
+            unsafe { Box::from_raw(callback.cast::<F>()) }(
+                CreatePipelineAsyncStatus::from(status),
+                unsafe { RenderPipeline::Acquire(pipeline) },
+                message,
+            );
+        }
+        let mut callbackInfo = WGPUCreateRenderPipelineAsyncCallbackInfo::default();
+        callbackInfo.mode = callbackMode.into();
+        callbackInfo.callback = Some(invoke::<F>);
+        callbackInfo.userdata1 = Box::into_raw(Box::new(callback)).cast();
+        unsafe { wgpuDeviceCreateRenderPipelineAsync(self.handle, descriptor, callbackInfo) }
     }
     pub(crate) unsafe fn CreateSampler(&self, arg1: *const WGPUSamplerDescriptor) -> Sampler {
         Sampler::Acquire(wgpuDeviceCreateSampler(self.handle, arg1))
@@ -3174,8 +3338,23 @@ impl Device {
     pub(crate) unsafe fn HasFeature(&self, arg1: WGPUFeatureName) -> Bool {
         Bool::from(wgpuDeviceHasFeature(self.handle, arg1))
     }
-    pub(crate) unsafe fn PopErrorScope(&self, arg1: WGPUPopErrorScopeCallbackInfo) -> WGPUFuture {
+    pub(crate) unsafe fn PopErrorScopeRaw(&self, arg1: WGPUPopErrorScopeCallbackInfo) -> WGPUFuture {
         wgpuDevicePopErrorScope(self.handle, arg1)
+    }
+    pub(crate) unsafe fn PopErrorScope<F>(&self, callbackMode: CallbackMode, callback: F) -> Future
+    where F: FnOnce(PopErrorScopeStatus, ErrorType, WGPUStringView) + 'static {
+        unsafe extern "C" fn invoke<F>(status: WGPUPopErrorScopeStatus, errorType: WGPUErrorType, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
+        where F: FnOnce(PopErrorScopeStatus, ErrorType, WGPUStringView) + 'static {
+            // SAFETY: PopErrorScope transfers one boxed one-shot completion.
+            unsafe { Box::from_raw(callback.cast::<F>()) }(
+                PopErrorScopeStatus::from(status), ErrorType::from(errorType), message,
+            );
+        }
+        let mut callbackInfo = WGPUPopErrorScopeCallbackInfo::default();
+        callbackInfo.mode = callbackMode.into();
+        callbackInfo.callback = Some(invoke::<F>);
+        callbackInfo.userdata1 = Box::into_raw(Box::new(callback)).cast();
+        unsafe { wgpuDevicePopErrorScope(self.handle, callbackInfo) }
     }
     pub(crate) unsafe fn PushErrorScope(&self, arg1: WGPUErrorFilter) {
         wgpuDevicePushErrorScope(self.handle, arg1)
@@ -3230,8 +3409,23 @@ impl Instance {
     pub(crate) unsafe fn ProcessEvents(&self) {
         wgpuInstanceProcessEvents(self.handle)
     }
-    pub(crate) unsafe fn RequestAdapter(&self, arg1: *const WGPURequestAdapterOptions, arg2: WGPURequestAdapterCallbackInfo) -> WGPUFuture {
+    pub(crate) unsafe fn RequestAdapterRaw(&self, arg1: *const WGPURequestAdapterOptions, arg2: WGPURequestAdapterCallbackInfo) -> WGPUFuture {
         wgpuInstanceRequestAdapter(self.handle, arg1, arg2)
+    }
+    pub(crate) unsafe fn RequestAdapter<F>(&self, options: *const WGPURequestAdapterOptions, callbackMode: CallbackMode, callback: F) -> Future
+    where F: FnOnce(RequestAdapterStatus, Adapter, WGPUStringView) + 'static {
+        unsafe extern "C" fn invoke<F>(status: WGPURequestAdapterStatus, adapter: WGPUAdapter, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
+        where F: FnOnce(RequestAdapterStatus, Adapter, WGPUStringView) + 'static {
+            // SAFETY: The callback owns one capture and the returned handle.
+            unsafe { Box::from_raw(callback.cast::<F>()) }(
+                RequestAdapterStatus::from(status), unsafe { Adapter::Acquire(adapter) }, message,
+            );
+        }
+        let mut callbackInfo = WGPURequestAdapterCallbackInfo::default();
+        callbackInfo.mode = callbackMode.into();
+        callbackInfo.callback = Some(invoke::<F>);
+        callbackInfo.userdata1 = Box::into_raw(Box::new(callback)).cast();
+        unsafe { wgpuInstanceRequestAdapter(self.handle, options, callbackInfo) }
     }
     pub(crate) unsafe fn WaitAny(&self, arg1: usize, arg2: *mut WGPUFutureWaitInfo, arg3: u64) -> WaitStatus {
         WaitStatus::from(wgpuInstanceWaitAny(self.handle, arg1, arg2, arg3))
@@ -3356,8 +3550,21 @@ impl Queue {
         self.handle = std::ptr::null_mut();
         handle
     }
-    pub(crate) unsafe fn OnSubmittedWorkDone(&self, arg1: WGPUQueueWorkDoneCallbackInfo) -> WGPUFuture {
+    pub(crate) unsafe fn OnSubmittedWorkDoneRaw(&self, arg1: WGPUQueueWorkDoneCallbackInfo) -> WGPUFuture {
         wgpuQueueOnSubmittedWorkDone(self.handle, arg1)
+    }
+    pub(crate) unsafe fn OnSubmittedWorkDone<F>(&self, callbackMode: CallbackMode, callback: F) -> Future
+    where F: FnOnce(QueueWorkDoneStatus, WGPUStringView) + 'static {
+        unsafe extern "C" fn invoke<F>(status: WGPUQueueWorkDoneStatus, message: WGPUStringView, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
+        where F: FnOnce(QueueWorkDoneStatus, WGPUStringView) + 'static {
+            // SAFETY: Queue completion transfers one boxed one-shot callback.
+            unsafe { Box::from_raw(callback.cast::<F>()) }(QueueWorkDoneStatus::from(status), message);
+        }
+        let mut callbackInfo = WGPUQueueWorkDoneCallbackInfo::default();
+        callbackInfo.mode = callbackMode.into();
+        callbackInfo.callback = Some(invoke::<F>);
+        callbackInfo.userdata1 = Box::into_raw(Box::new(callback)).cast();
+        unsafe { wgpuQueueOnSubmittedWorkDone(self.handle, callbackInfo) }
     }
     pub(crate) unsafe fn SetLabel(&self, arg1: WGPUStringView) {
         wgpuQueueSetLabel(self.handle, arg1)
@@ -3701,8 +3908,22 @@ impl ShaderModule {
         self.handle = std::ptr::null_mut();
         handle
     }
-    pub(crate) unsafe fn GetCompilationInfo(&self, arg1: WGPUCompilationInfoCallbackInfo) -> WGPUFuture {
+    pub(crate) unsafe fn GetCompilationInfoRaw(&self, arg1: WGPUCompilationInfoCallbackInfo) -> WGPUFuture {
         wgpuShaderModuleGetCompilationInfo(self.handle, arg1)
+    }
+    pub(crate) unsafe fn GetCompilationInfo<F>(&self, callbackMode: CallbackMode, callback: F) -> Future
+    where F: FnOnce(CompilationInfoRequestStatus, *const WGPUCompilationInfo) + 'static {
+        unsafe extern "C" fn invoke<F>(status: WGPUCompilationInfoRequestStatus, info: *const WGPUCompilationInfo, callback: *mut std::ffi::c_void, _userdata: *mut std::ffi::c_void)
+        where F: FnOnce(CompilationInfoRequestStatus, *const WGPUCompilationInfo) + 'static {
+            // SAFETY: Compilation completion transfers one boxed callback; the
+            // info record remains borrowed for this invocation only.
+            unsafe { Box::from_raw(callback.cast::<F>()) }(CompilationInfoRequestStatus::from(status), info);
+        }
+        let mut callbackInfo = WGPUCompilationInfoCallbackInfo::default();
+        callbackInfo.mode = callbackMode.into();
+        callbackInfo.callback = Some(invoke::<F>);
+        callbackInfo.userdata1 = Box::into_raw(Box::new(callback)).cast();
+        unsafe { wgpuShaderModuleGetCompilationInfo(self.handle, callbackInfo) }
     }
     pub(crate) unsafe fn SetLabel(&self, arg1: WGPUStringView) {
         wgpuShaderModuleSetLabel(self.handle, arg1)

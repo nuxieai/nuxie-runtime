@@ -163,3 +163,27 @@ impl ScopedAssetReference {
         digits > 0 && after_at[digits..].strip_prefix('/') == Some(self.path.as_str())
     }
 }
+
+#[cfg(test)]
+mod upstream_scope_tests {
+    use super::*;
+
+    #[test]
+    fn scoped_asset_reference_matching_direct_port() {
+        let lua = Lua::new();
+
+        let bare = ScopedAssetReference::new(&lua, "lit");
+        assert_eq!(bare.rank("lit", "lit"), 1);
+        assert_eq!(bare.rank("shaders/lit", "lit"), 1);
+        assert_eq!(bare.rank("draco@1531/lit", "lit"), 0);
+        assert_eq!(bare.rank("draco@1531/other", "other"), 0);
+
+        let library = ScopedAssetReference::new(&lua, "lib:draco/lit");
+        assert_eq!(library.rank("draco@1531/lit", "lit"), 1);
+        assert_eq!(library.rank("draco#9@2/lit", "lit"), 1);
+        assert_eq!(library.rank("draco@1531/other", "other"), 0);
+        assert_eq!(library.rank("other@3/lit", "lit"), 0);
+        assert_eq!(library.rank("lit", "lit"), 0);
+        assert_eq!(library.rank("dracoish@3/lit", "lit"), 0);
+    }
+}

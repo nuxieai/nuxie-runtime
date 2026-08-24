@@ -1,8 +1,7 @@
-# Nuxie Apple clock patch for luaur-common 0.1.8
+# Nuxie platform clock patches for luaur-common 0.1.8
 
-This directory vendors the crates.io `luaur-common` 0.1.8 package. The only
-Rust source change widens the upstream Mach monotonic-clock branches from
-`target_os = "macos"` to `target_vendor = "apple"`.
+This directory vendors the crates.io `luaur-common` 0.1.8 package. Its clock
+sources carry Apple and Android compatibility patches.
 
 The upstream fallback uses `libc::clock` and `libc::CLOCKS_PER_SEC`, which are
 not exposed by Rust's `libc` crate for iOS. Apple platforms provide the same
@@ -16,8 +15,19 @@ Provenance:
 - Original package checksum:
   `0d9c24d960012cf14bd4cfd056a89d41758d5548305e91552fc71aa0318edae7`
 - Upstream repository: `https://github.com/pjankiewicz/luaur`
-- Patch: Apple-vendor cfg widening in `get_clock_timestamp.rs` and
-  `get_clock_period.rs`
+- Patches: Apple-vendor cfg widening plus Android Bionic `clock()` binding and
+  clock-period fallback in `get_clock_timestamp.rs` and `get_clock_period.rs`
+
+## Android Bionic clock compatibility
+
+- `get_clock_timestamp.rs` binds Bionic's exported `clock()` function
+  directly because the Rust `libc` crate does not expose that Android
+  binding.
+- `get_clock_period.rs` uses Bionic's defined `CLOCKS_PER_SEC` value of
+  1,000,000 because the Rust `libc` crate does not expose the macro.
+
+Together these preserve the upstream fallback profiler-clock semantics while
+allowing Android scripting builds to compile.
 
 ## Luau fork rung 1
 

@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 49
+max_pending = 48
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -1044,9 +1044,9 @@ note = "The exhaustive FL-B/FL-C table identifies the listed names as fully cove
 [[file]]
 upstream = "tests/unit_tests/runtime/stroke_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_stroke.rs"]
+note = "Direct fixture port preserves the exact named Stroke lookup, concrete SolidColor paint assertion, and ARGB(255,0,255,255) live color mutation through the retained runtime property owner."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/text_input_test.cpp"

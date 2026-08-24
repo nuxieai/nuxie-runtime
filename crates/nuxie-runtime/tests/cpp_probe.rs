@@ -19224,6 +19224,171 @@ fn upstream_component_origin_pivots_a_layout_transform() {
 }
 
 #[test]
+fn upstream_transform_order_is_as_expected() {
+    let translation = Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 20.0]);
+    let rotation = Mat2D::from_rotation(3.14 / 2.0);
+    let scale = Mat2D([2.0, 0.0, 0.0, 3.0, 0.0, 0.0]);
+    let composed = translation.multiply(rotation).multiply(scale);
+    let mut explicit = Mat2D::from_rotation(3.14 / 2.0);
+    explicit.0[0] *= 2.0;
+    explicit.0[1] *= 2.0;
+    explicit.0[2] *= 3.0;
+    explicit.0[3] *= 3.0;
+    explicit.0[4] = 10.0;
+    explicit.0[5] = 20.0;
+    assert_eq!(explicit, composed);
+}
+
+#[test]
+fn upstream_file_with_animation_can_be_read() {
+    let bytes = std::fs::read(cpp_runtime_fixture("juice.riv")).expect("read juice.riv");
+    let runtime = read_runtime_file(&bytes).expect("import juice.riv");
+    let graphs = GraphFile::from_runtime_file(&runtime).expect("graph juice.riv");
+    let graph = &graphs.artboards[0];
+    assert_eq!(graph.name.as_deref(), Some("New Artboard"));
+    let shin = graph
+        .components
+        .iter()
+        .find(|component| component.name.as_deref() == Some("shin_right"))
+        .expect("shin_right");
+    assert_eq!(shin.type_name, "Node");
+    let leg = graph
+        .components
+        .iter()
+        .find(|component| Some(component.local_id) == shin.parent_local)
+        .expect("leg_right parent");
+    assert_eq!(leg.name.as_deref(), Some("leg_right"));
+    let root = graph
+        .components
+        .iter()
+        .find(|component| Some(component.local_id) == leg.parent_local)
+        .expect("root parent");
+    assert_eq!(root.name.as_deref(), Some("root"));
+    assert_eq!(root.parent_local, Some(0));
+    let walk = graph
+        .animations
+        .iter()
+        .find(|animation| animation.name.as_deref() == Some("walk"))
+        .expect("walk animation");
+    assert_eq!(walk.keyed_objects.len(), 22);
+}
+
+#[test]
+fn upstream_file_dependencies_are_as_expected() {
+    let bytes =
+        std::fs::read(cpp_runtime_fixture("dependency_test.riv")).expect("read dependency fixture");
+    let runtime = read_runtime_file(&bytes).expect("import dependency fixture");
+    let graphs = GraphFile::from_runtime_file(&runtime).expect("graph dependency fixture");
+    let graph = &graphs.artboards[0];
+    assert_eq!(graph.name.as_deref(), Some("Blue"));
+    let named = |name: &str| {
+        graph
+            .components
+            .iter()
+            .find(|component| component.name.as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("missing {name}"))
+    };
+    let node_a = named("A");
+    let node_b = named("B");
+    let node_c = named("C");
+    let shape = named("Rectangle");
+    let path = named("Rectangle Path");
+    assert_eq!(node_a.parent_local, Some(0));
+    assert_eq!(node_b.parent_local, Some(node_a.local_id));
+    assert_eq!(node_c.parent_local, Some(node_b.local_id));
+    assert_eq!(shape.parent_local, Some(node_b.local_id));
+    assert_eq!(path.parent_local, Some(shape.local_id));
+    assert_eq!(node_b.dependent_locals.len(), 2);
+    assert!(node_a.graph_order > Some(0));
+    assert!(node_b.graph_order > node_a.graph_order);
+    assert!(node_c.graph_order > node_b.graph_order);
+    assert!(shape.graph_order > node_b.graph_order);
+    assert!(path.graph_order > shape.graph_order);
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+            .expect("instantiate dependency fixture");
+    artboard.update_pass();
+    let world = artboard
+        .object_world_transform(shape.local_id)
+        .expect("Rectangle world transform");
+    assert_eq!(world.0[4], 39.203125);
+    assert_eq!(world.0[5], 29.535156);
+}
+
+#[test]
+fn upstream_long_name_object_is_parsed_correctly() {
+    let bytes = std::fs::read(cpp_runtime_fixture("long_name.riv")).expect("read long_name.riv");
+    let runtime = read_runtime_file(&bytes).expect("import long_name.riv");
+    let graphs = GraphFile::from_runtime_file(&runtime).expect("graph long_name.riv");
+    assert_eq!(graphs.artboards[0].local_objects.len(), 7);
+}
+
+#[test]
+#[ignore = "expected-red: nuxie-binary has no File::stripAssets correspondence"]
+fn upstream_file_with_in_band_images_can_have_them_stripped() {
+    let bytes =
+        std::fs::read(cpp_runtime_fixture("jellyfish_test.riv")).expect("read jellyfish fixture");
+    let runtime = read_runtime_file(&bytes).expect("import jellyfish fixture");
+    let graphs = GraphFile::from_runtime_file(&runtime).expect("graph jellyfish fixture");
+    assert_eq!(graphs.artboards[0].name.as_deref(), Some("Jellyfish"));
+    assert!(
+        runtime
+            .file_assets()
+            .iter()
+            .any(|asset| asset.type_name == "ImageAsset")
+    );
+    panic!(
+        "the remaining assertions call File::stripAssets with an empty set and with +         ImageAsset::typeKey; the Rust binary owner has no strip operation"
+    );
+}
+
+#[test]
+fn upstream_bad_skin_without_parent_skinnable_does_not_crash() {
+    let bytes = std::fs::read(cpp_runtime_fixture("bad_skin.riv")).expect("read bad skin fixture");
+    let runtime = read_runtime_file(&bytes).expect("import bad skin fixture");
+    let graphs = GraphFile::from_runtime_file(&runtime).expect("graph bad skin fixture");
+    let graph = &graphs.artboards[0];
+    assert_eq!(graph.name.as_deref(), Some("Illustration WOman.svg"));
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+            .expect("instantiate bad skin fixture");
+    artboard.update_pass();
+    assert!(!graph.paths.is_empty());
+    artboard.update_pass();
+}
+
+#[test]
+fn upstream_file_with_bad_keyed_property_loads() {
+    let bytes = std::fs::read(cpp_runtime_fixture("magic_alley_db_reduced_export.riv"))
+        .expect("read bad keyed-property fixture");
+    let runtime = read_runtime_file(&bytes).expect("import bad keyed-property fixture");
+    let graphs = GraphFile::from_runtime_file(&runtime).expect("graph bad keyed-property fixture");
+    let graph = &graphs.artboards[0];
+    assert_eq!(graph.name.as_deref(), Some("Artboard"));
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+            .expect("instantiate bad keyed-property fixture");
+    artboard.update_pass();
+}
+
+#[test]
+#[ignore = "expected-red: imported ScriptAsset verification state has no Rust owner"]
+fn upstream_file_can_be_read_with_verified_signed_scripts() {
+    let bytes = std::fs::read(cpp_runtime_fixture("joel_signed.riv"))
+        .expect("read signed-script fixture");
+    let runtime = read_runtime_file(&bytes).expect("import signed-script fixture");
+    let scripts = runtime
+        .file_assets()
+        .into_iter()
+        .filter(|asset| asset.type_name == "ScriptAsset")
+        .collect::<Vec<_>>();
+    assert!(!scripts.is_empty());
+    panic!(
+        "every imported ScriptAsset must report verified(), but Rust discards that verification +         result instead of retaining it on the asset owner"
+    );
+}
+
+#[test]
 fn list_follow_path_constraint_registers_and_updates_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

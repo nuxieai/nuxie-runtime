@@ -290,10 +290,9 @@ note = "Explicit Rust-language adaptation disposition under docs/runtime-exact-p
 [[file]]
 upstream = "tests/unit_tests/runtime/file_test.cpp"
 test_case_count = 12
-status = "partial"
-evidence = ["crates/nuxie/src/lib.rs::{upstream_file_can_be_read,upstream_file_artboards_can_be_counted_and_accessed_via_index_or_name,upstream_file_with_bad_blend_mode_fails_to_load}"]
-covered_test_cases = ["file can be read", "file with bad blend mode fails to load", "artboards can be counted and accessed via index or name"]
-note = "The listed public File facade cases are direct Rust ports over the same pinned fixtures. The remaining nine TEST_CASEs are unclaimed."
+status = "ported-direct"
+evidence = ["crates/nuxie/src/lib.rs::{upstream_file_can_be_read,upstream_file_artboards_can_be_counted_and_accessed_via_index_or_name,upstream_file_with_bad_blend_mode_fails_to_load}", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_{transform_order,file_with_animation,file_dependencies,long_name,file_with_in_band_images,bad_skin,file_with_bad_keyed_property,file_can_be_read_with_verified_signed_scripts}*", "silver-corpus.toml::{deterministic_mode}"]
+note = "All 12 cases are ported against their pinned fixtures. Asset stripping and retained script-verification state are honestly ignored-red at their missing Rust owners; deterministic mode retains its exact divergent silver."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/focus_test.cpp"

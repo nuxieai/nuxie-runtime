@@ -1,8 +1,7 @@
-# Nuxie Apple clock patch for luaur-vm 0.1.8
+# Nuxie platform compatibility patches for luaur-vm 0.1.8
 
-This directory vendors the crates.io `luaur-vm` 0.1.8 package. The only Rust
-source change widens the upstream Mach monotonic-clock branches from
-`target_os = "macos"` to `target_vendor = "apple"`.
+This directory vendors the crates.io `luaur-vm` 0.1.8 package. It carries
+Apple clock and Android Bionic compatibility patches.
 
 Without this patch the iOS fallback declares a `CLOCKS_PER_SEC` external
 symbol even though Darwin supplies it as a C macro. Reusing the VM's existing
@@ -15,8 +14,18 @@ Provenance:
 - Original package checksum:
   `945d6993538f99bc25a424b7a7a55b9db953d609f7fc869e6d80495326e46ae2`
 - Upstream repository: `https://github.com/pjankiewicz/luaur`
-- Patch: Apple-vendor cfg widening in `clock_timestamp.rs` and
-  `clock_period.rs`
+- Patches: Apple-vendor cfg widening, Android Bionic clock-period fallback,
+  and Android `c_char` signedness corrections in the files listed below
+
+## Android Bionic compatibility
+
+- `clock_period.rs` uses the Bionic clock period of `1e-6` directly. Bionic
+  defines `CLOCKS_PER_SEC` as a macro, not an exported symbol, so the upstream
+  extern-static fallback fails when the Android library is loaded.
+- `enumclass.rs`, `enumclosure.rs`, `enumobject.rs`, `enumtable.rs`,
+  `luau_f_select.rs`, `luau_f_tostring.rs`, `str_pack.rs`, and `sizeclass.rs`
+  use `c_char`-typed zeroes, comparisons, and sentinels instead of assuming
+  `c_char` is `i8`. On aarch64 Android, `c_char` is unsigned.
 
 ## Luau fork rung 1
 

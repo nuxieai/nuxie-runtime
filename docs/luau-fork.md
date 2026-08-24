@@ -30,10 +30,10 @@ crates.io, vendored byte-for-byte under `vendor/`:
 |---|---|---|---|
 | `luaur-ast` | `vendor/luaur-ast-0.1.8` | no | `NUXIE_PROVENANCE.md` |
 | `luaur-bytecode` | `vendor/luaur-bytecode-0.1.8` | no | `NUXIE_PROVENANCE.md` |
-| `luaur-common` | `vendor/luaur-common-0.1.8` | yes (Apple clock) | `NUXIE_PATCH.md` |
+| `luaur-common` | `vendor/luaur-common-0.1.8` | yes (Apple and Android clocks) | `NUXIE_PATCH.md` |
 | `luaur-compiler` | `vendor/luaur-compiler-0.1.8` | no | `NUXIE_PROVENANCE.md` |
 | `luaur-rt` | `vendor/luaur-rt-0.1.8` | yes (bytecode-only runtime feature, async thread data, userdata dispatch) | `NUXIE_PATCH.md` |
-| `luaur-vm` | `vendor/luaur-vm-0.1.8` | yes (Apple clock) | `NUXIE_PATCH.md` |
+| `luaur-vm` | `vendor/luaur-vm-0.1.8` | yes (Apple/Android clock, Android `c_char`) | `NUXIE_PATCH.md` |
 
 - Upstream repository: `https://github.com/pjankiewicz/luaur`
 - Upstream commit for all six packages:
@@ -84,7 +84,15 @@ Verified at the fork switch (both green, no behavioral diff):
    `get_clock_timestamp.rs`/`get_clock_period.rs` (common),
    `clock_timestamp.rs`/`clock_period.rs` (vm). Details in each package's
    `NUXIE_PATCH.md`.
-2. **Async coroutine host-data inheritance** (`luaur-rt`). Generic
+2. **Android Bionic compatibility** (`luaur-common`, `luaur-vm`). Common
+   binds Bionic's exported `clock()` directly because the Rust `libc` crate
+   omits the Android binding, and uses Bionic's 1,000,000 `CLOCKS_PER_SEC`
+   value because `libc` also omits that macro. VM uses the same clock period
+   directly because Bionic does not export `CLOCKS_PER_SEC` as a symbol, and
+   removes signed-`c_char` assumptions from profiler/name buffers,
+   comparisons, and sentinels because aarch64 Android's `c_char` is unsigned.
+   Details and touched files are in each package's `NUXIE_PATCH.md`.
+3. **Async coroutine host-data inheritance** (`luaur-rt`). Generic
    `Function::call_async` coroutines copy the invoking thread's host pointer
    before their first resume, matching Rive's
    `lua_setthreaddata(co, lua_getthreaddata(L))` on promise coroutines
@@ -92,7 +100,7 @@ Verified at the fork switch (both green, no behavioral diff):
    (`src/lua/rive_lua_libs.cpp:693`). This extends the already-ported
    Promise-specific behavior to the generic async bridge used when WebGPU
    validation must complete before an authored shader becomes visible.
-3. **State-independent userdata field dispatchers** (`luaur-rt`,
+4. **State-independent userdata field dispatchers** (`luaur-rt`,
    UNIV-1764). `create_userdata`/`create_scoped_userdata` build their
    `__index`/`__newindex` field dispatchers as Lua closures rather than Rust
    closures capturing `Table` handles. luaur-rt handles are bound to the
@@ -102,7 +110,7 @@ Verified at the fork switch (both green, no behavioral diff):
    `lua_g_indexerror`; native `index2addr` assert). Lua-closure dispatch runs
    on whichever live thread invokes the metamethod, matching mlua's
    current-state dispatch and C++ Luau's C-function metamethods.
-4. **Bytecode-only device runtime** (`luaur-rt`, UNIV-1644). Source compilation
+5. **Bytecode-only device runtime** (`luaur-rt`, UNIV-1644). Source compilation
    and its `luaur-ast`/`luaur-bytecode`/`luaur-compiler` dependencies are behind
    the default-on `compiler` feature. Compiler-free builds expose
    `Lua::load_bytecode`; small runtime-owned helper closures are precompiled by

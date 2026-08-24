@@ -384,6 +384,24 @@ enum NuxViewModelChangeOrigin
 typedef uint32_t NuxViewModelChangeOrigin;
 #endif // __cplusplus
 
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Owned frame pixels returned by the Android Vulkan renderer.
+ *
+ * `data` exposes tightly packed, top-row-first RGBA8 UNORM bytes with
+ * premultiplied alpha. Its borrowed pointer remains valid until `_free`.
+ */
+typedef struct NuxAndroidVulkanFrame NuxAndroidVulkanFrame;
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Product-neutral headless Vulkan renderer. The handle and every frame it
+ * returns are affine to the thread that created them.
+ */
+typedef struct NuxAndroidVulkanRenderer NuxAndroidVulkanRenderer;
+#endif
+
 /**
  * Owned artboard occurrence. It retains the imported [`File`] through native
  * shared ownership and therefore remains valid after its [`NuxFile`] handle
@@ -442,6 +460,10 @@ typedef struct NuxViewModelInstance NuxViewModelInstance;
 typedef struct NuxViewModelMutationResult NuxViewModelMutationResult;
 
 typedef struct NuxViewModelSnapshot NuxViewModelSnapshot;
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+typedef uint32_t NuxAndroidVulkanPixelFormat;
+#endif
 
 /**
  * Borrowed view of a [`RawPath`]: `verbs` holds `NuxPathVerb` values and
@@ -984,6 +1006,10 @@ typedef struct NuxViewModelChangeView {
   size_t list_item_count;
 } NuxViewModelChangeView;
 
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+typedef uint32_t NuxAndroidVulkanRendererFit;
+#endif
+
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 typedef uint32_t NuxRendererDisposition;
 #endif
@@ -1186,6 +1212,27 @@ typedef struct NuxViewModelSnapshotValueView {
   size_t list_item_count;
 } NuxViewModelSnapshotValueView;
 
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Tightly packed, top-row-first RGBA8 UNORM with premultiplied alpha.
+ */
+#define NUX_ANDROID_VULKAN_PIXEL_FORMAT_RGBA8_PREMULTIPLIED 1
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Uniformly scale and center the authored artboard inside the output frame.
+ */
+#define NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER 1
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Preserve authored artboard coordinates without applying a viewport fit.
+ */
+#define NUX_ANDROID_VULKAN_RENDERER_FIT_NONE 0
+#endif
+
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 #define NUX_ASSET_CALLBACK_STATUS_FAILED 2
 #endif
@@ -1295,6 +1342,37 @@ typedef struct NuxViewModelSnapshotValueView {
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Returns a borrowed pointer to the frame's tightly packed RGBA8 bytes.
+ */
+const uint8_t *nux_android_vulkan_frame_data(const struct NuxAndroidVulkanFrame *frame);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+NuxStatus nux_android_vulkan_frame_free(struct NuxAndroidVulkanFrame *frame);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+uint32_t nux_android_vulkan_frame_height(const struct NuxAndroidVulkanFrame *frame);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+size_t nux_android_vulkan_frame_len(const struct NuxAndroidVulkanFrame *frame);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+NuxAndroidVulkanPixelFormat nux_android_vulkan_frame_pixel_format(const struct NuxAndroidVulkanFrame *frame);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+uint32_t nux_android_vulkan_frame_row_stride_bytes(const struct NuxAndroidVulkanFrame *frame);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+uint32_t nux_android_vulkan_frame_width(const struct NuxAndroidVulkanFrame *frame);
+#endif
 
 /**
  * Advance the artboard timeline without a state machine. `out_changed` is
@@ -1616,6 +1694,46 @@ NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPla
                                                              size_t item_index,
                                                              uint64_t *out_instance_id);
 
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+NuxStatus nux_renderer_android_vulkan_free(struct NuxAndroidVulkanRenderer *renderer);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Renders a player into a newly owned CPU frame. `out_result` is optional and
+ * failure-only: when supplied it stays NULL on success and owns a diagnostic
+ * on failure.
+ */
+NuxStatus nux_renderer_android_vulkan_render_player(struct NuxAndroidVulkanRenderer *renderer,
+                                                    struct NuxPlayer *player,
+                                                    uint32_t clear_color,
+                                                    NuxAndroidVulkanRendererFit fit,
+                                                    struct NuxAndroidVulkanFrame **out_frame,
+                                                    struct NuxCapiResult **out_result);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Drops renderer-owned resources from the player's retained artboard and
+ * binds it to this renderer's current durable domain.
+ */
+NuxStatus nux_renderer_android_vulkan_reset_player_domain(const struct NuxAndroidVulkanRenderer *renderer,
+                                                          struct NuxPlayer *player,
+                                                          struct NuxCapiResult **out_result);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Recreates the headless target at a new non-zero extent. The durable domain
+ * and generation are retained, so players already bound to this renderer
+ * continue to render without an explicit reset.
+ */
+NuxStatus nux_renderer_android_vulkan_resize(struct NuxAndroidVulkanRenderer *renderer,
+                                             uint32_t pixel_width,
+                                             uint32_t pixel_height,
+                                             struct NuxCapiResult **out_result);
+#endif
+
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 /**
  * Copies the renderer's MTLDevice with Objective-C +1 ownership.
@@ -1639,6 +1757,16 @@ NuxStatus nux_renderer_free(struct NuxRenderer *renderer);
 NuxStatus nux_renderer_info(const struct NuxRenderer *renderer,
                             struct NuxRendererInfo *out_info,
                             struct NuxCapiResult **out_result);
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Creates a headless Vulkan renderer at the requested pixel extent.
+ */
+NuxStatus nux_renderer_new_android_vulkan(uint32_t pixel_width,
+                                          uint32_t pixel_height,
+                                          struct NuxAndroidVulkanRenderer **out_renderer,
+                                          struct NuxCapiResult **out_result);
 #endif
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))

@@ -341,10 +341,9 @@ note = "All three pinned global-view-model action streams are ported; unsupporte
 [[file]]
 upstream = "tests/unit_tests/runtime/hittest_test.cpp"
 test_case_count = 21
-status = "partial"
-evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::hittest_test.cpp provenance findings"]
-covered_test_cases = ["hittest-basics", "hittest-mesh", "hit test on opaque target", "hit test on opaque nested artboard", "early out on listeners", "Hit testing multi touch events", "Multitouch with nested artboard and pointer exit event", "Hit test leaves in collapsed layouts"]
-note = "The exhaustive FL-B/FL-C table identifies the listed names as fully covered TEST_CASEs; mixed or finding rows remain unclaimed."
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "silver-corpus.toml (all hittest_test.cpp provenance rows)", "crates/nuxie-runtime/tests/cpp_probe.rs::{upstream_click_event_fixture_initial_and_first_click_contract,upstream_click_event_fixture_reports_exact_group_click_sequence,upstream_multiple_shapes_pointer_enter_exit_sequence}"]
+note = "All 21 cases are represented. Eight earlier direct fixture ports and eleven literal renderer-silver action streams retain their exact/divergent outcomes. The click-event case executes the complete cumulative 1/1/1/2/3 report sequence. The art-2 enter/exit case preserves its fixture, advances, pointer coordinates, and green/green/red/green assertions as expected-red at the unavailable external TESTING hitComponentsCount/layerState animation-name queries."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/ik_constraint_test.cpp"

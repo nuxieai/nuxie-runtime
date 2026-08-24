@@ -21259,6 +21259,65 @@ fn upstream_click_event_fixture_reports_exact_group_click_sequence() {
 }
 
 #[test]
+#[ignore = "expected-red: Rust does not expose TESTING hitComponentsCount/layerState animation queries outside the private owner"]
+fn upstream_multiple_shapes_pointer_enter_exit_sequence() {
+    fn assert_hit_components_count(_machine: &StateMachineInstance, expected: usize) {
+        panic!(
+            "hittest_test.cpp requires StateMachineInstance::hitComponentsCount() == {expected}"
+        );
+    }
+
+    fn assert_layer_animation_name(_machine: &StateMachineInstance, expected: &str) {
+        panic!(
+            "hittest_test.cpp requires layerState(0)->AnimationState::animation()->name() == {expected:?}"
+        );
+    }
+
+    let fixture = cpp_runtime_fixture("click_event.riv");
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
+    let runtime = read_runtime_file(&bytes).expect("import click_event.riv");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("graph click_event.riv");
+    let artboard_index = graph
+        .artboards
+        .iter()
+        .position(|artboard| artboard.name.as_deref() == Some("art-2"))
+        .expect("art-2");
+    let artboard_graph = &graph.artboards[artboard_index];
+    assert_eq!(artboard_graph.state_machines.len(), 1);
+    let machine_index = artboard_graph
+        .state_machines
+        .iter()
+        .position(|machine| machine.name.as_deref() == Some("sm-1"))
+        .expect("sm-1");
+    assert_eq!(artboard_graph.state_machines[machine_index].layers.len(), 1);
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .expect("instantiate click-event art-2");
+    let mut machine = artboard
+        .state_machine_instance(machine_index)
+        .expect("instantiate sm-1");
+
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    artboard.update_components();
+    assert!(machine.needs_advance());
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    assert_hit_components_count(&machine, 2);
+
+    for (x, expected_animation) in [
+        (75.0, "green"),
+        (200.0, "green"),
+        (400.0, "red"),
+        (200.0, "green"),
+    ] {
+        machine.pointer_move(&mut artboard, x, 75.0, 0.0, 0);
+        artboard.update_components();
+        artboard.advance_state_machine_instance(&mut machine, 0.0);
+        assert_layer_animation_name(&machine, expected_animation);
+    }
+}
+
+#[test]
 fn upstream_listener_align_target_fixture_contract() {
     let fixture = cpp_runtime_fixture("align_target.riv");
     let bytes = std::fs::read(&fixture)

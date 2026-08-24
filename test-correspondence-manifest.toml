@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 60
+max_pending = 59
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -864,9 +864,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_scope_test.cpp"
 test_case_count = 5
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_scope.rs", "crates/nuxie-scripting/src/vm/lua_blob.rs"]
+note = "All five cases preserve module names and sources, registration order, cached field reads, error attribution checks, every scoped-reference candidate, the scope_probe fixture, qualified/cache fields, and the bare leak probe. The first, second, third, and fifth cases use the safe ScriptVm registration/cache APIs; the fourth exercises the private ScopedAssetReference owner directly. The exported-file case is expected-red because scope_probe is absent from the registered module cache; its three literal cached-field expectations and leak probe remain intact."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_text_runs.cpp"

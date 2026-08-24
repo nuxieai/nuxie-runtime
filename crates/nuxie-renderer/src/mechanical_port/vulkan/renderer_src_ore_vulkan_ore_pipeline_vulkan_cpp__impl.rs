@@ -9,11 +9,10 @@ use super::ore_pipeline_vulkan_decl::PipelineVulkan;
 use super::ore_shader_module_vulkan_decl::ShaderModuleVulkan;
 use super::ore_vulkan_dsl::kVkMaxGroups;
 use ash::vk;
-use nuxie_ore_metal::bind_group_layout::BindGroupLayout;
-use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
-use nuxie_ore_metal::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
-    validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,
+use nuxie_ore_metal::bind_group_layout::{
+    BindGroupLayout, validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,
 };
+use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::types::{
     BlendFactor, BlendOp, ColorWriteMask, CompareFunction, CullMode, FaceWinding, LoadOp,
     PipelineDesc, PrimitiveTopology, StencilFaceState, StencilOp, StoreOp, TextureFormat,

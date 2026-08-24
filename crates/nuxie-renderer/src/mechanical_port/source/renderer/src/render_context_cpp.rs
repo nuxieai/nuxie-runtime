@@ -4400,50 +4400,7 @@ impl RenderContext {
             }
         }
         let max_path_id = gpu::MaxPathID(features.pathIDGranularity as i32) as usize - 1;
-        let mut context = Box::pin(Self {
-            base: ManuallyDrop::new(RiveRenderFactory::default()),
-            members: ManuallyDrop::new(RenderContextMembers {
-                m_impl: owner,
-                m_max_path_id: max_path_id,
-                #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
-                m_ore_context: None,
-                m_current_resource_allocations: ResourceAllocationCounts::default(),
-                m_max_recent_resource_requirements: ResourceAllocationCounts::default(),
-                m_last_resource_trim_time_in_seconds: 0.0,
-                m_frame_descriptor: FrameDescriptor::default(),
-                m_frame_interlock_mode: gpu::InterlockMode::msaa,
-                m_frame_shader_features_mask: gpu::ShaderFeatures::NONE,
-                #[cfg(debug_assertions)]
-                m_did_begin_frame: false,
-                m_clip_content_id: 0,
-                m_coverage_buffer_prefix: 0,
-                m_indirect_draw_list: Vec::new(),
-                m_intersection_board: None,
-                m_scissor_id_lookup: HashMap::new(),
-                m_prev_scissor_id: -1,
-                m_flush_uniform_data: gpu::WriteOnlyMappedMemory::default(),
-                m_path_data: gpu::WriteOnlyMappedMemory::default(),
-                m_paint_data: gpu::WriteOnlyMappedMemory::default(),
-                m_paint_aux_data: gpu::WriteOnlyMappedMemory::default(),
-                m_contour_data: gpu::WriteOnlyMappedMemory::default(),
-                m_grad_span_data: gpu::WriteOnlyMappedMemory::default(),
-                m_tess_span_data: gpu::WriteOnlyMappedMemory::default(),
-                m_triangle_vertex_data: gpu::WriteOnlyMappedMemory::default(),
-                m_image_draw_instance_data: gpu::WriteOnlyMappedMemory::default(),
-                m_per_frame_allocator: TrivialBlockAllocator::default(),
-                m_num_chops_allocator: TrivialArrayAllocator::default(),
-                m_chop_vertices_allocator: TrivialArrayAllocator::default(),
-                m_tangent_pairs_allocator: TrivialArrayAllocator::default(),
-                m_polar_segment_counts_allocator: TrivialArrayAllocator::default(),
-                m_parametric_segment_counts_allocator: TrivialArrayAllocator::default(),
-                m_logical_flushes: Vec::new(),
-            }),
-            #[cfg(feature = "rive-ktx2")]
-            m_ktx2_decoder: None,
-            #[cfg(feature = "rive-decoders")]
-            m_bitmap_decoder: None,
-            _pin: PhantomPinned,
-        });
+        let mut context = Self::pinFromOwner(owner, max_path_id);
         unsafe {
             let this = Pin::get_unchecked_mut(context.as_mut());
             this.setResourceSizes(ResourceAllocationCounts::default(), true);

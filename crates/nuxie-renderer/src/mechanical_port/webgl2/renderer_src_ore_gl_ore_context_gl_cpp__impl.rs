@@ -918,7 +918,7 @@ fn makePipelineCurrent(
     // erased base constructor cannot discover ShaderModuleGL on its own.
     *pipeline.m_bindingMap = vertexModule.m_bindingMap.clone();
 
-    use nuxie_ore_metal::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
+    use nuxie_ore_metal::bind_group_layout::{
         validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,
     };
     let layoutCount = desc.bindGroupLayoutCount().ok()? as usize;

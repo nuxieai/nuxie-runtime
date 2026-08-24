@@ -13,13 +13,22 @@ pub(crate) fn live_metal_test_unavailable(context: &str) {
     }
 }
 
-pub mod mechanical_port;
+// Raw source-shaped modules are the shared translation's member/friend zone.
+// Consumers use the controlled public modules below and cannot assemble or
+// split intrusive bases, retained arrays, manager links, or ManuallyDrop owner
+// graphs directly.
+mod mechanical_port;
 
 pub mod bind_group {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_hpp::*;
 }
 pub mod bind_group_layout {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_layout_hpp::*;
+    #[doc(hidden)]
+    pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
+        validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,
+        validateLayoutsAgainstBindingMap,
+    };
 }
 pub mod binding_map {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_binding_map_hpp::*;

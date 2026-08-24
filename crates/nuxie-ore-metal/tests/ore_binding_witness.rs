@@ -5,11 +5,11 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::time::{Duration, Instant};
 
-use nuxie_ore_metal::mechanical_port::source::renderer::include::rive::renderer::ore::ore_binding_map_hpp::{BindingMap, ResourceKind};
-use nuxie_ore_metal::mechanical_port::source::renderer::include::rive::renderer::ore::ore_context_hpp::FrameDescriptor;
-use nuxie_ore_metal::mechanical_port::source::renderer::include::rive::renderer::ore::ore_context_metal_hpp::ContextMetal;
-use nuxie_ore_metal::mechanical_port::source::renderer::src::ore::metal::ore_shader_module_metal_hpp::ShaderModuleMetal;
-use nuxie_ore_metal::mechanical_port::source::renderer::include::rive::renderer::ore::ore_types_hpp::{
+use nuxie_ore_metal::binding_map::{BindingMap, ResourceKind};
+use nuxie_ore_metal::context::FrameDescriptor;
+use nuxie_ore_metal::metal::context::ContextMetal;
+use nuxie_ore_metal::metal::shader_module::ShaderModuleMetal;
+use nuxie_ore_metal::types::{
     BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
     ClearColor, ColorAttachment, ColorTargetState, PipelineDesc, RenderPassDesc, ShaderModuleDesc,
     StageVisibility, TextureFormat, UBOEntry,

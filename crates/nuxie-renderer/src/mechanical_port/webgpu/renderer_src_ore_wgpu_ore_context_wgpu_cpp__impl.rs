@@ -683,13 +683,13 @@ pub(crate) fn makePipeline(
     }
 
     let mut error = String::new();
-    let layoutsValid = nuxie_ore_metal::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::validateLayoutsAgainstBindingMap(
+    let layoutsValid = nuxie_ore_metal::bind_group_layout::validateLayoutsAgainstBindingMap(
         &pipeline.m_bindingMap,
         desc.bindGroupLayouts,
         desc.bindGroupLayoutCount,
         Some(&mut error),
     );
-    let colorsValid = nuxie_ore_metal::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::validateColorRequiresFragment(
+    let colorsValid = nuxie_ore_metal::bind_group_layout::validateColorRequiresFragment(
         desc.colorCount,
         desc.fragmentModule.is_some(),
         Some(&mut error),

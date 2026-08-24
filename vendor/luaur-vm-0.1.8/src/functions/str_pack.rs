@@ -74,7 +74,7 @@ pub unsafe fn str_pack(L: *mut lua_State) -> c_int {
             KOption::Kfloat => {
                 // floating-point options
                 let mut u = Ftypes { n: 0.0 };
-                let mut buff = [0i8; 16]; // MAXINTSIZE
+                let mut buff = [0 as c_char; 16]; // MAXINTSIZE
                 let n = lua_l_checknumber(L, arg); // get argument
                 if size as usize == core::mem::size_of::<core::ffi::c_float>() {
                     u.f = n as core::ffi::c_float; // copy it into 'u'

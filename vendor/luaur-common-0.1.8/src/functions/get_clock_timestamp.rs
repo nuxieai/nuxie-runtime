@@ -1,3 +1,10 @@
+// The Rust libc crate omits bionic's `clock` binding even though Android's
+// time.h exports it. Keep the fallback profiler clock available on Android.
+#[cfg(target_os = "android")]
+unsafe extern "C" {
+    fn clock() -> libc::clock_t;
+}
+
 pub(crate) fn get_clock_timestamp() -> f64 {
     #[cfg(target_os = "windows")]
     {
@@ -36,6 +43,7 @@ pub(crate) fn get_clock_timestamp() -> f64 {
         not(target_arch = "wasm32"),
         not(any(
             target_os = "windows",
+            target_os = "android",
             target_vendor = "apple",
             target_os = "linux",
             target_os = "freebsd"
@@ -43,5 +51,9 @@ pub(crate) fn get_clock_timestamp() -> f64 {
     ))]
     {
         unsafe { libc::clock() as f64 }
+    }
+    #[cfg(target_os = "android")]
+    {
+        unsafe { clock() as f64 }
     }
 }

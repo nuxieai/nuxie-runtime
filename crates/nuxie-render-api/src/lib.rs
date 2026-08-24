@@ -1139,12 +1139,13 @@ pub struct GpuCanvasShaderBinding {
 
 /// The authored shader representation requested by a renderer factory.
 ///
-/// WebGPU remains the default. Apple Metal is an explicit opt-in so adding the
-/// native decoder cannot change editor, browser, or existing runtime behavior.
+/// WebGPU remains the default. WebGL2 is selected by the exact browser fallback
+/// factory. Apple Metal is an explicit trusted-native opt-in.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum GpuCanvasShaderProfile {
     #[default]
     WebGpu,
+    WebGl2,
     TrustedAppleMetal,
 }
 
@@ -1359,6 +1360,8 @@ pub struct GpuCanvasShader {
     pub source: String,
     pub entries: Vec<GpuCanvasShaderEntry>,
     pub bindings: Vec<GpuCanvasShaderBinding>,
+    /// Exact target-16 bytes consumed by the ORE WebGPU module constructor.
+    pub binding_map_bytes: Arc<[u8]>,
 }
 
 impl GpuCanvasShader {
@@ -1373,9 +1376,40 @@ impl GpuCanvasShader {
     }
 }
 
+/// One texture/sampler pair lowered into a combined GLSL sampler uniform.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GpuCanvasShaderTextureSamplerPair {
+    pub texture_group: u8,
+    pub texture_binding: u8,
+    pub sampler_group: u8,
+    pub sampler_binding: u8,
+}
+
+/// Trusted-compiler WebGL2 projection selected from one RSTB ShaderAsset.
+///
+/// GLSL is stored per entry because each WebGL2 shader module has physical
+/// entry point `main`. `sources` and `entries` share index ordering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasWebGl2Shader {
+    pub entries: Vec<GpuCanvasShaderEntry>,
+    pub sources: Vec<String>,
+    pub bindings: Vec<GpuCanvasShaderBinding>,
+    pub binding_map_bytes: Arc<[u8]>,
+    pub vertex_gl_fixup_bytes: Arc<[u8]>,
+    pub fragment_gl_fixup_bytes: Arc<[u8]>,
+    pub texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
+}
+
+impl GpuCanvasWebGl2Shader {
+    pub fn source_for_entry(&self, entry_index: usize) -> Option<&str> {
+        self.sources.get(entry_index).map(String::as_str)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GpuCanvasShaderArtifact {
     WebGpu(GpuCanvasShader),
+    WebGl2(GpuCanvasWebGl2Shader),
     TrustedAppleMetal(GpuCanvasAppleMetalShader),
 }
 
@@ -1383,6 +1417,7 @@ impl GpuCanvasShaderArtifact {
     pub fn entries(&self) -> &[GpuCanvasShaderEntry] {
         match self {
             Self::WebGpu(shader) => &shader.entries,
+            Self::WebGl2(shader) => &shader.entries,
             Self::TrustedAppleMetal(shader) => shader.entries(),
         }
     }
@@ -1390,6 +1425,7 @@ impl GpuCanvasShaderArtifact {
     pub fn bindings(&self) -> &[GpuCanvasShaderBinding] {
         match self {
             Self::WebGpu(shader) => &shader.bindings,
+            Self::WebGl2(shader) => &shader.bindings,
             Self::TrustedAppleMetal(shader) => shader.bindings(),
         }
     }
@@ -2221,6 +2257,7 @@ pub trait Factory {
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         match shader {
             GpuCanvasShaderArtifact::WebGpu(shader) => self.make_gpu_canvas_shader(shader),
+            GpuCanvasShaderArtifact::WebGl2(_) => Err(GpuCanvasError::unsupported()),
             GpuCanvasShaderArtifact::TrustedAppleMetal(_) => Err(GpuCanvasError::unsupported()),
         }
     }
@@ -2234,7 +2271,7 @@ pub trait Factory {
     ) -> GpuCanvasShaderLoad {
         match shader {
             GpuCanvasShaderArtifact::WebGpu(shader) => self.load_gpu_canvas_shader(shader),
-            GpuCanvasShaderArtifact::TrustedAppleMetal(_) => {
+            GpuCanvasShaderArtifact::WebGl2(_) | GpuCanvasShaderArtifact::TrustedAppleMetal(_) => {
                 GpuCanvasShaderLoad::Ready(self.make_gpu_canvas_shader_artifact(shader))
             }
         }

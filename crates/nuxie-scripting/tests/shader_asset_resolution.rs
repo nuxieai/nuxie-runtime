@@ -1007,6 +1007,7 @@ fn opaque_shader_handles_are_rejected_by_another_factory_domain() {
         source: "domain-source".into(),
         entries: Vec::new(),
         bindings: Vec::new(),
+        binding_map_bytes: Arc::from([]),
     };
     let mut first = persistent_observing_factory();
     let handle = first.make_gpu_canvas_shader(&shader).unwrap();

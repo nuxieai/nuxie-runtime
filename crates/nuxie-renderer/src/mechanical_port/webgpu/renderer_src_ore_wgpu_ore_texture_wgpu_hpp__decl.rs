@@ -5,9 +5,7 @@
 
 use super::webgpu_cpp_decl::{Queue as WagyuQueue, Texture as WagyuTexture};
 use super::webgpu_cpp_decl::TextureView as WagyuTextureView;
-use nuxie_ore_metal::gpu_resource::{
-    AnyResourceHandle, GPUResource, GPUResourceManager, GpuResourcePayload,
-};
+use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, GPUResource, GpuResourcePayload};
 use nuxie_ore_metal::texture::{Texture, TextureApi, TextureUploadError, TextureView};
 use nuxie_ore_metal::types::{
     TextureDataDesc, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
@@ -27,9 +25,11 @@ pub(crate) struct TextureWGPU {
 }
 
 impl TextureWGPU {
-    pub(crate) fn new(manager: GPUResourceManager, desc: &TextureDesc<'_>) -> Self {
+    pub(crate) fn new(desc: &TextureDesc<'_>) -> Self {
         Self {
-            base: ManuallyDrop::new(nuxie_ore_metal::new_texture_backend_base(manager, desc)),
+            base: ManuallyDrop::new(nuxie_ore_metal::new_texture_backend_base_without_manager(
+                desc,
+            )),
             m_wgpuTexture: ManuallyDrop::new(WagyuTexture::default()),
             m_wgpuQueue: ManuallyDrop::new(WagyuQueue::default()),
         }
@@ -88,14 +88,13 @@ pub(crate) struct TextureViewWGPU {
 
 impl TextureViewWGPU {
     pub(crate) fn new(
-        manager: GPUResourceManager,
         texture: AnyResourceHandle,
         desc: &TextureViewDesc<'_>,
     ) -> Self {
         Self {
-            base: ManuallyDrop::new(nuxie_ore_metal::new_texture_view_backend_base(
-                manager, texture, desc,
-            )),
+            base: ManuallyDrop::new(
+                nuxie_ore_metal::new_texture_view_backend_base_without_manager(texture, desc),
+            ),
             m_wgpuTextureView: ManuallyDrop::new(WagyuTextureView::default()),
         }
     }
@@ -155,5 +154,12 @@ mod tests {
         assert_eq!(size_of::<WagyuTexture>(), size_of::<usize>());
         assert_eq!(size_of::<WagyuQueue>(), size_of::<usize>());
         assert_eq!(size_of::<WagyuTextureView>(), size_of::<usize>());
+    }
+
+    #[test]
+    fn source_constructors_leave_manager_installation_to_resource_publication() {
+        let texture = ManuallyDrop::new(TextureWGPU::new(&TextureDesc::default()));
+
+        assert!(texture.gpu_resource().manager().is_none());
     }
 }

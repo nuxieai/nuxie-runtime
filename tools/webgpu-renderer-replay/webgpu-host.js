@@ -6,6 +6,11 @@ const preparedSessions = new Map();
 const pendingPreparedSessionIds = [];
 let nextPreparedSessionId = 1;
 
+function traceWebGpu(phase, detail) {
+  const trace = globalThis.__nuxieWebGpuTrace;
+  if (typeof trace === "function") trace(phase, detail);
+}
+
 function preparedSession(sessionId) {
   const session = preparedSessions.get(sessionId);
   if (!session) {
@@ -40,6 +45,12 @@ export async function prepareWebGpu(canvas) {
     ? ["clip-distances"]
     : [];
   const device = await adapter.requestDevice({ requiredFeatures });
+  device.addEventListener("uncapturederror", ({ error }) => {
+    traceWebGpu("uncaptured-error", error?.message ?? String(error));
+  });
+  void device.lost.then((info) => {
+    traceWebGpu("device-lost", info.message);
+  });
   if (nextPreparedSessionId > 0xffffffff) {
     device.destroy();
     throw new Error("WebGPU session identifier space is exhausted");
@@ -65,11 +76,13 @@ export async function waitForWebGpu(sessionId) {
 
 export async function captureWebGpuPixels(sessionId) {
   const session = preparedSession(sessionId);
+  traceWebGpu("capture-start", sessionId);
   if (!session.surfaceTexture) {
     throw new Error("WebGPU replay did not produce a surface texture");
   }
   const bytesPerRow = Math.ceil((session.surfaceWidth * 4) / 256) * 256;
   const buffer = session.device.createBuffer({
+    label: "nuxie-gpu-canvas-readback",
     size: bytesPerRow * session.surfaceHeight,
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
   });
@@ -88,7 +101,9 @@ export async function captureWebGpuPixels(sessionId) {
     },
   );
   session.device.queue.submit([encoder.finish()]);
+  traceWebGpu("capture-submitted", sessionId);
   await buffer.mapAsync(GPUMapMode.READ);
+  traceWebGpu("capture-mapped", sessionId);
   const mapped = new Uint8Array(buffer.getMappedRange());
   const pixels = new Uint8Array(session.surfaceWidth * session.surfaceHeight * 4);
   const packedBytesPerRow = session.surfaceWidth * 4;
@@ -175,6 +190,21 @@ export function createWebGpuImports(getWasm) {
       while (u8()[data + length]) length += 1;
     }
     return new TextDecoder().decode(u8().subarray(data, data + length));
+  };
+  const readShaderModuleCode = (chain) => {
+    const sType = i32()[(chain + 4) >>> 2];
+    if (sType === 393228) {
+      const length = u32()[(chain + 8) >>> 2];
+      const data = u32()[(chain + 12) >>> 2];
+      const language = i32()[(chain + 16) >>> 2];
+      if (language !== 3) {
+        throw new Error(
+          `browser WebGPU host only accepts Wagyu WGSL modules; received language ${language}`,
+        );
+      }
+      return new TextDecoder().decode(u8().subarray(data, data + length));
+    }
+    return readStringView(chain + 8);
   };
   const writeStringView = (pointer, value) => {
     const bytes = new TextEncoder().encode(value);
@@ -691,10 +721,11 @@ export function createWebGpuImports(getWasm) {
     },
     wgpuDeviceCreateShaderModule: (device, descriptor) => {
       const chain = u32()[descriptor >>> 2];
+      const code = chain ? readShaderModuleCode(chain) : "";
       return addObject(
         object(device).createShaderModule({
           label: readStringView(descriptor + 4, true),
-          code: chain ? readStringView(chain + 8) : "",
+          code,
         }),
       );
     },
@@ -874,6 +905,8 @@ export function createWebGpuImports(getWasm) {
       object(pass).setPipeline(object(pipeline)),
     wgpuRenderPassEncoderSetStencilReference: (pass, reference) =>
       object(pass).setStencilReference(reference >>> 0),
+    wgpuRenderPassEncoderSetBlendConstant: (pass, value) =>
+      object(pass).setBlendConstant(color(value)),
     wgpuRenderPassEncoderSetVertexBuffer: (pass, slot, buffer, offset, size) =>
       object(pass).setVertexBuffer(
         slot,
@@ -917,7 +950,7 @@ export function createWebGpuImports(getWasm) {
 
   for (const name of [
     "wgpuQueue", "wgpuBuffer", "wgpuDevice", "wgpuAdapter", "wgpuTexture",
-    "wgpuTextureView", "wgpuShaderModule", "wgpuCommandEncoder",
+    "wgpuTextureView", "wgpuShaderModule", "wgpuCommandEncoder", "wgpuSampler",
     "wgpuRenderPipeline", "wgpuBindGroupLayout", "wgpuRenderPassEncoder",
   ]) {
     imports[`${name}AddRef`] = addRef;

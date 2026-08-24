@@ -338,7 +338,7 @@ pub(crate) fn makeBuffer(
     desc: &BufferDesc<'_>,
 ) -> Option<AnyResourceHandle> {
     let (manager, domain) = managerAndDomain(context)?;
-    let mut buffer = BufferWGPU::new(manager.clone(), desc.size, desc.usage, context);
+    let mut buffer = BufferWGPU::new(desc.size, desc.usage, context);
     {
         let state = buffer
             .state
@@ -399,7 +399,7 @@ pub(crate) fn makeTexture(
     desc: &TextureDesc<'_>,
 ) -> Option<AnyResourceHandle> {
     let (manager, domain) = managerAndDomain(context)?;
-    let mut texture = TextureWGPU::new(manager.clone(), desc);
+    let mut texture = TextureWGPU::new(desc);
     texture.setQueue((&*context.m_wgpuQueue).clone());
 
     let mut usage = WgpuTextureUsage::TextureBinding | WgpuTextureUsage::CopyDst;
@@ -428,7 +428,7 @@ pub(crate) fn makeTextureView(
     let textureOwner = desc.texture?.clone();
     let texture = textureOwner.downcast_ref::<TextureWGPU>()?;
     let (manager, domain) = managerAndDomain(context)?;
-    let mut view = TextureViewWGPU::new(manager.clone(), textureOwner.clone(), desc);
+    let mut view = TextureViewWGPU::new(textureOwner.clone(), desc);
     let mut wDesc = WGPUTextureViewDescriptor::default();
     wDesc.dimension = oreViewDimToWGPU(desc.dimension).into();
     wDesc.aspect = oreAspectToWGPU(desc.aspect).into();
@@ -552,7 +552,7 @@ pub(crate) fn makePipeline(
     assert!(desc.colorCount as usize <= 4);
     assert!(bindGroupLayoutCount <= kMaxBindGroups as usize);
     let (manager, domain) = managerAndDomain(context)?;
-    let mut pipeline = PipelineWGPU::new(manager.clone(), desc)?;
+    let mut pipeline = PipelineWGPU::new(desc)?;
 
     let mut wAttribs: [WGPUVertexAttribute; kMaxAttribs] =
         std::array::from_fn(|_| WGPUVertexAttribute::default());
@@ -916,7 +916,7 @@ pub(crate) fn makeBindGroup(
 
     let (manager, domain) = managerAndDomain(context)?;
     let nativeLayout = layout.native().clone();
-    let mut group = BindGroupWGPU::new(manager.clone(), context);
+    let mut group = BindGroupWGPU::new(context);
     nuxie_ore_metal::install_bind_group_backend_parts(
         &mut group,
         dynamicCount,
@@ -1087,7 +1087,7 @@ pub(crate) unsafe fn wrapCanvasTexture(
         ..TextureDesc::default()
     };
     let (manager, domain) = managerAndDomain(context)?;
-    let mut texture = TextureWGPU::new(manager.clone(), &textureDesc);
+    let mut texture = TextureWGPU::new(&textureDesc);
     texture.setNativeTexture(target.targetTexture());
     let textureOwner =
         ResourceHandle::new_texture_in_domain(Some(manager.clone()), domain.clone(), texture)
@@ -1101,7 +1101,7 @@ pub(crate) unsafe fn wrapCanvasTexture(
         baseLayer: 0,
         layerCount: 1,
     };
-    let mut view = TextureViewWGPU::new(manager.clone(), textureOwner.clone(), &viewDesc);
+    let mut view = TextureViewWGPU::new(textureOwner.clone(), &viewDesc);
     view.setNative(target.targetTextureView());
     Some(ResourceHandle::new_in_domain(Some(manager), domain, view).erase())
 }
@@ -1131,7 +1131,7 @@ pub(crate) unsafe fn wrapRiveTexture(
         ..TextureDesc::default()
     };
     let (manager, domain) = managerAndDomain(context)?;
-    let mut texture = TextureWGPU::new(manager.clone(), &textureDesc);
+    let mut texture = TextureWGPU::new(&textureDesc);
     texture.setNativeTexture(nativeTexture);
     let textureOwner =
         ResourceHandle::new_texture_in_domain(Some(manager.clone()), domain.clone(), texture)
@@ -1154,7 +1154,7 @@ pub(crate) unsafe fn wrapRiveTexture(
     nativeViewDesc.baseArrayLayer = 0;
     nativeViewDesc.arrayLayerCount = 1;
     let nativeView = unsafe { texture.nativeTexture().CreateView(&nativeViewDesc) };
-    let mut view = TextureViewWGPU::new(manager.clone(), textureOwner.clone(), &viewDesc);
+    let mut view = TextureViewWGPU::new(textureOwner.clone(), &viewDesc);
     view.setNative(nativeView);
     Some(ResourceHandle::new_in_domain(Some(manager), domain, view).erase())
 }

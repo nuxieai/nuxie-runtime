@@ -9,7 +9,7 @@ use super::webgpu_cpp_decl::{
 };
 use super::webgpu_decl::WGPUBuffer;
 use nuxie_ore_metal::buffer::{Buffer, BufferApi, BufferUpdateError};
-use nuxie_ore_metal::gpu_resource::{GPUResource, GPUResourceManager, GpuResourcePayload};
+use nuxie_ore_metal::gpu_resource::{GPUResource, GpuResourcePayload};
 use nuxie_ore_metal::types::BufferUsage;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
@@ -69,14 +69,13 @@ pub(crate) struct BufferWGPU {
 
 impl BufferWGPU {
     pub(crate) fn new(
-        manager: GPUResourceManager,
         size: u32,
         usage: BufferUsage,
         context: &mut ContextWGPU,
     ) -> Self {
         Self {
-            base: ManuallyDrop::new(nuxie_ore_metal::new_buffer_backend_base(
-                manager, size, usage,
+            base: ManuallyDrop::new(nuxie_ore_metal::new_buffer_backend_base_without_manager(
+                size, usage,
             )),
             state: ManuallyDrop::new(Mutex::new(BufferWGPUState {
                 m_pool: ManuallyDrop::new(Vec::new()),

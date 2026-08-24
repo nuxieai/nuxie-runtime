@@ -11,7 +11,7 @@ use super::webgpu_cpp_decl::{
 };
 use super::webgpu_decl::WGPUBuffer;
 use nuxie_ore_metal::bind_group::BindGroup;
-use nuxie_ore_metal::gpu_resource::{GPUResource, GPUResourceManager, GpuResourcePayload};
+use nuxie_ore_metal::gpu_resource::{GPUResource, GpuResourcePayload};
 use std::cell::UnsafeCell;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
@@ -73,9 +73,11 @@ pub(crate) struct BindGroupWGPU {
 }
 
 impl BindGroupWGPU {
-    pub(crate) fn new(manager: GPUResourceManager, context: &mut ContextWGPU) -> Self {
+    pub(crate) fn new(context: &mut ContextWGPU) -> Self {
         Self {
-            base: ManuallyDrop::new(nuxie_ore_metal::new_bind_group_backend_base(manager)),
+            base: ManuallyDrop::new(
+                nuxie_ore_metal::new_bind_group_backend_base_without_manager(),
+            ),
             m_uboEntries: ManuallyDrop::new(Vec::new()),
             m_texEntries: ManuallyDrop::new(Vec::new()),
             m_sampEntries: ManuallyDrop::new(Vec::new()),

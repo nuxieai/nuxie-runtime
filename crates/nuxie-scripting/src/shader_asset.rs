@@ -14,7 +14,8 @@ use nuxie_render_api::{
 use nuxie_render_api::{
     GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
     GpuCanvasShaderProfile, GpuCanvasShaderProvenance, GpuCanvasShaderResourceKind,
-    GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
+    GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureSamplerPair,
+    GpuCanvasShaderTextureViewDimension, GpuCanvasWebGl2Shader,
 };
 #[cfg(any(feature = "apple-authored-msl", test))]
 use sha2::{Digest, Sha256};
@@ -28,6 +29,11 @@ const RSTB_MAGIC: u32 = 0x5253_5442;
 const RSTB_VERSION: u16 = 4;
 const WGSL_SOURCE_TARGET: u8 = 0;
 const WGSL_BINDING_MAP_TARGET: u8 = 16;
+const WEBGL2_SOURCE_TARGET: u8 = 1;
+const WEBGL2_BINDING_MAP_TARGET: u8 = 11;
+const WEBGL2_VERTEX_FIXUP_TARGET: u8 = 14;
+const WEBGL2_FRAGMENT_FIXUP_TARGET: u8 = 15;
+const TEXTURE_SAMPLER_PAIR_SECTION: u8 = 1;
 #[cfg(any(feature = "apple-authored-msl", test))]
 const APPLE_METAL_SOURCE_TARGET: u8 = 2;
 #[cfg(any(feature = "apple-authored-msl", test))]
@@ -59,6 +65,7 @@ struct VariantDescriptor {
 pub(crate) struct ShaderAsset {
     blob_data: Vec<u8>,
     variants: [Option<Range<usize>>; 256],
+    texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
     #[cfg(any(feature = "apple-authored-msl", test))]
     supplemental_reflection: Option<Vec<u8>>,
     #[cfg(any(feature = "apple-authored-msl", test))]
@@ -102,12 +109,23 @@ impl ShaderAsset {
                     .map_err(|_| Error::runtime("RSTB variant size is not addressable"))?,
             });
         }
+        let mut texture_sampler_pairs = Vec::new();
+        let mut has_texture_sampler_pairs = false;
         #[cfg(any(feature = "apple-authored-msl", test))]
         let mut supplemental_reflection = None;
         for _ in 0..section_count {
             let tag = cursor.read_u8("section tag")?;
             let length = usize::from(cursor.read_u16("section length")?);
             let section = cursor.read_bytes(length, "section payload")?;
+            if tag == TEXTURE_SAMPLER_PAIR_SECTION {
+                if has_texture_sampler_pairs {
+                    return Err(Error::runtime(
+                        "RSTB contains duplicate texture/sampler pair sections",
+                    ));
+                }
+                has_texture_sampler_pairs = true;
+                texture_sampler_pairs = decode_texture_sampler_pairs(name, section)?;
+            }
             #[cfg(any(feature = "apple-authored-msl", test))]
             if tag == SUPPLEMENTAL_REFLECTION_SECTION {
                 if supplemental_reflection.is_some() {
@@ -118,7 +136,7 @@ impl ShaderAsset {
                 supplemental_reflection = Some(section.to_vec());
             }
             #[cfg(not(any(feature = "apple-authored-msl", test)))]
-            let _ = (tag, section);
+            let _ = section;
         }
 
         let blob_data = cursor.read_bytes(cursor.remaining(), "blob data")?;
@@ -143,6 +161,7 @@ impl ShaderAsset {
         Ok(Self {
             blob_data: blob_data.to_vec(),
             variants,
+            texture_sampler_pairs,
             #[cfg(any(feature = "apple-authored-msl", test))]
             supplemental_reflection,
             #[cfg(any(feature = "apple-authored-msl", test))]
@@ -167,6 +186,41 @@ impl ShaderAsset {
         decode_whole_module_wgsl(name, wgsl, binding_map)
     }
 
+    pub(crate) fn decode_webgl2(&self, name: &str) -> Result<GpuCanvasWebGl2Shader> {
+        let source = self.variant(WEBGL2_SOURCE_TARGET).ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no WebGL2 RSTB target-1 GLSL source"
+            ))
+        })?;
+        let binding_map = self.variant(WEBGL2_BINDING_MAP_TARGET).ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no mandatory WebGL2 RSTB target-11 binding map"
+            ))
+        })?;
+        let vertex_fixup = self.variant(WEBGL2_VERTEX_FIXUP_TARGET).ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no mandatory WebGL2 target-14 vertex fixup"
+            ))
+        })?;
+        let fragment_fixup = self.variant(WEBGL2_FRAGMENT_FIXUP_TARGET).ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no mandatory WebGL2 target-15 fragment fixup"
+            ))
+        })?;
+        let (entries, sources) = decode_per_entry_glsl(name, source)?;
+        validate_gl_fixup(name, "vertex", vertex_fixup)?;
+        validate_gl_fixup(name, "fragment", fragment_fixup)?;
+        Ok(GpuCanvasWebGl2Shader {
+            entries,
+            sources,
+            bindings: decode_binding_map(name, binding_map)?,
+            binding_map_bytes: std::sync::Arc::from(binding_map),
+            vertex_gl_fixup_bytes: std::sync::Arc::from(vertex_fixup),
+            fragment_gl_fixup_bytes: std::sync::Arc::from(fragment_fixup),
+            texture_sampler_pairs: self.texture_sampler_pairs.clone(),
+        })
+    }
+
     pub(crate) fn decode_for_profile(
         &self,
         name: &str,
@@ -177,6 +231,9 @@ impl ShaderAsset {
             GpuCanvasShaderProfile::WebGpu => self
                 .decode_webgpu(name)
                 .map(GpuCanvasShaderArtifact::WebGpu),
+            GpuCanvasShaderProfile::WebGl2 => self
+                .decode_webgl2(name)
+                .map(GpuCanvasShaderArtifact::WebGl2),
             #[cfg(any(feature = "apple-authored-msl", test))]
             GpuCanvasShaderProfile::TrustedAppleMetal => self
                 .decode_apple_metal(name, provenance)
@@ -266,6 +323,23 @@ impl ShaderAsset {
     }
 }
 
+/// Decode one trusted, precompiled browser `ShaderAsset` for the renderer
+/// profile selected by the caller. Source translation is intentionally absent:
+/// the payload must already contain the exact RSTB target and sidecars required
+/// by WebGPU or WebGL2.
+pub fn decode_browser_shader_asset(
+    name: &str,
+    payload: &[u8],
+    profile: GpuCanvasShaderProfile,
+) -> Result<GpuCanvasShaderArtifact> {
+    if profile == GpuCanvasShaderProfile::TrustedAppleMetal {
+        return Err(Error::runtime(
+            "browser ShaderAsset decoding does not authorize native Metal code",
+        ));
+    }
+    ShaderAsset::decode(name, payload)?.decode_for_profile(name, profile, None)
+}
+
 struct Cursor<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -344,7 +418,122 @@ fn decode_whole_module_wgsl(
         source,
         entries,
         bindings: decode_binding_map(name, binding_map)?,
+        binding_map_bytes: std::sync::Arc::from(binding_map),
     })
+}
+
+fn decode_per_entry_glsl(
+    name: &str,
+    source_container: &[u8],
+) -> Result<(Vec<GpuCanvasShaderEntry>, Vec<String>)> {
+    let mut cursor = Cursor::new(source_container);
+    let entry_count = usize::from(cursor.read_u8("GLSL entry count")?);
+    if entry_count == 0 {
+        return Err(Error::runtime(format!(
+            "ShaderAsset '{name}' GLSL entry table is empty"
+        )));
+    }
+    let mut entries = Vec::with_capacity(entry_count);
+    let mut sources = Vec::with_capacity(entry_count);
+    for _ in 0..entry_count {
+        let stage = match cursor.read_u8("GLSL shader stage")? {
+            0 => GpuCanvasShaderStage::Vertex,
+            1 => GpuCanvasShaderStage::Fragment,
+            other => {
+                return Err(Error::runtime(format!(
+                    "ShaderAsset '{name}' WebGL2 stage {other} is unsupported"
+                )));
+            }
+        };
+        let logical_entry_point = cursor.read_string("GLSL logical entry point")?;
+        let physical_entry_point = cursor.read_string("GLSL physical entry point")?;
+        if logical_entry_point.is_empty() || physical_entry_point != "main" {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' WebGL2 entries require a logical name and physical entry 'main'"
+            )));
+        }
+        let source_length = usize::try_from(cursor.read_u32("GLSL source length")?)
+            .map_err(|_| Error::runtime("GLSL source length is not addressable"))?;
+        if source_length == 0 || source_length > MAX_SHADER_MODULE_BYTES {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' GLSL module size must be between 1 and {MAX_SHADER_MODULE_BYTES} bytes"
+            )));
+        }
+        let source = std::str::from_utf8(cursor.read_bytes(source_length, "GLSL source")?)
+            .map_err(|_| Error::runtime(format!("ShaderAsset '{name}' GLSL source is not UTF-8")))?
+            .to_owned();
+        if !source.starts_with("#version 300 es") {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' WebGL2 source is not GLSL ES 3.00"
+            )));
+        }
+        entries.push(GpuCanvasShaderEntry {
+            stage,
+            logical_entry_point,
+            physical_entry_point,
+        });
+        sources.push(source);
+    }
+    if cursor.remaining() != 0 {
+        return Err(Error::runtime(format!(
+            "ShaderAsset '{name}' GLSL entry container has trailing bytes"
+        )));
+    }
+    Ok((entries, sources))
+}
+
+fn validate_gl_fixup(name: &str, stage: &str, bytes: &[u8]) -> Result<()> {
+    let mut cursor = Cursor::new(bytes);
+    if cursor.read_u8("GL fixup version")? != 1 {
+        return Err(Error::runtime(format!(
+            "ShaderAsset '{name}' {stage} GL fixup has unsupported version"
+        )));
+    }
+    let count = usize::from(cursor.read_u16("GL fixup count")?);
+    for _ in 0..count {
+        let kind = cursor.read_u8("GL fixup kind")?;
+        if kind > 1 {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' {stage} GL fixup has unknown kind {kind}"
+            )));
+        }
+        let _slot = cursor.read_u8("GL fixup slot")?;
+        let entry_name = cursor.read_string("GL fixup name")?;
+        if entry_name.is_empty() {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' {stage} GL fixup has an empty name"
+            )));
+        }
+    }
+    if cursor.remaining() != 0 {
+        return Err(Error::runtime(format!(
+            "ShaderAsset '{name}' {stage} GL fixup has trailing bytes"
+        )));
+    }
+    Ok(())
+}
+
+fn decode_texture_sampler_pairs(
+    name: &str,
+    bytes: &[u8],
+) -> Result<Vec<GpuCanvasShaderTextureSamplerPair>> {
+    let mut cursor = Cursor::new(bytes);
+    let count = usize::from(cursor.read_u8("texture/sampler pair count")?);
+    let mut pairs = Vec::with_capacity(count);
+    for _ in 0..count {
+        pairs.push(GpuCanvasShaderTextureSamplerPair {
+            texture_group: cursor.read_u8("texture pair group")?,
+            texture_binding: cursor.read_u8("texture pair binding")?,
+            sampler_group: cursor.read_u8("sampler pair group")?,
+            sampler_binding: cursor.read_u8("sampler pair binding")?,
+        });
+    }
+    if cursor.remaining() != 0 {
+        return Err(Error::runtime(format!(
+            "ShaderAsset '{name}' texture/sampler pair section has trailing bytes"
+        )));
+    }
+    Ok(pairs)
 }
 
 fn decode_whole_module_source(
@@ -785,6 +974,22 @@ mod tests {
         source
     }
 
+    fn per_entry_source_container(entries: &[(u8, &str, &str, &str)]) -> Vec<u8> {
+        let mut source = vec![entries.len() as u8];
+        for (stage, logical, physical, glsl) in entries {
+            source.push(*stage);
+            put_string(&mut source, logical);
+            put_string(&mut source, physical);
+            put_u32(&mut source, glsl.len() as u32);
+            source.extend_from_slice(glsl.as_bytes());
+        }
+        source
+    }
+
+    fn empty_gl_fixup() -> Vec<u8> {
+        vec![1, 0, 0]
+    }
+
     fn imported_gpu_canvas_source_container() -> Vec<u8> {
         source_container(
             &[(0, "vs_main", "vs_main"), (1, "fs_main", "fs_main")],
@@ -991,6 +1196,108 @@ mod tests {
         );
         assert_eq!(shader.bindings[0].stage_mask, 1 << 1);
         assert_eq!(shader.bindings[0].backend_slots, [None, Some(0), None]);
+    }
+
+    #[test]
+    fn selects_webgl2_per_entry_sources_sidecars_and_texture_pairs() {
+        let glsl = per_entry_source_container(&[
+            (
+                0,
+                "authored_vertex",
+                "main",
+                "#version 300 es\nvoid main() { gl_Position = vec4(0.0); }\n",
+            ),
+            (
+                1,
+                "authored_fragment",
+                "main",
+                "#version 300 es\nprecision highp float; out vec4 color; void main() { color = vec4(1.0); }\n",
+            ),
+        ]);
+        let payload = rstb_payload_with_sections(
+            &[
+                (WEBGL2_SOURCE_TARGET, glsl),
+                (
+                    WEBGL2_BINDING_MAP_TARGET,
+                    IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+                ),
+                (WEBGL2_VERTEX_FIXUP_TARGET, empty_gl_fixup()),
+                (WEBGL2_FRAGMENT_FIXUP_TARGET, empty_gl_fixup()),
+            ],
+            &[(TEXTURE_SAMPLER_PAIR_SECTION, vec![1, 2, 4, 2, 7])],
+        );
+        let artifact =
+            decode_browser_shader_asset("portable", &payload, GpuCanvasShaderProfile::WebGl2)
+                .expect("WebGL2 profile selects its exact variants");
+        let GpuCanvasShaderArtifact::WebGl2(shader) = artifact else {
+            panic!("expected WebGL2 artifact");
+        };
+        assert_eq!(shader.entries.len(), 2);
+        assert_eq!(shader.entries[0].logical_entry_point, "authored_vertex");
+        assert_eq!(shader.entries[0].physical_entry_point, "main");
+        assert!(
+            shader
+                .source_for_entry(1)
+                .expect("fragment source")
+                .starts_with("#version 300 es")
+        );
+        assert_eq!(
+            shader.binding_map_bytes.as_ref(),
+            IMPORTED_GPU_CANVAS_BINDING_MAP
+        );
+        assert_eq!(shader.vertex_gl_fixup_bytes.as_ref(), [1, 0, 0]);
+        assert_eq!(
+            shader.texture_sampler_pairs,
+            vec![GpuCanvasShaderTextureSamplerPair {
+                texture_group: 2,
+                texture_binding: 4,
+                sampler_group: 2,
+                sampler_binding: 7,
+            }]
+        );
+    }
+
+    #[test]
+    fn webgl2_rejects_non_main_entries_and_missing_sidecars_without_fallback() {
+        let bad_source = per_entry_source_container(&[(
+            0,
+            "vertex",
+            "vertex",
+            "#version 300 es\nvoid main() {}\n",
+        )]);
+        let payload = rstb_payload(&[
+            (WEBGL2_SOURCE_TARGET, bad_source),
+            (
+                WEBGL2_BINDING_MAP_TARGET,
+                IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+            ),
+            (WEBGL2_VERTEX_FIXUP_TARGET, empty_gl_fixup()),
+            (WEBGL2_FRAGMENT_FIXUP_TARGET, empty_gl_fixup()),
+        ]);
+        let asset = ShaderAsset::decode("bad-gl", &payload).expect("outer RSTB decodes");
+        assert!(
+            asset
+                .decode_for_profile("bad-gl", GpuCanvasShaderProfile::WebGl2, None)
+                .expect_err("GLSL physical entry must be main")
+                .to_string()
+                .contains("physical entry 'main'")
+        );
+
+        let webgpu_only = rstb_payload(&[
+            (WGSL_SOURCE_TARGET, imported_gpu_canvas_source_container()),
+            (
+                WGSL_BINDING_MAP_TARGET,
+                IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+            ),
+        ]);
+        let asset = ShaderAsset::decode("webgpu-only", &webgpu_only).expect("RSTB decodes");
+        assert!(
+            asset
+                .decode_for_profile("webgpu-only", GpuCanvasShaderProfile::WebGl2, None)
+                .expect_err("WebGL2 never falls back to WGSL")
+                .to_string()
+                .contains("no WebGL2 RSTB target-1")
+        );
     }
 
     #[test]

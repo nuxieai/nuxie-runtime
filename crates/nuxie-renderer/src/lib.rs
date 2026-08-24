@@ -14,6 +14,10 @@ mod exact_source_adapter;
 mod native_vulkan;
 #[cfg(feature = "native-vulkan-experimental")]
 pub use native_vulkan::{NativeVulkanFactory, NativeVulkanFrame};
+#[cfg(feature = "native-webgpu-experimental")]
+mod native_webgpu;
+#[cfg(feature = "native-webgpu-experimental")]
+pub use native_webgpu::{NativeWebGpuFactory, NativeWebGpuFrame};
 mod tessellation_relocation;
 pub(crate) use tessellation_relocation::relocate_tessellation_logically;
 #[cfg(test)]

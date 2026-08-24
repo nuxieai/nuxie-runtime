@@ -21,6 +21,9 @@ native-vulkan-experimental = ["dep:ash", "dep:nuxie-ore-metal", "dep:vk-mem"]
 # Builds the exact pinned Dawn/Wagyu WebGPU campaign without selecting it for
 # shipping or sharing authority with the legacy Rust-WGPU renderer.
 native-webgpu-experimental = ["dep:libc", "dep:nuxie-ore-metal"]
+# Retains the pinned vendor-Wagyu conditional branches independently from the
+# native Dawn/WebGPU product selection.
+native-wagyu-experimental = ["native-webgpu-experimental"]
 with-rive-tools = ["nuxie-ore-metal?/with-rive-tools"]
 track-rive-shader-id = ["nuxie-ore-metal?/track-rive-shader-id"]
 # Wires the pinned RIVE_CANVAS ORE constructor to the exact native renderer

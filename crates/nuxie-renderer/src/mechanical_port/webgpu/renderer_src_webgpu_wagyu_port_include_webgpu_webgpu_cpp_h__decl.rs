@@ -1888,16 +1888,10 @@ impl Default for WGPUBindGroupDescriptor {
 
 impl Default for WGPUBindGroupLayoutEntry {
     fn default() -> Self {
-        Self {
-            nextInChain: std::ptr::null_mut(),
-            binding: 0,
-            visibility: WGPUShaderStage_None,
-            bindingArraySize: 0,
-            buffer: WGPUBufferBindingLayout::default(),
-            sampler: WGPUSamplerBindingLayout::default(),
-            texture: WGPUTextureBindingLayout::default(),
-            storageTexture: WGPUStorageTextureBindingLayout::default(),
-        }
+        // `WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT` uses `_wgpu_STRUCT_ZERO_INIT`
+        // for every nested binding layout. It does not recursively apply the
+        // individual layout macros, whose type fields use `Undefined`.
+        unsafe { core::mem::zeroed() }
     }
 }
 

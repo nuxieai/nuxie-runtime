@@ -83,6 +83,16 @@ pub struct FfiBackendWorkMetrics {
     pub path_patches: u64,
 }
 
+/// Keeps the pinned Dawn native archives in the final link when another Rust
+/// crate calls the translated WebGPU C ABI directly. It never constructs or
+/// routes through the C++ oracle.
+#[cfg(all(feature = "dawn", target_os = "macos"))]
+#[doc(hidden)]
+#[inline(never)]
+pub fn dawn_link_anchor() {
+    std::hint::black_box(());
+}
+
 #[cfg(target_os = "macos")]
 pub fn metal_adapter_identity() -> Result<MetalAdapterIdentity, NativeRendererError> {
     let mut identity = FfiAdapterIdentity::default();

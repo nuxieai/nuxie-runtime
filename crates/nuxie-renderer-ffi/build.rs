@@ -158,9 +158,21 @@ fn main() {
 
     if renderer_lib.exists() {
         if has_dawn {
-            build
-                .define("RIVE_DESKTOP_GL", None)
-                .define("RIVE_DAWN", None);
+            for define in [
+                "RIVE_DESKTOP_GL",
+                "RIVE_DAWN",
+                "ORE_BACKEND_METAL",
+                "ORE_BACKEND_GL",
+                "ORE_BACKEND_WGPU",
+                "RIVE_ORE",
+                "WITH_RIVE_TEXT",
+                "RIVE_CANVAS",
+                "WITH_RIVE_LAYOUT",
+                "RIVE_DECODERS",
+                "RIVE_KTX2",
+            ] {
+                build.define(define, None);
+            }
         } else if has_vulkan {
             for define in [
                 "RIVE_VULKAN",

@@ -7,13 +7,13 @@
 #![allow(non_snake_case, non_upper_case_globals)]
 
 use super::render_context_webgpu_decl::{
-    Capabilities, ContextOptions, DrawPipelineLayout, PixelLocalStorageType,
-    RenderContextWebGPUImpl, RenderTargetWebGPU, TextureWebGPUImpl,
+    BlitTextureAsDrawPipeline, Capabilities, ContextOptions, DrawPipelineLayout,
+    PixelLocalStorageType, RenderContextWebGPUImpl, RenderTargetWebGPU, TextureWebGPUImpl,
 };
 use super::webgpu_cpp_decl::{
-    Adapter, BackendType, BindGroup, BindGroupLayout, Buffer, CommandEncoder, Device, FeatureName,
-    Queue, Sampler, ShaderModule, Texture as WagyuTexture, TextureFormat, TextureUsage,
-    TextureView,
+    Adapter, AdapterInfo, BackendType, BindGroup, BindGroupLayout, Buffer, CommandEncoder, Device,
+    FeatureName, Queue, Sampler, ShaderModule, Texture as WagyuTexture, TextureFormat,
+    TextureUsage, TextureView,
 };
 use super::webgpu_decl::{
     WGPUBindGroupDescriptor, WGPUBindGroupEntry, WGPUBindGroupLayout,
@@ -24,18 +24,17 @@ use super::webgpu_decl::{
     WGPUShaderModuleDescriptor, WGPUShaderSourceWGSL,
     WGPUShaderStage_Fragment, WGPUShaderStage_Vertex, WGPUStringView,
     WGPUBlendState, WGPUColorTargetState, WGPUFragmentState, WGPURenderPipelineDescriptor,
-    WGPUSamplerDescriptor, WGPUVertexAttribute, WGPUVertexBufferLayout,
+    WGPURenderPassColorAttachment, WGPURenderPassDescriptor, WGPUSamplerDescriptor,
+    WGPUTextureViewDescriptor, WGPUVertexAttribute, WGPUVertexBufferLayout,
     WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo, WGPUTextureDescriptor,
     WGPUTextureSampleType_Float,
     WGPUTextureSampleType_Uint, WGPUTextureSampleType_UnfilterableFloat,
     WGPUTextureViewDimension_2D, WGPU_LIMIT_U32_UNDEFINED, WGPU_STRLEN,
 };
 use super::webgpu_wagyu_decl::{
-    wgpuWagyuAdapterGetBackend, wgpuWagyuAdapterGetExtensions, wgpuWagyuDeviceGetExtensions,
-    wgpuWagyuStringArrayFreeMembers, WGPUFeatureName_WagyuBlendEquationAdvancedCoherent,
     WGPUSType_WagyuInputTextureBindingLayout, WGPUWagyuInputTextureBindingLayout,
     WGPUTextureUsage_WagyuInputAttachment, WGPUTextureUsage_WagyuMSAAResolveSource,
-    WGPUTextureUsage_WagyuTransientAttachment, WGPUWagyuStringArray,
+    WGPUTextureUsage_WagyuTransientAttachment,
 };
 use crate::mechanical_port::webgl2::load_store_actions_ext_decl::LoadStoreActionsEXT;
 use crate::mechanical_port::webgl2::load_store_actions_ext_impl::{
@@ -815,21 +814,119 @@ pub(crate) fn makeVertexBufferRing(
     ))
 }
 
-pub(crate) fn generateMipmaps(context: &RenderContextWebGPUImpl, texture: &WagyuTexture) {
+fn newBlitTextureAsDrawPipeline(
+    context: &RenderContextWebGPUImpl,
+) -> BlitTextureAsDrawPipeline {
+    let device = context.device();
+    let entries = [
+        textureLayoutEntry(
+            IMAGE_TEXTURE_IDX,
+            WGPUShaderStage_Fragment,
+            WGPUTextureSampleType_Float,
+        ),
+        samplerLayoutEntry(WEBGPU_IMAGE_SAMPLER_IDX, WGPUShaderStage_Fragment),
+    ];
+    let perDrawBindGroupLayout = createLayout(&device, &entries);
+    let layouts = [
+        context.m_emptyBindingsLayout.Get(),
+        perDrawBindGroupLayout.Get(),
+    ];
+    debug_assert_eq!(PER_DRAW_BINDINGS_SET, 1);
+    let mut pipelineLayoutDescriptor = WGPUPipelineLayoutDescriptor::default();
+    pipelineLayoutDescriptor.bindGroupLayoutCount = layouts.len();
+    pipelineLayoutDescriptor.bindGroupLayouts = layouts.as_ptr();
+    let pipelineLayout = unsafe { device.CreatePipelineLayout(&pipelineLayoutDescriptor) };
+
+    let vertex = compileShaderModuleWGSL(
+        &device,
+        include_str!("../../generated/blit_texture_as_draw_filtered.webgpu_vert.wgsl"),
+        "blit_texture_as_draw_filtered.webgpu.vert",
+    );
+    let fragment = compileShaderModuleWGSL(
+        &device,
+        include_str!("../../generated/blit_texture_as_draw_filtered.webgpu_frag.wgsl"),
+        "blit_texture_as_draw_filtered.webgpu.frag",
+    );
+    let mut colorTarget = WGPUColorTargetState::default();
+    colorTarget.format = TextureFormat::RGBA8Unorm.into();
+    let mut fragmentState = WGPUFragmentState::default();
+    fragmentState.module = fragment.Get();
+    fragmentState.entryPoint = stringView("main");
+    fragmentState.targetCount = 1;
+    fragmentState.targets = &colorTarget;
+    let mut descriptor = WGPURenderPipelineDescriptor::default();
+    descriptor.label = stringView("RIVE_BlitTextureAsDrawPipeline");
+    descriptor.layout = pipelineLayout.Get();
+    descriptor.vertex.module = vertex.Get();
+    descriptor.vertex.entryPoint = stringView("main");
+    descriptor.primitive.topology =
+        super::webgpu_cpp_decl::PrimitiveTopology::TriangleStrip.into();
+    descriptor.fragment = &fragmentState;
+    let renderPipeline = unsafe { device.CreateRenderPipeline(&descriptor) };
+    BlitTextureAsDrawPipeline {
+        m_perDrawBindGroupLayout: std::mem::ManuallyDrop::new(perDrawBindGroupLayout),
+        m_renderPipeline: std::mem::ManuallyDrop::new(renderPipeline),
+    }
+}
+
+pub(crate) fn generateMipmaps(context: &mut RenderContextWebGPUImpl, texture: &WagyuTexture) {
     let encoder = unsafe { context.m_device.CreateCommandEncoder(std::ptr::null()) };
-    unsafe {
-        super::webgpu_wagyu_decl::wgpuWagyuCommandEncoderGenerateMipmap(
-            encoder.Get(),
-            texture.Get(),
-        )
-    };
+    if context.m_blitTextureAsDrawPipeline.is_none() {
+        *context.m_blitTextureAsDrawPipeline = Some(Box::new(newBlitTextureAsDrawPipeline(context)));
+    }
+    let pipeline = context
+        .m_blitTextureAsDrawPipeline
+        .as_ref()
+        .expect("mipmap blit pipeline");
+    let mut textureViewDescriptor = WGPUTextureViewDescriptor::default();
+    textureViewDescriptor.baseMipLevel = 0;
+    textureViewDescriptor.mipLevelCount = 1;
+    let mut sourceView = unsafe { texture.CreateView(&textureViewDescriptor) };
+    for level in 1..unsafe { texture.GetMipLevelCount() } {
+        textureViewDescriptor.baseMipLevel = level;
+        let destinationView = unsafe { texture.CreateView(&textureViewDescriptor) };
+        let mut attachment = WGPURenderPassColorAttachment::default();
+        attachment.view = destinationView.Get();
+        attachment.loadOp = super::webgpu_cpp_decl::LoadOp::Clear.into();
+        attachment.storeOp = super::webgpu_cpp_decl::StoreOp::Store.into();
+        let mut passDescriptor = WGPURenderPassDescriptor::default();
+        passDescriptor.label = stringView("RIVE_MipMap_Generation_Pass");
+        passDescriptor.colorAttachmentCount = 1;
+        passDescriptor.colorAttachments = &attachment;
+        let pass = unsafe { encoder.BeginRenderPass(&passDescriptor) };
+
+        let mut textureEntry = WGPUBindGroupEntry::default();
+        textureEntry.binding = IMAGE_TEXTURE_IDX;
+        textureEntry.textureView = sourceView.Get();
+        let mut samplerEntry = WGPUBindGroupEntry::default();
+        samplerEntry.binding = WEBGPU_IMAGE_SAMPLER_IDX;
+        samplerEntry.sampler = context.m_linearSampler.Get();
+        let entries = [textureEntry, samplerEntry];
+        let mut bindGroupDescriptor = WGPUBindGroupDescriptor::default();
+        bindGroupDescriptor.layout = pipeline.m_perDrawBindGroupLayout.Get();
+        bindGroupDescriptor.entryCount = entries.len();
+        bindGroupDescriptor.entries = entries.as_ptr();
+        let bindings = unsafe { context.m_device.CreateBindGroup(&bindGroupDescriptor) };
+        unsafe {
+            pass.SetBindGroup(
+                PER_DRAW_BINDINGS_SET as u32,
+                bindings.Get(),
+                0,
+                std::ptr::null(),
+            );
+            pass.SetPipeline(pipeline.m_renderPipeline.Get());
+            pass.Draw(4, 1, 0, 0);
+            pass.End();
+        }
+        sourceView = destinationView;
+    }
     let commands = unsafe { encoder.Finish(std::ptr::null()) };
     let raw = commands.Get();
     unsafe { context.m_queue.Submit(1, &raw) };
 }
 
 pub(crate) fn makeImageTexture(
-    context: &RenderContextWebGPUImpl,
+    context: &mut RenderContextWebGPUImpl,
     width: u32,
     height: u32,
     mipLevelCount: u32,
@@ -874,7 +971,14 @@ pub(crate) fn makeImageTexture(
 
     let mut usage = (TextureUsage::TextureBinding | TextureUsage::CopyDst).intoBitmask();
     if generateRemainingMips && mipLevelCount > 1 {
-        usage |= TextureUsage::CopySrc;
+        #[cfg(feature = "native-wagyu-experimental")]
+        {
+            usage |= TextureUsage::CopySrc;
+        }
+        #[cfg(not(feature = "native-wagyu-experimental"))]
+        {
+            usage |= TextureUsage::RenderAttachment;
+        }
     }
     let mut textureDesc = WGPUTextureDescriptor::default();
     textureDesc.usage = usage.into();
@@ -1044,49 +1148,6 @@ pub(crate) fn atomicPLSCoverageBuffer(context: &mut RenderContextWebGPUImpl) -> 
     )
 }
 
-fn stringViewEquals(view: &WGPUStringView, expected: &[u8]) -> bool {
-    if view.data.is_null() {
-        return false;
-    }
-    let actual = unsafe {
-        if view.length == WGPU_STRLEN {
-            std::ffi::CStr::from_ptr(view.data).to_bytes()
-        } else {
-            std::slice::from_raw_parts(view.data.cast::<u8>(), view.length)
-        }
-    };
-    actual == expected
-}
-
-fn parseVendorExtensions(adapter: &Adapter, device: &Device, caps: &mut Capabilities) {
-    let mut extensions = WGPUWagyuStringArray {
-        stringCount: 0,
-        strings: std::ptr::null_mut(),
-    };
-    unsafe {
-        if caps.backendType == BackendType::Vulkan {
-            wgpuWagyuDeviceGetExtensions(device.Get(), &mut extensions);
-            for extension in std::slice::from_raw_parts(extensions.strings, extensions.stringCount)
-            {
-                if stringViewEquals(extension, b"VK_EXT_rasterization_order_attachment_access") {
-                    caps.VK_EXT_rasterization_order_attachment_access = true;
-                }
-            }
-        } else if caps.backendType == BackendType::OpenGLES {
-            wgpuWagyuAdapterGetExtensions(adapter.Get(), &mut extensions);
-            for extension in std::slice::from_raw_parts(extensions.strings, extensions.stringCount)
-            {
-                if stringViewEquals(extension, b"GL_EXT_shader_pixel_local_storage") {
-                    caps.GL_EXT_shader_pixel_local_storage = true;
-                } else if stringViewEquals(extension, b"GL_EXT_shader_pixel_local_storage2") {
-                    caps.GL_EXT_shader_pixel_local_storage2 = true;
-                }
-            }
-        }
-        wgpuWagyuStringArrayFreeMembers(extensions);
-    }
-}
-
 pub(crate) fn newContext(
     adapter: Adapter,
     device: Device,
@@ -1105,6 +1166,7 @@ pub(crate) fn newContext(
         m_loadStoreEXTPipelines: std::mem::ManuallyDrop::new(Default::default()),
         m_loadStoreEXTVertexShader: std::mem::ManuallyDrop::new(ShaderModule::default()),
         m_loadStoreEXTUniforms: std::mem::ManuallyDrop::new(None),
+        m_blitTextureAsDrawPipeline: std::mem::ManuallyDrop::new(None),
         m_colorRampPipeline: std::mem::ManuallyDrop::new(None),
         m_gradientTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
         m_gradientTextureView: std::mem::ManuallyDrop::new(TextureView::default()),
@@ -1141,35 +1203,9 @@ pub(crate) fn newContext(
         limits.nextInChain = &mut compatibilityLimits.chain;
     }
     let limitsValid = unsafe { context.m_device.GetLimits(&mut limits).asBool() };
-    context.m_capabilities.backendType =
-        unsafe { BackendType::from(wgpuWagyuAdapterGetBackend(adapter.Get())) };
-    parseVendorExtensions(&adapter, &context.m_device, &mut context.m_capabilities);
-
-    if context
-        .m_capabilities
-        .VK_EXT_rasterization_order_attachment_access
-    {
-        context.m_capabilities.plsType =
-            PixelLocalStorageType::VK_EXT_rasterization_order_attachment_access;
-        context
-            .base
-            .base
-            .m_platformFeatures
-            .supportsRasterOrderingMode = true;
-    } else if context.m_capabilities.GL_EXT_shader_pixel_local_storage {
-        context.m_capabilities.plsType = PixelLocalStorageType::GL_EXT_shader_pixel_local_storage;
-        context
-            .base
-            .base
-            .m_platformFeatures
-            .supportsRasterOrderingMode = true;
-        context.base.base.m_platformFeatures.supportsClockwiseMode = true;
-        context
-            .base
-            .base
-            .m_platformFeatures
-            .supportsClockwiseFixedFunctionMode =
-            context.m_capabilities.GL_EXT_shader_pixel_local_storage2;
+    let mut adapterInfo = AdapterInfo::default();
+    if unsafe { adapter.GetInfo(&mut adapterInfo) }.asBool() {
+        context.m_capabilities.backendType = BackendType::from(adapterInfo.asRaw().backendType);
     }
 
     let mut maxStorageBuffersInVertexStage = WGPU_LIMIT_U32_UNDEFINED;
@@ -1203,13 +1239,8 @@ pub(crate) fn newContext(
         );
     }
     features.atomicPLSInitNeedsDraw = true;
-    features.supportsBlendAdvancedKHR = unsafe {
-        context
-            .m_device
-            .HasFeature(WGPUFeatureName_WagyuBlendEquationAdvancedCoherent)
-            .asBool()
-    };
-    features.supportsBlendAdvancedCoherentKHR = features.supportsBlendAdvancedKHR;
+    features.supportsBlendAdvancedKHR = false;
+    features.supportsBlendAdvancedCoherentKHR = false;
     features.supportsClipPlanes = unsafe {
         context
             .m_device
@@ -1602,14 +1633,15 @@ pub(crate) fn makeDrawPipeline(
     fragmentState.constants = fragmentConstants.as_ptr();
     fragmentState.targetCount = colorAttachments.len();
     fragmentState.targets = colorAttachments.as_ptr();
+    #[cfg(feature = "native-wagyu-experimental")]
     let mut inputAttachments: [super::webgpu_wagyu_decl::WGPUWagyuInputAttachmentState;
-        PLS_PLANE_COUNT] =
-        std::array::from_fn(
-            |index| super::webgpu_wagyu_decl::WGPUWagyuInputAttachmentState {
-                format: colorAttachments[index].format,
-                usedAsColor: super::webgpu_decl::WGPUOptionalBool_True,
-            },
-        );
+        PLS_PLANE_COUNT] = std::array::from_fn(
+        |index| super::webgpu_wagyu_decl::WGPUWagyuInputAttachmentState {
+            format: colorAttachments[index].format,
+            usedAsColor: super::webgpu_decl::WGPUOptionalBool_True,
+        },
+    );
+    #[cfg(feature = "native-wagyu-experimental")]
     let mut wagyuFragmentState = super::webgpu_wagyu_decl::WGPUWagyuFragmentState {
         chain: super::webgpu_decl::WGPUChainedStruct {
             next: std::ptr::null_mut(),
@@ -1619,6 +1651,7 @@ pub(crate) fn makeDrawPipeline(
         inputs: inputAttachments.as_mut_ptr(),
         featureFlags: super::webgpu_wagyu_decl::WGPUWagyuFragmentStateFeaturesFlags_RasterizationOrderAttachmentAccess,
     };
+    #[cfg(feature = "native-wagyu-experimental")]
     if usingPLSInputAttachments {
         fragmentState.nextInChain = &mut wagyuFragmentState.chain;
     }
@@ -3805,12 +3838,15 @@ unsafe fn executeDrawList(
             boundImageSampler = Some(batch.imageSampler);
         }
 
+        #[cfg(feature = "native-wagyu-experimental")]
         let targetIsGLFBO0 = context.m_capabilities.backendType == BackendType::OpenGLES
             && unsafe {
                 super::webgpu_wagyu_decl::wgpuWagyuTextureIsSwapchain(
                     renderTarget.m_targetTexture.Get(),
                 ) == super::webgpu_decl::WGPU_TRUE
             };
+        #[cfg(not(feature = "native-wagyu-experimental"))]
+        let targetIsGLFBO0 = false;
         let shaderFeatures = if desc.interlockMode == InterlockMode::atomics {
             desc.combinedShaderFeatures
         } else {
@@ -4154,9 +4190,13 @@ pub(crate) unsafe fn flush(
         desc.interlockMode,
         InterlockMode::rasterOrdering | InterlockMode::clockwise
     );
+    #[cfg(feature = "native-wagyu-experimental")]
     let usingInputAttachmentBindings = usingPLS
         && context.m_capabilities.plsType
             == PixelLocalStorageType::VK_EXT_rasterization_order_attachment_access;
+    #[cfg(not(feature = "native-wagyu-experimental"))]
+    let usingInputAttachmentBindings = false;
+    #[cfg(feature = "native-wagyu-experimental")]
     if usingInputAttachmentBindings {
         let views = [
             renderTarget.targetTextureView(),
@@ -4188,9 +4228,13 @@ pub(crate) unsafe fn flush(
         };
     }
 
+    #[cfg(feature = "native-wagyu-experimental")]
     let usingShaderPixelLocalStorageEXT = usingPLS
         && context.m_capabilities.plsType
             == PixelLocalStorageType::GL_EXT_shader_pixel_local_storage;
+    #[cfg(not(feature = "native-wagyu-experimental"))]
+    let usingShaderPixelLocalStorageEXT = false;
+    #[cfg(feature = "native-wagyu-experimental")]
     if usingShaderPixelLocalStorageEXT {
         if desc.fixedFunctionColorOutput {
             assert!(context.m_capabilities.GL_EXT_shader_pixel_local_storage2);
@@ -4271,6 +4315,7 @@ pub(crate) unsafe fn flush(
         &perFlushBindings,
     );
 
+    #[cfg(feature = "native-wagyu-experimental")]
     if usingShaderPixelLocalStorageEXT && !desc.fixedFunctionColorOutput {
         let actions = LoadStoreActionsEXT::storeColor;
         let key = loadStoreEXTPipelineKey(actions, renderTarget.framebufferFormat());

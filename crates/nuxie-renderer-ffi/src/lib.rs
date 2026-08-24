@@ -11,6 +11,10 @@ mod native;
 #[cfg(feature = "native")]
 pub use native::{FfiFactory, FfiFrame, FfiFrameMetrics, FfiRenderMode, NativeRendererError};
 
+#[cfg(all(feature = "native", feature = "dawn", target_os = "macos"))]
+#[doc(hidden)]
+pub use native::dawn_link_anchor;
+
 #[cfg(all(feature = "native", target_os = "macos"))]
 pub use native::{MetalAdapterIdentity, metal_adapter_identity};
 

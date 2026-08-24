@@ -104,6 +104,20 @@ pub(crate) struct ColorRampPipeline {
     pub(crate) m_renderPipeline: ManuallyDrop<RenderPipeline>,
 }
 
+pub(crate) struct BlitTextureAsDrawPipeline {
+    pub(crate) m_perDrawBindGroupLayout: ManuallyDrop<BindGroupLayout>,
+    pub(crate) m_renderPipeline: ManuallyDrop<RenderPipeline>,
+}
+
+impl Drop for BlitTextureAsDrawPipeline {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.m_renderPipeline);
+            ManuallyDrop::drop(&mut self.m_perDrawBindGroupLayout);
+        }
+    }
+}
+
 impl Drop for ColorRampPipeline {
     fn drop(&mut self) {
         unsafe {
@@ -166,6 +180,8 @@ pub(crate) struct RenderContextWebGPUImpl {
     pub(crate) m_loadStoreEXTVertexShader: ManuallyDrop<ShaderModule>,
     pub(crate) m_loadStoreEXTUniforms:
         ManuallyDrop<Option<Box<dyn super::render_context_webgpu_impl::BufferRingWebGPUApi>>>,
+    pub(crate) m_blitTextureAsDrawPipeline:
+        ManuallyDrop<Option<Box<BlitTextureAsDrawPipeline>>>,
     pub(crate) m_colorRampPipeline: ManuallyDrop<Option<Box<ColorRampPipeline>>>,
     pub(crate) m_gradientTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_gradientTextureView: ManuallyDrop<TextureView>,
@@ -255,7 +271,7 @@ impl RenderContextWebGPUImpl {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn makeImageTexture(
-        &self,
+        &mut self,
         width: u32,
         height: u32,
         mipLevelCount: u32,
@@ -281,7 +297,7 @@ impl RenderContextWebGPUImpl {
     }
 
     pub(crate) fn makeImageTextureDefault(
-        &self,
+        &mut self,
         width: u32,
         height: u32,
         mipLevelCount: u32,
@@ -354,6 +370,7 @@ impl Drop for RenderContextWebGPUImpl {
             ManuallyDrop::drop(&mut self.m_gradientTextureView);
             ManuallyDrop::drop(&mut self.m_gradientTexture);
             ManuallyDrop::drop(&mut self.m_colorRampPipeline);
+            ManuallyDrop::drop(&mut self.m_blitTextureAsDrawPipeline);
             ManuallyDrop::drop(&mut self.m_loadStoreEXTUniforms);
             ManuallyDrop::drop(&mut self.m_loadStoreEXTVertexShader);
             ManuallyDrop::drop(&mut self.m_loadStoreEXTPipelines);

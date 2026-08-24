@@ -26,6 +26,13 @@ native-vulkan-exact = [
   "nuxie-renderer/native-ore-vulkan-experimental",
   "nuxie-renderer/rive-decoders",
 ]
+native-webgpu-exact = [
+  "dep:nuxie-renderer",
+  "dep:nuxie-renderer-ffi",
+  "nuxie-renderer/native-webgpu-experimental",
+  "nuxie-renderer/rive-decoders",
+  "nuxie-renderer-ffi/dawn",
+]
 apple-msl-replay = ["rust-wgpu", "nuxie-renderer/apple-msl-replay"]
 ffi = ["dep:nuxie-renderer-ffi"]
 perf-dawn = ["ffi", "nuxie-renderer-ffi/dawn"]

@@ -208,7 +208,11 @@ pub(crate) mod webgpu {
     #[path = "renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs"]
     mod webgpu_port_generator;
 
+    #[path = "product_root.rs"]
+    mod product_root;
+
     pub(crate) use ore_context_wgpu_decl::ContextWGPU;
+    pub(crate) use product_root::WebGpuProductBackend;
 }
 
 #[cfg(feature = "native-vulkan-experimental")]

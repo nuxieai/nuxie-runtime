@@ -59,8 +59,8 @@ fn wgpuBool(value: bool) -> u32 {
     if value { WGPU_TRUE } else { WGPU_FALSE }
 }
 
-/// Mechanical form of the binding-map path, including the source defaults:
-/// Undefined view dimension, Undefined sample type, and non-multisampled.
+/// Mechanical form of the binding-map path. The enclosing C descriptor starts
+/// fully zero-initialized; only the layout selected by `kind` is populated.
 pub(crate) fn makeWGPUBGLEntry(
     binding: u32,
     kind: ResourceKind,
@@ -304,6 +304,8 @@ mod tests {
         assert_eq!(uniform.visibility, WGPUShaderStage_Vertex | WGPUShaderStage_Fragment);
         assert_eq!(uniform.buffer.r#type, WGPUBufferBindingType_Uniform);
         assert_eq!(uniform.buffer.hasDynamicOffset, WGPU_TRUE);
+        assert_eq!(uniform.texture.sampleType, 0);
+        assert_eq!(uniform.sampler.r#type, 0);
 
         let sampled = makeWGPUBGLEntry(
             3,
@@ -318,6 +320,8 @@ mod tests {
         assert_eq!(sampled.texture.sampleType, WGPUTextureSampleType_Depth);
         assert_eq!(sampled.texture.viewDimension, WGPUTextureViewDimension_CubeArray);
         assert_eq!(sampled.texture.multisampled, WGPU_TRUE);
+        assert_eq!(sampled.buffer.r#type, 0);
+        assert_eq!(sampled.sampler.r#type, 0);
 
         let unknown = makeWGPUBGLEntryWithSourceDefaults(
             1,
@@ -325,8 +329,10 @@ mod tests {
             false,
             WGPUShaderStage::None,
         );
-        assert_eq!(unknown.buffer.r#type, WGPUBufferBindingType_Undefined);
-        assert_eq!(unknown.sampler.r#type, WGPUSamplerBindingType_Undefined);
+        assert_eq!(unknown.buffer.r#type, 0);
+        assert_eq!(unknown.sampler.r#type, 0);
+        assert_eq!(unknown.texture.sampleType, 0);
+        assert_eq!(unknown.storageTexture.access, 0);
     }
 
     #[test]

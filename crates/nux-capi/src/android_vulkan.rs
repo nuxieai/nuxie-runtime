@@ -175,49 +175,58 @@ pub unsafe extern "C" fn nux_renderer_new_android_vulkan(
     out_renderer: *mut *mut NuxAndroidVulkanRenderer,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
-    ffi_guard_with_handle_result(out_renderer, out_result, HandleKind::Renderer, || {
-        if out_result.is_null() {
-            return NuxStatus::NullArgument;
-        }
-        if out_renderer.is_null() {
-            publish_result(out_result, NuxStatus::NullArgument, "out_renderer is null");
-            return NuxStatus::NullArgument;
-        }
-        if let Err(failure) = validate_extent(pixel_width, pixel_height) {
-            publish_result(out_result, failure.status, failure.message);
-            return failure.status;
-        }
-        let domain = match allocate_renderer_domain() {
-            Ok(domain) => domain,
-            Err(failure) => {
+    ffi_guard_with_handle_result(
+        out_renderer,
+        out_result,
+        HandleKind::AndroidVulkanRenderer,
+        || {
+            if out_result.is_null() {
+                return NuxStatus::NullArgument;
+            }
+            if out_renderer.is_null() {
+                publish_result(out_result, NuxStatus::NullArgument, "out_renderer is null");
+                return NuxStatus::NullArgument;
+            }
+            if let Err(failure) = validate_extent(pixel_width, pixel_height) {
                 publish_result(out_result, failure.status, failure.message);
                 return failure.status;
             }
-        };
-        let factory = match NativeVulkanFactory::new(pixel_width, pixel_height) {
-            Ok(factory) => factory,
-            Err(error) => {
-                let failure = renderer_failure(error);
-                publish_result(out_result, failure.status, failure.message);
-                return failure.status;
-            }
-        };
-        let pending = PendingHandlePublication::new(
-            NuxAndroidVulkanRenderer {
-                state: RefCell::new(AndroidVulkanRendererState {
-                    factory: PersistentFactory::new(factory),
-                    pixel_width,
-                    pixel_height,
-                }),
-                domain,
-            },
-            HandleKind::Renderer,
-        );
-        register_handle(pending.handle, HandleKind::Renderer, thread::current().id());
-        unsafe { *out_renderer = pending.finish() };
-        publish_result(out_result, NuxStatus::Ok, "");
-        NuxStatus::Ok
-    })
+            let domain = match allocate_renderer_domain() {
+                Ok(domain) => domain,
+                Err(failure) => {
+                    publish_result(out_result, failure.status, failure.message);
+                    return failure.status;
+                }
+            };
+            let factory = match NativeVulkanFactory::new(pixel_width, pixel_height) {
+                Ok(factory) => factory,
+                Err(error) => {
+                    let failure = renderer_failure(error);
+                    publish_result(out_result, failure.status, failure.message);
+                    return failure.status;
+                }
+            };
+            let pending = PendingHandlePublication::new(
+                NuxAndroidVulkanRenderer {
+                    state: RefCell::new(AndroidVulkanRendererState {
+                        factory: PersistentFactory::new(factory),
+                        pixel_width,
+                        pixel_height,
+                    }),
+                    domain,
+                },
+                HandleKind::AndroidVulkanRenderer,
+            );
+            register_handle(
+                pending.handle,
+                HandleKind::AndroidVulkanRenderer,
+                thread::current().id(),
+            );
+            unsafe { *out_renderer = pending.finish() };
+            publish_result(out_result, NuxStatus::Ok, "");
+            NuxStatus::Ok
+        },
+    )
 }
 
 /// Recreates the headless target at a new non-zero extent. The durable domain
@@ -232,7 +241,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_resize(
 ) -> NuxStatus {
     with_result(out_result, || {
         validate_extent(pixel_width, pixel_height)?;
-        let _renderer_call = enter_handle(renderer, HandleKind::Renderer)
+        let _renderer_call = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)
             .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
         let renderer = unsafe { renderer.as_ref() }
             .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "renderer is null"))?;
@@ -258,7 +267,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_reset_player_domain(
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
     with_result(out_result, || {
-        let _renderer_call = enter_handle(renderer, HandleKind::Renderer)
+        let _renderer_call = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)
             .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
         let _player_call = enter_handle(player, HandleKind::Player)
             .map_err(|status| ApiFailure::new(status, "player handle is unavailable"))?;
@@ -326,7 +335,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                         "unknown Android Vulkan renderer fit",
                     ));
                 }
-                let _renderer_call = enter_handle(renderer, HandleKind::Renderer)
+                let _renderer_call = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)
                     .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
                 let _player_call = enter_handle(player, HandleKind::Player)
                     .map_err(|status| ApiFailure::new(status, "player handle is unavailable"))?;
@@ -455,7 +464,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_free(
         if renderer.is_null() {
             return NuxStatus::Ok;
         }
-        if let Err(status) = remove_handle(renderer, HandleKind::Renderer) {
+        if let Err(status) = remove_handle(renderer, HandleKind::AndroidVulkanRenderer) {
             return status;
         }
         unsafe { drop(Box::from_raw(renderer)) };

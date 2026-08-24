@@ -664,9 +664,9 @@ note = "All 22 inline scripts and their assertion order are direct ports: 20 pas
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 test_case_count = 12
-status = "pending"
-evidence = []
-note = "corpus_scripts.rs runs the ArtboardGrid protocol and scripting_linear_animation bytecode, but it does not reproduce any complete upstream artboard TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/src/vm/lua_artboards.rs::artboard_owner_tests::{upstream_can_access_artboard_width_and_height,upstream_can_access_artboard_bounds,upstream_can_render_an_artboard_via_the_scripting_engine,upstream_can_access_nodes_from_artboards,upstream_can_add_artboard_to_path}", "crates/nuxie-scripting/src/vm/listener_invocation.rs::tests::upstream_can_detect_hit_test_from_pointer_event", "crates/nuxie/tests/upstream_scripting_artboard.rs"]
+note = "All 12 cases are explicit ports. The six binding cases preserve the pinned calls and assertions: width/height and PointerEvent pass, while bounds, coin render/data mutation, full Node transforms/hierarchy, and addToPath are honest red at absent Rust bindings. The six public-facade silvers preserve fixture/artboard selection, exact timing, 60-frame loops, didChange checks, double-advance property timing, pointer/trigger order, and named SRIV comparisons; all remain honestly ignored pending scripted renderer-stream parity."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_buffer_ext_test.cpp"

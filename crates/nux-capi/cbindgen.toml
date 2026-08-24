@@ -17,9 +17,9 @@ exclude = ["__nuxie_size_report_renderer_roots"]
 [parse]
 parse_deps = false
 
-# The committed header describes both distribution variants. Portable builds
-# omit the renderer symbols; Apple archives are built with `apple-metal` and
-# expose the declarations automatically under the platform macro.
+# The committed header describes the portable ABI and its platform extensions.
+# Distribution builds expose only the declarations selected by these feature
+# and platform macros.
 [defines]
 "feature = apple-metal" = "NUX_CAPI_APPLE_METAL"
 "feature = android-vulkan" = "NUX_CAPI_ANDROID_VULKAN"

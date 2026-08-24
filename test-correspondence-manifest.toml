@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 32
+max_pending = 31
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -885,9 +885,9 @@ note = "The sole condition case is fully covered; the live comparison is narrowe
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_update_phase_guard_test.cpp"
 test_case_count = 3
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_update_phase_guard.rs"]
+note = "All three exact action/assertion bodies and the complete typed Luau source are translated as honest expected-red tests. Rust exposes neither the pinned per-object inUpdatePhase state nor the ScriptedDrawable markNeedsUpdate dirt owner; Context.markNeedsUpdate is currently a base no-op, so the absent correspondence remains explicit rather than being replaced by locally invented behavior."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_vector_test.cpp"

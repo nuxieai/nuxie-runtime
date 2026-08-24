@@ -1,0 +1,56 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-020"
+units = ["shader:source:atomic_draw_path"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g2-component-020-20260823"
+review_wave = "g2"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = ["component-015"]
+dependency_ownership_receipts = [{ id = "component-015", path = "docs/backend-port-ownership-reviews/component-015.ownership-review.toml", sha256 = "ca91058ce0c3aabe2f27974eba7357fd96210d3b25a8b59c4a1eb604580759d1", byte_count = 18701 }]
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 1
+configuration_authority.sha256 = "81c33803e6de287319129c9b33f159e105f92b9e51a3cbb03d3e7f84c4eef4ee"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:atomic_draw_path\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/atomic_draw_path.main\u001ftoken=GL_GOOGLE_include_directive",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 1
+dependency_authority.sha256 = "df4ad867a95126b32dc94aa7ac9da20c8201f7f6aae3105d514371a90a750c96"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=atomic_base.glsl\u001fdependency_unit=shader:source:atomic_base\u001fline=4\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/shaders/spirv/atomic_base.glsl\u001fresolved_sha256=4f929858680a03c74e88b85b676d8020c7a588146367c7189eec791b2412365a\u001fsource_path=renderer/src/shaders/spirv/atomic_draw_path.main\u001fsource_unit=shader:source:atomic_draw_path",
+]
+authority_record_count = 8
+authority_sha256 = "7480b5ff6f874db254cc47e1ad097390ff24c1c196c37e7ad3ab96fc6dfc87e4"
+authority_keys = [
+  "component-dependency:component-020->component-015",
+  "component:component-020",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:atomic_draw_path\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/atomic_draw_path.main\u001ftoken=GL_GOOGLE_include_directive",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=atomic_base.glsl\u001fdependency_unit=shader:source:atomic_base\u001fline=4\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/shaders/spirv/atomic_base.glsl\u001fresolved_sha256=4f929858680a03c74e88b85b676d8020c7a588146367c7189eec791b2412365a\u001fsource_path=renderer/src/shaders/spirv/atomic_draw_path.main\u001fsource_unit=shader:source:atomic_draw_path",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-020\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:atomic_draw_path",
+  "source-binding:byte_count=108\u001fcitation=source:renderer/src/shaders/spirv/atomic_draw_path.main:1-4\u001fdisposition=shared-authority\u001flogical_lines=4\u001fpath=renderer/src/shaders/spirv/atomic_draw_path.main\u001fsha256=03327dcdaa878b265f76d721cb321e047f87e5df4e8b40dc4cb923623e4ab99b",
+  "source-review-receipt-binding:byte_count=1202\u001fid=component-020\u001fpath=docs/backend-port-source-reviews/component-020.source-review.toml\u001fsha256=ea7bd43550f54d768c49e4d57f2345890ed86a09705391bb3ff8cbf2487f3b81",
+  "target-binding:byte_count=960\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_path_main__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_path_main__generated_input.rs\u001fsha256=72808af21c68b486b839fd7de226684e4472fda68e571bb7351f43ff909899b1",
+]
+source_review_receipts = [{ id = "component-020", path = "docs/backend-port-source-reviews/component-020.source-review.toml", sha256 = "ea7bd43550f54d768c49e4d57f2345890ed86a09705391bb3ff8cbf2487f3b81", byte_count = 1202 }]
+sources = [{ path = "renderer/src/shaders/spirv/atomic_draw_path.main", sha256 = "03327dcdaa878b265f76d721cb321e047f87e5df4e8b40dc4cb923623e4ab99b", logical_lines = 4, byte_count = 108, citation = "source:renderer/src/shaders/spirv/atomic_draw_path.main:1-4", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_path_main__generated_input.rs", sha256 = "72808af21c68b486b839fd7de226684e4472fda68e571bb7351f43ff909899b1", logical_lines = 17, byte_count = 960, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_path_main__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

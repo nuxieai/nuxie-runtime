@@ -1,0 +1,70 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-104"
+units = ["webgpu:ore:sampler"]
+owner_families = ["webgpu-ore-owners"]
+field_profiles = ["webgpu-wagyu-v1", "webgpu-dawn-v2"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g2-component-104-20260823"
+review_wave = "g2"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "webgpu-ore-owners", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "webgpu-wagyu-v1", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }, { id = "webgpu-dawn-v2", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = ["component-101"]
+dependency_ownership_receipts = [{ id = "component-101", path = "docs/backend-port-ownership-reviews/component-101.ownership-review.toml", sha256 = "6aa31d7594ff9d5f5add23994ed315acad0bd82c1bca604d901bc24793ec4c92", byte_count = 1425601 }]
+field_authority.kind = "field-raw"
+field_authority.record_count = 2
+field_authority.sha256 = "585c5ed89ecae2deaa9592b1d41f35451c6e259e57e46f080e2c4afc6eb93d33"
+field_authority.authority_keys = [
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-dawn-v2\u001fdeclaration_line=17\u001fdeclared_type=wgpu::Sampler\u001ffield_name=m_wgpuSampler\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:sampler\u001fqualified_type=rive::ore::SamplerWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=17\u001fdeclared_type=wgpu::Sampler\u001ffield_name=m_wgpuSampler\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:sampler\u001fqualified_type=rive::ore::SamplerWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp",
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 2
+lifecycle_authority.sha256 = "e09ef90fefa503f9e14a5ce93db21546b61d4a48bbe550959175e4455409327b"
+lifecycle_authority.authority_keys = [
+  "lifecycle-raw:campaign=webgpu\u001fevent_class=destruction-or-release\u001fline=13\u001fmatched_token=releases\u001fownership_unit=webgpu:ore:sampler\u001freview_status=review-required\u001fsource_evidence=~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp",
+  "lifecycle-raw:campaign=webgpu\u001fevent_class=destruction-or-release\u001fline=13\u001fmatched_token=~SamplerWGPU(\u001fownership_unit=webgpu:ore:sampler\u001freview_status=review-required\u001fsource_evidence=~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp",
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 3
+dependency_authority.sha256 = "5ad97ddfea57847b988cce60f7657569accccd9dd87bc59f2630f01e95db91cc"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_sampler_wgpu.hpp\u001fdependency_unit=webgpu:ore:sampler\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp\u001fresolved_sha256=b5e6eca633ed6dfb7893761d7a6d398ea495fec2b4f30bdaf9278047308e91bd\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.cpp\u001fsource_unit=webgpu:ore:sampler",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_sampler.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_sampler.hpp\u001fresolved_sha256=e185a80af7fbe556f56a060b3a075a7727acc74da9048a2327c91ce566e80671\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp\u001fsource_unit=webgpu:ore:sampler",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=webgpu/webgpu_cpp.h\u001fdependency_unit=webgpu:wagyu:webgpu_cpp\u001fline=3\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h\u001fresolved_sha256=d58a0553dd853995594f2ccac691c7e02228263582ce5202f0fd931d48fc5f13\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp\u001fsource_unit=webgpu:ore:sampler",
+]
+authority_record_count = 17
+authority_sha256 = "6764a41db552ce9067ddac11b11974fb07750dd433485a4fbce7a15f1dd7d1c1"
+authority_keys = [
+  "component-dependency:component-104->component-101",
+  "component:component-104",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_sampler_wgpu.hpp\u001fdependency_unit=webgpu:ore:sampler\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp\u001fresolved_sha256=b5e6eca633ed6dfb7893761d7a6d398ea495fec2b4f30bdaf9278047308e91bd\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.cpp\u001fsource_unit=webgpu:ore:sampler",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_sampler.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_sampler.hpp\u001fresolved_sha256=e185a80af7fbe556f56a060b3a075a7727acc74da9048a2327c91ce566e80671\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp\u001fsource_unit=webgpu:ore:sampler",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=webgpu/webgpu_cpp.h\u001fdependency_unit=webgpu:wagyu:webgpu_cpp\u001fline=3\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h\u001fresolved_sha256=d58a0553dd853995594f2ccac691c7e02228263582ce5202f0fd931d48fc5f13\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp\u001fsource_unit=webgpu:ore:sampler",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-104\u001fprofile_id=webgpu-dawn-v2",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-104\u001fprofile_id=webgpu-wagyu-v1",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-dawn-v2\u001fdeclaration_line=17\u001fdeclared_type=wgpu::Sampler\u001ffield_name=m_wgpuSampler\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:sampler\u001fqualified_type=rive::ore::SamplerWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=17\u001fdeclared_type=wgpu::Sampler\u001ffield_name=m_wgpuSampler\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:sampler\u001fqualified_type=rive::ore::SamplerWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp",
+  "lifecycle-raw:campaign=webgpu\u001fevent_class=destruction-or-release\u001fline=13\u001fmatched_token=releases\u001fownership_unit=webgpu:ore:sampler\u001freview_status=review-required\u001fsource_evidence=~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp",
+  "lifecycle-raw:campaign=webgpu\u001fevent_class=destruction-or-release\u001fline=13\u001fmatched_token=~SamplerWGPU(\u001fownership_unit=webgpu:ore:sampler\u001freview_status=review-required\u001fsource_evidence=~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp",
+  "owner-family:campaign=webgpu\u001fcomponent_id=component-104\u001ffamily_id=webgpu-ore-owners\u001fownership_unit=webgpu:ore:sampler",
+  "source-binding:byte_count=421\u001fcitation=source:renderer/src/ore/wgpu/ore_sampler_wgpu.hpp:1-19\u001fdisposition=translate\u001flogical_lines=19\u001fpath=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp\u001fsha256=b5e6eca633ed6dfb7893761d7a6d398ea495fec2b4f30bdaf9278047308e91bd",
+  "source-binding:byte_count=63\u001fcitation=source:renderer/src/ore/wgpu/ore_sampler_wgpu.cpp:1-5\u001fdisposition=translate\u001flogical_lines=5\u001fpath=renderer/src/ore/wgpu/ore_sampler_wgpu.cpp\u001fsha256=8cc83496c99cbc7af33242775267969f8684b1db5ff606b506fd21cd3dc0008a",
+  "source-review-receipt-binding:byte_count=1665\u001fid=component-104\u001fpath=docs/backend-port-source-reviews/component-104.source-review.toml\u001fsha256=e55c6ebc4a34058dd2cc99c77bb5c47364981bc3f73e85f72f5b0028016445d7",
+  "target-binding:byte_count=2741\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs:1-98\u001flogical_lines=98\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs\u001fsha256=362022deadd3f58ad995a70cdc815f5a40cebd6c46a07008772d229c7b8b1052",
+  "target-binding:byte_count=770\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_cpp__impl.rs:1-21\u001flogical_lines=21\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_cpp__impl.rs\u001fsha256=78ebfc2dff8f82bb9ffe4ca5e861d9f8e75f1b8ffbf7b78c6bf8cae45a55a00a",
+]
+source_review_receipts = [{ id = "component-104", path = "docs/backend-port-source-reviews/component-104.source-review.toml", sha256 = "e55c6ebc4a34058dd2cc99c77bb5c47364981bc3f73e85f72f5b0028016445d7", byte_count = 1665 }]
+sources = [{ path = "renderer/src/ore/wgpu/ore_sampler_wgpu.cpp", sha256 = "8cc83496c99cbc7af33242775267969f8684b1db5ff606b506fd21cd3dc0008a", logical_lines = 5, byte_count = 63, citation = "source:renderer/src/ore/wgpu/ore_sampler_wgpu.cpp:1-5", disposition = "translate" }, { path = "renderer/src/ore/wgpu/ore_sampler_wgpu.hpp", sha256 = "b5e6eca633ed6dfb7893761d7a6d398ea495fec2b4f30bdaf9278047308e91bd", logical_lines = 19, byte_count = 421, citation = "source:renderer/src/ore/wgpu/ore_sampler_wgpu.hpp:1-19", disposition = "translate" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_cpp__impl.rs", sha256 = "78ebfc2dff8f82bb9ffe4ca5e861d9f8e75f1b8ffbf7b78c6bf8cae45a55a00a", logical_lines = 21, byte_count = 770, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_cpp__impl.rs:1-21" }, { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs", sha256 = "362022deadd3f58ad995a70cdc815f5a40cebd6c46a07008772d229c7b8b1052", logical_lines = 98, byte_count = 2741, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs:1-98" }]
+findings = [{ id = "OR-C104-01", severity = "P2", summary = "The source keeps its value-owned Sampler handle private and its RAII assignment releases the prior reference. The target exposes the owner as pub(crate) ManuallyDrop, so safe direct field replacement can discard a live wrapper without running Drop; only the current dereferenced-assignment convention avoids leaking the old sampler reference.", review_domains = ["ownership-transfers", "teardown-and-destruction-order"], citations = ["source:renderer/src/ore/wgpu/ore_sampler_wgpu.hpp:9-18", "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:897-918", "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_sampler_wgpu_hpp__decl.rs:15-41"], authority_keys = ["component:component-104", "field-raw:campaign=webgpu\u001fconfiguration=webgpu-dawn-v2\u001fdeclaration_line=17\u001fdeclared_type=wgpu::Sampler\u001ffield_name=m_wgpuSampler\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:sampler\u001fqualified_type=rive::ore::SamplerWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp", "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=17\u001fdeclared_type=wgpu::Sampler\u001ffield_name=m_wgpuSampler\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:sampler\u001fqualified_type=rive::ore::SamplerWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_sampler_wgpu.hpp"] }]
+open_findings = 1
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

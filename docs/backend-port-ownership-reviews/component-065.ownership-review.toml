@@ -1,0 +1,56 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-065"
+units = ["shader:source:render_atlas_stroke"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g2-component-065-20260823"
+review_wave = "g2"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = ["component-063"]
+dependency_ownership_receipts = [{ id = "component-063", path = "docs/backend-port-ownership-reviews/component-063.ownership-review.toml", sha256 = "2d726e2aa09c8ce89e0ea6ab8c5b49f0990219e14aa9ce82a2afebd0a16a225c", byte_count = 50849 }]
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 1
+configuration_authority.sha256 = "971f74ba2e1cb0b6a3557c85a2b9701302c34ca25e98975739654006f55d14e0"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:render_atlas_stroke\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/render_atlas_stroke.frag\u001ftoken=GL_GOOGLE_include_directive",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 1
+dependency_authority.sha256 = "43503ecc29178898d904e5566a70056df81ded2457bb59b2d6a62007bef4cecd"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=render_atlas_common.glsl\u001fdependency_unit=shader:source:render_atlas_common\u001fline=4\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/shaders/spirv/render_atlas_common.glsl\u001fresolved_sha256=95ffda17e87a1a09be1be4440e6905ae67ae9083fcb3d6467ca603d2e8494cd7\u001fsource_path=renderer/src/shaders/spirv/render_atlas_stroke.frag\u001fsource_unit=shader:source:render_atlas_stroke",
+]
+authority_record_count = 8
+authority_sha256 = "d41864d203b55d187d1961a7de13df01e510b55c08d2be7204c1fa648fe8b401"
+authority_keys = [
+  "component-dependency:component-065->component-063",
+  "component:component-065",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:render_atlas_stroke\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/render_atlas_stroke.frag\u001ftoken=GL_GOOGLE_include_directive",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=render_atlas_common.glsl\u001fdependency_unit=shader:source:render_atlas_common\u001fline=4\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/shaders/spirv/render_atlas_common.glsl\u001fresolved_sha256=95ffda17e87a1a09be1be4440e6905ae67ae9083fcb3d6467ca603d2e8494cd7\u001fsource_path=renderer/src/shaders/spirv/render_atlas_stroke.frag\u001fsource_unit=shader:source:render_atlas_stroke",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-065\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:render_atlas_stroke",
+  "source-binding:byte_count=129\u001fcitation=source:renderer/src/shaders/spirv/render_atlas_stroke.frag:1-4\u001fdisposition=shared-authority\u001flogical_lines=4\u001fpath=renderer/src/shaders/spirv/render_atlas_stroke.frag\u001fsha256=03993d7ed74efdbf0f5db9e576b24b7be3661bd66bb66483b5752de77426d8aa",
+  "source-review-receipt-binding:byte_count=1217\u001fid=component-065\u001fpath=docs/backend-port-source-reviews/component-065.source-review.toml\u001fsha256=6237e401a8af6e0c876cfb66aaa2c2cac19c8da407bf7ac39f467dedb2ef11a4",
+  "target-binding:byte_count=972\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_stroke_frag__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_stroke_frag__generated_input.rs\u001fsha256=6c5a267f1265d3cb81db6d0c3375b70c3210addf0ccd68326cc8c691f68d24c0",
+]
+source_review_receipts = [{ id = "component-065", path = "docs/backend-port-source-reviews/component-065.source-review.toml", sha256 = "6237e401a8af6e0c876cfb66aaa2c2cac19c8da407bf7ac39f467dedb2ef11a4", byte_count = 1217 }]
+sources = [{ path = "renderer/src/shaders/spirv/render_atlas_stroke.frag", sha256 = "03993d7ed74efdbf0f5db9e576b24b7be3661bd66bb66483b5752de77426d8aa", logical_lines = 4, byte_count = 129, citation = "source:renderer/src/shaders/spirv/render_atlas_stroke.frag:1-4", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_stroke_frag__generated_input.rs", sha256 = "6c5a267f1265d3cb81db6d0c3375b70c3210addf0ccd68326cc8c691f68d24c0", logical_lines = 17, byte_count = 972, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_render_atlas_stroke_frag__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

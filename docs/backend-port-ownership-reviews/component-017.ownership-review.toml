@@ -1,0 +1,56 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-017"
+units = ["shader:source:atomic_draw_image_mesh"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g2-component-017-20260823"
+review_wave = "g2"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = ["component-015"]
+dependency_ownership_receipts = [{ id = "component-015", path = "docs/backend-port-ownership-reviews/component-015.ownership-review.toml", sha256 = "ca91058ce0c3aabe2f27974eba7357fd96210d3b25a8b59c4a1eb604580759d1", byte_count = 18701 }]
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 1
+configuration_authority.sha256 = "f17ee6e75df031c912c8cdc795609ddef284a03d917a8539c762e9abe13c7594"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:atomic_draw_image_mesh\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/atomic_draw_image_mesh.main\u001ftoken=GL_GOOGLE_include_directive",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 1
+dependency_authority.sha256 = "05939830230388be68b923ef1c4b5698c7f34e898046ad4a16ec546e8ca9d90f"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=atomic_base.glsl\u001fdependency_unit=shader:source:atomic_base\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/shaders/spirv/atomic_base.glsl\u001fresolved_sha256=4f929858680a03c74e88b85b676d8020c7a588146367c7189eec791b2412365a\u001fsource_path=renderer/src/shaders/spirv/atomic_draw_image_mesh.main\u001fsource_unit=shader:source:atomic_draw_image_mesh",
+]
+authority_record_count = 8
+authority_sha256 = "0b7e7e0c9dc51d37c27fef3196c5ee51c5f86afc74c555ba408fadaeb04458cc"
+authority_keys = [
+  "component-dependency:component-017->component-015",
+  "component:component-017",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:atomic_draw_image_mesh\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/atomic_draw_image_mesh.main\u001ftoken=GL_GOOGLE_include_directive",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=atomic_base.glsl\u001fdependency_unit=shader:source:atomic_base\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/shaders/spirv/atomic_base.glsl\u001fresolved_sha256=4f929858680a03c74e88b85b676d8020c7a588146367c7189eec791b2412365a\u001fsource_path=renderer/src/shaders/spirv/atomic_draw_image_mesh.main\u001fsource_unit=shader:source:atomic_draw_image_mesh",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-017\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:atomic_draw_image_mesh",
+  "source-binding:byte_count=133\u001fcitation=source:renderer/src/shaders/spirv/atomic_draw_image_mesh.main:1-5\u001fdisposition=shared-authority\u001flogical_lines=5\u001fpath=renderer/src/shaders/spirv/atomic_draw_image_mesh.main\u001fsha256=06fbd52a990b3ae38b460b661967cb8069787621948308d1eb8cdfda83522276",
+  "source-review-receipt-binding:byte_count=1232\u001fid=component-017\u001fpath=docs/backend-port-source-reviews/component-017.source-review.toml\u001fsha256=5973dbace6c880535a6f654e4029da353808c101b9014d5279bed29127c15d7e",
+  "target-binding:byte_count=984\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_image_mesh_main__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_image_mesh_main__generated_input.rs\u001fsha256=d6dde465f00da585e7ef47e5518e033db3bea8825aa650dac344e63ef6130da9",
+]
+source_review_receipts = [{ id = "component-017", path = "docs/backend-port-source-reviews/component-017.source-review.toml", sha256 = "5973dbace6c880535a6f654e4029da353808c101b9014d5279bed29127c15d7e", byte_count = 1232 }]
+sources = [{ path = "renderer/src/shaders/spirv/atomic_draw_image_mesh.main", sha256 = "06fbd52a990b3ae38b460b661967cb8069787621948308d1eb8cdfda83522276", logical_lines = 5, byte_count = 133, citation = "source:renderer/src/shaders/spirv/atomic_draw_image_mesh.main:1-5", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_image_mesh_main__generated_input.rs", sha256 = "d6dde465f00da585e7ef47e5518e033db3bea8825aa650dac344e63ef6130da9", logical_lines = 17, byte_count = 984, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_atomic_draw_image_mesh_main__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

@@ -1,0 +1,76 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-088"
+units = ["webgl2:ore:sampler"]
+owner_families = ["webgl2-ore-owners"]
+field_profiles = ["webgl2-emscripten"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g2-component-088-20260823"
+review_wave = "g2"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "webgl2-ore-owners", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "webgl2-emscripten", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = ["component-084"]
+dependency_ownership_receipts = [{ id = "component-084", path = "docs/backend-port-ownership-reviews/component-084.ownership-review.toml", sha256 = "4a7e75cf3c04571d88d334e331b2003617c340cd6604e3cfc1bd5bf6d2c0388c", byte_count = 9805 }]
+field_authority.kind = "field-raw"
+field_authority.record_count = 1
+field_authority.sha256 = "c03e73d85c9eabe02ad7f72eefee4437debcbc8626c39b078797e2639ee6e813"
+field_authority.authority_keys = [
+  "field-raw:campaign=webgl2\u001fconfiguration=webgl2-emscripten\u001fdeclaration_line=16\u001fdeclared_type=unsigned int\u001ffield_name=m_glSampler\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgl2:ore:sampler\u001fqualified_type=rive::ore::SamplerGL\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.hpp",
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 2
+lifecycle_authority.sha256 = "5bb02691c9ddb1181aec87187cc59880d5d078a77aeac10de505eb8232decfbd"
+lifecycle_authority.authority_keys = [
+  "lifecycle-raw:campaign=webgl2\u001fevent_class=destruction-or-release\u001fline=12\u001fmatched_token=~SamplerGL(\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_evidence=~SamplerGL() override;\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.hpp",
+  "lifecycle-raw:campaign=webgl2\u001fevent_class=destruction-or-release\u001fline=13\u001fmatched_token=~SamplerGL(\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_evidence=SamplerGL::~SamplerGL()\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp",
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 3
+configuration_authority.sha256 = "1afc2c7c9e31be134e118d4fb4e5e086ef16feee04115ca8bc45ac5e9e2c1ffc"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=webgl2\u001fenclosing_condition=all;if defined(ORE_BACKEND_GL)\u001fline=11\u001foccurrence_count=2\u001foccurrence_lines=11,22\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001ftoken=ORE_BACKEND_GL",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=webgl2\u001fenclosing_condition=if defined(ORE_BACKEND_GL)\u001fline=22\u001foccurrence_count=1\u001foccurrence_lines=22\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001ftoken=// ORE_BACKEND_GL",
+  "configuration-raw:authority_kind=preprocessor-if\u001fcampaign=webgl2\u001fenclosing_condition=all\u001fline=11\u001foccurrence_count=1\u001foccurrence_lines=11\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001ftoken=defined(ORE_BACKEND_GL)",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 4
+dependency_authority.sha256 = "de1d1be71fc57a651ae1d15fdc4b9117eb805cd13df4fd5d37bec85355fd5874"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_sampler_gl.cpp\u001fdependency_unit=webgl2:ore:sampler\u001fline=3\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001fresolved_sha256=c6582fcb7d5a73ce79eb12851db9adf83e5b98d11dd934eac3e0f5e3fd3a25d5\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.mm\u001fsource_unit=webgl2:ore:sampler",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_sampler_gl.hpp\u001fdependency_unit=webgl2:ore:sampler\u001fline=6\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/gl/ore_sampler_gl.hpp\u001fresolved_sha256=38a3f85f36ba884c495893df6b60b4a9c6e1b745723e70d8d2b9503735f10274\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001fsource_unit=webgl2:ore:sampler",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/gl/load_gles_extensions.hpp\u001fdependency_unit=webgl2:renderer:load_gles_extensions\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/include/rive/renderer/gl/load_gles_extensions.hpp\u001fresolved_sha256=b7b26a500a5bb931c18acf18e68c4821e8ec1cf3e9f6800b959392677e3f6700\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001fsource_unit=webgl2:ore:sampler",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_sampler.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_sampler.hpp\u001fresolved_sha256=e185a80af7fbe556f56a060b3a075a7727acc74da9048a2327c91ce566e80671\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.hpp\u001fsource_unit=webgl2:ore:sampler",
+]
+authority_record_count = 20
+authority_sha256 = "f4f6dffd3f684eb4590802833307a0f78b2032e8b2cee249ae689d28dbf93f4f"
+authority_keys = [
+  "component-dependency:component-088->component-084",
+  "component:component-088",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=webgl2\u001fenclosing_condition=all;if defined(ORE_BACKEND_GL)\u001fline=11\u001foccurrence_count=2\u001foccurrence_lines=11,22\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001ftoken=ORE_BACKEND_GL",
+  "configuration-raw:authority_kind=preprocessor-endif\u001fcampaign=webgl2\u001fenclosing_condition=if defined(ORE_BACKEND_GL)\u001fline=22\u001foccurrence_count=1\u001foccurrence_lines=22\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001ftoken=// ORE_BACKEND_GL",
+  "configuration-raw:authority_kind=preprocessor-if\u001fcampaign=webgl2\u001fenclosing_condition=all\u001fline=11\u001foccurrence_count=1\u001foccurrence_lines=11\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001ftoken=defined(ORE_BACKEND_GL)",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_sampler_gl.cpp\u001fdependency_unit=webgl2:ore:sampler\u001fline=3\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001fresolved_sha256=c6582fcb7d5a73ce79eb12851db9adf83e5b98d11dd934eac3e0f5e3fd3a25d5\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.mm\u001fsource_unit=webgl2:ore:sampler",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_sampler_gl.hpp\u001fdependency_unit=webgl2:ore:sampler\u001fline=6\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/gl/ore_sampler_gl.hpp\u001fresolved_sha256=38a3f85f36ba884c495893df6b60b4a9c6e1b745723e70d8d2b9503735f10274\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001fsource_unit=webgl2:ore:sampler",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/gl/load_gles_extensions.hpp\u001fdependency_unit=webgl2:renderer:load_gles_extensions\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/include/rive/renderer/gl/load_gles_extensions.hpp\u001fresolved_sha256=b7b26a500a5bb931c18acf18e68c4821e8ec1cf3e9f6800b959392677e3f6700\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp\u001fsource_unit=webgl2:ore:sampler",
+  "dependency-raw:campaign=webgl2\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_sampler.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_sampler.hpp\u001fresolved_sha256=e185a80af7fbe556f56a060b3a075a7727acc74da9048a2327c91ce566e80671\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.hpp\u001fsource_unit=webgl2:ore:sampler",
+  "field-profile:campaign=webgl2\u001fcomponent_id=component-088\u001fprofile_id=webgl2-emscripten",
+  "field-raw:campaign=webgl2\u001fconfiguration=webgl2-emscripten\u001fdeclaration_line=16\u001fdeclared_type=unsigned int\u001ffield_name=m_glSampler\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgl2:ore:sampler\u001fqualified_type=rive::ore::SamplerGL\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.hpp",
+  "lifecycle-raw:campaign=webgl2\u001fevent_class=destruction-or-release\u001fline=12\u001fmatched_token=~SamplerGL(\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_evidence=~SamplerGL() override;\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.hpp",
+  "lifecycle-raw:campaign=webgl2\u001fevent_class=destruction-or-release\u001fline=13\u001fmatched_token=~SamplerGL(\u001fownership_unit=webgl2:ore:sampler\u001freview_status=review-required\u001fsource_evidence=SamplerGL::~SamplerGL()\u001fsource_path=renderer/src/ore/gl/ore_sampler_gl.cpp",
+  "owner-family:campaign=webgl2\u001fcomponent_id=component-088\u001ffamily_id=webgl2-ore-owners\u001fownership_unit=webgl2:ore:sampler",
+  "source-binding:byte_count=132\u001fcitation=source:renderer/src/ore/gl/ore_sampler_gl.mm:1-3\u001fdisposition=source-exclusion-non-webgl2-build\u001flogical_lines=3\u001fpath=renderer/src/ore/gl/ore_sampler_gl.mm\u001fsha256=8f235053ddaccde3261a85861e94c7e2bab7ba82a0c4fe8fdb9914c92c9e3a67",
+  "source-binding:byte_count=337\u001fcitation=source:renderer/src/ore/gl/ore_sampler_gl.hpp:1-18\u001fdisposition=translate\u001flogical_lines=18\u001fpath=renderer/src/ore/gl/ore_sampler_gl.hpp\u001fsha256=38a3f85f36ba884c495893df6b60b4a9c6e1b745723e70d8d2b9503735f10274",
+  "source-binding:byte_count=356\u001fcitation=source:renderer/src/ore/gl/ore_sampler_gl.cpp:1-24\u001fdisposition=translate\u001flogical_lines=24\u001fpath=renderer/src/ore/gl/ore_sampler_gl.cpp\u001fsha256=c6582fcb7d5a73ce79eb12851db9adf83e5b98d11dd934eac3e0f5e3fd3a25d5",
+  "source-review-receipt-binding:byte_count=1882\u001fid=component-088\u001fpath=docs/backend-port-source-reviews/component-088.source-review.toml\u001fsha256=cf40adabdd48e5161df33d8fcd9060fedc97d59fdad028cf3337397c4f7106b5",
+  "target-binding:byte_count=1928\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_sampler_gl_hpp__decl.rs:1-70\u001flogical_lines=70\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_sampler_gl_hpp__decl.rs\u001fsha256=0732d74fbffaeb9db45a1d5a9fab7f4ce90255838f7ebea2b2cb940b02426fa6",
+  "target-binding:byte_count=890\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_sampler_gl_cpp__impl.rs:1-30\u001flogical_lines=30\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_sampler_gl_cpp__impl.rs\u001fsha256=d002853af9fdbc34482f0cc1d0e50bbad2a5361f55f6ff345d7f63598b2d7cfb",
+]
+source_review_receipts = [{ id = "component-088", path = "docs/backend-port-source-reviews/component-088.source-review.toml", sha256 = "cf40adabdd48e5161df33d8fcd9060fedc97d59fdad028cf3337397c4f7106b5", byte_count = 1882 }]
+sources = [{ path = "renderer/src/ore/gl/ore_sampler_gl.cpp", sha256 = "c6582fcb7d5a73ce79eb12851db9adf83e5b98d11dd934eac3e0f5e3fd3a25d5", logical_lines = 24, byte_count = 356, citation = "source:renderer/src/ore/gl/ore_sampler_gl.cpp:1-24", disposition = "translate" }, { path = "renderer/src/ore/gl/ore_sampler_gl.hpp", sha256 = "38a3f85f36ba884c495893df6b60b4a9c6e1b745723e70d8d2b9503735f10274", logical_lines = 18, byte_count = 337, citation = "source:renderer/src/ore/gl/ore_sampler_gl.hpp:1-18", disposition = "translate" }, { path = "renderer/src/ore/gl/ore_sampler_gl.mm", sha256 = "8f235053ddaccde3261a85861e94c7e2bab7ba82a0c4fe8fdb9914c92c9e3a67", logical_lines = 3, byte_count = 132, citation = "source:renderer/src/ore/gl/ore_sampler_gl.mm:1-3", disposition = "source-exclusion-non-webgl2-build" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_sampler_gl_cpp__impl.rs", sha256 = "d002853af9fdbc34482f0cc1d0e50bbad2a5361f55f6ff345d7f63598b2d7cfb", logical_lines = 30, byte_count = 890, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_sampler_gl_cpp__impl.rs:1-30" }, { path = "crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_sampler_gl_hpp__decl.rs", sha256 = "0732d74fbffaeb9db45a1d5a9fab7f4ce90255838f7ebea2b2cb940b02426fa6", logical_lines = 70, byte_count = 1928, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgl2/renderer_src_ore_gl_ore_sampler_gl_hpp__decl.rs:1-70" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

@@ -1,0 +1,68 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-053"
+units = ["shader:source:draw_msaa_color_seed_attachment"]
+owner_families = ["shared-shader-and-build-authority"]
+field_profiles = []
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g2-component-053-20260823"
+review_wave = "g2"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "shared-shader-and-build-authority", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = []
+dependency_components = ["component-009", "component-010", "component-012", "component-013", "component-049"]
+dependency_ownership_receipts = [{ id = "component-009", path = "docs/backend-port-ownership-reviews/component-009.ownership-review.toml", sha256 = "70488a7788bb906578b64e058177471c8792459c7b45748776470ffeff832f14", byte_count = 31828 }, { id = "component-010", path = "docs/backend-port-ownership-reviews/component-010.ownership-review.toml", sha256 = "fa007368259d1981aeb4f2284f94bc33ccac61ceed55629a46c5bd238a752dcb", byte_count = 7725 }, { id = "component-012", path = "docs/backend-port-ownership-reviews/component-012.ownership-review.toml", sha256 = "bffb0f7135da77995aaab0f71cf19234070b4fa166a9a442eaef72897f0a5c9b", byte_count = 12916 }, { id = "component-013", path = "docs/backend-port-ownership-reviews/component-013.ownership-review.toml", sha256 = "b73e1c0d490632096e63c3ca5d39cfaf214bbaf925630f8d600771ac46efda3f", byte_count = 119128 }, { id = "component-049", path = "docs/backend-port-ownership-reviews/component-049.ownership-review.toml", sha256 = "03dc78c3f0dbe2d0f99b140cf4eff8e4540c4640e09c49b17beebd524a406297", byte_count = 16527 }]
+field_authority.kind = "field-raw"
+field_authority.record_count = 0
+field_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+field_authority.authority_keys = [
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 0
+lifecycle_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+lifecycle_authority.authority_keys = [
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 1
+configuration_authority.sha256 = "341c662535f1651ac33a1d290872b0cadfde19322b30b977cd0231c8d8d415c6"
+configuration_authority.authority_keys = [
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:draw_msaa_color_seed_attachment\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001ftoken=GL_GOOGLE_include_directive",
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 5
+dependency_authority.sha256 = "704efcbc3d694ef1ccc78c42028b2afa0f03f9e180533af6dd2e7bcb757f236c"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=common.minified.glsl\u001fdependency_unit=shader:source:common\u001fline=6\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/common.glsl\u001fresolved_sha256=37d9f72c2ec84a9a24b42d8798c56c77e396c7b57a39f24edece8c95fe8b3881\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=constants.minified.glsl\u001fdependency_unit=shader:source:constants\u001fline=4\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/constants.glsl\u001fresolved_sha256=eefc0b9115beb4fe87b85431b0c683fdec73244c044278e97fdba0c96014bb56\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=draw_input_attachment.minified.frag\u001fdependency_unit=shader:source:draw_input_attachment\u001fline=8\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/draw_input_attachment.frag\u001fresolved_sha256=8af2574495c71e8282116b3e598daf5e1c705d0b50c39d2439ad18e6be1e8694\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=flush_uniforms.minified.glsl\u001fdependency_unit=shader:source:flush_uniforms\u001fline=5\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/flush_uniforms.glsl\u001fresolved_sha256=1c22659c0e40233b0b06515287e122e06b73a4428d8e78721ca71e3419db961e\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=glsl.minified.glsl\u001fdependency_unit=shader:source:glsl\u001fline=3\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/glsl.glsl\u001fresolved_sha256=d7e3b795badbe6e5108f268ddea4f7c0bb5af4ad1416e41c7304beca89a15523\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+]
+authority_record_count = 16
+authority_sha256 = "af12af12090a6b0c91f26c2cc49eeb63c6728bbd193659125b8fbf1ff9e900d8"
+authority_keys = [
+  "component-dependency:component-053->component-009",
+  "component-dependency:component-053->component-010",
+  "component-dependency:component-053->component-012",
+  "component-dependency:component-053->component-013",
+  "component-dependency:component-053->component-049",
+  "component:component-053",
+  "configuration-raw:authority_kind=configuration-or-capability-symbol\u001fcampaign=shader-build-authority\u001fenclosing_condition=all\u001fline=2\u001foccurrence_count=1\u001foccurrence_lines=2\u001fownership_unit=shader:source:draw_msaa_color_seed_attachment\u001freview_status=authority-recorded\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001ftoken=GL_GOOGLE_include_directive",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=common.minified.glsl\u001fdependency_unit=shader:source:common\u001fline=6\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/common.glsl\u001fresolved_sha256=37d9f72c2ec84a9a24b42d8798c56c77e396c7b57a39f24edece8c95fe8b3881\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=constants.minified.glsl\u001fdependency_unit=shader:source:constants\u001fline=4\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/constants.glsl\u001fresolved_sha256=eefc0b9115beb4fe87b85431b0c683fdec73244c044278e97fdba0c96014bb56\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=draw_input_attachment.minified.frag\u001fdependency_unit=shader:source:draw_input_attachment\u001fline=8\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/draw_input_attachment.frag\u001fresolved_sha256=8af2574495c71e8282116b3e598daf5e1c705d0b50c39d2439ad18e6be1e8694\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=flush_uniforms.minified.glsl\u001fdependency_unit=shader:source:flush_uniforms\u001fline=5\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/flush_uniforms.glsl\u001fresolved_sha256=1c22659c0e40233b0b06515287e122e06b73a4428d8e78721ca71e3419db961e\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+  "dependency-raw:campaign=shader-build-authority\u001fdependency_syntax=cpp-include\u001fdependency_token=glsl.minified.glsl\u001fdependency_unit=shader:source:glsl\u001fline=3\u001fresolution_kind=generated-from-owned-source\u001fresolved_path=renderer/src/shaders/glsl.glsl\u001fresolved_sha256=d7e3b795badbe6e5108f268ddea4f7c0bb5af4ad1416e41c7304beca89a15523\u001fsource_path=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsource_unit=shader:source:draw_msaa_color_seed_attachment",
+  "owner-family:campaign=shader-build-authority\u001fcomponent_id=component-053\u001ffamily_id=shared-shader-and-build-authority\u001fownership_unit=shader:source:draw_msaa_color_seed_attachment",
+  "source-binding:byte_count=304\u001fcitation=source:renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag:1-8\u001fdisposition=shared-authority\u001flogical_lines=8\u001fpath=renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag\u001fsha256=0baeda14de63ded97fc2247240b01b71f891be7235b3c73a2a950810402c44d5",
+  "source-review-receipt-binding:byte_count=1277\u001fid=component-053\u001fpath=docs/backend-port-source-reviews/component-053.source-review.toml\u001fsha256=33596f96b871a8d4168b265438c4b386765260482836c9db932a32386f5ef137",
+  "target-binding:byte_count=1020\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.rs:1-17\u001flogical_lines=17\u001fpath=crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.rs\u001fsha256=8122045673a115e371f0afac22f0c7e7831a19f1e47cdbff8440aafd709be2ed",
+]
+source_review_receipts = [{ id = "component-053", path = "docs/backend-port-source-reviews/component-053.source-review.toml", sha256 = "33596f96b871a8d4168b265438c4b386765260482836c9db932a32386f5ef137", byte_count = 1277 }]
+sources = [{ path = "renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag", sha256 = "0baeda14de63ded97fc2247240b01b71f891be7235b3c73a2a950810402c44d5", logical_lines = 8, byte_count = 304, citation = "source:renderer/src/shaders/spirv/draw_msaa_color_seed_attachment.frag:1-8", disposition = "shared-authority" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.rs", sha256 = "8122045673a115e371f0afac22f0c7e7831a19f1e47cdbff8440aafd709be2ed", logical_lines = 17, byte_count = 1020, citation = "target:crates/nuxie-renderer/src/mechanical_port/shader-build-authority/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.rs:1-17" }]
+findings = []
+open_findings = 0
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

@@ -1,0 +1,70 @@
+schema_version = 1
+receipt_kind = "ownership-review-component"
+component_id = "component-106"
+units = ["webgpu:ore:shader_module"]
+owner_families = ["webgpu-ore-owners"]
+field_profiles = ["webgpu-wagyu-v1", "webgpu-dawn-v2"]
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+workspace_base_ref = "4af6b0ac961191bfd9b755223e7a52e2865ee004"
+role = "sol-high"
+review_run_id = "ownership-g2-component-106-20260823"
+review_wave = "g2"
+coverage = ["field-and-layout", "ownership-transfers", "provenance-and-aliasing", "callbacks-and-threading", "synchronization-and-mapping", "failure-and-loss", "teardown-and-destruction-order", "unsafe-ffi-and-abi", "configuration-owner-graphs"]
+owner_contract_bindings = [{ id = "webgpu-ore-owners", path = "docs/backend-port-owner-contracts.toml", sha256 = "b9d6aef8689ef92ac7f50de25c803c4fdf4928e9ac3da632b3536f952b4117a6", byte_count = 7474 }]
+field_profile_bindings = [{ id = "webgpu-wagyu-v1", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }, { id = "webgpu-dawn-v2", path = "docs/backend-port-field-profiles.toml", sha256 = "7fcc6aa87d7ef650de4875b749faadb9bd52b7d0995e13bbef21aa92f5852e79", byte_count = 1484 }]
+dependency_components = ["component-101"]
+dependency_ownership_receipts = [{ id = "component-101", path = "docs/backend-port-ownership-reviews/component-101.ownership-review.toml", sha256 = "6aa31d7594ff9d5f5add23994ed315acad0bd82c1bca604d901bc24793ec4c92", byte_count = 1425601 }]
+field_authority.kind = "field-raw"
+field_authority.record_count = 2
+field_authority.sha256 = "ee60b0b339a6967f876e5ea1d56283b5ef55b4e9d1c53208a0e2068d3983c622"
+field_authority.authority_keys = [
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-dawn-v2\u001fdeclaration_line=19\u001fdeclared_type=wgpu::ShaderModule\u001ffield_name=m_wgpuShaderModule\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=19\u001fdeclared_type=wgpu::ShaderModule\u001ffield_name=m_wgpuShaderModule\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp",
+]
+lifecycle_authority.kind = "lifecycle-raw"
+lifecycle_authority.record_count = 2
+lifecycle_authority.sha256 = "d98a6fea05c5b552ce46e70f6f008afe276067a46130175921f22b71a2be2915"
+lifecycle_authority.authority_keys = [
+  "lifecycle-raw:campaign=webgpu\u001fevent_class=destruction-or-release\u001fline=14\u001fmatched_token=~ShaderModuleWGPU(\u001fownership_unit=webgpu:ore:shader_module\u001freview_status=review-required\u001fsource_evidence=~ShaderModuleWGPU() override =\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp",
+  "lifecycle-raw:campaign=webgpu\u001fevent_class=destruction-or-release\u001fline=15\u001fmatched_token=releases\u001fownership_unit=webgpu:ore:shader_module\u001freview_status=review-required\u001fsource_evidence=default; // wgpu::ShaderModule RAII destructor releases\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp",
+]
+configuration_authority.kind = "configuration-raw"
+configuration_authority.record_count = 0
+configuration_authority.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+configuration_authority.authority_keys = [
+]
+dependency_authority.kind = "dependency-raw"
+dependency_authority.record_count = 3
+dependency_authority.sha256 = "b0a859d39d7619bba316efb08560b7ebf15e4237f4e5514981ff684530dc9355"
+dependency_authority.authority_keys = [
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_shader_module_wgpu.hpp\u001fdependency_unit=webgpu:ore:shader_module\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp\u001fresolved_sha256=00920df29c3426c1eb9796196b942b228c75879c65f1687c04ab3dbe6e4be4a6\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.cpp\u001fsource_unit=webgpu:ore:shader_module",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_shader_module.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_shader_module.hpp\u001fresolved_sha256=7ed17ed2d9adf6ea941b0b53fdac1c96d3e7d2a4f2da3e01495ef16a67a65248\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp\u001fsource_unit=webgpu:ore:shader_module",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=webgpu/webgpu_cpp.h\u001fdependency_unit=webgpu:wagyu:webgpu_cpp\u001fline=3\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h\u001fresolved_sha256=d58a0553dd853995594f2ccac691c7e02228263582ce5202f0fd931d48fc5f13\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp\u001fsource_unit=webgpu:ore:shader_module",
+]
+authority_record_count = 17
+authority_sha256 = "6590f43be97a09f41aaab59e0b2911fbcaedd8dc7ea5970a3680d0ff0a7b5ead"
+authority_keys = [
+  "component-dependency:component-106->component-101",
+  "component:component-106",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=ore_shader_module_wgpu.hpp\u001fdependency_unit=webgpu:ore:shader_module\u001fline=5\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp\u001fresolved_sha256=00920df29c3426c1eb9796196b942b228c75879c65f1687c04ab3dbe6e4be4a6\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.cpp\u001fsource_unit=webgpu:ore:shader_module",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=rive/renderer/ore/ore_shader_module.hpp\u001fdependency_unit=-\u001fline=2\u001fresolution_kind=pinned-source-external\u001fresolved_path=renderer/include/rive/renderer/ore/ore_shader_module.hpp\u001fresolved_sha256=7ed17ed2d9adf6ea941b0b53fdac1c96d3e7d2a4f2da3e01495ef16a67a65248\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp\u001fsource_unit=webgpu:ore:shader_module",
+  "dependency-raw:campaign=webgpu\u001fdependency_syntax=cpp-include\u001fdependency_token=webgpu/webgpu_cpp.h\u001fdependency_unit=webgpu:wagyu:webgpu_cpp\u001fline=3\u001fresolution_kind=owned-source\u001fresolved_path=renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h\u001fresolved_sha256=d58a0553dd853995594f2ccac691c7e02228263582ce5202f0fd931d48fc5f13\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp\u001fsource_unit=webgpu:ore:shader_module",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-106\u001fprofile_id=webgpu-dawn-v2",
+  "field-profile:campaign=webgpu\u001fcomponent_id=component-106\u001fprofile_id=webgpu-wagyu-v1",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-dawn-v2\u001fdeclaration_line=19\u001fdeclared_type=wgpu::ShaderModule\u001ffield_name=m_wgpuShaderModule\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp",
+  "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=19\u001fdeclared_type=wgpu::ShaderModule\u001ffield_name=m_wgpuShaderModule\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp",
+  "lifecycle-raw:campaign=webgpu\u001fevent_class=destruction-or-release\u001fline=14\u001fmatched_token=~ShaderModuleWGPU(\u001fownership_unit=webgpu:ore:shader_module\u001freview_status=review-required\u001fsource_evidence=~ShaderModuleWGPU() override =\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp",
+  "lifecycle-raw:campaign=webgpu\u001fevent_class=destruction-or-release\u001fline=15\u001fmatched_token=releases\u001fownership_unit=webgpu:ore:shader_module\u001freview_status=review-required\u001fsource_evidence=default; // wgpu::ShaderModule RAII destructor releases\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp",
+  "owner-family:campaign=webgpu\u001fcomponent_id=component-106\u001ffamily_id=webgpu-ore-owners\u001fownership_unit=webgpu:ore:shader_module",
+  "source-binding:byte_count=479\u001fcitation=source:renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp:1-21\u001fdisposition=translate\u001flogical_lines=21\u001fpath=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp\u001fsha256=00920df29c3426c1eb9796196b942b228c75879c65f1687c04ab3dbe6e4be4a6",
+  "source-binding:byte_count=69\u001fcitation=source:renderer/src/ore/wgpu/ore_shader_module_wgpu.cpp:1-5\u001fdisposition=translate\u001flogical_lines=5\u001fpath=renderer/src/ore/wgpu/ore_shader_module_wgpu.cpp\u001fsha256=aef1ea905817c98dc82cafa4bb0cf1f74cf66407c229bf30241dfafa7171949f",
+  "source-review-receipt-binding:byte_count=1719\u001fid=component-106\u001fpath=docs/backend-port-source-reviews/component-106.source-review.toml\u001fsha256=3cc34c8993cd7a4d5e11340feb4d120f627884524d424b77bf0e7b1241085d85",
+  "target-binding:byte_count=2829\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_hpp__decl.rs:1-97\u001flogical_lines=97\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_hpp__decl.rs\u001fsha256=fbe36467f3daef42cf1eaa8425dce619ef51d958836dfebc1cb40b68333b4e81",
+  "target-binding:byte_count=788\u001fcitation=target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_cpp__impl.rs:1-21\u001flogical_lines=21\u001fpath=crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_cpp__impl.rs\u001fsha256=c06253b493c47058ad90b06ac382e9978a50954aa44a16c286c45364d1c04f67",
+]
+source_review_receipts = [{ id = "component-106", path = "docs/backend-port-source-reviews/component-106.source-review.toml", sha256 = "3cc34c8993cd7a4d5e11340feb4d120f627884524d424b77bf0e7b1241085d85", byte_count = 1719 }]
+sources = [{ path = "renderer/src/ore/wgpu/ore_shader_module_wgpu.cpp", sha256 = "aef1ea905817c98dc82cafa4bb0cf1f74cf66407c229bf30241dfafa7171949f", logical_lines = 5, byte_count = 69, citation = "source:renderer/src/ore/wgpu/ore_shader_module_wgpu.cpp:1-5", disposition = "translate" }, { path = "renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp", sha256 = "00920df29c3426c1eb9796196b942b228c75879c65f1687c04ab3dbe6e4be4a6", logical_lines = 21, byte_count = 479, citation = "source:renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp:1-21", disposition = "translate" }]
+targets = [{ path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_cpp__impl.rs", sha256 = "c06253b493c47058ad90b06ac382e9978a50954aa44a16c286c45364d1c04f67", logical_lines = 21, byte_count = 788, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_cpp__impl.rs:1-21" }, { path = "crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_hpp__decl.rs", sha256 = "fbe36467f3daef42cf1eaa8425dce619ef51d958836dfebc1cb40b68333b4e81", logical_lines = 97, byte_count = 2829, citation = "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_hpp__decl.rs:1-97" }]
+findings = [{ id = "OR-C106-01", severity = "P2", summary = "The source keeps its value-owned ShaderModule handle private and its RAII assignment releases the prior reference. The target exposes the owner as pub(crate) ManuallyDrop, so safe direct field replacement can discard a live wrapper without running Drop; only the current dereferenced-assignment convention avoids leaking the old shader-module reference.", review_domains = ["ownership-transfers", "teardown-and-destruction-order"], citations = ["source:renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp:9-20", "source:renderer/src/webgpu/wagyu-port/include/webgpu/webgpu_cpp.h:897-918", "target:crates/nuxie-renderer/src/mechanical_port/webgpu/renderer_src_ore_wgpu_ore_shader_module_wgpu_hpp__decl.rs:15-40"], authority_keys = ["component:component-106", "field-raw:campaign=webgpu\u001fconfiguration=webgpu-dawn-v2\u001fdeclaration_line=19\u001fdeclared_type=wgpu::ShaderModule\u001ffield_name=m_wgpuShaderModule\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp", "field-raw:campaign=webgpu\u001fconfiguration=webgpu-wagyu-v1\u001fdeclaration_line=19\u001fdeclared_type=wgpu::ShaderModule\u001ffield_name=m_wgpuShaderModule\u001ffield_order=1\u001fownership_review=value-lifetime-review-required\u001fownership_unit=webgpu:ore:shader_module\u001fqualified_type=rive::ore::ShaderModuleWGPU\u001fsource_path=renderer/src/ore/wgpu/ore_shader_module_wgpu.hpp"] }]
+open_findings = 1
+attestation = "reviewed-complete-component-ownership-lifetime-abi-authority"

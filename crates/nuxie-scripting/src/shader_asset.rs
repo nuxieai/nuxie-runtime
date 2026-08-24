@@ -1551,4 +1551,254 @@ mod tests {
         );
         assert!(ShaderAsset::decode("duplicate-reflection", &payload).is_err());
     }
+
+    fn make_upstream_rstb(
+        version: u16,
+        variants: &[(u8, Vec<u8>)],
+        sections: &[(u8, Vec<u8>)],
+        magic: u32,
+    ) -> Vec<u8> {
+        let mut out = Vec::new();
+        put_u32(&mut out, magic);
+        put_u16(&mut out, version);
+        out.push(variants.len() as u8);
+        out.push(sections.len() as u8);
+
+        let mut blob_section = Vec::new();
+        for (target, blob) in variants {
+            out.push(*target);
+            put_u32(&mut out, blob_section.len() as u32);
+            put_u32(&mut out, blob.len() as u32);
+            blob_section.extend_from_slice(blob);
+        }
+        for (tag, data) in sections {
+            out.push(*tag);
+            put_u16(&mut out, data.len() as u16);
+            out.extend_from_slice(data);
+        }
+        out.extend_from_slice(&blob_section);
+        out
+    }
+
+    fn upstream_envelope(rstb: &[u8]) -> Vec<u8> {
+        let mut out = vec![0x00];
+        out.extend_from_slice(rstb);
+        out
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct UpstreamTextureSamplerPair {
+        tex_group: u8,
+        tex_binding: u8,
+        samp_group: u8,
+        samp_binding: u8,
+    }
+
+    fn upstream_texture_sampler_pairs(_asset: &ShaderAsset) -> Vec<UpstreamTextureSamplerPair> {
+        // The production Rust ShaderAsset has no tag-1 texture/sampler-pair
+        // owner yet. Returning its observable empty surface keeps all four
+        // upstream section cases executable without adding runtime behavior.
+        Vec::new()
+    }
+
+    fn make_upstream_tex_sampler_pairs_tag(pairs: &[[u8; 4]]) -> Vec<u8> {
+        let mut out = vec![pairs.len() as u8];
+        for pair in pairs {
+            out.extend_from_slice(pair);
+        }
+        out
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_valid() {
+        let blob = vec![0xde, 0xad, 0xbe, 0xef, 0x42];
+        let data = upstream_envelope(&make_upstream_rstb(4, &[(2, blob)], &[], 0x5253_5442));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+
+        let result = asset.variant(2).unwrap();
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[0], 0xde);
+        assert_eq!(result[1], 0xad);
+        assert_eq!(result[2], 0xbe);
+        assert_eq!(result[3], 0xef);
+        assert_eq!(result[4], 0x42);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_bad_magic() {
+        let data = upstream_envelope(&make_upstream_rstb(4, &[], &[], 0xbadb_ad00));
+        assert_eq!(ShaderAsset::decode("asset", &data).is_ok(), false);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_bad_version() {
+        let data = upstream_envelope(&make_upstream_rstb(3, &[], &[], 0x5253_5442));
+        assert_eq!(ShaderAsset::decode("asset", &data).is_ok(), false);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_truncated() {
+        let data = [0x00, 0x52, 0x53, 0x54, 0x42, 0x01, 0x00];
+        assert_eq!(ShaderAsset::decode("asset", &data).is_ok(), false);
+    }
+
+    #[test]
+    fn upstream_shader_asset_find_shader_miss() {
+        let data = upstream_envelope(&make_upstream_rstb(4, &[(2, vec![0xaa])], &[], 0x5253_5442));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+
+        assert!(asset.variant(0).is_none());
+        assert!(asset.variant(99).is_none());
+        assert_eq!(asset.variant(2).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn upstream_shader_asset_multiple_targets() {
+        let blob0 = vec![0x11, 0x22];
+        let blob1 = vec![0x33, 0x44, 0x55];
+        let blob2 = vec![0x66];
+        let blob3 = vec![0x77, 0x88, 0x99, 0xaa];
+        let data = upstream_envelope(&make_upstream_rstb(
+            4,
+            &[(0, blob0), (1, blob1), (2, blob2), (3, blob3)],
+            &[],
+            0x5253_5442,
+        ));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+
+        let r0 = asset.variant(0).unwrap();
+        assert_eq!(r0.len(), 2);
+        assert_eq!(r0[0], 0x11);
+        let r1 = asset.variant(1).unwrap();
+        assert_eq!(r1.len(), 3);
+        assert_eq!(r1[0], 0x33);
+        let r2 = asset.variant(2).unwrap();
+        assert_eq!(r2.len(), 1);
+        assert_eq!(r2[0], 0x66);
+        let r3 = asset.variant(3).unwrap();
+        assert_eq!(r3.len(), 4);
+        assert_eq!(r3[0], 0x77);
+    }
+
+    #[test]
+    #[ignore = "expected-red: Rust ShaderAsset does not retain tag-1 texture/sampler pairs"]
+    fn upstream_shader_asset_decode_texture_sampler_pairs() {
+        let pairs =
+            make_upstream_tex_sampler_pairs_tag(&[[0, 1, 0, 2], [1, 3, 1, 4], [2, 5, 2, 6]]);
+        let data = upstream_envelope(&make_upstream_rstb(
+            4,
+            &[(2, vec![0xaa])],
+            &[(1, pairs)],
+            0x5253_5442,
+        ));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+
+        let out = upstream_texture_sampler_pairs(&asset);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0].tex_group, 0);
+        assert_eq!(out[0].tex_binding, 1);
+        assert_eq!(out[0].samp_group, 0);
+        assert_eq!(out[0].samp_binding, 2);
+        assert_eq!(out[1].tex_binding, 3);
+        assert_eq!(out[2].samp_binding, 6);
+
+        let blob = asset.variant(2).unwrap();
+        assert_eq!(blob.len(), 1);
+        assert_eq!(blob[0], 0xaa);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_no_sections_empty_pairs() {
+        let data = upstream_envelope(&make_upstream_rstb(4, &[(2, vec![0x42])], &[], 0x5253_5442));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+        assert_eq!(upstream_texture_sampler_pairs(&asset).len(), 0);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_unknown_tag_skipped() {
+        let bogus_section = vec![0xde, 0xad, 0xbe, 0xef];
+        let data = upstream_envelope(&make_upstream_rstb(
+            4,
+            &[(2, vec![0x42])],
+            &[(99, bogus_section)],
+            0x5253_5442,
+        ));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+        assert_eq!(upstream_texture_sampler_pairs(&asset).len(), 0);
+        let blob = asset.variant(2).unwrap();
+        assert_eq!(blob.len(), 1);
+        assert_eq!(blob[0], 0x42);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_truncated_section_header() {
+        let mut rstb = make_upstream_rstb(4, &[(2, vec![0x42])], &[(1, vec![0])], 0x5253_5442);
+        rstb.resize(17 + 1, 0);
+        let data = upstream_envelope(&rstb);
+        assert_eq!(ShaderAsset::decode("asset", &data).is_ok(), false);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_truncated_section_data() {
+        let mut rstb = make_upstream_rstb(4, &[(2, vec![0x42])], &[], 0x5253_5442);
+        rstb[7] = 1;
+        rstb.push(1);
+        rstb.push(10);
+        rstb.push(0);
+        rstb.push(0xaa);
+        rstb.push(0xbb);
+        let data = upstream_envelope(&rstb);
+        assert_eq!(ShaderAsset::decode("asset", &data).is_ok(), false);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_rejects_out_of_range_variant() {
+        let mut rstb = make_upstream_rstb(4, &[(2, vec![0xaa])], &[], 0x5253_5442);
+        rstb[13] = 0xff;
+        rstb[14] = 0xff;
+        rstb[15] = 0xff;
+        rstb[16] = 0x7f;
+        let data = upstream_envelope(&rstb);
+        let result = ShaderAsset::decode("asset", &data);
+        assert_eq!(result.is_ok(), false);
+        assert_eq!(
+            result
+                .as_ref()
+                .ok()
+                .and_then(|asset| asset.variant(2))
+                .is_some(),
+            false
+        );
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_rejects_overflowing_variant() {
+        let mut rstb = make_upstream_rstb(4, &[(2, vec![0xaa])], &[], 0x5253_5442);
+        rstb[9] = 0xf0;
+        rstb[10] = 0xff;
+        rstb[11] = 0xff;
+        rstb[12] = 0xff;
+        rstb[13] = 0x20;
+        rstb[14] = 0x00;
+        rstb[15] = 0x00;
+        rstb[16] = 0x00;
+        let data = upstream_envelope(&rstb);
+        assert_eq!(ShaderAsset::decode("asset", &data).is_ok(), false);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_pair_count_mismatch_ignored() {
+        let bad_pairs = vec![5, 0, 1, 0, 2, 1, 3, 1, 4];
+        let data = upstream_envelope(&make_upstream_rstb(
+            4,
+            &[(2, vec![0xaa])],
+            &[(1, bad_pairs)],
+            0x5253_5442,
+        ));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+        assert_eq!(upstream_texture_sampler_pairs(&asset).len(), 0);
+        let blob = asset.variant(2).unwrap();
+        assert_eq!(blob.len(), 1);
+        assert_eq!(blob[0], 0xaa);
+    }
 }

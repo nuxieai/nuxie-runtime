@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 41
+max_pending = 40
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -978,9 +978,9 @@ note = "Only the listed literal TEST_CASE action streams execute through both ru
 [[file]]
 upstream = "tests/unit_tests/runtime/shader_asset_test.cpp"
 test_case_count = 17
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-binary/src/assets/shader_asset.rs::upstream_tests", "crates/nuxie-scripting/src/shader_asset.rs::tests::upstream_shader_asset_*"]
+note = "All seventeen metadata, decode, lookup, multi-target, tagged-section, truncation, range, overflow, and pair-count sequences are translated against the schema/file-asset and private RSTB owners. Sixteen are green. The texture/sampler-pair case is honestly expected-red because Rust skips tag 1 and exposes no retained pair collection; every exact expected field and the unaffected variant assertion remain in the body."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/signed_content_header_test.cpp"

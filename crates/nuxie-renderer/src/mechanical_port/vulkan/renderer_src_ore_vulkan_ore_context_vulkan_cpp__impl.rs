@@ -608,8 +608,12 @@ pub(crate) fn makeBuffer(
         BufferUsage::upload => vk::BufferUsageFlags::TRANSFER_SRC,
     };
     let mut buffer = BufferVulkan::new(manager.clone(), desc.size, desc.usage);
-    buffer.setVulkanContext(Arc::clone(&context.m_vk));
-    buffer.setDeviceAndUsage(context.m_vk.device, usage);
+    unsafe {
+        // The context, device, and every allocation below are one retained
+        // VulkanContext/VMA provenance domain.
+        buffer.setVulkanContext(Arc::clone(&context.m_vk));
+        buffer.setDeviceAndUsage(context.m_vk.device, usage);
+    }
     let create_info = vk::BufferCreateInfo::default()
         .size(u64::from(desc.size))
         .usage(usage);
@@ -632,7 +636,11 @@ pub(crate) fn makeBuffer(
         .get_allocation_info(&allocation)
         .mapped_data
         .cast::<u8>();
-    buffer.installPooledBacking(vk_buffer, allocation, mapped);
+    unsafe {
+        // `vk_buffer`, `allocation`, and `mapped` were returned together by
+        // the allocator retained in the context installed above.
+        buffer.installPooledBacking(vk_buffer, allocation, mapped);
+    }
     if let Some(data) = desc.data_prefix().ok()? {
         unsafe { std::ptr::copy_nonoverlapping(data.as_ptr(), mapped, desc.size as usize) };
     }

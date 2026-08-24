@@ -16,9 +16,29 @@ use nuxie_ore_metal::gpu_resource::{GPUResourceManager, ResourceHandle};
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
 use nuxie_render_api::ColorInt;
 use std::ffi::CStr;
-use std::mem::{ManuallyDrop, transmute};
+use std::mem::{ManuallyDrop, transmute_copy};
 use std::sync::Arc;
 use vk_mem::{AllocatorCreateFlags, AllocatorCreateInfo};
+
+unsafe fn loadInstanceCommand<T: Copy>(
+    get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+    instance: vk::Instance,
+    name: &CStr,
+) -> Option<T> {
+    let command = unsafe { get_instance_proc_addr(instance, name.as_ptr()) }?;
+    assert_eq!(core::mem::size_of::<T>(), core::mem::size_of_val(&command));
+    Some(unsafe { transmute_copy(&command) })
+}
+
+unsafe fn loadDeviceCommand<T: Copy>(
+    get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
+    device: vk::Device,
+    name: &CStr,
+) -> Option<T> {
+    let command = unsafe { get_device_proc_addr(device, name.as_ptr()) }?;
+    assert_eq!(core::mem::size_of::<T>(), core::mem::size_of_val(&command));
+    Some(unsafe { transmute_copy(&command) })
+}
 
 impl VulkanContext {
     /// # Safety
@@ -37,22 +57,38 @@ impl VulkanContext {
         let static_fn = ash::StaticFn { get_instance_proc_addr };
         let ash_instance = unsafe { ash::Instance::load(&static_fn, instance) };
         let ash_device = unsafe { ash::Device::load(ash_instance.fp_v1_0(), device) };
-        let debug_name = CStr::from_bytes_with_nul(b"vkSetDebugUtilsObjectNameEXT\0").unwrap();
-        let raw_debug = unsafe { get_instance_proc_addr(instance, debug_name.as_ptr()) };
-        let debug_fn = raw_debug.map(|function| unsafe { transmute(function) });
-        let get_device_proc_addr = ash_instance.fp_v1_0().get_device_proc_addr;
-        let color_write_name = CStr::from_bytes_with_nul(b"vkCmdSetColorWriteEnableEXT\0").unwrap();
-        let cull_mode_name = CStr::from_bytes_with_nul(b"vkCmdSetCullMode\0").unwrap();
-        let depth_write_name = CStr::from_bytes_with_nul(b"vkCmdSetDepthWriteEnable\0").unwrap();
-        let cmd_set_color_write_enable_ext: Option<vk::PFN_vkCmdSetColorWriteEnableEXT> =
-            unsafe { get_device_proc_addr(device, color_write_name.as_ptr()) }
-                .map(|function| unsafe { transmute(function) });
-        let cmd_set_cull_mode: Option<vk::PFN_vkCmdSetCullMode> =
-            unsafe { get_device_proc_addr(device, cull_mode_name.as_ptr()) }
-                .map(|function| unsafe { transmute(function) });
-        let cmd_set_depth_write_enable: Option<vk::PFN_vkCmdSetDepthWriteEnable> =
-            unsafe { get_device_proc_addr(device, depth_write_name.as_ptr()) }
-                .map(|function| unsafe { transmute(function) });
+        let GetDeviceProcAddr: Option<vk::PFN_vkGetDeviceProcAddr> =
+            unsafe { loadInstanceCommand(get_instance_proc_addr, instance, c"vkGetDeviceProcAddr") };
+        let get_device_proc_addr =
+            GetDeviceProcAddr.expect("Vulkan instance must publish vkGetDeviceProcAddr");
+        let GetPhysicalDeviceFormatProperties = unsafe {
+            loadInstanceCommand(
+                get_instance_proc_addr,
+                instance,
+                c"vkGetPhysicalDeviceFormatProperties",
+            )
+        };
+        let GetPhysicalDeviceProperties = unsafe {
+            loadInstanceCommand(
+                get_instance_proc_addr,
+                instance,
+                c"vkGetPhysicalDeviceProperties",
+            )
+        };
+        let GetPhysicalDeviceFeatures = unsafe {
+            loadInstanceCommand(
+                get_instance_proc_addr,
+                instance,
+                c"vkGetPhysicalDeviceFeatures",
+            )
+        };
+        let SetDebugUtilsObjectNameEXT = unsafe {
+            loadInstanceCommand(
+                get_instance_proc_addr,
+                instance,
+                c"vkSetDebugUtilsObjectNameEXT",
+            )
+        };
         let mut allocator_info = AllocatorCreateInfo::new(&ash_instance, &ash_device, physicalDevice);
         allocator_info.flags = AllocatorCreateFlags::EXTERNALLY_SYNCHRONIZED;
         allocator_info.vulkan_api_version = features.apiVersion;
@@ -71,18 +107,88 @@ impl VulkanContext {
             .optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT);
         assert!(d24 || d32, "No suitable depth format supported!");
 
+        macro_rules! load_device_command {
+            ($name:ident) => {{
+                let name = CStr::from_bytes_with_nul(
+                    concat!("vk", stringify!($name), "\0").as_bytes(),
+                )
+                .expect("static Vulkan command name");
+                unsafe { loadDeviceCommand(get_device_proc_addr, device, name) }
+            }};
+        }
+
         Arc::new(Self {
             m_managerOwner: manager_owner,
             instance,
             physicalDevice,
             device,
             features,
+            GetDeviceProcAddr,
+            GetPhysicalDeviceFormatProperties,
+            GetPhysicalDeviceProperties,
+            GetPhysicalDeviceFeatures,
+            SetDebugUtilsObjectNameEXT,
+            AllocateCommandBuffers: load_device_command!(AllocateCommandBuffers),
+            AllocateDescriptorSets: load_device_command!(AllocateDescriptorSets),
+            BeginCommandBuffer: load_device_command!(BeginCommandBuffer),
+            CmdBeginRenderPass: load_device_command!(CmdBeginRenderPass),
+            CmdBindDescriptorSets: load_device_command!(CmdBindDescriptorSets),
+            CmdBindIndexBuffer: load_device_command!(CmdBindIndexBuffer),
+            CmdBindPipeline: load_device_command!(CmdBindPipeline),
+            CmdBindVertexBuffers: load_device_command!(CmdBindVertexBuffers),
+            CmdBlitImage: load_device_command!(CmdBlitImage),
+            CmdClearColorImage: load_device_command!(CmdClearColorImage),
+            CmdCopyBufferToImage: load_device_command!(CmdCopyBufferToImage),
+            CmdDraw: load_device_command!(CmdDraw),
+            CmdDrawIndexed: load_device_command!(CmdDrawIndexed),
+            CmdEndRenderPass: load_device_command!(CmdEndRenderPass),
+            CmdFillBuffer: load_device_command!(CmdFillBuffer),
+            CmdNextSubpass: load_device_command!(CmdNextSubpass),
+            CmdPipelineBarrier: load_device_command!(CmdPipelineBarrier),
+            CmdSetBlendConstants: load_device_command!(CmdSetBlendConstants),
+            CmdSetColorWriteEnableEXT: load_device_command!(CmdSetColorWriteEnableEXT),
+            CmdSetCullMode: load_device_command!(CmdSetCullMode),
+            CmdSetDepthWriteEnable: load_device_command!(CmdSetDepthWriteEnable),
+            CmdSetScissor: load_device_command!(CmdSetScissor),
+            CmdSetStencilCompareMask: load_device_command!(CmdSetStencilCompareMask),
+            CmdSetStencilOp: load_device_command!(CmdSetStencilOp),
+            CmdSetStencilReference: load_device_command!(CmdSetStencilReference),
+            CmdSetStencilWriteMask: load_device_command!(CmdSetStencilWriteMask),
+            CmdSetViewport: load_device_command!(CmdSetViewport),
+            CreateCommandPool: load_device_command!(CreateCommandPool),
+            CreateDescriptorPool: load_device_command!(CreateDescriptorPool),
+            CreateDescriptorSetLayout: load_device_command!(CreateDescriptorSetLayout),
+            CreateFramebuffer: load_device_command!(CreateFramebuffer),
+            CreateFence: load_device_command!(CreateFence),
+            CreateGraphicsPipelines: load_device_command!(CreateGraphicsPipelines),
+            CreateImageView: load_device_command!(CreateImageView),
+            CreatePipelineLayout: load_device_command!(CreatePipelineLayout),
+            CreateRenderPass: load_device_command!(CreateRenderPass),
+            CreateSampler: load_device_command!(CreateSampler),
+            CreateShaderModule: load_device_command!(CreateShaderModule),
+            DestroyCommandPool: load_device_command!(DestroyCommandPool),
+            DestroyDescriptorPool: load_device_command!(DestroyDescriptorPool),
+            DestroyDescriptorSetLayout: load_device_command!(DestroyDescriptorSetLayout),
+            DestroyFence: load_device_command!(DestroyFence),
+            DestroyFramebuffer: load_device_command!(DestroyFramebuffer),
+            DestroyImageView: load_device_command!(DestroyImageView),
+            DestroyPipeline: load_device_command!(DestroyPipeline),
+            DestroyPipelineLayout: load_device_command!(DestroyPipelineLayout),
+            DestroyRenderPass: load_device_command!(DestroyRenderPass),
+            DestroySampler: load_device_command!(DestroySampler),
+            DestroyShaderModule: load_device_command!(DestroyShaderModule),
+            EndCommandBuffer: load_device_command!(EndCommandBuffer),
+            FreeCommandBuffers: load_device_command!(FreeCommandBuffers),
+            FreeDescriptorSets: load_device_command!(FreeDescriptorSets),
+            QueueSubmit: load_device_command!(QueueSubmit),
+            QueueWaitIdle: load_device_command!(QueueWaitIdle),
+            ResetCommandBuffer: load_device_command!(ResetCommandBuffer),
+            ResetDescriptorPool: load_device_command!(ResetDescriptorPool),
+            ResetFences: load_device_command!(ResetFences),
+            UpdateDescriptorSets: load_device_command!(UpdateDescriptorSets),
+            WaitForFences: load_device_command!(WaitForFences),
             m_ashInstance: ash_instance,
             m_ashDevice: ash_device,
-            m_setDebugUtilsObjectNameEXT: debug_fn,
-            CmdSetColorWriteEnableEXT: cmd_set_color_write_enable_ext,
-            CmdSetCullMode: cmd_set_cull_mode,
-            CmdSetDepthWriteEnable: cmd_set_depth_write_enable,
             m_vmaAllocator: ManuallyDrop::new(allocator),
             m_physicalDeviceProperties: properties,
             m_supportsD24S8: d24,
@@ -282,7 +388,7 @@ impl VulkanContext {
 
     pub(crate) fn setDebugNameIfEnabled<T: Handle>(&self, handle: T,
         object_type: vk::ObjectType, name: Option<&CStr>) {
-        let (Some(function), Some(name)) = (self.m_setDebugUtilsObjectNameEXT, name) else { return; };
+        let (Some(function), Some(name)) = (self.SetDebugUtilsObjectNameEXT, name) else { return; };
         let info = vk::DebugUtilsObjectNameInfoEXT {
             object_type,
             object_handle: handle.as_raw(),

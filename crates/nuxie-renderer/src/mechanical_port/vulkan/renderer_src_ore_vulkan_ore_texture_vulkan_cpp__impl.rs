@@ -238,8 +238,12 @@ pub(crate) fn upload(
         .expect("TextureVulkan requires its retained VulkanContext")
         .clone();
     let mut staging = BufferVulkan::new(manager.clone(), required as u32, BufferUsage::upload);
-    staging.setVulkanContext(vk_context.clone());
-    staging.setDeviceAndUsage(vk_context.device, vk::BufferUsageFlags::TRANSFER_SRC);
+    unsafe {
+        // The staging buffer retains this exact context and its device; its
+        // backing below is allocated from the same context's VMA owner.
+        staging.setVulkanContext(vk_context.clone());
+        staging.setDeviceAndUsage(vk_context.device, vk::BufferUsageFlags::TRANSFER_SRC);
+    }
     let buffer_info = vk::BufferCreateInfo::default()
         .size(upload_size)
         .usage(vk::BufferUsageFlags::TRANSFER_SRC);
@@ -289,7 +293,11 @@ pub(crate) fn upload(
             TextureUploadError::SizeOverflow,
         );
     }
-    staging.installStagingBacking(buffer, allocation, mapped);
+    unsafe {
+        // The native buffer, allocation, and mapped range are the tuple just
+        // returned by `vk_context.allocator()`.
+        staging.installStagingBacking(buffer, allocation, mapped);
+    }
     staging
         .update(bytes, required as u32, 0)
         .map_err(|_| TextureUploadError::SizeOverflow)?;

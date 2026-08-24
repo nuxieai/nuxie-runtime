@@ -56,8 +56,19 @@ pub(crate) fn vk_abort<T>(result: vk::Result, file: &str, line: u32) -> T {
 
 impl Buffer {
     pub(crate) fn new(vk: Arc<VulkanContext>, info: vk::BufferCreateInfo<'_>, map: Mappability) -> Self {
-        let mut info: vk::BufferCreateInfo<'static> = unsafe { transmute(info) };
-        info.s_type = vk::StructureType::BUFFER_CREATE_INFO;
+        assert!(
+            info.p_next.is_null(),
+            "safe Vulkan Buffer ownership does not retain a borrowed pNext chain"
+        );
+        assert_eq!(
+            info.queue_family_index_count, 0,
+            "safe Vulkan Buffer ownership requires exclusive sharing without borrowed queue indices"
+        );
+        let info: vk::BufferCreateInfo<'static> = vk::BufferCreateInfo::default()
+            .flags(info.flags)
+            .size(info.size)
+            .usage(info.usage)
+            .sharing_mode(info.sharing_mode);
         let buffer = Self { base: std::mem::ManuallyDrop::new(Resource::new(vk)), m_mappability: map,
             m_info: std::cell::UnsafeCell::new(info),
             m_vmaAllocation: std::cell::UnsafeCell::new(None),

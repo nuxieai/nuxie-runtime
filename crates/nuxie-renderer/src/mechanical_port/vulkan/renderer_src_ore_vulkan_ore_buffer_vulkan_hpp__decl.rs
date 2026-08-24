@@ -114,12 +114,17 @@ impl BufferVulkan {
     }
 
     /// Source friend access used by ContextVulkan and TextureVulkan.
-    pub(crate) fn setVulkanContext(&mut self, vk: Arc<VulkanContext>) {
+    /// # Safety
+    /// `vk` must own the device and allocator used by every backing installed
+    /// in this buffer and must remain live through final destruction.
+    pub(crate) unsafe fn setVulkanContext(&mut self, vk: Arc<VulkanContext>) {
         *self.m_vk.get_mut() = Some(vk);
     }
 
     /// Source friend access used by ContextVulkan.
-    pub(crate) fn setDeviceAndUsage(
+    /// # Safety
+    /// `device` must be the device owned by the installed Vulkan context.
+    pub(crate) unsafe fn setDeviceAndUsage(
         &mut self,
         device: vk::Device,
         usage: vk::BufferUsageFlags,
@@ -129,7 +134,11 @@ impl BufferVulkan {
     }
 
     /// Seeds the source backing pool with its first VMA allocation.
-    pub(crate) fn installPooledBacking(
+    /// # Safety
+    /// The buffer, allocation, and mapped pointer must be one live tuple
+    /// created by this object's installed context allocator. `mapped` must
+    /// cover the source buffer size for the allocation lifetime.
+    pub(crate) unsafe fn installPooledBacking(
         &mut self,
         buffer: vk::Buffer,
         allocation: vk_mem::Allocation,
@@ -152,7 +161,11 @@ impl BufferVulkan {
 
     /// Installs the single source staging allocation while leaving `m_pool`
     /// empty, exactly as TextureVulkan does.
-    pub(crate) fn installStagingBacking(
+    /// # Safety
+    /// The buffer, allocation, and mapped pointer must be one live tuple
+    /// created by this object's installed context allocator. `mapped` must
+    /// cover the source buffer size for the allocation lifetime.
+    pub(crate) unsafe fn installStagingBacking(
         &mut self,
         buffer: vk::Buffer,
         allocation: vk_mem::Allocation,

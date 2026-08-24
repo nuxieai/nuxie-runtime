@@ -307,10 +307,9 @@ note = "The exhaustive FL-B/FL-C table identifies the listed names as fully cove
 [[file]]
 upstream = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 test_case_count = 8
-status = "partial"
-evidence = ["silver-corpus.toml::{follow_path_animate_shape,follow_path_animate_solo,follow_path_animate_target,follow_path_constraint,text_follow_path_shape_length}"]
-covered_test_cases = ["Animate shape along follow path", "Animate solo along follow path", "Animate follow path target path", "Follow path constraint with path as target", "Text follow path modifier"]
-note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+status = "ported-direct"
+evidence = ["silver-corpus.toml::{follow_path_animate_shape,follow_path_animate_solo,follow_path_animate_target,follow_path_constraint,text_follow_path_shape_length}", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_follow_path_*"]
+note = "All eight pinned cases are ported. The three direct fixture cases compare the constrained target and rectangle world translations after the exact zero-second update."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/font_test.cpp"

@@ -19100,6 +19100,54 @@ fn follow_path_constraint_retains_measure_and_applies_like_cpp_probe() {
     );
 }
 
+fn assert_upstream_follow_path_fixture_matches_target(fixture: &str) {
+    let bytes = std::fs::read(cpp_runtime_fixture(fixture))
+        .unwrap_or_else(|error| panic!("read {fixture}: {error}"));
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("import {fixture}: {error:#}"));
+    let graphs = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("graph {fixture}: {error:#}"));
+    let graph = &graphs.artboards[0];
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+            .unwrap_or_else(|error| panic!("instantiate {fixture}: {error:#}"));
+    let named = |name: &str| {
+        graph
+            .components
+            .iter()
+            .find(|component| component.name.as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("{fixture} missing {name}"))
+            .local_id
+    };
+    let target = named("target");
+    let rectangle = named("rect");
+
+    artboard.update_pass();
+    let target_world = artboard
+        .object_world_transform(target)
+        .expect("target world transform");
+    let rectangle_world = artboard
+        .object_world_transform(rectangle)
+        .expect("rectangle world transform");
+    assert_eq!(target_world.0[4], rectangle_world.0[4]);
+    assert_eq!(target_world.0[5], rectangle_world.0[5]);
+}
+
+#[test]
+fn upstream_follow_path_constraint_updates_world_transform() {
+    assert_upstream_follow_path_fixture_matches_target("follow_path.riv");
+}
+
+#[test]
+fn upstream_follow_path_with_zero_opacity_constraint_updates_world_transform() {
+    assert_upstream_follow_path_fixture_matches_target("follow_path_with_0_opacity.riv");
+}
+
+#[test]
+fn upstream_follow_path_with_zero_opacity_path_updates_world_transform() {
+    assert_upstream_follow_path_fixture_matches_target("follow_path_path_0_opacity.riv");
+}
+
 #[test]
 fn list_follow_path_constraint_registers_and_updates_like_cpp_probe() {
     let Some(probe) = probe_path() else {

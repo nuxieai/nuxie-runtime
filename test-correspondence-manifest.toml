@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 16
+max_pending = 15
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -779,9 +779,9 @@ note = "P2C directly ports the five Lua-call cases. The sixth case replays the e
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_listener_action_test.cpp"
 test_case_count = 3
-status = "pending"
-evidence = []
-note = "The backfill explicitly retains all three exact script-console/view-model-result cases as findings; pending scripted silver entries are not executed evidence."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_scripting_listener_action.rs"]
+note = "All three upstream cases retain their exact fixtures, frame timing, pointer coordinates and IDs, focus/key/text sequence, and assertion order. The two silver cases are honestly red at the shared frameSize-versus-makeRenderPaint stream-prefix difference; the listener-context case is honestly red at the first post-move assertion because pointerType remains empty instead of becoming pointerEnter."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_mat2d_test.cpp"

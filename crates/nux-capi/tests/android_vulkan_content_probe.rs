@@ -96,6 +96,12 @@ fn fixture_renders_content_through_the_android_vulkan_arm() {
             "content did not render: only {} distinct colors",
             colors.len()
         );
+        let pixel = |x: usize, y: usize| &data[(y * 400 + x) * 4..][..4];
+        assert_eq!(
+            pixel(335, 360),
+            [0x00, 0x00, 0x00, 0xff],
+            "top-row-first frame is vertically inverted or missing the Color toggle"
+        );
         nux_android_vulkan_frame_free(frame);
         nux_renderer_android_vulkan_free(renderer);
         nux_player_free(player);

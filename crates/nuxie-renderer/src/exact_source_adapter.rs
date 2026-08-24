@@ -109,6 +109,9 @@ pub(crate) trait ExactSourceBackend: 'static {
     fn context_mut(&mut self) -> Pin<&mut RenderContext>;
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError>;
     fn finish_frame(&mut self, frame_number: u64) -> Result<Vec<u8>, RendererError>;
+    fn finish_frame_without_readback(&mut self, frame_number: u64) -> Result<(), RendererError> {
+        self.finish_frame(frame_number).map(drop)
+    }
     fn abort_frame(&mut self);
 }
 
@@ -262,6 +265,15 @@ pub(crate) struct ExactSourceFrameCore<B: ExactSourceBackend> {
 impl<B: ExactSourceBackend> ExactSourceFrameCore<B> {
     pub(crate) fn finish(mut self) -> Result<Vec<u8>, RendererError> {
         let result = self.backend.borrow_mut().finish_frame(self.frame_number);
+        self.finished = true;
+        result
+    }
+
+    pub(crate) fn finish_without_readback(mut self) -> Result<(), RendererError> {
+        let result = self
+            .backend
+            .borrow_mut()
+            .finish_frame_without_readback(self.frame_number);
         self.finished = true;
         result
     }

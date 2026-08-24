@@ -255,7 +255,8 @@ crate-seams-baseline-check:
 crate-seams-browser-check:
 	RUSTC="$$(rustup which --toolchain stable rustc)" \
 		"$$(rustup which --toolchain stable cargo)" check --locked \
-		-p webgl2-renderer-replay --target wasm32-unknown-unknown --all-targets
+		-p webgpu-renderer-replay -p webgl2-renderer-replay \
+		--target wasm32-unknown-unknown --all-targets
 
 crate-seams-apple-check:
 	tools/check-nux-capi-apple.sh

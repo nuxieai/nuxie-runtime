@@ -137,7 +137,10 @@ class ParityScorecardCliTests(unittest.TestCase):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
         makefile = (REPO_ROOT / "Makefile").read_text()
 
-        self.assertIn("--features renderer-webgpu", workflow)
+        self.assertIn(
+            "-p webgpu-renderer-replay --target wasm32-unknown-unknown",
+            workflow,
+        )
         self.assertIn("-p webgl2-renderer-replay --target wasm32-unknown-unknown", workflow)
         self.assertNotIn("browser-webgpu-only-check", makefile)
         self.assertNotIn("tools/browser-renderer-smoke", workflow)

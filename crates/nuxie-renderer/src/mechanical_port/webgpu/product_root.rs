@@ -14,7 +14,7 @@ use super::webgpu_cpp_decl::{
     PowerPreference, Queue, QueueWorkDoneStatus, RequestAdapterStatus, RequestDeviceStatus,
     Texture, TextureDimension, TextureFormat, TextureUsage, WaitStatus,
 };
-#[cfg(target_os = "emscripten")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use super::webgpu_cpp_decl::{
     CompositeAlphaMode, EmscriptenSurfaceSourceCanvasHTMLSelector, Surface,
     SurfaceCapabilities, SurfaceConfiguration, SurfaceTexture, TextureViewDimension,
@@ -25,7 +25,7 @@ use super::webgpu_decl::{
     WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo, WGPUTextureAspect_All,
     WGPUTextureDescriptor, WGPUBufferDescriptor, WGPUExtent3D, WGPU_STRLEN,
 };
-#[cfg(target_os = "emscripten")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use super::webgpu_decl::{WGPUSurfaceDescriptor, WGPUTextureViewDescriptor};
 use crate::exact_source_adapter::ExactSourceBackend;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
@@ -37,17 +37,7 @@ use crate::{RenderMode, RendererError};
 const WAIT_FOREVER: u64 = u64::MAX;
 const COPY_ROW_ALIGNMENT: usize = 256;
 
-#[cfg(target_os = "emscripten")]
-unsafe extern "C" {
-    fn emscripten_set_canvas_element_size(
-        target: *const std::ffi::c_char,
-        width: std::ffi::c_int,
-        height: std::ffi::c_int,
-    ) -> std::ffi::c_int;
-    fn emscripten_sleep(milliseconds: u32);
-}
-
-#[cfg(target_os = "emscripten")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 const CANVAS_SELECTOR: &[u8; 8] = b"#canvas\0";
 
 fn report_uncaptured_error(_device: &Device, error_type: ErrorType, message: WGPUStringView) {
@@ -66,9 +56,9 @@ pub(crate) struct WebGpuProductBackend {
     context: Option<Pin<Box<RenderContext>>>,
     target: rcp<RenderTargetWebGPU>,
     target_texture: Texture,
-    #[cfg(target_os = "emscripten")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     surface: Surface,
-    #[cfg(target_os = "emscripten")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     surface_format: TextureFormat,
     command_encoder: Option<CommandEncoder>,
     width: u32,
@@ -89,7 +79,7 @@ impl WebGpuProductBackend {
             });
         }
 
-        #[cfg(not(target_os = "emscripten"))]
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         let instance = {
             let timed_wait_any = InstanceFeatureName::TimedWaitAny.into();
             let instance_descriptor = super::webgpu_cpp_decl::InstanceDescriptor {
@@ -99,7 +89,7 @@ impl WebGpuProductBackend {
             };
             unsafe { super::webgpu_cpp_decl::CreateInstance(Some(&instance_descriptor)) }
         };
-        #[cfg(target_os = "emscripten")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         let instance = unsafe { super::webgpu_cpp_decl::CreateInstance(None) };
         if instance.Get().is_null() {
             return Err(RendererError::Adapter(
@@ -160,7 +150,7 @@ impl WebGpuProductBackend {
             copy_string(&adapter_info.asRaw().description),
             backend_name(expected_backend()),
         );
-        #[cfg(not(target_os = "emscripten"))]
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         if copy_string(&adapter_info.asRaw().device).is_empty() {
             return Err(RendererError::Adapter(
                 "Dawn Metal adapter did not report a device name".into(),
@@ -170,7 +160,7 @@ impl WebGpuProductBackend {
         let clip_distances = FeatureName::ClipDistances.into();
         let supports_clip_distances = unsafe { adapter.HasFeature(clip_distances) }.asBool();
         let mut device_descriptor = super::webgpu_cpp_decl::DeviceDescriptor::default();
-        #[cfg(not(target_os = "emscripten"))]
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         device_descriptor.SetUncapturedErrorCallback(report_uncaptured_error);
         device_descriptor.requiredFeatureCount = usize::from(supports_clip_distances);
         device_descriptor.requiredFeatures = if supports_clip_distances {
@@ -224,7 +214,7 @@ impl WebGpuProductBackend {
                 .static_impl_cast::<RenderContextWebGPUImpl>()
         };
 
-        #[cfg(not(target_os = "emscripten"))]
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         let (target, target_texture) = {
             let texture_descriptor = WGPUTextureDescriptor {
                 usage: (TextureUsage::RenderAttachment
@@ -265,14 +255,9 @@ impl WebGpuProductBackend {
             (target, target_texture)
         };
 
-        #[cfg(target_os = "emscripten")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         let (target, target_texture, surface, surface_format) = {
             let selector = CANVAS_SELECTOR.as_ptr().cast::<std::ffi::c_char>();
-            let width = std::ffi::c_int::try_from(width)
-                .map_err(|_| RendererError::Device("WebGPU canvas width overflow".into()))?;
-            let height = std::ffi::c_int::try_from(height)
-                .map_err(|_| RendererError::Device("WebGPU canvas height overflow".into()))?;
-            unsafe { emscripten_set_canvas_element_size(selector, width, height) };
 
             let mut html_selector = EmscriptenSurfaceSourceCanvasHTMLSelector::default();
             html_selector.selector = WGPUStringView {
@@ -286,7 +271,7 @@ impl WebGpuProductBackend {
             let surface = unsafe { instance.CreateSurface(&surface_descriptor) };
             if surface.Get().is_null() {
                 return Err(RendererError::Device(
-                    "create exact Emscripten WebGPU canvas surface".into(),
+                    "create exact wasm32 WebGPU canvas surface".into(),
                 ));
             }
 
@@ -296,7 +281,7 @@ impl WebGpuProductBackend {
                 || capabilities.asRaw().formats.is_null()
             {
                 return Err(RendererError::Device(
-                    "query exact Emscripten WebGPU surface capabilities".into(),
+                    "query exact wasm32 WebGPU surface capabilities".into(),
                 ));
             }
             let advertised = unsafe { *capabilities.asRaw().formats };
@@ -333,9 +318,9 @@ impl WebGpuProductBackend {
             context: Some(context),
             target,
             target_texture,
-            #[cfg(target_os = "emscripten")]
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             surface,
-            #[cfg(target_os = "emscripten")]
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             surface_format,
             command_encoder: None,
             width,
@@ -357,10 +342,10 @@ impl WebGpuProductBackend {
     fn submit_and_wait(&self, command_buffer: &super::webgpu_cpp_decl::CommandBuffer) -> Result<(), RendererError> {
         let raw = command_buffer.Get();
         unsafe { self.queue.Submit(1, &raw) };
-        #[cfg(target_os = "emscripten")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         return Ok(());
 
-        #[cfg(not(target_os = "emscripten"))]
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         {
         let completion = Rc::new(RefCell::new(None));
         let callback_completion = Rc::clone(&completion);
@@ -477,26 +462,11 @@ impl WebGpuProductBackend {
         let source = unsafe { std::slice::from_raw_parts(mapped, readback_size) };
         let mut pixels = vec![0; packed_row_bytes * self.height as usize];
         for row in 0..self.height as usize {
-            #[cfg(not(target_os = "emscripten"))]
             let source_row = row;
-            #[cfg(target_os = "emscripten")]
-            let source_row = self.height as usize - row - 1;
             let source_pixels =
                 &source[source_row * padded_row_bytes..][..packed_row_bytes];
             let destination = &mut pixels[row * packed_row_bytes..][..packed_row_bytes];
-            #[cfg(not(target_os = "emscripten"))]
             destination.copy_from_slice(source_pixels);
-            #[cfg(target_os = "emscripten")]
-            if self.surface_format == TextureFormat::RGBA8Unorm {
-                destination.copy_from_slice(source_pixels);
-            } else {
-                for x in (0..packed_row_bytes).step_by(4) {
-                    destination[x] = source_pixels[x + 2];
-                    destination[x + 1] = source_pixels[x + 1];
-                    destination[x + 2] = source_pixels[x];
-                    destination[x + 3] = source_pixels[x + 3];
-                }
-            }
         }
         unsafe { readback.Unmap() };
         Ok(pixels)
@@ -514,13 +484,13 @@ impl ExactSourceBackend for WebGpuProductBackend {
                 "exact WebGPU context already has an active frame".into(),
             ));
         }
-        #[cfg(target_os = "emscripten")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
             let mut surface_texture = SurfaceTexture::default();
             unsafe { self.surface.GetCurrentTexture(&mut surface_texture) };
             if surface_texture.texture.Get().is_null() {
                 return Err(RendererError::Device(
-                    "acquire exact Emscripten WebGPU canvas texture".into(),
+                    "acquire exact wasm32 WebGPU canvas texture".into(),
                 ));
             }
             let surface_width = unsafe { surface_texture.texture.GetWidth() };
@@ -537,7 +507,7 @@ impl ExactSourceBackend for WebGpuProductBackend {
             );
             if !render_target.operator_bool() {
                 return Err(RendererError::Device(
-                    "create exact Emscripten WebGPU render target".into(),
+                    "create exact wasm32 WebGPU render target".into(),
                 ));
             }
             let view_descriptor = WGPUTextureViewDescriptor {
@@ -550,7 +520,7 @@ impl ExactSourceBackend for WebGpuProductBackend {
             };
             if target_view.Get().is_null() {
                 return Err(RendererError::Device(
-                    "create exact Emscripten WebGPU canvas texture view".into(),
+                    "create exact wasm32 WebGPU canvas texture view".into(),
                 ));
             }
             unsafe { &mut *render_target.get() }
@@ -586,6 +556,36 @@ impl ExactSourceBackend for WebGpuProductBackend {
     }
 
     fn finish_frame(&mut self, frame_number: u64) -> Result<Vec<u8>, RendererError> {
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        {
+            let _ = frame_number;
+            return Err(RendererError::Map(
+                "browser WebGPU readback is asynchronous; use finish_present".into(),
+            ));
+        }
+
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        {
+            self.finish_commands(frame_number)?;
+            self.read_pixels()
+        }
+    }
+
+    fn finish_frame_without_readback(&mut self, frame_number: u64) -> Result<(), RendererError> {
+        self.finish_commands(frame_number)
+    }
+
+    fn abort_frame(&mut self) {
+        if self.active_frame {
+            unsafe { Pin::get_unchecked_mut(self.context_pin()) }.abortFrameExecutable();
+            self.command_encoder.take();
+            self.active_frame = false;
+        }
+    }
+}
+
+impl WebGpuProductBackend {
+    fn finish_commands(&mut self, frame_number: u64) -> Result<(), RendererError> {
         if !self.active_frame || frame_number != self.frame_number {
             return Err(RendererError::Device(
                 "exact WebGPU frame ownership mismatch".into(),
@@ -615,21 +615,12 @@ impl ExactSourceBackend for WebGpuProductBackend {
         let completion = self.submit_and_wait(&command_buffer);
         self.active_frame = false;
         completion?;
-        let pixels = self.read_pixels();
-        #[cfg(target_os = "emscripten")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
             self.target.operator_assign_null();
             self.target_texture = Texture::default();
         }
-        pixels
-    }
-
-    fn abort_frame(&mut self) {
-        if self.active_frame {
-            unsafe { Pin::get_unchecked_mut(self.context_pin()) }.abortFrameExecutable();
-            self.command_encoder.take();
-            self.active_frame = false;
-        }
+        Ok(())
     }
 }
 
@@ -663,23 +654,23 @@ fn await_future(
 }
 
 fn callback_mode() -> CallbackMode {
-    #[cfg(target_os = "emscripten")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     return CallbackMode::AllowSpontaneous;
-    #[cfg(not(target_os = "emscripten"))]
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     return CallbackMode::WaitAnyOnly;
 }
 
 fn requested_backend() -> BackendType {
-    #[cfg(target_os = "emscripten")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     return BackendType::Undefined;
-    #[cfg(not(target_os = "emscripten"))]
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     return BackendType::Metal;
 }
 
 fn expected_backend() -> BackendType {
-    #[cfg(target_os = "emscripten")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     return BackendType::WebGPU;
-    #[cfg(not(target_os = "emscripten"))]
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     return BackendType::Metal;
 }
 
@@ -713,15 +704,17 @@ fn await_callback<T>(
     result: &Rc<RefCell<Option<T>>>,
     operation: &'static str,
 ) -> Result<(), RendererError> {
-    #[cfg(target_os = "emscripten")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
-        let _ = (instance, future, operation);
-        while result.borrow().is_none() {
-            unsafe { emscripten_sleep(1) };
+        let _ = (instance, future);
+        if result.borrow().is_none() {
+            return Err(RendererError::Device(format!(
+                "{operation}: wasm32 host callback was not delivered synchronously"
+            )));
         }
         Ok(())
     }
-    #[cfg(not(target_os = "emscripten"))]
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     {
         let _ = result;
         await_future(instance, future, operation)

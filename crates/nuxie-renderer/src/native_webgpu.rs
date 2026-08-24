@@ -103,6 +103,12 @@ impl NativeWebGpuFrame {
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
         self.core.finish()
     }
+
+    /// Presents one browser frame without forcing an asynchronous GPU readback.
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    pub fn finish_present(self) -> Result<(), RendererError> {
+        self.core.finish_without_readback()
+    }
 }
 
 impl Renderer for NativeWebGpuFrame {

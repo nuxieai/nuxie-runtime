@@ -36,7 +36,8 @@ two ongoing workflows, and every document here supports one of them:
 | `renderer-exactness-map.md` | Contract-exact vs byte-exact renderer corpus metrics and the same-runner gate. |
 | `renderer-fuzz-replay.md` | The dual-renderer negative-input gate. |
 | `audio-core-parity.md` | The audio parity boundary (headless engine exact; no device sink). |
-| `webgpu-only-browser-cut.md` | Intentional product cut: WebGPU is the sole browser backend. |
+| `browser-renderer-wasm-packaging.md` | Current browser packaging decision: separate exact WebGPU and WebGL2 products, both on `wasm32-unknown-unknown`, with explicit editor selection and no automatic fallback. |
+| `webgpu-only-browser-cut.md` | Historical WebGPU-only product cut, superseded by the exact WebGL2 port and explicit editor renderer selection. |
 | `luau-fork.md` | State of the in-house `luaur` Luau engine fork and its carried patches. |
 | `watch-cpp-nest-semantic-uaf.md` | Live upstream heap-use-after-free (register row W3) + candidate upstream patch. |
 | `b6-audit/` | The structural correspondence audit: per-file verdicts on how faithfully each Rust module mirrors its C++ counterpart. `results/` is read by the `make b6-audit-check` CI ratchet. |

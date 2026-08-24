@@ -21,7 +21,7 @@ members = [
     "tools/perf-compare",
     "tools/pixel-compare",
     "tools/renderer-replay",
-    "tools/webgpu-renderer-emscripten",
+    "tools/webgpu-renderer-replay",
     "tools/webgl2-renderer-replay",
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",

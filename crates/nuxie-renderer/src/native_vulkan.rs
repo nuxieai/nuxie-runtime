@@ -175,9 +175,19 @@ impl Renderer for NativeVulkanFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static LIVE_VULKAN_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn lock_live_vulkan_test() -> std::sync::MutexGuard<'static, ()> {
+        LIVE_VULKAN_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     #[test]
     fn resize_preserves_factory_and_changes_the_readback_extent() {
+        let _live_vulkan_test = lock_live_vulkan_test();
         let Ok(mut factory) = NativeVulkanFactory::new(2, 2) else {
             return;
         };
@@ -191,5 +201,139 @@ mod tests {
 
         assert_eq!(pixels.len(), 3 * 2 * 4);
         assert_eq!(&pixels[..4], &[16, 32, 48, 255]);
+    }
+
+    #[test]
+    fn direct_rect_draw_probe() {
+        let _live_vulkan_test = lock_live_vulkan_test();
+        let Ok(mut factory) = NativeVulkanFactory::new(200, 200) else {
+            return;
+        };
+        let mut frame = factory
+            .begin_frame(0xFFFF00FF, RenderMode::Msaa)
+            .expect("begin");
+        let mut path = RawPath::new();
+        path.move_to(50.0, 50.0);
+        path.line_to(150.0, 50.0);
+        path.line_to(150.0, 150.0);
+        path.line_to(50.0, 150.0);
+        path.close();
+        let mut render_path = factory.make_render_path(path, FillRule::NonZero);
+        let mut paint = factory.make_render_paint();
+        paint.color(0xFF00FF00);
+        paint.blend_mode(BlendMode::SrcOver);
+        frame.draw_path(render_path.as_mut(), paint.as_mut());
+        let pixels = frame.finish().expect("finish");
+        let mut colors = std::collections::HashSet::new();
+        for px in pixels.chunks_exact(4) {
+            colors.insert([px[0], px[1], px[2], px[3]]);
+        }
+        let center = &pixels[((100 * 200 + 100) * 4)..((100 * 200 + 100) * 4 + 4)];
+        eprintln!(
+            "PROBE-DIRECT: {} colors, center={:02x?}",
+            colors.len(),
+            center
+        );
+        assert!(colors.len() >= 2, "nothing drawn at all");
+        assert_ne!(
+            center,
+            [0xFFu8, 0x00, 0xFF, 0xFF],
+            "center is still the clear color: rect not drawn"
+        );
+    }
+
+    #[test]
+    fn artboard_like_draw_probe() {
+        let _live_vulkan_test = lock_live_vulkan_test();
+        let Ok(mut factory) = NativeVulkanFactory::new(200, 200) else {
+            return;
+        };
+        let mut frame = factory
+            .begin_frame(0xFFFF00FF, RenderMode::Msaa)
+            .expect("begin");
+        // Mimic the artboard sequence: fit transform, save, clip to the
+        // artboard bounds, background, then a nested-transform shape.
+        frame.transform(Mat2D([2.0, 0.0, 0.0, 2.0, 0.0, 50.0]));
+        frame.save();
+        let mut clip = RawPath::new();
+        clip.move_to(0.0, 0.0);
+        clip.line_to(100.0, 0.0);
+        clip.line_to(100.0, 50.0);
+        clip.line_to(0.0, 50.0);
+        clip.close();
+        let mut clip_path = factory.make_render_path(clip, FillRule::NonZero);
+        frame.clip_path(clip_path.as_mut());
+        // Background.
+        let mut bg = RawPath::new();
+        bg.move_to(0.0, 0.0);
+        bg.line_to(100.0, 0.0);
+        bg.line_to(100.0, 50.0);
+        bg.line_to(0.0, 50.0);
+        bg.close();
+        let mut bg_path = factory.make_render_path(bg, FillRule::NonZero);
+        let mut bg_paint = factory.make_render_paint();
+        bg_paint.color(0xFF000000);
+        frame.draw_path(bg_path.as_mut(), bg_paint.as_mut());
+        // Nested-transform shape (the panel analog).
+        frame.save();
+        frame.transform(Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 10.0]));
+        let mut rect = RawPath::new();
+        rect.move_to(0.0, 0.0);
+        rect.line_to(60.0, 0.0);
+        rect.line_to(60.0, 20.0);
+        rect.line_to(0.0, 20.0);
+        rect.close();
+        let mut rect_path = factory.make_render_path(rect, FillRule::NonZero);
+        let mut rect_paint = factory.make_render_paint();
+        rect_paint.color(0xFF808080);
+        frame.draw_path(rect_path.as_mut(), rect_paint.as_mut());
+        frame.restore();
+        frame.restore();
+        let pixels = frame.finish().expect("finish");
+        // Panel analog center: artboard (30,20) -> device (60, 90).
+        let panel = &pixels[((90 * 200 + 60) * 4)..((90 * 200 + 60) * 4 + 4)];
+        // Background sample away from panel: artboard (80,45) -> device (160, 140).
+        let bg_px = &pixels[((140 * 200 + 160) * 4)..((140 * 200 + 160) * 4 + 4)];
+        eprintln!("PROBE-ARTLIKE: panel={panel:02x?} bg={bg_px:02x?}");
+        assert_eq!(bg_px, [0x00u8, 0x00, 0x00, 0xFF], "background missing");
+        assert_eq!(
+            panel,
+            [0x80u8, 0x80, 0x80, 0xFF],
+            "clipped nested shape missing"
+        );
+    }
+
+    #[test]
+    fn three_overlapping_solid_paths_land_in_one_frame() {
+        let _live_vulkan_test = lock_live_vulkan_test();
+        let Ok(mut factory) = NativeVulkanFactory::new(200, 200) else {
+            return;
+        };
+        let mut paths_and_paints = Vec::new();
+        for (inset, color) in [(20.0, 0xffff0000), (50.0, 0xff00ff00), (80.0, 0xff0000ff)] {
+            let mut path = RawPath::new();
+            path.move_to(inset, inset);
+            path.line_to(200.0 - inset, inset);
+            path.line_to(200.0 - inset, 200.0 - inset);
+            path.line_to(inset, 200.0 - inset);
+            path.close();
+            let render_path = factory.make_render_path(path, FillRule::NonZero);
+            let mut paint = factory.make_render_paint();
+            paint.color(color);
+            paths_and_paints.push((render_path, paint));
+        }
+
+        let mut frame = factory
+            .begin_frame(0xffff00ff, RenderMode::Msaa)
+            .expect("begin");
+        for (path, paint) in &mut paths_and_paints {
+            frame.draw_path(path.as_mut(), paint.as_mut());
+        }
+        let pixels = frame.finish().expect("finish");
+        let pixel = |x: usize, y: usize| &pixels[(y * 200 + x) * 4..][..4];
+
+        assert_eq!(pixel(30, 30), [0xff, 0x00, 0x00, 0xff]);
+        assert_eq!(pixel(60, 60), [0x00, 0xff, 0x00, 0xff]);
+        assert_eq!(pixel(100, 100), [0x00, 0x00, 0xff, 0xff]);
     }
 }

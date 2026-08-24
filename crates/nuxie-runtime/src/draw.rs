@@ -26297,6 +26297,40 @@ mod tests {
     use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
 
     #[test]
+    fn zero_length_dashes_do_not_cause_a_crash() {
+        let file = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+        ])
+        .expect("minimal artboard imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("minimal artboard graph builds");
+        let graph = graphs.artboards.first().expect("minimal artboard");
+        let artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard instance");
+        let source = rect_commands(PathBounds {
+            min_x: 1.0,
+            min_y: 1.0,
+            max_x: 5.0,
+            max_y: 6.0,
+        });
+        let dashes = [
+            DashNode {
+                local_id: usize::MAX - 1,
+                global_id: u32::MAX - 1,
+                length: 0.0,
+                length_is_percentage: false,
+            },
+            DashNode {
+                local_id: usize::MAX,
+                global_id: u32::MAX,
+                length: 0.0,
+                length_is_percentage: false,
+            },
+        ];
+
+        let _destination = dash_path_apply_dash(&artboard, &source, 0.0, false, &dashes);
+    }
+
+    #[test]
     fn ellipse_control_matches_upstream_fused_rounding() {
         assert_eq!(ellipse_control(68.5, 68.5, 1.0), 106.331_505);
     }

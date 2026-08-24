@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 53
+max_pending = 52
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -155,9 +155,9 @@ note = "The sole fixture case compares the pinned C++ runtime update with Rust f
 [[file]]
 upstream = "tests/unit_tests/runtime/dash_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/src/draw.rs::zero_length_dashes_do_not_cause_a_crash"]
+note = "Private production-owner test directly invokes the retained PathMeasure/dash algorithm with the literal (1,1,5,6) rectangle, two zero-length non-percentage dashes, and zero non-percentage offset; completion is the upstream no-crash assertion."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/data_bind_container_test.cpp"

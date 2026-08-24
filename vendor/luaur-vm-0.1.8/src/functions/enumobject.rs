@@ -12,7 +12,7 @@ use core::ffi::{c_char, c_int};
 #[allow(non_snake_case)]
 pub(crate) unsafe fn enumobject(ctx: *mut EnumContext, inst: *mut LuauObject) {
     let inst_ref = &*inst;
-    let mut buf = [0i8; LUA_IDSIZE as usize];
+    let mut buf = [0 as c_char; LUA_IDSIZE as usize];
 
     let obj = inst as *mut GCObject;
 
@@ -35,7 +35,7 @@ pub(crate) unsafe fn enumobject(ctx: *mut EnumContext, inst: *mut LuauObject) {
             continue;
         }
 
-        let mut membername = [0i8; 32];
+        let mut membername = [0 as c_char; 32];
         let name_ptr = *(*inst_ref.lclass).offsettomember.add(i as usize);
         snprintf(
             membername.as_mut_ptr(),

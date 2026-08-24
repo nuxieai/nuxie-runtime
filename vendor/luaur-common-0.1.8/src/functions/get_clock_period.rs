@@ -1,3 +1,8 @@
+// Bionic's time.h defines CLOCKS_PER_SEC as 1000000, but the Rust libc crate
+// does not expose the macro for Android.
+#[cfg(target_os = "android")]
+const BIONIC_CLOCKS_PER_SEC: f64 = 1_000_000.0;
+
 pub(crate) fn get_clock_period() -> f64 {
     #[cfg(target_os = "windows")]
     {
@@ -35,10 +40,15 @@ pub(crate) fn get_clock_period() -> f64 {
         // `period * timestamp` math finite alongside the frozen timestamp below.
         1e-9
     }
+    #[cfg(target_os = "android")]
+    {
+        1.0 / BIONIC_CLOCKS_PER_SEC
+    }
     #[cfg(all(
         not(target_arch = "wasm32"),
         not(any(
             target_os = "windows",
+            target_os = "android",
             target_vendor = "apple",
             target_os = "linux",
             target_os = "freebsd"

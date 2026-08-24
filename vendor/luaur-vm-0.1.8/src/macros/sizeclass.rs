@@ -12,7 +12,7 @@ macro_rules! sizeclass {
         if __idx < crate::records::size_class_config::kMaxSmallSize as usize {
             crate::records::size_class_config::kSizeClassConfig.classForSize[__sz as usize]
         } else {
-            -1 as core::ffi::c_char
+            (-1_i8) as core::ffi::c_char
         }
     }};
 }

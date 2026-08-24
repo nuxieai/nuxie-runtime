@@ -2744,7 +2744,7 @@ id = "layout_scroll_snap_carousel"
 expected = "tests/unit_tests/silvers/layout_scroll_snap_carousel.sriv"
 source = "layout/layout_scroll_snap.riv"
 dependencies = []
-artboard = "default"
+artboard = "main"
 animation = "none"
 state_machine = "default"
 lane = "runtime"
@@ -2752,14 +2752,14 @@ deterministic = "enabled"
 random = "deterministic"
 view_model = "cpp-test-defined"
 sample_times = [0]
-actions = []
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2", seconds = 1.0, pointer_id = 0 }, { kind = "pointer-down", x = "artboard-width/2", y = "artboard-height/2", pointer_id = 0 }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2+375", y = "artboard-height/2", seconds = 2.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2+750", y = "artboard-height/2", seconds = 3.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2+1125", y = "artboard-height/2", seconds = 4.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2+1500", y = "artboard-height/2", seconds = 5.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-up", x = "artboard-width/2+1500", y = "artboard-height/2", pointer_id = 0 }, { kind = "advance-draw-until-scroll-physics-stops", max_frames = 300, seconds = 0.016 }]
 verification = "sriv-v1-epsilon"
-status = "unsupported-feature"
+status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Carousel snap swipe right settles past index 0"
 producer_line = 241
-note = "Unsupported feature: missing runtime surface scroll-constraint-physics-running-state-exposure; the pinned C++ action stream requires that unported runtime surface."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 145 (rewind): expected rewind, got drawPath."
 
 [[case]]
 id = "layout_scroll_snap_padding_layouts"

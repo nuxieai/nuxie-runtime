@@ -84,6 +84,12 @@ impl PointerCoordinate {
         match self {
             Self::Literal(value) => Ok(*value),
             Self::Expression(expression) => {
+                if let Some(distance) = expression.strip_prefix("artboard-width/2+") {
+                    let distance = distance.parse::<f32>().with_context(|| {
+                        format!("invalid pointer coordinate expression {expression}")
+                    })?;
+                    return Ok(width / 2.0 + distance);
+                }
                 if let Some(distance) = expression.strip_prefix("artboard-height/2-") {
                     let distance = distance.parse::<f32>().with_context(|| {
                         format!("invalid pointer coordinate expression {expression}")
@@ -1322,6 +1328,12 @@ repeat = false
                 .resolve(640.0, 480.0)
                 .unwrap(),
             320.0
+        );
+        assert_eq!(
+            PointerCoordinate::Expression("artboard-width/2+375".to_owned())
+                .resolve(640.0, 480.0)
+                .unwrap(),
+            695.0
         );
         assert_eq!(
             PointerCoordinate::Expression("artboard-height-20".to_owned())

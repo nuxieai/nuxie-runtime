@@ -177,7 +177,6 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     "layout_grid_stack_grid_with_layout_participants": (
         "retained-text-render-style-registration-for-layout-participant-text"
     ),
-    "layout_scroll_snap_carousel": "scroll-constraint-physics-running-state-exposure",
 }
 EXACT = (
     "hittest_ab_text_parent",
@@ -1159,6 +1158,45 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
         ),
     )
 
+    if silver_id == "layout_scroll_snap_carousel":
+        actions = [
+            bind,
+            advance(0.0),
+            draw,
+            pointer(
+                "pointer-move",
+                "artboard-width/2",
+                "artboard-height/2",
+                seconds=1.0,
+            ),
+            pointer("pointer-down", "artboard-width/2", "artboard-height/2"),
+        ]
+        for step in range(1, 5):
+            actions += [
+                frame,
+                pointer(
+                    "pointer-move",
+                    f"artboard-width/2+{1500 * step / 4:g}",
+                    "artboard-height/2",
+                    seconds=float(step + 1),
+                ),
+                advance(0.016),
+                draw,
+            ]
+        actions += [
+            pointer(
+                "pointer-up",
+                "artboard-width/2+1500",
+                "artboard-height/2",
+            ),
+            action(
+                "advance-draw-until-scroll-physics-stops",
+                max_frames=300,
+                seconds=0.016,
+            ),
+        ]
+        return tuple(actions)
+
     if silver_id in {"hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized"}:
         actions = [
             bind,
@@ -1851,6 +1889,7 @@ juice|frame 0, op 40 (blendMode): expected blendMode, got makeRenderPaint
 layout_scroll_drag_multiplier_layouts|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 layout_scroll_drag_multiplier_list|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
 layout_scroll_drag_multiplier_virtualized|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
+layout_scroll_snap_carousel|frame 1, op 145 (rewind): expected rewind, got drawPath
 layout_scroll_snap_padding_layouts|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 layout_scroll_snap_padding_list|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
 layout_scroll_snap_padding_virtualized|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
@@ -2275,6 +2314,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     chunk,
                     "default" if "artboard" in chunk else "cpp-test-defined",
                 )
+                if silver_id == "layout_scroll_snap_carousel":
+                    artboard = "main"
                 animation = infer_selector(
                     ANIMATION_NAME,
                     chunk,

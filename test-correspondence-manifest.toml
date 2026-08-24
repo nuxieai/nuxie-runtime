@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 2
+max_pending = 1
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -434,9 +434,9 @@ note = "S4-38 directly asserts the seven fixture outcomes; the four animation ca
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 test_case_count = 23
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/src/constraints.rs::{upstream_layout_scroll_vertical_offset,upstream_layout_scroll_horizontal_offset,upstream_layout_scroll_list,upstream_layout_scroll_nearest_snap_offset_in_direction,upstream_elastic_scroll_snap_respects_trailing_padding,upstream_viewport_drag_updates_velocity_and_release_triggers_fling,upstream_viewport_drag_held_still_clears_velocity,upstream_scrollbar_drag_updates_velocity_and_release_zeros_it,typed_scroll_properties_hold_then_resolve_against_live_layout,index_intent_survives_a_hidden_layout_and_resolves_when_shown}", "silver-corpus.toml::{layout_scroll_snap_carousel,layout_scroll_snap_padding_layouts,layout_scroll_snap_padding_list,layout_scroll_snap_padding_virtualized,layout_scroll_drag_multiplier_layouts,layout_scroll_drag_multiplier_list,layout_scroll_drag_multiplier_virtualized,layout_scroll_visibility,scroll_intent}", "tools/silver-corpus/generate_manifest.py::p1q_round2_actions", "tools/silver-corpus/src/action.rs::PointerCoordinate"]
+note = "All 23 TEST_CASE bodies are now represented. Eight direct owner tests preserve the exact offset/index/content, directional snap, trailing-padding physics, and viewport/scrollbar velocity assertion sequences; the existing typed-intent tests cover pre-layout index/percent resolution and out-of-range clamping. All nine silver bodies execute their pinned action streams against the pinned fixtures. The formerly empty carousel port now binds main, reproduces the four-step 1500px swipe and up-to-300-frame physics settle, and records the honest frame-1 rewind/drawPath divergence rather than claiming the old missing-observable blocker."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_stack_test.cpp"

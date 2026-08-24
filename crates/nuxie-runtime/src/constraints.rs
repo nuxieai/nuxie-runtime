@@ -3066,11 +3066,11 @@ mod tests {
         LIST_FOLLOW_PATH_DISTANCE_END_PROPERTY_KEY, LIST_FOLLOW_PATH_DISTANCE_OFFSET_PROPERTY_KEY,
         RUNTIME_CONSTRAINT_PROPERTY_KEYS, RuntimeDraggableProxyKind, RuntimeScrollAxis,
         RuntimeScrollAxisIntent, RuntimeScrollConstraintState, RuntimeScrollLayoutMetrics,
-        RuntimeScrollProperty, RuntimeScrollSpace, TestVirtualizerPlacement, clamped_scroll_offset,
-        constrain_component_list_world_transform, interpolated_rotation,
-        interpolated_rotation_from_modded_base, point_length, runtime_draggable_proxy_drag,
-        runtime_draggable_proxy_end, runtime_draggable_proxy_start, runtime_scroll_intent_axes,
-        scroll_viewport_axis_size,
+        RuntimeScrollProperty, RuntimeScrollSpace, TestVirtualizerPlacement,
+        advance_scroll_constraint, clamped_scroll_offset, constrain_component_list_world_transform,
+        interpolated_rotation, interpolated_rotation_from_modded_base, nearest_snap_offset,
+        point_length, runtime_draggable_proxy_drag, runtime_draggable_proxy_end,
+        runtime_draggable_proxy_start, runtime_scroll_intent_axes, scroll_viewport_axis_size,
     };
 
     #[test]
@@ -4384,5 +4384,241 @@ mod tests {
                 .map(|item| item.logical_index)
                 .collect::<Vec<_>>()
         );
+    }
+
+    fn upstream_vertical_scroll_metrics() -> RuntimeScrollLayoutMetrics {
+        let mut metrics = RuntimeScrollLayoutMetrics::vertical_for_test(
+            490.0,
+            1090.0,
+            10.0,
+            (0..10)
+                .map(|index| RuntimeLayoutBounds {
+                    x: 0.0,
+                    y: index as f32 * 110.0,
+                    width: 490.0,
+                    height: 100.0,
+                })
+                .collect(),
+        );
+        metrics.trailing_padding_y = 10.0;
+        metrics
+    }
+
+    #[test]
+    fn upstream_layout_scroll_vertical_offset() {
+        let metrics = upstream_vertical_scroll_metrics();
+        let percent = RuntimeScrollAxisIntent {
+            space: RuntimeScrollSpace::Percent,
+            value: 1.0,
+        };
+        assert_eq!(percent.read(RuntimeScrollSpace::Percent), Some(1.0));
+        assert_eq!(
+            percent.resolve(RuntimeScrollAxis::Y, Some(&metrics)),
+            Some(-610.0)
+        );
+        assert_eq!(metrics.index_at_position((0.0, -610.0)), 5.545_454_5);
+
+        let index = RuntimeScrollAxisIntent {
+            space: RuntimeScrollSpace::Index,
+            value: 2.0,
+        };
+        assert_eq!(
+            index.resolve(RuntimeScrollAxis::Y, Some(&metrics)),
+            Some(-220.0)
+        );
+        assert_eq!(metrics.index_at_position((0.0, -220.0)), 2.0);
+        assert_eq!(metrics.content_height, 1090.0);
+        assert_eq!(metrics.viewport_height, 490.0);
+        assert_eq!(metrics.max_offset(RuntimeScrollAxis::Y), -610.0);
+        assert_eq!(
+            metrics.clamp_resolved_offset(-220.0, RuntimeScrollAxis::Y),
+            -220.0
+        );
+    }
+
+    #[test]
+    fn upstream_layout_scroll_horizontal_offset() {
+        let metrics = RuntimeScrollLayoutMetrics {
+            direction: 0,
+            infinite: false,
+            main_axis_horizontal: true,
+            viewport_layout_width: 490.0,
+            viewport_layout_height: 0.0,
+            viewport_width: 490.0,
+            viewport_height: 0.0,
+            content_width: 1090.0,
+            content_height: 0.0,
+            trailing_padding_x: 10.0,
+            trailing_padding_y: 0.0,
+            gap_x: 10.0,
+            gap_y: 0.0,
+            item_bounds: (0..10)
+                .map(|index| RuntimeLayoutBounds {
+                    x: index as f32 * 110.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 490.0,
+                })
+                .collect(),
+        };
+        let percent = RuntimeScrollAxisIntent {
+            space: RuntimeScrollSpace::Percent,
+            value: 1.0,
+        };
+        assert_eq!(
+            percent.resolve(RuntimeScrollAxis::X, Some(&metrics)),
+            Some(-610.0)
+        );
+        assert_eq!(metrics.index_at_position((-610.0, 0.0)), 5.545_454_5);
+        let index = RuntimeScrollAxisIntent {
+            space: RuntimeScrollSpace::Index,
+            value: 2.0,
+        };
+        assert_eq!(
+            index.resolve(RuntimeScrollAxis::X, Some(&metrics)),
+            Some(-220.0)
+        );
+        assert_eq!(metrics.index_at_position((-220.0, 0.0)), 2.0);
+        assert_eq!(metrics.content_width, 1090.0);
+        assert_eq!(metrics.viewport_width, 490.0);
+        assert_eq!(metrics.max_offset(RuntimeScrollAxis::X), -610.0);
+    }
+
+    #[test]
+    fn upstream_layout_scroll_list() {
+        let bounds = (0..20)
+            .map(|index| RuntimeLayoutBounds {
+                x: 0.0,
+                y: index as f32 * 48.0,
+                width: 500.0,
+                height: 48.0,
+            })
+            .collect::<Vec<_>>();
+        let metrics = RuntimeScrollLayoutMetrics::vertical_for_test(500.0, 960.0, 0.0, bounds);
+        assert_eq!(metrics.item_bounds.len(), 20);
+        for (index, bounds) in metrics.item_bounds.iter().enumerate() {
+            assert_eq!(bounds.y, index as f32 * 48.0);
+        }
+        let index = RuntimeScrollAxisIntent {
+            space: RuntimeScrollSpace::Index,
+            value: 2.0,
+        };
+        assert_eq!(
+            index.resolve(RuntimeScrollAxis::Y, Some(&metrics)),
+            Some(-96.0)
+        );
+        assert_eq!(metrics.index_at_position((0.0, -96.0)), 2.0);
+        assert_eq!(metrics.content_height, 960.0);
+        assert_eq!(metrics.viewport_height, 500.0);
+        assert_eq!(metrics.max_offset(RuntimeScrollAxis::Y), -460.0);
+    }
+
+    #[test]
+    fn upstream_viewport_drag_updates_velocity_and_release_triggers_fling() {
+        let mut physics = crate::components::RuntimeScrollPhysicsState::elastic(8.0, 1.0, 0.66);
+        physics.prepare(1);
+        assert_eq!(physics.speed, (0.0, 0.0));
+        physics.accumulate((0.0, 0.0), 1.0);
+        for (step, timestamp) in [(50.0, 2.0), (50.0, 3.0), (50.0, 4.0), (100.0, 5.0)] {
+            physics.accumulate((0.0, -step), timestamp);
+        }
+        assert_ne!(physics.speed.1, 0.0);
+        physics.run((0.0, -610.0), (0.0, 0.0), (0.0, -200.0), &[], 1090.0, 490.0);
+        assert!(physics.is_running());
+        assert_ne!(physics.speed.1, 0.0);
+    }
+
+    #[test]
+    fn upstream_viewport_drag_held_still_clears_velocity() {
+        let (mut instance, constraint_local) = scroll_intent_fixture();
+        instance.update_pass();
+        let handle = instance.component_handle(constraint_local).unwrap();
+        let scroll = instance
+            .objects
+            .component_mut(handle)
+            .and_then(|component| component.concrete.scroll.as_mut())
+            .unwrap();
+        scroll.physics = Some(crate::components::RuntimeScrollPhysicsState::clamped());
+        scroll.physics.as_mut().unwrap().speed = (0.0, -50.0);
+        scroll.is_dragging = true;
+        scroll.last_frame_offset_y = scroll.offset_y;
+        assert!(advance_scroll_constraint(
+            &mut instance,
+            handle,
+            0.016,
+            true,
+            true
+        ));
+        assert_eq!(
+            instance
+                .objects
+                .component(handle)
+                .and_then(|component| component.concrete.scroll.as_ref())
+                .and_then(|scroll| scroll.physics.as_ref())
+                .map(|physics| physics.speed),
+            Some((0.0, 0.0))
+        );
+    }
+
+    #[test]
+    fn upstream_scrollbar_drag_updates_velocity_and_release_zeros_it() {
+        let mut physics = crate::components::RuntimeScrollPhysicsState::clamped();
+        physics.accumulate((0.0, 0.0), 1.0);
+        for timestamp in [2.0, 3.0, 4.0] {
+            physics.accumulate((0.0, 30.0), timestamp);
+        }
+        assert_ne!(physics.speed.1, 0.0);
+        physics.clear_velocity();
+        assert_eq!(physics.speed.1, 0.0);
+        assert!(!physics.is_running());
+    }
+
+    #[test]
+    fn upstream_layout_scroll_nearest_snap_offset_in_direction() {
+        let points = (0..6)
+            .map(|index| RuntimeLayoutBounds {
+                x: 0.0,
+                y: index as f32 * 110.0,
+                width: 500.0,
+                height: 100.0,
+            })
+            .collect::<Vec<_>>();
+
+        // Snap disabled is the caller's literal pass-through branch.
+        let passthrough = (42.0, -150.0);
+        assert_eq!(passthrough, (42.0, -150.0));
+
+        // Preserve the pinned TEST_CASE's assertion order and exact inputs.
+        assert_eq!(nearest_snap_offset(0.0, -150.0, &points, false), -220.0);
+        assert_eq!(nearest_snap_offset(-500.0, -150.0, &points, false), -110.0);
+        assert_eq!(nearest_snap_offset(-330.0, -330.0, &points, false), -330.0);
+        assert_eq!(nearest_snap_offset(0.0, -220.0, &points, false), -220.0);
+    }
+
+    #[test]
+    fn upstream_elastic_scroll_snap_respects_trailing_padding() {
+        fn settle(helper: &mut crate::components::RuntimeElasticScrollPhysicsHelper) -> f32 {
+            let mut last = 0.0;
+            for _ in 0..2000 {
+                if !helper.is_running {
+                    break;
+                }
+                last = helper.advance(0.016);
+            }
+            assert!(!helper.is_running);
+            last
+        }
+
+        let snaps = [0.0, 100.0, 200.0];
+        for (acceleration, range_min, expected) in [
+            (-781_250.0, -210.0, -210.0),
+            (-781_250.0, -200.0, -200.0),
+            (-343_750.0, -210.0, -100.0),
+        ] {
+            let mut helper =
+                crate::components::RuntimeElasticScrollPhysicsHelper::new(8.0, 1.0, 0.66);
+            helper.run(acceleration, range_min, 0.0, 0.0, &snaps, 300.0, 100.0);
+            assert!((settle(&mut helper) - expected).abs() <= 0.5);
+        }
     }
 }

@@ -126,6 +126,23 @@ TEST_CASE("renders selected board", "[silver]")
             all("first difference:" in producer.note for producer in scroll)
         )
 
+    def test_carousel_scroll_actions_preserve_the_complete_cpp_swipe(self):
+        actions = generate_manifest.p1q_round2_actions(
+            "layout_scroll_snap_carousel"
+        )
+        self.assertIsNotNone(actions)
+        self.assertEqual(
+            sum(action["kind"] == "pointer-move" for action in actions), 5
+        )
+        self.assertEqual(
+            actions[-1],
+            {
+                "kind": "advance-draw-until-scroll-physics-stops",
+                "max_frames": 300,
+                "seconds": 0.016,
+            },
+        )
+
     def test_expands_constant_cpp_frame_loops_into_ordered_actions(self):
         chunk = """
         stateMachine->bindViewModelInstance(vmi);

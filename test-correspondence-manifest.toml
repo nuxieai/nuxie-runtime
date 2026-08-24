@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 25
+max_pending = 24
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -913,9 +913,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/scroll_velocity_test.cpp"
 test_case_count = 4
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_scroll_velocity.rs"]
+note = "All four fixture/input/timing/assertion bodies are translated, including the 600-frame settle loop and direct physics-running checks. They remain honestly expected-red because Rust's public ScrollConstraint snapshot omits the exact retained velocityX, velocityY, and scrollActive observables; Phase 1 does not infer replacements from offset or physics state."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_artboard_test.cpp"

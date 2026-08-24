@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 9
+max_pending = 8
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -98,9 +98,9 @@ note = "The completed E7 checklist covers all five cases with focused retained-p
 [[file]]
 upstream = "tests/unit_tests/runtime/color_glyph_test.cpp"
 test_case_count = 22
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_color_glyph.rs"]
+note = "All 22 cases directly preserve the pinned fonts, glyph IDs, layer/count/append assertions, foreground-color calls, COLRv0 paint checks, high-glyph bounds, RawText strings/sizes/widths, and render no-crash sequences against Rust's shared color-glyph and standalone RawText owners. Twenty-one pass. The A-heart-B fallback-shaping case is honestly ignored and individually executable red because Rust does not select an emoji/color run from the occurrence-local fallback chain where pinned C++ invokes its fallback proc."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/color_test.cpp"

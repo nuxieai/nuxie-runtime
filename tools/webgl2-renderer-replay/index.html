@@ -41,6 +41,77 @@
           result.free();
         }
       };
+
+      const candidateWorker = new URLSearchParams(location.search).has(
+        "candidate-worker",
+      );
+      if (candidateWorker) {
+        let completedRenders = 0;
+        const delay = (milliseconds) =>
+          new Promise((resolve) => setTimeout(resolve, milliseconds));
+        const postJson = (path, payload) =>
+          fetch(path, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+        const browserName = navigator.userAgent.includes("Firefox/")
+          ? "firefox"
+          : navigator.userAgent.includes("Safari/") &&
+              !navigator.userAgent.includes("Chrome/")
+            ? "safari"
+            : "chromium";
+
+        const work = async () => {
+          await window.webgl2CandidateReady;
+          const registration = await postJson("/worker/register", {
+            name: browserName,
+            user_agent: navigator.userAgent,
+            webgl2: Boolean(document.createElement("canvas").getContext("webgl2")),
+          });
+          if (!registration.ok) {
+            throw new Error(`candidate registration failed: ${registration.status}`);
+          }
+          document.body.dataset.status = "worker-ready";
+          status.textContent = "ready: exact Rust WebGL2 corpus worker";
+
+          for (;;) {
+            const response = await fetch("/worker/next", { cache: "no-store" });
+            if (response.status === 204) {
+              await delay(10);
+              continue;
+            }
+            if (!response.ok) {
+              throw new Error(`candidate work request failed: ${response.status}`);
+            }
+            const job = await response.json();
+            try {
+              const result = await window.runWebgl2Candidate(job);
+              const completion = await postJson("/worker/complete", {
+                id: job.id,
+                result,
+              });
+              if (!completion.ok) {
+                throw new Error(`candidate completion failed: ${completion.status}`);
+              }
+            } catch (error) {
+              await postJson("/worker/complete", {
+                id: job.id,
+                error: error?.stack || String(error),
+              });
+            }
+            completedRenders += 1;
+            if (completedRenders >= 16) {
+              location.reload();
+              return;
+            }
+          }
+        };
+        work().catch((error) => {
+          document.body.dataset.status = "worker-failed";
+          status.textContent = error?.stack || String(error);
+        });
+      }
     </script>
   </body>
 </html>

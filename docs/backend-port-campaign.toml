@@ -1,6 +1,6 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_queue = "rooted-execution"
+active_queue = "behavior-platform"
 preparation_status = "green"
 ignored_skills = ["implement", "tdd"]
 compiler_status = "green"

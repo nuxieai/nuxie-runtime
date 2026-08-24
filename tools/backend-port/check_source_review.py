@@ -45,7 +45,8 @@ OWNERSHIP_COMPLETION_PIN_KEYS = {
 }
 EXPECTED_MANIFEST_KEYS = {
     "schema_version", "upstream_ref", "active_queue", "preparation_status",
-    "ignored_skills", "translation_receipt_directory", "source_review_plan",
+    "ignored_skills", "compiler_status", "compiler_barrier_ref",
+    "translation_receipt_directory", "source_review_plan",
     "source_review_schema", "source_review_receipt_directory",
     "source_review_support_inventory", "source_review_status",
     "ownership_review_plan", "ownership_review_schema",

@@ -744,6 +744,8 @@ class SyntheticCampaign:
             "active_queue": "source-review",
             "preparation_status": "green",
             "ignored_skills": ["implement", "tdd"],
+            "compiler_status": "green",
+            "compiler_barrier_ref": "synthetic-compiler-barrier",
             "translation_receipt_directory": "docs/translations",
             "source_review_plan": "docs/backend-port-source-review-plan.toml",
             "source_review_schema": "docs/backend-port-source-review-schema.md",

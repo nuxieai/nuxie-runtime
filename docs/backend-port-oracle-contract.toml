@@ -85,13 +85,23 @@ emsdk_revision = "e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59"
 emscripten_release_revision = "28e4a74b579b4157bda5fc34f23c7d3905a8bd6c"
 emscripten_version = "3.1.61"
 rust_toolchain = "rustc 1.91.1 (ed61e7d7e 2025-11-07)"
-playwright_version = "1.55.0"
+browser_driver = "playwright-cli 0.1.18 installed Chrome channel"
 browser_version = "Google Chrome 151.0.7922.173"
 reported_adapter = "WebKit WebGL"
 captured_replay_client_sha256 = "86a5e4874f39e4e8d51fdcdf5cff8789182127133e4e00a2db8c0a4acd24216b"
 captured_replay_js_sha256 = "38658b8abff6fc1c1a600292a8ea27b21ddfe4c70dbd83bd50f112edd74e724e"
-captured_replay_wasm_sha256 = "a415d20bc72a8d84f38121b33520b67e9ac34dae8af2c81f40c5b1ae436c67f9"
-execution_environment = "Playwright 1.55.0 installed Chrome channel; WebGL2 only; sealed Wasm module reload every 16 source renders"
+captured_replay_wasm_sha256 = "fbd8598fbedf9bd009b73299ce10be0100236ab8a2837116abf8f4fe800c61c5"
+candidate_replay_js_sha256 = "b98aa322214396d4ef843e9ad51f66af59e957410a8271207470e4f0c1870ca7"
+candidate_replay_wasm_sha256 = "011ee8972c1b5e2b50707b54ab200d8a2871fb7f8316f7fb50fc4b9f8c76eb89"
+source_worker_html_sha256 = "0029b6bfac814e3f01124f5f8c18057ca21e2ecbab4e6347681abd08bea39635"
+candidate_worker_html_sha256 = "272e3baa3b0824e5974359b296d6e1e1d86ec7d062f98a20f0321f22cd3cd639"
+execution_environment = "playwright-cli installed Chrome channel; WebGL2 only; separate source/candidate brokers; sealed Wasm module reload every 16 renders"
+browser_primary_parity_status = "green-1469-of-1469"
+browser_primary_parity_byte_exact = 1441
+browser_primary_parity_diverges = 0
+browser_primary_parity_gated = 0
+browser_primary_parity_log = "target/backend-port/logs/webgl2-chrome-rebuilt-source-parity.log"
+browser_primary_parity_log_sha256 = "ac216bc82ed47b97423c732e8abd3e036ea7ca738b902c29e286df999a6f0da4"
 
 [[platform]]
 id = "vulkan-macos-moltenvk-apple-m5-max"
@@ -99,7 +109,7 @@ backend = "vulkan"
 environment = "macOS Apple M5 Max through pinned MoltenVK"
 requirement = "local-blocking"
 primary_status = "green"
-candidate_status = "pending-translation"
+candidate_status = "green-1469-of-1469"
 
 [[platform]]
 id = "vulkan-linux-amd"
@@ -131,7 +141,7 @@ backend = "webgpu"
 environment = "native Dawn Metal on macOS Apple M5 Max"
 requirement = "local-blocking"
 primary_status = "green"
-candidate_status = "pending-translation"
+candidate_status = "green-1469-of-1469"
 
 [[platform]]
 id = "webgpu-chromium-macos"
@@ -146,16 +156,32 @@ id = "webgpu-firefox-macos"
 backend = "webgpu"
 environment = "current pinned Firefox browser build on macOS"
 requirement = "closeout-blocking"
-primary_status = "pending"
-candidate_status = "pending-translation"
+primary_status = "green"
+candidate_status = "green-1469-of-1469"
+browser_version = "Firefox 153.0 (Playwright browser revision 1539)"
+reported_adapter = "   (WebGPU)"
+browser_configuration = "headed; source-owned gfx.webgpu.ignore-blocklist=true; no renderer fallback"
+parity_byte_exact = 1412
+parity_diverges = 0
+parity_gated = 0
+evidence_log = "target/backend-port/logs/webgpu-firefox-source-parity.log"
+evidence_log_sha256 = "70e0d9d77c435c18442ee42d9762559675f22df3c1cc77b8849497af775d9251"
 
 [[platform]]
 id = "webgpu-safari-macos"
 backend = "webgpu"
 environment = "current pinned Safari/WebKit build on macOS"
 requirement = "closeout-blocking"
-primary_status = "pending"
-candidate_status = "pending-translation"
+primary_status = "green"
+candidate_status = "green-1469-of-1469"
+browser_version = "Safari 26.5.2 / AppleWebKit 605.1.15"
+reported_adapter = "apple apple apple (WebGPU)"
+browser_configuration = "headed native Safari; separate source/candidate brokers; no renderer fallback"
+parity_byte_exact = 1412
+parity_diverges = 0
+parity_gated = 0
+evidence_log = "target/backend-port/logs/webgpu-safari-final-source-parity.log"
+evidence_log_sha256 = "e1f8494d4b70d835fac56cd0e798c3dedf284a4178c4c83c46662c9c0ae8127d"
 
 [[platform]]
 id = "webgl2-chromium-macos"
@@ -163,23 +189,61 @@ backend = "webgl2"
 environment = "current pinned Chromium browser build on macOS"
 requirement = "local-blocking"
 primary_status = "green"
-candidate_status = "pending-translation"
+candidate_status = "green-1469-of-1469"
+browser_version = "Google Chrome 151.0.7922.173"
+reported_adapter = "WebKit WebGL"
+parity_byte_exact = 1441
+parity_diverges = 0
+parity_gated = 0
+evidence_log = "target/backend-port/logs/webgl2-chrome-rebuilt-source-parity.log"
+evidence_log_sha256 = "ac216bc82ed47b97423c732e8abd3e036ea7ca738b902c29e286df999a6f0da4"
 
 [[platform]]
 id = "webgl2-firefox-macos"
 backend = "webgl2"
 environment = "current pinned Firefox browser build on macOS"
 requirement = "closeout-blocking"
-primary_status = "pending"
-candidate_status = "pending-translation"
+primary_status = "green"
+candidate_status = "green-1469-of-1469"
+browser_version = "Firefox 153.0 (Playwright browser revision 1539)"
+reported_adapter = "Apple M1, or similar"
+browser_configuration = "headless; WebGL2; separate source/candidate brokers; disposable feature-probe canvas; sealed Wasm module reload every 16 renders"
+parity_byte_exact = 1463
+parity_diverges = 0
+parity_gated = 0
+evidence_log = "target/backend-port/logs/webgl2-firefox-rebuilt-source-parity.log"
+evidence_log_sha256 = "3cb367e50dc9519f1b85025bdfedf8839285312c2cbd00874f97e90a35de840b"
 
 [[platform]]
 id = "webgl2-safari-macos"
 backend = "webgl2"
 environment = "current pinned Safari/WebKit build on macOS"
 requirement = "closeout-blocking"
-primary_status = "pending"
-candidate_status = "pending-translation"
+primary_status = "green"
+candidate_status = "green-1469-of-1469"
+browser_version = "Safari 26.5.2 / AppleWebKit 605.1.15"
+reported_adapter = "WebKit WebGL"
+browser_configuration = "headed native Safari; separate source/candidate brokers; disposable feature-probe canvas; sealed Wasm module reload every 16 renders; 600-second replay timeout with active source/candidate tab rotation"
+parity_byte_exact = 1431
+parity_diverges = 0
+parity_gated = 0
+evidence_log = "target/backend-port/logs/webgl2-safari-rebuilt2-source-parity.log"
+evidence_log_sha256 = "a88bbc8fa2ae6071cfc1a9d91d1fdbf0d67716d1582701cfce8ffd412782cfa6"
+
+[[supplemental_platform_probe]]
+id = "webgpu-playwright-webkit-macos"
+backend = "webgpu"
+environment = "Playwright WebKit 26.5 browser revision 2342 on macOS Apple M5 Max"
+disposition = "source-platform-incompatible; not candidate parity evidence"
+source_status = "failed-at-artboardclipping-frame-0-msaa"
+candidate_isolated_status = "green"
+reported_adapter = "apple apple apple (WebGPU)"
+source_failure_owner = "pinned Dawn WebGPU-to-Metal shader translation consumed by Playwright WebKit"
+source_failure = "generated Metal mixes float[4] clip-distance storage with array<float, 4>, producing no-viable-conversion and constructor errors"
+candidate_change = "none"
+tolerance_change = "none"
+evidence_log = "target/backend-port/logs/webgpu-webkit-source-parity.log"
+evidence_log_sha256 = "07e4416a180bc73d25c3789a604a0f77ead201ec53490568844724bc374933f3"
 
 [[cross_platform_family]]
 id = "browser-windows"

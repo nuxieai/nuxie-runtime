@@ -5,11 +5,44 @@ emsdk_revision = "e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59"
 emscripten_release_revision = "28e4a74b579b4157bda5fc34f23c7d3905a8bd6c"
 emscripten_version = "3.1.61"
 rust_toolchain = "rustc 1.91.1 (ed61e7d7e 2025-11-07)"
+workspace_build_ref = "a332a170a9db890534a1fa234248fa242bc84f95"
 playwright_version = "1.55.0"
 browser = "Google Chrome 151.0.7922.173"
 reported_adapter = "WebKit WebGL"
 browser_selection = "installed-chrome-channel"
 link_contract = "WebGL2-only; MIN_WEBGL_VERSION=2; MAX_WEBGL_VERSION=2; no automatic fallback"
+
+[[platform_harness_correction]]
+id = "external-worker-canvas-ownership"
+platforms = ["firefox-macos", "safari-macos"]
+source_owner = "Emscripten Module.canvas lifecycle in the pinned C++ WebGL2 source root"
+failure = "worker registration called getContext('webgl2') on Module.canvas before the C++ renderer owned it"
+evidence = "Safari source omitted bad_skin content and Firefox source diverged on feather fixtures while the Rust candidate retained the frozen Chrome source hashes"
+correction = "probe WebGL2 support on a disposable canvas; leave Module.canvas untouched until the pinned C++ source initializes it"
+candidate_renderer_change = "none"
+tolerance_change = "none"
+isolated_verification = "bad_skin is byte-identical source-to-candidate on Safari and Firefox; Safari source and candidate both equal frozen source hash 96bab6f3a2a3e5cdb3a09145576b673c7750afe023cd728722dcafd30af4547a"
+
+[[platform_harness_correction]]
+id = "stale-shared-replay-wasm"
+platforms = ["chromium-macos", "firefox-macos", "safari-macos"]
+source_owner = "the workspace replay binary at a332a170a9db890534a1fa234248fa242bc84f95"
+failure = "the recorded f4b2a5f1 Wasm artifact predated the committed WebGPU browser-root changes to the shared renderer-replay binary, while the source-root receipt did not freeze the workspace build ref"
+evidence = "the JavaScript wrapper rebuilt byte-identically, but both an incremental rebuild and a clean rebuild from the current frozen tree produced fbd8598f; the shared renderer-replay source changed between the WebGL2 root commit and a332a170a"
+correction = "freeze the workspace build ref, clean-rebuild the source Wasm, and rerun every browser platform corpus against the reproducible artifact"
+candidate_renderer_change = "none"
+tolerance_change = "none"
+reproducibility = "incremental and clean rebuilds both produced fbd8598fbedf9bd009b73299ce10be0100236ab8a2837116abf8f4fe800c61c5"
+
+[[platform_harness_correction]]
+id = "safari-worker-tab-reload-ownership"
+platforms = ["safari-macos"]
+source_owner = "native Safari background-tab scheduling around the harness-owned sealed Wasm module reload"
+failure = "the background candidate tab stopped polling after 925 exact cases and exceeded the initial 120-second process timeout; all completed comparisons were exact"
+correction = "use the established 600-second native-Safari replay timeout and rotate foreground ownership between the source and candidate tabs while preserving the 16-render sealed-module lifecycle"
+candidate_renderer_change = "none"
+tolerance_change = "none"
+full_after = "1,469 exact; 1,431 byte-exact; 0 divergences; 0 gated"
 
 [[artifact]]
 path = "target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer-replay.js"
@@ -17,15 +50,39 @@ sha256 = "38658b8abff6fc1c1a600292a8ea27b21ddfe4c70dbd83bd50f112edd74e724e"
 
 [[artifact]]
 path = "target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer_replay.wasm"
-sha256 = "a415d20bc72a8d84f38121b33520b67e9ac34dae8af2c81f40c5b1ae436c67f9"
+sha256 = "fbd8598fbedf9bd009b73299ce10be0100236ab8a2837116abf8f4fe800c61c5"
+
+[[workspace_build_input]]
+path = "tools/renderer-replay/src/main.rs"
+sha256 = "bd0cde89a75a0ef664a499d3c35509471a3a717cb9e7772d5d90c9de6a0c4e57"
+
+[[workspace_build_input]]
+path = "tools/renderer-replay/Cargo.toml"
+sha256 = "237dcd7423aac334222dc1e32a630c36e13771cc2b9ccdc13353d6d56965359e"
+
+[[workspace_build_input]]
+path = "crates/nuxie-renderer-ffi/src/native.rs"
+sha256 = "bdbc761f85f575fbde318cb0330d83eb8b2f07c319c7ef1c1b87429d2c623dea"
+
+[[workspace_build_input]]
+path = "crates/nuxie-renderer-ffi/build.rs"
+sha256 = "0f7f74071dcf809ff3b466840bbc7795acf11c0645f1ab633e6ef73cfdce14e2"
+
+[[workspace_build_input]]
+path = "Cargo.lock"
+sha256 = "f434df72002d1771bb36140db45a48c181e49200b73e8131d53896a97b6c35a6"
 
 [[artifact]]
 path = "tools/backend-port/webgl2-source-oracle.html"
-sha256 = "4d827cdecfb9fbe6d16c88b7564956b46fbdd543733c2cb9b0f8977b612828cf"
+sha256 = "0029b6bfac814e3f01124f5f8c18057ca21e2ecbab4e6347681abd08bea39635"
 
 [[artifact]]
 path = "tools/backend-port/webgl2-oracle-server.cjs"
 sha256 = "1414eb83f588addb061b02e4ffd536b6193b8fb56f4b1f3bdec1750679f6390f"
+
+[[artifact]]
+path = "tools/backend-port/webgl2-browser-server.cjs"
+sha256 = "295a3afea39066fa603fb858c17ecb7f00bc1aea79382b1cd294e462a4e818e0"
 
 [[artifact]]
 path = "tools/backend-port/webgl2-replay-client.py"

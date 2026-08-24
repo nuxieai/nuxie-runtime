@@ -447,10 +447,9 @@ note = "All three pinned stack cases now execute their fixture, mutation, and as
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_test.cpp"
 test_case_count = 23
-status = "partial"
-evidence = ["docs/runtime-frame-loop-fl-e4-tests.md", "docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_layout_*"]
-covered_test_cases = ["LayoutComponent FlexDirection row", "LayoutComponent FlexDirection column", "LayoutComponent FlexDirection row with gap", "LayoutComponent FlexDirection row with wrap", "LayoutComponent Center using alignItems and justifyContent", "LayoutComponent with intrinsic size gets measured correctly", "LayoutComponent Padding Px", "LayoutComponent Margin Px", "LayoutComponent Corner Radius", "LayoutComponent Direction", "LayoutComponent forcedWidth/Height dirt test", "LayoutComponent Alignment", "Prevent Margin Pct on Artboard", "Multiple layout collapsing and soloing in hierarchy.", "Layout animation time databound", "Layout animation artboard component list", "Layout animation nested artboards", "Layout aspect ratio", "Animating layout display", "Layout background & foreground shape paints."]
-note = "The first 13 direct bodies and seven executable silver bodies are covered. Layout fixed/fill and top-level hug remain unsupported, so the file is partial."
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e4-tests.md", "docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_layout_*", "crates/nuxie-runtime/tests/cpp_probe.rs::{upstream_top_level_hug_artboard_computes_size_from_children,upstream_padding_insets_a_fill_child}", "silver-corpus.toml::{layout_fixed_fill,layout_hug_artboard}"]
+note = "All 23 pinned cases now have direct executable Rust or literal silver ports. layout_fixed_fill remains a recorded renderer divergence; the hug and padding assertions execute against the exact pinned fixtures."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/library_asset_test.cpp"

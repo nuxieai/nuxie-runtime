@@ -91094,6 +91094,65 @@ fn upstream_stack_alignment_positions_a_fixed_child() {
     }
 }
 
+#[test]
+fn upstream_top_level_hug_artboard_computes_size_from_children() {
+    let (runtime, graphs, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_hug_artboard.riv", Some("HugArtboard"));
+    let graph = &graphs.artboards[index];
+    artboard.update_pass();
+    let report = artboard
+        .debug_taffy_layout_bounds_report(&runtime, graph)
+        .expect("hug artboard layout report");
+    let root = report
+        .iter()
+        .find(|entry| entry.local_id == 0)
+        .expect("hug artboard root");
+    assert!(
+        (root.width - 302.63).abs() <= 0.01,
+        "hug artboard layoutWidth mismatch: expected 302.63 ± 0.01, got {}",
+        root.width
+    );
+    assert!(
+        (root.height - 100.0).abs() <= 0.01,
+        "hug artboard layoutHeight mismatch: expected 100 ± 0.01, got {}",
+        root.height
+    );
+}
+
+#[test]
+fn upstream_padding_insets_a_fill_child() {
+    let (runtime, graphs, index, mut artboard) =
+        upstream_layout_fixture("layout/styled_flex.riv", None);
+    let graph = &graphs.artboards[index];
+    artboard.update_pass();
+    let report = artboard
+        .debug_taffy_layout_bounds_report(&runtime, graph)
+        .expect("styled flex layout report");
+    let child = report
+        .iter()
+        .find(|entry| {
+            entry.type_name == "LayoutComponent"
+                && entry.parent_local.is_some_and(|parent| {
+                    parent != 0
+                        && report
+                            .iter()
+                            .any(|candidate| {
+                                candidate.local_id == parent
+                                    && candidate.type_name == "LayoutComponent"
+                            })
+                })
+        })
+        .expect("fill child under the non-artboard container");
+    let parent = report
+        .iter()
+        .find(|entry| Some(entry.local_id) == child.parent_local)
+        .expect("fill child's layout parent");
+    assert_eq!(child.x - parent.x, 10.0);
+    assert_eq!(child.y - parent.y, 20.0);
+    assert_eq!(child.width, 160.0);
+    assert_eq!(child.height, 140.0);
+}
+
 fn upstream_layout_local(graph: &nuxie_graph::ArtboardGraph, name: &str) -> usize {
     graph
         .components

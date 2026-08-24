@@ -19149,6 +19149,81 @@ fn upstream_follow_path_with_zero_opacity_path_updates_world_transform() {
 }
 
 #[test]
+#[ignore = "expected-red: Rust has no runtime object-list insertion API for ComponentOrigin"]
+fn upstream_component_origin_overrides_the_mounted_instance_origin() {
+    let bytes = std::fs::read(cpp_runtime_fixture("nested_artboard_opacity.riv"))
+        .expect("read nested-artboard fixture");
+    let runtime = read_runtime_file(&bytes).expect("import nested-artboard fixture");
+    let graphs = GraphFile::from_runtime_file(&runtime).expect("graph nested-artboard fixture");
+    let graph = graphs
+        .artboards
+        .iter()
+        .find(|artboard| artboard.name.as_deref() == Some("Parent Artboard"))
+        .expect("Parent Artboard");
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+            .expect("instantiate Parent Artboard");
+    artboard.update_pass();
+
+    let origin_x = property_key_for_name("Artboard", "originX");
+    let origin_y = property_key_for_name("Artboard", "originY");
+    let mut nested_count = 0;
+    artboard
+        .try_visit_nested_artboard_instances_mut(&mut |_, _, child| -> Result<(), ()> {
+            nested_count += 1;
+            let _ = child.set_double_property(0, origin_x, 0.0);
+            let _ = child.set_double_property(0, origin_y, 0.0);
+            assert_eq!(child.double_property(0, origin_x), Some(0.0));
+            assert_eq!(child.double_property(0, origin_y), Some(0.0));
+            Ok(())
+        })
+        .expect("visit mounted nested artboard");
+    assert_eq!(nested_count, 1);
+
+    panic!(
+        "the next pinned action authors ComponentOrigin(0.25, 0.75) as a new child of +         NestedArtboard; Rust's immutable imported object arena has no equivalent insertion seam"
+    );
+}
+
+#[test]
+#[ignore = "expected-red: Rust has no runtime object-list insertion API for ComponentOrigin"]
+fn upstream_component_origin_pivots_a_layout_transform() {
+    let (runtime, graphs, index, mut artboard) =
+        upstream_layout_fixture("layout/stack.riv", None);
+    let graph = &graphs.artboards[index];
+    artboard.update_pass();
+    let report = artboard
+        .debug_taffy_layout_bounds_report(&runtime, graph)
+        .expect("stack layout report");
+    let box_local = report
+        .iter()
+        .find(|entry| {
+            entry.type_name == "LayoutComponent"
+                && entry.width == 40.0
+                && entry.height == 40.0
+        })
+        .expect("fixed 40x40 box")
+        .local_id;
+    assert!(artboard.set_transform_property(
+        box_local,
+        TransformProperty::Rotation,
+        std::f32::consts::FRAC_PI_2,
+    ));
+    artboard.update_pass();
+    let world = artboard
+        .object_world_transform(box_local)
+        .expect("box world transform");
+    assert_close(world.0[0], 0.0, "box world xx");
+    assert_close(world.0[1], 1.0, "box world xy");
+    assert_close(world.0[4], 160.0, "box world tx");
+    assert_close(world.0[5], 160.0, "box world ty");
+
+    panic!(
+        "the next pinned action authors ComponentOrigin(0.5, 0.5) under the loaded box; +         Rust's immutable imported object arena has no equivalent insertion seam"
+    );
+}
+
+#[test]
 fn list_follow_path_constraint_registers_and_updates_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

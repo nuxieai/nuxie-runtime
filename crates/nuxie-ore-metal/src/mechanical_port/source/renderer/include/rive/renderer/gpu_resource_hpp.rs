@@ -850,6 +850,20 @@ impl<T: GpuResourcePayload> ResourceHandle<T> {
         Self::new_with_vtable(manager, None, payload, plain_vtable::<T>())
     }
 
+    /// Adopts a source allocation whose concrete constructor already
+    /// initialized its inherited `GPUResource::m_manager` base.
+    ///
+    /// This is the exact `make_rcp<T>(...)` path for source types such as
+    /// Vulkan `BufferPool`: the derived constructor forwards the manager to
+    /// its base constructor before `make_rcp` publishes the allocation.
+    pub fn new_with_installed_manager(payload: T) -> Self {
+        assert!(
+            payload.gpu_resource().manager().is_some(),
+            "a pre-managed GPUResource must carry its manager before publication"
+        );
+        Self::publish(None, payload, plain_vtable::<T>())
+    }
+
     pub fn new_in_domain(
         manager: Option<GPUResourceManager>,
         domain: ResourceDomain,
@@ -904,6 +918,10 @@ impl<T: GpuResourcePayload> ResourceHandle<T> {
             domain.assert_recording_thread();
         }
         payload.gpu_resource_mut().install_manager(manager);
+        Self::publish(domain, payload, vtable)
+    }
+
+    fn publish(domain: Option<ResourceDomain>, payload: T, vtable: ResourceVTable) -> Self {
         let complete = NonNull::from(Box::leak(Box::new(payload)));
         let base = NonNull::from(unsafe { complete.as_ref() }.gpu_resource());
         assert_eq!(

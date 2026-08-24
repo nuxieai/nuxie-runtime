@@ -251,7 +251,7 @@ impl RenderBufferVulkanImpl {
                     size_in_bytes,
                 )
             }),
-            m_bufferPool: ManuallyDrop::new(ResourceHandle::new(Some(vk_context.manager()), pool)),
+            m_bufferPool: ManuallyDrop::new(ResourceHandle::new_with_installed_manager(pool)),
             m_currentBuffer: ManuallyDrop::new(None),
         }
     }

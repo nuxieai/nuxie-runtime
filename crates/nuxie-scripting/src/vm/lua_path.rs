@@ -437,3 +437,409 @@ pub(super) fn install_path_global(lua: &Lua) -> Result<()> {
     lua.globals().set("Path", table)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod upstream_scripted_path_tests {
+    use super::*;
+    use crate::vm::ScriptVm;
+    use luaur_rt::FromLuaMulti;
+
+    fn compile_source(source: &str) -> Vec<u8> {
+        use luaur_compiler::functions::luau_compile::luau_compile;
+
+        luaur_common::set_all_flags(true);
+        let mut output_size = 0;
+        let output = luau_compile(
+            source.as_ptr().cast(),
+            source.len(),
+            std::ptr::null_mut(),
+            &mut output_size,
+        );
+        assert!(!output.is_null());
+        assert_ne!(output_size, 0);
+        // SAFETY: luau_compile returns a malloc allocation of output_size bytes.
+        let bytecode =
+            unsafe { std::slice::from_raw_parts(output.cast::<u8>(), output_size) }.to_vec();
+        unsafe extern "C" {
+            fn free(pointer: *mut std::ffi::c_void);
+        }
+        // SAFETY: output is the allocation returned by luau_compile above.
+        unsafe { free(output.cast()) };
+        assert_ne!(bytecode.first(), Some(&0));
+        bytecode
+    }
+
+    fn eval<R: FromLuaMulti>(source: &str) -> R {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().expect("install Rive globals");
+        vm.eval_bytecode("upstream_scripted_path", &compile_source(source))
+            .expect("evaluate exact upstream script")
+    }
+
+    fn assert_approx(actual: f64, expected: f64) {
+        assert!((actual - expected).abs() <= f64::EPSILON);
+    }
+
+    #[test]
+    fn path_contours_returns_first_contour() {
+        let value: bool = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             path:close()\n\
+             local contour = path:contours()\n\
+             return contour ~= nil\n",
+        );
+        assert!(value);
+    }
+
+    #[test]
+    fn contour_measure_has_length() {
+        let length: f64 = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             path:close()\n\
+             local contour = path:contours()\n\
+             return contour.length\n",
+        );
+        assert!(length > 0.0);
+        assert!(length < 100.0);
+    }
+
+    #[test]
+    fn contour_measure_is_closed() {
+        let value: bool = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             path:close()\n\
+             local contour = path:contours()\n\
+             return contour.isClosed\n",
+        );
+        assert!(value);
+    }
+
+    #[test]
+    fn contour_measure_is_closed_false_for_open_path() {
+        let value: bool = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             local contour = path:contours()\n\
+             return contour.isClosed\n",
+        );
+        assert!(!value);
+    }
+
+    #[test]
+    fn contour_measure_position_and_tangent() {
+        let values: (f64, f64, f64, f64) = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             local contour = path:contours()\n\
+             local pos, tan = contour:positionAndTangent(0)\n\
+             return pos.x, pos.y, tan.x, tan.y\n",
+        );
+        assert_approx(values.0, 0.0);
+        assert_approx(values.1, 0.0);
+        assert!(values.2 > 0.0);
+        assert_approx(values.3, 0.0);
+    }
+
+    #[test]
+    fn contour_measure_warp() {
+        let values: (f64, f64) = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             local contour = path:contours()\n\
+             local result = contour:warp(Vector.xy(5, 2))\n\
+             return result.x, result.y\n",
+        );
+        assert_approx(values.0, 5.0);
+        assert_approx(values.1, 2.0);
+    }
+
+    fn extracted_path(source: &str) -> AnyUserData {
+        eval(source)
+    }
+
+    #[test]
+    fn contour_measure_extract() {
+        let path = extracted_path(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             local contour = path:contours()\n\
+             local destPath: Path = Path.new()\n\
+             contour:extract(0, 10, destPath, true)\n\
+             return destPath\n",
+        );
+        let path = path
+            .borrow::<ScriptedPath>()
+            .expect("ScriptedPath userdata");
+        assert!(!path.raw_path.verbs().is_empty());
+    }
+
+    #[test]
+    fn contour_measure_extract_defaults_to_start_with_move_true() {
+        let path = extracted_path(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             local contour = path:contours()\n\
+             local destPath: Path = Path.new()\n\
+             contour:extract(0, 10, destPath)\n\
+             return destPath\n",
+        );
+        let path = path
+            .borrow::<ScriptedPath>()
+            .expect("ScriptedPath userdata");
+        assert!(!path.raw_path.verbs().is_empty());
+        assert_eq!(path.raw_path.verbs()[0], PathVerb::Move);
+    }
+
+    #[test]
+    #[ignore = "expected-red: startWithMove=false inserts a second move instead of a line"]
+    fn contour_measure_extract_with_start_with_move_false() {
+        let path = extracted_path(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             local contour = path:contours()\n\
+             local destPath: Path = Path.new()\n\
+             destPath:moveTo(Vector.xy(100, 100))\n\
+             contour:extract(0, 10, destPath, false)\n\
+             return destPath\n",
+        );
+        let path = path
+            .borrow::<ScriptedPath>()
+            .expect("ScriptedPath userdata");
+        assert!(path.raw_path.verbs().len() > 1);
+        assert_eq!(path.raw_path.verbs()[0], PathVerb::Move);
+        assert_eq!(path.raw_path.verbs()[1], PathVerb::Line);
+    }
+
+    #[test]
+    fn contour_measure_next_iterates_contours() {
+        let values: (bool, bool) = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:close()\n\
+             path:moveTo(Vector.xy(20, 20))\n\
+             path:lineTo(Vector.xy(30, 20))\n\
+             path:close()\n\
+             local contour1 = path:contours()\n\
+             local contour2 = contour1.next\n\
+             return contour1 ~= nil, contour2 ~= nil\n",
+        );
+        assert!(values.0);
+        assert!(values.1);
+    }
+
+    #[test]
+    fn contour_measure_next_returns_nil_when_done() {
+        let value: bool = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:close()\n\
+             local contour1 = path:contours()\n\
+             local contour2 = contour1.next\n\
+             return contour2 == nil\n",
+        );
+        assert!(value);
+    }
+
+    #[test]
+    fn path_measure_returns_path_measure() {
+        let value: bool = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             path:close()\n\
+             local measure = path:measure()\n\
+             return measure ~= nil\n",
+        );
+        assert!(value);
+    }
+
+    #[test]
+    fn path_measure_has_length() {
+        let length: f64 = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             path:close()\n\
+             local measure = path:measure()\n\
+             return measure.length\n",
+        );
+        assert!(length > 0.0);
+        assert!(length < 100.0);
+    }
+
+    #[test]
+    fn path_measure_is_closed_for_single_closed_contour() {
+        let value: bool = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             path:close()\n\
+             local measure = path:measure()\n\
+             return measure.isClosed\n",
+        );
+        assert!(value);
+    }
+
+    #[test]
+    fn path_measure_is_closed_false_for_multiple_contours() {
+        let value: bool = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:close()\n\
+             path:moveTo(Vector.xy(20, 20))\n\
+             path:lineTo(Vector.xy(30, 20))\n\
+             path:close()\n\
+             local measure = path:measure()\n\
+             return measure.isClosed\n",
+        );
+        assert!(!value);
+    }
+
+    #[test]
+    fn path_measure_is_closed_false_for_open_path() {
+        let value: bool = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             local measure = path:measure()\n\
+             return measure.isClosed\n",
+        );
+        assert!(!value);
+    }
+
+    #[test]
+    fn path_measure_position_and_tangent() {
+        let values: (f64, f64, f64, f64) = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             local measure = path:measure()\n\
+             local pos, tan = measure:positionAndTangent(0)\n\
+             return pos.x, pos.y, tan.x, tan.y\n",
+        );
+        assert_approx(values.0, 0.0);
+        assert_approx(values.1, 0.0);
+        assert!(values.2 > 0.0);
+        assert_approx(values.3, 0.0);
+    }
+
+    #[test]
+    fn path_measure_warp() {
+        let values: (f64, f64) = eval(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             local measure = path:measure()\n\
+             local result = measure:warp(Vector.xy(5, 2))\n\
+             return result.x, result.y\n",
+        );
+        assert_approx(values.0, 5.0);
+        assert_approx(values.1, 2.0);
+    }
+
+    #[test]
+    fn path_measure_extract() {
+        let path = extracted_path(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             local measure = path:measure()\n\
+             local destPath: Path = Path.new()\n\
+             measure:extract(0, 10, destPath, true)\n\
+             return destPath\n",
+        );
+        let path = path
+            .borrow::<ScriptedPath>()
+            .expect("ScriptedPath userdata");
+        assert!(!path.raw_path.verbs().is_empty());
+    }
+
+    #[test]
+    fn path_measure_extract_defaults_to_start_with_move_true() {
+        let path = extracted_path(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             local measure = path:measure()\n\
+             local destPath: Path = Path.new()\n\
+             measure:extract(0, 10, destPath)\n\
+             return destPath\n",
+        );
+        let path = path
+            .borrow::<ScriptedPath>()
+            .expect("ScriptedPath userdata");
+        assert!(!path.raw_path.verbs().is_empty());
+        assert_eq!(path.raw_path.verbs()[0], PathVerb::Move);
+    }
+
+    #[test]
+    #[ignore = "expected-red: startWithMove=false inserts a second move instead of a line"]
+    fn path_measure_extract_with_start_with_move_false() {
+        let path = extracted_path(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:lineTo(Vector.xy(10, 10))\n\
+             local measure = path:measure()\n\
+             local destPath: Path = Path.new()\n\
+             destPath:moveTo(Vector.xy(100, 100))\n\
+             measure:extract(0, 10, destPath, false)\n\
+             return destPath\n",
+        );
+        let path = path
+            .borrow::<ScriptedPath>()
+            .expect("ScriptedPath userdata");
+        assert!(path.raw_path.verbs().len() > 1);
+        assert_eq!(path.raw_path.verbs()[0], PathVerb::Move);
+        assert_eq!(path.raw_path.verbs()[1], PathVerb::Line);
+    }
+
+    #[test]
+    fn path_measure_extract_across_multiple_contours() {
+        let path = extracted_path(
+            "local path: Path = Path.new()\n\
+             path:moveTo(Vector.xy(0, 0))\n\
+             path:lineTo(Vector.xy(10, 0))\n\
+             path:close()\n\
+             path:moveTo(Vector.xy(20, 0))\n\
+             path:lineTo(Vector.xy(30, 0))\n\
+             path:close()\n\
+             local measure = path:measure()\n\
+             local destPath: Path = Path.new()\n\
+             measure:extract(5, 25, destPath, true)\n\
+             return destPath\n",
+        );
+        let path = path
+            .borrow::<ScriptedPath>()
+            .expect("ScriptedPath userdata");
+        assert!(!path.raw_path.verbs().is_empty());
+    }
+}

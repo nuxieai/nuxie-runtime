@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 34
+max_pending = 33
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -821,9 +821,9 @@ note = "Both upstream cases are translated one-for-one with every original scrip
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_path_effect_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_scripting_path_effect.rs", "silver-corpus.toml::reuse_path_in_effect"]
+note = "The exact fixture, renderer initialization, default ViewModel binding, 0.016 advance, draw, and named .sriv comparison are present. It remains expected-red only at the inactive scripted .sriv comparator boundary."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_pointer_event_test.cpp"

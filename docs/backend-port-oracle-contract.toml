@@ -117,7 +117,7 @@ backend = "vulkan"
 environment = "Linux AMD Vulkan"
 requirement = "closeout-blocking"
 primary_status = "hardware-not-yet-provisioned"
-candidate_status = "pending-translation"
+candidate_status = "pending-hardware-evidence"
 
 [[platform]]
 id = "vulkan-linux-nvidia"
@@ -125,7 +125,7 @@ backend = "vulkan"
 environment = "Linux NVIDIA Vulkan"
 requirement = "closeout-blocking"
 primary_status = "hardware-not-yet-provisioned"
-candidate_status = "pending-translation"
+candidate_status = "pending-hardware-evidence"
 
 [[platform]]
 id = "vulkan-linux-intel"
@@ -133,7 +133,7 @@ backend = "vulkan"
 environment = "Linux Intel Vulkan"
 requirement = "closeout-blocking"
 primary_status = "hardware-not-yet-provisioned"
-candidate_status = "pending-translation"
+candidate_status = "pending-hardware-evidence"
 
 [[platform]]
 id = "webgpu-native-dawn-macos-apple-m5-max"
@@ -277,6 +277,7 @@ candidate_renderer_change = "none"
 tolerance_change = "none"
 smoke_verification = "all four WebGPU/WebGL2 x Chromium/Firefox combinations passed a same-browser, same-adapter exact representative case on macOS; WebGPU Firefox inherited its recorded headed requirement"
 closeout_verdict = "pending full hosted Windows and Linux workflow evidence"
+execution_status = "deferred-by-user-after-port-construction"
 
 [cutover]
 begins_after = "vulkan, webgpu, and webgl2 frozen-byte closeout green"

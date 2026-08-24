@@ -32669,8 +32669,36 @@ mod tests {
             vec![3],
             "the first active Solo child is the layout provider"
         );
+        assert_eq!(
+            instance
+                .component(2)
+                .and_then(|component| component.concrete.solo.as_ref())
+                .and_then(|solo| {
+                    solo.cpp_local_ids.iter().position(|local| {
+                        instance
+                            .component(*local)
+                            .is_some_and(|child| !child.is_collapsed())
+                    })
+                }),
+            Some(0),
+            "getActiveChildIndex starts at the first soloable option"
+        );
 
         assert!(instance.set_solo_active_child_by_index(2, 1.0));
+        assert_eq!(
+            instance
+                .component(2)
+                .and_then(|component| component.concrete.solo.as_ref())
+                .and_then(|solo| {
+                    solo.cpp_local_ids.iter().position(|local| {
+                        instance
+                            .component(*local)
+                            .is_some_and(|child| !child.is_collapsed())
+                    })
+                }),
+            Some(1),
+            "updateByIndex(1) updates getActiveChildIndex"
+        );
         assert_eq!(
             engine
                 .layout_provider_children(&instance, 1)
@@ -32678,6 +32706,214 @@ mod tests {
             vec![6],
             "provider discovery follows the live Solo selection"
         );
+    }
+
+    #[test]
+    fn upstream_cubic_participant_retargets_while_smoothing() {
+        let runtime =
+            read_runtime_file(&cpp_runtime_fixture("layout/animated_cubic_participant.riv"))
+                .expect("animated cubic participant imports");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("animated cubic participant graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instance builds");
+        advance_participant_frame(&mut instance, 0.0);
+        let participant_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Shape")
+            .and_then(|shape| instance.runtime_layout_participant_local(shape.local_id))
+            .expect("shape participant");
+        let container_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "LayoutComponent")
+            .expect("styled container")
+            .local_id;
+        let width_key =
+            property_key_for_name("LayoutComponent", "width").expect("LayoutComponent.width");
+
+        assert!(instance.set_double_property(container_local, width_key, 100.0));
+        let mut width = 200.0;
+        for _ in 0..8 {
+            if width < 200.0 {
+                break;
+            }
+            advance_participant_frame(&mut instance, 0.1);
+            width = participant_width(&instance, participant_local);
+        }
+        assert!(width < 200.0);
+
+        assert!(instance.set_double_property(container_local, width_key, 80.0));
+        advance_participant_frame(&mut instance, 0.1);
+        assert!(instance.set_double_property(container_local, width_key, 50.0));
+        for _ in 0..20 {
+            advance_participant_frame(&mut instance, 1.0);
+        }
+        assert!((participant_width(&instance, participant_local) - 50.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn upstream_grouped_participants_are_discovered_from_exact_fixtures() {
+        for (fixture, expected_shape_count) in [
+            ("layout/group_participant.riv", 1_usize),
+            ("layout/nested_group_participant.riv", 3_usize),
+        ] {
+            let runtime = read_runtime_file(&cpp_runtime_fixture(fixture))
+                .unwrap_or_else(|error| panic!("{fixture} imports: {error:#}"));
+            let graphs = GraphFile::from_runtime_file(&runtime)
+                .unwrap_or_else(|error| panic!("{fixture} graphs: {error:#}"));
+            let graph = graphs.artboards.first().expect("fixture has an artboard");
+            let mut instance =
+                ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                    .expect("instance builds");
+            instance.update_pass();
+            let shapes = graph
+                .components
+                .iter()
+                .filter(|component| component.type_name == "Shape")
+                .collect::<Vec<_>>();
+            assert_eq!(shapes.len(), expected_shape_count);
+            let full = shapes
+                .iter()
+                .filter(|shape| {
+                    instance.layout_bounds(shape.local_id).is_some_and(|bounds| {
+                        bounds.width == 200.0 && bounds.height == 200.0
+                    })
+                })
+                .count();
+            assert_eq!(
+                full,
+                if expected_shape_count == 1 { 1 } else { 2 },
+                "{fixture}: direct/grouped-Solo active providers fill the stack while the +                 inactive Solo sibling does not"
+            );
+        }
+    }
+
+    fn upstream_grouped_component_list_joins_layout(fixture: &str) -> bool {
+        let engine = TaffyRuntimeLayoutEngine;
+        let runtime = read_runtime_file(&cpp_runtime_fixture(fixture))
+            .unwrap_or_else(|error| panic!("{fixture} imports: {error:#}"));
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .unwrap_or_else(|error| panic!("{fixture} graphs: {error:#}"));
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instance builds");
+        instance.update_pass();
+        let lists = graph
+            .components
+            .iter()
+            .filter(|component| component.type_name == "ArtboardComponentList")
+            .collect::<Vec<_>>();
+        assert_eq!(lists.len(), 1);
+        let list = lists[0];
+        let parent = instance
+            .component_parent_local(list.local_id)
+            .and_then(|local| instance.component(local))
+            .expect("list parent");
+        assert_eq!(parent.type_name, "Node");
+        engine
+            .layout_provider_children(&instance, 0)
+            .expect("root layout providers")
+            .contains(&list.local_id)
+    }
+
+    #[test]
+    fn upstream_component_list_inside_a_group_stays_out_of_layout() {
+        assert!(!upstream_grouped_component_list_joins_layout(
+            "clipping_and_draw_order.riv"
+        ));
+    }
+
+    #[test]
+    #[ignore = "expected-red: ParticipatesInLayout is not decoded from the pinned list fixture"]
+    fn upstream_flagged_component_list_joins_layout_through_a_group() {
+        assert!(upstream_grouped_component_list_joins_layout(
+            "layout/list_in_group_joins_layout.riv"
+        ));
+    }
+
+    #[test]
+    #[ignore = "expected-red: custom PointsPath intrinsic geometry is absent before first update"]
+    fn upstream_custom_path_participant_measures_before_paths_are_built() {
+        let runtime = read_runtime_file(&cpp_runtime_fixture("layout_grid_stack.riv"))
+            .expect("layout grid-stack fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("layout grid-stack graphs");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|artboard| {
+                artboard.name.as_deref() == Some("GridWithLayoutParticipants")
+            })
+            .expect("GridWithLayoutParticipants");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instance builds");
+        let shapes = graph
+            .components
+            .iter()
+            .filter(|component| component.type_name == "Shape")
+            .collect::<Vec<_>>();
+        assert!(!shapes.is_empty());
+        let mut cache = RuntimeGeometryState::default();
+        let mut custom_paths = 0;
+        for shape in &shapes {
+            let bounds = instance
+                .geometry_world_bounds_with_context(
+                    &runtime,
+                    graph,
+                    shape.local_id,
+                    &mut cache,
+                )
+                .expect("shape intrinsic geometry is never inverted or absent");
+            assert!(bounds.width() >= 0.0);
+            assert!(bounds.height() >= 0.0);
+            let has_custom_path = shape.children.iter().any(|child| {
+                graph.components.iter().any(|component| {
+                    component.local_id == *child && component.type_name == "PointsPath"
+                })
+            });
+            if has_custom_path {
+                custom_paths += 1;
+                assert!(bounds.width() > 0.0);
+                assert!(bounds.height() > 0.0);
+            }
+        }
+        assert!(custom_paths > 0);
+    }
+
+    #[test]
+    fn upstream_empty_path_participant_keeps_a_sane_world_transform() {
+        let runtime = read_runtime_file(&cpp_runtime_fixture("layout_grid_stack.riv"))
+            .expect("layout grid-stack fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("layout grid-stack graphs");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|artboard| {
+                artboard.name.as_deref() == Some("GridWithLayoutParticipants")
+            })
+            .expect("GridWithLayoutParticipants");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instance builds");
+        let shapes = graph
+            .components
+            .iter()
+            .filter(|component| component.type_name == "Shape")
+            .collect::<Vec<_>>();
+        assert!(!shapes.is_empty());
+        instance.update_pass();
+        for shape in shapes {
+            let world = instance
+                .object_world_transform(shape.local_id)
+                .expect("shape world transform");
+            assert!(world.0[4].abs() < 1.0e6);
+            assert!(world.0[5].abs() < 1.0e6);
+        }
     }
 
     #[test]

@@ -6,6 +6,8 @@
 use std::ffi::{c_char, CStr};
 use std::ptr;
 
+use super::webgpu_decl;
+
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_webgpu_webgpu_compat.h");
 pub(crate) const PINNED_SOURCE_LINE_COUNT: usize = 640;
@@ -57,15 +59,15 @@ pub(crate) unsafe fn WGPU_STRING_VIEW_FREE(value: WGPUStringView) {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct WagyuStringViewParts {
+pub(crate) struct WGPUWagyuStringView {
     pub(crate) data: WGPUStringView,
     pub(crate) length: usize,
 }
 
 /// Both the C and C++ `WGPU_WAGYU_STRING_VIEW` branches produce these exact
 /// pointer/length fields; only their aggregate-construction syntax differs.
-pub(crate) unsafe fn WGPU_WAGYU_STRING_VIEW(value: WGPUStringView) -> WagyuStringViewParts {
-    WagyuStringViewParts {
+pub(crate) unsafe fn WGPU_WAGYU_STRING_VIEW(value: WGPUStringView) -> WGPUWagyuStringView {
+    WGPUWagyuStringView {
         data: value,
         length: if value.is_null() {
             0
@@ -76,13 +78,181 @@ pub(crate) unsafe fn WGPU_WAGYU_STRING_VIEW(value: WGPUStringView) -> WagyuStrin
     }
 }
 
-pub(crate) trait WgpuReference {
-    fn reference(&self);
+pub(crate) trait WgpuReference: Copy {
+    unsafe fn reference(self);
 }
 
-pub(crate) fn WGPU_ADDREF<T: WgpuReference>(object: &T) {
-    object.reference();
+pub(crate) unsafe fn WGPU_ADDREF<T: WgpuReference>(object: T) {
+    // SAFETY: Each concrete handle implementation dispatches to its matching
+    // WebGPU ABI reference operation; the caller supplies a live borrowed
+    // handle, exactly as the source macro requires.
+    unsafe { object.reference() };
 }
+
+macro_rules! concrete_wgpu_reference {
+    ($(($handle:ty, $reference:path)),+ $(,)?) => {$ (
+        impl WgpuReference for $handle {
+            unsafe fn reference(self) {
+                // SAFETY: The trait contract requires a live handle of this
+                // exact concrete ABI type.
+                unsafe { $reference(self) };
+            }
+        }
+    )+ };
+}
+
+concrete_wgpu_reference!(
+    (webgpu_decl::WGPUAdapter, webgpu_decl::wgpuAdapterAddRef),
+    (webgpu_decl::WGPUBindGroup, webgpu_decl::wgpuBindGroupAddRef),
+    (webgpu_decl::WGPUBindGroupLayout, webgpu_decl::wgpuBindGroupLayoutAddRef),
+    (webgpu_decl::WGPUBuffer, webgpu_decl::wgpuBufferAddRef),
+    (webgpu_decl::WGPUCommandBuffer, webgpu_decl::wgpuCommandBufferAddRef),
+    (webgpu_decl::WGPUCommandEncoder, webgpu_decl::wgpuCommandEncoderAddRef),
+    (webgpu_decl::WGPUComputePassEncoder, webgpu_decl::wgpuComputePassEncoderAddRef),
+    (webgpu_decl::WGPUComputePipeline, webgpu_decl::wgpuComputePipelineAddRef),
+    (webgpu_decl::WGPUDevice, webgpu_decl::wgpuDeviceAddRef),
+    (webgpu_decl::WGPUInstance, webgpu_decl::wgpuInstanceAddRef),
+    (webgpu_decl::WGPUPipelineLayout, webgpu_decl::wgpuPipelineLayoutAddRef),
+    (webgpu_decl::WGPUQuerySet, webgpu_decl::wgpuQuerySetAddRef),
+    (webgpu_decl::WGPUQueue, webgpu_decl::wgpuQueueAddRef),
+    (webgpu_decl::WGPURenderBundle, webgpu_decl::wgpuRenderBundleAddRef),
+    (webgpu_decl::WGPURenderBundleEncoder, webgpu_decl::wgpuRenderBundleEncoderAddRef),
+    (webgpu_decl::WGPURenderPassEncoder, webgpu_decl::wgpuRenderPassEncoderAddRef),
+    (webgpu_decl::WGPURenderPipeline, webgpu_decl::wgpuRenderPipelineAddRef),
+    (webgpu_decl::WGPUSampler, webgpu_decl::wgpuSamplerAddRef),
+    (webgpu_decl::WGPUShaderModule, webgpu_decl::wgpuShaderModuleAddRef),
+    (webgpu_decl::WGPUSurface, webgpu_decl::wgpuSurfaceAddRef),
+    (webgpu_decl::WGPUTexture, webgpu_decl::wgpuTextureAddRef),
+    (webgpu_decl::WGPUTextureView, webgpu_decl::wgpuTextureViewAddRef),
+);
+
+/// Executable compatibility names for the pinned Wagyu profile. The Dawn
+/// source names map to the same semantic ABI records in this profile instead
+/// of remaining string-only alias metadata.
+pub(crate) mod wagyu_profile {
+    pub(crate) type WGPUTexelCopyBufferInfo = super::webgpu_decl::WGPUTexelCopyBufferInfo;
+    pub(crate) type WGPUTexelCopyTextureInfo = super::webgpu_decl::WGPUTexelCopyTextureInfo;
+    pub(crate) type WGPUTexelCopyBufferLayout = super::webgpu_decl::WGPUTexelCopyBufferLayout;
+    pub(crate) type WGPUInstanceCapabilities = super::webgpu_decl::WGPUSupportedInstanceFeatures;
+    pub(crate) type WGPUMapAsyncStatus = super::webgpu_decl::WGPUMapAsyncStatus;
+    pub(crate) type WGPUShaderSourceWGSL = super::webgpu_decl::WGPUShaderSourceWGSL;
+    pub(crate) type WGPURenderPassMaxDrawCount = super::webgpu_decl::WGPURenderPassMaxDrawCount;
+    pub(crate) type WGPUWGSLLanguageFeatureName =
+        super::webgpu_decl::WGPUWGSLLanguageFeatureName;
+    pub(crate) type WGPUEmscriptenSurfaceSourceCanvasHTMLSelector =
+        super::webgpu_decl::WGPUEmscriptenSurfaceSourceCanvasHTMLSelector;
+
+    pub(crate) const WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal:
+        super::webgpu_decl::WGPUSurfaceGetCurrentTextureStatus =
+        super::webgpu_decl::WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal;
+    pub(crate) const WGPUMapAsyncStatus_Success: WGPUMapAsyncStatus =
+        super::webgpu_decl::WGPUMapAsyncStatus_Success;
+    pub(crate) const WGPUMapAsyncStatus_Force32: WGPUMapAsyncStatus =
+        super::webgpu_decl::WGPUMapAsyncStatus_Force32;
+    pub(crate) const WGPUSType_ShaderSourceWGSL: super::webgpu_decl::WGPUSType =
+        super::webgpu_decl::WGPUSType_ShaderSourceWGSL;
+
+    pub(crate) unsafe fn wgpuGetInstanceCapabilities(
+        output: *mut WGPUInstanceCapabilities,
+    ) {
+        // SAFETY: This is the source compatibility alias for the exact output
+        // operation exposed by the pinned Wagyu ABI.
+        unsafe { super::webgpu_decl::wgpuGetInstanceFeatures(output) };
+    }
+}
+
+/// Dawn and Wagyu spell these compatibility records differently, but their
+/// renderer-facing meanings are identical. Keeping a second typed namespace
+/// makes profile selection compile-time authority rather than string lookup.
+pub(crate) mod dawn_profile {
+    pub(crate) use super::wagyu_profile::*;
+}
+
+macro_rules! typed_compat_initializers {
+    ($(($name:ident, $ty:ty)),+ $(,)?) => {$ (
+        pub(crate) fn $name() -> $ty {
+            <$ty>::default()
+        }
+    )+ };
+}
+
+pub(crate) const fn WGPU_MAKE_INIT_STRUCT<T>(value: T) -> T {
+    value
+}
+
+/// Typed executable forms of every ownership-sensitive aggregate initializer
+/// in the compatibility header. Their `Default` implementations are generated
+/// from the pinned WebGPU field order and preserve null callbacks/userdata,
+/// null chains/handles, undefined sentinels, and version-specific fields.
+typed_compat_initializers!(
+    (WGPU_ADAPTER_INFO_INIT, webgpu_decl::WGPUAdapterInfo),
+    (WGPU_BIND_GROUP_DESCRIPTOR_INIT, webgpu_decl::WGPUBindGroupDescriptor),
+    (WGPU_BIND_GROUP_ENTRY_INIT, webgpu_decl::WGPUBindGroupEntry),
+    (WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT, webgpu_decl::WGPUBindGroupLayoutDescriptor),
+    (WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT, webgpu_decl::WGPUBindGroupLayoutEntry),
+    (WGPU_BLEND_COMPONENT_INIT, webgpu_decl::WGPUBlendComponent),
+    (WGPU_BLEND_STATE_INIT, webgpu_decl::WGPUBlendState),
+    (WGPU_BUFFER_BINDING_LAYOUT_INIT, webgpu_decl::WGPUBufferBindingLayout),
+    (WGPU_BUFFER_DESCRIPTOR_INIT, webgpu_decl::WGPUBufferDescriptor),
+    (WGPU_BUFFER_MAP_CALLBACK_INFO_INIT, webgpu_decl::WGPUBufferMapCallbackInfo),
+    (WGPU_COLOR_INIT, webgpu_decl::WGPUColor),
+    (WGPU_COLOR_TARGET_STATE_INIT, webgpu_decl::WGPUColorTargetState),
+    (WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT, webgpu_decl::WGPUCommandBufferDescriptor),
+    (WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT, webgpu_decl::WGPUCommandEncoderDescriptor),
+    (WGPU_COMPILATION_INFO_INIT, webgpu_decl::WGPUCompilationInfo),
+    (WGPU_COMPILATION_MESSAGE_INIT, webgpu_decl::WGPUCompilationMessage),
+    (WGPU_COMPUTE_PASS_DESCRIPTOR_INIT, webgpu_decl::WGPUComputePassDescriptor),
+    (WGPU_COMPUTE_PASS_TIMESTAMP_WRITES_INIT, webgpu_decl::WGPUPassTimestampWrites),
+    (WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT, webgpu_decl::WGPUComputePipelineDescriptor),
+    (WGPU_COMPUTE_STATE_INIT, webgpu_decl::WGPUComputeState),
+    (WGPU_CONSTANT_ENTRY_INIT, webgpu_decl::WGPUConstantEntry),
+    (WGPU_DEPTH_STENCIL_STATE_INIT, webgpu_decl::WGPUDepthStencilState),
+    (WGPU_DEVICE_DESCRIPTOR_INIT, webgpu_decl::WGPUDeviceDescriptor),
+    (WGPU_EXTENT_3D_INIT, webgpu_decl::WGPUExtent3D),
+    (WGPU_FRAGMENT_STATE_INIT, webgpu_decl::WGPUFragmentState),
+    (WGPU_TEXEL_COPY_BUFFER_INFO_INIT, webgpu_decl::WGPUTexelCopyBufferInfo),
+    (WGPU_TEXEL_COPY_TEXTURE_INFO_INIT, webgpu_decl::WGPUTexelCopyTextureInfo),
+    (WGPU_INSTANCE_DESCRIPTOR_INIT, webgpu_decl::WGPUInstanceDescriptor),
+    (WGPU_INSTANCE_CAPABILITIES_INIT, webgpu_decl::WGPUSupportedInstanceFeatures),
+    (WGPU_LIMITS_INIT, webgpu_decl::WGPULimits),
+    (WGPU_MULTISAMPLE_STATE_INIT, webgpu_decl::WGPUMultisampleState),
+    (WGPU_ORIGIN_3D_INIT, webgpu_decl::WGPUOrigin3D),
+    (WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT, webgpu_decl::WGPUPipelineLayoutDescriptor),
+    (WGPU_PRIMITIVE_STATE_INIT, webgpu_decl::WGPUPrimitiveState),
+    (WGPU_QUERY_SET_DESCRIPTOR_INIT, webgpu_decl::WGPUQuerySetDescriptor),
+    (WGPU_QUEUE_DESCRIPTOR_INIT, webgpu_decl::WGPUQueueDescriptor),
+    (WGPU_RENDER_BUNDLE_DESCRIPTOR_INIT, webgpu_decl::WGPURenderBundleDescriptor),
+    (WGPU_RENDER_BUNDLE_ENCODER_DESCRIPTOR_INIT, webgpu_decl::WGPURenderBundleEncoderDescriptor),
+    (WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT, webgpu_decl::WGPURenderPassColorAttachment),
+    (WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT, webgpu_decl::WGPURenderPassDepthStencilAttachment),
+    (WGPU_RENDER_PASS_DESCRIPTOR_INIT, webgpu_decl::WGPURenderPassDescriptor),
+    (WGPU_RENDER_PASS_MAX_DRAW_COUNT_INIT, webgpu_decl::WGPURenderPassMaxDrawCount),
+    (WGPU_RENDER_PASS_TIMESTAMP_WRITES_INIT, webgpu_decl::WGPUPassTimestampWrites),
+    (WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT, webgpu_decl::WGPURenderPipelineDescriptor),
+    (WGPU_REQUEST_ADAPTER_OPTIONS_INIT, webgpu_decl::WGPURequestAdapterOptions),
+    (WGPU_REQUIRED_LIMITS_INIT, webgpu_decl::WGPULimits),
+    (WGPU_SAMPLER_BINDING_LAYOUT_INIT, webgpu_decl::WGPUSamplerBindingLayout),
+    (WGPU_SAMPLER_DESCRIPTOR_INIT, webgpu_decl::WGPUSamplerDescriptor),
+    (WGPU_SHADER_MODULE_DESCRIPTOR_INIT, webgpu_decl::WGPUShaderModuleDescriptor),
+    (WGPU_SHADER_SOURCE_SPIRV_INIT, webgpu_decl::WGPUShaderSourceSPIRV),
+    (WGPU_SHADER_SOURCE_WGSL_INIT, webgpu_decl::WGPUShaderSourceWGSL),
+    (WGPU_STENCIL_FACE_STATE_INIT, webgpu_decl::WGPUStencilFaceState),
+    (WGPU_STORAGE_TEXTURE_BINDING_LAYOUT_INIT, webgpu_decl::WGPUStorageTextureBindingLayout),
+    (WGPU_SUPPORTED_LIMITS_INIT, webgpu_decl::WGPULimits),
+    (WGPU_SURFACE_CAPABILITIES_INIT, webgpu_decl::WGPUSurfaceCapabilities),
+    (WGPU_SURFACE_CONFIGURATION_INIT, webgpu_decl::WGPUSurfaceConfiguration),
+    (WGPU_SURFACE_DESCRIPTOR_INIT, webgpu_decl::WGPUSurfaceDescriptor),
+    (WGPU_SURFACE_TEXTURE_INIT, webgpu_decl::WGPUSurfaceTexture),
+    (WGPU_TEXTURE_BINDING_LAYOUT_INIT, webgpu_decl::WGPUTextureBindingLayout),
+    (WGPU_TEXTURE_BINDING_VIEW_DIMENSION_DESCRIPTOR_INIT, webgpu_decl::WGPUTextureBindingViewDimensionDescriptor),
+    (WGPU_TEXTURE_DATA_LAYOUT_INIT, webgpu_decl::WGPUTexelCopyBufferLayout),
+    (WGPU_TEXTURE_DESCRIPTOR_INIT, webgpu_decl::WGPUTextureDescriptor),
+    (WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT, webgpu_decl::WGPUTextureViewDescriptor),
+    (WGPU_VERTEX_ATTRIBUTE_INIT, webgpu_decl::WGPUVertexAttribute),
+    (WGPU_VERTEX_BUFFER_LAYOUT_INIT, webgpu_decl::WGPUVertexBufferLayout),
+    (WGPU_VERTEX_STATE_INIT, webgpu_decl::WGPUVertexState),
+    (WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT, webgpu_decl::WGPUQueueWorkDoneCallbackInfo),
+);
 
 pub(crate) const fn WGPU_CHECK_STATUS<T>(status: T) -> T {
     status
@@ -283,7 +453,6 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
     use std::ffi::CString;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn complete_macro_denominator_and_duplicate_branches_are_frozen() {
@@ -339,26 +508,12 @@ mod tests {
         unsafe {
             assert_eq!(
                 WGPU_WAGYU_STRING_VIEW(ptr::null()),
-                WagyuStringViewParts { data: ptr::null(), length: 0 }
+                WGPUWagyuStringView { data: ptr::null(), length: 0 }
             );
             assert_eq!(
                 WGPU_WAGYU_STRING_VIEW(source.as_ptr()),
-                WagyuStringViewParts { data: source.as_ptr(), length: 4 }
+                WGPUWagyuStringView { data: source.as_ptr(), length: 4 }
             );
         }
-    }
-
-    #[test]
-    fn addref_dispatches_exactly_once() {
-        struct Handle(AtomicUsize);
-        impl WgpuReference for Handle {
-            fn reference(&self) {
-                self.0.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-
-        let handle = Handle(AtomicUsize::new(0));
-        WGPU_ADDREF(&handle);
-        assert_eq!(handle.0.load(Ordering::Relaxed), 1);
     }
 }

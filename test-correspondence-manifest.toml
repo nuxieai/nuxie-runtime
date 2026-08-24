@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 18
+max_pending = 17
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -707,9 +707,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 test_case_count = 5
-status = "pending"
-evidence = []
-note = "corpus_require_dependency_chain_registers_and_resolves proves module registration/require, but not a complete converter-output TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_scripting_dependency.rs"]
+note = "All five pinned fixtures execute through the Rust-native scripting stack with the original named artboard/default view-model selection, initial 0.1 advance/draw, exact 30-number or five-string mutation loops, 0.016 advances, frame/draw order, and pinned SRIV comparisons. They are honestly expected-red at the first frozen-stream difference: Rust records the upstream frameSize setup call as op 0 while every pinned C++ silver starts with makeRenderPaint. The port retains frameSize and does not filter that discrepancy away."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_detached_viewmodel_advance_test.cpp"

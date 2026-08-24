@@ -68,8 +68,25 @@ pub use nuxie_render_api::{
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
-    RenderMode, RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame, WgpuFrameMetrics,
+    WgpuAdapterInfo, WgpuFactory, WgpuFrame, WgpuFrameMetrics,
 };
+#[cfg(feature = "renderer-vulkan")]
+pub use nuxie_renderer::{NativeVulkanFactory, NativeVulkanFrame};
+#[cfg(feature = "renderer-webgpu")]
+pub use nuxie_renderer::{NativeWebGpuFactory, NativeWebGpuFrame};
+#[cfg(any(
+    feature = "renderer",
+    feature = "renderer-vulkan",
+    feature = "renderer-webgpu",
+    feature = "renderer-webgl2"
+))]
+pub use nuxie_renderer::{RenderMode, RendererError};
+#[cfg(all(
+    feature = "renderer-webgl2",
+    target_arch = "wasm32",
+    target_os = "unknown"
+))]
+pub use nuxie_renderer::{WebGl2Factory, WebGl2Frame};
 #[cfg(all(feature = "renderer", not(target_arch = "wasm32")))]
 pub use nuxie_renderer::{
     WgpuFactory as DefaultRendererFactory, WgpuFrame as DefaultRendererFrame,

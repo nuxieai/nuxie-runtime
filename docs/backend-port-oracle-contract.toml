@@ -284,6 +284,11 @@ web_editor_public_selection = ["webgpu", "webgl2"]
 automatic_failure_fallback = false
 legacy_backend_id = "rust-wgpu"
 legacy_deletion_status = "pending"
+product_wiring_status = "green-precloseout-legacy-retained"
+renderer_crate_features = ["renderer-vulkan", "renderer-webgpu", "renderer-webgl2"]
+facade_crate_features = ["renderer-vulkan", "renderer-webgpu", "renderer-webgl2"]
+browser_artifact_contract = "explicit selection loads either the Emscripten WebGPU artifact or the wasm32-unknown-unknown WebGL2 artifact; target-specific upstream ownership forbids an automatic cross-backend fallback"
+product_root_compile_evidence = "all three stable feature roots compile independently; cargo dependency trees for each contain neither legacy wgpu nor naga"
 required_proofs = [
   "explicit selection reports selected backend identity",
   "WebGPU selection roots rust-webgpu-exact and never legacy-rust-wgpu",

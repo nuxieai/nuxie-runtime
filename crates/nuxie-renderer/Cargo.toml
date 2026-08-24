@@ -8,6 +8,12 @@ publish = false
 [features]
 default = ["rust-wgpu"]
 rust-wgpu = ["dep:naga", "dep:wgpu"]
+# Stable product roots for the three exact-source renderer ports. Keep the
+# campaign feature names as their internal implementation authority until the
+# deferred closeout permits the legacy Rust-WGPU graph to be deleted.
+renderer-vulkan = ["native-vulkan-experimental"]
+renderer-webgpu = ["native-webgpu-experimental"]
+renderer-webgl2 = ["native-webgl2-experimental"]
 apple-msl-capture = ["rust-wgpu"]
 apple-msl-replay = ["rust-wgpu", "dep:wgpu-hal", "wgpu-hal/apple-msl-replay"]
 # Compiles the explicit, dormant trusted authored-MSL factory profile. The

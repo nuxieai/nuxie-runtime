@@ -9,7 +9,12 @@ publish = false
 [features]
 default = ["renderer", "js-host-seed"]
 js-host-seed = ["nuxie-runtime/js-host-seed", "nuxie-scripting?/js-host-seed"]
-renderer = ["dep:nuxie-renderer"]
+# Backward-compatible legacy selection. The exact ports have separate explicit
+# roots below so selecting one never activates Rust-WGPU as a fallback.
+renderer = ["dep:nuxie-renderer", "nuxie-renderer/rust-wgpu"]
+renderer-vulkan = ["dep:nuxie-renderer", "nuxie-renderer/renderer-vulkan"]
+renderer-webgpu = ["dep:nuxie-renderer", "nuxie-renderer/renderer-webgpu"]
+renderer-webgl2 = ["dep:nuxie-renderer", "nuxie-renderer/renderer-webgl2"]
 apple-authored-msl = [
     "renderer",
     "scripting",
@@ -35,7 +40,7 @@ anyhow = "1"
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-api = { path = "../nuxie-render-api" }
-nuxie-renderer = { path = "../nuxie-renderer", optional = true }
+nuxie-renderer = { path = "../nuxie-renderer", optional = true, default-features = false }
 nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 nuxie-schema = { path = "../nuxie-schema" }
 nuxie-scripting = { path = "../nuxie-scripting", optional = true, default-features = false }

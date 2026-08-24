@@ -30,6 +30,12 @@ impl NativeVulkanFactory {
         &self.adapter_name
     }
 
+    /// Recreates only the extent-dependent target resources, preserving this
+    /// factory's device, exact-source context, and render-resource domain.
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        self.core.resize(width, height)
+    }
+
     pub fn begin_frame(
         &self,
         clear_color: u32,
@@ -163,5 +169,27 @@ impl Renderer for NativeVulkanFrame {
 
     fn modulate_opacity(&mut self, opacity: f32) {
         self.core.modulate_opacity(opacity);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resize_preserves_factory_and_changes_the_readback_extent() {
+        let Ok(mut factory) = NativeVulkanFactory::new(2, 2) else {
+            return;
+        };
+
+        factory.resize(3, 2).expect("resize Vulkan target");
+        let pixels = factory
+            .begin_frame(0xff102030, RenderMode::Msaa)
+            .expect("begin resized frame")
+            .finish()
+            .expect("finish resized frame");
+
+        assert_eq!(pixels.len(), 3 * 2 * 4);
+        assert_eq!(&pixels[..4], &[16, 32, 48, 255]);
     }
 }

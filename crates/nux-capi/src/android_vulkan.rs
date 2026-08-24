@@ -245,13 +245,15 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_resize(
             .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
         let renderer = unsafe { renderer.as_ref() }
             .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "renderer is null"))?;
-        let replacement =
-            NativeVulkanFactory::new(pixel_width, pixel_height).map_err(renderer_failure)?;
         let mut state = renderer
             .state
             .try_borrow_mut()
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-        *state.factory.borrow_mut() = replacement;
+        state
+            .factory
+            .borrow_mut()
+            .resize(pixel_width, pixel_height)
+            .map_err(renderer_failure)?;
         state.pixel_width = pixel_width;
         state.pixel_height = pixel_height;
         Ok(())

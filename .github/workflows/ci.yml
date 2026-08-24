@@ -360,6 +360,8 @@ jobs:
 
       - name: Install exact Rust and Node toolchains
         run: |
+          sudo apt-get update
+          sudo apt-get install --yes uuid-dev
           rustup toolchain install 1.91.1 --profile minimal --no-self-update
           rustup toolchain install 1.94.1 --profile minimal --no-self-update
           rustup target add --toolchain 1.91.1 wasm32-unknown-emscripten

@@ -1,10 +1,13 @@
 //! Public product seam for the exact browser WebGL2 translation.
 
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderCanvas, RenderCanvasError,
-    RenderImage, RenderPaint, RenderPath, RenderShader, Renderer,
+    BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders,
+    GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderProfile,
+    ImageDecodeError, ImageSampler, Mat2D, RawPath, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderCanvas, RenderCanvasError, RenderGpuCanvasShader, RenderImage,
+    RenderPaint, RenderPath, RenderShader, Renderer,
 };
+use std::sync::Arc;
 use web_sys::HtmlCanvasElement;
 
 use crate::exact_source_adapter::{ExactSourceFactoryCore, ExactSourceFrameCore};
@@ -47,6 +50,40 @@ impl WebGl2Factory {
 }
 
 impl Factory for WebGl2Factory {
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        self.core.gpu_canvas_shader_profile()
+    }
+
+    fn make_gpu_canvas_shader(
+        &mut self,
+        shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.core.make_gpu_canvas_shader(shader)
+    }
+
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        artifact: &GpuCanvasShaderArtifact,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.core.make_gpu_canvas_shader_artifact(artifact)
+    }
+
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.core.make_gpu_canvas_shader_occurrence(prepared)
+    }
+
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.core
+            .make_gpu_canvas_image_with_pipelines(pipelines, plan)
+    }
+
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,

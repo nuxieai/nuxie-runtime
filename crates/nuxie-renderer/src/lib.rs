@@ -14,6 +14,9 @@ pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};
 ))]
 mod exact_source_adapter;
 
+#[cfg(any(feature = "renderer-webgpu", feature = "renderer-webgl2"))]
+mod exact_gpu_canvas;
+
 #[cfg(feature = "renderer-vulkan")]
 mod native_vulkan;
 #[cfg(feature = "renderer-vulkan")]

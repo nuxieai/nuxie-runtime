@@ -7,7 +7,7 @@ use super::webgpu_cpp_decl::{
     Device as WagyuDevice, PipelineLayout as WagyuPipelineLayout,
     RenderPipeline as WagyuRenderPipeline,
 };
-use nuxie_ore_metal::gpu_resource::{GPUResource, GPUResourceManager, GpuResourcePayload};
+use nuxie_ore_metal::gpu_resource::{GPUResource, GpuResourcePayload};
 use nuxie_ore_metal::pipeline::Pipeline;
 use nuxie_ore_metal::types::PipelineDesc;
 use std::mem::ManuallyDrop;
@@ -25,9 +25,11 @@ pub(crate) struct PipelineWGPU {
 }
 
 impl PipelineWGPU {
-    pub(crate) fn new(manager: GPUResourceManager, desc: &PipelineDesc<'_>) -> Option<Self> {
+    pub(crate) fn new(desc: &PipelineDesc<'_>) -> Option<Self> {
         Some(Self {
-            base: ManuallyDrop::new(nuxie_ore_metal::new_pipeline_backend_base(manager, desc)?),
+            base: ManuallyDrop::new(
+                nuxie_ore_metal::new_pipeline_backend_base_without_manager(desc)?,
+            ),
             m_wgpuDevice: ManuallyDrop::new(WagyuDevice::default()),
             m_wgpuPipeline: ManuallyDrop::new(WagyuRenderPipeline::default()),
             m_wgpuPipelineLayout: ManuallyDrop::new(WagyuPipelineLayout::default()),

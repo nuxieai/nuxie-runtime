@@ -13,11 +13,13 @@ use std::pin::Pin;
 use std::rc::Rc;
 
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, ImageDecodeError, ImageSampler, Mat2D,
-    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderCanvas as RenderCanvasContract, RenderCanvasError, RenderCanvasFrame, RenderImage,
-    RenderPaint, RenderPath, RenderShader, Renderer,
+    BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders,
+    GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderProfile,
+    ImageDecodeError, ImageSampler, Mat2D, RawPath, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderCanvas as RenderCanvasContract, RenderCanvasError, RenderCanvasFrame,
+    RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader, Renderer,
 };
+use std::sync::Arc;
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use crate::mechanical_port::source::include::rive::renderer_hpp::RendererContract;
@@ -273,6 +275,35 @@ pub(crate) trait ExactSourceBackend: 'static {
         self.finish_frame(frame_number).map(drop)
     }
     fn abort_frame(&mut self);
+
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        GpuCanvasShaderProfile::WebGpu
+    }
+
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        _artifact: &GpuCanvasShaderArtifact,
+        _execution_anchor: Rc<dyn Any>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        Err(GpuCanvasError::unsupported())
+    }
+
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        _prepared: &Arc<dyn RenderGpuCanvasShader>,
+        _execution_anchor: Rc<dyn Any>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        Err(GpuCanvasError::unsupported())
+    }
+
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        _pipelines: &[GpuCanvasPipelineShaders],
+        _plan: &GpuCanvasPlan,
+        _execution_anchor: Rc<dyn Any>,
+    ) -> Result<RiveRenderImageHandle, GpuCanvasError> {
+        Err(GpuCanvasError::unsupported())
+    }
 }
 
 pub(crate) struct ExactSourceFactoryCore<B: ExactSourceBackend> {
@@ -333,6 +364,51 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
 }
 
 impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        self.backend.borrow().gpu_canvas_shader_profile()
+    }
+
+    fn make_gpu_canvas_shader(
+        &mut self,
+        shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.make_gpu_canvas_shader_artifact(&GpuCanvasShaderArtifact::WebGpu(shader.clone()))
+    }
+
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        artifact: &GpuCanvasShaderArtifact,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        let anchor = self.execution_anchor();
+        self.backend
+            .borrow_mut()
+            .make_gpu_canvas_shader_artifact(artifact, anchor)
+    }
+
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        let anchor = self.execution_anchor();
+        self.backend
+            .borrow_mut()
+            .make_gpu_canvas_shader_occurrence(prepared, anchor)
+    }
+
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        let anchor = self.execution_anchor();
+        let image = self
+            .backend
+            .borrow_mut()
+            .make_gpu_canvas_image_with_pipelines(pipelines, plan, anchor)?
+            .with_execution_domain(self.resource_domain.clone(), self.execution_anchor());
+        Ok(Box::new(image))
+    }
+
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,

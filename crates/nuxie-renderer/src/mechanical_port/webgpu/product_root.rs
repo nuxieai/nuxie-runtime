@@ -1,9 +1,11 @@
 //! Product root for the exact Dawn WebGPU translation.
 
+use std::any::Any;
 use std::cell::RefCell;
 use std::ffi::CStr;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use super::render_context_webgpu_decl::{
     ContextOptions, RenderContextWebGPUImpl, RenderTargetWebGPU,
@@ -28,11 +30,17 @@ use super::webgpu_decl::{
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use super::webgpu_decl::{WGPUSurfaceDescriptor, WGPUTextureViewDescriptor};
 use crate::exact_source_adapter::ExactSourceBackend;
+use crate::exact_gpu_canvas::ExactGpuCanvas;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, FrameDescriptor, RenderContext, RenderContextContract,
 };
 use crate::{RenderMode, RendererError};
+use nuxie_render_api::{
+    GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShaderArtifact,
+    GpuCanvasShaderProfile, RenderGpuCanvasShader,
+};
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 
 const WAIT_FOREVER: u64 = u64::MAX;
 const COPY_ROW_ALIGNMENT: usize = 256;
@@ -54,6 +62,7 @@ pub(crate) struct WebGpuProductBackend {
     device: Device,
     queue: Queue,
     context: Option<Pin<Box<RenderContext>>>,
+    gpu_canvas: Option<ExactGpuCanvas<super::ContextWGPU>>,
     target: rcp<RenderTargetWebGPU>,
     target_texture: Texture,
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -303,6 +312,7 @@ impl WebGpuProductBackend {
             device,
             queue,
             context: Some(context),
+            gpu_canvas: None,
             target,
             target_texture,
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -324,6 +334,29 @@ impl WebGpuProductBackend {
 
     fn context_pin(&mut self) -> Pin<&mut RenderContext> {
         self.context.as_mut().expect("live WebGPU context").as_mut()
+    }
+
+    fn implementation_mut(&mut self) -> &mut RenderContextWebGPUImpl {
+        unsafe {
+            &mut *Pin::get_unchecked_mut(self.context_pin())
+                .static_impl_cast::<RenderContextWebGPUImpl>()
+        }
+    }
+
+    fn gpu_canvas_mut(
+        &mut self,
+    ) -> Result<&mut ExactGpuCanvas<super::ContextWGPU>, GpuCanvasError> {
+        if self.gpu_canvas.is_none() {
+            let context = self
+                .implementation_mut()
+                .makeOreContext()
+                .ok_or_else(|| GpuCanvasError::new("exact WebGPU ORE context is unavailable"))?;
+            self.gpu_canvas = Some(ExactGpuCanvas::new(
+                context,
+                GpuCanvasShaderProfile::WebGpu,
+            )?);
+        }
+        Ok(self.gpu_canvas.as_mut().expect("initialized WebGPU ORE context"))
     }
 
     fn resize_target(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
@@ -611,6 +644,78 @@ impl ExactSourceBackend for WebGpuProductBackend {
             self.active_frame = false;
         }
     }
+
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        GpuCanvasShaderProfile::WebGpu
+    }
+
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        artifact: &GpuCanvasShaderArtifact,
+        execution_anchor: Rc<dyn Any>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.gpu_canvas_mut()?
+            .make_shader_artifact(artifact, execution_anchor)
+    }
+
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+        execution_anchor: Rc<dyn Any>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.gpu_canvas_mut()?
+            .make_shader_occurrence(prepared, execution_anchor)
+    }
+
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+        execution_anchor: Rc<dyn Any>,
+    ) -> Result<RiveRenderImageHandle, GpuCanvasError> {
+        if self.active_frame {
+            return Err(GpuCanvasError::new(
+                "exact WebGPU GPU-canvas submission overlaps the presentation frame",
+            ));
+        }
+        let canvas = self.implementation_mut().makeRenderCanvas(plan.width, plan.height);
+        if !canvas.operator_bool() {
+            return Err(GpuCanvasError::new(
+                "exact WebGPU failed to create a GPU-canvas render target",
+            ));
+        }
+        let encoder = unsafe { self.device.CreateCommandEncoder(std::ptr::null()) };
+        if encoder.Get().is_null() {
+            return Err(GpuCanvasError::new(
+                "exact WebGPU failed to create a GPU-canvas command encoder",
+            ));
+        }
+        let execution = {
+            let gpu_canvas = self.gpu_canvas_mut()?;
+            let frame_number = gpu_canvas.next_frame_number();
+            gpu_canvas
+                .context_mut()
+                .beginFrameExternal(encoder.clone());
+            let result = gpu_canvas.execute_current_frame(
+                &canvas,
+                pipelines,
+                plan,
+                &execution_anchor,
+            );
+            gpu_canvas.end_frame();
+            let _ = frame_number;
+            result
+        };
+        let command_buffer = unsafe { encoder.Finish(std::ptr::null()) };
+        if command_buffer.Get().is_null() {
+            return Err(GpuCanvasError::new(
+                "exact WebGPU failed to finish GPU-canvas commands",
+            ));
+        }
+        self.submit_and_wait(&command_buffer)
+            .map_err(|error| GpuCanvasError::new(error.to_string()))?;
+        execution
+    }
 }
 
 impl WebGpuProductBackend {
@@ -656,6 +761,7 @@ impl WebGpuProductBackend {
 impl Drop for WebGpuProductBackend {
     fn drop(&mut self) {
         self.abort_frame();
+        self.gpu_canvas.take();
         self.target.operator_assign_null();
         self.context.take();
         self.command_encoder.take();

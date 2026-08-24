@@ -22,4 +22,7 @@ pub mod host_commands;
 mod shader_asset;
 
 #[cfg(feature = "luau")]
+pub use shader_asset::decode_browser_shader_asset;
+
+#[cfg(feature = "luau")]
 pub mod vm;

@@ -25,7 +25,7 @@ use super::gles3_decl::{
     GLExecutionProvider, WebGLShaderPixelLocalStorageEnableResult, GLenum, GLint, GLuint,
     GL_ARRAY_BUFFER_BINDING, GL_CURRENT_PROGRAM, GL_ELEMENT_ARRAY_BUFFER_BINDING,
     GL_FRAMEBUFFER_BINDING, GL_RENDERER, GL_RGBA, GL_UNIFORM_BUFFER_BINDING,
-    GL_UNSIGNED_BYTE, GL_VERSION, GL_VERTEX_ARRAY_BINDING,
+    GL_NUM_EXTENSIONS, GL_UNSIGNED_BYTE, GL_VERSION, GL_VERTEX_ARRAY_BINDING,
 };
 
 thread_local! {
@@ -237,6 +237,15 @@ impl BrowserWebGl2Provider {
 
     fn call(&self, method: &str, args: &[JsValue]) -> JsValue {
         invoke(&self.gl, method, args)
+    }
+
+    fn supported_extensions(&self) -> Array {
+        let supported = self.call("getSupportedExtensions", &[]);
+        if supported.is_null() || supported.is_undefined() {
+            Array::new()
+        } else {
+            Array::from(&supported)
+        }
     }
 
     fn call_extension(extension: &JsValue, method: &str, args: &[JsValue]) -> JsValue {
@@ -542,6 +551,9 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
     }
 
     fn getInteger(&mut self, parameter: GLenum) -> GLint {
+        if parameter == GL_NUM_EXTENSIONS {
+            return self.supported_extensions().length() as GLint;
+        }
         let value = self.call("getParameter", &[number(parameter)]);
         self.queried_name(parameter, &value)
     }
@@ -555,9 +567,10 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
     }
 
     fn getExtension(&mut self, index: GLuint) -> Option<Vec<u8>> {
-        let supported = self.call("getSupportedExtensions", &[]);
-        let values = Array::from(&supported);
-        values.get(index).as_string().map(String::into_bytes)
+        self.supported_extensions()
+            .get(index)
+            .as_string()
+            .map(String::into_bytes)
     }
 
     fn enableWebGLExtension(&mut self, name: &str) -> bool {

@@ -1,6 +1,9 @@
 //! Browser product root for the exact pinned WebGL2 translation.
 
+use std::any::Any;
 use std::pin::Pin;
+use std::rc::Rc;
+use std::sync::Arc;
 
 use web_sys::HtmlCanvasElement;
 
@@ -9,14 +12,22 @@ use super::gles3_decl::{GLExecutionDomain, GL_NONE, GL_READ_FRAMEBUFFER};
 use super::render_context_gl_decl::{ContextOptions, RenderContextGLImpl};
 use super::render_target_gl_decl::FramebufferRenderTargetGL;
 use crate::exact_source_adapter::ExactSourceBackend;
+use crate::exact_gpu_canvas::ExactGpuCanvas;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, FrameDescriptor, RenderContext, RenderContextContract,
 };
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_helper_impl_hpp::RenderContextHelperBackendContract;
 use crate::{RenderMode, RendererError};
+use nuxie_render_api::{
+    GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShaderArtifact,
+    GpuCanvasShaderProfile, RenderGpuCanvasShader,
+};
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 
 pub(crate) struct WebGl2ProductBackend {
     context: Option<Pin<Box<RenderContext>>>,
+    gpu_canvas: Option<ExactGpuCanvas<super::ContextGL>>,
     target: rcp<FramebufferRenderTargetGL>,
     canvas: HtmlCanvasElement,
     sample_count: u32,
@@ -62,6 +73,7 @@ impl WebGl2ProductBackend {
         implementation.invalidateGLState();
         Ok(Self {
             context: Some(context),
+            gpu_canvas: None,
             target,
             canvas,
             sample_count,
@@ -90,6 +102,21 @@ impl WebGl2ProductBackend {
 
     fn execution_domain(&mut self) -> GLExecutionDomain {
         self.implementation_mut().rust_execution.domain().clone()
+    }
+
+    fn gpu_canvas_mut(
+        &mut self,
+    ) -> Result<&mut ExactGpuCanvas<super::ContextGL>, GpuCanvasError> {
+        if self.gpu_canvas.is_none() {
+            let execution = (&*self.implementation_mut().rust_execution).clone();
+            let context = super::ContextGL::Make(execution)
+                .ok_or_else(|| GpuCanvasError::new("exact WebGL2 ORE context is unavailable"))?;
+            self.gpu_canvas = Some(ExactGpuCanvas::new(
+                context,
+                GpuCanvasShaderProfile::WebGl2,
+            )?);
+        }
+        Ok(self.gpu_canvas.as_mut().expect("initialized WebGL2 ORE context"))
     }
 
     fn resize_target(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
@@ -210,11 +237,64 @@ impl ExactSourceBackend for WebGl2ProductBackend {
             self.active_frame = false;
         }
     }
+
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        GpuCanvasShaderProfile::WebGl2
+    }
+
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        artifact: &GpuCanvasShaderArtifact,
+        execution_anchor: Rc<dyn Any>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.gpu_canvas_mut()?
+            .make_shader_artifact(artifact, execution_anchor)
+    }
+
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+        execution_anchor: Rc<dyn Any>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.gpu_canvas_mut()?
+            .make_shader_occurrence(prepared, execution_anchor)
+    }
+
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+        execution_anchor: Rc<dyn Any>,
+    ) -> Result<RiveRenderImageHandle, GpuCanvasError> {
+        if self.active_frame {
+            return Err(GpuCanvasError::new(
+                "exact WebGL2 GPU-canvas submission overlaps the presentation frame",
+            ));
+        }
+        let canvas = self.implementation_mut().makeRenderCanvas(plan.width, plan.height);
+        if !canvas.operator_bool() {
+            return Err(GpuCanvasError::new(
+                "exact WebGL2 failed to create a GPU-canvas render target",
+            ));
+        }
+        let gpu_canvas = self.gpu_canvas_mut()?;
+        let frame_number = gpu_canvas.next_frame_number();
+        gpu_canvas.begin_frame(frame_number);
+        let result = gpu_canvas.execute_current_frame(
+            &canvas,
+            pipelines,
+            plan,
+            &execution_anchor,
+        );
+        gpu_canvas.end_frame();
+        result
+    }
 }
 
 impl Drop for WebGl2ProductBackend {
     fn drop(&mut self) {
         self.abort_frame();
+        self.gpu_canvas.take();
         self.target.operator_assign_null();
         self.context.take();
     }

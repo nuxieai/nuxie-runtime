@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 7
+max_pending = 6
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -836,9 +836,9 @@ note = "Both construction cases are covered directly."
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_promise_test.cpp"
 test_case_count = 48
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/src/vm/lua_promise.rs::upstream_promise_tests"]
+note = "All 48 pinned Luau programs and result assertions are ported directly against the installed Rust Promise/async/await owner: resolve/reject/default reason, chains, finally, all, coroutine/thread-data print capture, non-throwing await, handler/executor errors, cancellation graph/status/hooks, mixed/retry recovery, and every fulfilled/rejected/pending/adopted flattening route. All 48 pass."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"

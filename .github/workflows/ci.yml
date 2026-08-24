@@ -6,6 +6,12 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+    inputs:
+      backend_port_browser_closeout:
+        description: Run only the full Windows/Linux exact browser-port matrix
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -47,12 +53,14 @@ jobs:
   # queue.
   trusted-macos-ci:
     name: Trusted macOS
+    if: ${{ inputs.backend_port_browser_closeout != true }}
     uses: ./.github/workflows/_trusted-macos.yml
     with:
       force_hosted: ${{ github.ref != 'refs/heads/main' }}
 
   port-manifest:
     name: Upstream C++ port manifest
+    if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -108,6 +116,7 @@ jobs:
 
   runtime-differential-tooling:
     name: Runtime differential tooling
+    if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -131,6 +140,7 @@ jobs:
   # AND its check as independent verdicts.
   port-ledgers:
     name: Runtime port ledger gates
+    if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -194,6 +204,7 @@ jobs:
   # Apple-target feature compile and the SDK size budget.
   parity-runtime-evidence:
     name: Apple compile and size evidence
+    if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: macos-14
     # macOS timeouts on this and the jobs below are hang guards only, set at
     # 2-3x the observed worst-case duration. A wedged job that holds one of
@@ -273,6 +284,7 @@ jobs:
 
   browser-renderer:
     name: Browser WebGPU
+    if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: macos-14
     timeout-minutes: 60
     env:
@@ -322,12 +334,160 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # Manual closeout lane for the exact browser ports. The Wasm source and
+  # candidate products are built once from their frozen source/toolchain pins,
+  # then the identical bytes are replayed on every OS/browser worker. This is
+  # deliberately dispatch-only: each row renders the full 1,469-case corpus.
+  backend-port-browser-artifacts:
+    name: Exact browser-port artifacts
+    if: ${{ inputs.backend_port_browser_closeout == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout nuxie-runtime
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned Rive source oracle
+        uses: actions/checkout@v4
+        with:
+          repository: rive-app/rive-runtime
+          ref: ${{ env.RIVE_RUNTIME_REF }}
+          path: rive-runtime
+
+      - name: Install exact Rust and Node toolchains
+        run: |
+          rustup toolchain install 1.91.1 --profile minimal --no-self-update
+          rustup toolchain install 1.94.1 --profile minimal --no-self-update
+          rustup target add --toolchain 1.91.1 wasm32-unknown-emscripten
+          rustup target add --toolchain 1.94.1 wasm32-unknown-emscripten wasm32-unknown-unknown
+          rustup run 1.94.1 cargo fetch --locked
+
+      - name: Build frozen WebGPU source and candidate products
+        run: |
+          CARGO="$(rustup which --toolchain 1.94.1 cargo)"
+          RUSTC="$(rustup which --toolchain 1.94.1 rustc)"
+          export CARGO RUSTC
+          tools/webgpu-renderer-emscripten/build.sh
+          unset RUSTC
+          tools/backend-port/build-webgpu-source-oracle.sh
+
+      - name: Build frozen WebGL2 source and candidate products
+        run: |
+          tools/backend-port/build-webgl2-source-oracle.sh
+          CARGO="$(rustup which --toolchain 1.94.1 cargo)"
+          RUSTC="$(rustup which --toolchain 1.94.1 rustc)"
+          export CARGO RUSTC
+          tools/webgl2-renderer-replay/build.sh
+
+      - name: Reject browser artifact byte drift
+        run: |
+          echo 'bc672c453937e29f717d40b864ab40e23a37b05a8abbbe7aa152db2a24830849  target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer-replay.js' | sha256sum --check
+          echo '08b95e1c271d109648c138e5647600a0a3db5f81197dce443cae9d39dc9c127b  target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer_replay.wasm' | sha256sum --check
+          echo 'eac250f648fee47320e3b0e18da3b25b3140d3e5fb097c19863eaf6cce5a0da4  tools/webgpu-renderer-emscripten/pkg/renderer-replay.js' | sha256sum --check
+          echo '8475ba3ec4f257c0e9c4f9dde6c303a5f9262a29d87f894b22082c11d4fcd122  tools/webgpu-renderer-emscripten/pkg/renderer_replay.wasm' | sha256sum --check
+          echo '38658b8abff6fc1c1a600292a8ea27b21ddfe4c70dbd83bd50f112edd74e724e  target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer-replay.js' | sha256sum --check
+          echo 'fbd8598fbedf9bd009b73299ce10be0100236ab8a2837116abf8f4fe800c61c5  target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer_replay.wasm' | sha256sum --check
+          echo 'b98aa322214396d4ef843e9ad51f66af59e957410a8271207470e4f0c1870ca7  tools/webgl2-renderer-replay/pkg/webgl2_renderer_replay.js' | sha256sum --check
+          echo '011ee8972c1b5e2b50707b54ab200d8a2871fb7f8316f7fb50fc4b9f8c76eb89  tools/webgl2-renderer-replay/pkg/webgl2_renderer_replay_bg.wasm' | sha256sum --check
+
+      - name: Upload identical browser products
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-browser-port-products-${{ github.run_attempt }}
+          path: |
+            target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer-replay.js
+            target/renderer-webgpu-live-reference/wasm32-unknown-emscripten/release/renderer_replay.wasm
+            tools/webgpu-renderer-emscripten/pkg/renderer-replay.js
+            tools/webgpu-renderer-emscripten/pkg/renderer_replay.wasm
+            target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer-replay.js
+            target/renderer-webgl2-live-reference-1.91/wasm32-unknown-emscripten/release/renderer_replay.wasm
+            tools/webgl2-renderer-replay/pkg/webgl2_renderer_replay.js
+            tools/webgl2-renderer-replay/pkg/webgl2_renderer_replay_bg.wasm
+          if-no-files-found: error
+          retention-days: 7
+
+  backend-port-browser-platform:
+    name: Exact ${{ matrix.backend }} / ${{ matrix.browser }} / ${{ matrix.os }}
+    if: ${{ inputs.backend_port_browser_closeout == true }}
+    needs: backend-port-browser-artifacts
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        backend: [webgpu, webgl2]
+        browser: [chromium, firefox]
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout nuxie-runtime
+        uses: actions/checkout@v4
+
+      - name: Download byte-frozen browser products
+        uses: actions/download-artifact@v4
+        with:
+          name: exact-browser-port-products-${{ github.run_attempt }}
+          path: .
+
+      - name: Install harness toolchains
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install exact Rust corpus runner
+        run: |
+          rustup toolchain install 1.94.1 --profile minimal --no-self-update
+          rustup run 1.94.1 cargo fetch --locked
+          rustup run 1.94.1 cargo build --locked -p pixel-compare --bin corpus-r
+
+      - name: Install pinned real browsers
+        run: |
+          npm ci --ignore-scripts --prefix tools/backend-port/browser-platform
+          if [[ '${{ runner.os }}' == Linux ]]; then
+            npm exec --prefix tools/backend-port/browser-platform playwright -- install --with-deps '${{ matrix.browser }}'
+          else
+            npm exec --prefix tools/backend-port/browser-platform playwright -- install '${{ matrix.browser }}'
+          fi
+
+      - name: Run full same-browser source parity
+        env:
+          BROWSER_PLATFORM_CHROMIUM_CHANNEL: bundled
+          BROWSER_PLATFORM_REPLAY_TIMEOUT_SECONDS: '300'
+          RUSTUP_TOOLCHAIN: '1.94.1'
+        run: |
+          if [[ '${{ runner.os }}' == Linux && '${{ matrix.backend }}' == webgpu && '${{ matrix.browser }}' == firefox ]]; then
+            xvfb-run -a node tools/backend-port/run-browser-platform-parity.cjs '${{ matrix.backend }}' '${{ matrix.browser }}'
+          else
+            node tools/backend-port/run-browser-platform-parity.cjs '${{ matrix.backend }}' '${{ matrix.browser }}'
+          fi
+
+      - name: Upload platform evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-browser-platform-${{ matrix.os }}-${{ matrix.backend }}-${{ matrix.browser }}-${{ github.run_attempt }}
+          path: target/backend-port/platform
+          if-no-files-found: warn
+          retention-days: 30
+
   renderer-golden:
     name: Renderer pixel golden
     # Push-only: a warm pass is ~90 minutes, far too slow for PR latency. PRs
     # run this locally (make renderer-golden) or catch it on the merge's push
     # run.
-    if: github.event_name != 'pull_request'
+    if: ${{ inputs.backend_port_browser_closeout != true && github.event_name != 'pull_request' }}
     runs-on: macos-14
     # Worst observed pass is ~90 minutes with warm Dawn caches; a cold Dawn
     # bootstrap builds from depot_tools and needs the extra headroom.
@@ -574,7 +734,7 @@ jobs:
     name: Hot-loop performance gate
     # Push-only: release runner builds plus the timing corpus are too slow for
     # PR latency, and PR-runner load makes ratios noisy anyway.
-    if: github.event_name != 'pull_request'
+    if: ${{ inputs.backend_port_browser_closeout != true && github.event_name != 'pull_request' }}
     runs-on: macos-14
     timeout-minutes: 90
     env:
@@ -622,7 +782,7 @@ jobs:
     name: Five-tier parity scorecard
     # Push-only alongside the heavy evidence jobs it aggregates; on PRs the
     # golden/renderer/perf evidence deliberately does not exist.
-    if: ${{ always() && github.event_name != 'pull_request' }}
+    if: ${{ always() && inputs.backend_port_browser_closeout != true && github.event_name != 'pull_request' }}
     needs:
       # trusted-macos-ci uploads the oracle floor and C ABI evidence.
       - trusted-macos-ci
@@ -695,6 +855,7 @@ jobs:
   # `make fuzz-build` for a build-only gate.
   fuzz-smoke:
     name: Fuzz smoke gate
+    if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: nightly
@@ -733,6 +894,7 @@ jobs:
   # the rest; see the lint-gate target in the Makefile.
   lint-gate:
     name: Clippy lint gate
+    if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: stable

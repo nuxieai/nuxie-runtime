@@ -13,6 +13,13 @@ dawn_build_dir="${EMDAWNWEBGPU_BUILD_DIR:-$root/target/backend-port/dawn-emdawn-
 package_dir="$dawn_build_dir/emdawnwebgpu_pkg"
 jobs="${EMDAWNWEBGPU_JOBS:-4}"
 
+if [[ ! -d "$dawn_dir/.git" ]]; then
+    mkdir -p "$(dirname "$dawn_dir")"
+    git clone https://dawn.googlesource.com/dawn "$dawn_dir"
+    git -C "$dawn_dir" checkout --detach "$expected_dawn_revision"
+    python3 "$dawn_dir/tools/fetch_dawn_dependencies.py"
+fi
+
 for command in cmake git ninja rustup; do
     if ! command -v "$command" >/dev/null 2>&1; then
         echo "missing exact WebGPU browser build tool: $command" >&2

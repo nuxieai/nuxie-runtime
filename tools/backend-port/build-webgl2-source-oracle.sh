@@ -2,21 +2,29 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-RIVE_RUNTIME_DIR="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
+RIVE_RUNTIME_DIR="${RIVE_RUNTIME_DIR:?RIVE_RUNTIME_DIR must point at the pinned rive-runtime checkout}"
 UPSTREAM_REF="4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 EMSDK_REF="e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59"
-EMSDK_DIR="$RIVE_RUNTIME_DIR/build/dependencies/emsdk_3.1.61"
+EMSDK_DIR="${WEBGL2_EMSDK_DIR:-$RIVE_RUNTIME_DIR/build/dependencies/emsdk_3.1.61}"
 EMSCRIPTEN_DIR="$EMSDK_DIR/upstream/emscripten"
-RUST_TOOLCHAIN="1.91.1-aarch64-apple-darwin"
-RUST_TOOLCHAIN_DIR="/Users/levi/.rustup/toolchains/$RUST_TOOLCHAIN"
+RUST_TOOLCHAIN="${WEBGL2_SOURCE_RUST_TOOLCHAIN:-1.91.1}"
+RUSTC="$(rustup which --toolchain "$RUST_TOOLCHAIN" rustc)"
+RUSTDOC="$(rustup which --toolchain "$RUST_TOOLCHAIN" rustdoc)"
 TARGET_DIR="$REPO_ROOT/target/renderer-webgl2-live-reference-1.91"
 RENDERER_OUT="$RIVE_RUNTIME_DIR/renderer/out/cpp-webgl2-oracle"
 
 test "$(git -C "$RIVE_RUNTIME_DIR" rev-parse HEAD)" = "$UPSTREAM_REF"
 test -z "$(git -C "$RIVE_RUNTIME_DIR" status --short --untracked-files=no)"
+if [[ ! -d "$EMSDK_DIR/.git" ]]; then
+  mkdir -p "$(dirname "$EMSDK_DIR")"
+  git clone https://github.com/emscripten-core/emsdk.git "$EMSDK_DIR"
+  git -C "$EMSDK_DIR" checkout --detach "$EMSDK_REF"
+  "$EMSDK_DIR/emsdk" install 3.1.61
+  "$EMSDK_DIR/emsdk" activate 3.1.61
+fi
 test "$(git -C "$EMSDK_DIR" rev-parse HEAD)" = "$EMSDK_REF"
 $EMSCRIPTEN_DIR/emcc --version | head -1 | grep -q ') 3\.1\.61 ('
-test "$($RUST_TOOLCHAIN_DIR/bin/rustc --version | awk '{print $2}')" = "1.91.1"
+test "$($RUSTC --version | awk '{print $2}')" = "1.91.1"
 
 if [[ ! -f "$RENDERER_OUT/librive_pls_renderer.a" ]]; then
   (
@@ -28,8 +36,8 @@ if [[ ! -f "$RENDERER_OUT/librive_pls_renderer.a" ]]; then
   )
 fi
 
-export RUSTC="$RUST_TOOLCHAIN_DIR/bin/rustc"
-export RUSTDOC="$RUST_TOOLCHAIN_DIR/bin/rustdoc"
+export RUSTC="$RUSTC"
+export RUSTDOC="$RUSTDOC"
 export EMSDK="$EMSDK_DIR"
 export EM_CONFIG="$EMSDK_DIR/.emscripten"
 export PATH="$EMSDK_DIR:$EMSCRIPTEN_DIR:$PATH"

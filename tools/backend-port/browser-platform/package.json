@@ -1,0 +1,9 @@
+{
+  "name": "nuxie-backend-port-browser-platform",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned real-browser driver for exact backend-port platform parity",
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}

@@ -250,14 +250,33 @@ id = "browser-windows"
 backends = ["webgpu", "webgl2"]
 browsers = ["chromium", "firefox"]
 requirement = "closeout-blocking"
-status = "host-not-yet-provisioned"
+status = "hosted-runner-dispatch-ready-evidence-pending"
+runner = "windows-latest"
+artifact_contract = "one byte-frozen source/candidate Wasm product set shared by every OS/browser row"
+comparison_contract = "full 1,469-case fresh source versus candidate corpus in one browser context; same nonempty adapter required per case; zero divergences; no renderer fallback"
 
 [[cross_platform_family]]
 id = "browser-linux"
 backends = ["webgpu", "webgl2"]
 browsers = ["chromium", "firefox"]
 requirement = "closeout-blocking"
-status = "host-not-yet-provisioned"
+status = "hosted-runner-dispatch-ready-evidence-pending"
+runner = "ubuntu-latest"
+artifact_contract = "one byte-frozen source/candidate Wasm product set shared by every OS/browser row"
+comparison_contract = "full 1,469-case fresh source versus candidate corpus in one browser context; same nonempty adapter required per case; zero divergences; no renderer fallback"
+
+[browser_platform_closeout]
+workflow = ".github/workflows/ci.yml:backend-port-browser-artifacts,backend-port-browser-platform"
+driver = "tools/backend-port/run-browser-platform-parity.cjs"
+driver_sha256 = "db69eaf7ce5ac4d7a6cb4f191f53c937b802f13b78410e00d611028b13fb111c"
+playwright_package = "tools/backend-port/browser-platform/package.json"
+playwright_version = "1.62.1"
+windows_process_owner = "the corpus runner launches a replay path directly; Windows does not own Unix shebang execution"
+windows_process_correction = "generate ephemeral .cmd launchers that invoke the unchanged pinned Python replay clients and forward every corpus argument"
+candidate_renderer_change = "none"
+tolerance_change = "none"
+smoke_verification = "all four WebGPU/WebGL2 x Chromium/Firefox combinations passed a same-browser, same-adapter exact representative case on macOS; WebGPU Firefox inherited its recorded headed requirement"
+closeout_verdict = "pending full hosted Windows and Linux workflow evidence"
 
 [cutover]
 begins_after = "vulkan, webgpu, and webgl2 frozen-byte closeout green"

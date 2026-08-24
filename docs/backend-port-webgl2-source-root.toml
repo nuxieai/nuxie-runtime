@@ -90,7 +90,7 @@ sha256 = "86a5e4874f39e4e8d51fdcdf5cff8789182127133e4e00a2db8c0a4acd24216b"
 
 [[artifact]]
 path = "tools/backend-port/build-webgl2-source-oracle.sh"
-sha256 = "bd2675421de7a135004dcd77b8edbc716bc80890dcdaed7e9ca1edffe7859960"
+sha256 = "51521f9328d7deb0e16c33c9bfd154471a40ca2c73fd3e853ef9475d32252828"
 
 [[artifact]]
 path = "crates/nuxie-renderer-ffi/cpp/rive_renderer_ffi_webgl2.cpp"

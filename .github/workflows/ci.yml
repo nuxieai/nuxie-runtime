@@ -368,6 +368,28 @@ jobs:
           rustup target add --toolchain 1.94.1 wasm32-unknown-emscripten wasm32-unknown-unknown
           rustup run 1.94.1 cargo fetch --locked
 
+      # Rive's pinned premake graph generates SPIR-V while building the source
+      # oracle. Build the exact compiler revision declared by our frozen shader
+      # toolchain instead of accepting the hosted runner's moving apt package.
+      - name: Install pinned Rive shader compiler
+        run: |
+          archive="${RUNNER_TEMP}/glslang-16.2.0.tar.gz"
+          source_dir="${RUNNER_TEMP}/glslang-16.2.0"
+          build_dir="${RUNNER_TEMP}/glslang-build"
+          bin_dir="${RUNNER_TEMP}/glslang-bin"
+          curl -fsSL https://github.com/KhronosGroup/glslang/archive/refs/tags/16.2.0.tar.gz -o "$archive"
+          echo '01985335785c97906a91afe3cb5ee015997696181ec6c125bab5555602ba08e2  '"$archive" | sha256sum --check
+          tar -xzf "$archive" -C "${RUNNER_TEMP}"
+          cmake -S "$source_dir" -B "$build_dir" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_EXTERNAL=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DENABLE_OPT=OFF
+          cmake --build "$build_dir" --target glslang-standalone --parallel 4
+          install -Dm755 "$build_dir/StandAlone/glslang" "$bin_dir/glslangValidator"
+          echo "$bin_dir" >> "$GITHUB_PATH"
+          "$bin_dir/glslangValidator" --version | grep -Fx 'Glslang Version: 11:16.2.0'
+
       - name: Build frozen WebGPU source and candidate products
         run: |
           CARGO="$(rustup which --toolchain 1.94.1 cargo)"

@@ -764,11 +764,18 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                     continue;
                 }
                 let original_tangents = cubic_tangents(curve.cubic);
-                let (roots, are_cusps) = find_cubic_convex_180_chops(curve.cubic);
-                let chopped = if are_cusps {
-                    chop_cubic_around_cusps(curve.cubic, &roots, matrix_scale)
+                // PathDraw only convex/180-degree chops strokes here. Source
+                // feather curves were already chopped by softenedCopy and are
+                // published directly (`isStroke() ? find... : 0`).
+                let chopped = if is_stroke {
+                    let (roots, are_cusps) = find_cubic_convex_180_chops(curve.cubic);
+                    if are_cusps {
+                        chop_cubic_around_cusps(curve.cubic, &roots, matrix_scale)
+                    } else {
+                        chop_cubic_at_values(curve.cubic, &roots)
+                    }
                 } else {
-                    chop_cubic_at_values(curve.cubic, &roots)
+                    vec![curve.cubic]
                 };
                 let chopped_count = chopped.len();
                 for (index, cubic) in chopped.into_iter().enumerate() {
@@ -919,10 +926,9 @@ fn build_stroke_or_feather_tessellation_using_scratch(
 }
 
 fn normalize_stroke_contour_curves(contour: &mut StrokeContour) {
-    contour.curves.retain(|curve| {
-        let [p0, p1, p2, p3] = curve.cubic;
-        !(points_equal(p0, p1) && points_equal(p1, p2) && points_equal(p2, p3))
-    });
+    // PathDraw::initForMidpointFan retains every authored line and cubic,
+    // including zero-length verbs. They participate in endpoint averaging,
+    // contour vertex counts, and tessellation span publication.
     if contour.closed && !same_point(contour.first, contour.current) {
         contour.curves.push(StrokeCurve {
             cubic: line_cubic(contour.current, contour.first),
@@ -958,7 +964,8 @@ pub(crate) fn softened_path_for_feathering(
     const MIN_POLAR_ANGLE: f32 = std::f32::consts::PI / 16.0;
     let radius = feather_radius * matrix_scale * 0.25;
     let cos_theta = 1.0 - (1.0 / POLAR_JOIN_PRECISION) / radius;
-    let mut rotation_between_joins = 2.0 * cos_theta.max(-1.0).acos();
+    let polar_segments_per_radian = 0.5 / cos_theta.max(-1.0).acos();
+    let mut rotation_between_joins = 1.0 / polar_segments_per_radian;
     if rotation_between_joins < MIN_POLAR_ANGLE {
         let delta = (MIN_POLAR_ANGLE - rotation_between_joins) * 5.0;
         rotation_between_joins = MIN_POLAR_ANGLE + delta * (delta * delta);
@@ -1076,19 +1083,27 @@ fn append_cubic_at_uniform_rotation(
     let c = subtract(cubic[1], cubic[0]);
     let d = subtract(cubic[2], cubic[1]);
     let b = subtract(d, c);
-    let a = subtract(subtract(cubic[3], cubic[0]), scale(d, 3.0));
+    let e = subtract(cubic[3], cubic[0]);
+    // The pinned source is built with fast floating-point contraction, so its
+    // `CubicCoeffs::A = -3.f * D + E` is one fused operation per lane.
+    let a = Vec2D::new(
+        (-3.0f32).mul_add(d.x, e.x),
+        (-3.0f32).mul_add(d.y, e.y),
+    );
     let mut tangent = tangents[0];
-    let mut max_t = 0.0;
+    let mut max_t: f32 = 0.0;
     let mut roots = Vec::with_capacity(chop_count);
     for _ in 0..chop_count {
         tangent = Vec2D::new(
             cos_rotation * tangent.x - sin_rotation * tangent.y,
             sin_rotation * tangent.x + cos_rotation * tangent.y,
         );
-        let qa = a.x * tangent.y - a.y * tangent.x;
-        let qb = b.x * tangent.y - b.y * tangent.x;
-        let qc = c.x * tangent.y - c.y * tangent.x;
-        let discriminant = qb * qb - qa * qc;
+        // These are the pinned source's contracted SIMD cross products.
+        let qa = a.x.mul_add(tangent.y, -a.y * tangent.x);
+        let qb = b.x.mul_add(tangent.y, -b.y * tangent.x);
+        let qc = c.x.mul_add(tangent.y, -c.y * tangent.x);
+        // Preserve the pinned source's contracted `qb * qb - qa * qc`.
+        let discriminant = qb.mul_add(qb, -qa * qc);
         let q = -qb - discriminant.sqrt().copysign(qb);
         let root = qc / q;
         if root > max_t + 1e-4 && root < 1.0 - 1e-4 {
@@ -1227,23 +1242,40 @@ pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool
     let d = subtract(points[2], points[1]);
     let e = subtract(points[3], points[0]);
     let b_vector = subtract(d, c_vector);
-    let a_vector = subtract(e, scale(d, 3.0));
+    let a_vector = Vec2D::new(
+        (-3.0f32).mul_add(d.x, e.x),
+        (-3.0f32).mul_add(d.y, e.y),
+    );
     let mut a = vector_cross(a_vector, b_vector);
     let b = vector_cross(a_vector, c_vector);
     let mut c = vector_cross(b_vector, c_vector);
     let mut b_over_minus_2 = -0.5 * b;
-    let mut discriminant_over_4 = b_over_minus_2 * b_over_minus_2 - a * c;
+    // Preserve the pinned source's contracted
+    // `b_over_minus_2 * b_over_minus_2 - a * c`.
+    let mut discriminant_over_4 = b_over_minus_2.mul_add(b_over_minus_2, -a * c);
     let cusp_threshold = (a * (TESS_EPSILON * 0.5)).powi(2);
-    let inside = |root: f32| root.is_finite() && root >= TESS_EPSILON && root < 1.0 - TESS_EPSILON;
+    // The source's first two range checks use the unsigned IEEE-bit test
+    // `(uint32_t)(root - epsilon) < one_minus_2_epsilon`, which includes the
+    // lower endpoint. The final quadratic-root check below is deliberately
+    // strict at both endpoints.
+    let inside_bit_range = |root: f32| {
+        (root - TESS_EPSILON).to_bits() < (1.0 - 2.0 * TESS_EPSILON).to_bits()
+    };
     if discriminant_over_4 < -cusp_threshold {
         let root = c / b_over_minus_2;
-        return (inside(root).then_some(root).into_iter().collect(), false);
+        return (
+            inside_bit_range(root).then_some(root).into_iter().collect(),
+            false,
+        );
     }
     let are_cusps = discriminant_over_4 <= cusp_threshold;
     if are_cusps {
         if a != 0.0 || b_over_minus_2 != 0.0 || c != 0.0 {
             let root = b_over_minus_2 / a;
-            return (inside(root).then_some(root).into_iter().collect(), true);
+            if inside_bit_range(root) {
+                return (vec![root], true);
+            }
+            return (Vec::new(), false);
         }
         let base = subtract(points[3], points[0]);
         let ordered = points
@@ -1260,9 +1292,12 @@ pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool
         a = dot(tangent0, a_vector);
         b_over_minus_2 = -dot(tangent0, b_vector);
         c = dot(tangent0, c_vector);
-        discriminant_over_4 = (b_over_minus_2 * b_over_minus_2 - a * c).max(0.0);
+        discriminant_over_4 = b_over_minus_2
+            .mul_add(b_over_minus_2, -a * c)
+            .max(0.0);
     }
     let q = discriminant_over_4.sqrt().copysign(b_over_minus_2) + b_over_minus_2;
+    let inside = |root: f32| root > TESS_EPSILON && root < 1.0 - TESS_EPSILON;
     let mut roots = [q / a, c / q]
         .into_iter()
         .filter(|root| inside(*root))
@@ -2866,7 +2901,7 @@ mod tests {
     }
 
     #[test]
-    fn stroke_contour_normalization_matches_clone_filter_and_close_bit_for_bit() {
+    fn stroke_contour_normalization_retains_source_verbs_and_closes_bit_for_bit() {
         let nan = f32::from_bits(0x7fc0_0042);
         let first = Vec2D::new(-0.0, 11.0);
         let current = Vec2D::new(0.0, 11.0);
@@ -2891,13 +2926,9 @@ mod tests {
             closed: true,
         };
 
-        // This is the allocation-heavy sequence used before normalization was
-        // moved in place.
+        // renderer/src/draw.cpp counts every authored verb. Normalization only
+        // appends the source's implicit closing line.
         let mut expected = contour.curves.clone();
-        expected.retain(|curve| {
-            let [p0, p1, p2, p3] = curve.cubic;
-            !(points_equal(p0, p1) && points_equal(p1, p2) && points_equal(p2, p3))
-        });
         if contour.closed && !same_point(contour.first, contour.current) {
             expected.push(StrokeCurve {
                 cubic: line_cubic(contour.current, contour.first),
@@ -4067,7 +4098,7 @@ mod tests {
     }
 
     #[test]
-    fn zero_length_cubic_stroke_uses_empty_cap_geometry() {
+    fn zero_length_cubic_stroke_retains_collapsed_source_geometry() {
         let mut path = RawPath::new();
         path.move_to(20.0, 30.0);
         path.cubic_to(20.0, 30.0, 20.0, 30.0, 20.0, 30.0);
@@ -4083,10 +4114,10 @@ mod tests {
             assert_eq!(tessellation.spans.len(), 5);
             let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
             assert_eq!(geometry.len(), 2);
-            assert_eq!(geometry[0].points[0], [21.0, 30.0]);
-            assert_eq!(geometry[0].points[3], [20.0, 30.0]);
-            assert_eq!(geometry[1].points[0], [19.0, 30.0]);
-            assert_eq!(geometry[1].points[3], [20.0, 30.0]);
+            assert!(geometry
+                .iter()
+                .flat_map(|span| span.points)
+                .all(|point| point == [20.0, 30.0]));
             assert_eq!(
                 geometry[0].contour_id_with_flags,
                 1 | flags | EMULATED_STROKE_CAP_CONTOUR_FLAG
@@ -4110,9 +4141,14 @@ mod tests {
         )
         .unwrap();
 
-        let close = geometry_spans(&tessellation).next().unwrap();
-        assert_eq!(close.points[0][0].to_bits(), 0.0f32.to_bits());
-        assert_eq!(close.points[3][0].to_bits(), (-0.0f32).to_bits());
+        let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
+        assert_eq!(geometry.len(), 2);
+        // Source retains the authored signed-zero line first, then appends the
+        // bitwise-distinct implicit close in the opposite direction.
+        assert_eq!(geometry[0].points[0][0].to_bits(), (-0.0f32).to_bits());
+        assert_eq!(geometry[0].points[3][0].to_bits(), 0.0f32.to_bits());
+        assert_eq!(geometry[1].points[0][0].to_bits(), 0.0f32.to_bits());
+        assert_eq!(geometry[1].points[3][0].to_bits(), (-0.0f32).to_bits());
     }
 
     #[test]

@@ -16,6 +16,8 @@ mod draw;
 mod feather_lut;
 mod gpu;
 mod gr_triangulator;
+#[allow(dead_code)]
+mod intersection_board;
 
 #[cfg(all(
     feature = "native-metal-experimental",

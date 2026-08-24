@@ -16808,9 +16808,10 @@ mod tests {
             StrokeCap::Butt,
         )
         .unwrap();
-        // Source publishes zero-geometry ContourData for both empty butt-cap
-        // contours. The closed miter contour still emits the square-cap spans
-        // under local ID 2, and the three authored local IDs remain dense.
+        // Source publishes zero-geometry ContourData for the empty butt-cap
+        // contours. The closed miter contour emits spans under local ID 2,
+        // while the authored zero-length line remains under local ID 3; all
+        // three authored local IDs stay dense.
         assert_eq!(tessellation.contours.len(), 3);
         assert!(tessellation
             .spans
@@ -16854,7 +16855,7 @@ mod tests {
         }));
         assert!(spans[sparse_span_start..].iter().all(|span| {
             let id = span.contour_id_with_flags & gpu::CONTOUR_ID_MASK;
-            id == 0 || id == 3
+            id == 0 || id == 3 || id == 4
         }));
     }
 

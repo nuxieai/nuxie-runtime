@@ -1327,40 +1327,7 @@ fn intersect_iaabb(a: IAABB, b: IAABB) -> IAABB {
 }
 
 pub use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::RenderContextImpl;
-pub struct IntersectionBoard {
-    width: u32,
-    height: u32,
-    rectangles: Vec<(IAABB, i16)>,
-}
-impl IntersectionBoard {
-    pub fn new() -> Self {
-        Self {
-            width: 0,
-            height: 0,
-            rectangles: Vec::new(),
-        }
-    }
-    pub fn resizeAndReset(&mut self, width: u32, height: u32) {
-        self.width = width;
-        self.height = height;
-        self.rectangles.clear();
-    }
-    pub fn addRectangle(&mut self, bounds: IAABB, max_passes: i8) -> i16 {
-        let mut group = 1i16;
-        for (other, last_group) in self.rectangles.iter() {
-            let overlaps = bounds.left < other.right
-                && bounds.right > other.left
-                && bounds.top < other.bottom
-                && bounds.bottom > other.top;
-            if overlaps {
-                group = group.max(last_group.saturating_add(1));
-            }
-        }
-        self.rectangles
-            .push((bounds, group.saturating_add(max_passes as i16 - 1)));
-        group
-    }
-}
+pub type IntersectionBoard = crate::intersection_board::IntersectionBoard;
 #[repr(C)]
 pub struct ImageRectDraw {
     pub base: Draw,

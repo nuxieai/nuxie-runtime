@@ -434,19 +434,21 @@ impl DrawPipelineVulkan {
         } else {
             &*layout::DYNAMIC_VIEWPORT_SCISSOR
         };
-        let pipelineCreateInfo = vk::GraphicsPipelineCreateInfo::default()
+        let mut pipelineCreateInfo = vk::GraphicsPipelineCreateInfo::default()
             .stages(&stages)
             .vertex_input_state(vertexInputState)
             .input_assembly_state(inputAssemblyState)
             .viewport_state(&layout::SINGLE_VIEWPORT)
             .rasterization_state(&pipelineRasterizationStateCreateInfo)
             .multisample_state(&msaaState)
-            .depth_stencil_state(&depthStencilState)
             .color_blend_state(&pipelineColorBlendStateCreateInfo)
             .dynamic_state(dynamicState)
             .layout(pipelineLayout.vkPipelineLayout())
             .render_pass(vkRenderPass)
             .subpass(subpassIndex);
+        if interlockMode == InterlockMode::msaa {
+            pipelineCreateInfo = pipelineCreateInfo.depth_stencil_state(&depthStencilState);
+        }
         let vkPipeline = match unsafe {
             vk.m_ashDevice.create_graphics_pipelines(
                 vk::PipelineCache::null(),

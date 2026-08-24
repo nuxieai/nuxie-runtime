@@ -6281,14 +6281,16 @@ impl LogicalFlush {
                 .m_indirect_draw_list
                 .reserve(self.m_draw_pass_count as usize);
             if context.m_intersection_board.is_none() {
-                context.m_intersection_board = Some(Box::new(IntersectionBoard::new()));
+                context.m_intersection_board = Some(Box::new(IntersectionBoard::new(
+                    crate::intersection_board::GroupingType::Disjoint,
+                )));
             }
             let target = self.m_flush_desc.renderTarget.unwrap();
             context
                 .m_intersection_board
                 .as_mut()
                 .unwrap()
-                .resizeAndReset(unsafe { target.as_ref().width() }, unsafe {
+                .resize_and_reset(unsafe { target.as_ref().width() }, unsafe {
                     target.as_ref().height()
                 });
             context.m_scissor_id_lookup.clear();
@@ -6373,7 +6375,15 @@ impl LogicalFlush {
                     .m_intersection_board
                     .as_mut()
                     .unwrap()
-                    .addRectangle(draw_bounds, if all_same_group { 1 } else { max_subpasses });
+                    .add_rectangle(
+                        crate::intersection_board::Rect::new(
+                            draw_bounds.left,
+                            draw_bounds.top,
+                            draw_bounds.right,
+                            draw_bounds.bottom,
+                        ),
+                        i16::from(if all_same_group { 1 } else { max_subpasses }),
+                    );
                 let mut key = make_sort_key(draw, group, scissor_id, 0);
                 if draw.prepassCount() > 0 {
                     context.m_indirect_draw_list.push(DrawSortEntry {
@@ -6414,7 +6424,9 @@ impl LogicalFlush {
             );
             context
                 .m_indirect_draw_list
-                .sort_by_key(|entry| entry.sortKey);
+                // std::sort is not stable. Equal keys deliberately have no
+                // relative-order guarantee in the source owner.
+                .sort_unstable_by_key(|entry| entry.sortKey);
             self.writeSortedDrawsExecutable(&features);
         }
 

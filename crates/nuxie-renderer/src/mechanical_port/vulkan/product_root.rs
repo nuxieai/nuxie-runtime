@@ -481,6 +481,7 @@ fn create_device(
     let portability = CString::new("VK_KHR_portability_subset").unwrap();
     let raster_order = CString::new("VK_EXT_rasterization_order_attachment_access").unwrap();
     let amd_raster_order = CString::new("VK_AMD_rasterization_order_attachment_access").unwrap();
+    let fragment_interlock = CString::new("VK_EXT_fragment_shader_interlock").unwrap();
     let mut extensions = Vec::new();
     let has_portability = supports(&portability);
     if has_portability {
@@ -496,8 +497,19 @@ fn create_device(
     if let Some(name) = selected_raster_extension {
         extensions.push(name.as_ptr());
     }
+    let mut queried_interlock = vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT::default();
+    let mut queried_features =
+        vk::PhysicalDeviceFeatures2::default().push_next(&mut queried_interlock);
+    unsafe { instance.get_physical_device_features2(physical_device, &mut queried_features) };
+    let has_fragment_interlock = supports(&fragment_interlock)
+        && queried_interlock.fragment_shader_pixel_interlock != 0;
+    if has_fragment_interlock {
+        extensions.push(fragment_interlock.as_ptr());
+    }
     let mut raster_features = vk::PhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT::default()
         .rasterization_order_color_attachment_access(selected_raster_extension.is_some());
+    let mut interlock_features = vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT::default()
+        .fragment_shader_pixel_interlock(has_fragment_interlock);
     let priority = [1.0f32];
     let queues = [vk::DeviceQueueCreateInfo::default()
         .queue_family_index(queue_family_index)
@@ -508,6 +520,9 @@ fn create_device(
         .enabled_features(&requested_features);
     if selected_raster_extension.is_some() {
         create = create.push_next(&mut raster_features);
+    }
+    if has_fragment_interlock {
+        create = create.push_next(&mut interlock_features);
     }
     let device = unsafe { instance.create_device(physical_device, &create, None) }
         .map_err(|error| RendererError::Device(format!("create Vulkan device: {error:?}")))?;
@@ -520,7 +535,7 @@ fn create_device(
             fragmentStoresAndAtomics: requested_features.fragment_stores_and_atomics != 0,
             shaderClipDistance: requested_features.shader_clip_distance != 0,
             rasterizationOrderColorAttachmentAccess: selected_raster_extension.is_some(),
-            fragmentShaderPixelInterlock: false,
+            fragmentShaderPixelInterlock: has_fragment_interlock,
             colorWriteEnable: false,
             VK_KHR_portability_subset: has_portability,
             textureCompressionBC: requested_features.texture_compression_bc != 0,

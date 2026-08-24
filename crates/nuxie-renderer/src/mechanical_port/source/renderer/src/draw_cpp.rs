@@ -1254,7 +1254,11 @@ unsafe fn push_path(
                         unsafe {
                             flush_ref.pushMidpointFanDrawExecutable(
                                 &owner.draw,
-                                gpu::DrawType::midpointFanPatches,
+                                if owner.isFeatheredFill() {
+                                    gpu::DrawType::midpointFanCenterAAPatches
+                                } else {
+                                    gpu::DrawType::midpointFanPatches
+                                },
                                 tess_vertex_count,
                                 owner.prepass_tess_location,
                                 gpu::ShaderMiscFlags::borrowedCoveragePass,

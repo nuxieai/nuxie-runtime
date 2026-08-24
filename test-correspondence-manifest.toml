@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 33
+max_pending = 32
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -534,9 +534,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/nested_artboard_opacity_test.cpp"
 test_case_count = 3
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_nested_artboard_opacity.rs", "crates/nuxie-runtime/src/artboard/tests.rs::{paused_nested_artboard_flushes_child_dirt_after_host_opacity_changes,host_opacity_multiplies_without_overwriting_artboard_opacity}"]
+note = "All three cases execute the pinned fixture actions and assertions directly. The fixture verifies 0.3275 background propagation, paused host-opacity halving, preservation of the child Artboard's 0.4 authored opacity, and the resulting 0.2 background paint; private owner-level tests independently bind the latter two behaviors."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/nested_artboard_test.cpp"

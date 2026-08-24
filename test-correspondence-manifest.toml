@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 46
+max_pending = 45
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -563,9 +563,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/node_test.cpp"
 test_case_count = 2
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_node.rs"]
+note = "Both direct safe-Rust ports exercise the retained Node owner: default x equals 0, then a separately owned Node reads 0, writes 2, and reads 2 before Rust scope-drop replaces explicit C++ delete."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/object_stream_test.cpp"

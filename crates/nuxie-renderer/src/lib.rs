@@ -92,9 +92,14 @@ mod native_metal;
 ))]
 use mechanical_port::source::renderer::src::metal::render_context_metal_impl_mm as mechanical_metal_implementation;
 mod path_pipeline;
-#[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+#[cfg(any(
+    target_arch = "wasm32",
+    target_os = "ios",
+    target_os = "macos",
+    target_os = "android"
+))]
 mod present_pipeline;
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", target_os = "android"))]
 mod presentation;
 mod shader_catalog;
 #[cfg(feature = "apple-msl-capture")]
@@ -132,7 +137,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
 use work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", target_os = "android"))]
 pub use presentation::{
     WgpuPresentationAcquireError, WgpuPresentationAlpha, WgpuPresentationFrame,
     WgpuPresentationSurface,
@@ -3481,7 +3486,7 @@ impl WgpuFrame {
             .map(|(pixels, _, coverage, clips, colors, _, _, _)| (pixels, coverage, clips, colors))
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    #[cfg(any(target_os = "ios", target_os = "macos", target_os = "android"))]
     pub(crate) fn finish_to_texture_view(
         self,
         target: &wgpu::TextureView,
@@ -3490,7 +3495,12 @@ impl WgpuFrame {
         pollster::block_on(self.finish_to_texture_view_async(target, presenter))
     }
 
-    #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+    #[cfg(any(
+        target_arch = "wasm32",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "android"
+    ))]
     pub(crate) async fn finish_to_texture_view_async(
         self,
         target: &wgpu::TextureView,
@@ -3510,9 +3520,19 @@ impl WgpuFrame {
         capture_atomic_planes: bool,
         read_pixels: bool,
         logical_diagnostics: bool,
-        #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+        #[cfg(any(
+            target_arch = "wasm32",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "android"
+        ))]
         presentation: Option<(&wgpu::TextureView, &present_pipeline::PresentPipeline)>,
-        #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
+        #[cfg(not(any(
+            target_arch = "wasm32",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "android"
+        )))]
         _presentation: Option<()>,
     ) -> Result<
         (
@@ -7144,7 +7164,12 @@ impl WgpuFrame {
 
         if !read_pixels {
             debug_assert!(!capture_clockwise_atomic_coverage && !capture_atomic_planes);
-            #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+            #[cfg(any(
+            target_arch = "wasm32",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "android"
+        ))]
             if let Some((target, presenter)) = presentation {
                 presenter.encode(&self.context.device, &mut encoder, target, &view);
             }
@@ -7155,11 +7180,21 @@ impl WgpuFrame {
             if let Some(backing) = clockwise_atomic_backing.borrow_mut().as_mut() {
                 backing.did_submit();
             }
-            #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+            #[cfg(any(
+            target_arch = "wasm32",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "android"
+        ))]
             if presentation.is_none() {
                 wait_for_submitted_work(&self.context, submission).await?;
             }
-            #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
+            #[cfg(not(any(
+            target_arch = "wasm32",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "android"
+        )))]
             wait_for_submitted_work(&self.context, submission).await?;
             return_uncaptured_device_error(&self.context)?;
             tessellation_texture_frame.borrow_mut().recycle();

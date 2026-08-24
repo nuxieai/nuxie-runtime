@@ -384,6 +384,8 @@ enum NuxViewModelChangeOrigin
 typedef uint32_t NuxViewModelChangeOrigin;
 #endif // __cplusplus
 
+typedef struct NuxAndroidRenderer NuxAndroidRenderer;
+
 /**
  * Owned artboard occurrence. It retains the imported [`File`] through native
  * shared ownership and therefore remains valid after its [`NuxFile`] handle
@@ -984,6 +986,10 @@ typedef struct NuxViewModelChangeView {
   size_t list_item_count;
 } NuxViewModelChangeView;
 
+typedef uint32_t NuxAndroidRendererFit;
+
+typedef uint32_t NuxAndroidRenderDisposition;
+
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 typedef uint32_t NuxRendererDisposition;
 #endif
@@ -1185,6 +1191,24 @@ typedef struct NuxViewModelSnapshotValueView {
   size_t first_list_item;
   size_t list_item_count;
 } NuxViewModelSnapshotValueView;
+
+/**
+ * Scale and center the artboard inside the surface, preserving aspect.
+ */
+#define NUX_ANDROID_RENDERER_FIT_CONTAIN_CENTER 1
+
+/**
+ * Preserve authored artboard coordinates without applying a viewport fit.
+ */
+#define NUX_ANDROID_RENDERER_FIT_NONE 0
+
+#define NUX_ANDROID_RENDER_DISPOSITION_NONE 0
+
+#define NUX_ANDROID_RENDER_DISPOSITION_PRESENTED 1
+
+#define NUX_ANDROID_RENDER_DISPOSITION_SKIPPED_ACQUIRE 2
+
+#define NUX_ANDROID_RENDER_DISPOSITION_SURFACE_OUTDATED 3
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 #define NUX_ASSET_CALLBACK_STATUS_FAILED 2
@@ -1616,6 +1640,45 @@ NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPla
                                                              size_t item_index,
                                                              uint64_t *out_instance_id);
 
+/**
+ * Releases the renderer. Bound players must be reset before binding again.
+ */
+NuxStatus nux_renderer_android_wgpu_free(struct NuxAndroidRenderer *renderer);
+
+/**
+ * Re-wraps a recreated `ANativeWindow` after the platform surface was
+ * destroyed and recreated, preserving renderer and session state.
+ */
+NuxStatus nux_renderer_android_wgpu_recreate_surface(struct NuxAndroidRenderer *renderer,
+                                                     void *window,
+                                                     struct NuxCapiResult **out_result);
+
+/**
+ * Renders the player's retained artboard into the next platform frame and
+ * presents it. `out_disposition` reports presented/skipped/outdated.
+ */
+NuxStatus nux_renderer_android_wgpu_render_player(struct NuxAndroidRenderer *renderer,
+                                                  struct NuxPlayer *player,
+                                                  uint32_t clear_color,
+                                                  NuxAndroidRendererFit fit,
+                                                  NuxAndroidRenderDisposition *out_disposition,
+                                                  struct NuxCapiResult **out_result);
+
+/**
+ * Resets a player's Android renderer-domain binding so it can bind to a new
+ * renderer (mirror of the Metal `nux_renderer_reset_player_domain`).
+ */
+NuxStatus nux_renderer_android_wgpu_reset_player_domain(struct NuxPlayer *player,
+                                                        struct NuxCapiResult **out_result);
+
+/**
+ * Reconfigures the presentation extent after the platform window resizes.
+ */
+NuxStatus nux_renderer_android_wgpu_resize(struct NuxAndroidRenderer *renderer,
+                                           uint32_t pixel_width,
+                                           uint32_t pixel_height,
+                                           struct NuxCapiResult **out_result);
+
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 /**
  * Copies the renderer's MTLDevice with Objective-C +1 ownership.
@@ -1640,6 +1703,15 @@ NuxStatus nux_renderer_info(const struct NuxRenderer *renderer,
                             struct NuxRendererInfo *out_info,
                             struct NuxCapiResult **out_result);
 #endif
+
+/**
+ * Creates a WebGPU renderer presenting into the given `ANativeWindow`.
+ */
+NuxStatus nux_renderer_new_android_wgpu(void *window,
+                                        uint32_t pixel_width,
+                                        uint32_t pixel_height,
+                                        struct NuxAndroidRenderer **out_renderer,
+                                        struct NuxCapiResult **out_result);
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 /**

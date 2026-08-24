@@ -7,6 +7,18 @@
 use super::present_pipeline::{PresentPipeline, PresentTargetAlpha};
 use super::{Context, RendererError, WgpuFrame, WgpuFrameMetrics};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+
+/// Platform presentation target bound. Native surfaces require thread-safe
+/// targets (wgpu's non-wasm `create_surface` bound); wasm canvases are
+/// single-threaded and exempt.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait WgpuPresentationTarget: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static> WgpuPresentationTarget for T {}
+#[cfg(target_arch = "wasm32")]
+pub trait WgpuPresentationTarget: HasWindowHandle + HasDisplayHandle + 'static {}
+#[cfg(target_arch = "wasm32")]
+impl<T: HasWindowHandle + HasDisplayHandle + 'static> WgpuPresentationTarget for T {}
 use std::sync::Arc;
 
 /// Alpha representation expected by a platform presentation target.
@@ -53,7 +65,7 @@ impl super::WgpuFactory {
         alpha: WgpuPresentationAlpha,
     ) -> Result<WgpuPresentationSurface, RendererError>
     where
-        T: HasWindowHandle + HasDisplayHandle + 'static,
+        T: WgpuPresentationTarget,
     {
         WgpuPresentationSurface::new(Arc::clone(&self.context), target, width, height, alpha)
     }
@@ -68,7 +80,7 @@ impl WgpuPresentationSurface {
         alpha: WgpuPresentationAlpha,
     ) -> Result<Self, RendererError>
     where
-        T: HasWindowHandle + HasDisplayHandle + 'static,
+        T: WgpuPresentationTarget,
     {
         let surface = create_surface(&context, target, "creation")?;
         let mut configuration = surface
@@ -111,7 +123,7 @@ impl WgpuPresentationSurface {
     /// preserving the selected format, extent, and alpha contract.
     pub fn recreate<T>(&mut self, target: T) -> Result<(), RendererError>
     where
-        T: HasWindowHandle + HasDisplayHandle + 'static,
+        T: WgpuPresentationTarget,
     {
         let surface = create_surface(&self.context, target, "recreation")?;
         surface.configure(&self.context.device, &self.configuration);
@@ -173,7 +185,7 @@ fn create_surface<T>(
     operation: &'static str,
 ) -> Result<wgpu::Surface<'static>, RendererError>
 where
-    T: HasWindowHandle + HasDisplayHandle + 'static,
+    T: WgpuPresentationTarget,
 {
     context.instance.create_surface(target).map_err(|error| {
         RendererError::Device(format!(

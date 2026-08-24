@@ -20,18 +20,12 @@ members = [
     "tools/luaur-rt-test-harness",
     "tools/perf-compare",
     "tools/pixel-compare",
-    "tools/renderer-fuzz-replay",
     "tools/renderer-replay",
-    "tools/browser-renderer-smoke",
     "tools/webgpu-renderer-emscripten",
     "tools/webgl2-renderer-replay",
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",
     "tools/silver-corpus",
-    "tools/size-report-roots",
-    "tools/apple-msl-catalog",
-    "tools/apple-msl-capture",
-    "tools/apple-msl-no-wgsl-probe",
 ]
 exclude = [
     "vendor/luaur-ast-0.1.8",
@@ -45,13 +39,6 @@ exclude = [
     "vendor/symphonia-bundle-mp3-0.5.5",
     "vendor/symphonia-format-riff-0.5.5",
     "vendor/symphonia-utils-xiph-0.5.5",
-    "vendor/wgpu-30.0.0",
-    "vendor/wgpu-core-30.0.0",
-    "vendor/wgpu-core-deps-apple-30.0.0",
-    "vendor/wgpu-core-deps-emscripten-30.0.0",
-    "vendor/wgpu-core-deps-wasm-30.0.0",
-    "vendor/wgpu-core-deps-windows-linux-android-30.0.0",
-    "vendor/wgpu-hal-30.0.0",
     "vendor/vk-mem-0.5.0",
 ]
 resolver = "3"

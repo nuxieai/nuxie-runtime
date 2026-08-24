@@ -348,7 +348,7 @@ class PortManifestCliTest(unittest.TestCase):
                 self.assertEqual(rows[upstream]["status"], status)
                 self.assertIn(feature_id, rows[upstream]["note"])
         self.assertIn(
-            "crates/nuxie-renderer/src/gpu_canvas_shader.rs",
+            "crates/nuxie/src/ore_metal_gpu_canvas.rs",
             rows["src/lua/renderer/lua_gpu.cpp"]["rust_module"],
         )
 

@@ -95,7 +95,6 @@ steps:
       - Makefile
       - crates/{nux-capi,nuxie,nuxie-audio,nuxie-image-codec,nuxie-render-api,nuxie-renderer,nuxie-scripting}/**
       - tools/{apple_runtime_contract.py,apple_runtime_input_digest.py,build-nux-capi-xcframeworks.sh,check-nux-capi-apple.sh,check-nux-capi-surface.py,verify-nux-capi-xcframeworks.sh}
-      - tools/size-report-roots/**
     command: |
       set -euo pipefail
       rustup toolchain install stable --profile minimal --no-self-update
@@ -165,7 +164,7 @@ steps:
       make capi-smoke
       make feature-compile-gate-apple
       cargo test -p nuxie-renderer
-      make wasm-perf-test crate-seams-browser-check
+      make crate-seams-browser-check
     agents:
       queue: nuxie-pr
       nuxie-platform: macos

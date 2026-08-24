@@ -169,6 +169,8 @@ pub(crate) struct ActualMetalExecutionInventory {
     pub(crate) draw_calls: usize,
     /// Instances submitted by the physical Metal draw selectors above.
     pub(crate) draw_instances: usize,
+    /// Logical flushes executed by the pinned source RenderContext.
+    pub(crate) logical_flushes: usize,
     /// Physical atomic-content draw selectors, excluding PLS initialize/resolve.
     pub(crate) atomic_draw_calls: usize,
     /// Instances submitted by `atomic_draw_calls`.
@@ -704,6 +706,10 @@ impl Objc2MetalExecution {
     /// against a live, typed registry owner since the last reset.
     pub(crate) fn snapshot_execution_inventory(&self) -> ActualMetalExecutionInventory {
         self.execution_inventory.snapshot
+    }
+
+    pub(crate) fn record_logical_flushes(&mut self, logical_flushes: usize) {
+        self.execution_inventory.snapshot.logical_flushes = logical_flushes;
     }
 
     fn pipeline_semantic(&self, pipeline: Handle) -> Option<PipelineSemantic> {

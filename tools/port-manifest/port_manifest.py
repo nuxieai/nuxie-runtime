@@ -51,8 +51,8 @@ FEATURE_ROWS = {
     ),
     "src/lua/renderer/lua_gpu.cpp": (
         "partial",
-        "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie-renderer/src/gpu_canvas.rs; crates/nuxie-renderer/src/gpu_canvas_shader.rs",
-        "GPUCEIL/D18: the GPU-prefixed Lua candidate includes retained multi-pipeline submissions, explicit empty-pass/orphan handling, occurrence-lifetime cross-submission external texture identity, async browser validation before mount, and a fresh physical shader module per lookup. X3 records the additive direct-bytecode scalar input projection. Mixed-file Canvas 2D/Image:view residue remains F7/F8.",
+        "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie/src/ore_metal_gpu_canvas.rs",
+        "GPUCEIL/D18: the GPU-prefixed Lua candidate includes retained multi-pipeline submissions, explicit empty-pass/orphan handling, occurrence-lifetime cross-submission external texture identity, and an exact Metal product adaptation. Editor-side shader translation is tracked separately. X3 records the additive direct-bytecode scalar input projection. Mixed-file Canvas 2D/Image:view residue remains F7/F8.",
     ),
     "src/joystick.cpp": (
         "ported",

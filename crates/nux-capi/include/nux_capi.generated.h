@@ -411,7 +411,7 @@ typedef struct NuxPlayerStepResult NuxPlayerStepResult;
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 /**
- * Product-neutral native renderer. The handle owns one wgpu/Metal domain and
+ * Product-neutral native renderer. The handle owns one exact Metal domain and
  * is affine to its creator thread like the other portable C handles.
  */
 typedef struct NuxRenderer NuxRenderer;

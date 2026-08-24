@@ -426,20 +426,14 @@ fn embedded_image_contents_remain_authoritative_over_external_bytes() {
     assert!(!stream.contains("data=deadbeef"));
 }
 
+#[cfg(all(feature = "renderer-metal", target_os = "macos"))]
 #[test]
-fn public_api_exposes_the_default_rust_renderer() {
-    let mut factory = match nuxie::DefaultRendererFactory::new(16, 16) {
-        Ok(factory) => factory,
-        Err(nuxie::RendererError::Adapter(message)) => {
-            assert!(
-                message.contains("No suitable graphics adapter found"),
-                "adapter discovery must return the public diagnostic: {message}"
-            );
-            return;
-        }
-        Err(error) => panic!("construct the default Rust renderer: {error}"),
-    };
-    let mut frame = factory.begin_frame(0xff_12_34_56);
+fn public_api_exposes_the_explicit_metal_renderer() {
+    let mut factory = nuxie::NativeMetalFactory::new(16, 16)
+        .expect("construct the explicit native Metal renderer");
+    let mut frame = factory
+        .begin_frame(0xff_12_34_56)
+        .expect("begin native Metal frame");
     let mut path = factory.make_empty_render_path();
     path.move_to(2.0, 2.0);
     path.line_to(14.0, 2.0);
@@ -449,13 +443,13 @@ fn public_api_exposes_the_default_rust_renderer() {
     paint.color(0xff_ff_00_00);
     frame.draw_path(path.as_ref(), paint.as_ref());
 
-    let pixels = frame.finish().expect("render one default-backend frame");
+    let pixels = frame.finish().expect("render one native Metal frame");
     assert_eq!(pixels.len(), 16 * 16 * 4);
     assert!(
         pixels
             .chunks_exact(4)
             .any(|pixel| pixel == [255, 0, 0, 255]),
-        "the default backend must draw into the frame"
+        "the explicit Metal backend must draw into the frame"
     );
 }
 

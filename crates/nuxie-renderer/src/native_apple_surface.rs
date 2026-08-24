@@ -1,7 +1,7 @@
 //! Native Metal adaptation for a caller-owned Core Animation drawable.
 //!
-//! This seam is intentionally independent of the WGPU-owned Apple surface
-//! module so selecting native Metal does not root the diagnostic renderer.
+//! This seam keeps caller-owned presentation separate from the exact Metal
+//! renderer's command and resource ownership.
 
 use objc2::runtime::ProtocolObject;
 use objc2_quartz_core::CAMetalDrawable;

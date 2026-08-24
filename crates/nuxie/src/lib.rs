@@ -65,17 +65,26 @@ pub use nuxie_render_api::{
     RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
     StrokeJoin, Vec2D,
 };
-#[cfg(feature = "renderer")]
+#[cfg(all(
+    feature = "renderer-metal",
+    any(
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "tvos",
+        target_os = "visionos"
+    )
+))]
 pub use nuxie_renderer::{
-    GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
-    WgpuAdapterInfo, WgpuFactory, WgpuFrame, WgpuFrameMetrics,
+    NativeMetalContextOptions, NativeMetalDrawableFrame, NativeMetalExecutionInventory,
+    NativeMetalFactory, NativeMetalFrame, NativeMetalFrameOutput,
+    NativeMetalSynthesizedFailureType, ShaderCompilationMode,
 };
 #[cfg(feature = "renderer-vulkan")]
 pub use nuxie_renderer::{NativeVulkanFactory, NativeVulkanFrame};
 #[cfg(feature = "renderer-webgpu")]
 pub use nuxie_renderer::{NativeWebGpuFactory, NativeWebGpuFrame};
 #[cfg(any(
-    feature = "renderer",
+    feature = "renderer-metal",
     feature = "renderer-vulkan",
     feature = "renderer-webgpu",
     feature = "renderer-webgl2"
@@ -87,10 +96,6 @@ pub use nuxie_renderer::{RenderMode, RendererError};
     target_os = "unknown"
 ))]
 pub use nuxie_renderer::{WebGl2Factory, WebGl2Frame};
-#[cfg(all(feature = "renderer", not(target_arch = "wasm32")))]
-pub use nuxie_renderer::{
-    WgpuFactory as DefaultRendererFactory, WgpuFrame as DefaultRendererFrame,
-};
 pub use nuxie_runtime::{
     AudioArtboardId, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
     AudioSound, AudioSource, ExternalFontAssetError, GAMEPAD_BATCH_MAX_AXES,
@@ -648,10 +653,7 @@ struct FileScriptAsset {
     is_external_data_converter: bool,
 }
 
-#[cfg(all(
-    feature = "scripting",
-    any(feature = "apple-authored-msl", feature = "ore-metal-authored-msl")
-))]
+#[cfg(all(feature = "scripting", feature = "ore-metal-authored-msl"))]
 fn mint_shader_provenance(
     native_shaders_are_authorized: bool,
     type_name: &str,
@@ -677,10 +679,7 @@ fn mint_shader_provenance(
     })
 }
 
-#[cfg(all(
-    feature = "scripting",
-    not(any(feature = "apple-authored-msl", feature = "ore-metal-authored-msl"))
-))]
+#[cfg(all(feature = "scripting", not(feature = "ore-metal-authored-msl")))]
 fn mint_shader_provenance(
     _native_shaders_are_authorized: bool,
     _type_name: &str,
@@ -8370,7 +8369,7 @@ mod inert_script_import_tests {
         assert_eq!(assets[0].payload.as_deref(), Some([0, 1, 2, 3].as_slice()));
     }
 
-    #[cfg(any(feature = "apple-authored-msl", feature = "ore-metal-authored-msl"))]
+    #[cfg(feature = "ore-metal-authored-msl")]
     #[test]
     fn only_trusted_exporter_exact_artifacts_mint_shader_provenance() {
         let shader_payload = [0, 1, 2, 3];

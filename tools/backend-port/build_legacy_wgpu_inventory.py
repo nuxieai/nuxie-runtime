@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import re
+import csv
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -19,20 +17,6 @@ HEADER = (
     "cutover_disposition",
     "cutover_status",
 )
-DIRECT = re.compile(r"\b(?:wgpu|Wgpu|WGPU|WebGPU|rust-wgpu|WGSL)\b")
-
-
-@dataclass(frozen=True, order=True)
-class Row:
-    source_path: str
-    source_sha256: str
-    evidence_kind: str
-    evidence_count: int
-    cutover_disposition: str
-    cutover_status: str = "pending"
-
-    def tsv(self) -> str:
-        return "\t".join(str(getattr(self, column)) for column in HEADER)
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,46 +27,42 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def render(repo_root: Path) -> str:
-    source_root = repo_root / "crates/nuxie-renderer/src"
-    rows: list[Row] = []
-    for path in sorted(item for item in source_root.rglob("*") if item.is_file()):
-        relative = path.relative_to(repo_root).as_posix()
-        if "/native_metal/" in relative or "/mechanical_port/" in relative:
-            continue
-        if path.suffix == ".wgsl":
-            rows.append(Row(relative, digest(path), "wgsl-artifact", 1, "delete-or-replace"))
-            continue
-        if path.suffix != ".rs":
-            continue
-        matches = DIRECT.findall(path.read_text(errors="replace"))
-        if matches:
-            rows.append(
-                Row(relative, digest(path), "direct-rust-wgpu-owner-or-callsite", len(matches), "delete-or-replace")
-            )
+def validate_cutover(repo_root: Path, inventory: Path) -> int:
+    if not inventory.is_file():
+        raise ValueError(f"missing frozen legacy Rust-WGPU inventory: {inventory}")
+    with inventory.open(newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if tuple(reader.fieldnames or ()) != HEADER:
+            raise ValueError("legacy Rust-WGPU inventory header changed")
+        rows = list(reader)
     if not rows:
         raise ValueError("legacy Rust-WGPU inventory is empty")
-    return "\n".join(("\t".join(HEADER), *(row.tsv() for row in rows))) + "\n"
+
+    failures: list[str] = []
+    for row in rows:
+        path = repo_root / row["source_path"]
+        disposition = row["cutover_disposition"]
+        if row["cutover_status"] != "complete":
+            failures.append(f"{row['source_path']}: cutover is not complete")
+        if disposition == "delete" and path.exists():
+            failures.append(f"{row['source_path']}: legacy owner still exists")
+        elif disposition != "delete" and not path.is_file():
+            failures.append(f"{row['source_path']}: retained exact-source input is missing")
+    if failures:
+        raise ValueError("\n".join(failures))
+    return len(rows)
 
 
 def main() -> int:
     args = parse_args()
     output = args.output if args.output.is_absolute() else args.repo_root / args.output
-    rendered = render(args.repo_root)
-    count = len(rendered.splitlines()) - 1
-    if args.check:
-        if not output.is_file() or output.read_text() != rendered:
-            print("legacy Rust-WGPU inventory is stale", file=sys.stderr)
-            return 1
-        print(f"legacy Rust-WGPU inventory clean: {count} files")
-        return 0
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(rendered)
-    print(f"wrote {count} legacy Rust-WGPU rows to {output}")
+    try:
+        count = validate_cutover(args.repo_root, output)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 1
+    action = "checked" if args.check else "verified"
+    print(f"{action} {count} frozen legacy Rust-WGPU cutover rows: complete")
     return 0
 
 

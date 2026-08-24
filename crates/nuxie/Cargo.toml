@@ -7,20 +7,12 @@ repository.workspace = true
 publish = false
 
 [features]
-default = ["renderer", "js-host-seed"]
+default = ["js-host-seed"]
 js-host-seed = ["nuxie-runtime/js-host-seed", "nuxie-scripting?/js-host-seed"]
-# Backward-compatible legacy selection. The exact ports have separate explicit
-# roots below so selecting one never activates Rust-WGPU as a fallback.
-renderer = ["dep:nuxie-renderer", "nuxie-renderer/rust-wgpu"]
+renderer-metal = ["dep:nuxie-renderer", "nuxie-renderer/renderer-metal"]
 renderer-vulkan = ["dep:nuxie-renderer", "nuxie-renderer/renderer-vulkan"]
 renderer-webgpu = ["dep:nuxie-renderer", "nuxie-renderer/renderer-webgpu"]
 renderer-webgl2 = ["dep:nuxie-renderer", "nuxie-renderer/renderer-webgl2"]
-apple-authored-msl = [
-    "renderer",
-    "scripting",
-    "nuxie-renderer/apple-authored-msl",
-    "nuxie-scripting/apple-authored-msl",
-]
 ore-metal-authored-msl = [
     "scripting",
     "nuxie-scripting/apple-authored-msl",

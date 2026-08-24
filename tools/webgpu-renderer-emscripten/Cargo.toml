@@ -8,4 +8,4 @@ publish = false
 [dependencies.nuxie-renderer]
 path = "../../crates/nuxie-renderer"
 default-features = false
-features = ["native-webgpu-experimental", "rive-decoders"]
+features = ["renderer-webgpu", "rive-decoders"]

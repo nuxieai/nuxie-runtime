@@ -3487,13 +3487,13 @@ note = "P2B faithful candidate under the immutable-file/per-VM asset-registry ad
 upstream = "src/lua/renderer/lua_gpu.cpp"
 status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie-renderer/src/gpu_canvas.rs; crates/nuxie-renderer/src/gpu_canvas_shader.rs"
+rust_module = "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie/src/ore_metal_gpu_canvas.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0280"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/post-b6-port-reviews.md"
-note = "GPUCEIL implementation at pinned 4ac7b327 under registered D18: authored fixtures prove distinct pipeline/resource snapshots in one submission, explicit empty finish plus orphan rejection, and stable external texture identity from attachment store to a later sampled submission. Browser preparation asynchronously validates exact immutable WGSL before Lua mounts, while each synchronous lookup creates a fresh physical wgpu shader module like C++. X3 records the additive direct-bytecode scalar input projection, whose conversions match ScriptedObject setters without inventing component dirt for a non-Component program. The typed plan indexes immutable pipeline snapshots and wgpu retains occurrence-lifetime physical textures per resource id across submissions; focused checks and adapter-aware tests are cited in GPUCEIL-report.md. Mixed-file Canvas 2D/Image:view members remain open under RF-33. MR exception (crate boundary): the Lua GPU surface is architecturally four files across three crates — scripting binding, render-api contract, and wgpu implementation — and cannot consolidate without merging crates."
+note = "GPUCEIL implementation at pinned 4ac7b327 under registered D18: authored fixtures prove distinct pipeline/resource snapshots in one submission, explicit empty finish plus orphan rejection, and stable external texture identity from attachment store to a later sampled submission. The runtime owns backend-neutral GPU scripting contracts while the exact Metal product adaptation owns native execution; editor-side shader translation is tracked separately. X3 records the additive direct-bytecode scalar input projection, whose conversions match ScriptedObject setters without inventing component dirt for a non-Component program. Mixed-file Canvas 2D/Image:view members remain open under RF-33. MR exception (crate boundary): the Lua GPU surface spans the scripting binding, render-api contract, and exact product adaptation."
 
 [[file]]
 upstream = "src/lua/renderer/lua_gradient.cpp"

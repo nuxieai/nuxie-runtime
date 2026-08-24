@@ -71,7 +71,11 @@ FORBIDDEN_DEPENDENCIES.update(UNPROTECTED_WORKSPACE_PACKAGES)
 # package is protected, while the C consumer is restricted to this exact edge
 # and approved symbols.
 PORTABLE_ABI_FACADE_EDGE = ("nux-capi", "nuxie")
-PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {"renderer", "scripting"}
+PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {
+    "renderer",
+    "renderer-metal",
+    "scripting",
+}
 PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "Artboard",
     "ArtboardInstance",
@@ -264,17 +268,12 @@ AUDITED_UNSCANNED_THIRD_PARTY_PATHS = {
     "vendor/luaur-compiler-0.1.8",
     "vendor/luaur-rt-0.1.8",
     "vendor/luaur-vm-0.1.8",
+    "vendor/jpeg-decoder-0.3.2-rive-v9f",
     "vendor/symphonia-bundle-flac-0.5.5",
     "vendor/symphonia-bundle-mp3-0.5.5",
     "vendor/symphonia-format-riff-0.5.5",
     "vendor/symphonia-utils-xiph-0.5.5",
-    "vendor/wgpu-30.0.0",
-    "vendor/wgpu-core-30.0.0",
-    "vendor/wgpu-core-deps-apple-30.0.0",
-    "vendor/wgpu-core-deps-emscripten-30.0.0",
-    "vendor/wgpu-core-deps-wasm-30.0.0",
-    "vendor/wgpu-core-deps-windows-linux-android-30.0.0",
-    "vendor/wgpu-hal-30.0.0",
+    "vendor/vk-mem-0.5.0",
 }
 
 # These are file-level ratchet exceptions, not compliant dependencies. A new
@@ -325,10 +324,19 @@ APPROVED_NEUTRAL_MECHANICS_FILES = {
     "apple-presentation": {
         "crates/nux-capi/tests/apple_metal.rs",
         "crates/nux-capi/src/apple_metal.rs",
+        "crates/nuxie-renderer/src/native_apple_surface.rs",
         "crates/nuxie-renderer/src/apple_surface.rs",
         "crates/nuxie-renderer/src/lib.rs",
         "tools/renderer-replay/src/bin/native-metal-product-root.rs",
     },
+}
+
+# The exact renderer translation preserves upstream-shaped inline module zones.
+# Their `#[path]` values are static, relative, and confined to the renderer
+# crate, but resolving them requires Rust's nested-module context rather than
+# the generic package-edge scanner.
+ALLOWED_INLINE_PATH_ATTRIBUTE_FILES = {
+    "crates/nuxie-renderer/src/mechanical_port.rs",
 }
 
 EXPLICIT_PRODUCT_PATH = re.compile(
@@ -362,7 +370,7 @@ RUST_DATA_INCLUDE_MANIFEST_EDGE = re.compile(
     re.DOTALL,
 )
 RUST_DATA_INCLUDE_OUT_DIR_EDGE = re.compile(
-    rf'\binclude_bytes\s*!\s*\(\s*concat\s*!\s*\(\s*'
+    rf'\b(?P<macro>include_(?:bytes|str))\s*!\s*\(\s*concat\s*!\s*\(\s*'
     rf'env\s*!\s*\(\s*"OUT_DIR"\s*\)\s*,\s*'
     rf"{RUST_STRING_LITERAL}\s*\)\s*\)",
     re.DOTALL,
@@ -380,6 +388,22 @@ ALLOWED_DYNAMIC_INCLUDES = {
     "crates/nuxie-runtime/src/objects.rs": re.compile(
         r'include!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)\s*,'
         r'\s*"/runtime_objects\.rs"\s*\)\s*\)'
+    ),
+    "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs": re.compile(
+        r'include!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)\s*,'
+        r'\s*"/mechanical_shader_generated/runtime_shader_exports\.rs"\s*\)\s*\)'
+    ),
+    "crates/nuxie-renderer/src/mechanical_port/vulkan/renderer_src_vulkan_vulkan_shaders_cpp__impl.rs": re.compile(
+        r'include!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)\s*,'
+        r'\s*"/vulkan_spirv_embedded\.rs"\s*\)\s*\)'
+    ),
+}
+ALLOWED_DYNAMIC_DATA_INCLUDES = {
+    "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs": re.compile(
+        r'include_str!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)'
+    ),
+    "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs": re.compile(
+        r'include_bytes!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)'
     ),
 }
 
@@ -1419,6 +1443,14 @@ def cross_package_source_edge_errors(
         verified_path_starts.add(match.start())
         preceding_code = code_mask[: match.start()]
         if preceding_code.count("{") != preceding_code.count("}"):
+            if relative in ALLOWED_INLINE_PATH_ATTRIBUTE_FILES:
+                source_edge = rust_string_literal_value(match)
+                if (
+                    source_edge is not None
+                    and not pathlib.PurePosixPath(source_edge).is_absolute()
+                    and ".." not in pathlib.PurePosixPath(source_edge).parts
+                ):
+                    continue
             line = source.count("\n", 0, match.start()) + 1
             errors.append(
                 f"{relative}:{line}: protected source path attribute inside an "
@@ -1511,7 +1543,8 @@ def cross_package_source_edge_errors(
             continue
         suffix = rust_string_literal_value(match)
         if (
-            suffix is not None
+            match.group("macro") == "include_bytes"
+            and suffix is not None
             and suffix.startswith("/")
             and "\\" not in suffix
             and ".." not in pathlib.PurePosixPath(suffix).parts
@@ -1519,6 +1552,11 @@ def cross_package_source_edge_errors(
             verified_data_include_starts.add(match.start())
     for invocation in RUST_DATA_INCLUDE_INVOCATION.finditer(code_mask):
         if invocation.start() in verified_data_include_starts:
+            continue
+        allowed_dynamic_data = ALLOWED_DYNAMIC_DATA_INCLUDES.get(relative)
+        if allowed_dynamic_data is not None and allowed_dynamic_data.match(
+            source, invocation.start()
+        ):
             continue
         line = source.count("\n", 0, invocation.start()) + 1
         errors.append(

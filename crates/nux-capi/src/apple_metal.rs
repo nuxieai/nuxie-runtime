@@ -13,12 +13,16 @@ use super::{
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
 use nuxie::{Mat2D, PersistentFactory, Renderer};
 use nuxie_renderer::{
-    AppleMetalDevice, ApplePresentationCompletion, AppleSurface, RenderMode, RendererError,
-    SurfaceDisposition, SurfaceError, WgpuDeviceHealth, WgpuFactory, WgpuFrameMetrics,
+    NativeMetalExecutionInventory, NativeMetalFactory, RenderMode, RendererError,
 };
+use objc2::rc::Retained;
+use objc2::runtime::ProtocolObject;
+use objc2_metal::MTLDevice;
+use objc2_quartz_core::CAMetalDrawable;
 use std::cell::RefCell;
 use std::ffi::c_void;
 use std::ptr;
+use std::ptr::NonNull;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
@@ -156,8 +160,10 @@ impl Default for NuxRendererInfo {
 }
 
 pub(crate) struct RendererState {
-    factory: PersistentFactory<WgpuFactory>,
-    surface: AppleSurface,
+    factory: PersistentFactory<NativeMetalFactory>,
+    pixel_width: u32,
+    pixel_height: u32,
+    attached: bool,
 }
 
 impl RendererState {
@@ -177,7 +183,7 @@ impl RendererState {
     }
 }
 
-/// Product-neutral native renderer. The handle owns one wgpu/Metal domain and
+/// Product-neutral native renderer. The handle owns one exact Metal domain and
 /// is affine to its creator thread like the other portable C handles.
 pub struct NuxRenderer {
     pub(crate) state: RefCell<RendererState>,
@@ -224,15 +230,14 @@ impl ApiFailure {
     }
 }
 
-fn surface_failure(error: SurfaceError) -> ApiFailure {
-    let status = match &error {
-        SurfaceError::NullDrawable | SurfaceError::InvalidDrawable(_) => NuxStatus::InvalidArgument,
-        SurfaceError::Renderer(RendererError::InvalidTextureExtent { .. }) => {
-            NuxStatus::InvalidArgument
-        }
-        SurfaceError::Unsupported(_)
-        | SurfaceError::Presentation(_)
-        | SurfaceError::Renderer(_) => NuxStatus::RuntimeError,
+fn renderer_failure(error: RendererError) -> ApiFailure {
+    let status = if matches!(
+        error,
+        RendererError::InvalidDrawable(_) | RendererError::InvalidTextureExtent { .. }
+    ) {
+        NuxStatus::InvalidArgument
+    } else {
+        NuxStatus::RuntimeError
     };
     ApiFailure::new(status, error.to_string())
 }
@@ -458,14 +463,6 @@ impl PendingCompletion {
             context_identity: operation.completion_context.expose_provenance(),
         })
     }
-
-    fn into_renderer_completion(mut self) -> Option<ApplePresentationCompletion> {
-        let callback = self.callback.take()?;
-        let context_identity = self.context_identity;
-        Some(ApplePresentationCompletion::new(move || {
-            defer_completion(callback, context_identity);
-        }))
-    }
 }
 
 impl Drop for PendingCompletion {
@@ -504,61 +501,29 @@ fn validate_drawable(
     }
 }
 
-fn health_value(health: &WgpuDeviceHealth) -> NuxRendererHealth {
-    match health {
-        WgpuDeviceHealth::Healthy => NUX_RENDERER_HEALTH_HEALTHY,
-        WgpuDeviceHealth::DeviceLost => NUX_RENDERER_HEALTH_DEVICE_LOST,
-        WgpuDeviceHealth::OutOfMemory => NUX_RENDERER_HEALTH_OUT_OF_MEMORY,
-        WgpuDeviceHealth::Failed(_) => NUX_RENDERER_HEALTH_FAILED,
-    }
-}
-
-fn disposition_value(
-    disposition: SurfaceDisposition,
-) -> Result<NuxRendererDisposition, ApiFailure> {
-    Ok(match disposition {
-        SurfaceDisposition::None => NUX_RENDERER_DISPOSITION_NONE,
-        SurfaceDisposition::Presented => NUX_RENDERER_DISPOSITION_PRESENTED,
-        SurfaceDisposition::SkippedZeroSize => NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE,
-        SurfaceDisposition::SkippedTimeout => NUX_RENDERER_DISPOSITION_SKIPPED_TIMEOUT,
-        SurfaceDisposition::SkippedOccluded => NUX_RENDERER_DISPOSITION_SKIPPED_OCCLUDED,
-        SurfaceDisposition::Reconfigured => NUX_RENDERER_DISPOSITION_RECONFIGURED,
-        SurfaceDisposition::Recreated => NUX_RENDERER_DISPOSITION_RECREATED,
-        SurfaceDisposition::DeviceLost => NUX_RENDERER_DISPOSITION_DEVICE_LOST,
-        SurfaceDisposition::OutOfMemory => NUX_RENDERER_DISPOSITION_OUT_OF_MEMORY,
-        SurfaceDisposition::Fatal => {
-            return Err(ApiFailure::new(
-                NuxStatus::RuntimeError,
-                "renderer reported a fatal surface outcome",
-            ));
-        }
-    })
-}
-
-fn disposition_acknowledges_render(disposition: SurfaceDisposition) -> bool {
-    disposition == SurfaceDisposition::Presented
-}
-
 fn outcome(
     state: &RendererState,
     disposition: NuxRendererDisposition,
-    metrics: Option<WgpuFrameMetrics>,
+    inventory: Option<NativeMetalExecutionInventory>,
 ) -> NuxRendererOutcome {
-    let (pixel_width, pixel_height) = state.surface.dimensions();
     let (draw_calls, logical_flushes, atomic_strategy_partitions) =
-        metrics.map_or((0, 0, 0), |metrics| {
+        inventory.map_or((0, 0, 0), |inventory| {
             (
-                metrics.draw_calls,
-                metrics.logical_flushes,
-                metrics.atomic_strategy_partitions,
+                u64::try_from(inventory.draw_calls).unwrap_or(u64::MAX),
+                u64::try_from(inventory.logical_flushes).unwrap_or(u64::MAX),
+                if inventory.mode == RenderMode::ClockwiseAtomic {
+                    u64::try_from(inventory.atomic_draw_groups).unwrap_or(u64::MAX)
+                } else {
+                    0
+                },
             )
         });
     NuxRendererOutcome {
         struct_size: u32::try_from(std::mem::size_of::<NuxRendererOutcome>()).unwrap_or(u32::MAX),
         disposition,
-        health: health_value(&state.surface.device_health()),
-        pixel_width,
-        pixel_height,
+        health: NUX_RENDERER_HEALTH_HEALTHY,
+        pixel_width: state.pixel_width,
+        pixel_height: state.pixel_height,
         draw_calls,
         logical_flushes,
         atomic_strategy_partitions,
@@ -600,19 +565,20 @@ pub unsafe extern "C" fn nux_renderer_new_metal(
                 return failure.status;
             }
         };
-        let (factory, surface) =
-            match AppleSurface::attach_with_factory(pixel_width, pixel_height, RenderMode::Msaa) {
-                Ok(value) => value,
-                Err(error) => {
-                    let failure = surface_failure(error);
-                    publish_result(out_result, failure.status, failure.message);
-                    return failure.status;
-                }
-            };
+        let factory = match NativeMetalFactory::new(pixel_width.max(1), pixel_height.max(1)) {
+            Ok(factory) => factory,
+            Err(error) => {
+                let failure = renderer_failure(error);
+                publish_result(out_result, failure.status, failure.message);
+                return failure.status;
+            }
+        };
         let renderer = Box::into_raw(Box::new(NuxRenderer {
             state: RefCell::new(RendererState {
                 factory: PersistentFactory::new(factory),
-                surface,
+                pixel_width,
+                pixel_height,
+                attached: true,
             }),
             domain,
         }));
@@ -656,9 +622,9 @@ pub unsafe extern "C" fn nux_renderer_copy_metal_device(
                 .state
                 .try_borrow()
                 .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-            Ok(state.surface.copy_metal_device_owned())
+            Ok(state.factory.borrow().retained_metal_device())
         },
-        AppleMetalDevice::into_raw,
+        |device: Retained<ProtocolObject<dyn MTLDevice>>| Retained::into_raw(device).cast(),
     )
 }
 
@@ -681,13 +647,12 @@ pub unsafe extern "C" fn nux_renderer_info(
             .state
             .try_borrow()
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-        let (pixel_width, pixel_height) = state.surface.dimensions();
         let value = NuxRendererInfo {
             struct_size: u32::try_from(std::mem::size_of::<NuxRendererInfo>()).unwrap_or(u32::MAX),
-            pixel_width,
-            pixel_height,
-            attached: state.surface.is_attached(),
-            health: health_value(&state.surface.device_health()),
+            pixel_width: state.pixel_width,
+            pixel_height: state.pixel_height,
+            attached: state.attached,
+            health: NUX_RENDERER_HEALTH_HEALTHY,
             generation: renderer.domain.generation.load(Ordering::Relaxed),
         };
         unsafe { write_caller_struct(out_info, &value, NUX_RENDERER_INFO_V3_MIN_SIZE) }
@@ -716,14 +681,21 @@ pub unsafe extern "C" fn nux_renderer_resize(
             .state
             .try_borrow_mut()
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-        let RendererState { factory, surface } = &mut *state;
-        let disposition = surface
-            .resize(&mut *factory.borrow_mut(), pixel_width, pixel_height)
-            .map_err(surface_failure)?;
-        write_outcome(
-            out_outcome,
-            &outcome(&state, disposition_value(disposition)?, None),
-        )
+        if pixel_width != 0 && pixel_height != 0 {
+            state
+                .factory
+                .borrow_mut()
+                .resize(pixel_width, pixel_height)
+                .map_err(renderer_failure)?;
+        }
+        state.pixel_width = pixel_width;
+        state.pixel_height = pixel_height;
+        let disposition = if pixel_width == 0 || pixel_height == 0 {
+            NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE
+        } else {
+            NUX_RENDERER_DISPOSITION_RECONFIGURED
+        };
+        write_outcome(out_outcome, &outcome(&state, disposition, None))
     })
 }
 
@@ -746,7 +718,7 @@ pub unsafe extern "C" fn nux_renderer_detach(
             .state
             .try_borrow_mut()
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-        state.surface.detach();
+        state.attached = false;
         write_outcome(
             out_outcome,
             &outcome(&state, NUX_RENDERER_DISPOSITION_NONE, None),
@@ -777,15 +749,14 @@ pub unsafe extern "C" fn nux_renderer_reattach(
             .state
             .try_borrow_mut()
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-        if state.surface.is_attached() {
+        if state.attached {
             return Err(ApiFailure::new(
                 NuxStatus::InvalidArgument,
                 "renderer must be detached before reattach",
             ));
         }
-        let (factory, surface) =
-            AppleSurface::attach_with_factory(pixel_width, pixel_height, RenderMode::Msaa)
-                .map_err(surface_failure)?;
+        let factory = NativeMetalFactory::new(pixel_width.max(1), pixel_height.max(1))
+            .map_err(renderer_failure)?;
         let next_generation = renderer
             .domain
             .generation
@@ -801,11 +772,15 @@ pub unsafe extern "C" fn nux_renderer_reattach(
             .saturating_add(1);
         debug_assert_ne!(next_generation, 0);
         *state.factory.borrow_mut() = factory;
-        state.surface = surface;
-        write_outcome(
-            out_outcome,
-            &outcome(&state, NUX_RENDERER_DISPOSITION_RECREATED, None),
-        )
+        state.pixel_width = pixel_width;
+        state.pixel_height = pixel_height;
+        state.attached = true;
+        let disposition = if pixel_width == 0 || pixel_height == 0 {
+            NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE
+        } else {
+            NUX_RENDERER_DISPOSITION_RECREATED
+        };
+        write_outcome(out_outcome, &outcome(&state, disposition, None))
     })
 }
 
@@ -831,16 +806,10 @@ pub unsafe extern "C" fn nux_renderer_reset_player_domain(
                 .state
                 .try_borrow()
                 .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-            if !state.surface.is_attached() {
+            if !state.attached {
                 return Err(ApiFailure::new(
                     NuxStatus::InvalidArgument,
                     "cannot bind a player to a detached renderer",
-                ));
-            }
-            if state.surface.device_health() != WgpuDeviceHealth::Healthy {
-                return Err(ApiFailure::new(
-                    NuxStatus::RuntimeError,
-                    "cannot bind a player to an unhealthy renderer",
                 ));
             }
         }
@@ -885,7 +854,7 @@ pub unsafe extern "C" fn nux_renderer_render_player(
             Ok(operation) => operation,
             Err(failure) => return with_optional_failure_result(out_result, || Err(failure)),
         };
-        let completion = match PendingCompletion::new(&operation) {
+        let _completion = match PendingCompletion::new(&operation) {
             Ok(completion) => completion,
             Err(failure) => return with_optional_failure_result(out_result, || Err(failure)),
         };
@@ -915,20 +884,25 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                 .state
                 .try_borrow_mut()
                 .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-            if let Some(mut disposition) = state
-                .surface
-                .preflight_present(drawable_available)
-                .map_err(surface_failure)?
-            {
-                if disposition == SurfaceDisposition::SkippedTimeout
-                    && operation.drawable_state == NUX_METAL_DRAWABLE_STATE_OCCLUDED
-                {
-                    disposition = SurfaceDisposition::SkippedOccluded;
-                }
+            if !state.attached {
+                return Err(ApiFailure::new(
+                    NuxStatus::InvalidArgument,
+                    "renderer is not attached",
+                ));
+            }
+            if state.pixel_width == 0 || state.pixel_height == 0 {
                 return write_outcome(
                     out_outcome,
-                    &outcome(&state, disposition_value(disposition)?, None),
+                    &outcome(&state, NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE, None),
                 );
+            }
+            if !drawable_available {
+                let disposition = if operation.drawable_state == NUX_METAL_DRAWABLE_STATE_OCCLUDED {
+                    NUX_RENDERER_DISPOSITION_SKIPPED_OCCLUDED
+                } else {
+                    NUX_RENDERER_DISPOSITION_SKIPPED_TIMEOUT
+                };
+                return write_outcome(out_outcome, &outcome(&state, disposition, None));
             }
 
             // Domain ownership starts only when an available drawable causes
@@ -958,51 +932,62 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     ));
                 }
             }
-            let RendererState { factory, surface } = &mut *state;
             player
                 .artboard
                 .refresh_bound_view_model_invalidation()
                 .map_err(|status| ApiFailure::new(status, "player render revision overflowed"))?;
             let rendered_revision = player.artboard.render_revision.get();
-            let mut frame = factory.borrow().begin_frame(operation.clear_color);
+            let drawable = unsafe {
+                NonNull::new(operation.drawable)
+                    .ok_or_else(|| {
+                        ApiFailure::new(
+                            NuxStatus::NullArgument,
+                            "AVAILABLE requires a non-null CAMetalDrawable",
+                        )
+                    })?
+                    .cast::<ProtocolObject<dyn CAMetalDrawable>>()
+                    .as_ref()
+            };
+            let mut frame = state
+                .factory
+                .borrow()
+                .begin_drawable_frame(drawable, operation.clear_color)
+                .map_err(renderer_failure)?;
             let mut artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
                 ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
             })?;
             if operation.fit == NUX_RENDERER_FIT_CONTAIN_CENTER {
                 frame.transform(centered_contain_transform(
                     artboard.artboard_bounds(),
-                    surface.dimensions(),
+                    (state.pixel_width, state.pixel_height),
                 )?);
             }
             if let Some(assets) = player.artboard.apple_assets.as_ref() {
-                let mut factory = assets.wrap_factory(factory);
-                artboard
-                    .draw(&mut factory, &mut frame)
-                    .map_err(|error| ApiFailure::new(NuxStatus::RuntimeError, error.to_string()))?;
+                let mut factory = assets.wrap_factory(&mut state.factory);
+                artboard.draw(&mut factory, &mut *frame).map_err(|error| {
+                    ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
+                })?;
             } else {
                 artboard
-                    .draw(factory, &mut frame)
-                    .map_err(|error| ApiFailure::new(NuxStatus::RuntimeError, error.to_string()))?;
-            }
-            drop(artboard);
-            let completion = completion.into_renderer_completion();
-            let (disposition, metrics) =
-                unsafe { surface.present(frame, operation.drawable, completion) }
-                    .map_err(surface_failure)?;
-            if disposition_acknowledges_render(disposition) {
-                player
-                    .artboard
-                    .acknowledge_presented(rendered_revision)
-                    .map_err(|status| {
-                        ApiFailure::new(
-                            status,
-                            "presented player revision no longer matches the rendered occurrence",
-                        )
+                    .draw(&mut state.factory, &mut *frame)
+                    .map_err(|error| {
+                        ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
                     })?;
             }
+            drop(artboard);
+            let inventory = frame.finish().map_err(renderer_failure)?;
+            player
+                .artboard
+                .acknowledge_presented(rendered_revision)
+                .map_err(|status| {
+                    ApiFailure::new(
+                        status,
+                        "presented player revision no longer matches the rendered occurrence",
+                    )
+                })?;
             write_outcome(
                 out_outcome,
-                &outcome(&state, disposition_value(disposition)?, Some(metrics)),
+                &outcome(&state, NUX_RENDERER_DISPOSITION_PRESENTED, Some(inventory)),
             )
         })
     })
@@ -1172,26 +1157,6 @@ mod tests {
             ..NuxMetalRenderOperation::default()
         };
         assert!(unsafe { read_operation(&raw const invalid) }.is_err());
-    }
-
-    #[test]
-    fn only_presented_acknowledges_an_occurrence_revision() {
-        assert!(disposition_acknowledges_render(
-            SurfaceDisposition::Presented
-        ));
-        for disposition in [
-            SurfaceDisposition::None,
-            SurfaceDisposition::SkippedZeroSize,
-            SurfaceDisposition::SkippedTimeout,
-            SurfaceDisposition::SkippedOccluded,
-            SurfaceDisposition::Reconfigured,
-            SurfaceDisposition::Recreated,
-            SurfaceDisposition::DeviceLost,
-            SurfaceDisposition::OutOfMemory,
-            SurfaceDisposition::Fatal,
-        ] {
-            assert!(!disposition_acknowledges_render(disposition));
-        }
     }
 
     #[test]

@@ -13,7 +13,7 @@ use nuxie::{
     RenderPath, RenderShader,
 };
 use nuxie::{File, FileAssetKind};
-use nuxie_renderer::WgpuFactory;
+use nuxie_renderer::NativeMetalFactory;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::ptr;
@@ -165,14 +165,14 @@ pub(crate) struct AppleAssetCatalog {
 }
 
 pub(crate) struct AppleAssetFactory<'a> {
-    inner: &'a mut PersistentFactory<WgpuFactory>,
+    inner: &'a mut PersistentFactory<NativeMetalFactory>,
     catalog: &'a AppleAssetCatalog,
 }
 
 impl AppleAssetCatalog {
     pub(crate) fn wrap_factory<'a>(
         &'a self,
-        inner: &'a mut PersistentFactory<WgpuFactory>,
+        inner: &'a mut PersistentFactory<NativeMetalFactory>,
     ) -> AppleAssetFactory<'a> {
         AppleAssetFactory {
             inner,

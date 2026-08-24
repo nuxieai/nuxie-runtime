@@ -1,4 +1,4 @@
-//! Renderer-neutral public types shared by the WGPU and native Metal roots.
+//! Renderer-neutral public types shared by the exact backend roots.
 
 use std::error::Error;
 use std::fmt;
@@ -16,6 +16,7 @@ pub enum RendererError {
         max_dimension: u32,
     },
     InvalidGpuCanvas(String),
+    InvalidDrawable(String),
     InvalidImageUpload(String),
     Map(String),
     NativeMetal(String),
@@ -44,6 +45,7 @@ impl fmt::Display for RendererError {
                 "invalid {label} texture extent {width}x{height}; dimensions must be between 1 and {max_dimension}"
             ),
             Self::InvalidGpuCanvas(message) => write!(f, "invalid GPU-canvas plan: {message}"),
+            Self::InvalidDrawable(message) => write!(f, "invalid drawable: {message}"),
             Self::InvalidImageUpload(message) => write!(f, "invalid image upload: {message}"),
             Self::Map(message) => {
                 f.write_char(char::from_u32(119).expect("ASCII w"))?;

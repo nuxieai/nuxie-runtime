@@ -37,6 +37,7 @@ RUST_CRATES = (
     "nuxie-binary",
     "nuxie-graph",
     "nuxie-image-codec",
+    "nuxie-ore-metal",
     "nuxie-project-data",
     "nuxie-render-api",
     "nuxie-render-stream",
@@ -82,6 +83,13 @@ RUST_GENERATOR_OUTPUTS = {
     "crates/nuxie-renderer-ffi/build.rs": [
         "native-link:nuxie_renderer_ffi",
     ],
+    "crates/nuxie-renderer/build.rs": [
+        "OUT_DIR/vulkan_spirv_embedded.rs",
+        "OUT_DIR/native_metal_*.metallib",
+        "OUT_DIR/rive_*.metallib",
+        "OUT_DIR/mechanical_shader_generated/**",
+        "OUT_DIR/mechanical_shader_generated/runtime_shader_exports.rs",
+    ],
     "crates/nuxie-runtime/build.rs": [
         "OUT_DIR/runtime_objects.rs",
     ],
@@ -98,15 +106,12 @@ RUST_GENERATOR_INPUT_GLOBS = {
     "crates/nuxie-renderer-ffi/build.rs": [
         "crates/nuxie-renderer-ffi/cpp/*",
     ],
-}
-RUST_EMBEDDED_INPUT_GLOBS = {
-    # shader_catalog.rs embeds these modules with include_str!, so their bytes
-    # are production renderer behavior even though they are not Rust sources.
-    "crates/nuxie-renderer/src/shader_catalog.rs": [
-        "crates/nuxie-renderer/src/*.wgsl",
-        "crates/nuxie-renderer/src/generated/*.wgsl",
+    "crates/nuxie-renderer/build.rs": [
+        "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/**/*",
+        "crates/nuxie-renderer/src/mechanical_port/vulkan/generated/spirv/*.h",
     ],
 }
+RUST_EMBEDDED_INPUT_GLOBS = {}
 RUST_GENERATOR_UPSTREAM_INPUT_GLOBS = {
     "crates/nuxie-renderer-ffi/build.rs": [
         "renderer/src/draw.cpp",
@@ -173,7 +178,7 @@ NAMED_ADAPTATION_PATH_RULES = {
         ["docs/PORTING.md:D3", "docs/runtime-drawing-ownership.toml"],
     ),
     "crates/nuxie-scripting/src/gpu_canvas.rs": (
-        "lua-gpu-wgpu-adapter",
+        "lua-gpu-exact-renderer-adapter",
         None,
         ["src/lua/renderer/lua_gpu.cpp"],
         ["drop-gpu-name", "share-occurrence-module", "substitute-cpu-rendering"],
@@ -182,22 +187,15 @@ NAMED_ADAPTATION_PATH_RULES = {
             "crates/nuxie-scripting/tests/async_shader_instantiation.rs",
         ],
     ),
-    "crates/nuxie-renderer/src/gpu_canvas.rs": (
-        "lua-gpu-wgpu-adapter",
+    "crates/nuxie/src/ore_metal_gpu_canvas.rs": (
+        "lua-gpu-exact-renderer-adapter",
         None,
         ["src/lua/renderer/lua_gpu.cpp"],
         ["drop-gpu-name", "share-occurrence-module", "substitute-cpu-rendering"],
-        ["docs/PORTING.md:D18", "crates/nuxie/tests/imported_gpu_canvas.rs"],
-    ),
-    "crates/nuxie-renderer/src/gpu_canvas_shader.rs": (
-        "lua-gpu-wgpu-adapter",
-        None,
-        ["src/lua/renderer/lua_gpu.cpp"],
-        ["drop-gpu-name", "share-occurrence-module", "substitute-cpu-rendering"],
-        ["docs/PORTING.md:D18", "crates/nuxie/tests/imported_gpu_canvas.rs"],
+        ["docs/PORTING.md:D18", "crates/nuxie/tests/ore_metal_authored_gpu_canvas.rs"],
     ),
     "crates/nuxie-render-api/src/lib.rs": (
-        "lua-gpu-wgpu-adapter",
+        "lua-gpu-exact-renderer-adapter",
         re.compile(r"GpuCanvas"),
         ["src/lua/renderer/lua_gpu.cpp"],
         ["drop-gpu-name", "share-occurrence-module", "substitute-cpu-rendering"],
@@ -3803,6 +3801,37 @@ def rust_macro_arm_modules(
         "ty",
     }
 
+    def may_generate_modules(callee: str, seen: frozenset[str] = frozenset()) -> bool:
+        if callee == "include":
+            return True
+        if callee in seen:
+            return True
+        definition = environment.get(callee)
+        if definition is None:
+            return False
+        if definition[0] == "alternatives":
+            return any(
+                alternative[0]
+                or any(
+                    direct_targets
+                    or any(
+                        may_generate_modules(nested, seen | {callee})
+                        for nested, *_rest in delegated
+                    )
+                    for _pattern, direct_targets, delegated in alternative[1]
+                )
+                for alternative in definition[1]
+            )
+        direct, definition_arms = definition
+        return direct or any(
+            direct_targets
+            or any(
+                may_generate_modules(nested, seen | {callee})
+                for nested, *_rest in delegated
+            )
+            for _pattern, direct_targets, delegated in definition_arms
+        )
+
     def skip_trivia(text: str, cursor: int) -> int:
         """Skip Rust whitespace and comments, including nested block comments."""
         while cursor < len(text):
@@ -4331,7 +4360,10 @@ def rust_macro_arm_modules(
                     kind == "variable" and value in non_identifier_bindings
                     for kind, value, _requires_test, _explicit_path in direct_targets
                 )
-                or any(callee != "include" for callee, *_rest in delegated)
+                or any(
+                    callee != "include" and may_generate_modules(callee)
+                    for callee, *_rest in delegated
+                )
             ):
                 raise ValueError(
                     "unsupported Rust tt fragment controls module generation"
@@ -4368,6 +4400,10 @@ def rust_macro_arm_modules(
                         )
                     modules.append((f"@include:{include_path}", requires_test))
                     continue
+                if callee in {"include_bytes", "include_str", "concat", "env"}:
+                    continue
+                if not may_generate_modules(callee):
+                    continue
                 concrete_arguments = [
                     identifier_bindings[value] if kind == "variable" else value
                     for kind, value in argument_tokens
@@ -4395,6 +4431,37 @@ def rust_resolve_macro_modules(
     raw_arguments: str | None = None,
 ) -> list[tuple[str, bool]]:
     """Resolve one supported macro invocation through delegated wrappers."""
+    def definition_may_generate(callee: str, seen: frozenset[str]) -> bool:
+        if callee == "include":
+            return True
+        if callee in seen:
+            return True
+        candidate = environment.get(callee)
+        if candidate is None:
+            return False
+        if candidate[0] == "alternatives":
+            return any(
+                alternative[0]
+                or any(
+                    direct_targets
+                    or any(
+                        definition_may_generate(nested, seen | {callee})
+                        for nested, *_rest in delegated
+                    )
+                    for _pattern, direct_targets, delegated in alternative[1]
+                )
+                for alternative in candidate[1]
+            )
+        direct_candidate, candidate_arms = candidate
+        return direct_candidate or any(
+            direct_targets
+            or any(
+                definition_may_generate(nested, seen | {callee})
+                for nested, *_rest in delegated
+            )
+            for _pattern, direct_targets, delegated in candidate_arms
+        )
+
     definition = environment.get(name)
     if definition is None:
         return []
@@ -4416,9 +4483,7 @@ def rust_resolve_macro_modules(
     if name in visiting:
         raise ValueError(f"cyclic module-generating macro expansion: {name}!")
     direct, arms = definition
-    if not direct and not any(
-        direct_targets or delegated for _pattern, direct_targets, delegated in arms
-    ):
+    if not definition_may_generate(name, frozenset()):
         return []
     try:
         modules = rust_macro_arm_modules(

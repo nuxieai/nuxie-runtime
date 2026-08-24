@@ -7,7 +7,10 @@
 //! pinned at `4ac7b32798da0482e441ef09304dc3b480ed3ee5`. The platform caller
 //! retains ownership of acquisition, actor scheduling, and layer policy.
 
-use super::{mechanical_render_context::MechanicalRenderContext, NativeMetalFrame};
+use super::{
+    NativeMetalExecutionInventory, NativeMetalFrame,
+    mechanical_render_context::MechanicalRenderContext,
+};
 use crate::RendererError;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
@@ -76,13 +79,14 @@ impl<'a> NativeMetalDrawableFrame<'a> {
 
     /// Commits renderer work, then presents the borrowed drawable on the next
     /// command buffer from the same queue, matching the pinned product oracle.
-    pub fn finish(mut self) -> Result<(), RendererError> {
-        self.frame.finish_present(self.drawable)?;
+    pub fn finish(mut self) -> Result<NativeMetalExecutionInventory, RendererError> {
+        let inventory = self.frame.finish_present(self.drawable)?;
         self.mechanical.borrow_mut().replace_target(
             self.restore_texture.clone(),
             self.restore_width,
             self.restore_height,
-        )
+        )?;
+        Ok(inventory)
     }
 }
 

@@ -90,7 +90,13 @@ def collect_tree(upstream_root: Path, relative_root: str) -> list[Path]:
     root = upstream_root / relative_root
     if not root.is_dir():
         raise FileNotFoundError(f"missing source root: {relative_root}")
-    return sorted(path for path in root.rglob("*") if path.is_file())
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and "__pycache__" not in path.parts
+        and path.suffix.lower() != ".pyc"
+    )
 
 
 def add_row(

@@ -22,19 +22,6 @@ pub(crate) struct GradientSpan {
 }
 
 impl GradientSpan {
-    #[cfg(any(feature = "rust-wgpu", test))]
-    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Self>() as u64,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Uint32x4,
-                offset: 0,
-                shader_location: 0,
-            }],
-        }
-    }
-
     pub(crate) fn new(
         x0_fixed: u32,
         x1_fixed: u32,
@@ -67,36 +54,6 @@ pub(crate) struct TessVertexSpan {
 }
 
 impl TessVertexSpan {
-    #[cfg(any(feature = "rust-wgpu", test))]
-    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Self>() as u64,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 16,
-                    shader_location: 1,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 32,
-                    shader_location: 2,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint32x4,
-                    offset: 48,
-                    shader_location: 3,
-                },
-            ],
-        }
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         points: [[f32; 2]; 4],
@@ -205,26 +162,6 @@ pub(crate) struct PatchVertex {
 }
 
 impl PatchVertex {
-    #[cfg(any(feature = "rust-wgpu", test))]
-    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Self>() as u64,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 16,
-                    shader_location: 1,
-                },
-            ],
-        }
-    }
-
     pub(crate) fn new(local_vertex_id: f32, outset: f32, fill_coverage: f32, params: i32) -> Self {
         Self {
             local_vertex_id,
@@ -678,19 +615,6 @@ pub(crate) struct TriangleVertex {
 }
 
 impl TriangleVertex {
-    #[cfg(any(feature = "rust-wgpu", test))]
-    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Self>() as u64,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: 0,
-                shader_location: 0,
-            }],
-        }
-    }
-
     pub(crate) const fn new(point: [f32; 2], weight: i16, path_id: u16) -> Self {
         Self {
             point,
@@ -709,36 +633,6 @@ pub(crate) struct ImageDrawInstance {
 }
 
 impl ImageDrawInstance {
-    #[cfg(any(feature = "rust-wgpu", test))]
-    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Self>() as u64,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 2,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 16,
-                    shader_location: 3,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 32,
-                    shader_location: 4,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint32x4,
-                    offset: 48,
-                    shader_location: 5,
-                },
-            ],
-        }
-    }
-
     pub(crate) fn new(
         matrix: Mat2D,
         opacity: f32,
@@ -771,18 +665,6 @@ pub(crate) struct ImageRectVertex {
 }
 
 impl ImageRectVertex {
-    #[cfg(any(feature = "rust-wgpu", test))]
-    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Self>() as u64,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x4,
-                offset: 0,
-                shader_location: 0,
-            }],
-        }
-    }
 }
 
 pub(crate) const IMAGE_RECT_VERTICES: [ImageRectVertex; 12] = [

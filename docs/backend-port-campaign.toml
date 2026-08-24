@@ -1,12 +1,12 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_queue = "behavior-platform"
+active_queue = "product-cutover"
 preparation_status = "green"
 ignored_skills = ["implement", "tdd"]
 port_construction_status = "complete-frozen"
 port_construction_barrier_ref = "e20e0ec7b"
-closeout_execution_status = "deferred-by-user-after-port-construction"
-closeout_resume_queue = "behavior-platform"
+closeout_execution_status = "supported-host-gates-green-product-cutover-in-progress"
+closeout_resume_queue = "product-cutover"
 compiler_status = "green"
 compiler_barrier_ref = "248b0de020912b4dcafa8a61b35f17ddb3ab4cad"
 translation_receipt_directory = "docs/backend-port-receipts"
@@ -68,7 +68,7 @@ repeatability_inventory = "docs/backend-port-repeatability.tsv"
 ported_renderers = ["vulkan", "webgpu", "webgl2"]
 editor_browser_renderers = ["webgpu", "webgl2"]
 editor_selection = "explicit-user-selected-no-automatic-fallback"
-legacy_wgpu = "retain-until-each-ported-renderer-independently-passes-frozen-closeout-then-delete"
+legacy_wgpu = "deleted-after-each-ported-renderer-passed-the-supported-host-frozen-closeout"
 
 [denominator]
 sources = 200
@@ -86,7 +86,7 @@ corpus_entries = 1469
 [[backend]]
 id = "vulkan"
 upstream_name = "Rive Vulkan renderer and ORE Vulkan"
-product_disposition = "exact-backend-selection-after-closeout"
+product_disposition = "exact-backend-selection-active"
 primary_oracle = "pinned C++ Vulkan on the same reported adapter and driver"
 secondary_oracles = ["Rust native Metal", "Rust WebGPU"]
 translation_status = "complete"
@@ -101,9 +101,9 @@ extra_sources = ["renderer/include/rive/renderer/ore/ore_context_vulkan.hpp"]
 [[backend]]
 id = "webgpu"
 upstream_name = "Rive WebGPU renderer, Wagyu browser port, and ORE WGPU"
-product_disposition = "new-exact-browser-backend-replaces-legacy-rust-wgpu-after-all-ports-close"
+product_disposition = "exact-browser-backend-active-legacy-rust-wgpu-deleted"
 primary_oracle = "pinned C++ Dawn WebGPU on the same reported adapter"
-secondary_oracles = ["legacy Rust-WGPU", "Rust native Metal", "future Rust Vulkan"]
+secondary_oracles = ["Rust native Metal", "Rust Vulkan"]
 translation_status = "complete"
 preparation_status = "green"
 source_roots = [

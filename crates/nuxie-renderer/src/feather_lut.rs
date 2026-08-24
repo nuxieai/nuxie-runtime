@@ -1,59 +1,7 @@
 //! Canonical Gaussian lookup texture used by Rive's feather shaders.
 
-#[cfg(any(feature = "rust-wgpu", test))]
-use crate::work_metrics::CountedQueueExt;
-
 pub(crate) const TABLE_SIZE: usize = 512;
 const TEXTURE_STDDEVS: f32 = 3.0;
-
-#[cfg(any(feature = "rust-wgpu", test))]
-pub(crate) struct FeatherLut {
-    #[allow(dead_code)]
-    texture: wgpu::Texture,
-    pub(crate) view: wgpu::TextureView,
-}
-
-#[cfg(any(feature = "rust-wgpu", test))]
-impl FeatherLut {
-    pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("nuxie-feather-lut"),
-            size: wgpu::Extent3d {
-                width: TABLE_SIZE as u32,
-                height: 2,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R16Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let rows = table_rows();
-        queue.write_counted_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            bytemuck::cast_slice(&rows),
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some((TABLE_SIZE * size_of::<u16>()) as u32),
-                rows_per_image: Some(2),
-            },
-            wgpu::Extent3d {
-                width: TABLE_SIZE as u32,
-                height: 2,
-                depth_or_array_layers: 1,
-            },
-        );
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        Self { texture, view }
-    }
-}
 
 pub(crate) fn table_rows() -> [[u16; TABLE_SIZE]; 2] {
     let gaussian = gaussian_integral();

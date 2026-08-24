@@ -47,7 +47,7 @@ id = "webgpu"
 candidate_backend_id = "rust-webgpu-exact"
 primary_backend_id = "ffi-dawn"
 primary_oracle = "pinned C++ Dawn WebGPU on the same reported adapter, device profile, and browser/native environment"
-secondary_oracles = ["legacy-rust-wgpu", "rust-metal", "rust-vulkan-exact"]
+secondary_oracles = ["rust-metal", "rust-vulkan-exact"]
 required_modes = ["msaa", "clockwise-atomic"]
 corpus_entries = 1469
 rooted_native_runner = "tools/renderer-replay"
@@ -72,10 +72,10 @@ id = "webgl2"
 candidate_backend_id = "rust-webgl2-exact"
 primary_backend_id = "ffi-webgl2"
 primary_oracle = "pinned C++ WebGL2 in the same browser build on the same reported GPU"
-secondary_oracles = ["rust-webgpu-exact", "legacy-rust-wgpu"]
+secondary_oracles = ["rust-webgpu-exact"]
 required_modes = ["msaa", "clockwise-atomic"]
 corpus_entries = 1469
-rooted_browser_runner = "tools/browser-renderer-smoke"
+rooted_browser_runner = "tools/webgl2-renderer-replay"
 web_editor_selection = "webgl2"
 primary_root_status = "green"
 candidate_root_contract_status = "frozen"
@@ -112,28 +112,37 @@ primary_status = "green"
 candidate_status = "green-1469-of-1469"
 
 [[platform]]
+id = "vulkan-android-arm64-emulator"
+backend = "vulkan"
+environment = "Android arm64 emulator SwiftShader Device (LLVM 10.0.0)"
+requirement = "supported-host-blocking"
+primary_status = "frozen-oracle-byte-authority"
+candidate_status = "green-byte-exact-first-light-rectangle-msaa"
+candidate_png_sha256 = "58d0a71f5a6903752dd4a6e5ddf8c5a0b83157535d0de95a09bcb177de7e10da"
+
+[[platform]]
 id = "vulkan-linux-amd"
 backend = "vulkan"
 environment = "Linux AMD Vulkan"
-requirement = "closeout-blocking"
+requirement = "follow-up-nonblocking-universe-126"
 primary_status = "hardware-not-yet-provisioned"
-candidate_status = "pending-hardware-evidence"
+candidate_status = "deferred-after-supported-host-cutover"
 
 [[platform]]
 id = "vulkan-linux-nvidia"
 backend = "vulkan"
 environment = "Linux NVIDIA Vulkan"
-requirement = "closeout-blocking"
+requirement = "follow-up-nonblocking-universe-126"
 primary_status = "hardware-not-yet-provisioned"
-candidate_status = "pending-hardware-evidence"
+candidate_status = "deferred-after-supported-host-cutover"
 
 [[platform]]
 id = "vulkan-linux-intel"
 backend = "vulkan"
 environment = "Linux Intel Vulkan"
-requirement = "closeout-blocking"
+requirement = "follow-up-nonblocking-universe-126"
 primary_status = "hardware-not-yet-provisioned"
-candidate_status = "pending-hardware-evidence"
+candidate_status = "deferred-after-supported-host-cutover"
 
 [[platform]]
 id = "webgpu-native-dawn-macos-apple-m5-max"
@@ -249,8 +258,8 @@ evidence_log_sha256 = "07e4416a180bc73d25c3789a604a0f77ead201ec53490568844724bc3
 id = "browser-windows"
 backends = ["webgpu", "webgl2"]
 browsers = ["chromium", "firefox"]
-requirement = "closeout-blocking"
-status = "hosted-runner-dispatch-ready-evidence-pending"
+requirement = "follow-up-nonblocking-universe-126"
+status = "deferred-after-macos-host-cutover"
 runner = "windows-latest"
 artifact_contract = "one byte-frozen source/candidate Wasm product set shared by every OS/browser row"
 comparison_contract = "full 1,469-case fresh source versus candidate corpus in one browser context; same nonempty adapter required per case; zero divergences; no renderer fallback"
@@ -259,8 +268,8 @@ comparison_contract = "full 1,469-case fresh source versus candidate corpus in o
 id = "browser-linux"
 backends = ["webgpu", "webgl2"]
 browsers = ["chromium", "firefox"]
-requirement = "closeout-blocking"
-status = "hosted-runner-dispatch-ready-evidence-pending"
+requirement = "follow-up-nonblocking-universe-126"
+status = "deferred-after-macos-host-cutover"
 runner = "ubuntu-latest"
 artifact_contract = "one byte-frozen source/candidate Wasm product set shared by every OS/browser row"
 comparison_contract = "full 1,469-case fresh source versus candidate corpus in one browser context; same nonempty adapter required per case; zero divergences; no renderer fallback"
@@ -276,19 +285,21 @@ windows_process_correction = "generate ephemeral .cmd launchers that invoke the 
 candidate_renderer_change = "none"
 tolerance_change = "none"
 smoke_verification = "all four WebGPU/WebGL2 x Chromium/Firefox combinations passed a same-browser, same-adapter exact representative case on macOS; WebGPU Firefox inherited its recorded headed requirement"
-closeout_verdict = "pending full hosted Windows and Linux workflow evidence"
-execution_status = "deferred-by-user-after-port-construction"
+closeout_verdict = "macOS browser-host parity green; Windows/Linux expansion deferred to teambasis/universe#126"
+execution_status = "nonblocking-follow-up"
 
 [cutover]
 begins_after = "vulkan, webgpu, and webgl2 frozen-byte closeout green"
 web_editor_public_selection = ["webgpu", "webgl2"]
 automatic_failure_fallback = false
 legacy_backend_id = "rust-wgpu"
-legacy_deletion_status = "pending"
-product_wiring_status = "green-precloseout-legacy-retained"
+legacy_deletion_status = "complete"
+product_wiring_status = "green-explicit-exact-roots"
 renderer_crate_features = ["renderer-vulkan", "renderer-webgpu", "renderer-webgl2"]
 facade_crate_features = ["renderer-vulkan", "renderer-webgpu", "renderer-webgl2"]
 browser_artifact_contract = "explicit selection loads either the Emscripten WebGPU artifact or the wasm32-unknown-unknown WebGL2 artifact; target-specific upstream ownership forbids an automatic cross-backend fallback"
+webgl2_wasm32_unknown_unknown_optimization = "follow-up-teambasis-universe-124"
+runtime_naga_ownership = "none; editor shader compilation integration is follow-up teambasis/universe#125"
 product_root_compile_evidence = "all three stable feature roots compile independently; cargo dependency trees for each contain neither legacy wgpu nor naga"
 required_proofs = [
   "explicit selection reports selected backend identity",

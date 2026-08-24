@@ -14,7 +14,7 @@ use bytemuck::Zeroable;
 use nuxie_render_api::{FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
 use smallvec::SmallVec;
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Contour {
     pub points: Vec<Vec2D>,
@@ -45,7 +45,7 @@ impl Clone for FillTessellation {
 
 pub(crate) struct StrokeTessellation {
     pub tessellation: FillTessellation,
-    #[cfg(any(feature = "rust-wgpu", test))]
+    #[cfg(test)]
     pub local_contour_ids_are_dense: bool,
 }
 
@@ -76,7 +76,7 @@ impl Clone for InteriorTessellation {
 }
 
 impl InteriorTessellation {
-    #[cfg(any(feature = "rust-wgpu", test))]
+    #[cfg(test)]
     pub(crate) fn visit_triangles(
         &self,
         path_id: u16,
@@ -161,7 +161,7 @@ pub(crate) struct StrokePreparationScratch {
 }
 
 impl StrokePreparationScratch {
-    #[cfg(any(feature = "rust-wgpu", test))]
+    #[cfg(test)]
     pub(crate) fn retained_capacity_bytes(&self) -> usize {
         let contour_bytes = self
             .contours
@@ -192,7 +192,7 @@ impl StrokePreparationScratch {
             )
     }
 
-    #[cfg(any(feature = "rust-wgpu", test))]
+    #[cfg(test)]
     pub(crate) fn reset_for_reuse(&mut self) {
         for contour in &mut self.contours {
             contour.curves.clear();
@@ -504,7 +504,7 @@ fn transformed_control_bounds(path: &RawPath, transform: Mat2D) -> Option<(Vec2D
     Some((min, max))
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 pub(crate) fn clockwise_atomic_coverage_range(
     path: &RawPath,
     transform: Mat2D,
@@ -516,7 +516,7 @@ pub(crate) fn clockwise_atomic_coverage_range(
     clockwise_atomic_coverage_range_from_bounds(bounds, viewport_width, viewport_height, offset)
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 pub(crate) fn clockwise_atomic_coverage_range_from_bounds(
     [left, top, right, bottom]: [i32; 4],
     viewport_width: u32,
@@ -691,7 +691,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     }
     let mut spans = Vec::new();
     let mut contour_data = Vec::with_capacity(contours.len());
-    #[cfg(any(feature = "rust-wgpu", test))]
+    #[cfg(test)]
     let mut local_contour_ids_are_dense = true;
     let mut location = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32;
     push_padding_span(&mut spans, 0, location);
@@ -705,7 +705,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
         if curves.is_empty() && !is_stroke {
             // There is a contour record but no span carrying this local ID.
             // Preserve the generic validation/fallback for this sparse layout.
-            #[cfg(any(feature = "rust-wgpu", test))]
+            #[cfg(test)]
             {
                 local_contour_ids_are_dense = false;
             }
@@ -873,7 +873,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
         } else {
             contour_midpoint(curves)
         };
-        #[cfg(any(feature = "rust-wgpu", test))]
+        #[cfg(test)]
         {
             local_contour_ids_are_dense &=
                 u32::try_from(contour_data.len() + 1).ok() == Some(contour_id);
@@ -920,7 +920,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
             base_instance: 1,
             instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
         },
-        #[cfg(any(feature = "rust-wgpu", test))]
+        #[cfg(test)]
         local_contour_ids_are_dense,
     })
 }
@@ -2014,7 +2014,7 @@ pub(crate) fn msaa_fill_requires_reverse(
     msaa_fill_requires_reverse_from_area(path_coarse_area(path), transform, fill_rule)
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 pub(crate) fn msaa_fill_requires_reverse_from_area(
     coarse_area: f32,
     transform: Mat2D,
@@ -2549,7 +2549,7 @@ fn push_forward_tessellation_spans(
     }
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 pub(crate) fn tessellation_texture_height(spans: &[TessVertexSpan]) -> u32 {
     spans.iter().map(|span| span.y as u32).max().unwrap_or(0) + 1
 }
@@ -2558,7 +2558,7 @@ fn align_up(value: i32, alignment: i32) -> i32 {
     ((value + alignment - 1) / alignment) * alignment
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 pub(crate) fn flatten_path(path: &RawPath, transform: Mat2D) -> Vec<Contour> {
     let mut contours = Vec::new();
     let mut contour = None::<Contour>;
@@ -2634,7 +2634,7 @@ pub(crate) fn flatten_path(path: &RawPath, transform: Mat2D) -> Vec<Contour> {
     contours
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 fn ensure_contour(contour: &mut Option<Contour>) -> &mut Contour {
     contour.get_or_insert_with(|| Contour {
         points: vec![Vec2D::new(0.0, 0.0)],
@@ -2642,7 +2642,7 @@ fn ensure_contour(contour: &mut Option<Contour>) -> &mut Contour {
     })
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 fn finish_contour(contours: &mut Vec<Contour>, contour: Option<Contour>) {
     if let Some(mut contour) = contour {
         contour.points.dedup_by(|a, b| same_point(*a, *b));
@@ -2666,7 +2666,7 @@ fn points_equal(a: Vec2D, b: Vec2D) -> bool {
     a.x == b.x && a.y == b.y
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 fn append_cubic(contour: &mut Contour, cubic: [Vec2D; 4]) {
     let segment_count = cubic_segment_count(cubic);
     for segment in 1..=segment_count {
@@ -2676,12 +2676,12 @@ fn append_cubic(contour: &mut Contour, cubic: [Vec2D; 4]) {
     }
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 pub(crate) fn cubic_segment_count(points: [Vec2D; 4]) -> u32 {
     cubic_segment_count_with_precision(points, PARAMETRIC_PRECISION as f32)
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 fn cubic_segment_count_with_precision(points: [Vec2D; 4], precision: f32) -> u32 {
     cubic_segment_count_with_precision_and_transform(points, precision, Mat2D::IDENTITY)
 }
@@ -2714,7 +2714,7 @@ fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D)
     )
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 pub(crate) fn triangulate_contour(points: &[Vec2D]) -> Option<Vec<u32>> {
     if points.len() < 3 {
         return None;
@@ -2763,7 +2763,7 @@ pub(crate) fn triangulate_contour(points: &[Vec2D]) -> Option<Vec<u32>> {
     Some(indices)
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 fn signed_area(points: &[Vec2D]) -> f32 {
     points
         .iter()
@@ -2773,12 +2773,12 @@ fn signed_area(points: &[Vec2D]) -> f32 {
         * 0.5
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 fn cross(a: Vec2D, b: Vec2D, c: Vec2D) -> f32 {
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
 }
 
-#[cfg(any(feature = "rust-wgpu", test))]
+#[cfg(test)]
 fn point_in_triangle(point: Vec2D, a: Vec2D, b: Vec2D, c: Vec2D, winding: f32) -> bool {
     cross(a, b, point) * winding >= 0.0
         && cross(b, c, point) * winding >= 0.0

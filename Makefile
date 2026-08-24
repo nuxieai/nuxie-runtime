@@ -1,10 +1,9 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-apple-passthrough-probe renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-metal-atomic-oracle-tracer renderer-native-metal-tracer-binary ore-metal-binding-witness ore-metal-authenticated-gpu-canvas renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate renderer-timing-gate renderer-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten wasm-perf wasm-perf-test browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks size-report parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check metal-assert-parity-check metal-port-progress metal-port-progress-check backend-port-source-inventory backend-port-source-inventory-check backend-port-ownership-inventory backend-port-ownership-inventory-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-metal-atomic-oracle-tracer renderer-native-metal-tracer-binary ore-metal-binding-witness ore-metal-authenticated-gpu-canvas renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check metal-assert-parity-check metal-port-progress metal-port-progress-check backend-port-source-inventory backend-port-source-inventory-check backend-port-ownership-inventory backend-port-ownership-inventory-check
 .PHONY: runtime-drift-queue runtime-drift-queue-test runtime-drift-queue-snapshot runtime-drift-queue-check
 .PHONY: backend-port-ownership-inventory backend-port-ownership-inventory-check backend-port-dependency-inventory backend-port-dependency-inventory-check backend-port-generated-inventory backend-port-generated-inventory-check backend-port-configuration-inventory backend-port-configuration-inventory-check backend-port-field-inventory backend-port-field-inventory-check backend-port-lifecycle-inventory backend-port-lifecycle-inventory-check backend-port-legacy-wgpu-inventory backend-port-legacy-wgpu-inventory-check backend-port-repeatability-inventory backend-port-repeatability-inventory-check backend-port-denominators-check backend-port-preparation-check backend-port-translation-check backend-port-source-review-admission backend-port-source-review-check backend-port-ownership-review-admission backend-port-ownership-review-check backend-port-shader-authority backend-port-shader-authority-check
 .PHONY: renderer-metal-msaa-contract renderer-metal-msaa-probe renderer-metal-cpp-parity renderer-metal-wgpu-diagnostic renderer-metal-wgpu-parity
 .PHONY: renderer-native-metal-replay
 .PHONY: renderer-native-metal-platform-matrix renderer-native-metal-v3 metal-test-census-check
-.PHONY: renderer-apple-msl-capture-check renderer-apple-msl-no-wgsl-probe renderer-apple-msl-replay
 .PHONY: parity-evidence-freshness parity-evidence-freshness-test parity-evidence-registry-check parity-evidence-freshness-report
 .PHONY: runtime-behavior-inventory runtime-behavior-inventory-test runtime-behavior-inventory-snapshot runtime-behavior-inventory-check
 
@@ -237,9 +236,8 @@ schema:
 # dependencies, so it reaches the workspace-excluded vendored wgpu packages.
 # Each of those manifests carries an empty `[workspace]` table so cargo stops
 # its workspace search at the package itself; without it, a git worktree rooted
-# inside the main checkout (`.claude/worktrees/<name>`) makes cargo walk up past
-# the worktree root into the parent checkout's `Cargo.toml` and reject the
-# workspace mismatch. See vendor/wgpu-30.0.0/NUXIE_PATCH.md.
+# Keep formatting rooted at the current workspace so linked worktrees use the
+# same manifest and toolchain configuration.
 fmt:
 	cargo fmt --all
 
@@ -256,12 +254,12 @@ crate-seams-baseline-check:
 
 crate-seams-browser-check:
 	RUSTC="$$(rustup which --toolchain stable rustc)" \
-		"$$(rustup which --toolchain stable cargo)" check \
-		-p browser-renderer-smoke --target wasm32-unknown-unknown --all-targets
+		"$$(rustup which --toolchain stable cargo)" check --locked \
+		-p webgl2-renderer-replay --target wasm32-unknown-unknown --all-targets
 
 crate-seams-apple-check:
 	tools/check-nux-capi-apple.sh
-	cargo check -p nuxie-size-report-roots --all-targets
+	cargo check --locked -p nuxie-renderer --no-default-features --features renderer-metal
 
 crate-seams-full-check:
 	cargo check --workspace
@@ -566,11 +564,7 @@ lint-gate:
 
 # --- Feature compile gate ---------------------------------------------------
 # Code behind a Cargo feature that no CI job builds does not compile in CI, and
-# a `#[cfg(feature = ...)]` module that nothing compiles rots silently. That is
-# how an earlier size-report root harness sat broken on main: the only
-# consumer is tools/size-report.sh, whose renderer root
-# inventory check runs (correctly) ahead of the fat-LTO build, so the compile
-# errors were never reached.
+# a `#[cfg(feature = ...)]` module that nothing compiles rots silently.
 #
 # This gate type-checks -- `cargo check`, no linking, no fixtures beyond the
 # pinned assets -- every first-party feature that no other CI job builds. New
@@ -589,11 +583,9 @@ feature-compile-gate-portable:
 		"nuxie-runtime --features threading" "cargo check -p nuxie-runtime --features threading --lib --test work_pool" \
 		"nuxie-runtime --features tools" "cargo check -p nuxie-runtime --features tools --lib --test cpp_probe" \
 		"nuxie-ore-metal --features tools" "cargo test -p nuxie-ore-metal --features tools --lib" \
-		"nuxie-renderer --features perf-diagnostics" "cargo check -p nuxie-renderer --features perf-diagnostics --lib" \
-		"nuxie-renderer --features perf-counters" "cargo check -p nuxie-renderer --features perf-counters --lib" \
 		"nuxie-runtime upstream microbenchmarks" "cargo check -p nuxie-runtime --features upstream-microbenchmarks --bench upstream_microbenchmarks" \
-		"nuxie-renderer upstream microbenchmarks" "cargo check -p nuxie-renderer --features upstream-microbenchmarks --bench upstream_microbenchmarks" \
-		"renderer-replay --features perf-diagnostics" "cargo check -p renderer-replay --features perf-diagnostics --bins" \
+		"nuxie-renderer exact Vulkan" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-vulkan" \
+		"nuxie-renderer exact WebGPU" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-webgpu" \
 		"rust-golden-runner --features coverage-trace" "cargo check -p rust-golden-runner --features coverage-trace --all-targets" \
 		"nuxie-scripting --no-default-features" "cargo check -p nuxie-scripting --no-default-features --lib" \
 		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib" \
@@ -602,11 +594,10 @@ feature-compile-gate-portable:
 
 feature-compile-gate-apple:
 	@tools/report-all.sh "feature-compile-gate (apple)" \
-		"nuxie-size-report-roots" "cargo check -p nuxie-size-report-roots --lib" \
 		"nuxie-audio --features audio-device" "cargo check -p nuxie-audio --features audio-device --all-targets" \
-		"nuxie --features apple-authored-msl" "cargo check -p nuxie --features apple-authored-msl --lib" \
-		"nuxie-renderer --features native-ore-metal-experimental" "cargo check -p nuxie-renderer --features native-ore-metal-experimental --lib" \
-		"nuxie --features ore-metal-authored-msl" "cargo check -p nuxie --no-default-features --features ore-metal-authored-msl --lib" \
+		"nuxie --features renderer-metal" "cargo check --locked -p nuxie --no-default-features --features renderer-metal --lib" \
+		"nuxie-renderer --features renderer-metal" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-metal --lib" \
+		"nux-capi --features apple-metal" "cargo check --locked -p nux-capi --no-default-features --features apple-metal" \
 		"Darwin renderer measurement seam" "$(MAKE) --no-print-directory crate-seams-apple-check"
 
 feature-compile-gate:
@@ -741,56 +732,9 @@ renderer-references:
 renderer-shaders-check:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/check-renderer-shaders.sh
 
-renderer-apple-passthrough-probe:
-	cargo test --locked -p nuxie-renderer --features apple-authored-msl --test apple_msl_passthrough -- --ignored --nocapture
-
-# This is intentionally a real-Metal gate rather than a cross-compile check:
-# it proves that wgpu can compile committed MSL without enabling either
-# wgpu's WGSL frontend or Naga's WGSL parser.
-renderer-apple-msl-no-wgsl-probe:
-	tools/apple-msl-no-wgsl-probe/check.sh
-
-# Reconstruct every eager Metal pipeline family, including the forced
-# vertex-storage polyfill, and compare its version-neutral inputs with the
-# committed catalog capture.
-renderer-apple-msl-capture-check:
-	NUXIE_APPLE_MSL_CAPTURE_DIR="$(CURDIR)/target/apple-msl-capture-check" cargo run --quiet --locked -p apple-msl-capture -- --check "$(CURDIR)" "$(CURDIR)/target/apple-msl-capture-check"
-
-# Compare a normal WGSL/Naga renderer with the same revision replaying the
-# committed catalog at wgpu-hal's exact Metal pipeline permutation seam.
-renderer-apple-msl-replay:
-	CARGO_TARGET_DIR="$(CURDIR)/target/apple-msl-wgsl" cargo build --quiet --locked -p renderer-replay
-	CARGO_TARGET_DIR="$(CURDIR)/target/apple-msl-replay" cargo build --quiet --locked -p renderer-replay --features apple-msl-replay
-	rm -f "$(CURDIR)/target/apple-msl-replay/hits.tsv"
-	NUXIE_APPLE_MSL_REPLAY_DIR="$(CURDIR)/crates/nuxie-renderer/apple-msl-catalog" NUXIE_APPLE_MSL_REPLAY_EVIDENCE="$(CURDIR)/target/apple-msl-replay/hits.tsv" cargo run --quiet --locked -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/apple-msl-replay/debug/renderer-replay" --backend rust-wgpu --reference-replay "$(CURDIR)/target/apple-msl-wgsl/debug/renderer-replay" --reference-backend rust-wgpu --output-dir "$(CURDIR)/target/apple-msl-replay/comparison" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --entry first-light-rectangle-msaa --entry first-light-triangle-clockwise-atomic --entry first-light-nested-clip-probe-clockwise-atomic --entry gm-CubicStroke-msaa --entry gm-CubicStroke-clockwise-atomic
-	NUXIE_APPLE_MSL_REPLAY_DIR="$(CURDIR)/crates/nuxie-renderer/apple-msl-catalog" NUXIE_APPLE_MSL_REPLAY_EVIDENCE="$(CURDIR)/target/apple-msl-replay/hits.tsv" cargo run --quiet --locked -p renderer-fuzz-replay -- --replay "$(CURDIR)/target/apple-msl-replay/debug/renderer-replay" --reference-replay "$(CURDIR)/target/apple-msl-wgsl/debug/renderer-replay" --output-dir "$(CURDIR)/target/apple-msl-replay/fuzz-msaa" --mode msaa
-	NUXIE_APPLE_MSL_REPLAY_DIR="$(CURDIR)/crates/nuxie-renderer/apple-msl-catalog" NUXIE_APPLE_MSL_REPLAY_EVIDENCE="$(CURDIR)/target/apple-msl-replay/hits.tsv" cargo run --quiet --locked -p renderer-fuzz-replay -- --replay "$(CURDIR)/target/apple-msl-replay/debug/renderer-replay" --reference-replay "$(CURDIR)/target/apple-msl-wgsl/debug/renderer-replay" --output-dir "$(CURDIR)/target/apple-msl-replay/fuzz-clockwise-atomic" --mode clockwise-atomic
-	@hits="$$(cut -f1 "$(CURDIR)/target/apple-msl-replay/hits.tsv" 2>/dev/null | sort -u | wc -l | tr -d ' ')"; test "$${hits:-0}" -ge 70 || { echo "Apple MSL replay covered only $${hits:-0} validated compiler keys; expected at least 70" >&2; exit 1; }; echo "validated Apple MSL replay keys: $$hits"
-
-# Exercise the focused invariants and transitive feature wiring across the
-# excluded, pinned wgpu packages. Their committed lockfiles keep this check
-# reproducible without mutating the vendored source directories.
-renderer-wgpu-backend-check:
-	CARGO_TARGET_DIR="$(CURDIR)/target" cargo check --locked --manifest-path vendor/wgpu-30.0.0/Cargo.toml --no-default-features --features std,metal,wgsl
-	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal coalescing
-	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal shader_translation
-	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal binding_slots
-	CARGO_TARGET_DIR="$(CURDIR)/target" cargo check --locked -p apple-msl-capture
-	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-core-30.0.0/Cargo.toml --lib command_buffer
-
-renderer-wgpu-consumer-check:
-	tools/check-renderer-wgpu-consumer.sh
-
 renderer-decoder-oracle:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/check-renderer-decoder-provenance.sh
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_INCREMENTAL=0 cargo test -p nuxie-renderer-ffi --features decode-oracle --test decode_oracle -- --nocapture
-
-renderer-fuzz-replay:
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(CURDIR)/target/renderer-ffi" cargo build --quiet -p renderer-replay --features ffi
-	cargo run --quiet -p renderer-fuzz-replay -- --replay "$(CURDIR)/target/renderer-ffi/debug/renderer-replay"
-
-renderer-golden: renderer-replay
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend rust-wgpu --jobs "$(RENDERER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
 
 # The same-runner gate deliberately keeps the live reference and candidate
 # builds separate. CI may restore only RENDERER_DAWN_LIVE_REFERENCE_REPLAY from
@@ -798,7 +742,7 @@ renderer-golden: renderer-replay
 # from HEAD. The historical RENDERER_DAWN_REFERENCE_REPLAY remains isolated for
 # the immutable renderer-port pixel oracle and is never relabeled as current-runtime output.
 renderer-rust-replay-release:
-	CARGO_TARGET_DIR="$(RENDERER_GOLDEN_TARGET_DIR)" cargo build --quiet --locked --release -p renderer-replay --bin renderer-replay
+	CARGO_TARGET_DIR="$(RENDERER_GOLDEN_TARGET_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features native-webgpu-exact --bin renderer-replay
 
 # Build the upstream archives and bind them to the exact source revision. The
 # stamp prevents a checkout change from silently reusing ABI-incompatible
@@ -813,7 +757,7 @@ renderer-metal-reference-bootstrap:
 	@{ printf 'runtime_revision=%s\n' "$(RIVE_RUNTIME_REF)"; shasum -a 256 $(RENDERER_METAL_ARCHIVE_PATHS); } > "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)"
 
 # Build a C++ native-Metal-only oracle replay. This deliberately disables the
-# default Rust-wgpu feature and does not compile the Dawn bridge.
+# exact WebGPU renderer and does not select a fallback backend.
 renderer-metal-reference-replay:
 	@test -f "$(RENDERER_METAL_UPSTREAM_STAMP)" || { echo "missing pinned upstream Metal archive stamp; run make renderer-metal-reference-bootstrap" >&2; exit 2; }
 	@test "$$(cat "$(RENDERER_METAL_UPSTREAM_STAMP)")" = "$(RIVE_RUNTIME_REF)" || { echo "stale upstream Metal archives; run make renderer-metal-reference-bootstrap" >&2; exit 2; }
@@ -834,10 +778,10 @@ renderer-metal-reference-check:
 	@if otool -L "$(RENDERER_METAL_REFERENCE_REPLAY)" | tail -n +2 | grep -Eiq 'dawn|webgpu'; then echo "C++ Metal reference replay unexpectedly requires a Dawn/WebGPU dynamic library" >&2; exit 2; fi
 
 # Compare the actual Rust Metal candidate against pinned C++ Metal, then run
-# the same candidate and stream against current Rust-wgpu as a diagnostic only.
+# the same candidate and stream against the exact WebGPU port as a diagnostic only.
 renderer-metal-oracle-tracers: renderer-native-metal-replay renderer-rust-replay-release renderer-metal-reference-check
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_TRACER_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_TRACER_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend "$(RENDERER_METAL_CANDIDATE_BACKEND)" --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-webgpu-exact --output-dir "$(RENDERER_METAL_WGPU_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" $(RENDERER_METAL_ORACLE_ENTRIES)
 
 # Purpose-built UNIV-2088 lane. Keep the established `rust-metal` corpus on
 # capability-driven selection; only these bounded tracers force generic atomics.
@@ -854,11 +798,11 @@ renderer-metal-cpp-parity: renderer-native-metal-replay renderer-metal-reference
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_CPP_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
 
 # Secondary backend differential. This never overrules the pinned C++ Metal
-# oracle: completed WGPU pixel differences are reported as diagnostics, while
+# oracle: completed WebGPU pixel differences are reported as diagnostics, while
 # replay crashes, timeouts, and malformed outputs still fail the command.
 renderer-metal-wgpu-diagnostic: renderer-native-metal-replay renderer-rust-replay-release
 	python3 tools/metal-port/derive_clockwise_atomic_manifest.py --input "$(RENDERER_CORPUS_MANIFEST)" --output "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --expected "$(RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS)"
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-wgpu --output-dir "$(RENDERER_METAL_WGPU_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --report-divergences
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-webgpu-exact --output-dir "$(RENDERER_METAL_WGPU_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --report-divergences
 
 # Compatibility spelling retained for existing local scripts. This target is
 # diagnostic; `renderer-metal-cpp-parity` is the authoritative gate.
@@ -913,41 +857,10 @@ renderer-dawn-live-reference-check:
 
 renderer-golden-same-runner: renderer-rust-replay-release renderer-dawn-live-reference-check
 	@actual_rows=$$(awk '$$0 == "[[entry]]" { count++ } END { print count + 0 }' "$(RENDERER_CORPUS_MANIFEST)"); test "$$actual_rows" = "$(RENDERER_CORPUS_EXPECTED_ROWS)" || { echo "renderer corpus row count drifted: expected $(RENDERER_CORPUS_EXPECTED_ROWS), got $$actual_rows" >&2; exit 2; }
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --backend rust-wgpu --reference-replay "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)" --reference-backend ffi-dawn --output-dir "$(RENDERER_SAME_RUNNER_OUTPUT_DIR)" --jobs "$(RENDERER_SAME_RUNNER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --backend rust-webgpu-exact --reference-replay "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)" --reference-backend ffi-dawn --output-dir "$(RENDERER_SAME_RUNNER_OUTPUT_DIR)" --jobs "$(RENDERER_SAME_RUNNER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
 
 renderer-stub-baseline: renderer-replay
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend stub --output-dir target/renderer-stub-corpus --jobs "$(RENDERER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --expect-all-fail
-
-renderer-perf-runners:
-	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_PERF_TARGET_DIR)" cargo build --release -p renderer-replay --features perf-dawn --bin renderer-perf-cpp-runner --bin renderer-perf-rust-runner
-
-renderer-perf: renderer-perf-runners
-	@test -n "$(strip $(RENDERER_PERF_BASELINE_SOURCE_ID))" || { echo "RENDERER_PERF_BASELINE_SOURCE_ID is required (identify the baseline source revision)" >&2; exit 2; }
-	@test -n "$(strip $(RENDERER_PERF_CANDIDATE_SOURCE_ID))" || { echo "RENDERER_PERF_CANDIDATE_SOURCE_ID is required (use a reconstructable base+dirty source digest)" >&2; exit 2; }
-	cargo run --quiet -p perf-compare --bin renderer-perf -- --manifest tools/perf-compare/renderer-scenes.toml --baseline-runner "$(RENDERER_PERF_CPP_RUNNER)" --candidate-runner "$(RENDERER_PERF_RUST_RUNNER)" --baseline-source-id "$(RENDERER_PERF_BASELINE_SOURCE_ID)" --candidate-source-id "$(RENDERER_PERF_CANDIDATE_SOURCE_ID)" --max-ratio "$(RENDERER_PERF_MAX_RATIO)" --json "$(RENDERER_PERF_JSON)" --markdown "$(RENDERER_PERF_MARKDOWN)"
-
-renderer-perf-parity-gate:
-	cargo run --quiet -p perf-compare --bin renderer-perf-parity-gate -- --report "$(RENDERER_PERF_PARITY_REPORT_1)" --report "$(RENDERER_PERF_PARITY_REPORT_2)" --report "$(RENDERER_PERF_PARITY_REPORT_3)" --report "$(RENDERER_PERF_PARITY_REPORT_4)" --report "$(RENDERER_PERF_PARITY_REPORT_5)" --max-ratio "$(RENDERER_PERF_PARITY_MAX_RATIO)" --json "$(RENDERER_PERF_PARITY_JSON)" --markdown "$(RENDERER_PERF_PARITY_MARKDOWN)"
-
-# Timing-defined renderer acceptance only. The gate invokes the fixed renderer-perf
-# executable with pinned baseline, A, and B runner paths; it never evaluates a
-# caller-provided shell command.
-renderer-timing-gate-tools:
-	cargo build --quiet --release -p perf-compare --bin renderer-perf --bin renderer-timing-compare
-
-renderer-timing-gate: renderer-timing-gate-tools
-	@test -n "$(strip $(RENDERER_TIMING_GATE_BASELINE_SOURCE_ID))" || { echo "RENDERER_TIMING_GATE_BASELINE_SOURCE_ID is required (identify the baseline source revision)" >&2; exit 2; }
-	@test -n "$(strip $(RENDERER_TIMING_GATE_A_SOURCE_ID))" || { echo "RENDERER_TIMING_GATE_A_SOURCE_ID is required (identify the A runner source)" >&2; exit 2; }
-	@test -n "$(strip $(RENDERER_TIMING_GATE_B_SOURCE_ID))" || { echo "RENDERER_TIMING_GATE_B_SOURCE_ID is required (identify the B runner source)" >&2; exit 2; }
-	tools/renderer-timing-gate.sh
-
-renderer-counter-runners:
-	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_COUNTER_TARGET_DIR)" cargo build --release -p renderer-replay --features perf-counters --bin renderer-perf-cpp-runner --bin renderer-perf-rust-runner
-
-perf-counter-compare: renderer-counter-runners
-	@test -n "$(strip $(RENDERER_COUNTER_BASELINE_SOURCE_ID))" || { echo "RENDERER_COUNTER_BASELINE_SOURCE_ID is required (identify the baseline source revision)" >&2; exit 2; }
-	@test -n "$(strip $(RENDERER_COUNTER_CANDIDATE_SOURCE_ID))" || { echo "RENDERER_COUNTER_CANDIDATE_SOURCE_ID is required (use a reconstructable base+dirty source digest)" >&2; exit 2; }
-	cargo run --quiet -p perf-compare --bin perf-counter-compare -- --manifest tools/perf-compare/renderer-scenes.toml --baseline-runner "$(RENDERER_COUNTER_CPP_RUNNER)" --candidate-runner "$(RENDERER_COUNTER_RUST_RUNNER)" --baseline-source-id "$(RENDERER_COUNTER_BASELINE_SOURCE_ID)" --candidate-source-id "$(RENDERER_COUNTER_CANDIDATE_SOURCE_ID)" --json "$(RENDERER_COUNTER_JSON)" --markdown "$(RENDERER_COUNTER_MARKDOWN)"
 
 perf-compare: CPP_CONFIG=release
 perf-compare: RUST_PROFILE=release
@@ -1005,35 +918,6 @@ perf-gate-tighten:
 	$(MAKE) perf-gate-measure PERF_GATE_REPORT="$(PERF_GATE_TIGHTEN_REPORT_3)"
 	python3 "$(PERF_GATE_TOOL)" tighten --manifest "$(PERF_GATE_MANIFEST)" --corpus "$(PERF_CORPUS)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --report "$(PERF_GATE_REPORT)" --report "$(PERF_GATE_TIGHTEN_REPORT_2)" --report "$(PERF_GATE_TIGHTEN_REPORT_3)"
 
-wasm-perf: RUST_PROFILE=release
-wasm-perf: rust-golden-runner
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" \
-	RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" \
-	WASM_PERF_LIMIT="$(WASM_PERF_LIMIT)" \
-	WASM_PERF_IDS="$(WASM_PERF_IDS)" \
-	WASM_PERF_REPEAT="$(WASM_PERF_REPEAT)" \
-	WASM_PERF_RUNS="$(WASM_PERF_RUNS)" \
-	WASM_PERF_WARMUPS="$(WASM_PERF_WARMUPS)" \
-	WASM_PERF_OUTPUT="$(WASM_PERF_OUTPUT)" \
-	WASM_PERF_MARKDOWN="$(WASM_PERF_MARKDOWN)" \
-	tools/browser-renderer-smoke/run-wasm-perf.sh
-
-wasm-perf-test:
-	cd tools/browser-renderer-smoke && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s . -p 'test_wasm_perf.py' -v
-	node --test tools/browser-renderer-smoke/wasm-perf-driver.test.cjs
-
-browser-renderer-build:
-	tools/browser-renderer-smoke/build.sh
-
-browser-renderer-smoke:
-	tools/browser-renderer-smoke/run.sh
-
-browser-renderer-gpu-smoke:
-	BROWSER_RENDERER_GPU_ONLY=1 tools/browser-renderer-smoke/run.sh
-
-browser-webgpu-only-check: browser-renderer-smoke browser-renderer-gpu-smoke
-	tools/check-browser-webgpu-only.sh
-
 capi-smoke: fixtures
 	cargo build --quiet -p nux-capi
 	mkdir -p target/capi-smoke
@@ -1085,14 +969,6 @@ nux-capi-distribution-plan:
 
 nux-capi-xcframeworks:
 	tools/build-nux-capi-xcframeworks.sh
-
-# SDK binary-size report: builds the post-Phase-R Darwin link closure with the
-# renderer retained, for scripting off and on. Pass SIZE_BASELINE=1 to also
-# build the opt-level=3 release closure. No budget is enforced until #B-3's
-# USER-GATE is decided. See docs/SIZE.md.
-SIZE_BASELINE ?=
-size-report:
-	tools/size-report.sh $(if $(SIZE_BASELINE),--baseline,)
 
 parity-scorecard-test:
 	@PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/parity-scorecard -p 'test_*.py' -v

@@ -1798,23 +1798,14 @@ class GateTests(unittest.TestCase):
         ):
             self.assertIn(pattern, patterns)
 
-    def test_renderer_embedded_shaders_are_hashed(self) -> None:
+    def test_renderer_generated_shader_inputs_are_hashed(self) -> None:
         repo_root = pathlib.Path(__file__).parents[2]
-        owner = "crates/nuxie-renderer/src/shader_catalog.rs"
-        records = behavior_inventory.rust_embedded_input_records(repo_root, owner)
+        owner = "crates/nuxie-renderer/build.rs"
+        records = behavior_inventory.rust_generator_input_records(repo_root, owner)
         recorded_paths = {record["path"] for record in records}
-        source = (repo_root / owner).read_text()
-        direct_includes = {
-            (repo_root / owner)
-            .parent.joinpath(relative)
-            .relative_to(repo_root)
-            .as_posix()
-            for relative in re.findall(r'include_str!\(\s*"([^"]+)"\s*\)', source, re.S)
-        }
-        self.assertTrue(direct_includes)
-        self.assertLessEqual(direct_includes, recorded_paths)
         self.assertIn(
-            "crates/nuxie-renderer/src/advanced_composite.wgsl", recorded_paths
+            "crates/nuxie-renderer/src/mechanical_port/shader-build-authority/source/renderer_src_shaders_advanced_blend_glsl__generated_input.source",
+            recorded_paths,
         )
 
     def test_embedded_input_hash_changes_without_rust_source_change(self) -> None:

@@ -12,7 +12,7 @@ use nuxie::{
     ColorInt, Factory, File, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
     GpuCanvasShaderStage, ImageDecodeError, PersistentFactory, RawPath, RecordingFactory,
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage,
-    RenderPaint, RenderPath, RenderShader, WgpuFactory,
+    RenderPaint, RenderPath, RenderShader,
 };
 use nuxie_schema::definition_by_name;
 
@@ -767,30 +767,6 @@ fn scripted_drawable_hydrates_authored_boolean_input_before_init() {
         .unwrap();
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     assert!(block_on(instance.mount_scripted_drawables_async(&mut factory)).unwrap());
-}
-
-#[test]
-fn imported_shader_and_script_render_real_gpu_pixels() {
-    let file = File::import_with_unsigned_scripts(&imported_file()).unwrap();
-    let artboard = file.default_artboard().expect("fixture artboard");
-    assert_eq!(artboard.dimensions(), Some((32.0, 24.0)));
-    let mut instance = artboard.instantiate().unwrap();
-    let Ok(factory) = WgpuFactory::new(32, 24) else {
-        eprintln!("GPU adapter unavailable; browser execution remains a separate proof");
-        return;
-    };
-    let mut factory = PersistentFactory::new(factory);
-    let mut frame = factory.borrow_mut().begin_frame(0xff00_0000);
-    instance.draw(&mut factory, &mut frame).unwrap();
-    let pixels = frame.finish().unwrap();
-    let red_pixels = pixels
-        .chunks_exact(4)
-        .filter(|pixel| *pixel == [255, 0, 0, 255])
-        .count();
-    assert!(
-        red_pixels > 300,
-        "imported ScriptedDrawable produced only {red_pixels} red pixels"
-    );
 }
 
 #[test]

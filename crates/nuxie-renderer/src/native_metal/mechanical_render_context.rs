@@ -1077,6 +1077,33 @@ impl MechanicalRenderContext {
         context.decodeImageHandle(bytes)
     }
 
+    /// Routes host-decoded premultiplied RGBA8 through the pinned Metal
+    /// `makeImageTexture` owner with the source default upload arguments.
+    pub(super) fn upload_rgba8_image_handle(
+        &mut self,
+        width: u32,
+        height: u32,
+        bytes: Arc<[u8]>,
+    ) -> Option<RiveRenderImageHandle> {
+        let implementation = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
+        let implementation_metal = unsafe { metal_impl_mut(implementation) };
+        let native = implementation_metal.metal.make_image_texture(
+            &mut implementation_metal.execution,
+            width,
+            height,
+            1,
+            bytes,
+            mechanical_metal::TextureFormat::rgba32,
+            1,
+            1,
+            false,
+            false,
+        )?;
+        let texture = unsafe { rcp::from_ptr(Box::into_raw(Box::new(native)).cast::<Texture>()) };
+        let image = make_rcp(|| unsafe { RiveRenderImage::new(texture) });
+        RiveRenderImageHandle::from_exact(image)
+    }
+
     pub(super) fn adopt_image_handle(
         &mut self,
         texture: Retained<ProtocolObject<dyn MTLTexture>>,
@@ -1358,6 +1385,10 @@ impl MechanicalRenderContext {
             .completion_slot
             .lock()
             .unwrap_or_else(|poison| poison.into_inner()) = Some(completion.clone());
+        let logical_flushes = context.m_logical_flushes.len();
+        unsafe { metal_impl_mut(context) }
+            .execution
+            .record_logical_flushes(logical_flushes);
         let flush_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
             context.flushExecutable(&resources)
         }));

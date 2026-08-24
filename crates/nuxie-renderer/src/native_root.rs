@@ -1,6 +1,5 @@
-// Native-only crate root. Keep this surface limited to source-mechanical CPU
-// support and the native Metal product graph; WebGPU/Naga are selected only
-// by the explicit `rust-wgpu` feature.
+// Shared exact-source crate root. Keep this surface limited to mechanically
+// translated source owners selected by explicit product renderer features.
 
 #[cfg(test)]
 pub(crate) fn live_metal_test_unavailable(context: &str) {
@@ -12,8 +11,6 @@ pub(crate) fn live_metal_test_unavailable(context: &str) {
 }
 
 mod draw;
-#[cfg(test)]
-mod feather_lut;
 mod gpu;
 mod gr_triangulator;
 #[allow(dead_code)]

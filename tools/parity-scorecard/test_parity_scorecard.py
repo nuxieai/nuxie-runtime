@@ -123,74 +123,33 @@ class ParityScorecardCliTests(unittest.TestCase):
         )
         self.assertIn("-- make cpp-oracle-workspace-tests", trusted_workflow)
 
-    def test_ci_records_static_renderer_floor_and_keeps_same_runner_separate(self):
+    def test_ci_defers_legacy_renderer_scorecard_and_keeps_exact_same_runner(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 
-        self.assertRegex(
-            workflow,
-            re.compile(
-                r"--gate renderer-golden[\s\\]+"
-                r"--output target/parity-scorecard/evidence/renderer-golden\.json[\s\\]+"
-                r"-- make renderer-golden(?:\s|$)"
-            ),
-        )
-        self.assertNotRegex(
-            workflow,
-            re.compile(
-                r"--gate renderer-golden[\s\S]{0,240}"
-                r"-- make renderer-golden-same-runner"
-            ),
-        )
+        self.assertIn("teambasis/universe#126", workflow)
+        self.assertNotIn("-- make renderer-golden", workflow)
         self.assertIn(
             "- name: Verify same-runner renderer pixels (non-scorecard)",
             workflow,
         )
 
-    def test_ci_records_webgpu_only_browser_gate_for_the_scorecard(self):
+    def test_ci_compiles_both_exact_browser_roots_without_legacy_smoke(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
         makefile = (REPO_ROOT / "Makefile").read_text()
-        check = (REPO_ROOT / "tools" / "check-browser-webgpu-only.sh").read_text()
 
-        self.assertRegex(
-            workflow,
-            re.compile(
-                r"--gate browser-webgpu-only[\s\\]+"
-                r"--output target/parity-scorecard/evidence/browser-webgpu-only\.json[\s\\]+"
-                r"-- make browser-webgpu-only-check(?:\s|$)"
-            ),
-        )
-        self.assertRegex(
-            makefile,
-            re.compile(
-                r"browser-webgpu-only-check:[^\n]*browser-renderer-smoke"
-                r"[^\n]*browser-renderer-gpu-smoke"
-            ),
-        )
-        self.assertIn("prohibited_pattern=", check)
+        self.assertIn("--features renderer-webgpu", workflow)
+        self.assertIn("-p webgl2-renderer-replay --target wasm32-unknown-unknown", workflow)
+        self.assertNotIn("browser-webgpu-only-check", makefile)
+        self.assertNotIn("tools/browser-renderer-smoke", workflow)
         self.assertIn("- browser-renderer", workflow)
 
-    def test_ci_runs_wasm_perf_contract_suites(self):
+    def test_ci_no_longer_names_the_deleted_wasm_perf_harness(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
         makefile = (REPO_ROOT / "Makefile").read_text()
 
-        self.assertRegex(
-            makefile,
-            re.compile(
-                r"wasm-perf-test:\n"
-                r"\tcd tools/browser-renderer-smoke && "
-                r"PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover "
-                r"-s \. -p 'test_wasm_perf\.py' -v\n"
-                r"\tnode --test tools/browser-renderer-smoke/"
-                r"wasm-perf-driver\.test\.cjs"
-            ),
-        )
-        self.assertRegex(
-            workflow,
-            re.compile(
-                r"- name: Verify Wasm performance harness contracts\n"
-                r"\s+run: make wasm-perf-test"
-            ),
-        )
+        self.assertNotIn("wasm-perf-test:", makefile)
+        self.assertNotIn("make wasm-perf-test", workflow)
+        self.assertNotIn("tools/browser-renderer-smoke", workflow)
 
     def test_same_runner_uses_current_runtime_without_relabeling_historical_oracle(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()

@@ -200,10 +200,11 @@ jobs:
   # The reusable trusted workflow owns the oracle floor (golden compare,
   # scripted golden, workspace tests, C ABI smoke) and records its own
   # scorecard evidence, so this job no longer re-runs that floor on a second
-  # hosted runner. It carries only the gates no other job covers: the
-  # Apple-target feature compile and the SDK size budget.
+  # hosted runner. During the exact-renderer cutover it carries only the
+  # Apple-target compile gates; legacy renderer size/probe CI is tracked in
+  # teambasis/universe#126.
   parity-runtime-evidence:
-    name: Apple compile and size evidence
+    name: Apple exact-renderer compile
     if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: macos-14
     # macOS timeouts on this and the jobs below are hang guards only, set at
@@ -232,58 +233,12 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make fixtures
 
-      # The Darwin size-report root harness compiles ONLY here and in
-      # tools/size-report.sh, whose inventory check runs before its fat-LTO
-      # build -- so before this gate existed, inventory drift kept the
-      # harness's compile errors permanently unreached. See
-      # feature-compile-gate in the Makefile.
       - name: Compile Apple-only feature-gated code
         working-directory: ${{ github.workspace }}/rive-rust
         run: make feature-compile-gate-apple crate-seams-apple-check
 
-      - name: Probe pinned wgpu MSL passthrough on Metal
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: make renderer-apple-passthrough-probe
-
-      - name: Install Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Record SDK size budget (#B-3, 9 MiB both variants)
-        if: always()
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          rustc="$(rustup which --toolchain "${RUSTUP_TOOLCHAIN}" rustc)"
-          host="$("${rustc}" -vV | sed -n 's/^host: //p')"
-          sysroot="$("${rustc}" --print sysroot)"
-          if [[ -z "${host}" ]]; then
-            echo "resolved stable rustc reported an empty host triple" >&2
-            exit 1
-          fi
-          llvm_nm="${sysroot}/lib/rustlib/${host}/bin/llvm-nm"
-          if [[ ! -x "${llvm_nm}" ]]; then
-            echo "rustc-matched llvm-nm is not executable: ${llvm_nm}" >&2
-            exit 1
-          fi
-          export RUSTC="${rustc}"
-          export LLVM_NM="${llvm_nm}"
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate size-report \
-            --output target/parity-scorecard/evidence/size-report.json \
-            -- make size-report
-
-      - name: Upload runtime scorecard evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-scorecard-evidence-runtime-${{ github.run_attempt }}
-          path: rive-rust/target/parity-scorecard/evidence/*.json
-          if-no-files-found: warn
-          retention-days: 7
-
   browser-renderer:
-    name: Browser WebGPU
+    name: Browser exact-renderer compile
     if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: macos-14
     timeout-minutes: 60
@@ -296,9 +251,6 @@ jobs:
     steps:
       - name: Checkout rive-rust
         uses: actions/checkout@v4
-
-      - name: Verify Wasm performance harness contracts
-        run: make wasm-perf-test
 
       - name: Install Rust stable with wasm target
         run: |
@@ -316,23 +268,12 @@ jobs:
       - name: Compile the browser adapter seam
         run: make crate-seams-browser-check
 
-      - name: Record WebGPU-only browser support gate
-        env:
-          BROWSER_RENDERER_BROWSER: chrome
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate browser-webgpu-only \
-            --output target/parity-scorecard/evidence/browser-webgpu-only.json \
-            -- make browser-webgpu-only-check
 
-      - name: Upload browser scorecard evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-scorecard-evidence-browser-${{ github.run_attempt }}
-          path: target/parity-scorecard/evidence/browser-webgpu-only.json
-          if-no-files-found: warn
-          retention-days: 7
+      - name: Compile exact WebGPU source root
+        run: cargo check --locked -p nuxie-renderer --no-default-features --features renderer-webgpu
+
+      - name: Compile exact WebGL2 browser artifact
+        run: cargo check --locked -p webgl2-renderer-replay --target wasm32-unknown-unknown
 
   # Manual closeout lane for the exact browser ports. The Wasm source and
   # candidate products are built once from their frozen source/toolchain pins,
@@ -530,11 +471,10 @@ jobs:
           retention-days: 30
 
   renderer-golden:
-    name: Renderer pixel golden
-    # Push-only: a warm pass is ~90 minutes, far too slow for PR latency. PRs
-    # run this locally (make renderer-golden) or catch it on the merge's push
-    # run.
-    if: ${{ inputs.backend_port_browser_closeout != true && github.event_name != 'pull_request' }}
+    name: Renderer pixel golden (deferred)
+    # The former WGPU-era renderer job is deliberately dormant while the exact
+    # renderer CI contract is redesigned in teambasis/universe#126.
+    if: ${{ false }}
     runs-on: macos-14
     # Worst observed pass is ~90 minutes with warm Dawn caches; a cold Dawn
     # bootstrap builds from depot_tools and needs the extra headroom.
@@ -626,21 +566,6 @@ jobs:
           RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime-shaders
         run: make renderer-shaders-check
 
-      - name: Verify vendored wgpu backend and downstream graph
-        run: make renderer-wgpu-backend-check renderer-wgpu-consumer-check
-
-      - name: Execute committed Apple MSL without WGSL input support
-        if: ${{ !cancelled() }}
-        run: make renderer-apple-msl-no-wgsl-probe
-
-      - name: Compare live Metal pipeline inputs with committed catalog
-        if: ${{ !cancelled() }}
-        run: make renderer-apple-msl-capture-check
-
-      - name: Compare committed Apple MSL with live WGSL renderer output
-        if: ${{ !cancelled() }}
-        run: make renderer-apple-msl-replay
-
       - name: Build reference runtime and renderer for dual fuzz replay
         working-directory: ${{ env.RIVE_RUNTIME_DIR }}
         run: |
@@ -730,24 +655,6 @@ jobs:
           file target/renderer-dawn-live-reference/renderer-replay
           shasum -a 256 target/renderer-dawn-live-reference/renderer-replay
 
-      - name: Verify dual fuzz replay and renderer stub baseline
-        env:
-          RENDERER_JOBS: 4
-          RENDERER_REPLAY_TIMEOUT_SECONDS: 60
-        run: |
-          make renderer-fuzz-replay
-          make renderer-stub-baseline
-
-      - name: Record static renderer golden floor
-        env:
-          RENDERER_JOBS: 4
-          RENDERER_REPLAY_TIMEOUT_SECONDS: 60
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate renderer-golden \
-            --output target/parity-scorecard/evidence/renderer-golden.json \
-            -- make renderer-golden
-
       - name: Verify same-runner renderer pixels (non-scorecard)
         env:
           # Serialize the C++ Dawn oracle to avoid concurrent GPU replays
@@ -756,15 +663,6 @@ jobs:
           RENDERER_SAME_RUNNER_JOBS: 1
           RENDERER_REPLAY_TIMEOUT_SECONDS: 60
         run: make renderer-golden-same-runner
-
-      - name: Upload renderer scorecard evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-scorecard-evidence-renderer-${{ github.run_attempt }}
-          path: target/parity-scorecard/evidence/*.json
-          if-no-files-found: warn
-          retention-days: 7
 
       - name: Upload same-runner corpus failure artifacts
         if: failure()
@@ -829,7 +727,10 @@ jobs:
     name: Five-tier parity scorecard
     # Push-only alongside the heavy evidence jobs it aggregates; on PRs the
     # golden/renderer/perf evidence deliberately does not exist.
-    if: ${{ always() && inputs.backend_port_browser_closeout != true && github.event_name != 'pull_request' }}
+    # Legacy renderer/size evidence producers were retired with Rust-WGPU.
+    # Re-enable the aggregate only after teambasis/universe#126 defines the
+    # exact-renderer evidence set.
+    if: ${{ false }}
     needs:
       # trusted-macos-ci uploads the oracle floor and C ABI evidence.
       - trusted-macos-ci

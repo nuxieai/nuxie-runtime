@@ -89,7 +89,20 @@ unsafe fn assert_result(result: *mut NuxCapiResult, expected: NuxStatus) {
         unsafe { nux_capi_result_status(result, &raw mut status) },
         NuxStatus::Ok
     );
-    assert_eq!(status, expected);
+    let mut diagnostic = NuxCapiDiagnosticView::default();
+    assert_eq!(
+        unsafe { nux_capi_result_diagnostic(result, &raw mut diagnostic) },
+        NuxStatus::Ok
+    );
+    let message = if diagnostic.message.data.is_null() {
+        String::new()
+    } else {
+        let bytes = unsafe {
+            std::slice::from_raw_parts(diagnostic.message.data.cast::<u8>(), diagnostic.message.len)
+        };
+        String::from_utf8_lossy(bytes).into_owned()
+    };
+    assert_eq!(status, expected, "C API diagnostic: {message}");
     assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
 }
 
@@ -224,6 +237,9 @@ unsafe fn render(
             &raw mut result,
         )
     };
+    if status != expected {
+        unsafe { assert_result(result, expected) };
+    }
     assert_eq!(status, expected);
     if expected == NuxStatus::Ok {
         // The per-frame result slot is failure-only and allocation-free.

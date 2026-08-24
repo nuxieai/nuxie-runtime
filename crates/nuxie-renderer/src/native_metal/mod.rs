@@ -1,8 +1,7 @@
-//! Experimental native Metal renderer adapter.
+//! Exact native Metal renderer product adapter.
 //!
-//! The Apple product does not select this adapter until UNIV-2092. The module
-//! begins as the UNIV-2086 tracer and grows by mechanically porting the pinned
-//! upstream Metal implementation behind the existing renderer seam.
+//! This module is the Apple product renderer selected by `nuxie-renderer` and
+//! mechanically preserves the pinned upstream Metal implementation.
 
 #[cfg(test)]
 #[allow(dead_code)]
@@ -78,8 +77,6 @@ mod upload_buffer_ring;
 #[cfg(any())]
 use super::gpu;
 use super::{BackendWorkMetrics, RenderMode, RendererError};
-#[cfg(test)]
-use super::{LogicalPaint, LogicalPath};
 use crate::mechanical_port::source::include::rive::renderer_hpp::RendererContract;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RiveRenderBufferHandle;
@@ -99,8 +96,6 @@ use nuxie_render_api::{
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
     RenderShader, Renderer,
 };
-#[cfg(test)]
-use nuxie_render_api::{PathVerb, RenderPaintStyle, Vec2D};
 use objc2::runtime::{AnyObject, ProtocolObject};
 #[cfg(test)]
 use objc2::msg_send;
@@ -127,7 +122,6 @@ use std::ffi::c_void;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::rc::Rc;
-#[cfg(test)]
 use std::sync::Arc;
 
 pub use drawable::NativeMetalDrawableFrame;
@@ -224,6 +218,10 @@ pub struct NativeMetalFrameOutput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NativeMetalExecutionInventory {
     pub mode: RenderMode,
+    /// Physical Metal draw selectors submitted by the exact source renderer.
+    pub draw_calls: usize,
+    /// Logical flushes executed by the exact source RenderContext.
+    pub logical_flushes: usize,
     pub color_ramp_pipeline: bool,
     pub gradient_texture: bool,
     /// Fixed-function atomic SrcOver does not use the offscreen color plane.
@@ -267,6 +265,8 @@ impl NativeMetalExecutionInventory {
     fn from_execution(mode: RenderMode, metrics: ActualMetalExecutionInventory) -> Self {
         Self {
             mode,
+            draw_calls: metrics.draw_calls,
+            logical_flushes: metrics.logical_flushes,
             color_ramp_pipeline: metrics.color_ramp_draw_calls > 0,
             gradient_texture: metrics.gradient_texture_binds > 0,
             atomic_color_plane: metrics.atomic_color_plane_draw_calls > 0,
@@ -542,6 +542,52 @@ impl NativeMetalFactory {
             .map(|image| Box::new(image) as Box<dyn RenderImage>)
     }
 
+    /// Uploads tightly packed, premultiplied RGBA8 through the exact pinned
+    /// Metal image-texture constructor used by `RenderContextMetal`.
+    pub fn upload_rgba8_premul_srgb(
+        &self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, RendererError> {
+        validate_extent(width, height, self.source_capabilities().max_texture_size)?;
+        let expected_row_bytes = width.checked_mul(4).ok_or_else(|| {
+            RendererError::InvalidImageUpload("RGBA8 row byte count overflow".into())
+        })?;
+        if row_bytes != expected_row_bytes {
+            return Err(RendererError::InvalidImageUpload(format!(
+                "RGBA8 row_bytes is {row_bytes}, expected {expected_row_bytes}"
+            )));
+        }
+        let expected_len = usize::try_from(row_bytes)
+            .ok()
+            .and_then(|row| row.checked_mul(height as usize))
+            .ok_or_else(|| {
+                RendererError::InvalidImageUpload("RGBA8 image byte count overflow".into())
+            })?;
+        if pixels.len() != expected_len {
+            return Err(RendererError::InvalidImageUpload(format!(
+                "RGBA8 upload contains {} bytes, expected {expected_len}",
+                pixels.len()
+            )));
+        }
+        let mechanical = self.mechanical_context()?;
+        let domain = mechanical.borrow().resource_domain();
+        let image = mechanical
+            .borrow_mut()
+            .upload_rgba8_image_handle(width, height, Arc::from(pixels))
+            .ok_or_else(|| {
+                RendererError::InvalidImageUpload(
+                    "pinned Metal image-texture construction failed".into(),
+                )
+            })?;
+        Ok(Box::new(image.with_execution_domain(
+            domain,
+            Rc::clone(&mechanical) as Rc<dyn Any>,
+        )))
+    }
+
     /// Creates a private texture shared by a render-target owner and a
     /// sampleable-image owner, matching the pinned Metal RenderCanvas factory.
     #[cfg(feature = "native-ore-metal-experimental")]
@@ -590,18 +636,18 @@ impl NativeMetalFactory {
     ) -> Result<NativeMetalDrawableFrame<'a>, RendererError> {
         let (expected_width, expected_height) = self.dimensions();
         if texture.pixelFormat() != MTLPixelFormat::BGRA8Unorm {
-            return Err(RendererError::NativeMetal(
+            return Err(RendererError::InvalidDrawable(
                 "drawable texture is not BGRA8Unorm".into(),
             ));
         }
         let texture_device = texture.device();
         if Retained::as_ptr(&texture_device) != Retained::as_ptr(&self.device) {
-            return Err(RendererError::NativeMetal(
+            return Err(RendererError::InvalidDrawable(
                 "drawable texture belongs to a different MTLDevice".into(),
             ));
         }
         if texture.width() as u32 != expected_width || texture.height() as u32 != expected_height {
-            return Err(RendererError::NativeMetal(format!(
+            return Err(RendererError::InvalidDrawable(format!(
                 "drawable texture is {}x{}, expected {}x{}",
                 texture.width(),
                 texture.height(),
@@ -1702,14 +1748,19 @@ impl NativeMetalFrame {
     pub(super) fn finish_present(
         &mut self,
         drawable: &ProtocolObject<dyn objc2_metal::MTLDrawable>,
-    ) -> Result<(), RendererError> {
+    ) -> Result<NativeMetalExecutionInventory, RendererError> {
+        let source_mode = self.mechanical.borrow().mode();
         let completion = self.mechanical.borrow_mut().finish_present(
             self.frame_number,
             self.frame_number,
             drawable,
         )?;
         completion.wait()?;
-        Ok(())
+        let source_metrics = self.mechanical.borrow().execution_inventory();
+        Ok(NativeMetalExecutionInventory::from_execution(
+            source_mode,
+            source_metrics,
+        ))
     }
 }
 
@@ -2696,62 +2747,6 @@ fn select_native_metal_mode(
 }
 
 #[cfg(test)]
-fn solid_triangle_fan(path: &LogicalPath, transform: Mat2D) -> Option<Vec<[f32; 2]>> {
-    let verbs = path.raw_path.verbs();
-    let line_count = verbs.iter().filter(|verb| **verb == PathVerb::Line).count();
-    let point_count = path.raw_path.points().len();
-    if verbs.first() != Some(&PathVerb::Move)
-        || verbs.last() != Some(&PathVerb::Close)
-        || line_count + 2 != verbs.len()
-        || point_count != line_count + 1
-    {
-        return None;
-    }
-    let vertex_count = inline_triangle_fan_vertex_count(point_count)?;
-    if !fill_rule_accepts_source_winding(path.fill_rule, path.raw_path.points()) {
-        return None;
-    }
-    let points: Vec<[f32; 2]> = path
-        .raw_path
-        .points()
-        .iter()
-        .map(|point| {
-            let point = transform.transform_point(*point);
-            [point.x, point.y]
-        })
-        .collect();
-    if !is_convex_finite_polygon(&points) || !is_pixel_aligned_axis_aligned_rectangle(&points) {
-        return None;
-    }
-    let mut vertices = Vec::with_capacity(vertex_count);
-    for index in 1..points.len() - 1 {
-        vertices.extend([points[0], points[index], points[index + 1]]);
-    }
-    Some(vertices)
-}
-
-#[cfg(test)]
-fn fill_rule_accepts_source_winding(fill_rule: FillRule, points: &[Vec2D]) -> bool {
-    if fill_rule != FillRule::Clockwise {
-        return true;
-    }
-    let Some(origin) = points.first() else {
-        return false;
-    };
-    let doubled_area = points[1..]
-        .windows(2)
-        .map(|edge| {
-            let ax = f64::from(edge[0].x) - f64::from(origin.x);
-            let ay = f64::from(edge[0].y) - f64::from(origin.y);
-            let bx = f64::from(edge[1].x) - f64::from(origin.x);
-            let by = f64::from(edge[1].y) - f64::from(origin.y);
-            ax * by - bx * ay
-        })
-        .sum::<f64>();
-    doubled_area > 0.0
-}
-
-#[cfg(test)]
 fn is_pixel_aligned_axis_aligned_rectangle(points: &[[f32; 2]]) -> bool {
     if points.len() != 4
         || points
@@ -3329,46 +3324,6 @@ mod tests {
     }
 
     #[test]
-    fn clockwise_fill_checks_source_winding_but_accepts_reflected_draws() {
-        let make_path = |points: &[[f32; 2]], fill_rule| {
-            let mut raw_path = RawPath::new();
-            raw_path.move_to(points[0][0], points[0][1]);
-            for point in &points[1..] {
-                raw_path.line_to(point[0], point[1]);
-            }
-            raw_path.close();
-            LogicalPath {
-                raw_path: Arc::new(raw_path),
-                fill_rule,
-                valid: true,
-            }
-        };
-        let clockwise = make_path(
-            &[[8.0, 8.0], [56.0, 8.0], [56.0, 56.0], [8.0, 56.0]],
-            FillRule::Clockwise,
-        );
-        let counterclockwise = make_path(
-            &[[8.0, 56.0], [56.0, 56.0], [56.0, 8.0], [8.0, 8.0]],
-            FillRule::Clockwise,
-        );
-        let translated_unit = make_path(
-            &[
-                [4096.0, 4096.0],
-                [4097.0, 4096.0],
-                [4097.0, 4097.0],
-                [4096.0, 4097.0],
-            ],
-            FillRule::Clockwise,
-        );
-        let reflected = Mat2D([-1.0, 0.0, 0.0, 1.0, 64.0, 0.0]);
-
-        assert!(solid_triangle_fan(&clockwise, Mat2D::IDENTITY).is_some());
-        assert!(solid_triangle_fan(&clockwise, reflected).is_some());
-        assert!(solid_triangle_fan(&translated_unit, Mat2D::IDENTITY).is_some());
-        assert!(solid_triangle_fan(&counterclockwise, Mat2D::IDENTITY).is_none());
-    }
-
-    #[test]
     fn extent_validation_reports_the_selected_device_limit() {
         assert!(validate_extent(8_192, 8_192, 8_192).is_ok());
         assert!(matches!(
@@ -3378,43 +3333,6 @@ mod tests {
                 ..
             })
         ));
-    }
-
-    #[test]
-    fn admitted_atlas_fixture_has_pinned_cpp_extent_and_threshold() {
-        let mut path = RawPath::new();
-        path.move_to(16.0, 16.0);
-        path.line_to(48.0, 16.0);
-        path.line_to(48.0, 48.0);
-        path.line_to(16.0, 48.0);
-        path.close();
-        let paint = LogicalPaint {
-            style: RenderPaintStyle::Stroke,
-            thickness: 8.0,
-            feather: 24.0,
-            ..LogicalPaint::default()
-        };
-
-        assert!(crate::draw::feather_requires_atlas(
-            paint.feather,
-            Mat2D::IDENTITY,
-            false
-        ));
-        let placement = crate::feather_atlas_placement(
-            &path,
-            Mat2D::IDENTITY,
-            paint.feather,
-            paint.effective_stroke(),
-            64,
-            64,
-        )
-        .expect("atlas-selected fixture has a visible placement");
-        assert_eq!(placement.bounds, [0.0, 0.0, 64.0, 64.0]);
-        assert_eq!([placement.width, placement.height], [33, 33]);
-        assert_eq!(
-            crate::cpp_webgpu_atlas_physical_size([33, 33], [64, 64], 16_384),
-            [41, 41]
-        );
     }
 
     #[test]

@@ -5,8 +5,7 @@ edition = "2021"
 license = "MIT"
 
 [features]
-default = ["rust-wgpu"]
-rust-wgpu = ["dep:nuxie-renderer", "nuxie-renderer/rust-wgpu"]
+default = []
 native-metal = [
   "dep:nuxie-render-api",
   "dep:nuxie-renderer",
@@ -14,7 +13,7 @@ native-metal = [
   "dep:objc2-core-foundation",
   "dep:objc2-metal",
   "dep:objc2-quartz-core",
-  "nuxie-renderer/native-metal-experimental",
+  "nuxie-renderer/renderer-metal",
   "nuxie-renderer/rive-decoders",
 ]
 native-ore-metal = [
@@ -23,6 +22,7 @@ native-ore-metal = [
 ]
 native-vulkan-exact = [
   "dep:nuxie-renderer",
+  "nuxie-renderer/renderer-vulkan",
   "nuxie-renderer/native-ore-vulkan-experimental",
   "nuxie-renderer/rive-decoders",
 ]
@@ -33,22 +33,14 @@ native-webgpu-exact = [
 ]
 webgpu-exact = [
   "dep:nuxie-renderer",
-  "nuxie-renderer/native-webgpu-experimental",
+  "nuxie-renderer/renderer-webgpu",
   "nuxie-renderer/rive-decoders",
 ]
 browser-webgpu-exact = ["webgpu-exact"]
-apple-msl-replay = ["rust-wgpu", "nuxie-renderer/apple-msl-replay"]
 ffi = ["dep:nuxie-renderer-ffi"]
 perf-dawn = ["ffi", "nuxie-renderer-ffi/dawn"]
 ffi-vulkan = ["ffi", "nuxie-renderer-ffi/vulkan"]
 ffi-webgl2 = ["ffi", "nuxie-renderer-ffi/webgl2"]
-perf-diagnostics = ["rust-wgpu", "nuxie-renderer/perf-diagnostics"]
-perf-counters = [
-  "perf-dawn",
-  "rust-wgpu",
-  "nuxie-renderer/perf-counters",
-  "nuxie-renderer-ffi/perf-counters",
-]
 
 [dependencies]
 nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }
@@ -69,13 +61,3 @@ objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["
 name = "native-metal-product-root"
 path = "src/bin/native-metal-product-root.rs"
 required-features = ["native-metal", "native-ore-metal"]
-
-[[bin]]
-name = "renderer-perf-rust-runner"
-path = "src/bin/renderer-perf-rust-runner.rs"
-required-features = ["ffi", "rust-wgpu"]
-
-[[bin]]
-name = "renderer-perf-cpp-runner"
-path = "src/bin/renderer-perf-cpp-runner.rs"
-required-features = ["perf-dawn", "rust-wgpu"]

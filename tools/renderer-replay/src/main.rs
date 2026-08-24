@@ -14,6 +14,7 @@ struct Options {
     #[cfg_attr(
         not(any(
             feature = "rust-wgpu",
+            feature = "native-vulkan-exact",
             all(feature = "native-metal", target_os = "macos"),
             all(feature = "ffi", target_os = "macos")
         )),
@@ -36,6 +37,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         "stub" => (clear_pixels(width, height, clear), None),
         #[cfg(feature = "rust-wgpu")]
         "rust-wgpu" => replay_wgpu(&stream, options.frame, width, height, clear, &options.mode)?,
+        #[cfg(feature = "native-vulkan-exact")]
+        "rust-vulkan-exact" => {
+            replay_native_vulkan(&stream, options.frame, width, height, clear, &options.mode)?
+        }
         #[cfg(all(feature = "native-metal", target_os = "macos"))]
         "rust-metal" => replay_native_metal(&stream, options.frame, width, height, clear)?,
         #[cfg(all(feature = "native-metal", target_os = "macos"))]
@@ -58,9 +63,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         backend => {
             return Err(format!(
-                "backend `{backend}` is unavailable; use `stub`{}{}{}{}{}{}",
+                "backend `{backend}` is unavailable; use `stub`{}{}{}{}{}{}{}",
                 if cfg!(feature = "rust-wgpu") {
                     " or `rust-wgpu`"
+                } else {
+                    ""
+                },
+                if cfg!(feature = "native-vulkan-exact") {
+                    " or `rust-vulkan-exact`"
                 } else {
                     ""
                 },
@@ -106,6 +116,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         options.output.display()
     );
     Ok(())
+}
+
+#[cfg(feature = "native-vulkan-exact")]
+fn replay_native_vulkan(
+    stream: &RenderStream,
+    frame_index: usize,
+    width: u32,
+    height: u32,
+    clear: u32,
+    mode: &str,
+) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
+    let mode = match mode {
+        "msaa" => nuxie_renderer::RenderMode::Msaa,
+        "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
+        value => return Err(format!("unsupported exact Vulkan mode `{value}`").into()),
+    };
+    let mut factory = nuxie_renderer::NativeVulkanFactory::new(width, height)?;
+    let adapter = factory.adapter_name().to_owned();
+    let mut frame = factory.begin_frame(clear, mode)?;
+    stream.replay_frame(frame_index, &mut factory, &mut frame)?;
+    Ok((frame.finish()?, Some(adapter)))
 }
 
 fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
@@ -354,7 +385,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-wgpu|rust-vulkan-exact|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]

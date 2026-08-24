@@ -21,6 +21,10 @@ native-ore-metal = [
   "native-metal",
   "nuxie-renderer/native-ore-metal-experimental",
 ]
+native-vulkan-exact = [
+  "dep:nuxie-renderer",
+  "nuxie-renderer/native-ore-vulkan-experimental",
+]
 apple-msl-replay = ["rust-wgpu", "nuxie-renderer/apple-msl-replay"]
 ffi = ["dep:nuxie-renderer-ffi"]
 perf-dawn = ["ffi", "nuxie-renderer-ffi/dawn"]

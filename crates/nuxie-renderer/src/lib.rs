@@ -10,6 +10,10 @@ pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};
     feature = "native-webgpu-experimental"
 ))]
 mod exact_source_adapter;
+#[cfg(feature = "native-vulkan-experimental")]
+mod native_vulkan;
+#[cfg(feature = "native-vulkan-experimental")]
+pub use native_vulkan::{NativeVulkanFactory, NativeVulkanFrame};
 mod tessellation_relocation;
 pub(crate) use tessellation_relocation::relocate_tessellation_logically;
 #[cfg(test)]

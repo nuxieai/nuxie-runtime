@@ -295,8 +295,11 @@ pub(crate) mod vulkan {
     mod vulkan_shaders_decl;
     #[path = "renderer_src_vulkan_vulkan_shaders_cpp__impl.rs"]
     mod vulkan_shaders_impl;
+    #[path = "product_root.rs"]
+    mod product_root;
 
     pub(crate) use ore_context_vulkan_decl::ContextVulkan;
+    pub(crate) use product_root::VulkanProductBackend;
 }
 
 pub(crate) mod source {

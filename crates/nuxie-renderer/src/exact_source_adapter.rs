@@ -158,6 +158,12 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
         self.backend.borrow_mut().resize(width, height)
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_backend_mut_for_test(&self, callback: impl FnOnce(&mut B)) {
+        let mut backend = self.backend.borrow_mut();
+        callback(&mut backend);
+    }
+
     fn execution_anchor(&self) -> Rc<dyn Any> {
         Rc::clone(&self.backend) as Rc<dyn Any>
     }
@@ -272,7 +278,7 @@ pub(crate) struct ExactSourceFrameCore<B: ExactSourceBackend> {
 impl<B: ExactSourceBackend> ExactSourceFrameCore<B> {
     pub(crate) fn finish(mut self) -> Result<Vec<u8>, RendererError> {
         let result = self.backend.borrow_mut().finish_frame(self.frame_number);
-        self.finished = true;
+        self.finished = result.is_ok();
         result
     }
 
@@ -281,7 +287,7 @@ impl<B: ExactSourceBackend> ExactSourceFrameCore<B> {
             .backend
             .borrow_mut()
             .finish_frame_without_readback(self.frame_number);
-        self.finished = true;
+        self.finished = result.is_ok();
         result
     }
 }

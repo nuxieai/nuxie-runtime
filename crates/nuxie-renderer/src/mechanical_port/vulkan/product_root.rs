@@ -39,6 +39,51 @@ struct TargetResources {
     fence: vk::Fence,
 }
 
+impl TargetResources {
+    fn empty() -> Self {
+        Self {
+            image: vk::Image::null(),
+            image_memory: vk::DeviceMemory::null(),
+            image_view: vk::ImageView::null(),
+            readback: vk::Buffer::null(),
+            readback_memory: vk::DeviceMemory::null(),
+            command_pool: vk::CommandPool::null(),
+            command_buffer: vk::CommandBuffer::null(),
+            fence: vk::Fence::null(),
+        }
+    }
+}
+
+struct TargetResourcesGuard<'a> {
+    device: &'a ash::Device,
+    resources: TargetResources,
+    armed: bool,
+}
+
+impl<'a> TargetResourcesGuard<'a> {
+    fn new(device: &'a ash::Device) -> Self {
+        Self {
+            device,
+            resources: TargetResources::empty(),
+            armed: true,
+        }
+    }
+
+    fn finish(mut self) -> TargetResources {
+        let resources = std::mem::replace(&mut self.resources, TargetResources::empty());
+        self.armed = false;
+        resources
+    }
+}
+
+impl Drop for TargetResourcesGuard<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            unsafe { destroy_target_resources(self.device, &self.resources) };
+        }
+    }
+}
+
 pub(crate) struct VulkanProductBackend {
     entry: ash::Entry,
     instance: ash::Instance,
@@ -53,6 +98,9 @@ pub(crate) struct VulkanProductBackend {
     height: u32,
     frame_number: u64,
     active_frame: bool,
+    frame_recovery_error: Option<String>,
+    #[cfg(test)]
+    fail_next_finish: bool,
     adapter_name: String,
 }
 
@@ -128,12 +176,20 @@ impl VulkanProductBackend {
             height,
             frame_number: 0,
             active_frame: false,
+            frame_recovery_error: None,
+            #[cfg(test)]
+            fail_next_finish: false,
             adapter_name,
         })
     }
 
     pub(crate) fn adapter_name(&self) -> &str {
         &self.adapter_name
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_finish_for_test(&mut self) {
+        self.fail_next_finish = true;
     }
 
     pub(crate) fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
@@ -226,6 +282,62 @@ impl VulkanProductBackend {
         unsafe { self.device.unmap_memory(self.resources.readback_memory) };
         Ok(pixels)
     }
+
+    fn finish_submission(&mut self, command: vk::CommandBuffer) -> Result<(), RendererError> {
+        unsafe {
+            self.device.end_command_buffer(command).map_err(|error| {
+                RendererError::Device(format!("end Vulkan frame: {error:?}"))
+            })?;
+            self.device
+                .reset_fences(&[self.resources.fence])
+                .map_err(|error| {
+                    RendererError::Device(format!("reset Vulkan fence: {error:?}"))
+                })?;
+            #[cfg(test)]
+            if std::mem::take(&mut self.fail_next_finish) {
+                return Err(RendererError::Device(
+                    "injected exact Vulkan submit failure".into(),
+                ));
+            }
+            self.device
+                .queue_submit(
+                    self.queue,
+                    &[vk::SubmitInfo::default().command_buffers(&[command])],
+                    self.resources.fence,
+                )
+                .map_err(|error| {
+                    RendererError::Device(format!("submit Vulkan frame: {error:?}"))
+                })?;
+            self.device
+                .wait_for_fences(&[self.resources.fence], true, u64::MAX)
+                .map_err(|error| {
+                    RendererError::Device(format!("complete Vulkan frame: {error:?}"))
+                })?;
+        }
+        Ok(())
+    }
+
+    fn recover_failed_submission(&mut self) -> Result<(), RendererError> {
+        unsafe {
+            self.device.device_wait_idle().map_err(|error| {
+                RendererError::Device(format!("wait to recover failed Vulkan frame: {error:?}"))
+            })?;
+            let old_fence = std::mem::replace(&mut self.resources.fence, vk::Fence::null());
+            self.device.destroy_fence(old_fence, None);
+            self.resources.fence = self
+                .device
+                .create_fence(
+                    &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
+                    None,
+                )
+                .map_err(|error| {
+                    RendererError::Device(format!(
+                        "recreate fence after failed Vulkan frame: {error:?}"
+                    ))
+                })?;
+        }
+        Ok(())
+    }
 }
 
 fn load_vulkan_entry() -> Result<ash::Entry, RendererError> {
@@ -283,6 +395,11 @@ impl ExactSourceBackend for VulkanProductBackend {
     }
 
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError> {
+        if let Some(error) = &self.frame_recovery_error {
+            return Err(RendererError::Device(format!(
+                "exact Vulkan frame synchronization is unavailable: {error}"
+            )));
+        }
         if self.active_frame {
             return Err(RendererError::Device(
                 "exact Vulkan context already has an active frame".into(),
@@ -395,22 +512,16 @@ impl ExactSourceBackend for VulkanProductBackend {
                     .size(vk::WHOLE_SIZE)],
                 &[],
             );
-            self.device
-                .end_command_buffer(command)
-                .map_err(|error| RendererError::Device(format!("end Vulkan frame: {error:?}")))?;
-            self.device
-                .reset_fences(&[self.resources.fence])
-                .map_err(|error| RendererError::Device(format!("reset Vulkan fence: {error:?}")))?;
-            self.device
-                .queue_submit(
-                    self.queue,
-                    &[vk::SubmitInfo::default().command_buffers(&[command])],
-                    self.resources.fence,
-                )
-                .map_err(|error| RendererError::Device(format!("submit Vulkan frame: {error:?}")))?;
-            self.device
-                .wait_for_fences(&[self.resources.fence], true, u64::MAX)
-                .map_err(|error| RendererError::Device(format!("complete Vulkan frame: {error:?}")))?;
+        }
+        if let Err(finish_error) = self.finish_submission(command) {
+            if let Err(recovery_error) = self.recover_failed_submission() {
+                let recovery_error = recovery_error.to_string();
+                self.frame_recovery_error = Some(recovery_error.clone());
+                return Err(RendererError::Device(format!(
+                    "{finish_error}; Vulkan frame recovery failed: {recovery_error}"
+                )));
+            }
+            return Err(finish_error);
         }
         self.active_frame = false;
         self.read_pixels()
@@ -443,13 +554,27 @@ impl Drop for VulkanProductBackend {
 
 unsafe fn destroy_target_resources(device: &ash::Device, resources: &TargetResources) {
     unsafe {
-        device.destroy_fence(resources.fence, None);
-        device.destroy_command_pool(resources.command_pool, None);
-        device.destroy_buffer(resources.readback, None);
-        device.free_memory(resources.readback_memory, None);
-        device.destroy_image_view(resources.image_view, None);
-        device.destroy_image(resources.image, None);
-        device.free_memory(resources.image_memory, None);
+        if resources.fence != vk::Fence::null() {
+            device.destroy_fence(resources.fence, None);
+        }
+        if resources.command_pool != vk::CommandPool::null() {
+            device.destroy_command_pool(resources.command_pool, None);
+        }
+        if resources.readback != vk::Buffer::null() {
+            device.destroy_buffer(resources.readback, None);
+        }
+        if resources.readback_memory != vk::DeviceMemory::null() {
+            device.free_memory(resources.readback_memory, None);
+        }
+        if resources.image_view != vk::ImageView::null() {
+            device.destroy_image_view(resources.image_view, None);
+        }
+        if resources.image != vk::Image::null() {
+            device.destroy_image(resources.image, None);
+        }
+        if resources.image_memory != vk::DeviceMemory::null() {
+            device.free_memory(resources.image_memory, None);
+        }
     }
 }
 
@@ -616,7 +741,8 @@ fn create_target_resources(
     width: u32,
     height: u32,
 ) -> Result<TargetResources, RendererError> {
-    let image = unsafe {
+    let mut pending = TargetResourcesGuard::new(device);
+    pending.resources.image = unsafe {
         device.create_image(
             &vk::ImageCreateInfo::default()
                 .image_type(vk::ImageType::TYPE_2D)
@@ -632,13 +758,14 @@ fn create_target_resources(
         )
     }
     .map_err(|error| RendererError::Device(format!("create Vulkan target image: {error:?}")))?;
-    let image_requirements = unsafe { device.get_image_memory_requirements(image) };
+    let image_requirements =
+        unsafe { device.get_image_memory_requirements(pending.resources.image) };
     let image_memory_type = find_memory_type(
         memory_properties,
         image_requirements.memory_type_bits,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     )?;
-    let image_memory = unsafe {
+    pending.resources.image_memory = unsafe {
         device.allocate_memory(
             &vk::MemoryAllocateInfo::default()
                 .allocation_size(image_requirements.size)
@@ -647,12 +774,18 @@ fn create_target_resources(
         )
     }
     .map_err(|error| RendererError::Device(format!("allocate Vulkan target: {error:?}")))?;
-    unsafe { device.bind_image_memory(image, image_memory, 0) }
+    unsafe {
+        device.bind_image_memory(
+            pending.resources.image,
+            pending.resources.image_memory,
+            0,
+        )
+    }
         .map_err(|error| RendererError::Device(format!("bind Vulkan target: {error:?}")))?;
-    let image_view = unsafe {
+    pending.resources.image_view = unsafe {
         device.create_image_view(
             &vk::ImageViewCreateInfo::default()
-                .image(image)
+                .image(pending.resources.image)
                 .view_type(vk::ImageViewType::TYPE_2D)
                 .format(TARGET_FORMAT)
                 .subresource_range(
@@ -666,7 +799,7 @@ fn create_target_resources(
     }
     .map_err(|error| RendererError::Device(format!("create Vulkan target view: {error:?}")))?;
     let readback_size = u64::from(width) * u64::from(height) * 4;
-    let readback = unsafe {
+    pending.resources.readback = unsafe {
         device.create_buffer(
             &vk::BufferCreateInfo::default()
                 .size(readback_size)
@@ -676,13 +809,14 @@ fn create_target_resources(
         )
     }
     .map_err(|error| RendererError::Device(format!("create Vulkan readback: {error:?}")))?;
-    let readback_requirements = unsafe { device.get_buffer_memory_requirements(readback) };
+    let readback_requirements =
+        unsafe { device.get_buffer_memory_requirements(pending.resources.readback) };
     let readback_memory_type = find_memory_type(
         memory_properties,
         readback_requirements.memory_type_bits,
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     )?;
-    let readback_memory = unsafe {
+    pending.resources.readback_memory = unsafe {
         device.allocate_memory(
             &vk::MemoryAllocateInfo::default()
                 .allocation_size(readback_requirements.size)
@@ -691,9 +825,15 @@ fn create_target_resources(
         )
     }
     .map_err(|error| RendererError::Device(format!("allocate Vulkan readback: {error:?}")))?;
-    unsafe { device.bind_buffer_memory(readback, readback_memory, 0) }
+    unsafe {
+        device.bind_buffer_memory(
+            pending.resources.readback,
+            pending.resources.readback_memory,
+            0,
+        )
+    }
         .map_err(|error| RendererError::Device(format!("bind Vulkan readback: {error:?}")))?;
-    let command_pool = unsafe {
+    pending.resources.command_pool = unsafe {
         device.create_command_pool(
             &vk::CommandPoolCreateInfo::default()
                 .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
@@ -702,32 +842,26 @@ fn create_target_resources(
         )
     }
     .map_err(|error| RendererError::Device(format!("create Vulkan command pool: {error:?}")))?;
-    let command_buffer = unsafe {
+    pending.resources.command_buffer = unsafe {
         device.allocate_command_buffers(
             &vk::CommandBufferAllocateInfo::default()
-                .command_pool(command_pool)
+                .command_pool(pending.resources.command_pool)
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_buffer_count(1),
         )
     }
-    .map_err(|error| RendererError::Device(format!("allocate Vulkan command buffer: {error:?}")))?[0];
-    let fence = unsafe {
+    .map_err(|error| RendererError::Device(format!("allocate Vulkan command buffer: {error:?}")))?
+    .into_iter()
+    .next()
+    .ok_or_else(|| RendererError::Device("allocate Vulkan command buffer returned none".into()))?;
+    pending.resources.fence = unsafe {
         device.create_fence(
             &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
             None,
         )
     }
     .map_err(|error| RendererError::Device(format!("create Vulkan fence: {error:?}")))?;
-    Ok(TargetResources {
-        image,
-        image_memory,
-        image_view,
-        readback,
-        readback_memory,
-        command_pool,
-        command_buffer,
-        fence,
-    })
+    Ok(pending.finish())
 }
 
 fn find_memory_type(

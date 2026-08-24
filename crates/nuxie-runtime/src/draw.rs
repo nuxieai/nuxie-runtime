@@ -18956,7 +18956,9 @@ fn runtime_realize_owned_shape_paints(
             Some(RuntimeShapePaintState::SolidColor { .. }) | None => {
                 backend.shader = None;
                 backend.shader_state = None;
-                render_paint.shader(None);
+                // `runtime_configure_owned_shape_paint` has already detached
+                // the shader before setting the solid color. Exact-source
+                // paints interpret another `shader(None)` as solid black.
             }
         }
         backend.paint = Some(render_paint);
@@ -36231,6 +36233,44 @@ mod tests {
                 && first_color < allocations[1],
             "C++ initializes the first cloned fill style and SolidColor before constructing the \
              second paint: {operations:?}"
+        );
+    }
+
+    #[test]
+    fn owned_solid_paint_realization_does_not_clear_after_setting_color() {
+        let bytes = synthetic_solid_fill_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic solid fill imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic solid fill graphs");
+        let graph = graphs.artboards.first().expect("synthetic artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+
+        instance
+            .synchronize_artboard_renderer(
+                &file,
+                graph,
+                &graphs.artboards,
+                &BTreeMap::new(),
+                &mut factory,
+                None,
+            )
+            .expect("solid paint realization succeeds");
+
+        let operations = stats.paint_ops.borrow();
+        let last_color = operations
+            .iter()
+            .rposition(|operation| *operation == "color")
+            .unwrap_or_else(|| panic!("solid paint receives its authored color: {operations:?}"));
+        assert!(
+            !operations[last_color + 1..]
+                .iter()
+                .any(|operation| *operation == "shader"),
+            "ownership transfer must not clear the shader after setting the solid color: {operations:?}"
         );
     }
 

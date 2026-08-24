@@ -26365,6 +26365,59 @@ mod tests {
     }
 
     #[test]
+    fn child_typed_iterators_work() {
+        let file = read_runtime_file(&cpp_runtime_fixture("juice.riv")).expect("juice imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("juice graph builds");
+        let graph = graphs.artboards.first().expect("default artboard");
+
+        let node_children = graph
+            .components
+            .iter()
+            .filter(|component| component.parent_local == Some(0))
+            .filter(|component| {
+                nuxie_schema::definition_by_name(component.type_name).is_some_and(|definition| {
+                    definition.name == "Node" || definition.ancestors.contains(&"Node")
+                })
+            })
+            .collect::<Vec<_>>();
+        for child in &node_children {
+            assert_eq!(child.name.as_deref(), Some("root"));
+        }
+        assert_eq!(node_children.len(), 1);
+
+        let root_paints = graph
+            .shape_paint_containers
+            .iter()
+            .find(|container| container.local_id == 0)
+            .expect("artboard paint container");
+        assert_eq!(root_paints.paints.len(), 1);
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+        let root_owner = instance
+            .runtime_shapes
+            .get(0)
+            .and_then(|shape| shape.paint_owners.first())
+            .expect("root ShapePaint owner");
+        assert!(runtime_owned_shape_paint_is_visible(&instance, root_owner));
+        assert!(matches!(
+            root_owner.paint_state.borrow().as_ref(),
+            Some(RuntimeShapePaintState::SolidColor { render_color, .. }) if (render_color >> 24) != 0
+        ));
+
+        let all_shape_paints = graph
+            .shape_paint_containers
+            .iter()
+            .flat_map(|container| &container.paints)
+            .collect::<Vec<_>>();
+        let mut count = 0;
+        for _ in &all_shape_paints {
+            count += 1;
+        }
+        assert_eq!(all_shape_paints.len(), 20);
+        assert_eq!(all_shape_paints.len(), count);
+    }
+
+    #[test]
     fn root_gradient_first_backend_state_precedes_sibling_data_bind_write() {
         let runtime = read_runtime_file(&cpp_runtime_fixture("rewards_demo.riv"))
             .expect("rewards_demo imports");

@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 63
+max_pending = 62
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -814,9 +814,9 @@ note = "S4-17 directly covers referenced-type minting. Refresh after a reference
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_paint_test.cpp"
 test_case_count = 2
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_paint.rs"]
+note = "Both upstream cases are translated one-for-one with every original script, userdata/nil type check, action order, assertion order, value, and approximate feather comparison. Construction is active and green. Gradient clearing is honestly ignored expected-red because Paint.copy({gradient=false}) currently rejects false instead of clearing the gradient; no runtime fix is included in this phase."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_path_effect_test.cpp"

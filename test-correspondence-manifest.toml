@@ -126,10 +126,9 @@ note = "The completed D5-D7 checklist explicitly absorbs all 29 cases with direc
 [[file]]
 upstream = "tests/unit_tests/runtime/component_origin_test.cpp"
 test_case_count = 3
-status = "partial"
-evidence = ["silver-corpus.toml::{nested_artboard_origin_override_test}"]
-covered_test_cases = ["Animated origin and click events"]
-note = "The previously tracked animated-origin silver moved here at the new pin; the two new direct ComponentOrigin cases are not claimed by that differential."
+status = "ported-direct"
+evidence = ["silver-corpus.toml::{nested_artboard_origin_override_test}", "crates/nuxie-runtime/tests/cpp_probe.rs::{upstream_component_origin_overrides_the_mounted_instance_origin,upstream_component_origin_pivots_a_layout_transform}"]
+note = "All three cases are ported. The two dynamic-authoring cases execute their exact fixture/control sequence and remain honestly ignored-red at the missing Rust runtime object-insertion action."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/component_test.cpp"

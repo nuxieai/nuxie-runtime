@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 17
+max_pending = 16
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -35,9 +35,9 @@ note = "All 14 cases and 30 assertions are mapped directly in the FL-B/FL-C back
 [[file]]
 upstream = "tests/unit_tests/runtime/artboard_transform_test.cpp"
 test_case_count = 6
-status = "pending"
-evidence = []
-note = "The S4 runtime port covers the transform mechanism, but no completed correspondence executes every assertion sequence in this newly enrolled file."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_artboard_transform.rs"]
+note = "All six fixture and assertion sequences are directly translated: exact self scale/rotation draw matrices, transform-count delta, inverse-mapped rotated hit target and bool input, nested child root-transform movement, the complete 11-frame opacity/transform silver scenario, and the composed transform at clipPath. The silver case remains expected-red at the missing pinned SRIV comparator; the nested case remains expected-red because Rust does not expose the exact ArtboardInstance::rootTransform(point) owner, and no object-world-transform proxy is accepted."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/audio_test.cpp"

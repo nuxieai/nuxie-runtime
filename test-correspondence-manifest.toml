@@ -587,8 +587,8 @@ upstream = "tests/unit_tests/runtime/raw_path_test.cpp"
 test_case_count = 7
 status = "partial"
 evidence = ["crates/nuxie-render-api/tests/upstream_raw_path.rs"]
-covered_test_cases = ["rawpath-basics", "addPath", "bounds", "addPathBackwards"]
-note = "Four of seven cases are complete direct ports against the production RawPath owner. Basics preserves resets and exact bounds. addPath preserves all 4x4 maker combinations with identity and scale transforms. Bounds preserves the 1-through-32768 exponential verb counts and exact coarse control-point envelope with a deterministic Rust-local stream. addPathBackwards preserves the validator, forward/reverse/double-reverse checks, empty/implicit/repeated-close paths, and complete complex contour stream. The remaining helper, iterator, and pruning cases are unclaimed."
+covered_test_cases = ["rawpath-basics", "rawpath-iter", "addPath", "bounds", "addPathBackwards"]
+note = "Five of seven cases are complete direct ports against the production RawPath owner. Basics preserves resets and bounds. Iterator preserves empty traversal, every verb view, consecutive moves, discarded closes, implicit moves, and exact segment points. addPath preserves all 4x4 maker combinations with identity and scale transforms. Bounds preserves exponential verb counts and the exact coarse envelope with a deterministic local stream. addPathBackwards preserves the validator and complete complex contour stream. Only add-helpers and prune-empty-segments remain unclaimed."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/raw_text_input_test.cpp"

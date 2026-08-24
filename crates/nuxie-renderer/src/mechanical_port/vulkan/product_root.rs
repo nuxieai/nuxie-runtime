@@ -136,6 +136,61 @@ impl VulkanProductBackend {
         &self.adapter_name
     }
 
+    pub(crate) fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        if width == 0 || height == 0 {
+            return Err(RendererError::InvalidTextureExtent {
+                label: "Vulkan target",
+                width,
+                height,
+                max_dimension: u32::MAX,
+            });
+        }
+        if self.active_frame {
+            return Err(RendererError::Device(
+                "cannot resize an active exact Vulkan frame".into(),
+            ));
+        }
+        if width == self.width && height == self.height {
+            return Ok(());
+        }
+        unsafe {
+            self.device
+                .device_wait_idle()
+                .map_err(|error| RendererError::Device(format!("wait to resize Vulkan target: {error:?}")))?;
+        }
+        let target = {
+            let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
+            let implementation = unsafe {
+                &mut *context.static_impl_cast::<RenderContextVulkanImpl>()
+            };
+            implementation.makeRenderTarget(width, height, TARGET_FORMAT, TARGET_USAGE)
+        };
+        if !target.operator_bool() {
+            return Err(RendererError::Device(
+                "exact Vulkan render-target resize failed".into(),
+            ));
+        }
+        let memory_properties = unsafe {
+            self.instance
+                .get_physical_device_memory_properties(self.physical_device)
+        };
+        let resources = create_target_resources(
+            &self.device,
+            &memory_properties,
+            self.queue_family_index,
+            width,
+            height,
+        )?;
+
+        let mut old_target = std::mem::replace(&mut self.target, target);
+        let old_resources = std::mem::replace(&mut self.resources, resources);
+        self.width = width;
+        self.height = height;
+        old_target.operator_assign_null();
+        unsafe { destroy_target_resources(&self.device, &old_resources) };
+        Ok(())
+    }
+
     fn context_pin(&mut self) -> Pin<&mut RenderContext> {
         self.context.as_mut().expect("live Vulkan context").as_mut()
     }
@@ -221,6 +276,10 @@ fn load_vulkan_entry() -> Result<ash::Entry, RendererError> {
 impl ExactSourceBackend for VulkanProductBackend {
     fn context_mut(&mut self) -> Pin<&mut RenderContext> {
         self.context_pin()
+    }
+
+    fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        VulkanProductBackend::resize(self, width, height)
     }
 
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError> {
@@ -374,18 +433,23 @@ impl Drop for VulkanProductBackend {
         self.target.operator_assign_null();
         self.context.take();
         unsafe {
-            self.device.destroy_fence(self.resources.fence, None);
-            self.device
-                .destroy_command_pool(self.resources.command_pool, None);
-            self.device.destroy_buffer(self.resources.readback, None);
-            self.device.free_memory(self.resources.readback_memory, None);
-            self.device.destroy_image_view(self.resources.image_view, None);
-            self.device.destroy_image(self.resources.image, None);
-            self.device.free_memory(self.resources.image_memory, None);
+            destroy_target_resources(&self.device, &self.resources);
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
         }
         let _ = (&self.entry, self.physical_device, self.queue_family_index);
+    }
+}
+
+unsafe fn destroy_target_resources(device: &ash::Device, resources: &TargetResources) {
+    unsafe {
+        device.destroy_fence(resources.fence, None);
+        device.destroy_command_pool(resources.command_pool, None);
+        device.destroy_buffer(resources.readback, None);
+        device.free_memory(resources.readback_memory, None);
+        device.destroy_image_view(resources.image_view, None);
+        device.destroy_image(resources.image, None);
+        device.free_memory(resources.image_memory, None);
     }
 }
 

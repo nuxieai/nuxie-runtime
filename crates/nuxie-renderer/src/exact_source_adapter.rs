@@ -107,6 +107,9 @@ pub(crate) fn install_bitmap_decoder(mut context: Pin<&mut RenderContext>) {
 
 pub(crate) trait ExactSourceBackend: 'static {
     fn context_mut(&mut self) -> Pin<&mut RenderContext>;
+    fn resize(&mut self, _width: u32, _height: u32) -> Result<(), RendererError> {
+        Err(RendererError::Unsupported("backend target resize"))
+    }
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError>;
     fn finish_frame(&mut self, frame_number: u64) -> Result<Vec<u8>, RendererError>;
     fn finish_frame_without_readback(&mut self, frame_number: u64) -> Result<(), RendererError> {
@@ -149,6 +152,10 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
             frame_number,
             finished: false,
         })
+    }
+
+    pub(crate) fn resize(&self, width: u32, height: u32) -> Result<(), RendererError> {
+        self.backend.borrow_mut().resize(width, height)
     }
 
     fn execution_anchor(&self) -> Rc<dyn Any> {

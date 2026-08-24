@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 36
+max_pending = 35
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -396,9 +396,9 @@ note = "All three metadata, loader-responsibility, and rejection-fallback cases 
 [[file]]
 upstream = "tests/unit_tests/runtime/instancing_test.cpp"
 test_case_count = 3
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_instancing.rs"]
+note = "All three cases preserve their fixtures and assertion order. Artboard clipping construction/draw is green. Individual Shape cloning and animation-definition identity/deleteCount remain expected-red because those C++ ownership diagnostics have no Rust owner."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/joystick_flags_test.cpp"

@@ -1008,9 +1008,9 @@ note = "AF-7 ports the meaningful empty, owned-copy, slice, iteration, growth, r
 [[file]]
 upstream = "tests/unit_tests/runtime/solo_test.cpp"
 test_case_count = 9
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie/tests/upstream_solo.rs", "crates/nuxie-runtime/src/artboard/tests.rs::solo_index_and_name_selection_skip_property_like_children", "silver-corpus.toml::databind_solo_to_enum"]
+note = "All nine cases are explicit ports. The public suite preserves every pinned fixture, advance/pointer/view-model mutation sequence, component-name collapse assertion, and SRIV comparison; the property-like-child construction remains beside the private Solo owner with the exact interleaved types and index/name/no-op/collapse assertions. Four fixture cases and the synthetic case pass. Nested-artboard paint inspection, the first scripted advanceCount update, the frameSize-vs-makeRenderPaint enum silver prefix, and the formerly unsupported solo-index silver remain honest expected-red without runtime fixes."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/span_test.cpp"

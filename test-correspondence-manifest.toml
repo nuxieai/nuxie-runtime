@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 23
+max_pending = 22
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -920,9 +920,9 @@ note = "All four fixture/input/timing/assertion bodies are translated, including
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_artboard_test.cpp"
 test_case_count = 10
-status = "pending"
-evidence = ["P3C-report.md", "LT1SC-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
-note = "FTAIL makes the data_binding_lists and Simpsons semantic-only fixture differentials exact, alongside exact nested-focus parentage, bounds, and stable ids. The row remains pending because those corpus projections do not yet map all ten named semantic_artboard_test.cpp TEST_CASE bodies one-for-one."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_semantic_artboard.rs", "P3C-report.md", "LT1SC-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
+note = "All ten fixture, settle, diff-replay, pointer/semantic-action, spawn/despawn, exact-label, role/trait/state, bounds, parent-id, cycle-count, and idempotence bodies are directly translated. Nine remain honest expected-red: execution shows Rust omits the mounted/dynamic ArtboardComponentList semantic items and upstream initial Expanded state, and four later assertions additionally need the private C++ nodeById/parent owner. No weaker diff inference or runtime repair replaces those failures in Phase 1."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp"

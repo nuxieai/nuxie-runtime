@@ -3322,4 +3322,406 @@ mod tests {
         let cpp = String::from_utf8(output.stdout).expect("C++ Blob oracle UTF-8");
         assert_eq!(positive_blob_lookup_surface(), cpp);
     }
+
+    /// Direct ports of the non-silver cases in pinned
+    /// `tests/unit_tests/runtime/scripting/scripting_context_test.cpp`.
+    ///
+    /// The five silver cases live in `nuxie/tests/upstream_scripting_context.rs`
+    /// because they exercise the public file/artboard/state-machine facade.
+    mod upstream_scripting_context_tests {
+        use super::*;
+
+        fn context(lua: &Lua) -> AnyUserData {
+            lua.create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(None)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                None,
+            ))
+            .expect("scripted context")
+        }
+
+        fn disposed_context(lua: &Lua) -> AnyUserData {
+            lua.create_userdata(ScriptedContext::new_with_lifetime(
+                Rc::new(RefCell::new(None)),
+                Rc::new(Cell::new(false)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                None,
+                Rc::new(Cell::new(false)),
+            ))
+            .expect("disposed scripted context")
+        }
+
+        fn run_nil_result_case(source: &str, function: &str) {
+            let lua = Lua::new();
+            lua.load(source).exec().expect("context test source");
+            let context = context(&lua);
+            lua.globals().set("context", context).unwrap();
+            lua.globals()
+                .get::<Function>(function)
+                .unwrap()
+                .call::<()>(lua.globals().get::<AnyUserData>("context").unwrap())
+                .expect("context method call");
+            assert_eq!(
+                lua.globals()
+                    .get::<Function>("getResult")
+                    .unwrap()
+                    .call::<String>(())
+                    .unwrap(),
+                "nil"
+            );
+        }
+
+        #[test]
+        #[ignore = "expected-red: Rust's base ScriptedContext has no observable ScriptedObject dirt owner"]
+        fn scripted_context_mark_needs_update_works() {
+            let lua = Lua::new();
+            lua.load(
+                r#"
+                function init(self, context)
+                  context:markNeedsUpdate()
+                  return true
+                end
+                "#,
+            )
+            .exec()
+            .unwrap();
+            let context = context(&lua);
+            let returned: bool = lua
+                .globals()
+                .get::<Function>("init")
+                .unwrap()
+                .call((Value::Nil, context))
+                .unwrap();
+            assert!(returned);
+            let scripted_object_needs_update = false;
+            assert!(scripted_object_needs_update);
+        }
+
+        #[test]
+        fn scripted_context_errors_when_used_after_disposal() {
+            let lua = Lua::new();
+            lua.load(
+                r#"
+                function callMarkNeedsUpdate(context)
+                  context:markNeedsUpdate()
+                end
+                "#,
+            )
+            .exec()
+            .unwrap();
+            let error = lua
+                .globals()
+                .get::<Function>("callMarkNeedsUpdate")
+                .unwrap()
+                .call::<()>(disposed_context(&lua))
+                .expect_err("disposed context must error");
+            assert!(
+                error
+                    .to_string()
+                    .contains("context:markNeedsUpdate() called on a disposed context")
+            );
+        }
+
+        #[test]
+        fn data_global_is_initialized_when_a_scripting_vm_is_provided_to_import() {
+            let mut vm = ScriptVm::new();
+            vm.install_rive_globals().expect("external VM initializes");
+            let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+                .join("tests/unit_tests/assets/data_global_repro.riv");
+            let bytes = std::fs::read(&fixture)
+                .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+            let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
+            vm.set_view_models(nuxie_runtime::script_view_models(&file));
+
+            let data: Table = vm.lua().globals().get("Data").expect("Data table");
+            let model: Table = data.get("ProbeChipVM").expect("ProbeChipVM table");
+            assert!(matches!(
+                model.get::<Value>("new").unwrap(),
+                Value::Function(_)
+            ));
+        }
+
+        #[test]
+        #[ignore = "expected-red: Rust Context:image is view-model scoped, not ScriptAsset/File scoped"]
+        fn context_image_returns_image_asset_by_name() {
+            let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+                .join("tests/unit_tests/assets/walle.riv");
+            let bytes = std::fs::read(&fixture)
+                .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+            let file = nuxie_binary::read_runtime_file(&bytes).expect("walle fixture parses");
+            let model = nuxie_runtime::script_view_models(&file)
+                .into_values()
+                .next()
+                .expect("expected-red: Context must resolve walle.jpg from its ScriptAsset File");
+            let lua = Lua::new();
+            let context = lua
+                .create_userdata(ScriptedContext::new(
+                    Rc::new(RefCell::new(Some(model))),
+                    Vec::new(),
+                    Rc::new(Cell::new(false)),
+                    None,
+                ))
+                .unwrap();
+            lua.globals().set("context", context).unwrap();
+            let values: Table = lua
+                .load(
+                    r#"
+                    local foundImage = nil
+                    local imageWidth = 0
+                    local imageHeight = 0
+                    local img = context:image("walle.jpg")
+                    if img then
+                      foundImage = true
+                      imageWidth = img.width
+                      imageHeight = img.height
+                    else
+                      foundImage = false
+                    end
+                    return { foundImage, imageWidth, imageHeight }
+                    "#,
+                )
+                .eval()
+                .unwrap();
+            assert!(values.get::<bool>(1).unwrap());
+            assert!(values.get::<f64>(2).unwrap() > 0.0);
+            assert!(values.get::<f64>(3).unwrap() > 0.0);
+        }
+
+        #[test]
+        fn context_image_returns_nil_for_non_existent_image() {
+            let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+                .join("tests/unit_tests/assets/walle.riv");
+            let bytes = std::fs::read(&fixture)
+                .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+            nuxie_binary::read_runtime_file(&bytes).expect("walle fixture parses");
+            let lua = Lua::new();
+            lua.globals().set("context", context(&lua)).unwrap();
+            let found: bool = lua
+                .load(
+                    r#"
+                    local foundImage = nil
+                    local img = context:image("this_image_does_not_exist")
+                    if img then foundImage = true else foundImage = false end
+                    return foundImage
+                    "#,
+                )
+                .eval()
+                .unwrap();
+            assert!(!found);
+        }
+
+        #[test]
+        fn context_image_returns_nil_when_no_script_asset() {
+            let lua = Lua::new();
+            lua.globals().set("context", context(&lua)).unwrap();
+            let found: bool = lua
+                .load(
+                    r#"
+                    local foundImage = nil
+                    local img = context:image("anyname")
+                    if img then foundImage = true else foundImage = false end
+                    return foundImage
+                    "#,
+                )
+                .eval()
+                .unwrap();
+            assert!(!found);
+        }
+
+        #[test]
+        fn context_methods_error_on_disposed_context() {
+            let lua = Lua::new();
+            lua.load(
+                r#"
+                function testDisposed(context)
+                  context:markNeedsUpdate()
+                end
+                "#,
+            )
+            .exec()
+            .unwrap();
+            let error = lua
+                .globals()
+                .get::<Function>("testDisposed")
+                .unwrap()
+                .call::<()>(disposed_context(&lua))
+                .expect_err("disposed context must error");
+            assert!(error.to_string().contains("disposed context"));
+        }
+
+        #[test]
+        fn context_view_model_returns_nil_with_no_data_context() {
+            run_nil_result_case(
+                r#"
+                local result = "not_called"
+                function testViewModel(context)
+                  local vm = context:viewModel()
+                  if vm == nil then result = "nil" else result = "found" end
+                end
+                function getResult() return result end
+                "#,
+                "testViewModel",
+            );
+        }
+
+        #[test]
+        fn context_root_view_model_returns_nil_with_no_data_context() {
+            run_nil_result_case(
+                r#"
+                local result = "not_called"
+                function testRootViewModel(context)
+                  local vm = context:rootViewModel()
+                  if vm == nil then result = "nil" else result = "found" end
+                end
+                function getResult() return result end
+                "#,
+                "testRootViewModel",
+            );
+        }
+
+        #[test]
+        fn context_data_context_returns_nil_with_no_data_context() {
+            run_nil_result_case(
+                r#"
+                local result = "not_called"
+                function testDataContext(context)
+                  local dc = context:dataContext()
+                  if dc == nil then result = "nil" else result = "found" end
+                end
+                function getResult() return result end
+                "#,
+                "testDataContext",
+            );
+        }
+
+        #[test]
+        fn context_features_returns_fallback_table_without_rive_canvas() {
+            let lua = Lua::new();
+            lua.globals().set("context", context(&lua)).unwrap();
+            let values: Table = lua
+                .load(
+                    r#"
+                    local featuresTable = context:features()
+                    return {
+                      featuresTable.bc, featuresTable.etc2, featuresTable.astc,
+                      featuresTable.anisotropicFiltering, featuresTable.texture3D,
+                      featuresTable.maxTextureSize2D, featuresTable.maxTextureSizeCube,
+                      featuresTable.maxTextureSize3D, featuresTable.maxColorAttachments,
+                      featuresTable.maxUniformBufferSize, featuresTable.maxSamplers,
+                      featuresTable.maxSamples
+                    }
+                    "#,
+                )
+                .eval()
+                .unwrap();
+            for index in 1..=5 {
+                assert!(!values.get::<bool>(index).unwrap());
+            }
+            assert_eq!(values.get::<u32>(6).unwrap(), 4096);
+            assert_eq!(values.get::<u32>(7).unwrap(), 4096);
+            assert_eq!(values.get::<u32>(8).unwrap(), 256);
+            assert_eq!(values.get::<u32>(9).unwrap(), 4);
+            assert_eq!(values.get::<u32>(10).unwrap(), 16_384);
+            assert_eq!(values.get::<u32>(11).unwrap(), 16);
+            assert_eq!(values.get::<u32>(12).unwrap(), 4);
+        }
+
+        fn assert_invalid_method(method: &str) {
+            let lua = Lua::new();
+            lua.globals().set("context", context(&lua)).unwrap();
+            let error = lua
+                .load(format!("context:{method}()"))
+                .exec()
+                .expect_err("removed or invalid method must error");
+            assert!(error.to_string().contains("is not a valid method"));
+        }
+
+        #[test]
+        #[ignore = "expected-red: luaur userdata reports a different invalid-method diagnostic"]
+        fn context_preferred_canvas_format_is_removed() {
+            assert_invalid_method("preferredCanvasFormat");
+        }
+
+        #[test]
+        #[ignore = "expected-red: luaur userdata reports a different invalid-method diagnostic"]
+        fn context_invalid_method_raises_error() {
+            assert_invalid_method("thisMethodDoesNotExist");
+        }
+
+        #[test]
+        fn context_blob_returns_nil_when_no_script_asset() {
+            run_nil_result_case(
+                r#"
+                local result = "not_called"
+                function testBlob(context)
+                  local b = context:blob("anyname")
+                  if b == nil then result = "nil" else result = "found" end
+                end
+                function getResult() return result end
+                "#,
+                "testBlob",
+            );
+        }
+
+        #[test]
+        fn context_blob_returns_nil_for_non_existent_blob() {
+            let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+                .join("tests/unit_tests/assets/walle.riv");
+            let bytes = std::fs::read(&fixture)
+                .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+            nuxie_binary::read_runtime_file(&bytes).expect("walle fixture parses");
+            let lua = Lua::new();
+            ScriptedBlobAssets::install(&lua);
+            lua.globals().set("context", context(&lua)).unwrap();
+            let result: String = lua
+                .load(
+                    r#"
+                    local result = "not_called"
+                    local b = context:blob("nonexistent_blob")
+                    if b == nil then result = "nil" else result = "found" end
+                    return result
+                    "#,
+                )
+                .eval()
+                .unwrap();
+            assert_eq!(result, "nil");
+        }
+
+        #[test]
+        #[ignore = "expected-red: Rust's base ScriptedContext has no observable ScriptedObject dirt owner"]
+        fn context_mark_needs_update_without_data_context() {
+            let lua = Lua::new();
+            lua.globals().set("context", context(&lua)).unwrap();
+            lua.load(
+                r#"
+                function testMark(context)
+                  context:markNeedsUpdate()
+                end
+                testMark(context)
+                "#,
+            )
+            .exec()
+            .unwrap();
+            let scripted_object_needs_update = false;
+            assert!(scripted_object_needs_update);
+        }
+
+        #[test]
+        #[ignore = "expected-red: Rust ScriptVm has no separately inspectable ore/render ScriptingContext owner"]
+        fn scripting_context_ore_and_render_context_default_to_null() {
+            let vm = ScriptVm::new();
+            vm.lua().load("-- empty").exec().unwrap();
+            panic!("expected-red: expose the VM-owned ore/render context default state");
+        }
+    }
 }

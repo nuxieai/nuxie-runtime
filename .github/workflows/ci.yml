@@ -368,17 +368,17 @@ jobs:
           rustup target add --toolchain 1.94.1 wasm32-unknown-emscripten wasm32-unknown-unknown
           rustup run 1.94.1 cargo fetch --locked
 
-      # Rive's pinned premake graph generates SPIR-V while building the source
-      # oracle. Build the exact compiler revision declared by our frozen shader
-      # toolchain instead of accepting the hosted runner's moving apt package.
-      - name: Install pinned Rive shader compiler
+      # Rive's pinned premake graph generates and optimizes SPIR-V while
+      # building the source oracle. Build the exact revisions declared by our
+      # frozen shader toolchain instead of accepting moving apt packages.
+      - name: Install pinned Rive shader tools
         run: |
           archive="${RUNNER_TEMP}/glslang-16.2.0.tar.gz"
           source_dir="${RUNNER_TEMP}/glslang-16.2.0"
           build_dir="${RUNNER_TEMP}/glslang-build"
-          bin_dir="${RUNNER_TEMP}/glslang-bin"
+          bin_dir="${RUNNER_TEMP}/rive-shader-tools-bin"
           curl -fsSL https://github.com/KhronosGroup/glslang/archive/refs/tags/16.2.0.tar.gz -o "$archive"
-          echo '01985335785c97906a91afe3cb5ee015997696181ec6c125bab5555602ba08e2  '"$archive" | sha256sum --check
+          printf '%s  %s\n' 01985335785c97906a91afe3cb5ee015997696181ec6c125bab5555602ba08e2 "$archive" | sha256sum --check
           tar -xzf "$archive" -C "${RUNNER_TEMP}"
           cmake -S "$source_dir" -B "$build_dir" \
             -DCMAKE_BUILD_TYPE=Release \
@@ -387,8 +387,31 @@ jobs:
             -DENABLE_OPT=OFF
           cmake --build "$build_dir" --target glslang-standalone --parallel 4
           install -Dm755 "$build_dir/StandAlone/glslang" "$bin_dir/glslangValidator"
-          echo "$bin_dir" >> "$GITHUB_PATH"
           "$bin_dir/glslangValidator" --version | grep -Fx 'Glslang Version: 11:16.2.0'
+
+          headers_archive="${RUNNER_TEMP}/spirv-headers-1.4.341.0.tar.gz"
+          tools_archive="${RUNNER_TEMP}/spirv-tools-1.4.341.0.tar.gz"
+          headers_dir="${RUNNER_TEMP}/SPIRV-Headers-vulkan-sdk-1.4.341.0"
+          tools_dir="${RUNNER_TEMP}/SPIRV-Tools-vulkan-sdk-1.4.341.0"
+          tools_build_dir="${RUNNER_TEMP}/spirv-tools-build"
+          curl -fsSL https://github.com/KhronosGroup/SPIRV-Headers/archive/refs/tags/vulkan-sdk-1.4.341.0.tar.gz -o "$headers_archive"
+          curl -fsSL https://github.com/KhronosGroup/SPIRV-Tools/archive/refs/tags/vulkan-sdk-1.4.341.0.tar.gz -o "$tools_archive"
+          printf '%s  %s\n' cab0a654c4917e16367483296b44cdb1d614e3120c721beafcd37e3a8580486c "$headers_archive" | sha256sum --check
+          printf '%s  %s\n' 15bfb678138cdf9cd1480dfb952547bbb66b763a735b6d5582578572f5c2e6f9 "$tools_archive" | sha256sum --check
+          tar -xzf "$headers_archive" -C "${RUNNER_TEMP}"
+          tar -xzf "$tools_archive" -C "${RUNNER_TEMP}"
+          cmake -S "$tools_dir" -B "$tools_build_dir" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DSPIRV-Headers_SOURCE_DIR="$headers_dir" \
+            -DSPIRV_SKIP_TESTS=ON
+          # The archive has no Git metadata. Reuse the pinned tag commit time
+          # so SPIRV-Tools' own reproducible-build path emits frozen identity.
+          export SOURCE_DATE_EPOCH=1769111119
+          cmake --build "$tools_build_dir" --target spirv-opt --parallel 4
+          install -Dm755 "$tools_build_dir/tools/spirv-opt" "$bin_dir/spirv-opt"
+          "$bin_dir/spirv-opt" --version | grep -Fx 'SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00'
+          echo "$bin_dir" >> "$GITHUB_PATH"
 
       - name: Build frozen WebGPU source and candidate products
         run: |

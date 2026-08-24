@@ -90987,6 +90987,113 @@ fn s4_layout_foundation_fixtures_import_and_settle() {
     }
 }
 
+#[test]
+fn upstream_animating_a_grid_track_value_reflows_the_layout() {
+    let (runtime, graphs, index, mut artboard) =
+        upstream_layout_fixture("layout/grid_2x2.riv", None);
+    let graph = &graphs.artboards[index];
+    artboard.update_pass();
+
+    let collection = property_key_for_name("GridTrack", "collection");
+    let track_value = property_key_for_name("GridTrack", "trackValue");
+    let tracks = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "GridTrack")
+        .collect::<Vec<_>>();
+    assert_eq!(tracks.len(), 4);
+    let first_column = tracks
+        .iter()
+        .find(|track| {
+            artboard.debug_uint_property(track.local_id, collection) == Some(0)
+        })
+        .expect("first template column");
+    assert!(artboard.set_double_property(first_column.local_id, track_value, 150.0));
+    artboard.update_pass();
+
+    let report = artboard
+        .debug_taffy_layout_bounds_report(&runtime, graph)
+        .expect("grid layout report");
+    assert!(
+        report.iter().any(|entry| {
+            entry.type_name == "LayoutComponent"
+                && entry.y == 50.0
+                && entry.width == 250.0
+                && entry.height == 50.0
+        }),
+        "the spanning item must cover the 150px and 100px columns"
+    );
+}
+
+#[test]
+#[ignore = "expected-red: retained grid line offsets have no Rust owner or query surface"]
+fn upstream_grid_line_offsets_are_exposed_after_layout() {
+    let (runtime, graphs, index, mut artboard) =
+        upstream_layout_fixture("layout/grid_2x2.riv", None);
+    let graph = &graphs.artboards[index];
+    artboard.update_pass();
+    let report = artboard
+        .debug_taffy_layout_bounds_report(&runtime, graph)
+        .expect("grid layout report");
+    assert!(
+        report
+            .iter()
+            .any(|entry| entry.type_name == "LayoutComponent"),
+        "fixture must settle before querying line offsets"
+    );
+
+    let expected_columns = [0.0_f32, 100.0, 200.0];
+    let expected_rows = [0.0_f32, 50.0, 100.0];
+    panic!(
+        "expected retained grid column offsets {expected_columns:?} and row offsets +         {expected_rows:?}; the Rust LayoutComponent owner does not retain or expose them"
+    );
+}
+
+#[test]
+fn upstream_stack_alignment_positions_a_fixed_child() {
+    let (runtime, graphs, index, mut artboard) =
+        upstream_layout_fixture("layout/stack.riv", None);
+    let graph = &graphs.artboards[index];
+    artboard.update_pass();
+
+    let layout_type = property_key_for_name("LayoutComponentStyle", "layoutTypeValue");
+    let alignment = property_key_for_name("LayoutComponentStyle", "layoutAlignmentType");
+    let stack_style = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "LayoutComponentStyle")
+        .find(|style| artboard.debug_uint_property(style.local_id, layout_type) == Some(2))
+        .expect("stack style")
+        .local_id;
+
+    for (value, expected) in [
+        (0, (0.0, 0.0)),
+        (1, (80.0, 0.0)),
+        (2, (160.0, 0.0)),
+        (3, (0.0, 80.0)),
+        (4, (80.0, 80.0)),
+        (5, (160.0, 80.0)),
+        (6, (0.0, 160.0)),
+        (7, (80.0, 160.0)),
+        (8, (160.0, 160.0)),
+    ] {
+        assert!(artboard.set_uint_property(stack_style, alignment, value));
+        artboard.update_pass();
+        let report = artboard
+            .debug_taffy_layout_bounds_report(&runtime, graph)
+            .expect("stack layout report");
+        let box_bounds = report
+            .iter()
+            .find(|entry| {
+                entry.type_name == "LayoutComponent"
+                    && entry.width == 40.0
+                    && entry.height == 40.0
+            })
+            .expect("fixed 40x40 child");
+        assert_eq!((box_bounds.x, box_bounds.y), expected);
+    }
+}
+
 fn upstream_layout_local(graph: &nuxie_graph::ArtboardGraph, name: &str) -> usize {
     graph
         .components

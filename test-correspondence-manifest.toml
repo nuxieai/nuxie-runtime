@@ -418,10 +418,9 @@ note = "All six cases retain the pinned layout_grid_stack.riv artboard, initial 
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_grid_test.cpp"
 test_case_count = 5
-status = "partial"
-evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::s4_layout_foundation_fixtures_import_and_settle"]
-covered_test_cases = ["grid layout places cells from a .riv file", "grid auto rows size overflow cells", "grid track types (minmax/percent/fr) size their columns"]
-note = "S4-38 directly asserts the three listed fixture layouts. Animated track reflow and exposed line-offset assertions remain unclaimed."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::{s4_layout_foundation_fixtures_import_and_settle,upstream_animating_a_grid_track_value_reflows_the_layout,upstream_grid_line_offsets_are_exposed_after_layout}"]
+note = "All five pinned cases are executable direct Rust ports. Grid line offsets remain an honestly ignored red because the packed Rust layout owner does not retain or expose the upstream line arrays."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_participant_test.cpp"
@@ -441,10 +440,9 @@ note = "All 23 TEST_CASE bodies are now represented. Eight direct owner tests pr
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_stack_test.cpp"
 test_case_count = 3
-status = "partial"
-evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::s4_layout_foundation_fixtures_import_and_settle"]
-covered_test_cases = ["stack overlaps children and aligns from a .riv file"]
-note = "S4-38 directly asserts the stack fixture's overlapping layout. The fixed-child alignment and display-fold cases remain unclaimed."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::{s4_layout_foundation_fixtures_import_and_settle,upstream_stack_alignment_positions_a_fixed_child}", "crates/nuxie-runtime/src/draw.rs::upstream_engine_display_folds_visibility_and_layout_type"]
+note = "All three pinned stack cases now execute their fixture, mutation, and assertion sequence directly in Rust."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/layout_test.cpp"

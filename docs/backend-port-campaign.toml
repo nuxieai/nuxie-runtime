@@ -1,8 +1,10 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_queue = "compiler"
+active_queue = "rooted-execution"
 preparation_status = "green"
 ignored_skills = ["implement", "tdd"]
+compiler_status = "green"
+compiler_barrier_ref = "248b0de020912b4dcafa8a61b35f17ddb3ab4cad"
 translation_receipt_directory = "docs/backend-port-receipts"
 source_review_plan = "docs/backend-port-source-review-plan.toml"
 source_review_schema = "docs/backend-port-source-review-schema.md"

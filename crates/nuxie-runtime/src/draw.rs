@@ -28558,6 +28558,56 @@ mod tests {
     }
 
     #[test]
+    fn upstream_engine_display_folds_visibility_and_layout_type() {
+        let bytes = cpp_runtime_fixture("layout/stack.riv");
+        let file = read_runtime_file(&bytes).expect("stack fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("stack fixture graphs");
+        let graph = &graphs.artboards[0];
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("stack artboard instantiates");
+        artboard.update_pass();
+
+        let layout_type = property_key_for_name("LayoutComponentStyle", "layoutTypeValue")
+            .expect("layoutTypeValue key");
+        let display_value = property_key_for_name("LayoutComponentStyle", "displayValue")
+            .expect("displayValue key");
+        let style_local = graph
+            .components
+            .iter()
+            .filter(|component| component.type_name == "LayoutComponentStyle")
+            .find(|component| artboard.uint_property(component.local_id, layout_type) == Some(2))
+            .expect("stack style")
+            .local_id;
+        let owner_local = graph
+            .components
+            .iter()
+            .find(|component| {
+                component.type_name == "LayoutComponent"
+                    && component.children.contains(&style_local)
+            })
+            .expect("stack owner")
+            .local_id;
+        let engine = TaffyRuntimeLayoutEngine;
+
+        for (display, layout, expected) in [
+            (0, 0, TaffyDisplay::Flex),
+            (0, 1, TaffyDisplay::Grid),
+            (0, 2, TaffyDisplay::Grid),
+            (1, 0, TaffyDisplay::None),
+            (1, 1, TaffyDisplay::None),
+            (1, 2, TaffyDisplay::None),
+        ] {
+            let _ = artboard.set_uint_property(style_local, display_value, display);
+            let _ = artboard.set_uint_property(style_local, layout_type, layout);
+            let style = engine
+                .style_for_node(&artboard, graph, owner_local, true)
+                .expect("attached stack style resolves");
+            assert_eq!(style.display, expected);
+        }
+    }
+
+    #[test]
     fn mounted_child_backend_resources_clone_and_remount_cold() {
         let mut source = RuntimeOccurrenceRenderResources::default();
         source.reset_for_parent_backend_context(17);

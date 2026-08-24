@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 19
+max_pending = 18
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -678,9 +678,9 @@ note = "All 35 pinned inline-Luau TEST_CASE scenarios are direct Rust ports thro
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_canvas_drawing_phase_test.cpp"
 test_case_count = 3
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_canvas_drawing_phase.rs"]
+note = "All three cases retain the exact default/true/nested/restored phase checks, nullable guard construction, typed Luau drawCanvas body, pinned coin.riv fixture, and outside/inside-phase calls. They remain honestly expected-red because the Rust-native scripting backend has no canvasDrawingPhase state, scoped guard, or drawCanvas binding owner; Phase 1 does not add them."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_color_test.cpp"

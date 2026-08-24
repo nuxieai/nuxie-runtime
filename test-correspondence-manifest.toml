@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 62
+max_pending = 61
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -899,9 +899,9 @@ note = "All 13 upstream cases are translated one-for-one with their original scr
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_wake_advance_test.cpp"
 test_case_count = 2
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_wake_advance.rs"]
+note = "Both cases preserve the complete typed Luau fixture, implemented-method masks, initialization, park-loop helper, pointer/keyboard dispatch arguments, advance flags, counter reads, and assertion order. They are honest ignored expected-red tests because the Rust runtime has no primary ScriptedDrawable idle/wake owner yet."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scroll_test.cpp"

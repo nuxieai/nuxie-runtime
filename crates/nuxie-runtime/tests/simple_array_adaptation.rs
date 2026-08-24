@@ -112,6 +112,30 @@ fn nested_owned_storage_moves_without_aliasing_payloads() {
 }
 
 #[test]
+fn upstream_builder_arrays_of_arrays_work_under_the_rust_allocator_adaptation() {
+    let mut structs = Vec::with_capacity(2);
+    for _ in 0..3 {
+        let numbers = vec![33_u32, 22, 44, 66];
+        structs.push(numbers);
+    }
+
+    assert_eq!(structs.len(), 3);
+    assert!(structs.iter().all(|numbers| numbers == &[33, 22, 44, 66]));
+}
+
+#[test]
+fn upstream_oom_construction_returns_empty_under_the_rust_allocator_adaptation() {
+    // Rust cannot safely request C++'s infallible SIZE_MAX allocation. Its
+    // exact native counterpart is the fallible reservation API: rejection
+    // leaves the owner valid, empty, and with a null dangling-free slice.
+    let mut array = Vec::<u8>::new();
+    assert!(array.try_reserve_exact(usize::MAX).is_err());
+    assert!(array.is_empty());
+    assert_eq!(array.len(), 0);
+    assert!(array.as_slice().is_empty());
+}
+
+#[test]
 fn fallible_growth_rejects_overflow_and_leaves_storage_composable() {
     // `ctor returns empty array on size*sizeof(T) overflow`, `delegating ctor
     // stays safe on overflow`, and `overflow-failed array stays composable`.

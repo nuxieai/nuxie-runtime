@@ -672,10 +672,9 @@ note = "All three cases retain the exact default/true/nested/restored phase chec
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_color_test.cpp"
 test_case_count = 3
-status = "partial"
-evidence = ["crates/nuxie-scripting/src/vm/lua_color.rs::{color_construction_and_component_overloads_match_cpp,color_opacity_lerp_and_float_conversion_match_cpp}"]
-covered_test_cases = ["color can be constructed", "color static methods work"]
-note = "The two complete direct Lua assertion sequences are active, including construction, every channel getter/setter, opacity, and lerp. Scripted color converter remains unclaimed because its exact 0/.016 fixture action stream is still pending-scripted; generic corpus sampling is not promoted as equivalent."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/src/vm/lua_color.rs::{color_construction_and_component_overloads_match_cpp,color_opacity_lerp_and_float_conversion_match_cpp}", "silver-corpus.toml::script_color_data_test"]
+note = "All three cases are represented. The two direct Lua assertion sequences are active, including construction, every channel getter/setter, opacity, and lerp. The scripted color converter retains its exact fixture, default ViewModel bind, 0/.016 advances, draws, frames, and named silver as an explicit pending-scripted result rather than being mistaken for a passing generic sample."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
@@ -701,10 +700,9 @@ note = "All five pinned fixtures execute through the Rust-native scripting stack
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_detached_viewmodel_advance_test.cpp"
 test_case_count = 3
-status = "partial"
-evidence = ["crates/nuxie-scripting/src/vm/view_model.rs::registrations_retain_until_the_last_owner_and_then_stop_advancing", "crates/nuxie-scripting/src/vm/view_model.rs::only_parentless_roots_advance_and_registered_roots_recurse_to_children", "crates/nuxie-scripting/src/vm/view_model.rs::runtime_list_parent_edges_change_without_a_scripting_rescan"]
-covered_test_cases = ["advanceDetachedViewModels advances only parentless instances", "tracked instance outlives its wrapper while another owner holds it"]
-note = "P3-b directly covers the two non-null wrapper/tracking lifecycle cases: owner-counted registrations retain until the last wrapper drops, attached instances are skipped via runtime has_parents(), and detached roots advance recursively. The pinned null-wrapper case has no safe Rust construction because ScriptViewModel always owns a non-null retained instance, so this three-case row remains honestly partial."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/src/vm/view_model.rs::{registrations_retain_until_the_last_owner_and_then_stop_advancing,only_parentless_roots_advance_and_registered_roots_recurse_to_children,runtime_list_parent_edges_change_without_a_scripting_rescan,advance_detached_view_models_tolerates_the_safe_rust_null_adaptation}"]
+note = "All three cases are represented. Owner-counted registrations retain until the last wrapper drops, attached instances are skipped via runtime has_parents(), and detached roots advance recursively. Rust cannot construct the pinned null ScriptedViewModel because its retained instance is non-null by type; the exact safe-Rust adaptation verifies that an empty frame context creates no registration and advances as a no-op."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_direct_field_benchmark.cpp"

@@ -1,6 +1,8 @@
 # Upstream C++ unit-test correspondence ledger. A differential disposition
 # requires complete behavior execution through both the pinned C++ runtime and
 # Rust. Direct-only coverage is never promoted from nearby or foundational tests.
+# Phase execution and the exact definition of a port live in
+# docs/runtime-exact-parity-plan.md.
 schema = "nuxie-test-correspondence/v1"
 schema_version = 1
 upstream_repository = "rive-app/rive-runtime"
@@ -14,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 79
+max_pending = 70
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -54,9 +56,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/binary_reader_test.cpp"
 test_case_count = 5
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-binary/tests/binary_reader_roundtrip.rs::{binary_reader_test_fits_in_checks_direct_port,binary_reader_test_range_checks_direct_port,binary_reader_test_all_data_types_can_be_written_and_read_direct_port}", "crates/nuxie-binary/src/core/binary_reader.rs::{read_bytes_overflows_on_a_length_past_the_end_of_the_buffer,read_bytes_returns_exactly_the_in_range_bytes_requested}"]
+note = "All five upstream assertion sequences are direct Rust ports: the public reader/writer integration test owns integer range and primitive round trips, and the private safe-reader tests retain both exact readBytes boundary cases."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/bound_bones_test.cpp"
@@ -103,9 +105,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/color_test.cpp"
 test_case_count = 2
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/src/shapes/paint/color.rs::{packed_color_unpacking_matches_pinned_argb_layout,packed_color_lerp_matches_pinned_channel_rounding_and_clamping}"]
+note = "Both upstream cases are direct Rust ports with the literal 0x12345678 channel layout, normalized and premultiplied channel assertions, and the 1.3 extrapolation clamp oracle."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/command_queue_test.cpp"
@@ -497,9 +499,9 @@ note = "Both preserve-offset cases are direct fixture ports."
 [[file]]
 upstream = "tests/unit_tests/runtime/lite_rtti_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_ownership.rs::lite_rtti_behaves_correctly_direct_safe_rust_port"]
+note = "The complete type-identity, nullable cast, constructor-field, and reference-counted cast sequence is a direct safe-Rust adaptation over Any, TypeId, and Rc; intrusive lite-RTTI is intentionally not recreated."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/main_test.cpp"
@@ -597,23 +599,23 @@ note = "All 16 raw cursor, edit, selection, measurement, and journal cases are d
 [[file]]
 upstream = "tests/unit_tests/runtime/reader_test.cpp"
 test_case_count = 4
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-binary/tests/binary_reader_roundtrip.rs::{reader_test_uint_leb_decoder_direct_port,reader_test_string_decoder_direct_port,reader_test_float_decoder_direct_port,reader_test_byte_decoder_direct_port}"]
+note = "All four decoder cases are direct Rust ports over the production BinaryDataReader, retaining the literal LEB128, string, float, truncation, byte-walk, and overflow assertions in source order."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/rectangles_to_contour_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/src/rectangles_to_contour.rs::adjacent_and_separate_rectangles_match_cpp_contours"]
+note = "The sole upstream case is a direct Rust port retaining both the adjacent-rectangle and reset-plus-separated-rectangle assertion sequences, including contour counts, sizes, point order, and literal coordinates."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/refcnt_test.cpp"
 test_case_count = 2
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_ownership.rs::{refcnt_direct_safe_rust_port,rcp_direct_safe_rust_port}"]
+note = "Both intrusive-refcount cases are direct safe-Rust adaptations over Rc and Option, retaining construction, clone/drop counts, null handling, release-shaped ownership transfer, identity, constructor arguments, and erased-type downcast assertions without recreating unsafe C++ ownership."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/render_test.cpp"
@@ -1011,9 +1013,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/span_test.cpp"
 test_case_count = 3
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_span.rs::{span_basics_direct_port,span_const_and_containers_direct_port,can_iterate_span_direct_port}"]
+note = "All three upstream Span cases are direct safe-Rust ports over the approved slice adaptation, preserving empty/data/length/byte-size/iteration/subset, mutable-to-const, array, and vector assertions."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/state_machine_event_test.cpp"
@@ -1098,9 +1100,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/type_conversions_test.cpp"
 test_case_count = 11
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-binary/tests/type_conversions.rs"]
+note = "All 11 checkedMul and mulOverflows cases are direct safe-Rust ports over primitive checked_mul, the approved language-native adaptation, retaining zero, identity, boundary, square, narrow-width, usize, alias-shaped, inverse, and decoder-sized assertions."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/viewmodel_instance_list_index_runtime_test.cpp"

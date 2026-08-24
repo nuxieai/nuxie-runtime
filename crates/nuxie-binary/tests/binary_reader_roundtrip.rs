@@ -1,5 +1,147 @@
 use nuxie_binary::{BinaryDataReader, BinaryStream, BinaryWriter};
 
+fn fits_in<T>(value: i64) -> bool
+where
+    T: TryFrom<i64>,
+{
+    T::try_from(value).is_ok()
+}
+
+fn assert_fits_in_boundaries<T>()
+where
+    T: TryFrom<i64> + BoundedI64,
+{
+    let min = T::MIN;
+    let max = T::MAX;
+    assert!(fits_in::<T>(max));
+    assert!(fits_in::<T>(min));
+    assert!(!fits_in::<T>(max + 1));
+    assert!(!fits_in::<T>(min - 1));
+}
+
+trait BoundedI64 {
+    const MIN: i64;
+    const MAX: i64;
+}
+
+macro_rules! bounded_i64 {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl BoundedI64 for $ty {
+                const MIN: i64 = <$ty>::MIN as i64;
+                const MAX: i64 = <$ty>::MAX as i64;
+            }
+        )+
+    };
+}
+
+bounded_i64!(i8, u8, i16, u16, i32, u32);
+
+fn pack_var_uint(mut value: u64) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    while value > 127 {
+        bytes.push(0x80 | (value as u8 & 0x7f));
+        value >>= 7;
+    }
+    bytes.push(value as u8);
+    bytes
+}
+
+fn read_var_uint_as<T>(value: u64) -> Option<T>
+where
+    T: TryFrom<u64>,
+{
+    let bytes = pack_var_uint(value);
+    let mut reader = BinaryDataReader::new(&bytes);
+    let value = T::try_from(reader.read_var_uint()).ok()?;
+    (!reader.did_overflow()).then_some(value)
+}
+
+#[test]
+fn binary_reader_test_fits_in_checks_direct_port() {
+    assert_fits_in_boundaries::<i8>();
+    assert_fits_in_boundaries::<u8>();
+    assert_fits_in_boundaries::<i16>();
+    assert_fits_in_boundaries::<u16>();
+    assert_fits_in_boundaries::<i32>();
+    assert_fits_in_boundaries::<u32>();
+}
+
+#[test]
+fn binary_reader_test_range_checks_direct_port() {
+    assert_eq!(read_var_uint_as::<u8>(100), Some(100));
+    assert_eq!(read_var_uint_as::<u16>(100), Some(100));
+    assert_eq!(read_var_uint_as::<u32>(100), Some(100));
+
+    assert_eq!(read_var_uint_as::<u8>(1_000), None);
+    assert_eq!(read_var_uint_as::<u16>(1_000), Some(1_000));
+    assert_eq!(read_var_uint_as::<u32>(1_000), Some(1_000));
+
+    assert_eq!(read_var_uint_as::<u8>(100_000), None);
+    assert_eq!(read_var_uint_as::<u16>(100_000), None);
+    assert_eq!(read_var_uint_as::<u32>(100_000), Some(100_000));
+}
+
+#[test]
+fn reader_test_uint_leb_decoder_direct_port() {
+    let mut reader = BinaryDataReader::new(&[0x01]);
+    assert_eq!(reader.read_var_uint(), 1);
+
+    let mut reader = BinaryDataReader::new(&[0x0f]);
+    assert_eq!(reader.read_var_uint(), 15);
+
+    let mut reader = BinaryDataReader::new(&[0xe5, 0x8e, 0x26]);
+    assert_eq!(reader.read_var_uint(), 624_485);
+}
+
+#[test]
+fn reader_test_string_decoder_direct_port() {
+    const STRING_BYTES: &[u8] = b"New Artboard";
+
+    let mut encoded = vec![12];
+    encoded.extend_from_slice(STRING_BYTES);
+    let mut reader = BinaryDataReader::new(&encoded);
+    assert_eq!(reader.read_string(), STRING_BYTES);
+    assert_eq!(reader.position(), 13);
+
+    let mut truncated = vec![12];
+    truncated.extend_from_slice(&STRING_BYTES[..11]);
+    let mut reader = BinaryDataReader::new(&truncated);
+    assert!(reader.read_string().is_empty());
+    assert!(reader.did_overflow());
+}
+
+#[test]
+#[allow(clippy::approx_constant)] // Literal values from pinned reader_test.cpp.
+fn reader_test_float_decoder_direct_port() {
+    let mut reader = BinaryDataReader::new(&[0x00, 0x00, 0xc8, 0x42]);
+    assert_eq!(reader.read_float32(), 100.0);
+    assert_eq!(reader.position(), 4);
+
+    let mut reader = BinaryDataReader::new(&[0xd0, 0x0f, 0x49, 0x40]);
+    assert_eq!(reader.read_float32(), 3.14159);
+    assert_eq!(reader.position(), 4);
+
+    let mut reader = BinaryDataReader::new(&[0x51, 0xf8, 0x2d, 0xc0]);
+    assert_eq!(reader.read_float32(), -2.718281);
+    assert_eq!(reader.position(), 4);
+
+    let mut reader = BinaryDataReader::new(&[0x51, 0xf8, 0x2d]);
+    assert_eq!(reader.read_float32(), 0.0);
+    assert!(reader.did_overflow());
+}
+
+#[test]
+fn reader_test_byte_decoder_direct_port() {
+    let bytes = [0x00, 0x00, 0xc8, 0x42];
+    let mut reader = BinaryDataReader::new(&bytes);
+    for expected in bytes {
+        assert_eq!(reader.read_byte(), expected);
+    }
+    assert_eq!(reader.read_byte(), 0);
+    assert!(reader.did_overflow());
+}
+
 #[derive(Default)]
 struct RecordingStream {
     bytes: Vec<u8>,

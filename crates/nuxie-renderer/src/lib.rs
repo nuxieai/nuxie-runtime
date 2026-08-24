@@ -5,6 +5,11 @@
 
 mod renderer_types;
 pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};
+#[cfg(any(
+    feature = "native-vulkan-experimental",
+    feature = "native-webgpu-experimental"
+))]
+mod exact_source_adapter;
 mod tessellation_relocation;
 pub(crate) use tessellation_relocation::relocate_tessellation_logically;
 #[cfg(test)]

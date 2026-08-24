@@ -325,6 +325,8 @@ pub(crate) fn build_feather_tessellation_with_direction(
 #[cfg(any(
     test,
     feature = "ore-gl",
+    feature = "native-vulkan-experimental",
+    feature = "native-webgpu-experimental",
     all(
         feature = "native-metal-experimental",
         any(
@@ -419,6 +421,8 @@ pub(crate) fn feather_pixel_bounds(
 #[cfg(any(
     test,
     feature = "ore-gl",
+    feature = "native-vulkan-experimental",
+    feature = "native-webgpu-experimental",
     all(
         feature = "native-metal-experimental",
         any(

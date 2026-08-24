@@ -132,12 +132,14 @@ fn readNextBytecodeSpan(spirvData: &'static [u32], spirvIndex: &mut usize) -> &'
     insnData
 }
 
-// void hotload_shaders(rive::Span<const uint32_t> spirvData)
-pub(crate) fn hotload_shaders(spirvData: &'static [u32]) {
+fn visit_hotload_shaders(
+    spirvData: &'static [u32],
+    mut assign: impl FnMut(&'static ShaderSlot, &'static [u32]),
+) {
     let mut spirvIndex = 0;
     macro_rules! read {
         ($slot:ident) => {
-            $slot.replace(readNextBytecodeSpan(spirvData, &mut spirvIndex))
+            assign(&$slot, readNextBytecodeSpan(spirvData, &mut spirvIndex))
         };
     }
 
@@ -247,6 +249,11 @@ pub(crate) fn hotload_shaders(spirvData: &'static [u32]) {
     read!(draw_msaa_resolve_frag);
 }
 
+// void hotload_shaders(rive::Span<const uint32_t> spirvData)
+pub(crate) fn hotload_shaders(spirvData: &'static [u32]) {
+    visit_hotload_shaders(spirvData, ShaderSlot::replace);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,19 +286,38 @@ mod tests {
             hotload.push(1);
             hotload.push(0x1000 + index as u32);
         }
-        hotload_shaders(Box::leak(hotload.into_boxed_slice()));
-        assert_eq!(&*color_ramp_vert.read().unwrap(), &[0x1000]);
+        let hotload = Box::leak(hotload.into_boxed_slice());
+        let mut assignments = Vec::with_capacity(serialized_shader_count);
+        visit_hotload_shaders(hotload, |slot, words| assignments.push((slot, words)));
+        assert_eq!(assignments.len(), serialized_shader_count);
+        assert!(std::ptr::eq(assignments[0].0, &color_ramp_vert));
+        assert_eq!(assignments[0].1, &[0x1000]);
+        let atlas_blit_assignments = assignments
+            .iter()
+            .filter(|(slot, _)| std::ptr::eq(*slot, &draw_clockwise_atomic_atlas_blit_vert))
+            .collect::<Vec<_>>();
+        assert_eq!(atlas_blit_assignments.len(), 2);
         #[cfg(not(target_os = "android"))]
-        assert_eq!(&*draw_clockwise_atomic_atlas_blit_vert.read().unwrap(), &[0x1043]);
+        assert_eq!(atlas_blit_assignments[1].1, &[0x1043]);
         #[cfg(target_os = "android")]
-        assert_eq!(&*draw_clockwise_atomic_atlas_blit_vert.read().unwrap(), &[0x1033]);
+        assert_eq!(atlas_blit_assignments[1].1, &[0x1033]);
         assert!(matches!(
             init_clockwise_atomic_workaround_vert.read(),
             Err(ShaderUnavailable::UndefinedSourceSymbol)
         ));
         #[cfg(not(target_os = "android"))]
-        assert_eq!(&*draw_msaa_resolve_frag.read().unwrap(), &[0x105d]);
+        assert!(std::ptr::eq(
+            assignments.last().expect("last shader assignment").0,
+            &draw_msaa_resolve_frag,
+        ));
         #[cfg(target_os = "android")]
-        assert_eq!(&*draw_msaa_resolve_frag.read().unwrap(), &[0x104d]);
+        assert!(std::ptr::eq(
+            assignments.last().expect("last shader assignment").0,
+            &draw_msaa_resolve_frag,
+        ));
+        #[cfg(not(target_os = "android"))]
+        assert_eq!(assignments.last().unwrap().1, &[0x105d]);
+        #[cfg(target_os = "android")]
+        assert_eq!(assignments.last().unwrap().1, &[0x104d]);
     }
 }

@@ -4,6 +4,8 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
 use std::ffi::{c_char, CStr};
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use std::ffi::CString;
 use std::ptr;
 
 use super::webgpu_decl;
@@ -45,16 +47,35 @@ pub(crate) unsafe fn WGPU_STRING_VIEW_TO_STRING(value: WGPUStringView) -> Vec<u8
 /// Source `strdup(s.c_str())`; ownership transfers to
 /// `WGPU_STRING_VIEW_FREE` exactly once.
 pub(crate) fn WGPU_STRING_VIEW_FROM_STRING(value: &CStr) -> WGPUStringView {
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    {
+        value.to_owned().into_raw()
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    {
     // SAFETY: `value` is NUL terminated and `strdup` returns independent C
     // allocation or null on allocation failure, exactly as the source macro.
-    unsafe { libc::strdup(value.as_ptr()) }
+        unsafe { libc::strdup(value.as_ptr()) }
+    }
 }
 
 /// Source `free(const_cast<char*>(s))`.
 pub(crate) unsafe fn WGPU_STRING_VIEW_FREE(value: WGPUStringView) {
+    if value.is_null() {
+        return;
+    }
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    {
+        // SAFETY: The source macro frees exactly the allocation produced by
+        // `WGPU_STRING_VIEW_FROM_STRING`; this is its Rust allocator twin.
+        drop(unsafe { CString::from_raw(value.cast_mut()) });
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    {
     // SAFETY: The caller transfers a pointer returned by the matching source
     // duplication operation, or null.
-    unsafe { libc::free(value.cast_mut().cast()) };
+        unsafe { libc::free(value.cast_mut().cast()) };
+    }
 }
 
 #[repr(C)]
@@ -73,7 +94,7 @@ pub(crate) unsafe fn WGPU_WAGYU_STRING_VIEW(value: WGPUStringView) -> WGPUWagyuS
             0
         } else {
             // SAFETY: The non-null input carries the source `strlen` contract.
-            unsafe { libc::strlen(value) }
+            unsafe { CStr::from_ptr(value) }.to_bytes().len()
         },
     }
 }

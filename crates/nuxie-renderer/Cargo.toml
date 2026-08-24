@@ -20,7 +20,7 @@ native-metal-experimental = []
 native-vulkan-experimental = ["dep:ash", "dep:nuxie-ore-metal", "dep:vk-mem"]
 # Builds the exact pinned Dawn/Wagyu WebGPU campaign without selecting it for
 # shipping or sharing authority with the legacy Rust-WGPU renderer.
-native-webgpu-experimental = ["dep:libc", "dep:nuxie-ore-metal"]
+native-webgpu-experimental = ["dep:libc", "dep:nuxie-ore-metal", "dep:web-time"]
 # Builds the exact pinned WebGL2 campaign for the browser without selecting it
 # implicitly or sharing product authority with WebGPU.
 native-webgl2-experimental = [

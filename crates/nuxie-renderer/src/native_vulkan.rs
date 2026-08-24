@@ -310,12 +310,16 @@ mod tests {
             return;
         };
         let mut paths_and_paints = Vec::new();
-        for (inset, color) in [(20.0, 0xffff0000), (50.0, 0xff00ff00), (80.0, 0xff0000ff)] {
+        for ([left, top, right, bottom], color) in [
+            ([10.0, 10.0, 190.0, 190.0], 0xffff0000),
+            ([40.0, 30.0, 160.0, 130.0], 0xff00ff00),
+            ([70.0, 50.0, 130.0, 90.0], 0xff0000ff),
+        ] {
             let mut path = RawPath::new();
-            path.move_to(inset, inset);
-            path.line_to(200.0 - inset, inset);
-            path.line_to(200.0 - inset, 200.0 - inset);
-            path.line_to(inset, 200.0 - inset);
+            path.move_to(left, top);
+            path.line_to(right, top);
+            path.line_to(right, bottom);
+            path.line_to(left, bottom);
             path.close();
             let render_path = factory.make_render_path(path, FillRule::NonZero);
             let mut paint = factory.make_render_paint();
@@ -332,8 +336,8 @@ mod tests {
         let pixels = frame.finish().expect("finish");
         let pixel = |x: usize, y: usize| &pixels[(y * 200 + x) * 4..][..4];
 
-        assert_eq!(pixel(30, 30), [0xff, 0x00, 0x00, 0xff]);
-        assert_eq!(pixel(60, 60), [0x00, 0xff, 0x00, 0xff]);
-        assert_eq!(pixel(100, 100), [0x00, 0x00, 0xff, 0xff]);
+        assert_eq!(pixel(20, 20), [0xff, 0x00, 0x00, 0xff]);
+        assert_eq!(pixel(50, 40), [0x00, 0xff, 0x00, 0xff]);
+        assert_eq!(pixel(80, 60), [0x00, 0x00, 0xff, 0xff]);
     }
 }

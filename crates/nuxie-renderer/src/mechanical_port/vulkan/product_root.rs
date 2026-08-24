@@ -216,7 +216,7 @@ impl VulkanProductBackend {
         let mut pixels = vec![0; byte_len];
         let stride = self.width as usize * 4;
         for y in 0..self.height as usize {
-            let source_row = &source[(self.height as usize - 1 - y) * stride..][..stride];
+            let source_row = &source[y * stride..][..stride];
             let target_row = &mut pixels[y * stride..][..stride];
             target_row.copy_from_slice(source_row);
             for pixel in target_row.chunks_exact_mut(4) {

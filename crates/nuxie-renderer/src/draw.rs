@@ -2785,6 +2785,10 @@ fn point_in_triangle(point: Vec2D, a: Vec2D, b: Vec2D, c: Vec2D, winding: f32) -
         && cross(c, a, point) * winding >= 0.0
 }
 
+#[cfg(test)]
+#[path = "draw/upstream_bezier_utils_tests.rs"]
+mod upstream_bezier_utils_tests;
+
 fn eval_cubic(points: [Vec2D; 4], t: f32) -> Vec2D {
     let ab = lerp(points[0], points[1], t);
     let bc = lerp(points[1], points[2], t);

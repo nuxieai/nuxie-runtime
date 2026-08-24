@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 44
+max_pending = 43
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -570,9 +570,9 @@ note = "Both direct safe-Rust ports exercise the retained Node owner: default x 
 [[file]]
 upstream = "tests/unit_tests/runtime/object_stream_test.cpp"
 test_case_count = 4
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_object_stream.rs"]
+note = "Explicit Rust-native container adaptation: all four action/assertion sequences use VecDeque<T> and a checked VecDeque<u8> POD stream, retaining empty-state checks, extraction order, exact values/vectors/arrays, the 100-object loop, and both complete 4096-record mixed-width POD sequences without recreating C++ object-layout or unsafe-memory constraints."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/path_test.cpp"

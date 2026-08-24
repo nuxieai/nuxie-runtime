@@ -2291,7 +2291,6 @@ impl ConvertibleStatus { pub(crate) fn asBool(self) -> bool { self.0 == Status::
 pub(crate) type Proc = WGPUProc;
 pub(crate) type StringView = WGPUStringView;
 
-pub(crate) type BindGroupEntry = WGPUBindGroupEntry;
 pub(crate) type BlendComponent = WGPUBlendComponent;
 pub(crate) type BufferBindingLayout = WGPUBufferBindingLayout;
 pub(crate) type BufferDescriptor = WGPUBufferDescriptor;
@@ -2308,14 +2307,12 @@ pub(crate) type InstanceLimits = WGPUInstanceLimits;
 pub(crate) type INTERNAL_HAVE_EMDAWNWEBGPU_HEADER = WGPUINTERNAL_HAVE_EMDAWNWEBGPU_HEADER;
 pub(crate) type MultisampleState = WGPUMultisampleState;
 pub(crate) type Origin3D = WGPUOrigin3D;
-pub(crate) type PassTimestampWrites = WGPUPassTimestampWrites;
 pub(crate) type PipelineLayoutDescriptor = WGPUPipelineLayoutDescriptor;
 pub(crate) type PrimitiveState = WGPUPrimitiveState;
 pub(crate) type QuerySetDescriptor = WGPUQuerySetDescriptor;
 pub(crate) type QueueDescriptor = WGPUQueueDescriptor;
 pub(crate) type RenderBundleDescriptor = WGPURenderBundleDescriptor;
 pub(crate) type RenderBundleEncoderDescriptor = WGPURenderBundleEncoderDescriptor;
-pub(crate) type RenderPassDepthStencilAttachment = WGPURenderPassDepthStencilAttachment;
 pub(crate) type RenderPassMaxDrawCount = WGPURenderPassMaxDrawCount;
 pub(crate) type RequestAdapterWebXROptions = WGPURequestAdapterWebXROptions;
 pub(crate) type SamplerBindingLayout = WGPUSamplerBindingLayout;
@@ -2325,42 +2322,265 @@ pub(crate) type ShaderSourceWGSL = WGPUShaderSourceWGSL;
 pub(crate) type StencilFaceState = WGPUStencilFaceState;
 pub(crate) type StorageTextureBindingLayout = WGPUStorageTextureBindingLayout;
 pub(crate) type SurfaceColorManagement = WGPUSurfaceColorManagement;
-pub(crate) type SurfaceConfiguration = WGPUSurfaceConfiguration;
-pub(crate) type SurfaceTexture = WGPUSurfaceTexture;
 pub(crate) type TexelCopyBufferLayout = WGPUTexelCopyBufferLayout;
 pub(crate) type TextureBindingLayout = WGPUTextureBindingLayout;
 pub(crate) type TextureBindingViewDimensionDescriptor = WGPUTextureBindingViewDimensionDescriptor;
 pub(crate) type TextureComponentSwizzle = WGPUTextureComponentSwizzle;
 pub(crate) type VertexAttribute = WGPUVertexAttribute;
-pub(crate) type BindGroupDescriptor = WGPUBindGroupDescriptor;
 pub(crate) type BindGroupLayoutEntry = WGPUBindGroupLayoutEntry;
 pub(crate) type BlendState = WGPUBlendState;
 pub(crate) type CompilationMessage = WGPUCompilationMessage;
 pub(crate) type ComputePassDescriptor = WGPUComputePassDescriptor;
-pub(crate) type ComputeState = WGPUComputeState;
 pub(crate) type DepthStencilState = WGPUDepthStencilState;
 pub(crate) type FutureWaitInfo = WGPUFutureWaitInfo;
 pub(crate) type InstanceDescriptor = WGPUInstanceDescriptor;
 pub(crate) type Limits = WGPULimits;
-pub(crate) type RenderPassColorAttachment = WGPURenderPassColorAttachment;
-pub(crate) type RequestAdapterOptions = WGPURequestAdapterOptions;
 pub(crate) type ShaderModuleDescriptor = WGPUShaderModuleDescriptor;
 pub(crate) type SurfaceDescriptor = WGPUSurfaceDescriptor;
-pub(crate) type TexelCopyBufferInfo = WGPUTexelCopyBufferInfo;
-pub(crate) type TexelCopyTextureInfo = WGPUTexelCopyTextureInfo;
 pub(crate) type TextureComponentSwizzleDescriptor = WGPUTextureComponentSwizzleDescriptor;
 pub(crate) type TextureDescriptor = WGPUTextureDescriptor;
 pub(crate) type VertexBufferLayout = WGPUVertexBufferLayout;
 pub(crate) type BindGroupLayoutDescriptor = WGPUBindGroupLayoutDescriptor;
 pub(crate) type ColorTargetState = WGPUColorTargetState;
 pub(crate) type CompilationInfo = WGPUCompilationInfo;
-pub(crate) type ComputePipelineDescriptor = WGPUComputePipelineDescriptor;
-pub(crate) type RenderPassDescriptor = WGPURenderPassDescriptor;
 pub(crate) type TextureViewDescriptor = WGPUTextureViewDescriptor;
-pub(crate) type VertexState = WGPUVertexState;
-pub(crate) type FragmentState = WGPUFragmentState;
-pub(crate) type RenderPipelineDescriptor = WGPURenderPipelineDescriptor;
 pub(crate) type DeviceDescriptor = WGPUDeviceDescriptor;
+
+macro_rules! owned_aggregate_layout {
+    ($name:ident, $raw:ident) => {
+        impl Default for $name {
+            fn default() -> Self {
+                // SAFETY: the wrapper has the exact C layout of the raw
+                // aggregate and every owned handle is repr(transparent). Raw
+                // defaults contain only null handles, so ownership begins
+                // empty on both sides.
+                unsafe { core::mem::transmute::<$raw, Self>(<$raw>::default()) }
+            }
+        }
+        impl $name {
+            pub(crate) fn asRaw(&self) -> &$raw {
+                unsafe { &*core::ptr::from_ref(self).cast::<$raw>() }
+            }
+        }
+        const _: () = assert!(core::mem::size_of::<$name>() == core::mem::size_of::<$raw>());
+        const _: () = assert!(core::mem::align_of::<$name>() == core::mem::align_of::<$raw>());
+    };
+}
+
+macro_rules! clone_owned_aggregate {
+    ($name:ident, $self:ident, $($field:ident),+ $(,)?) => {
+        impl Clone for $name {
+            fn clone(&$self) -> Self {
+                // SAFETY: all non-owner members are generated WebGPU C POD.
+                // Replace every bitwise-copied RAII member with a true clone
+                // before the result can be observed or dropped.
+                unsafe {
+                    let mut cloned = core::ptr::read($self);
+                    $(core::ptr::write(&mut cloned.$field, $self.$field.clone());)+
+                    cloned
+                }
+            }
+        }
+    };
+}
+
+#[repr(C)]
+pub(crate) struct BindGroupEntry {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) binding: u32,
+    pub(crate) buffer: Buffer,
+    pub(crate) offset: u64,
+    pub(crate) size: u64,
+    pub(crate) sampler: Sampler,
+    pub(crate) textureView: TextureView,
+}
+owned_aggregate_layout!(BindGroupEntry, WGPUBindGroupEntry);
+clone_owned_aggregate!(BindGroupEntry, self, buffer, sampler, textureView);
+
+#[repr(C)]
+pub(crate) struct PassTimestampWrites {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) querySet: QuerySet,
+    pub(crate) beginningOfPassWriteIndex: u32,
+    pub(crate) endOfPassWriteIndex: u32,
+}
+owned_aggregate_layout!(PassTimestampWrites, WGPUPassTimestampWrites);
+clone_owned_aggregate!(PassTimestampWrites, self, querySet);
+
+#[repr(C)]
+pub(crate) struct RenderPassDepthStencilAttachment {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) view: TextureView,
+    pub(crate) depthLoadOp: WGPULoadOp,
+    pub(crate) depthStoreOp: WGPUStoreOp,
+    pub(crate) depthClearValue: f32,
+    pub(crate) depthReadOnly: WGPUBool,
+    pub(crate) stencilLoadOp: WGPULoadOp,
+    pub(crate) stencilStoreOp: WGPUStoreOp,
+    pub(crate) stencilClearValue: u32,
+    pub(crate) stencilReadOnly: WGPUBool,
+}
+owned_aggregate_layout!(RenderPassDepthStencilAttachment, WGPURenderPassDepthStencilAttachment);
+clone_owned_aggregate!(RenderPassDepthStencilAttachment, self, view);
+
+#[repr(C)]
+pub(crate) struct SurfaceConfiguration {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) device: Device,
+    pub(crate) format: WGPUTextureFormat,
+    pub(crate) usage: WGPUTextureUsage,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) viewFormatCount: usize,
+    pub(crate) viewFormats: *const WGPUTextureFormat,
+    pub(crate) alphaMode: WGPUCompositeAlphaMode,
+    pub(crate) presentMode: WGPUPresentMode,
+}
+owned_aggregate_layout!(SurfaceConfiguration, WGPUSurfaceConfiguration);
+clone_owned_aggregate!(SurfaceConfiguration, self, device);
+
+#[repr(C)]
+pub(crate) struct SurfaceTexture {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) texture: Texture,
+    pub(crate) status: WGPUSurfaceGetCurrentTextureStatus,
+}
+owned_aggregate_layout!(SurfaceTexture, WGPUSurfaceTexture);
+clone_owned_aggregate!(SurfaceTexture, self, texture);
+impl SurfaceTexture {
+    fn resetForOutput(&mut self) -> *mut WGPUSurfaceTexture {
+        *self = Self::default();
+        self as *mut Self as *mut WGPUSurfaceTexture
+    }
+}
+
+#[repr(C)]
+pub(crate) struct BindGroupDescriptor {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) label: WGPUStringView,
+    pub(crate) layout: BindGroupLayout,
+    pub(crate) entryCount: usize,
+    pub(crate) entries: *const WGPUBindGroupEntry,
+}
+owned_aggregate_layout!(BindGroupDescriptor, WGPUBindGroupDescriptor);
+clone_owned_aggregate!(BindGroupDescriptor, self, layout);
+
+#[repr(C)]
+pub(crate) struct ComputeState {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) module: ShaderModule,
+    pub(crate) entryPoint: WGPUStringView,
+    pub(crate) constantCount: usize,
+    pub(crate) constants: *const WGPUConstantEntry,
+}
+owned_aggregate_layout!(ComputeState, WGPUComputeState);
+clone_owned_aggregate!(ComputeState, self, module);
+
+#[repr(C)]
+pub(crate) struct RenderPassColorAttachment {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) view: TextureView,
+    pub(crate) depthSlice: u32,
+    pub(crate) resolveTarget: TextureView,
+    pub(crate) loadOp: WGPULoadOp,
+    pub(crate) storeOp: WGPUStoreOp,
+    pub(crate) clearValue: WGPUColor,
+}
+owned_aggregate_layout!(RenderPassColorAttachment, WGPURenderPassColorAttachment);
+clone_owned_aggregate!(RenderPassColorAttachment, self, view, resolveTarget);
+
+#[repr(C)]
+pub(crate) struct RequestAdapterOptions {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) featureLevel: WGPUFeatureLevel,
+    pub(crate) powerPreference: WGPUPowerPreference,
+    pub(crate) forceFallbackAdapter: WGPUBool,
+    pub(crate) backendType: WGPUBackendType,
+    pub(crate) compatibleSurface: Surface,
+}
+owned_aggregate_layout!(RequestAdapterOptions, WGPURequestAdapterOptions);
+clone_owned_aggregate!(RequestAdapterOptions, self, compatibleSurface);
+
+#[repr(C)]
+pub(crate) struct TexelCopyBufferInfo {
+    pub(crate) layout: WGPUTexelCopyBufferLayout,
+    pub(crate) buffer: Buffer,
+}
+owned_aggregate_layout!(TexelCopyBufferInfo, WGPUTexelCopyBufferInfo);
+clone_owned_aggregate!(TexelCopyBufferInfo, self, buffer);
+
+#[repr(C)]
+pub(crate) struct TexelCopyTextureInfo {
+    pub(crate) texture: Texture,
+    pub(crate) mipLevel: u32,
+    pub(crate) origin: WGPUOrigin3D,
+    pub(crate) aspect: WGPUTextureAspect,
+}
+owned_aggregate_layout!(TexelCopyTextureInfo, WGPUTexelCopyTextureInfo);
+clone_owned_aggregate!(TexelCopyTextureInfo, self, texture);
+
+#[repr(C)]
+pub(crate) struct ComputePipelineDescriptor {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) label: WGPUStringView,
+    pub(crate) layout: PipelineLayout,
+    pub(crate) compute: ComputeState,
+}
+owned_aggregate_layout!(ComputePipelineDescriptor, WGPUComputePipelineDescriptor);
+clone_owned_aggregate!(ComputePipelineDescriptor, self, layout, compute);
+
+#[repr(C)]
+pub(crate) struct RenderPassDescriptor {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) label: WGPUStringView,
+    pub(crate) colorAttachmentCount: usize,
+    pub(crate) colorAttachments: *const WGPURenderPassColorAttachment,
+    pub(crate) depthStencilAttachment: *const WGPURenderPassDepthStencilAttachment,
+    pub(crate) occlusionQuerySet: QuerySet,
+    pub(crate) timestampWrites: *const WGPUPassTimestampWrites,
+}
+owned_aggregate_layout!(RenderPassDescriptor, WGPURenderPassDescriptor);
+clone_owned_aggregate!(RenderPassDescriptor, self, occlusionQuerySet);
+
+#[repr(C)]
+pub(crate) struct VertexState {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) module: ShaderModule,
+    pub(crate) entryPoint: WGPUStringView,
+    pub(crate) constantCount: usize,
+    pub(crate) constants: *const WGPUConstantEntry,
+    pub(crate) bufferCount: usize,
+    pub(crate) buffers: *const WGPUVertexBufferLayout,
+}
+owned_aggregate_layout!(VertexState, WGPUVertexState);
+clone_owned_aggregate!(VertexState, self, module);
+
+#[repr(C)]
+pub(crate) struct FragmentState {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) module: ShaderModule,
+    pub(crate) entryPoint: WGPUStringView,
+    pub(crate) constantCount: usize,
+    pub(crate) constants: *const WGPUConstantEntry,
+    pub(crate) targetCount: usize,
+    pub(crate) targets: *const WGPUColorTargetState,
+}
+owned_aggregate_layout!(FragmentState, WGPUFragmentState);
+clone_owned_aggregate!(FragmentState, self, module);
+
+#[repr(C)]
+pub(crate) struct RenderPipelineDescriptor {
+    pub(crate) nextInChain: *mut WGPUChainedStruct,
+    pub(crate) label: WGPUStringView,
+    pub(crate) layout: PipelineLayout,
+    pub(crate) vertex: VertexState,
+    pub(crate) primitive: WGPUPrimitiveState,
+    pub(crate) depthStencil: *const WGPUDepthStencilState,
+    pub(crate) multisample: WGPUMultisampleState,
+    pub(crate) fragment: *const WGPUFragmentState,
+}
+owned_aggregate_layout!(RenderPipelineDescriptor, WGPURenderPipelineDescriptor);
+clone_owned_aggregate!(RenderPipelineDescriptor, self, layout, vertex);
 
 #[repr(transparent)]
 pub(crate) struct AdapterInfo(WGPUAdapterInfo);
@@ -3522,14 +3742,14 @@ impl Surface {
         self.handle = std::ptr::null_mut();
         handle
     }
-    pub(crate) unsafe fn Configure(&self, arg1: *const WGPUSurfaceConfiguration) {
-        wgpuSurfaceConfigure(self.handle, arg1)
+    pub(crate) unsafe fn Configure(&self, configuration: &SurfaceConfiguration) {
+        wgpuSurfaceConfigure(self.handle, configuration.asRaw())
     }
     pub(crate) unsafe fn GetCapabilities(&self, adapter: WGPUAdapter, output: &mut SurfaceCapabilities) -> ConvertibleStatus {
         ConvertibleStatus(Status::from(wgpuSurfaceGetCapabilities(self.handle, adapter, output.resetForOutput())))
     }
-    pub(crate) unsafe fn GetCurrentTexture(&self, arg1: *mut WGPUSurfaceTexture) {
-        wgpuSurfaceGetCurrentTexture(self.handle, arg1)
+    pub(crate) unsafe fn GetCurrentTexture(&self, output: &mut SurfaceTexture) {
+        wgpuSurfaceGetCurrentTexture(self.handle, output.resetForOutput())
     }
     pub(crate) unsafe fn Present(&self) -> ConvertibleStatus {
         ConvertibleStatus(Status::from(wgpuSurfacePresent(self.handle)))

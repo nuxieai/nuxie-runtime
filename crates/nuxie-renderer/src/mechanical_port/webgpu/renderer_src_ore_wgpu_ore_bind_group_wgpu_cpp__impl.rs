@@ -4,7 +4,10 @@
 #![allow(non_snake_case)]
 
 use super::ore_bind_group_wgpu_decl::{BindGroupWGPU, CachedGroup};
-use super::webgpu_cpp_decl::BindGroupEntry;
+use super::webgpu_cpp_decl::{
+    BindGroupEntry, Buffer as WagyuBuffer, Sampler as WagyuSampler,
+    TextureView as WagyuTextureView,
+};
 use super::webgpu_decl::{WGPUBindGroupDescriptor, WGPUStringView, WGPU_STRLEN};
 
 pub(crate) const PINNED_SOURCE: &str =
@@ -56,7 +59,7 @@ pub(crate) fn resolveBindGroup(group: &BindGroupWGPU) -> &super::webgpu_cpp_decl
         cached.key.push(buffer);
         let mut e = BindGroupEntry::default();
         e.binding = u.binding;
-        e.buffer = buffer;
+        e.buffer = unsafe { WagyuBuffer::FromBorrowed(buffer) };
         e.offset = u.offset;
         e.size = u.size;
         entries.push(e);
@@ -64,13 +67,13 @@ pub(crate) fn resolveBindGroup(group: &BindGroupWGPU) -> &super::webgpu_cpp_decl
     for t in group.m_texEntries.iter() {
         let mut e = BindGroupEntry::default();
         e.binding = t.binding;
-        e.textureView = t.view.Get();
+        e.textureView = unsafe { WagyuTextureView::FromBorrowed(t.view.Get()) };
         entries.push(e);
     }
     for s in group.m_sampEntries.iter() {
         let mut e = BindGroupEntry::default();
         e.binding = s.binding;
-        e.sampler = s.sampler.Get();
+        e.sampler = unsafe { WagyuSampler::FromBorrowed(s.sampler.Get()) };
         entries.push(e);
     }
 
@@ -82,7 +85,7 @@ pub(crate) fn resolveBindGroup(group: &BindGroupWGPU) -> &super::webgpu_cpp_decl
     bgDesc.entries = if entries.is_empty() {
         std::ptr::null()
     } else {
-        entries.as_ptr()
+        entries.as_ptr().cast()
     };
     cached.bindGroup = unsafe { ctx.m_wgpuDevice.CreateBindGroup(&bgDesc) };
     if cached.bindGroup.Get().is_null() {

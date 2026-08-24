@@ -774,6 +774,33 @@ mod tests {
     }
 
     #[test]
+    fn upstream_can_detect_hit_test_from_pointer_event() {
+        let lua = Lua::new();
+        lua.load(
+            r#"
+            function pointerDown(event)
+              event:hit()
+              return event.position.x
+            end
+            "#,
+        )
+        .exec()
+        .unwrap();
+        let event = ScriptedPointerEvent::new(1, 22.0, 23.0);
+        assert_eq!(event.id, 1);
+        assert_eq!(event.hit_result.get(), ScriptedPointerHitResult::None);
+        let hit_result = event.hit_result.clone();
+        let x: f32 = lua
+            .globals()
+            .get::<luaur_rt::Function>("pointerDown")
+            .unwrap()
+            .call(lua.create_userdata(event).unwrap())
+            .unwrap();
+        assert_eq!(hit_result.get(), ScriptedPointerHitResult::HitOpaque);
+        assert_eq!(x, 22.0);
+    }
+
+    #[test]
     fn owned_text_and_gamepad_payloads_survive_source_drop() {
         let lua = Lua::new();
         install_invocation(

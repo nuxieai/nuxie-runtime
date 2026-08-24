@@ -357,4 +357,217 @@ mod artboard_owner_tests {
         assert!(context.advance_detached());
         assert_eq!(model.trigger(&trigger), Some(0));
     }
+
+    struct DimensionsArtboard {
+        width: f32,
+        height: f32,
+    }
+
+    impl ScriptArtboard for DimensionsArtboard {
+        fn width(&self) -> f32 {
+            self.width
+        }
+
+        fn height(&self) -> f32 {
+            self.height
+        }
+
+        fn frame_origin(&self) -> bool {
+            false
+        }
+
+        fn set_width(&mut self, width: f32) {
+            self.width = width;
+        }
+
+        fn set_height(&mut self, height: f32) {
+            self.height = height;
+        }
+
+        fn set_frame_origin(&mut self, _frame_origin: bool) {}
+
+        fn instance(
+            &self,
+            _view_model: Option<ScriptViewModel>,
+        ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
+            Ok(Box::new(Self {
+                width: self.width,
+                height: self.height,
+            }))
+        }
+
+        fn node(&self, name: &str) -> std::result::Result<Option<ScriptNode>, ScriptError> {
+            Ok(
+                (name == "muzzle" || name == "Weapon").then_some(ScriptNode {
+                    path: None,
+                    paint: None,
+                }),
+            )
+        }
+
+        fn draw(
+            &mut self,
+            _factory: &mut dyn RenderFactory,
+            _renderer: &mut dyn Renderer,
+        ) -> std::result::Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    fn dimensions_userdata(lua: &Lua) -> AnyUserData {
+        lua.create_userdata(ScriptedArtboard::new(
+            Box::new(DimensionsArtboard {
+                width: 92.0,
+                height: 92.0,
+            }),
+            RendererBindings::new(ScriptViewModelFrameContext::default()),
+        ))
+        .expect("scripted artboard")
+    }
+
+    /// Direct ports of the six non-silver cases in pinned
+    /// `scripting_artboard_test.cpp`. The PointerEvent case is retained in
+    /// `listener_invocation::tests::pointer_hit_propagates_the_cpp_tristate_out_of_the_lua_callback`.
+    #[test]
+    fn upstream_can_access_artboard_width_and_height() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("artboard", dimensions_userdata(&lua))
+            .unwrap();
+        let values: Table = lua
+            .load(
+                r#"
+                function accessWidth(artboard) return artboard.width end
+                function accessHeight(artboard) return artboard.height end
+                function changeWidth(artboard)
+                  artboard.width = 24
+                  return artboard.width
+                end
+                function changeHeight(artboard)
+                  artboard.height = 22
+                  return artboard.height
+                end
+                return {
+                  accessWidth(artboard), accessHeight(artboard),
+                  changeWidth(artboard), changeHeight(artboard)
+                }
+                "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(values.get::<f32>(1).unwrap(), 92.0);
+        assert_eq!(values.get::<f32>(2).unwrap(), 92.0);
+        assert_eq!(values.get::<f32>(3).unwrap(), 24.0);
+        assert_eq!(values.get::<f32>(4).unwrap(), 22.0);
+    }
+
+    #[test]
+    #[ignore = "expected-red: ScriptedArtboard has no pinned bounds() method"]
+    fn upstream_can_access_artboard_bounds() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("artboard", dimensions_userdata(&lua))
+            .unwrap();
+        let values: Table = lua
+            .load(
+                r#"
+                local min, max = artboard:bounds()
+                return { min.x, min.y, max.x, max.y }
+                "#,
+            )
+            .eval()
+            .expect("pinned bounds method");
+        assert_eq!(values.get::<f32>(1).unwrap(), 0.0);
+        assert_eq!(values.get::<f32>(2).unwrap(), 0.0);
+        assert_eq!(values.get::<f32>(3).unwrap(), 92.0);
+        assert_eq!(values.get::<f32>(4).unwrap(), 92.0);
+    }
+
+    #[test]
+    #[ignore = "expected-red: exact coin.riv scripted renderer loop requires the public file-backed artboard owner"]
+    fn upstream_can_render_an_artboard_via_the_scripting_engine() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("artboard", dimensions_userdata(&lua))
+            .unwrap();
+        lua.load(
+            r#"
+            function render(artboard, renderer)
+              artboard:advance(0.1)
+              artboard:draw(renderer)
+              artboard.data.Vertical.value += 5
+            end
+            "#,
+        )
+        .exec()
+        .unwrap();
+        for _ in 0..10 {
+            let renderer = Value::Nil;
+            lua.globals()
+                .get::<luaur_rt::Function>("render")
+                .unwrap()
+                .call::<()>((
+                    lua.globals().get::<AnyUserData>("artboard").unwrap(),
+                    renderer,
+                ))
+                .expect("pinned renderer userdata and Vertical model");
+        }
+    }
+
+    #[test]
+    #[ignore = "expected-red: ScriptedNode lacks pinned transform, children, parent, and decompose fields"]
+    fn upstream_can_access_nodes_from_artboards() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("artboard", dimensions_userdata(&lua))
+            .unwrap();
+        let values: Table = lua
+            .load(
+                r#"
+                local muzzle = artboard:node('muzzle')
+                local before = { muzzle.x, muzzle.y, muzzle.scaleX, muzzle.scaleY }
+                muzzle:decompose(Mat2D.identity())
+                return {
+                  muzzle ~= nil,
+                  before[1], before[2], before[3], before[4],
+                  muzzle.x, muzzle.y, muzzle.scaleX, muzzle.scaleY,
+                  #muzzle.children, muzzle.parent ~= nil,
+                  #artboard:node('Weapon').children
+                }
+                "#,
+            )
+            .eval()
+            .expect("pinned ScriptedNode surface");
+        assert!(values.get::<bool>(1).unwrap());
+        assert_eq!(values.get::<f32>(2).unwrap(), 203.0);
+        assert_eq!(values.get::<f32>(3).unwrap(), 0.0);
+        assert!((values.get::<f32>(4).unwrap() - 1.250_002_980_2).abs() < 1e-6);
+        assert!((values.get::<f32>(5).unwrap() - 1.250_002_980_2).abs() < 1e-6);
+        assert_eq!(values.get::<f32>(6).unwrap(), 0.0);
+        assert_eq!(values.get::<f32>(7).unwrap(), 0.0);
+        assert_eq!(values.get::<f32>(8).unwrap(), 1.0);
+        assert_eq!(values.get::<f32>(9).unwrap(), 1.0);
+        assert_eq!(values.get::<usize>(10).unwrap(), 0);
+        assert!(values.get::<bool>(11).unwrap());
+        assert_eq!(values.get::<usize>(12).unwrap(), 9);
+    }
+
+    #[test]
+    #[ignore = "expected-red: ScriptedArtboard has no pinned addToPath method"]
+    fn upstream_can_add_artboard_to_path() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("artboard", dimensions_userdata(&lua))
+            .unwrap();
+        lua.load(
+            r#"
+            local path = Path.new()
+            artboard:addToPath(path)
+            local transformed = Path.new()
+            artboard:addToPath(transformed, Mat2D.identity())
+            "#,
+        )
+        .exec()
+        .expect("pinned addToPath overloads");
+    }
 }

@@ -5,11 +5,29 @@ use std::ptr;
 
 use nux_capi::*;
 
+fn live_vulkan_test_required() -> bool {
+    std::env::var_os("NUXIE_REQUIRE_LIVE_VULKAN_TESTS").as_deref()
+        == Some(std::ffi::OsStr::new("1"))
+}
+
+fn probe_fixture_path() -> Option<std::path::PathBuf> {
+    if let Some(path) = std::env::var_os("NUX_PROBE_RIV") {
+        return Some(path.into());
+    }
+    let repository_fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/flow/data_binding_test.riv");
+    repository_fixture.is_file().then_some(repository_fixture)
+}
+
 #[test]
 fn fixture_renders_content_through_the_android_vulkan_arm() {
-    let riv_path = match std::env::var("NUX_PROBE_RIV") {
-        Ok(p) => p,
-        Err(_) => return,
+    let required = live_vulkan_test_required();
+    let Some(riv_path) = probe_fixture_path() else {
+        assert!(
+            !required,
+            "required live Vulkan fixture is unavailable; set NUX_PROBE_RIV or provide fixtures/flow/data_binding_test.riv"
+        );
+        return;
     };
     let bytes = std::fs::read(&riv_path).expect("read riv");
 
@@ -31,6 +49,13 @@ fn fixture_renders_content_through_the_android_vulkan_arm() {
         let mut result: *mut NuxCapiResult = ptr::null_mut();
         let create_status = nux_renderer_new_android_vulkan(400, 800, &mut renderer, &mut result);
         if create_status != NuxStatus::Ok {
+            if !required {
+                nux_capi_result_free(result);
+                nux_player_free(player);
+                nux_artboard_instance_free(artboard);
+                nux_file_free(file);
+                return;
+            }
             let mut view: NuxCapiDiagnosticView = std::mem::zeroed();
             view.struct_size = std::mem::size_of::<NuxCapiDiagnosticView>() as u32;
             if !result.is_null() && nux_capi_result_diagnostic(result, &mut view) == NuxStatus::Ok {

@@ -16,7 +16,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 15
+max_pending = 14
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -657,9 +657,9 @@ note = "Direct fixture port preserves both named component lookups, the zero-sec
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
 test_case_count = 26
-status = "pending"
-evidence = []
-note = "The scripted corpus proves script_paths_test.riv bytecode loads, but it does not port any complete path/contour TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/src/vm/lua_path.rs::upstream_scripted_path_tests", "crates/nuxie/tests/upstream_scripted_path.rs"]
+note = "All 22 inline scripts and their assertion order are direct ports: 20 pass, while both startWithMove=false extract cases honestly remain red because the second verb is Move rather than Line. The four frozen-render cases preserve their exact fixtures, artboards, initial timing, frame counts (including the doubled PathEffects frame markers), ViewModel binding, and named silvers. Three reach the comparator and first differ at Rust's serialized frameSize prefix; PathEffects also logs repeated update failures. scripted_as_path remains red earlier because Node Script 1 init indexes a nil instance."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"

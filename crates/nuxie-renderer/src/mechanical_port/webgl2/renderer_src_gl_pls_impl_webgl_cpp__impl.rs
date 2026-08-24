@@ -502,10 +502,8 @@ mod tests {
     }
 
     fn capabilities() -> GLCapabilities {
-        let mut capabilities = GLCapabilities {
-            contextVersionMajor: 3,
-            ..GLCapabilities::default()
-        };
+        let mut capabilities = GLCapabilities::default();
+        capabilities.contextVersionMajor = 3;
         capabilities.setIsGLES(true);
         capabilities.setANGLE_shader_pixel_local_storage(true);
         capabilities.setANGLE_shader_pixel_local_storage_coherent(true);

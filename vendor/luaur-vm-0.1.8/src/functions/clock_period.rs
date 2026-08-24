@@ -34,12 +34,19 @@ pub(crate) fn clock_period() -> f64 {
     {
         1e-3
     }
+    #[cfg(target_os = "android")]
+    {
+        // Bionic defines CLOCKS_PER_SEC as the macro 1000000, not an
+        // exported symbol; the extern static below fails at dlopen.
+        1e-6
+    }
     #[cfg(not(any(
         target_os = "windows",
         target_vendor = "apple",
         target_os = "linux",
         target_os = "freebsd",
-        target_arch = "wasm32"
+        target_arch = "wasm32",
+        target_os = "android"
     )))]
     {
         extern "C" {

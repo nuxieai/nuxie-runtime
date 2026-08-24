@@ -1,6 +1,6 @@
 schema_version = 1
 upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-active_queue = "ownership-review"
+active_queue = "correction"
 preparation_status = "green"
 ignored_skills = ["implement", "tdd"]
 translation_receipt_directory = "docs/backend-port-receipts"
@@ -13,7 +13,17 @@ ownership_review_plan = "docs/backend-port-ownership-review-plan.toml"
 ownership_review_schema = "docs/backend-port-ownership-review-schema.md"
 ownership_review_receipt_directory = "docs/backend-port-ownership-reviews"
 ownership_review_launch_ref = "7c16f5977dfcc001586add9a27a6f10e4e823dbd"
-ownership_review_status = "active"
+ownership_review_status = "complete"
+ownership_review_barrier_ref = "4914330ec6bd6661286300140cc05439744c037f"
+ownership_review_receipt_tree_sha256 = "e82c2f3c84723924d12acaf9a191842a308e54a4e7000bf6a94b55f892a4d6bd"
+ownership_review_receipt_logical_lines = 28029
+ownership_review_receipt_bytes = 22866643
+ownership_review_finding_total = 43
+ownership_review_p0_findings = 0
+ownership_review_p1_findings = 21
+ownership_review_p2_findings = 22
+ownership_review_p3_findings = 0
+ownership_review_finding_id_sha256 = "c7dcdd791dfb0f3a569985ec2a6b8970d71fcc8a4c378e48ee299f48c1d26647"
 queue_order = [
   "audit",
   "preparation",

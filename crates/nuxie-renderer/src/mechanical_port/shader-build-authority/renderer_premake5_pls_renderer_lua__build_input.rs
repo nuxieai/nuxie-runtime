@@ -95,10 +95,21 @@ pub const SOURCE_RULES: &[SourceRule] = &[
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PortBuild {
-    Vulkan,
+    Vulkan {
+        platform: NativeVulkanPlatform,
+        no_gl: bool,
+    },
     WebGpuDawnV2,
     WebGpuWagyuV2,
     WebGl2,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NativeVulkanPlatform {
+    Android,
+    Linux,
+    MacOS,
+    Windows,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -112,12 +123,35 @@ pub struct ExactPortSelection {
 
 pub const fn exact_port_selection(port: PortBuild) -> ExactPortSelection {
     match port {
-        PortBuild::Vulkan => ExactPortSelection {
-            defines: &["RIVE_VULKAN", "VK_NO_PROTOTYPES", "VMA_STATIC_VULKAN_FUNCTIONS=0", "VMA_DYNAMIC_VULKAN_FUNCTIONS=1", "ORE_BACKEND_VK", "RIVE_ORE"],
-            shader_targets: &["spirv"],
-            backend_sources: &["src/vulkan/*.cpp"],
-            ore_sources: &["src/ore/*.cpp", "src/ore/vulkan/*.cpp"],
-            required_port: None,
+        PortBuild::Vulkan { platform, no_gl } => match (platform, no_gl) {
+            (NativeVulkanPlatform::Android, true) => ExactPortSelection {
+                defines: &["RIVE_VULKAN", "VK_NO_PROTOTYPES", "VMA_STATIC_VULKAN_FUNCTIONS=0", "VMA_DYNAMIC_VULKAN_FUNCTIONS=1", "RIVE_ANDROID", "ORE_BACKEND_VK"],
+                shader_targets: &["spirv"],
+                backend_sources: &["src/vulkan/*.cpp"],
+                ore_sources: &["src/ore/*.cpp", "src/ore/vulkan/*.cpp"],
+                required_port: None,
+            },
+            (NativeVulkanPlatform::Android, false) => ExactPortSelection {
+                defines: &["RIVE_VULKAN", "VK_NO_PROTOTYPES", "VMA_STATIC_VULKAN_FUNCTIONS=0", "VMA_DYNAMIC_VULKAN_FUNCTIONS=1", "RIVE_ANDROID", "ORE_BACKEND_VK", "ORE_BACKEND_GL", "RIVE_ORE"],
+                shader_targets: &["spirv"],
+                backend_sources: &["src/vulkan/*.cpp"],
+                ore_sources: &["src/ore/*.cpp", "src/ore/vulkan/*.cpp", "src/ore/gl/*.cpp"],
+                required_port: None,
+            },
+            (NativeVulkanPlatform::Linux, _) => ExactPortSelection {
+                defines: &["RIVE_VULKAN", "VK_NO_PROTOTYPES", "VMA_STATIC_VULKAN_FUNCTIONS=0", "VMA_DYNAMIC_VULKAN_FUNCTIONS=1", "ORE_BACKEND_VK", "ORE_BACKEND_GL", "RIVE_ORE"],
+                shader_targets: &["spirv"],
+                backend_sources: &["src/vulkan/*.cpp"],
+                ore_sources: &["src/ore/*.cpp", "src/ore/vulkan/*.cpp", "src/ore/gl/*.cpp"],
+                required_port: None,
+            },
+            (NativeVulkanPlatform::MacOS | NativeVulkanPlatform::Windows, _) => ExactPortSelection {
+                defines: &["RIVE_VULKAN", "VK_NO_PROTOTYPES", "VMA_STATIC_VULKAN_FUNCTIONS=0", "VMA_DYNAMIC_VULKAN_FUNCTIONS=1", "ORE_BACKEND_VK", "RIVE_ORE"],
+                shader_targets: &["spirv"],
+                backend_sources: &["src/vulkan/*.cpp"],
+                ore_sources: &["src/ore/*.cpp", "src/ore/vulkan/*.cpp"],
+                required_port: None,
+            },
         },
         PortBuild::WebGpuDawnV2 => ExactPortSelection {
             defines: &["RIVE_DAWN", "ORE_BACKEND_WGPU", "RIVE_ORE"],

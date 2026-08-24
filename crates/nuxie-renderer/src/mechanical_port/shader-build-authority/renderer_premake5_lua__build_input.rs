@@ -221,7 +221,12 @@ pub const fn exact_root_selection(root: RootedPlayer) -> ExactRootSelection {
         },
         RootedPlayer::WebGpuWagyuV2Player => ExactRootSelection {
             project: "webgpu_player",
-            emscripten_link_options: &["<RIVE_WAGYU_PORT>"],
+            emscripten_link_options: &[
+                "-sEXPORTED_FUNCTIONS=_main,_malloc,_free",
+                "-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPU32",
+                "-sENVIRONMENT=web,shell",
+                "<RIVE_WAGYU_PORT>",
+            ],
             emscripten_build_options: &["<RIVE_WAGYU_PORT>"],
         },
     }

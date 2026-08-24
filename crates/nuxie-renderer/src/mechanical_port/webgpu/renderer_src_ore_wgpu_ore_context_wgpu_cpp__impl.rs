@@ -338,7 +338,7 @@ pub(crate) fn makeBuffer(
     desc: &BufferDesc<'_>,
 ) -> Option<AnyResourceHandle> {
     let (manager, domain) = managerAndDomain(context)?;
-    let mut buffer = BufferWGPU::new(manager.clone(), desc.size, desc.usage);
+    let mut buffer = BufferWGPU::new(manager.clone(), desc.size, desc.usage, context);
     {
         let state = buffer
             .state
@@ -346,7 +346,6 @@ pub(crate) fn makeBuffer(
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         *state.m_wgpuQueue = (&*context.m_wgpuQueue).clone();
         *state.m_wgpuDevice = (&*context.m_wgpuDevice).clone();
-        state.m_ctx = context;
 
         let mut usage = WgpuBufferUsage::CopyDst;
         match desc.usage {
@@ -917,7 +916,7 @@ pub(crate) fn makeBindGroup(
 
     let (manager, domain) = managerAndDomain(context)?;
     let nativeLayout = layout.native().clone();
-    let mut group = BindGroupWGPU::new(manager.clone());
+    let mut group = BindGroupWGPU::new(manager.clone(), context);
     nuxie_ore_metal::install_bind_group_backend_parts(
         &mut group,
         dynamicCount,
@@ -926,7 +925,6 @@ pub(crate) fn makeBindGroup(
         retainedViews,
         retainedSamplers,
     );
-    group.m_ctx = context;
     *group.m_uboEntries = nativeUBOs;
     *group.m_texEntries = nativeTextures;
     *group.m_sampEntries = nativeSamplers;

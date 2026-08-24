@@ -4,7 +4,7 @@
 #![allow(non_snake_case)]
 
 use super::ore_buffer_wgpu_decl::BufferWGPU;
-use super::ore_context_wgpu_decl::ContextWGPU;
+use super::ore_context_wgpu_decl::{ContextWGPU, ContextWGPULifetime};
 use super::webgpu_cpp_decl::{
     BindGroup as WagyuBindGroup, BindGroupLayout as WagyuBindGroupLayout, Sampler as WagyuSampler,
     TextureView as WagyuTextureView,
@@ -16,6 +16,7 @@ use std::cell::UnsafeCell;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
+use std::rc::{Rc, Weak};
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_ore_wgpu_ore_bind_group_wgpu.hpp");
@@ -56,8 +57,6 @@ impl<T> RecordingCell<T> {
     }
 }
 
-unsafe impl<T: Send> Send for RecordingCell<T> {}
-
 #[repr(C)]
 pub(crate) struct BindGroupWGPU {
     pub(crate) base: ManuallyDrop<BindGroup>,
@@ -70,10 +69,11 @@ pub(crate) struct BindGroupWGPU {
     pub(crate) m_nullBindGroup: ManuallyDrop<WagyuBindGroup>,
     /// Rust safety sidecar for the source base-class `m_context` raw pointer.
     pub(crate) m_ctx: *mut ContextWGPU,
+    pub(super) m_contextLifetime: Weak<ContextWGPULifetime>,
 }
 
 impl BindGroupWGPU {
-    pub(crate) fn new(manager: GPUResourceManager) -> Self {
+    pub(crate) fn new(manager: GPUResourceManager, context: &mut ContextWGPU) -> Self {
         Self {
             base: ManuallyDrop::new(nuxie_ore_metal::new_bind_group_backend_base(manager)),
             m_uboEntries: ManuallyDrop::new(Vec::new()),
@@ -83,7 +83,8 @@ impl BindGroupWGPU {
             m_label: ManuallyDrop::new(String::new()),
             m_cache: ManuallyDrop::new(RecordingCell::new(Vec::new())),
             m_nullBindGroup: ManuallyDrop::new(WagyuBindGroup::default()),
-            m_ctx: std::ptr::null_mut(),
+            m_ctx: context,
+            m_contextLifetime: Rc::downgrade(&context.m_lifetime),
         }
     }
 
@@ -93,6 +94,16 @@ impl BindGroupWGPU {
 
     pub(crate) fn markUBOsBound(&self) {
         super::ore_bind_group_wgpu_impl::markUBOsBound(self)
+    }
+
+    pub(super) fn context(&self) -> &ContextWGPU {
+        assert!(
+            self.m_contextLifetime
+                .upgrade()
+                .is_some_and(|lifetime| lifetime.isLive()),
+            "BindGroupWGPU cannot access a retired ContextWGPU"
+        );
+        unsafe { self.m_ctx.as_ref() }.expect("BindGroupWGPU source m_context")
     }
 }
 
@@ -124,7 +135,6 @@ impl DerefMut for BindGroupWGPU {
     }
 }
 
-unsafe impl Send for BindGroupWGPU {}
 unsafe impl GpuResourcePayload for BindGroupWGPU {
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()

@@ -74,7 +74,7 @@ pub(crate) fn resolveBindGroup(group: &BindGroupWGPU) -> &super::webgpu_cpp_decl
         entries.push(e);
     }
 
-    let ctx = unsafe { group.m_ctx.as_ref() }.expect("BindGroupWGPU source m_context");
+    let ctx = group.context();
     let mut bgDesc = WGPUBindGroupDescriptor::default();
     bgDesc.layout = group.m_wgpuBGL.Get();
     bgDesc.label = labelView(&group.m_label);

@@ -3,7 +3,7 @@
 
 #![allow(non_snake_case)]
 
-use super::ore_context_wgpu_decl::ContextWGPU;
+use super::ore_context_wgpu_decl::{ContextWGPU, ContextWGPULifetime};
 use super::webgpu_cpp_decl::{
     Buffer as WagyuBuffer, BufferUsage as WagyuBufferUsage, Device, Queue,
 };
@@ -13,6 +13,7 @@ use nuxie_ore_metal::gpu_resource::{GPUResource, GPUResourceManager, GpuResource
 use nuxie_ore_metal::types::BufferUsage;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
+use std::rc::{Rc, Weak};
 use std::sync::Mutex;
 
 pub(crate) const PINNED_SOURCE: &str =
@@ -32,6 +33,19 @@ pub(crate) struct BufferWGPUState {
     pub(crate) m_wgpuDevice: ManuallyDrop<Device>,
     pub(crate) m_wgpuQueue: ManuallyDrop<Queue>,
     pub(crate) m_ctx: *mut ContextWGPU,
+    pub(super) m_contextLifetime: Weak<ContextWGPULifetime>,
+}
+
+impl BufferWGPUState {
+    pub(super) fn context(&self) -> &ContextWGPU {
+        assert!(
+            self.m_contextLifetime
+                .upgrade()
+                .is_some_and(|lifetime| lifetime.isLive()),
+            "BufferWGPU cannot access a retired ContextWGPU"
+        );
+        unsafe { self.m_ctx.as_ref() }.expect("BufferWGPU source m_ctx")
+    }
 }
 
 impl Drop for BufferWGPUState {
@@ -54,7 +68,12 @@ pub(crate) struct BufferWGPU {
 }
 
 impl BufferWGPU {
-    pub(crate) fn new(manager: GPUResourceManager, size: u32, usage: BufferUsage) -> Self {
+    pub(crate) fn new(
+        manager: GPUResourceManager,
+        size: u32,
+        usage: BufferUsage,
+        context: &mut ContextWGPU,
+    ) -> Self {
         Self {
             base: ManuallyDrop::new(nuxie_ore_metal::new_buffer_backend_base(
                 manager, size, usage,
@@ -67,7 +86,8 @@ impl BufferWGPU {
                 m_wgpuUsage: WagyuBufferUsage::default(),
                 m_wgpuDevice: ManuallyDrop::new(Device::default()),
                 m_wgpuQueue: ManuallyDrop::new(Queue::default()),
-                m_ctx: std::ptr::null_mut(),
+                m_ctx: context,
+                m_contextLifetime: Rc::downgrade(&context.m_lifetime),
             })),
         }
     }
@@ -106,8 +126,6 @@ impl DerefMut for BufferWGPU {
     }
 }
 
-unsafe impl Send for BufferWGPUState {}
-unsafe impl Send for BufferWGPU {}
 unsafe impl GpuResourcePayload for BufferWGPU {
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()

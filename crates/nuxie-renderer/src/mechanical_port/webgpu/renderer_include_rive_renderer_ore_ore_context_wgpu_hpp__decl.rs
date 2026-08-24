@@ -7,8 +7,10 @@ use super::webgpu_cpp_decl::{BackendType as WagyuBackendType, CommandEncoder, De
 use nuxie_ore_metal::context::{Context, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::GPUResourceManagerOwner;
 use nuxie_ore_metal::types::Features;
+use std::cell::Cell;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_include_rive_renderer_ore_ore_context_wgpu.hpp");
@@ -21,6 +23,16 @@ pub(crate) enum WGPUBackend {
     Vulkan,
 }
 
+pub(crate) struct ContextWGPULifetime {
+    live: Cell<bool>,
+}
+
+impl ContextWGPULifetime {
+    fn new() -> Self { Self { live: Cell::new(true) } }
+    pub(crate) fn isLive(&self) -> bool { self.live.get() }
+    fn retire(&self) { self.live.set(false); }
+}
+
 #[repr(C)]
 pub(crate) struct ContextWGPU {
     pub(crate) base: ManuallyDrop<Context>,
@@ -31,6 +43,7 @@ pub(crate) struct ContextWGPU {
     pub(crate) m_frameSerial: u64,
     /// Rust root for resources whose source C++ base uses a null manager.
     pub(crate) m_managerOwner: ManuallyDrop<GPUResourceManagerOwner>,
+    pub(super) m_lifetime: Rc<ContextWGPULifetime>,
 }
 
 impl ContextWGPU {
@@ -47,6 +60,7 @@ impl ContextWGPU {
             m_wgpuCommandEncoder: ManuallyDrop::new(CommandEncoder::default()),
             m_frameSerial: 0,
             m_managerOwner: ManuallyDrop::new(managerOwner),
+            m_lifetime: Rc::new(ContextWGPULifetime::new()),
         }
     }
 
@@ -85,6 +99,7 @@ impl ContextWGPU {
 
 impl Drop for ContextWGPU {
     fn drop(&mut self) {
+        self.m_lifetime.retire();
         super::ore_context_wgpu_impl::destroy(self);
         unsafe {
             ManuallyDrop::drop(&mut self.m_wgpuCommandEncoder);

@@ -14,7 +14,7 @@ pub(crate) const ALLOCATION_FAILURE_ERROR: &str =
     "ore: WGPU buffer backing allocation failed; reusing in flight backing for this update";
 
 fn context(state: &BufferWGPUState) -> &super::ore_context_wgpu_decl::ContextWGPU {
-    unsafe { state.m_ctx.as_ref() }.expect("BufferWGPU source m_ctx")
+    state.context()
 }
 
 pub(crate) fn markBound(buffer: &BufferWGPU) {

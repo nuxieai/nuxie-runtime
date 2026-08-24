@@ -183,10 +183,9 @@ note = "All ten cases are explicit ports. The two non-renderer runtime-property 
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_blobs_test.cpp"
 test_case_count = 5
-status = "partial"
-evidence = ["crates/nuxie-runtime/tests/blob_view_model.rs", "crates/nuxie-runtime/src/state_machine/bindables.rs::bindable_blob_retains_live_empty_payload_and_replaces_it_for_id_binds"]
-covered_test_cases = ["Blob data bind stores and clears the blob on the property", "Blob data value applies to the instance property", "Blob data value with only an id applies the id", "Directly-set blob yields a non-null asset even when empty"]
-note = "S4-42 directly covers the four value, identity, id-bind, empty-payload, and clearing cases. The newly enrolled silver remains not-yet in corpus.toml."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/blob_view_model.rs", "crates/nuxie-runtime/src/state_machine/bindables.rs::bindable_blob_retains_live_empty_payload_and_replaces_it_for_id_binds", "silver-corpus.toml::{data_bind_blob_test}"]
+note = "All five cases are ported. The external/internal binding silver preserves its literal action stream as an unsupported-feature red while the other four execute directly."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_computed_values_test.cpp"
@@ -242,10 +241,9 @@ note = "Only the listed literal TEST_CASE action streams execute through both ru
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
 test_case_count = 3
-status = "partial"
-evidence = ["silver-corpus.toml::{unbound_stateful_component}"]
-covered_test_cases = ["Stateful component is bound before binding the view model instance"]
-note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+status = "ported-direct"
+evidence = ["silver-corpus.toml::{unbound_stateful_component,databind_viewmodel,bidirectional_stateful_property}"]
+note = "All three literal upstream action streams are ported; databind_viewmodel remains an explicit unsupported-feature red."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/decode_ktx2_test.cpp"
@@ -339,10 +337,9 @@ note = "The listed File catalog case is a direct Rust port over global_variables
 [[file]]
 upstream = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 test_case_count = 3
-status = "partial"
-evidence = ["silver-corpus.toml::{global_viewmodels_test-auto_instance}"]
-covered_test_cases = ["Test global view models with automatic instancing"]
-note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+status = "ported-direct"
+evidence = ["silver-corpus.toml::{global_viewmodels_test-auto_instance,global_variables_test,global_viewmodels_test-set_instance}"]
+note = "All three pinned global-view-model action streams are ported; unsupported and divergent outcomes remain explicit per corpus row."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/hittest_test.cpp"
@@ -966,10 +963,9 @@ note = "F6FID ports the four RB-2-dependent list-focus cases through the product
 [[file]]
 upstream = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 test_case_count = 38
-status = "partial"
-evidence = ["silver-corpus.toml::{advance_blend_mode-inputs,advance_blend_mode-vms,bankcard,collapse_data_binds-test_1,collapse_data_binds-test_2,event_trigger_event,hide_test,hunter_x_demo,n_slice_triangle,recursive_data_bind,saturation,spotify_kids_app_icon,spotify_kids_demo,superbowl,text_stroke_test,transition_artboard_condition_test,vertical_align_ellipsis,virtualize_blendmode}"]
-covered_test_cases = ["Advance two consecutive blend modes and apply inputs", "Advance two consecutive blend modes and apply view model", "bank card data binding", "Collapsed data binds from layouts with display hidden", "Collapsed data binds from property groups in solos", "Event triggers another event", "hide silver", "hunter x demo data binding", "n-slice silver", "Recursive data binding artboards are skipped", "Target to source with different data types on source and target", "spotify kids app icon data binding", "spotify kids demo data binding", "superbowl data binding", "validate text with modifiers and dashes render correctly", "Test State machine transition conditions based on artboards", "Vertical align on text with ellipsis", "Virtualized list with blended animations as initial state correctly render their mixed values"]
-note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+status = "ported-direct"
+evidence = ["silver-corpus.toml::serialized_rendering_test.cpp provenance cases"]
+note = "Every pinned serialized-rendering TEST_CASE is represented by its literal silver action stream; exact, divergent, and unsupported-feature outcomes remain explicit per corpus row."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/shader_asset_test.cpp"
@@ -1061,10 +1057,9 @@ note = "Both assertion sequences are direct Rust ports; the animated draw remain
 [[file]]
 upstream = "tests/unit_tests/runtime/text_test.cpp"
 test_case_count = 18
-status = "partial"
-evidence = ["docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_*text*_body_is_ported"]
-covered_test_cases = ["file with text loads correctly", "can query for all text runs", "can query for a text run at a given index", "simple text loads", "vertical trim shrinks the box to the chosen band", "vertical trim top/bottom uint passthroughs pack into the mask", "ellipsis is shown", "fitFontSize shrinks the font to fit the bounds", "range mapper maps words", "run modifier ranges select runs", "run modifier ranges select runs with varying text size", "double new line type works", "can load and run opacity modifiers", "Vertical Trim"]
-note = "The 13 direct bodies and executable Vertical Trim silver body are covered. Zero-width-space, word-joiner, and serialized Fit font size remain unsupported, so the file is partial."
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_*text*_body_is_ported", "silver-corpus.toml::{zero_width_space_line_break,word_joiner_test,fit_font_size_test,layout_text_match,vertical_trim}"]
+note = "All 18 pinned text cases are ported. Remaining line-breaking, fit-font-size, and layout-controlled-box cases retain their literal silver action streams and explicit exact/divergent outcomes."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/texture_compressor_test.cpp"

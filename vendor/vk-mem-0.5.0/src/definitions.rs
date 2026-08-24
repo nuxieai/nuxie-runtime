@@ -508,8 +508,8 @@ pub struct PoolCreateInfo<'a> {
     /// Structures pointed by this member must remain alive and unchanged for the whole lifetime of the custom pool.
     /// Please note that some structures, e.g. `VkMemoryPriorityAllocateInfoEXT`, `VkMemoryDedicatedAllocateInfoKHR`,
     /// can be attached automatically by this library when using other, more convenient of its features.
-    pub memory_allocate_next: *const std::ffi::c_void,
-    pub _marker: PhantomData<&'a mut ()>,
+    memory_allocate_next: *const std::ffi::c_void,
+    _marker: PhantomData<&'a mut ()>,
 }
 impl<'a> PoolCreateInfo<'a> {
     pub fn push_next<T: vk::ExtendsMemoryAllocateInfo>(&mut self, next: &'a mut T) {

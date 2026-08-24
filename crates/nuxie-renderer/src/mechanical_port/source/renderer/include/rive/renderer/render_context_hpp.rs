@@ -1660,7 +1660,11 @@ pub use gpu::{
 
 #[derive(Default)]
 pub struct TrivialBlockAllocator {
-    allocations: Vec<(*mut u8, core::alloc::Layout)>,
+    allocations: Vec<(
+        *mut u8,
+        core::alloc::Layout,
+        Option<unsafe fn(*mut u8)>,
+    )>,
 }
 
 impl TrivialBlockAllocator {
@@ -1669,10 +1673,17 @@ impl TrivialBlockAllocator {
     }
 
     pub fn make<T>(&mut self, value: T) -> *mut T {
+        unsafe fn drop_value<T>(ptr: *mut u8) {
+            unsafe { core::ptr::drop_in_place(ptr.cast::<T>()) };
+        }
+
         let boxed = Box::new(value);
         let ptr = Box::into_raw(boxed);
-        self.allocations
-            .push((ptr.cast(), core::alloc::Layout::new::<T>()));
+        self.allocations.push((
+            ptr.cast(),
+            core::alloc::Layout::new::<T>(),
+            Some(drop_value::<T>),
+        ));
         ptr
     }
 
@@ -1685,12 +1696,15 @@ impl TrivialBlockAllocator {
         if ptr.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        self.allocations.push((ptr.cast(), layout));
+        self.allocations.push((ptr.cast(), layout, None));
         ptr
     }
 
     pub fn reset(&mut self) {
-        for (ptr, layout) in self.allocations.drain(..) {
+        for (ptr, layout, drop_value) in self.allocations.drain(..) {
+            if let Some(drop_value) = drop_value {
+                unsafe { drop_value(ptr) };
+            }
             // `Box::into_raw` may return a dangling-but-aligned sentinel for a
             // zero-sized type. The source arena owns no storage in that case.
             if layout.size() != 0 {
@@ -1706,11 +1720,11 @@ impl Drop for TrivialBlockAllocator {
     }
 }
 
-pub struct TrivialArrayAllocator<T, const ALIGN: usize = 1> {
+pub struct TrivialArrayAllocator<T: bytemuck::Pod, const ALIGN: usize = 1> {
     allocations: Vec<(*mut T, usize, core::alloc::Layout)>,
 }
 
-impl<T, const ALIGN: usize> TrivialArrayAllocator<T, ALIGN> {
+impl<T: bytemuck::Pod, const ALIGN: usize> TrivialArrayAllocator<T, ALIGN> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             allocations: Vec::with_capacity(capacity.max(1)),
@@ -1758,13 +1772,13 @@ impl<T, const ALIGN: usize> TrivialArrayAllocator<T, ALIGN> {
     }
 }
 
-impl<T, const ALIGN: usize> Default for TrivialArrayAllocator<T, ALIGN> {
+impl<T: bytemuck::Pod, const ALIGN: usize> Default for TrivialArrayAllocator<T, ALIGN> {
     fn default() -> Self {
         Self::with_capacity(0)
     }
 }
 
-impl<T, const ALIGN: usize> Drop for TrivialArrayAllocator<T, ALIGN> {
+impl<T: bytemuck::Pod, const ALIGN: usize> Drop for TrivialArrayAllocator<T, ALIGN> {
     fn drop(&mut self) {
         self.reset()
     }

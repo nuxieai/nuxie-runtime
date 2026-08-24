@@ -13,7 +13,7 @@ pub struct DefragmentationContext<'a> {
 impl<'a> Drop for DefragmentationContext<'a> {
     fn drop(&mut self) {
         unsafe {
-            ffi::vmaEndDefragmentation(self.allocator.internal, self.raw, std::ptr::null_mut());
+            ffi::vmaEndDefragmentation(self.allocator.internal(), self.raw, std::ptr::null_mut());
         }
     }
 }
@@ -28,7 +28,7 @@ impl<'a> DefragmentationContext<'a> {
             deviceMemoryBlocksFreed: 0,
         };
         unsafe {
-            ffi::vmaEndDefragmentation(self.allocator.internal, self.raw, &mut stats);
+            ffi::vmaEndDefragmentation(self.allocator.internal(), self.raw, &mut stats);
         }
         std::mem::forget(self);
         stats
@@ -41,7 +41,7 @@ impl<'a> DefragmentationContext<'a> {
             pMoves: std::ptr::null_mut(),
         };
         let result = unsafe {
-            ffi::vmaBeginDefragmentationPass(self.allocator.internal, self.raw, &mut pass_info)
+            ffi::vmaBeginDefragmentationPass(self.allocator.internal(), self.raw, &mut pass_info)
         };
         if result == vk::Result::SUCCESS {
             return false;
@@ -53,7 +53,7 @@ impl<'a> DefragmentationContext<'a> {
         mover(moves);
 
         let result = unsafe {
-            ffi::vmaEndDefragmentationPass(self.allocator.internal, self.raw, &mut pass_info)
+            ffi::vmaEndDefragmentationPass(self.allocator.internal(), self.raw, &mut pass_info)
         };
 
         return result == vk::Result::INCOMPLETE;
@@ -72,7 +72,7 @@ impl Allocator {
     ) -> VkResult<DefragmentationContext> {
         let mut context: ffi::VmaDefragmentationContext = std::ptr::null_mut();
 
-        ffi::vmaBeginDefragmentation(self.internal, info, &mut context).result()?;
+        ffi::vmaBeginDefragmentation(self.internal(), info, &mut context).result()?;
 
         Ok(DefragmentationContext {
             allocator: self,

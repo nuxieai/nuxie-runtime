@@ -287,6 +287,7 @@ upstream = "tests/unit_tests/runtime/enums_test.cpp"
 test_case_count = 17
 status = "n-a"
 evidence = []
+adaptation = "cxx-language-only"
 note = "Explicit Rust-language adaptation disposition under docs/runtime-exact-parity-plan.md: all 17 cases test C++-only enum-class detection, overloaded bitwise/compound operators, underlying-type templates, and enum increment/decrement helpers. Rust deliberately does not reproduce those C++ language mechanics; no renderer/runtime observable is omitted, and this row is not counted as literal behavior coverage."
 
 [[file]]

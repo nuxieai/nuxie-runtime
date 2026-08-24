@@ -229,6 +229,21 @@ class TestCorrespondenceCheckTest(unittest.TestCase):
         with self.assertRaisesRegex(CheckFailure, "unknown covered_test_cases"):
             check_manifest(self.repo, self.upstream, self.manifest)
 
+    def test_nonzero_na_requires_explicit_cxx_language_adaptation(self) -> None:
+        self.write_manifest(alpha_status="n-a")
+        with self.assertRaisesRegex(CheckFailure, "nonzero n-a row requires adaptation"):
+            check_manifest(self.repo, self.upstream, self.manifest)
+
+        self.manifest.write_text(
+            self.manifest.read_text().replace(
+                'status = "n-a"\n',
+                'status = "n-a"\nadaptation = "cxx-language-only"\n',
+                1,
+            )
+        )
+        summary = check_manifest(self.repo, self.upstream, self.manifest)
+        self.assertEqual(summary.status_counts["n-a"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1319,16 +1319,17 @@
       "line": 70,
       "name": "artboard is clipped correctly",
       "status": "direct",
-      "outcome": "pass",
-      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
+      "outcome": "expected-red",
+      "note": "Direct executable owner port imports artboardclipping.riv, advances Center, reads the retained Artboard m_worldPath RawPath before and after frameOrigin(false), and asserts all eight pinned points. It reaches the concrete divergence after updateComponents: Rust leaves the retained world path at 0..500 rather than rebuilding it to -250..250.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 18,
-          "symbol": "clip_artboard_is_clipped_correctly_complete_port"
+          "path": "crates/nuxie-runtime/src/artboard/tests.rs",
+          "line": 46,
+          "symbol": "upstream_clip_artboard_world_path_tracks_frame_origin"
         }
-      ]
+      ],
+      "expected_red_reason": "expected-red: frameOrigin(false) does not dirty/rebuild the retained Artboard m_worldPath owner"
     },
     {
       "id": "tests/unit_tests/runtime/clip_test.cpp#3",

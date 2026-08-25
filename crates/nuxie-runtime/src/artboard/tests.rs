@@ -42,6 +42,66 @@
     use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
+    #[ignore = "expected-red: frameOrigin(false) does not dirty/rebuild the retained Artboard m_worldPath owner"]
+    fn upstream_clip_artboard_world_path_tracks_frame_origin() {
+        fn world_path_points(artboard: &ArtboardInstance) -> Vec<nuxie_render_api::Vec2D> {
+            let owner = artboard
+                .runtime_shapes
+                .paint_path_owner(0, crate::draw::RuntimeShapePaintPathKind::World)
+                .expect("Center Artboard owns m_worldPath");
+            let retained = owner.retained.borrow();
+            retained
+                .as_ref()
+                .expect("Center Artboard m_worldPath is retained after component update")
+                .raw_path
+                .points()
+                .to_vec()
+        }
+
+        let fixture = PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets/artboardclipping.riv");
+        let file = read_runtime_file(&std::fs::read(&fixture).expect("read clipping fixture"))
+            .expect("import clipping fixture");
+        let graphs = GraphFile::from_runtime_file(&file).expect("build clipping graphs");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("Center"))
+            .expect("Center artboard");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("instantiate Center artboard");
+
+        artboard.advance(0.0).expect("advance Center artboard");
+        assert_eq!(artboard.origin_x, 0.5);
+        assert_eq!(artboard.origin_y, 0.5);
+        assert_eq!(
+            world_path_points(&artboard),
+            vec![
+                nuxie_render_api::Vec2D::new(0.0, 0.0),
+                nuxie_render_api::Vec2D::new(500.0, 0.0),
+                nuxie_render_api::Vec2D::new(500.0, 500.0),
+                nuxie_render_api::Vec2D::new(0.0, 500.0),
+            ]
+        );
+
+        artboard.set_frame_origin(false);
+        artboard.update_components();
+        assert_eq!(
+            world_path_points(&artboard),
+            vec![
+                nuxie_render_api::Vec2D::new(-250.0, -250.0),
+                nuxie_render_api::Vec2D::new(250.0, -250.0),
+                nuxie_render_api::Vec2D::new(250.0, 250.0),
+                nuxie_render_api::Vec2D::new(-250.0, 250.0),
+            ]
+        );
+    }
+
+    #[test]
     fn upstream_quantize_goes_to_whole_frames() {
         // Exact action/assertion port of
         // tests/unit_tests/runtime/linear_animation_test.cpp.

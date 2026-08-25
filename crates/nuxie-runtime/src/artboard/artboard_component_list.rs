@@ -402,6 +402,7 @@ impl ArtboardInstance {
         // would leave an empty-mounted virtualized list one settlement behind
         // (`artboard_component_list.cpp:245-260,1758-1788`).
         let mut assigned_bounds = self.runtime_component_list_assigned_layout_bounds();
+        let host_owned_lists = assigned_bounds.keys().copied().collect::<Vec<_>>();
         for list_local in self.component_list_locals() {
             let Some(items) = self.component_list_items(list_local) else {
                 continue;
@@ -443,6 +444,14 @@ impl ArtboardInstance {
                         // parent-owned `updateLayoutBounds`; the later
                         // component traversal performs `updatePass(false)`.
                         item.child.added_to_host();
+                        if host_owned_lists.contains(&list_local) {
+                            // `ArtboardComponentList::layoutNode` transfers
+                            // the row's root Yoga node into the parent tree
+                            // through `takeLayoutData()`. Child-local solves
+                            // must no longer overwrite that parent-owned root
+                            // result. Flowless lists remain child-owned.
+                            item.child.layout_node_owned_by_host = true;
+                        }
                     }
                     // The mounted root Yoga node remains owned by the hosting
                     // layout. Retain its parent-local location through the

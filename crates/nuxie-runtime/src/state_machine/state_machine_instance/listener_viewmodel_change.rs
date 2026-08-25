@@ -1,6 +1,7 @@
 // State-machine instance integration for the C++ `listener_viewmodel_change.cpp` source.
 use super::*;
 use crate::view_model::RuntimeViewModelPointer;
+use crate::view_model_cell::RuntimeHostMutationNotifications;
 
 impl RuntimeStateMachineListenerActionExecutor<'_> {
     pub(in crate::state_machine) fn perform_scheduled_view_model_change(
@@ -124,16 +125,24 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
                 return false;
             };
             bindable_trigger.set_value(*value);
-            let mut context = context_handle.borrow_mut();
-            if !self
-                .data_bind_graph
-                .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
-                    &mut context,
-                    data_bind_index,
-                    *value,
-                    &property_path,
-                )
-            {
+            let notifications = RuntimeHostMutationNotifications::begin();
+            let changed = {
+                let mut context = context_handle.borrow_mut();
+                self.data_bind_graph
+                    .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+                        &mut context,
+                        data_bind_index,
+                        *value,
+                        &property_path,
+                    )
+            };
+            if let Some(notifications) = notifications {
+                // C++ listeners may synchronously read the value that was
+                // just written. Publish only after Rust releases the owning
+                // ViewModel's mutable RefCell borrow.
+                notifications.commit();
+            }
+            if !changed {
                 return false;
             }
             return true;
@@ -206,15 +215,22 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
             }
             RuntimeListenerViewModelChangeValue::ViewModel(_) => return false,
             _ => {
-                let mut context = context_handle.borrow_mut();
-                let Some(changed) =
+                let notifications = RuntimeHostMutationNotifications::begin();
+                let changed = {
+                    let mut context = context_handle.borrow_mut();
                     StateMachineInstance::apply_listener_view_model_change_at_property_path(
                         &mut context,
                         &property_path,
                         value,
                         asset_value.as_ref(),
                     )
-                else {
+                };
+                if let Some(notifications) = notifications {
+                    // Match C++'s readable-during-callback ownership without
+                    // exposing a live Rust mutable borrow to the listener.
+                    notifications.commit();
+                }
+                let Some(changed) = changed else {
                     return false;
                 };
                 changed

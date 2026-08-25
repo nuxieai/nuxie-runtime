@@ -28,6 +28,7 @@ use taffy::prelude::{
     NodeId, Position, Rect, Size, Style, TaffyTree, TrackSizingFunction,
 };
 use taffy::style::Direction as TaffyDirection;
+use taffy::util::ResolveOrZero;
 
 use crate::components::ComponentHandle;
 pub use crate::math::raw_path::runtime_path_commands_from_raw_path;
@@ -11525,7 +11526,9 @@ enum TaffyMeasureContext {
     ComponentListItem {
         list_local: usize,
         item_index: usize,
-        intrinsic_size: Size<f32>,
+        outer_size: Size<f32>,
+        padding: Rect<LengthPercentage>,
+        border: Rect<LengthPercentage>,
     },
 }
 
@@ -11765,11 +11768,40 @@ impl TaffyRuntimeLayoutEngine {
                         Some(TaffyMeasureContext::ComponentListItem {
                             list_local: _,
                             item_index: _,
-                            intrinsic_size,
-                        }) => Size {
-                            width: known_dimensions.width.unwrap_or(intrinsic_size.width),
-                            height: known_dimensions.height.unwrap_or(intrinsic_size.height),
-                        },
+                            outer_size,
+                            padding,
+                            border,
+                        }) => {
+                            // Taffy's leaf callback measures the content box;
+                            // C++ transfers the complete Yoga root whose
+                            // retained width/height are border-box values.
+                            // Remove the root insets before handing the prior
+                            // parent-owned result back to Taffy, otherwise
+                            // every host solve adds those insets again.
+                            let inline_basis = definite_available_space(available_space.width)
+                                .or(known_dimensions.width)
+                                .or(Some(outer_size.width));
+                            let padding = padding.resolve_or_zero(inline_basis, |_, _| 0.0);
+                            let border = border.resolve_or_zero(inline_basis, |_, _| 0.0);
+                            let content_size = Size {
+                                width: (outer_size.width
+                                    - padding.left
+                                    - padding.right
+                                    - border.left
+                                    - border.right)
+                                    .max(0.0),
+                                height: (outer_size.height
+                                    - padding.top
+                                    - padding.bottom
+                                    - border.top
+                                    - border.bottom)
+                                    .max(0.0),
+                            };
+                            Size {
+                                width: known_dimensions.width.unwrap_or(content_size.width),
+                                height: known_dimensions.height.unwrap_or(content_size.height),
+                            }
+                        }
                         None => Size::ZERO,
                     }
                 },
@@ -11881,7 +11913,11 @@ impl TaffyRuntimeLayoutEngine {
                     }
                     if let Some(items) = instance.component_list_items(child_local) {
                         for (item_index, item) in items.iter().enumerate() {
-                            let intrinsic_size = runtime_component_list_item_layout_size(item);
+                            let (width, height) = runtime_component_list_item_layout_size(item);
+                            let retained_outer_size = Size { width, height };
+                            let outer_size = self
+                                .component_list_item_hug_outer_size(item)
+                                .unwrap_or(retained_outer_size);
                             let item_style = self.component_list_item_style(
                                 instance,
                                 graph,
@@ -11889,16 +11925,17 @@ impl TaffyRuntimeLayoutEngine {
                                 item,
                                 is_row,
                             )?;
+                            let padding = item_style.padding;
+                            let border = item_style.border;
                             let item_node = taffy
                                 .new_leaf_with_context(
                                     item_style,
                                     TaffyMeasureContext::ComponentListItem {
                                         list_local: child_local,
                                         item_index,
-                                        intrinsic_size: Size {
-                                            width: intrinsic_size.0,
-                                            height: intrinsic_size.1,
-                                        },
+                                        outer_size,
+                                        padding,
+                                        border,
                                     },
                                 )
                                 .ok()?;
@@ -12038,6 +12075,29 @@ impl TaffyRuntimeLayoutEngine {
             )?;
         }
         Some(style)
+    }
+
+    fn component_list_item_hug_outer_size(
+        &self,
+        item: &crate::artboard::RuntimeComponentListItemInstance,
+    ) -> Option<Size<f32>> {
+        let runtime = item.child.runtime_file()?;
+        let graph = item.child.runtime_graph()?;
+        let style_local = item.child.runtime_layout_component_style_local(0)?;
+        let root_hug = Size {
+            width: item.child.runtime_layout_axis_scale(style_local, true) == 2,
+            height: item.child.runtime_layout_axis_scale(style_local, false) == 2,
+        };
+        if !root_hug.width && !root_hug.height {
+            return None;
+        }
+        let bounds =
+            self.compute_bounds_with_root_hug(&item.child, graph, Some(runtime), root_hug)?;
+        let root = bounds.get(&0)?;
+        Some(Size {
+            width: root.width,
+            height: root.height,
+        })
     }
 
     fn component_list_item_override_local(

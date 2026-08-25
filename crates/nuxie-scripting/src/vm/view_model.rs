@@ -1096,7 +1096,7 @@ struct ScriptedPropertyImage {
 
 struct ScriptedBlobWatch {
     sink: RuntimeCellDirtSink,
-    listeners: RefCell<Vec<ScriptedListener>>,
+    listeners: Rc<RefCell<Vec<ScriptedListener>>>,
     _change_registration: RefCell<Option<ScriptViewModelChangeRegistration>>,
 }
 
@@ -1110,7 +1110,15 @@ struct ScriptedPropertyBlob {
 
 impl ScriptedPropertyBlob {
     fn new(model: ScriptViewModel, name: String) -> Self {
-        let sink = model.property_dirt_sink(&name).unwrap_or_default();
+        let listeners = Rc::new(RefCell::new(Vec::new()));
+        let weak_listeners = Rc::downgrade(&listeners);
+        let sink = model
+            .property_listener_sink(&name, move || {
+                if let Some(listeners) = weak_listeners.upgrade() {
+                    call_property_listeners(&listeners);
+                }
+            })
+            .unwrap_or_default();
         let cached_value = Rc::new(RefCell::new(None));
         let weak_cached_value = Rc::downgrade(&cached_value);
         let change_sink = model
@@ -1122,7 +1130,7 @@ impl ScriptedPropertyBlob {
             .unwrap_or_default();
         let watch = Rc::new(ScriptedBlobWatch {
             sink,
-            listeners: RefCell::new(Vec::new()),
+            listeners,
             _change_registration: RefCell::new(None),
         });
         let weak_watch = Rc::downgrade(&watch);
@@ -3447,6 +3455,32 @@ mod tests {
 
         assert_eq!(values.get::<i64>(1).unwrap(), 1);
         assert_eq!(values.get::<String>(2).unwrap(), "payload.bin");
+    }
+
+    #[test]
+    fn host_blob_mutation_notifies_lua_listener_synchronously() {
+        let (model, blob) =
+            model_with_property_from("data_bind_blob_test.riv", ScriptViewModelProperty::Blob);
+        let lua = Lua::new();
+        let context = ScriptViewModelFrameContext::for_lua(&lua);
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).expect("model global");
+        lua.globals()
+            .set("blobName", blob.clone())
+            .expect("blob name global");
+        lua.load(
+            "listenerCalls = 0\n\
+             model:getBlob(blobName):addListener(function()\n\
+                 listenerCalls += 1\n\
+             end)",
+        )
+        .exec()
+        .expect("listener registration");
+
+        assert!(model.set_blob(&blob, Some(Arc::<[u8]>::from(&b"host"[..]))));
+        assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
+        assert!(!context.advance_detached());
+        assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
     }
 
     #[test]

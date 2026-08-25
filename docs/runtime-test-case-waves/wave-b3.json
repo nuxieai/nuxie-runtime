@@ -1437,7 +1437,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_b3.rs",
-          "line": 43,
+          "line": 39,
           "symbol": "wave_b3_focus_collapsing"
         }
       ],
@@ -1456,7 +1456,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_b3.rs",
-          "line": 49,
+          "line": 43,
           "symbol": "wave_b3_keyboard_listener"
         }
       ],
@@ -1475,7 +1475,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_b3.rs",
-          "line": 55,
+          "line": 47,
           "symbol": "wave_b3_keyboard_listener_keyboard_input"
         }
       ],
@@ -1512,7 +1512,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_b3.rs",
-          "line": 60,
+          "line": 50,
           "symbol": "wave_b3_focus_traversal"
         }
       ],
@@ -1530,7 +1530,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_b3.rs",
-          "line": 65,
+          "line": 53,
           "symbol": "wave_b3_focusable_element"
         }
       ],
@@ -1595,7 +1595,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_b3.rs",
-          "line": 71,
+          "line": 57,
           "symbol": "wave_b3_list_focus_order"
         }
       ],
@@ -1614,7 +1614,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_b3.rs",
-          "line": 76,
+          "line": 60,
           "symbol": "wave_b3_focus_test"
         }
       ],

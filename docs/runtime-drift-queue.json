@@ -7,8 +7,8 @@
       "rows": 17
     },
     "golden": {
-      "candidates": 8,
-      "proven": 356,
+      "candidates": 7,
+      "proven": 357,
       "proven_rows": [
         "advance_blend_mode",
         "ai_assitant",
@@ -69,6 +69,7 @@
         "custom_property_enum",
         "custom_property_trigger",
         "data_bind_artboard_input",
+        "data_bind_blob_test",
         "data_bind_font_test",
         "data_bind_keyframes_test",
         "data_bind_solo",
@@ -473,8 +474,8 @@
       "rows": 252
     },
     "tracked-gaps": {
-      "candidates": 47,
-      "proven": 32,
+      "candidates": 46,
+      "proven": 33,
       "proven_rows": [
         "A3",
         "A4",
@@ -505,6 +506,7 @@
         "V40",
         "V41",
         "V42",
+        "V43",
         "V44",
         "V5",
         "V8"
@@ -681,7 +683,38 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 10,
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 130,
+      "disposition": "unknown",
+      "evidence_links": [
+        "docs/parity-gap-register.md:102"
+      ],
+      "evidence_state": "unknown",
+      "first_signal": "**Behavioral-verify candidates** \u2014 concrete typeKeys with no bespoke handler: `ClampedScrollPhysics`/`ElasticScrollPhysics` (524/525), `ListPath` (619), `ListenerInputTypeEvent/Text` (659/666), `TransitionValueIdComparator` (601) | \u2014 | UNKNOWN | Cheapest wins in the register: author one fixture each; either it's generically handled (close row) or it diffs (new F-row).",
+      "id": "gap:F10",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "high"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "F10",
+      "subsystem": "F10",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 11,
         "state": "current"
       },
       "cluster_id": "cluster:layout:ownership",
@@ -715,7 +748,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 10,
+        "recent_touch_count": 11,
         "state": "current"
       },
       "cluster_id": "cluster:layout:ownership",
@@ -749,7 +782,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "current"
       },
       "cluster_id": "cluster:layout:ownership",
@@ -787,37 +820,6 @@
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 125,
-      "disposition": "unknown",
-      "evidence_links": [
-        "docs/parity-gap-register.md:102"
-      ],
-      "evidence_state": "unknown",
-      "first_signal": "**Behavioral-verify candidates** \u2014 concrete typeKeys with no bespoke handler: `ClampedScrollPhysics`/`ElasticScrollPhysics` (524/525), `ListPath` (619), `ListenerInputTypeEvent/Text` (659/666), `TransitionValueIdComparator` (601) | \u2014 | UNKNOWN | Cheapest wins in the register: author one fixture each; either it's generically handled (close row) or it diffs (new F-row).",
-      "id": "gap:F10",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "high"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "F10",
-      "subsystem": "F10",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 3,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
       "confidence": "medium",
       "discovery_value": 120,
       "disposition": "known-divergence",
@@ -846,7 +848,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 3,
+        "recent_touch_count": 4,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -878,7 +880,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 3,
+        "recent_touch_count": 4,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -910,7 +912,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 3,
+        "recent_touch_count": 4,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -2892,14 +2894,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:119"
@@ -2923,14 +2925,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:122"
@@ -2954,14 +2956,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:124"
@@ -2985,14 +2987,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:135"
@@ -3016,14 +3018,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:136"
@@ -3047,14 +3049,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:lifecycle",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:93"
@@ -3078,14 +3080,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:float-behavior",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:105"
@@ -3109,14 +3111,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:107"
@@ -3140,14 +3142,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:lifecycle",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:99"
@@ -3171,14 +3173,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:219"
@@ -3202,14 +3204,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:221"
@@ -3233,14 +3235,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:148"
@@ -3264,14 +3266,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:150"
@@ -3295,14 +3297,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:151"
@@ -3326,14 +3328,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:40"
@@ -3357,14 +3359,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:49"
@@ -3388,14 +3390,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:55"
@@ -3419,14 +3421,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:57"
@@ -3450,14 +3452,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:lifecycle",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:41"
@@ -3481,14 +3483,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:63"
@@ -3512,14 +3514,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:64"
@@ -3543,14 +3545,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:65"
@@ -3574,14 +3576,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:42"
@@ -3605,14 +3607,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:invalidation",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:69"
@@ -3636,14 +3638,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:70"
@@ -3667,45 +3669,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ordering",
-      "confidence": "low",
-      "discovery_value": 105,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:82"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**`data_bind_blob_test`: data-bound blob geometry differs.** At the first differing draw, Rust's rectangle height is 2098.35938 while C++ uses 926.574219. | `corpus.toml` milestone V43, samples 0/0.1/0.5/1/2 | Reconcile blob-bound layout/geometry and enroll the row as `exact`.",
-      "id": "gap:V43",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "high"
-      },
-      "semantic_boundary": "ordering",
-      "source_kind": "tracked-gap",
-      "source_row": "V43",
-      "subsystem": "V43",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:48"
@@ -3729,14 +3700,14 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
       "confidence": "low",
-      "discovery_value": 105,
+      "discovery_value": 110,
       "disposition": "pending-proof",
       "evidence_links": [
         "docs/parity-gap-register.md:272"
@@ -3755,38 +3726,6 @@
       "source_kind": "tracked-gap",
       "source_row": "W3",
       "subsystem": "W3",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 3,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 105,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "corpus.toml",
-        "tests/unit_tests/assets/data_bind_blob_test.riv"
-      ],
-      "evidence_state": "not-yet",
-      "first_signal": "fixture has no passing Rust/C++ differential proof",
-      "id": "golden:data_bind_blob_test",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "high"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "golden",
-      "source_row": "data_bind_blob_test",
-      "subsystem": "data_bind_blob",
       "upstream_owner": null
     },
     {
@@ -4433,9 +4372,257 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 100,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:118"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**No `FileAssetLoader` callback** \u2014 no lazy/out-of-band/CDN asset resolution; host must pre-resolve all bytes at import; `cdnUuid`/`cdnBaseUrl` never consulted. | 1",
+      "id": "gap:A1",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "A1",
+      "subsystem": "A1",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 100,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:137"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "Corpus is upstream test assets + a few demos; no systematic ingestion of *production Nuxie flow files*. | Add a private product-corpus lane: every shipped Nuxie flow runs the golden compare in CI. This is the strongest \"verifiable replacement *for our product*\" gate available.",
+      "id": "gap:C3",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "C3",
+      "subsystem": "C3",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 100,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:61"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**Artifact reclassified \u2014 runner-feature split.** Fresh ordinary runners are exact at t=0/0.5/1, while fresh scripting-enabled runners reproduce the 245\u00d7250-vs-490\u00d7362.5 clip mismatch. The corpus cannot encode ordinary `exact` with scripted `diverges`, so the conservative shared annotation remains `diverges`. | fresh ordinary and scripted side-channel captures; `corpus.toml` milestone V22, samples 0/0.5/1 | Track the scripting-feature initialization artifact separately; do not attribute it to computed-value propagation in the ordinary runtime.",
+      "id": "gap:V22",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "V22",
+      "subsystem": "V22",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 100,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:66"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**Artifact reclassified \u2014 runner-feature split.** Fresh ordinary runners produce byte-identical 417,801-byte streams, while fresh scripting-enabled runners reproduce the image-buffer command-phase mismatch. The corpus cannot encode ordinary `exact` with scripted `diverges`, so the conservative shared annotation remains `diverges`. | fresh ordinary and scripted side-channel captures; `corpus.toml` milestone V27, samples 0/0.5/1 | Track the scripting-feature initialization artifact separately; ordinary image-fit geometry is exact.",
+      "id": "gap:V27",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "V27",
+      "subsystem": "V27",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 100,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:74"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**Artifact reclassified \u2014 ordinary oracle crash versus scripted geometry capture.** The fresh ordinary debug C++ runner terminates with SIGSEGV before comparison; fresh scripting-enabled runners complete and reproduce the filed 100-vs-75 radius mismatch. The earlier \u201cstale capture\u201d conclusion came from treating an unfinished runner session as success. | fresh ordinary and scripted side-channel captures; `corpus.toml` milestone V35, samples 0/0.5/1 | Keep `diverges`; diagnose the ordinary C++ diagnostic-path crash separately from the scripted source-switch geometry difference.",
+      "id": "gap:V35",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "V35",
+      "subsystem": "V35",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 100,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:75"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**Artifact reclassified \u2014 runner-feature split.** Fresh ordinary runners are exact at t=0/0.5/1, while fresh scripting-enabled runners reproduce the empty-path-vs-compound-path mismatch. The corpus cannot encode ordinary `exact` with scripted `diverges`, so the conservative shared annotation remains `diverges`. | fresh ordinary and scripted side-channel captures; `corpus.toml` milestone V36, samples 0/0.5/1 | Track the scripting-feature path-retention artifact separately; ordinary path retention is exact.",
+      "id": "gap:V36",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "V36",
+      "subsystem": "V36",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 100,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:45"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**Wide-tolerance escape hatches**: `computed_root_transform` tolerant(0.5), `list_index_script_access` tolerant(0.75) \u2014 loose enough to hide real divergence. | `corpus.toml` | Root-cause each; tighten below 0.01 or record a D-row explaining why not.",
+      "id": "gap:V6",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "V6",
+      "subsystem": "V6",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 100,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:46"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**Renderer oracle remains one-OS and WebGPU-on-Metal only.** The static pixel matrix covers Apple M5 Max and Apple Paravirtual device at 1,468/1,468 exact on both, so the second-adapter subgate is complete. The required same-runner gate now compares Rust with a separately pinned current-d788 C++ Dawn replay rather than the historical 7c oracle; it is 1,468/1,468 contract-exact locally on M5 (1,370 byte-exact), with the Paravirtual rerun pending. Native Metal/D3D/Vulkan/GL upstream backends remain unverified; 108 rows rest on the 2/32 subpixel contract; the two clockwise-atomic findings (`rust-wgpu-atomic-color-plane-lifetime-parity`, `native-clockwise-atomic-clip-edge-and-composite-parity`) still lack the purpose-built same-backend oracle needed to dismiss or classify them. | `renderer-parity-workflow.md`, `renderer-exactness-map.md`; CI runs `29788092231` and `29806487036`, artifact `8480363545`; local `make renderer-golden-same-runner` 2026-07-20 | (a) **Complete:** second adapter in the blocking static pixel matrix; (b) a purpose-built C++ oracle config for the clockwise-atomic hypotheses, or reclassify them as D-rows with area caps.",
+      "id": "gap:V7",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "V7",
+      "subsystem": "V7",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 3,
+        "recent_touch_count": 4,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -4467,7 +4654,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 3,
+        "recent_touch_count": 4,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -5523,254 +5710,6 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 95,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:118"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**No `FileAssetLoader` callback** \u2014 no lazy/out-of-band/CDN asset resolution; host must pre-resolve all bytes at import; `cdnUuid`/`cdnBaseUrl` never consulted. | 1",
-      "id": "gap:A1",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "A1",
-      "subsystem": "A1",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 95,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:137"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "Corpus is upstream test assets + a few demos; no systematic ingestion of *production Nuxie flow files*. | Add a private product-corpus lane: every shipped Nuxie flow runs the golden compare in CI. This is the strongest \"verifiable replacement *for our product*\" gate available.",
-      "id": "gap:C3",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "C3",
-      "subsystem": "C3",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 95,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:61"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**Artifact reclassified \u2014 runner-feature split.** Fresh ordinary runners are exact at t=0/0.5/1, while fresh scripting-enabled runners reproduce the 245\u00d7250-vs-490\u00d7362.5 clip mismatch. The corpus cannot encode ordinary `exact` with scripted `diverges`, so the conservative shared annotation remains `diverges`. | fresh ordinary and scripted side-channel captures; `corpus.toml` milestone V22, samples 0/0.5/1 | Track the scripting-feature initialization artifact separately; do not attribute it to computed-value propagation in the ordinary runtime.",
-      "id": "gap:V22",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "V22",
-      "subsystem": "V22",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 95,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:66"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**Artifact reclassified \u2014 runner-feature split.** Fresh ordinary runners produce byte-identical 417,801-byte streams, while fresh scripting-enabled runners reproduce the image-buffer command-phase mismatch. The corpus cannot encode ordinary `exact` with scripted `diverges`, so the conservative shared annotation remains `diverges`. | fresh ordinary and scripted side-channel captures; `corpus.toml` milestone V27, samples 0/0.5/1 | Track the scripting-feature initialization artifact separately; ordinary image-fit geometry is exact.",
-      "id": "gap:V27",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "V27",
-      "subsystem": "V27",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 95,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:74"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**Artifact reclassified \u2014 ordinary oracle crash versus scripted geometry capture.** The fresh ordinary debug C++ runner terminates with SIGSEGV before comparison; fresh scripting-enabled runners complete and reproduce the filed 100-vs-75 radius mismatch. The earlier \u201cstale capture\u201d conclusion came from treating an unfinished runner session as success. | fresh ordinary and scripted side-channel captures; `corpus.toml` milestone V35, samples 0/0.5/1 | Keep `diverges`; diagnose the ordinary C++ diagnostic-path crash separately from the scripted source-switch geometry difference.",
-      "id": "gap:V35",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "V35",
-      "subsystem": "V35",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 95,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:75"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**Artifact reclassified \u2014 runner-feature split.** Fresh ordinary runners are exact at t=0/0.5/1, while fresh scripting-enabled runners reproduce the empty-path-vs-compound-path mismatch. The corpus cannot encode ordinary `exact` with scripted `diverges`, so the conservative shared annotation remains `diverges`. | fresh ordinary and scripted side-channel captures; `corpus.toml` milestone V36, samples 0/0.5/1 | Track the scripting-feature path-retention artifact separately; ordinary path retention is exact.",
-      "id": "gap:V36",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "V36",
-      "subsystem": "V36",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 95,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:45"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**Wide-tolerance escape hatches**: `computed_root_transform` tolerant(0.5), `list_index_script_access` tolerant(0.75) \u2014 loose enough to hide real divergence. | `corpus.toml` | Root-cause each; tighten below 0.01 or record a D-row explaining why not.",
-      "id": "gap:V6",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "V6",
-      "subsystem": "V6",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 95,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:46"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**Renderer oracle remains one-OS and WebGPU-on-Metal only.** The static pixel matrix covers Apple M5 Max and Apple Paravirtual device at 1,468/1,468 exact on both, so the second-adapter subgate is complete. The required same-runner gate now compares Rust with a separately pinned current-d788 C++ Dawn replay rather than the historical 7c oracle; it is 1,468/1,468 contract-exact locally on M5 (1,370 byte-exact), with the Paravirtual rerun pending. Native Metal/D3D/Vulkan/GL upstream backends remain unverified; 108 rows rest on the 2/32 subpixel contract; the two clockwise-atomic findings (`rust-wgpu-atomic-color-plane-lifetime-parity`, `native-clockwise-atomic-clip-edge-and-composite-parity`) still lack the purpose-built same-backend oracle needed to dismiss or classify them. | `renderer-parity-workflow.md`, `renderer-exactness-map.md`; CI runs `29788092231` and `29806487036`, artifact `8480363545`; local `make renderer-golden-same-runner` 2026-07-20 | (a) **Complete:** second adapter in the blocking static pixel matrix; (b) a purpose-built C++ oracle config for the clockwise-atomic hypotheses, or reclassify them as D-rows with area caps.",
-      "id": "gap:V7",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "V7",
-      "subsystem": "V7",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
         "recent_touch_count": 3,
         "state": "manifest-current"
       },
@@ -6505,6 +6444,192 @@
     },
     {
       "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 90,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:125"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "Async decode callbacks; RTTI-style typed queries; semantic-tree protocol (pairs with F6). | 3",
+      "id": "gap:A8",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "A8",
+      "subsystem": "A8",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:lifecycle",
+      "confidence": "low",
+      "discovery_value": 90,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:104"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**Async work pool** (346) + **profiler** (407) | 753 | PARTIAL | P1-m ports the profiler records, lifecycle, wire format, and runtime hooks; its capture backend is the declared D16 adaptation. The async work pool remains absent; the current command-server port provides server-thread confinement without claiming that separate work-pool correspondence.",
+      "id": "gap:F12",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "lifecycle",
+      "source_kind": "tracked-gap",
+      "source_row": "F12",
+      "subsystem": "F12",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 90,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:96"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**Scroll physics** \u2014 `elastic_scroll_physics.cpp` (303), `scroll_bar_constraint(.proxy)` (237+), momentum/virtualized scroll | ~700 | PARTIAL | Clamped/core scroll constraint ported at sample-0; interactive momentum, elastic overscroll, scrollbars absent. Paywall-relevant (scrolling lists).",
+      "id": "gap:F4",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "F4",
+      "subsystem": "F4",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:lifecycle",
+      "confidence": "low",
+      "discovery_value": 90,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:101"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**Joystick runtime behavior** | 169 | PARTIAL (verify) | Only property keys found; confirm advance/apply behavior or add fixture proving it.",
+      "id": "gap:F9",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "lifecycle",
+      "source_kind": "tracked-gap",
+      "source_row": "F9",
+      "subsystem": "F9",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ownership",
+      "confidence": "low",
+      "discovery_value": 90,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:220"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "Size budget user-approved 2026-07-21: 9 MiB (9,437,184 B) blocking for BOTH variants. History: the initial 8 MiB choice predated `974aab66`; re-measurement with the 43-root harness (7.84 MiB OFF / 8.70 MiB ON) reopened the gate the same day, and the user approved the recommended replacement (~3.4% headroom over ON). Any future breach reopens the gate with fresh measurements rather than raising the constant.",
+      "id": "gap:H2",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "tracked-gap",
+      "source_row": "H2",
+      "subsystem": "H2",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:ordering",
+      "confidence": "low",
+      "discovery_value": 90,
+      "disposition": "pending-proof",
+      "evidence_links": [
+        "docs/parity-gap-register.md:43"
+      ],
+      "evidence_state": "tracked-gap",
+      "first_signal": "**PARTIAL \u2014 side-channel gate built (#OR-1/#OR-2, 2026-08-02).** Both runners serialize `settled` per advance (the `advanceAndApply` return incl. zero-second forcing), tri-state `HitResult` per pointer verb, reported events with typed custom properties (H4 folded in), and `stateChangedCount`, into the diffed stream behind `--side-channel` (spec: `docs/side-channel-format.md`); `make golden-compare` runs it corpus-wide and ratchets `side-channel-segments` (669). First catch: V11. REMAINDER: per-layer changed-state identity (Rust runtime records only the count; C++ `stateChangedByIndex` has no Rust counterpart), view-model value dumps (no pinned enumeration order exists on both sides), hover cursor. | `docs/side-channel-format.md`; `tools/golden-runner/main.cpp`, `tools/rust-golden-runner`, `tools/golden-compare` | Close the remainder: record changed-state identities in the Rust runtime, pin a VM-value enumeration order, then extend the channel.",
+      "id": "gap:V4",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ordering",
+      "source_kind": "tracked-gap",
+      "source_row": "V4",
+      "subsystem": "V4",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
@@ -6713,7 +6838,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 30,
+        "recent_touch_count": 31,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -6748,7 +6873,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 20,
+        "recent_touch_count": 22,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -6853,7 +6978,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -6887,7 +7012,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -6921,7 +7046,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -6955,7 +7080,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 10,
+        "recent_touch_count": 11,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -6989,7 +7114,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 10,
+        "recent_touch_count": 11,
         "state": "stale"
       },
       "cluster_id": "cluster:layout:ownership",
@@ -7024,7 +7149,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7129,7 +7254,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 12,
+        "recent_touch_count": 13,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -7163,7 +7288,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 41,
+        "recent_touch_count": 42,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -7197,7 +7322,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 23,
+        "recent_touch_count": 24,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7231,7 +7356,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7266,7 +7391,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7370,7 +7495,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 33,
+        "recent_touch_count": 34,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -7441,7 +7566,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7476,7 +7601,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7546,7 +7671,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7581,7 +7706,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 10,
+        "recent_touch_count": 11,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7616,7 +7741,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7651,7 +7776,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7721,7 +7846,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7756,7 +7881,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -7826,7 +7951,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 10,
+        "recent_touch_count": 11,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -7896,7 +8021,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 10,
+        "recent_touch_count": 11,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -7999,32 +8124,94 @@
     {
       "churn_freshness": {
         "basis": "checked-in ledger",
-        "churn": "medium",
+        "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 5,
         "state": "manifest-current"
       },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
+      "cluster_id": "cluster:unresolved:unsupported-observable",
+      "confidence": "medium",
       "discovery_value": 85,
-      "disposition": "pending-proof",
+      "disposition": "unsupported",
       "evidence_links": [
-        "docs/parity-gap-register.md:125"
+        "docs/parity-gap-register.md:103"
       ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "Async decode callbacks; RTTI-style typed queries; semantic-tree protocol (pairs with F6). | 3",
-      "id": "gap:A8",
+      "evidence_state": "unsupported-feature",
+      "first_signal": "**Compressed-texture decoders** (astc/bc/ktx2/etc) | 735 | ABSENT | GPU texture path; relevance depends on whether editor exports these.",
+      "id": "gap:F11",
       "missing_proofs": [],
       "owner_family": "unresolved",
       "owner_state": "unresolved",
       "product_reach": {
         "basis": "deterministic subsystem keyword policy",
-        "level": "low"
+        "level": "high"
       },
-      "semantic_boundary": "ownership",
+      "semantic_boundary": "unsupported-observable",
       "source_kind": "tracked-gap",
-      "source_row": "A8",
-      "subsystem": "A8",
+      "source_row": "F11",
+      "subsystem": "F11",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:unsupported-observable",
+      "confidence": "medium",
+      "discovery_value": 85,
+      "disposition": "unsupported",
+      "evidence_links": [
+        "docs/parity-gap-register.md:97"
+      ],
+      "evidence_state": "unsupported-feature",
+      "first_signal": "**Keyboard/gamepad/semantic/text-input listener groups + input runtime** (`*_listener_group.cpp` 481, `gamepad_batch.cpp` 363, inputs/) | ~930 | ABSENT | Pointer listeners only. Blocks F2 interaction and any keyboard-driven content.",
+      "id": "gap:F5",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "high"
+      },
+      "semantic_boundary": "unsupported-observable",
+      "source_kind": "tracked-gap",
+      "source_row": "F5",
+      "subsystem": "F5",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:unsupported-observable",
+      "confidence": "medium",
+      "discovery_value": 85,
+      "disposition": "unsupported",
+      "evidence_links": [
+        "docs/parity-gap-register.md:100"
+      ],
+      "evidence_state": "unsupported-feature",
+      "first_signal": "**ORE scripted GPU host** (GPUBuffer/GPUCanvas contexts) | \u2014 | DEFERRED (`deferred-2026-07-19-ore-gpu`) | GPU-prefixed userdata reaches the product renderer under the approved D18 adapter ceiling. The mixed Canvas 2D path now uses the exact mechanically ported RenderCanvas lifecycle, and `Image:view` retains an exact renderer image in the adapter's sampled-texture occurrence. A separate native-ORE product API is still not claimed.",
+      "id": "gap:F8",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "high"
+      },
+      "semantic_boundary": "unsupported-observable",
+      "source_kind": "tracked-gap",
+      "source_row": "F8",
+      "subsystem": "F8",
       "upstream_owner": null
     },
     {
@@ -8033,161 +8220,6 @@
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
         "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:lifecycle",
-      "confidence": "low",
-      "discovery_value": 85,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:104"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**Async work pool** (346) + **profiler** (407) | 753 | PARTIAL | P1-m ports the profiler records, lifecycle, wire format, and runtime hooks; its capture backend is the declared D16 adaptation. The async work pool remains absent; the current command-server port provides server-thread confinement without claiming that separate work-pool correspondence.",
-      "id": "gap:F12",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "lifecycle",
-      "source_kind": "tracked-gap",
-      "source_row": "F12",
-      "subsystem": "F12",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 85,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:96"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**Scroll physics** \u2014 `elastic_scroll_physics.cpp` (303), `scroll_bar_constraint(.proxy)` (237+), momentum/virtualized scroll | ~700 | PARTIAL | Clamped/core scroll constraint ported at sample-0; interactive momentum, elastic overscroll, scrollbars absent. Paywall-relevant (scrolling lists).",
-      "id": "gap:F4",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "F4",
-      "subsystem": "F4",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:lifecycle",
-      "confidence": "low",
-      "discovery_value": 85,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:101"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**Joystick runtime behavior** | 169 | PARTIAL (verify) | Only property keys found; confirm advance/apply behavior or add fixture proving it.",
-      "id": "gap:F9",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "lifecycle",
-      "source_kind": "tracked-gap",
-      "source_row": "F9",
-      "subsystem": "F9",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ownership",
-      "confidence": "low",
-      "discovery_value": 85,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:220"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "Size budget user-approved 2026-07-21: 9 MiB (9,437,184 B) blocking for BOTH variants. History: the initial 8 MiB choice predated `974aab66`; re-measurement with the 43-root harness (7.84 MiB OFF / 8.70 MiB ON) reopened the gate the same day, and the user approved the recommended replacement (~3.4% headroom over ON). Any future breach reopens the gate with fresh measurements rather than raising the constant.",
-      "id": "gap:H2",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "tracked-gap",
-      "source_row": "H2",
-      "subsystem": "H2",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:ordering",
-      "confidence": "low",
-      "discovery_value": 85,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "docs/parity-gap-register.md:43"
-      ],
-      "evidence_state": "tracked-gap",
-      "first_signal": "**PARTIAL \u2014 side-channel gate built (#OR-1/#OR-2, 2026-08-02).** Both runners serialize `settled` per advance (the `advanceAndApply` return incl. zero-second forcing), tri-state `HitResult` per pointer verb, reported events with typed custom properties (H4 folded in), and `stateChangedCount`, into the diffed stream behind `--side-channel` (spec: `docs/side-channel-format.md`); `make golden-compare` runs it corpus-wide and ratchets `side-channel-segments` (669). First catch: V11. REMAINDER: per-layer changed-state identity (Rust runtime records only the count; C++ `stateChangedByIndex` has no Rust counterpart), view-model value dumps (no pinned enumeration order exists on both sides), hover cursor. | `docs/side-channel-format.md`; `tools/golden-runner/main.cpp`, `tools/rust-golden-runner`, `tools/golden-compare` | Close the remainder: record changed-state identities in the Rust runtime, pin a VM-value enumeration order, then extend the channel.",
-      "id": "gap:V4",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ordering",
-      "source_kind": "tracked-gap",
-      "source_row": "V4",
-      "subsystem": "V4",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -8213,6 +8245,41 @@
       "source_row": "solo_index_test",
       "subsystem": "solo_index",
       "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 2,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:animation:ownership",
+      "confidence": "low",
+      "discovery_value": 85,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/animation.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "structural proof is divergent; behavioral proof is unverified; freshness is stale",
+      "id": "owner:src/animation/listener_viewmodel_change.cpp",
+      "missing_proofs": [
+        "structural proof is divergent",
+        "behavioral proof is unverified",
+        "freshness is stale"
+      ],
+      "owner_family": "animation",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "high"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/animation/listener_viewmodel_change.cpp",
+      "subsystem": "listener_viewmodel_change",
+      "upstream_owner": "src/animation/listener_viewmodel_change.cpp"
     },
     {
       "churn_freshness": {
@@ -8416,99 +8483,6 @@
       "source_row": "src/core/field_types/core_int_type.cpp",
       "subsystem": "core_int_type",
       "upstream_owner": "src/core/field_types/core_int_type.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:unsupported-observable",
-      "confidence": "medium",
-      "discovery_value": 80,
-      "disposition": "unsupported",
-      "evidence_links": [
-        "docs/parity-gap-register.md:103"
-      ],
-      "evidence_state": "unsupported-feature",
-      "first_signal": "**Compressed-texture decoders** (astc/bc/ktx2/etc) | 735 | ABSENT | GPU texture path; relevance depends on whether editor exports these.",
-      "id": "gap:F11",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "high"
-      },
-      "semantic_boundary": "unsupported-observable",
-      "source_kind": "tracked-gap",
-      "source_row": "F11",
-      "subsystem": "F11",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:unsupported-observable",
-      "confidence": "medium",
-      "discovery_value": 80,
-      "disposition": "unsupported",
-      "evidence_links": [
-        "docs/parity-gap-register.md:97"
-      ],
-      "evidence_state": "unsupported-feature",
-      "first_signal": "**Keyboard/gamepad/semantic/text-input listener groups + input runtime** (`*_listener_group.cpp` 481, `gamepad_batch.cpp` 363, inputs/) | ~930 | ABSENT | Pointer listeners only. Blocks F2 interaction and any keyboard-driven content.",
-      "id": "gap:F5",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "high"
-      },
-      "semantic_boundary": "unsupported-observable",
-      "source_kind": "tracked-gap",
-      "source_row": "F5",
-      "subsystem": "F5",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:unsupported-observable",
-      "confidence": "medium",
-      "discovery_value": 80,
-      "disposition": "unsupported",
-      "evidence_links": [
-        "docs/parity-gap-register.md:100"
-      ],
-      "evidence_state": "unsupported-feature",
-      "first_signal": "**ORE scripted GPU host** (GPUBuffer/GPUCanvas contexts) | \u2014 | DEFERRED (`deferred-2026-07-19-ore-gpu`) | GPU-prefixed userdata reaches the product renderer under the approved D18 adapter ceiling. The mixed Canvas 2D path now uses the exact mechanically ported RenderCanvas lifecycle, and `Image:view` retains an exact renderer image in the adapter's sampled-texture occurrence. A separate native-ORE product API is still not claimed.",
-      "id": "gap:F8",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "high"
-      },
-      "semantic_boundary": "unsupported-observable",
-      "source_kind": "tracked-gap",
-      "source_row": "F8",
-      "subsystem": "F8",
-      "upstream_owner": null
     },
     {
       "churn_freshness": {
@@ -10427,41 +10401,6 @@
       "source_row": "src/animation/listener_types/listener_input_type_viewmodel.cpp",
       "subsystem": "listener_input_type_viewmodel",
       "upstream_owner": "src/animation/listener_types/listener_input_type_viewmodel.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 1,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:animation:ownership",
-      "confidence": "low",
-      "discovery_value": 80,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/animation.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "structural proof is divergent; behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/animation/listener_viewmodel_change.cpp",
-      "missing_proofs": [
-        "structural proof is divergent",
-        "behavioral proof is unverified",
-        "freshness is stale"
-      ],
-      "owner_family": "animation",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "high"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/animation/listener_viewmodel_change.cpp",
-      "subsystem": "listener_viewmodel_change",
-      "upstream_owner": "src/animation/listener_viewmodel_change.cpp"
     },
     {
       "churn_freshness": {
@@ -14146,7 +14085,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14182,7 +14121,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 9,
+        "recent_touch_count": 10,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14288,7 +14227,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 28,
+        "recent_touch_count": 30,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14322,7 +14261,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 16,
+        "recent_touch_count": 17,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14601,7 +14540,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 38,
+        "recent_touch_count": 39,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -19282,7 +19221,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -19314,7 +19253,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:invalidation",
@@ -19346,7 +19285,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -19371,6 +19310,37 @@
       "source_kind": "decision",
       "source_row": "D3",
       "subsystem": "D3",
+      "upstream_owner": null
+    },
+    {
+      "churn_freshness": {
+        "basis": "checked-in ledger",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "manifest-current"
+      },
+      "cluster_id": "cluster:unresolved:unsupported-observable",
+      "confidence": "medium",
+      "discovery_value": 65,
+      "disposition": "unsupported",
+      "evidence_links": [
+        "docs/parity-gap-register.md:106"
+      ],
+      "evidence_state": "unsupported-feature",
+      "first_signal": "`binary_writer`/`binary_data_reader`, `static_scene.cpp`, `hittest_command_path.cpp`, `intrinsically_sizeable.cpp` | ~350 | ABSENT (accepted) | Read-only runtime doesn't need writers; note and close.",
+      "id": "gap:F14",
+      "missing_proofs": [],
+      "owner_family": "unresolved",
+      "owner_state": "unresolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "unsupported-observable",
+      "source_kind": "tracked-gap",
+      "source_row": "F14",
+      "subsystem": "F14",
       "upstream_owner": null
     },
     {
@@ -19825,7 +19795,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 82,
+        "recent_touch_count": 81,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -19856,7 +19826,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 82,
+        "recent_touch_count": 81,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -19887,7 +19857,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
@@ -19919,7 +19889,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
@@ -19944,37 +19914,6 @@
       "source_kind": "extension",
       "source_row": "X3",
       "subsystem": "X3",
-      "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:unresolved:unsupported-observable",
-      "confidence": "medium",
-      "discovery_value": 60,
-      "disposition": "unsupported",
-      "evidence_links": [
-        "docs/parity-gap-register.md:106"
-      ],
-      "evidence_state": "unsupported-feature",
-      "first_signal": "`binary_writer`/`binary_data_reader`, `static_scene.cpp`, `hittest_command_path.cpp`, `intrinsically_sizeable.cpp` | ~350 | ABSENT (accepted) | Read-only runtime doesn't need writers; note and close.",
-      "id": "gap:F14",
-      "missing_proofs": [],
-      "owner_family": "unresolved",
-      "owner_state": "unresolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "unsupported-observable",
-      "source_kind": "tracked-gap",
-      "source_row": "F14",
-      "subsystem": "F14",
       "upstream_owner": null
     },
     {
@@ -23565,7 +23504,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23597,7 +23536,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23629,7 +23568,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23661,7 +23600,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23693,7 +23632,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23725,7 +23664,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23757,7 +23696,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23789,7 +23728,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:float-behavior",
@@ -23821,7 +23760,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23853,7 +23792,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23885,7 +23824,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23917,7 +23856,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:invalidation",
@@ -24747,7 +24686,7 @@
         "gap:F13"
       ],
       "id": "cluster:unresolved:float-behavior",
-      "max_discovery_value": 105,
+      "max_discovery_value": 110,
       "owner_family": "unresolved",
       "semantic_boundary": "float-behavior"
     },
@@ -24759,7 +24698,7 @@
         "gap:V30"
       ],
       "id": "cluster:unresolved:invalidation",
-      "max_discovery_value": 105,
+      "max_discovery_value": 110,
       "owner_family": "unresolved",
       "semantic_boundary": "invalidation"
     },
@@ -24773,7 +24712,7 @@
         "gap:V2"
       ],
       "id": "cluster:unresolved:lifecycle",
-      "max_discovery_value": 105,
+      "max_discovery_value": 110,
       "owner_family": "unresolved",
       "semantic_boundary": "lifecycle"
     },
@@ -24788,12 +24727,12 @@
         "gap:V3"
       ],
       "id": "cluster:unresolved:mutation",
-      "max_discovery_value": 105,
+      "max_discovery_value": 110,
       "owner_family": "unresolved",
       "semantic_boundary": "mutation"
     },
     {
-      "candidate_count": 15,
+      "candidate_count": 14,
       "candidate_ids": [
         "decision:D1",
         "gap:F15",
@@ -24808,16 +24747,15 @@
         "gap:V26",
         "gap:V31",
         "gap:V4",
-        "gap:V43",
         "gap:W3"
       ],
       "id": "cluster:unresolved:ordering",
-      "max_discovery_value": 105,
+      "max_discovery_value": 110,
       "owner_family": "unresolved",
       "semantic_boundary": "ordering"
     },
     {
-      "candidate_count": 40,
+      "candidate_count": 39,
       "candidate_ids": [
         "decision:D10",
         "decision:D16",
@@ -24848,7 +24786,6 @@
         "gap:V6",
         "gap:V7",
         "gap:V9",
-        "golden:data_bind_blob_test",
         "golden:echo_show_demo",
         "golden:editor_scripted_vector_v7",
         "golden:group_effect",
@@ -24861,7 +24798,7 @@
         "silver:stateful_list_props"
       ],
       "id": "cluster:unresolved:ownership",
-      "max_discovery_value": 125,
+      "max_discovery_value": 130,
       "owner_family": "unresolved",
       "semantic_boundary": "ownership"
     },
@@ -24874,7 +24811,7 @@
         "gap:F8"
       ],
       "id": "cluster:unresolved:unsupported-observable",
-      "max_discovery_value": 80,
+      "max_discovery_value": 85,
       "owner_family": "unresolved",
       "semantic_boundary": "unsupported-observable"
     },
@@ -25035,7 +24972,6 @@
       "V35",
       "V36",
       "V4",
-      "V43",
       "V6",
       "V7",
       "V9",
@@ -25136,7 +25072,6 @@
       "dash",
       "dash_path",
       "data_bind",
-      "data_bind_blob",
       "data_bind_container",
       "data_bind_context",
       "data_bind_list_item_consumer",
@@ -25546,13 +25481,13 @@
   },
   "schema": "nuxie-runtime-drift-queue/v1",
   "summary": {
-    "candidate_count": 692,
+    "candidate_count": 690,
     "cluster_count": 32,
     "disposition_counts": {
       "extension": 3,
       "intentional-decision": 14,
       "known-divergence": 102,
-      "pending-proof": 86,
+      "pending-proof": 84,
       "stale-proof": 449,
       "unknown": 4,
       "unsupported": 34

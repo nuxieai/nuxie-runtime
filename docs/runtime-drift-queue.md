@@ -3,7 +3,7 @@
 Generated from the checked-in parity ledgers. JSON is authoritative; this view highlights clusters and the highest-discovery candidates.
 
 - Upstream ref: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
-- Candidates: 692
+- Candidates: 690
 - Clusters: 32
 
 ## Dispositions
@@ -13,7 +13,7 @@ Generated from the checked-in parity ledgers. JSON is authoritative; this view h
 | extension | 3 |
 | intentional-decision | 14 |
 | known-divergence | 102 |
-| pending-proof | 86 |
+| pending-proof | 84 |
 | stale-proof | 449 |
 | unknown | 4 |
 | unsupported | 34 |
@@ -26,16 +26,16 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 
 | cluster | boundary | owner family | candidates | max discovery value |
 |---|---|---|---:|---:|
+| `cluster:unresolved:ownership` | ownership | unresolved | 39 | 130 |
 | `cluster:layout:ownership` | ownership | layout | 14 | 128 |
-| `cluster:unresolved:ownership` | ownership | unresolved | 40 | 125 |
 | `cluster:runtime-tests:lifecycle` | lifecycle | runtime-tests | 73 | 120 |
 | `cluster:runtime-tests:ordering` | ordering | runtime-tests | 20 | 120 |
+| `cluster:unresolved:float-behavior` | float-behavior | unresolved | 2 | 110 |
+| `cluster:unresolved:invalidation` | invalidation | unresolved | 3 | 110 |
+| `cluster:unresolved:lifecycle` | lifecycle | unresolved | 5 | 110 |
+| `cluster:unresolved:mutation` | mutation | unresolved | 6 | 110 |
+| `cluster:unresolved:ordering` | ordering | unresolved | 14 | 110 |
 | `cluster:runtime-tests:ownership` | ownership | runtime-tests | 38 | 105 |
-| `cluster:unresolved:float-behavior` | float-behavior | unresolved | 2 | 105 |
-| `cluster:unresolved:invalidation` | invalidation | unresolved | 3 | 105 |
-| `cluster:unresolved:lifecycle` | lifecycle | unresolved | 5 | 105 |
-| `cluster:unresolved:mutation` | mutation | unresolved | 6 | 105 |
-| `cluster:unresolved:ordering` | ordering | unresolved | 15 | 105 |
 | `cluster:animation:ownership` | ownership | animation | 93 | 103 |
 | `cluster:viewmodel:ownership` | ownership | viewmodel | 39 | 93 |
 | `cluster:data_bind:ownership` | ownership | data_bind | 45 | 90 |
@@ -44,13 +44,13 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 | `cluster:scripted:ownership` | ownership | scripted | 6 | 90 |
 | `cluster:shapes:ownership` | ownership | shapes | 44 | 90 |
 | `cluster:text:ownership` | ownership | text | 30 | 90 |
+| `cluster:unresolved:unsupported-observable` | unsupported-observable | unresolved | 4 | 85 |
 | `cluster:core:ownership` | ownership | core | 10 | 83 |
 | `cluster:assets:ownership` | ownership | assets | 10 | 80 |
 | `cluster:importers:ownership` | ownership | importers | 26 | 80 |
 | `cluster:input:ownership` | ownership | input | 4 | 80 |
 | `cluster:inputs:ownership` | ownership | inputs | 3 | 80 |
 | `cluster:runtime-tests:unsupported-observable` | unsupported-observable | runtime-tests | 30 | 80 |
-| `cluster:unresolved:unsupported-observable` | unsupported-observable | unresolved | 4 | 80 |
 | `cluster:audio:ownership` | ownership | audio | 4 | 70 |
 | `cluster:bones:ownership` | ownership | bones | 6 | 70 |
 | `cluster:constraints:ownership` | ownership | constraints | 21 | 70 |
@@ -63,10 +63,10 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 
 | value | candidate | disposition | owner | first signal |
 |---:|---|---|---|---|
+| 130 | `gap:F10` | unknown | `unresolved-owner` | **Behavioral-verify candidates** — concrete typeKeys with no bespoke handler: `ClampedScrollPhysics`/`ElasticScrollPhysics` (524/525), `ListPath` (619), `ListenerInputTypeEvent/Te… |
 | 128 | `owner:src/layout/grid_item_placement.cpp` | known-divergence | `src/layout/grid_item_placement.cpp` | structural proof is divergent; behavioral proof is unverified |
 | 128 | `owner:src/layout/grid_track.cpp` | known-divergence | `src/layout/grid_track.cpp` | structural proof is divergent; behavioral proof is unverified |
 | 128 | `owner:src/layout/layout_participant.cpp` | known-divergence | `src/layout/layout_participant.cpp` | structural proof is divergent; behavioral proof is unverified |
-| 125 | `gap:F10` | unknown | `unresolved-owner` | **Behavioral-verify candidates** — concrete typeKeys with no bespoke handler: `ClampedScrollPhysics`/`ElasticScrollPhysics` (524/525), `ListPath` (619), `ListenerInputTypeEvent/Te… |
 | 120 | `golden:editor_scripted_vector_v7` | known-divergence | `unresolved-owner` | line 4: rust `makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}` vs c++ `source file="fixtures/editor/editor_scripted_vect… |
 | 120 | `golden:group_effect` | known-divergence | `unresolved-owner` | line 86: rust `drawPath path={id=2,fillRule=2,path={verbs=[move,line,line,line,line,move,line,line,line,line,move,line,line,line,line,move,line,line,line,line,move,line,line,line,… |
 | 120 | `golden:path_effect_with_feathers` | known-divergence | `unresolved-owner` | line 82: rust `drawPath path={id=5,fillRule=2,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,… |
@@ -132,34 +132,34 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 | 120 | `silver:unbound_stateful_component` | known-divergence | `tests/unit_tests/runtime/data_binding_viewmodels_test.cpp` | Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 10 (save): expected save, got color. |
 | 120 | `silver:virtualized_artboard_databound_children` | known-divergence | `tests/unit_tests/runtime/component_list_test.cpp` | Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 5, op 365 (makeRenderPaint): expected makeRenderPaint, got save. |
 | 120 | `silver:word_joiner_test` | known-divergence | `tests/unit_tests/runtime/text_test.cpp` | Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 2, op 262 (transform), field ty: expected -39.996094, got -15.796875. |
-| 105 | `gap:A2` | pending-proof | `unresolved-owner` | **Native device-output control remains absent** — the Rust Artboard facade now exposes headless engine and volume control, but CPAL start/stop and the portable C boundary remain l… |
-| 105 | `gap:A5` | pending-proof | `unresolved-owner` | **`nux-capi` cannot read events at all**; VM coverage is bool/number/string set-only (no color/enum/trigger/image/artboard/list, no getters/observers); no `pointer_exit`; no input… |
-| 105 | `gap:A7` | pending-proof | `unresolved-owner` | **Artboard resize/layout override not first-class** (`width(x)`, `layoutWidth/Height`, `updateLayoutBounds`, `resetArtboardSize`) — only `raw_mut().set_artboard_dimensions`. Respo… |
-| 105 | `gap:C1` | pending-proof | `unresolved-owner` | 28 schema-known typeKeys appear in **zero** corpus files; after removing abstract bases, the live list: `Folder`, `TextVariationModifier`, `TextStyleFeature`, `NSlicerTileMode`, `… |
-| 105 | `gap:C2` | pending-proof | `unresolved-owner` | Only ~14/317 entries exercise any pointer input; `structural` verification mode used by zero entries (fine — but means it's untested machinery). \| Grow input-script corpus alongs… |
-| 105 | `gap:F1` | pending-proof | `unresolved-owner` | **Audio** — `src/audio/**` engine/source/sound/reader, `audio_event.cpp` firing, `Artboard::volume` \| 1,030+ \| PARTIAL (P2F1/P2F2) \| Symphonia WAV/MP3/FLAC source/reader decode… |
-| 105 | `gap:F13` | pending-proof | `unresolved-owner` | Historical backlog ceilings (from the original port's status log): full ListenerGroup drag/opaque behavior, nested pointer/listener hit propagation beyond event bubbling, live dat… |
-| 105 | `gap:F15` | pending-proof | `unresolved-owner` | **Participant layout animation** — the C++ `ParticipantAnimation` lifecycle (`layout_participant.cpp:29-43,398-455,508-644`: `cascadeLayoutStyle` allocation, `advanceComponent`, `… |
-| 105 | `gap:F7` | pending-proof | `unresolved-owner` | **Unported Lua bindings** — `lua_promise` 1,323, `lua_scripted_context` 583, `lua_buffer_ext` 538, `lua_audio` 507, `lua_data_value` 503, `lua_image_decode` 467, + mesh/color/imag… |
-| 105 | `gap:H1` | pending-proof | `unresolved-owner` | Cycle-3 approval granted 2026-07-21 for the fixed `d788e8ec..b73bc675` cut: PORT TextInput (`1b4df2ad`) and static-link (`b73bc675`), profiler (`079305d7`) deferred WATCH, both de… |
-| 105 | `gap:H3` | pending-proof | `unresolved-owner` | Two `TODO(golden)` markers: `state_machine.rs:797` (port `addToHitLookup`), `draw.rs:3555` (unify layout-bounds path). |
-| 105 | `gap:RB-2` | pending-proof | `unresolved-owner` | Focus ownership/projection \| `RuntimeFocusTree::sync` descriptor projection plus `target_nodes` rebuild instead of retained live `Focusable`/`FocusData` relationships \| OPEN |
-| 105 | `gap:RB-4` | pending-proof | `unresolved-owner` | Scalar ScriptInput binding \| `rehydrate_script_listener_actions` rescans and hydrates scalar inputs at scene rebind instead of retaining the C++ `ScriptInput`/`DataBindContext` p… |
-| 105 | `gap:RB-5` | pending-proof | `unresolved-owner` | SolidColor paint mutation \| `solid_color_paint_revisions` defers the C++ `SolidColor::colorValueChanged` retained-paint mutation to a later draw handoff \| OPEN |
-| 105 | `gap:V1` | pending-proof | `unresolved-owner` | **The two oracles never compose.** `corpus.toml` proves runtime→draw-calls; `corpus-r.toml` replays pre-serialized `.rive-stream` fixtures through the renderer. Nothing runs `.riv… |
-| 105 | `gap:V10` | pending-proof | `unresolved-owner` | **BLOCKING RATCHET INSTALLED 2026-08-04; direct ratio parity remains open.** `make perf-gate` measures 24 manifest-owned files with scripting-enabled release C++/Rust runners, 100… |
-| 105 | `gap:V16` | pending-proof | `unresolved-owner` | **`bankcard`: authored gradient/inner-feather dependency topology is ported; one compound inner-path contour remains displaced.** Rust now interleaves `LinearGradient`/`RadialGrad… |
-| 105 | `gap:V18` | pending-proof | `unresolved-owner` | **`clipping_and_draw_order`: post-zero transform diverges.** Rust emits translation (1121,259) where C++ emits identity. \| `corpus.toml` milestone V18, samples 0/0.5/1 \| Reconci… |
-| 105 | `gap:V2` | pending-proof | `unresolved-owner` | **PARTIAL — the animated-corpus sampling hole is closed; the ratchet is withheld.** All 226 entries that combined `LinearAnimation` coverage with a sole `t=0` sample now retain `t… |
-| 105 | `gap:V24` | pending-proof | `unresolved-owner` | **PARTIAL 2026-08-03 — retained-paint loss is closed; a later gradient-order gap remains.** Rust now completes all samples and paint global 584 remains addressable through its con… |
-| 105 | `gap:V25` | pending-proof | `unresolved-owner` | **Script-update invalidation ported; chained GroupEffect output remains divergent.** A true scripted path-effect advance now schedules `ScriptUpdate` at the effect dependency slot… |
-| 105 | `gap:V26` | pending-proof | `unresolved-owner` | **PARTIAL 2026-08-03 — retained-gradient rematerialization is closed; a later path gap remains.** Gradient 189 is no longer recreated at t=0.5. The next mismatch is draw path 397 … |
-| 105 | `gap:V3` | pending-proof | `unresolved-owner` | **Differential fuzzing was planned (V2 map, "Long-Tail Strategy" §2) but never built.** `fuzz/` targets are panic-only — no C++ comparison, no randomized times/inputs. The long-ta… |
-| 105 | `gap:V30` | pending-proof | `unresolved-owner` | **Feather invalidation is wired, but its upstream effect path remains divergent.** V25's `ScriptUpdate` reaches `ShapePaint` before feather preparation; fresh dense capture still … |
-| 105 | `gap:V31` | pending-proof | `unresolved-owner` | **PARTIAL 2026-08-04 — retained-gradient rematerialization and root-gradient construction order are closed; a weighted rounded-path gap remains.** Gradient 51 is not recreated at … |
-| 105 | `gap:V43` | pending-proof | `unresolved-owner` | **`data_bind_blob_test`: data-bound blob geometry differs.** At the first differing draw, Rust's rectangle height is 2098.35938 while C++ uses 926.574219. \| `corpus.toml` milesto… |
-| 105 | `gap:V9` | pending-proof | `unresolved-owner` | **Rust-only diagnostics never differentially compared**: `--layout-bounds` Taffy report has no C++ counterpart. \| rust-golden-runner \| Optional: C++ layout-bounds flag; else not… |
-| 105 | `gap:W3` | pending-proof | `unresolved-owner` | **Upstream semantic UAF on nested-artboard swap** — `NestedArtboard::nest()` destroys the outgoing `ArtboardInstance` without evicting its `SemanticManager` nodes; next `drainDiff… |
-| 105 | `golden:data_bind_blob_test` | pending-proof | `unresolved-owner` | fixture has no passing Rust/C++ differential proof |
+| 110 | `gap:A2` | pending-proof | `unresolved-owner` | **Native device-output control remains absent** — the Rust Artboard facade now exposes headless engine and volume control, but CPAL start/stop and the portable C boundary remain l… |
+| 110 | `gap:A5` | pending-proof | `unresolved-owner` | **`nux-capi` cannot read events at all**; VM coverage is bool/number/string set-only (no color/enum/trigger/image/artboard/list, no getters/observers); no `pointer_exit`; no input… |
+| 110 | `gap:A7` | pending-proof | `unresolved-owner` | **Artboard resize/layout override not first-class** (`width(x)`, `layoutWidth/Height`, `updateLayoutBounds`, `resetArtboardSize`) — only `raw_mut().set_artboard_dimensions`. Respo… |
+| 110 | `gap:C1` | pending-proof | `unresolved-owner` | 28 schema-known typeKeys appear in **zero** corpus files; after removing abstract bases, the live list: `Folder`, `TextVariationModifier`, `TextStyleFeature`, `NSlicerTileMode`, `… |
+| 110 | `gap:C2` | pending-proof | `unresolved-owner` | Only ~14/317 entries exercise any pointer input; `structural` verification mode used by zero entries (fine — but means it's untested machinery). \| Grow input-script corpus alongs… |
+| 110 | `gap:F1` | pending-proof | `unresolved-owner` | **Audio** — `src/audio/**` engine/source/sound/reader, `audio_event.cpp` firing, `Artboard::volume` \| 1,030+ \| PARTIAL (P2F1/P2F2) \| Symphonia WAV/MP3/FLAC source/reader decode… |
+| 110 | `gap:F13` | pending-proof | `unresolved-owner` | Historical backlog ceilings (from the original port's status log): full ListenerGroup drag/opaque behavior, nested pointer/listener hit propagation beyond event bubbling, live dat… |
+| 110 | `gap:F15` | pending-proof | `unresolved-owner` | **Participant layout animation** — the C++ `ParticipantAnimation` lifecycle (`layout_participant.cpp:29-43,398-455,508-644`: `cascadeLayoutStyle` allocation, `advanceComponent`, `… |
+| 110 | `gap:F7` | pending-proof | `unresolved-owner` | **Unported Lua bindings** — `lua_promise` 1,323, `lua_scripted_context` 583, `lua_buffer_ext` 538, `lua_audio` 507, `lua_data_value` 503, `lua_image_decode` 467, + mesh/color/imag… |
+| 110 | `gap:H1` | pending-proof | `unresolved-owner` | Cycle-3 approval granted 2026-07-21 for the fixed `d788e8ec..b73bc675` cut: PORT TextInput (`1b4df2ad`) and static-link (`b73bc675`), profiler (`079305d7`) deferred WATCH, both de… |
+| 110 | `gap:H3` | pending-proof | `unresolved-owner` | Two `TODO(golden)` markers: `state_machine.rs:797` (port `addToHitLookup`), `draw.rs:3555` (unify layout-bounds path). |
+| 110 | `gap:RB-2` | pending-proof | `unresolved-owner` | Focus ownership/projection \| `RuntimeFocusTree::sync` descriptor projection plus `target_nodes` rebuild instead of retained live `Focusable`/`FocusData` relationships \| OPEN |
+| 110 | `gap:RB-4` | pending-proof | `unresolved-owner` | Scalar ScriptInput binding \| `rehydrate_script_listener_actions` rescans and hydrates scalar inputs at scene rebind instead of retaining the C++ `ScriptInput`/`DataBindContext` p… |
+| 110 | `gap:RB-5` | pending-proof | `unresolved-owner` | SolidColor paint mutation \| `solid_color_paint_revisions` defers the C++ `SolidColor::colorValueChanged` retained-paint mutation to a later draw handoff \| OPEN |
+| 110 | `gap:V1` | pending-proof | `unresolved-owner` | **The two oracles never compose.** `corpus.toml` proves runtime→draw-calls; `corpus-r.toml` replays pre-serialized `.rive-stream` fixtures through the renderer. Nothing runs `.riv… |
+| 110 | `gap:V10` | pending-proof | `unresolved-owner` | **BLOCKING RATCHET INSTALLED 2026-08-04; direct ratio parity remains open.** `make perf-gate` measures 24 manifest-owned files with scripting-enabled release C++/Rust runners, 100… |
+| 110 | `gap:V16` | pending-proof | `unresolved-owner` | **`bankcard`: authored gradient/inner-feather dependency topology is ported; one compound inner-path contour remains displaced.** Rust now interleaves `LinearGradient`/`RadialGrad… |
+| 110 | `gap:V18` | pending-proof | `unresolved-owner` | **`clipping_and_draw_order`: post-zero transform diverges.** Rust emits translation (1121,259) where C++ emits identity. \| `corpus.toml` milestone V18, samples 0/0.5/1 \| Reconci… |
+| 110 | `gap:V2` | pending-proof | `unresolved-owner` | **PARTIAL — the animated-corpus sampling hole is closed; the ratchet is withheld.** All 226 entries that combined `LinearAnimation` coverage with a sole `t=0` sample now retain `t… |
+| 110 | `gap:V24` | pending-proof | `unresolved-owner` | **PARTIAL 2026-08-03 — retained-paint loss is closed; a later gradient-order gap remains.** Rust now completes all samples and paint global 584 remains addressable through its con… |
+| 110 | `gap:V25` | pending-proof | `unresolved-owner` | **Script-update invalidation ported; chained GroupEffect output remains divergent.** A true scripted path-effect advance now schedules `ScriptUpdate` at the effect dependency slot… |
+| 110 | `gap:V26` | pending-proof | `unresolved-owner` | **PARTIAL 2026-08-03 — retained-gradient rematerialization is closed; a later path gap remains.** Gradient 189 is no longer recreated at t=0.5. The next mismatch is draw path 397 … |
+| 110 | `gap:V3` | pending-proof | `unresolved-owner` | **Differential fuzzing was planned (V2 map, "Long-Tail Strategy" §2) but never built.** `fuzz/` targets are panic-only — no C++ comparison, no randomized times/inputs. The long-ta… |
+| 110 | `gap:V30` | pending-proof | `unresolved-owner` | **Feather invalidation is wired, but its upstream effect path remains divergent.** V25's `ScriptUpdate` reaches `ShapePaint` before feather preparation; fresh dense capture still … |
+| 110 | `gap:V31` | pending-proof | `unresolved-owner` | **PARTIAL 2026-08-04 — retained-gradient rematerialization and root-gradient construction order are closed; a weighted rounded-path gap remains.** Gradient 51 is not recreated at … |
+| 110 | `gap:V9` | pending-proof | `unresolved-owner` | **Rust-only diagnostics never differentially compared**: `--layout-bounds` Taffy report has no C++ counterpart. \| rust-golden-runner \| Optional: C++ layout-bounds flag; else not… |
+| 110 | `gap:W3` | pending-proof | `unresolved-owner` | **Upstream semantic UAF on nested-artboard swap** — `NestedArtboard::nest()` destroys the outgoing `ArtboardInstance` without evicting its `SemanticManager` nodes; next `drainDiff… |
 | 105 | `silver:interpolator` | unknown | `unresolved-owner` | No producer/reference exists in the pinned upstream runtime tests. |
 | 105 | `silver:listener_action_inputs` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_listener_action_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |
+| 105 | `silver:multitouch_debug` | unknown | `unresolved-owner` | No producer/reference exists in the pinned upstream runtime tests. |
+| 105 | `silver:script_affects_has_changed` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |

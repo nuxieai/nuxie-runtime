@@ -2711,9 +2711,8 @@ features = ["type-key:100:Image", "type-key:1039:ComponentOrigin", "type-key:105
 id = "data_bind_blob_test"
 path = "tests/unit_tests/assets/data_bind_blob_test.riv"
 samples = [0.0, 0.1, 0.5, 1.0, 2.0]
-status = "not-yet"
-milestone = "V43"
-features = ["type-key:1043:ViewModelPropertyAssetBlob", "type-key:1044:ViewModelInstanceAssetBlob", "blob-layout-geometry-diverges:V43"]
+status = "exact"
+features = ["type-key:1043:ViewModelPropertyAssetBlob", "type-key:1044:ViewModelInstanceAssetBlob"]
 
 
 [[file]]

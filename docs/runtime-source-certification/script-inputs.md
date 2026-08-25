@@ -1371,3 +1371,113 @@ Focused correction evidence, all with `CARGO_INCREMENTAL=0`:
 
 Receipt status remains pending until two fresh reviewers independently inspect
 the corrected production/golden call chains and the operative witnesses.
+
+## First fresh independent review after `0c1e2b675`
+
+Status: **REJECTED.** The correction closes the specific live
+`apply_scripted_input_update` guard found by `8449eee45`, and the new golden
+rehydration and refresh witnesses enter their advertised helpers. The combined
+ScriptInput authority is still not certifiable because ViewModel prerequisite
+validation remains bypassable at the public hydration boundary, while the
+golden cold and bound-refresh owners still bypass pinned hydration/setter
+guards.
+
+### Public prepared hydration validates Artboards, not every input
+
+Pinned `ScriptedObject::hydrateScriptInputs` validates every custom property
+before Context-independent input publication. In particular,
+`ScriptInputViewModelProperty::validateHydrationPrerequisites` distinguishes an
+unresolved property (whole hydration fails) from a valid ViewModel-valued
+property whose selected child is null (hydration succeeds without a table
+write).
+
+`ScriptListenerActionHydration::preflight_artboards` validates only Artboard
+variants. It moves a public `ViewModel` variant and its resolver unchanged into
+`PreparedScriptListenerActionHydration`; `apply` may then install Context and
+publish earlier scalar/Artboard inputs before the resolver is called. The
+ordinary facade builders perform a separate caller-owned ViewModel check, but
+the public `new` plus `apply`/`apply_inputs` entry points do not make that check
+structural. This is the same kind of bypass the Artboard type-state correction
+was intended to remove.
+
+The correction must preserve two distinct ViewModel states at preflight: an
+invalid/unresolved property must reject the whole batch, while `Some(None)`
+must remain a valid nullable child. Phase two must still re-resolve the valid
+property at its authored position, because pinned C++ repeats that lookup and
+may fail there if an earlier setter changed the prerequisite.
+
+### Golden cold hydration still has no normal two-loop preflight
+
+The correction adds a two-loop transaction only to
+`rehydrate_script_inputs_in_range`. The operative cold
+`hydrate_script_inputs` remains a single authored loop. A missing
+`ScriptInputArtboard::artboardId` is silently skipped; an unavailable later
+Artboard can fail construction only after earlier scalar setters; and the
+caller proceeds to user `init` whenever the one-pass helper returns. Pinned
+`validateForColdScriptInit == true` permits generator construction, but it does
+not replace the normal `hydrateScriptInputs` first loop that immediately
+follows and rejects a null `m_referencedArtboard` before any setter or user
+`init`.
+
+Thus a cold script with an earlier number input and a later absent/invalid
+Artboard can publish the number and run `init` in the golden owner where pinned
+C++ returns false with the script table otherwise untouched. The receipt's
+claim that the cold sibling needs no live-hydration preflight conflates
+`validateForColdScriptInit` with `validateHydrationPrerequisites`.
+
+### Golden rehydrate and bound refresh still construct before the live setter guard
+
+The corrected runtime update path now checks
+`script_artboard_input_context_live` before resolver preparation, and the
+concrete setter repeats the check before construction. The golden paths do not
+share that invariant:
+
+- `rehydrate_script_inputs` calls
+  `new_rehydrated_runner_script_artboard` before
+  `set_script_artboard_input_for_global`; and
+- `refresh_bound_script_artboard_inputs` calls
+  `new_refreshed_runner_script_artboard` before the same setter.
+
+Neither helper first proves that the target scripted occurrence still has the
+state/table/ScriptAsset authority required by pinned
+`ScriptedObject::setArtboardInput`. An inert or disposed occurrence can
+therefore allocate a child, construct its default state machine, create/bind a
+ViewModel/DataContext, register render/frame ownership, or surface a resource
+error before the eventual setter discovers the missing table. The new refresh
+parent-chain witness proves the constructed child's context, but cannot
+falsify this earlier guard bypass.
+
+The golden owners need the same deferred prepared-recipe handoff used by the
+runtime path, with the occurrence guard ahead of preparation/construction and
+an inert result that skips dirt, completion hooks, and init.
+
+### Accepted portions and evidence
+
+Independent inspection accepts the corrected runtime live-update guard: an
+absent Artboard table/ScriptAsset returns false before resolver preparation,
+and the backend setter rechecks before construction. The golden live
+rehydration first pass correctly distinguishes an unresolved ViewModel
+property from a valid nullable child. The refreshed child now retains its
+owning parent context, and the previously recovered source RuntimeFile,
+consumer ViewModel, default-state-machine-before-bind, exactly-once bind, and
+host-frame-tail/no-construction-advance sequence were not falsified on the
+guarded production path.
+
+At `0c1e2b675`, with `CARGO_INCREMENTAL=0`:
+
+- complete `scripted_listener_action_tests`: 101 passed;
+- concrete Luau
+  `artboard_setter_checks_script_asset_before_running_prepared_constructor`:
+  passed;
+- complete golden-runner scripting unit suite: 17 passed;
+- combined `nuxie-runtime`, `nuxie-scripting`, `nuxie`, `silver-corpus`, and
+  golden-runner scripting checks: passed;
+- source correspondence remained 456 applicable rows with zero pending;
+- symbol correspondence remained 1,105 owners / 7,818 units, and its 33
+  checker tests passed.
+
+Those green tests accept the listed local corrections but have no witness for
+an initially unresolved public ViewModel batch, cold invalid-Artboard
+atomicity/init suppression, or an inert golden rehydrate/refresh target. The
+receipt remains rejected and requires a new correction plus a fresh two-review
+cycle.

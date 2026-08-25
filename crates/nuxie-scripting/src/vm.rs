@@ -67,10 +67,11 @@ use luaur_vm::macros::lua_l_checkstring::luaL_checkstring;
 use luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
-    ScriptArtboard, ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall,
-    ScriptError, ScriptHost, ScriptInstance, ScriptInterpolatorMethod, ScriptListenerActionMethod,
-    ScriptListenerInvocation, ScriptMethod, ScriptOptionalMethodResult, ScriptOptionalNumberResult,
-    ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
+    PreparedScriptArtboard, ScriptArtboard, ScriptCoreString, ScriptDataConverterMethod,
+    ScriptDataConverterOptionalCall, ScriptError, ScriptHost, ScriptInstance,
+    ScriptInterpolatorMethod, ScriptListenerActionMethod, ScriptListenerInvocation, ScriptMethod,
+    ScriptOptionalMethodResult, ScriptOptionalNumberResult, ScriptValue, ScriptViewModel,
+    ScriptingVm as RuntimeScriptingVm,
 };
 pub(crate) use renderer::RendererBindings;
 use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
@@ -2186,6 +2187,36 @@ impl Drop for LuaScriptInstance {
 }
 
 impl ScriptInstance for LuaScriptInstance {
+    fn script_artboard_input_context_live(&self) -> bool {
+        // `table` is the concrete `m_self`/live-table owner. A retained
+        // generator is the Rust occurrence's resolved ScriptAsset authority.
+        // The Lua state itself is owned by either value and cannot be null
+        // while both guards hold.
+        self.table.is_some() && self.generator.is_some()
+    }
+
+    fn set_prepared_artboard_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        recipe: Box<dyn PreparedScriptArtboard>,
+    ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
+        if !self.script_artboard_input_context_live() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let lua = table.lua();
+        let key = lua.create_string(name.as_c_str_bytes());
+        let artboard = recipe.construct()?;
+        let artboard = self
+            .renderer_bindings
+            .create_scripted_artboard(&lua, artboard)
+            .map_err(|error| self.script_error(error))?;
+        table
+            .set(key, artboard)
+            .map_err(|error| self.script_error(error))
+    }
+
     fn poll_async_work(&mut self) -> std::result::Result<bool, ScriptError> {
         let Some(lua) = self
             .table
@@ -2933,6 +2964,36 @@ mod context_init_tests {
     struct TruthyUserData;
 
     impl UserData for TruthyUserData {}
+
+    #[derive(Debug)]
+    struct FailingPreparedArtboard {
+        constructions: Rc<Cell<usize>>,
+    }
+
+    impl PreparedScriptArtboard for FailingPreparedArtboard {
+        fn construct(self: Box<Self>) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
+            self.constructions.set(self.constructions.get() + 1);
+            Err(ScriptError::new("Artboard construction must stay guarded"))
+        }
+    }
+
+    #[test]
+    fn artboard_setter_checks_script_asset_before_running_prepared_constructor() {
+        let lua = Lua::new();
+        let table = lua.create_table();
+        let mut instance = LuaScriptInstance::new(table);
+        let constructions = Rc::new(Cell::new(0));
+
+        instance
+            .set_prepared_artboard_input_core(
+                &ScriptCoreString::from("panel"),
+                Box::new(FailingPreparedArtboard {
+                    constructions: Rc::clone(&constructions),
+                }),
+            )
+            .expect("a live table without ScriptAsset authority is inert");
+        assert_eq!(constructions.get(), 0);
+    }
 
     #[test]
     fn compile_time_atom_table_resolves_every_upstream_name_and_exact_id() {

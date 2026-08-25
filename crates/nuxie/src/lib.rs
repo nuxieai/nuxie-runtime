@@ -3686,6 +3686,15 @@ impl FileScriptArtboard {
         bindable: &nuxie_runtime::RuntimeBindableArtboard,
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
     ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
+        Self::new_from_live_with_view_model(resolver_file, bindable, parent_context, None)
+    }
+
+    fn new_from_live_with_view_model(
+        resolver_file: Arc<File>,
+        bindable: &nuxie_runtime::RuntimeBindableArtboard,
+        parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
+        supplied_view_model: Option<nuxie_runtime::ScriptViewModel>,
+    ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
         // Take the concrete live snapshot only at the authored
         // `setArtboardInput` position. The prepared recipe deliberately
         // retains `bindable`, not this clone.
@@ -3721,7 +3730,7 @@ impl FileScriptArtboard {
             artboard_index,
             source,
             parent_context,
-            None,
+            supplied_view_model,
             true,
         )
     }
@@ -3793,6 +3802,13 @@ impl FileScriptArtboard {
         source_is_live: bool,
     ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
         instance.set_frame_origin(false);
+        // Pinned `ScriptReffedArtboard` constructs the default state machine in
+        // its member initializer, while the fresh clone still carries the
+        // source occurrence's DataContext. The later consumer bind replaces
+        // that inherited context; it must not influence construction.
+        let mut state_machine = instance
+            .default_state_machine_index()
+            .and_then(|state_machine_index| instance.state_machine_instance(state_machine_index));
         let view_model = supplied_view_model.or_else(|| {
             // `ScriptReffedArtboard` asks the consumer File to construct the
             // ViewModel for the already-resolved concrete source Artboard.
@@ -3819,28 +3835,24 @@ impl FileScriptArtboard {
                 nuxie_runtime::script_view_model_from_owned(&file.runtime, instance)
             })
         });
-        // Build one complete projected occurrence: bind the selected VMI to
-        // the mounted child before constructing its state machine, then
-        // forward that exact child DataContext. This is the scripted-artboard
-        // counterpart of C++ `NestedArtboard::bindStateful` and replacement
-        // construction (`src/nested_artboard.cpp:156-185,228-350`).
-        let data_context = view_model.as_ref().map(|view_model| {
-            let local = view_model.owned_handle();
-            parent_context
-                .map(|parent| parent.with_local_view_model(&local))
-                .unwrap_or_else(|| nuxie_runtime::ScriptArtboardDataContext::root(&local))
-        });
-        if let Some(context) = data_context.as_ref() {
-            instance.bind_script_artboard_data_context(&file.runtime, context);
-        }
-        let mut state_machine = instance
-            .default_state_machine_index()
-            .and_then(|state_machine_index| instance.state_machine_instance(state_machine_index));
+        let data_context = state_machine
+            .as_ref()
+            .and_then(|_| view_model.as_ref())
+            .map(|view_model| {
+                let local = view_model.owned_handle();
+                parent_context
+                    .map(|parent| parent.with_local_view_model(&local))
+                    .unwrap_or_else(|| nuxie_runtime::ScriptArtboardDataContext::root(&local))
+            });
         if let (Some(state_machine), Some(context)) =
             (state_machine.as_mut(), data_context.as_ref())
         {
+            // `StateMachineInstance::bindDataContext` owns one replacement of
+            // both the child Artboard and machine. The split Rust owners receive
+            // the same retained context once each, after construction, and the
+            // source RuntimeFile remains the DataBindPath resolver authority.
+            instance.bind_script_artboard_data_context(&source_runtime, context);
             state_machine.bind_script_artboard_data_context(context);
-            state_machine.advance_data_context();
         }
         let (width, height) = instance.artboard_dimensions();
         Ok(Self {
@@ -10167,7 +10179,11 @@ mod owned_instance_tests {
     }
 
     fn facade_view_model_file() -> File {
-        let runtime = RuntimeFile::from_fixture_records(vec![
+        facade_view_model_file_with_default_state_machine(false)
+    }
+
+    fn facade_view_model_file_with_default_state_machine(include_state_machine: bool) -> File {
+        let mut records = vec![
             fixture_record("Backboard", Vec::new()),
             fixture_record(
                 "ViewModel",
@@ -10213,15 +10229,62 @@ mod owned_instance_tests {
                     ("propertyValue", FixtureValue::Uint(7)),
                 ],
             ),
-            fixture_record("Artboard", vec![("viewModelId", FixtureValue::Uint(0))]),
-        ])
-        .expect("facade view-model fixture imports");
+            fixture_record(
+                "Artboard",
+                if include_state_machine {
+                    vec![
+                        ("viewModelId", FixtureValue::Uint(0)),
+                        ("defaultStateMachineId", FixtureValue::Uint(0)),
+                    ]
+                } else {
+                    vec![("viewModelId", FixtureValue::Uint(0))]
+                },
+            ),
+        ];
+        if include_state_machine {
+            records.push(fixture_record("StateMachine", Vec::new()));
+        }
+        let runtime =
+            RuntimeFile::from_fixture_records(records).expect("facade view-model fixture imports");
         File::from_runtime(runtime).expect("facade view-model graph")
     }
 
     fn facade_two_view_model_file() -> File {
-        let runtime = RuntimeFile::from_fixture_records(vec![
-            fixture_record("Backboard", Vec::new()),
+        facade_two_view_model_file_with_second_property("secondOnly", false, false)
+    }
+
+    fn fixture_single_property_manifest(property_name: &str) -> Vec<u8> {
+        assert!(property_name.len() < 128);
+        let mut names = vec![1, 7, property_name.len() as u8];
+        names.extend_from_slice(property_name.as_bytes());
+        let paths = [1, 9, 1, 7];
+        let mut manifest = vec![0, names.len() as u8];
+        manifest.extend(names);
+        manifest.extend([1, paths.len() as u8]);
+        manifest.extend(paths);
+        manifest
+    }
+
+    fn facade_two_view_model_file_with_second_property(
+        second_property_name: &str,
+        include_state_machine: bool,
+        include_name_manifest: bool,
+    ) -> File {
+        let mut records = vec![fixture_record("Backboard", Vec::new())];
+        if include_name_manifest {
+            records.push(fixture_record(
+                "ManifestAsset",
+                vec![("assetId", FixtureValue::Uint(0))],
+            ));
+            records.push(fixture_record(
+                "FileAssetContents",
+                vec![(
+                    "bytes",
+                    FixtureValue::Bytes(fixture_single_property_manifest(second_property_name)),
+                )],
+            ));
+        }
+        records.extend([
             fixture_record(
                 "ViewModel",
                 vec![("name", FixtureValue::String("First".to_owned()))],
@@ -10236,7 +10299,10 @@ mod owned_instance_tests {
             ),
             fixture_record(
                 "ViewModelPropertyNumber",
-                vec![("name", FixtureValue::String("secondOnly".to_owned()))],
+                vec![(
+                    "name",
+                    FixtureValue::String(second_property_name.to_owned()),
+                )],
             ),
             fixture_record(
                 "ViewModelInstance",
@@ -10266,7 +10332,17 @@ mod owned_instance_tests {
                     ("propertyValue", FixtureValue::Double(22.0)),
                 ],
             ),
-            fixture_record("Artboard", vec![("viewModelId", FixtureValue::Uint(0))]),
+            fixture_record(
+                "Artboard",
+                if include_state_machine {
+                    vec![
+                        ("viewModelId", FixtureValue::Uint(0)),
+                        ("defaultStateMachineId", FixtureValue::Uint(0)),
+                    ]
+                } else {
+                    vec![("viewModelId", FixtureValue::Uint(0))]
+                },
+            ),
             fixture_record("Shape", vec![("parentId", FixtureValue::Uint(0))]),
             fixture_record(
                 "Rectangle",
@@ -10277,23 +10353,37 @@ mod owned_instance_tests {
             ),
             fixture_record(
                 "DataBindContext",
-                vec![
-                    (
-                        "propertyKey",
-                        FixtureValue::Uint(u64::from(
-                            fixture_property(
-                                "Rectangle",
-                                "width",
-                                FixtureValue::Double(0.0),
-                            )
-                            .key,
-                        )),
-                    ),
-                    ("sourcePathIds", FixtureValue::Bytes(vec![1, 0])),
-                ],
+                if include_name_manifest {
+                    vec![
+                        (
+                            "propertyKey",
+                            FixtureValue::Uint(u64::from(
+                                fixture_property("Rectangle", "width", FixtureValue::Double(0.0))
+                                    .key,
+                            )),
+                        ),
+                        ("flags", FixtureValue::Uint(1 << 4)),
+                        ("sourcePathIds", FixtureValue::Bytes(vec![9])),
+                    ]
+                } else {
+                    vec![
+                        (
+                            "propertyKey",
+                            FixtureValue::Uint(u64::from(
+                                fixture_property("Rectangle", "width", FixtureValue::Double(0.0))
+                                    .key,
+                            )),
+                        ),
+                        ("sourcePathIds", FixtureValue::Bytes(vec![1, 0])),
+                    ]
+                },
             ),
-        ])
-        .expect("two-view-model fixture imports");
+        ]);
+        if include_state_machine {
+            records.push(fixture_record("StateMachine", Vec::new()));
+        }
+        let runtime =
+            RuntimeFile::from_fixture_records(records).expect("two-view-model fixture imports");
         File::from_runtime(runtime).expect("two-view-model graph")
     }
 
@@ -10566,8 +10656,108 @@ mod owned_instance_tests {
 
     #[cfg(feature = "scripting")]
     #[test]
+    fn cross_file_script_artboard_resolves_child_data_binds_with_source_manifest() {
+        let source_file = Arc::new(facade_two_view_model_file_with_second_property(
+            "secondOnly",
+            true,
+            true,
+        ));
+        let consumer_file = Arc::new(facade_two_view_model_file_with_second_property(
+            "consumerOnly",
+            true,
+            true,
+        ));
+        let mut source = OwnedArtboardInstance::instantiate_default(Arc::clone(&source_file))
+            .expect("instantiate the cross-File source");
+        let view_model_key = definition_by_name("Artboard")
+            .and_then(|definition| {
+                definition
+                    .properties
+                    .iter()
+                    .find(|property| property.name == "viewModelId")
+            })
+            .map(|property| property.key.int)
+            .expect("Artboard.viewModelId key");
+        assert!(source.raw_mut().set_uint_property(0, view_model_key, 1));
+        let rectangle_width_key =
+            fixture_property("Rectangle", "width", FixtureValue::Double(0.0)).key;
+        let source_owned = RuntimeOwnedViewModelInstance::new(source_file.runtime(), 1)
+            .map(RuntimeOwnedViewModelHandle::new)
+            .expect("construct the source model");
+        let source_model =
+            nuxie_runtime::script_view_model_from_owned(source_file.runtime(), &source_owned)
+                .expect("project the source model");
+        assert!(source_model.set_number("secondOnly", 7.0));
+        let source_context =
+            nuxie_runtime::ScriptArtboardDataContext::root(&source_model.owned_handle());
+        source
+            .raw_mut()
+            .bind_script_artboard_data_context(source_file.runtime(), &source_context);
+        source.raw_mut().advance_artboard_data_binds();
+        assert_eq!(
+            source.raw().double_property(2, rectangle_width_key),
+            Some(7.0),
+            "the live source starts with its own bound DataContext"
+        );
+        let bindable =
+            nuxie_runtime::RuntimeBindableArtboard::new_with_artboard_instance_and_file_authority(
+                "source",
+                source.raw(),
+                Rc::new(Arc::clone(&source_file)),
+            );
+
+        let consumer_owned = RuntimeOwnedViewModelInstance::new(consumer_file.runtime(), 1)
+            .map(RuntimeOwnedViewModelHandle::new)
+            .expect("construct the consumer model");
+        let consumer_model =
+            nuxie_runtime::script_view_model_from_owned(consumer_file.runtime(), &consumer_owned)
+                .expect("project the consumer model");
+        assert!(consumer_model.set_number("consumerOnly", 22.0));
+        let mut consumer_resolver_control = bindable
+            .artboard_instance()
+            .expect("clone the source for the negative control");
+        let consumer_context =
+            nuxie_runtime::ScriptArtboardDataContext::root(&consumer_model.owned_handle());
+        consumer_resolver_control
+            .bind_script_artboard_data_context(consumer_file.runtime(), &consumer_context);
+        consumer_resolver_control.advance_artboard_data_binds();
+        assert_eq!(
+            consumer_resolver_control.double_property(2, rectangle_width_key),
+            Some(22.0),
+            "the negative control proves this fixture detects the wrong consumer resolver"
+        );
+        let mut scripted = FileScriptArtboard::new_from_live_with_view_model(
+            consumer_file,
+            &bindable,
+            None,
+            Some(consumer_model),
+        )
+        .expect("consumer wraps the source occurrence");
+        assert!(
+            scripted.state_machine.is_some(),
+            "the fixture has a default state machine"
+        );
+        assert!(
+            scripted
+                .state_machine
+                .as_ref()
+                .expect("default state machine")
+                .scripted_constructor_context_was_prebound(),
+            "the default state machine inherits the live source context before the consumer replacement"
+        );
+        nuxie_runtime::ScriptArtboard::advance(&mut scripted, 0.0)
+            .expect("the child state machine advances");
+        assert_eq!(
+            scripted.instance.double_property(2, rectangle_width_key),
+            Some(7.0),
+            "source path 'secondOnly' must remain unresolved against the incompatible consumer model; using the consumer manifest would incorrectly bind consumerOnly=22"
+        );
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
     fn scripted_child_advance_does_not_consume_the_supplied_root_trigger() {
-        let file = Arc::new(facade_view_model_file());
+        let file = Arc::new(facade_view_model_file_with_default_state_machine(true));
         let owning_artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
             .expect("instantiate owning artboard");
         let root = owning_artboard
@@ -10581,6 +10771,15 @@ mod owned_instance_tests {
         let mut child =
             FileScriptArtboard::new_with_view_model(file, 0, None, Some(supplied.clone()))
                 .expect("instantiate the concrete scripted child");
+        assert!(child.state_machine.is_some());
+        assert!(
+            !child
+                .state_machine
+                .as_ref()
+                .expect("default state machine")
+                .scripted_constructor_context_was_prebound(),
+            "the default state machine is constructed before the supplied consumer context is bound"
+        );
         assert_eq!(supplied.trigger("submit"), Some(4));
         assert!(
             nuxie_runtime::ScriptArtboard::advance(&mut child, 0.0)

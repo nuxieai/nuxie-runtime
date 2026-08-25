@@ -118,6 +118,15 @@ impl RuntimeBindableArtboard {
         self.inner.source.borrow().clone()
     }
 
+    /// Whether the retained pointer-style source currently names a concrete
+    /// Artboard occurrence. This is the allocation-free counterpart of pinned
+    /// `ScriptInputArtboard::validateHydrationPrerequisites`; callers must take
+    /// the actual fresh clone later at the authored phase-two position.
+    #[doc(hidden)]
+    pub fn has_artboard_instance(&self) -> bool {
+        self.inner.source.borrow().is_some()
+    }
+
     #[doc(hidden)]
     pub fn source_file_authority<T: 'static>(&self) -> Option<Rc<T>> {
         self.inner

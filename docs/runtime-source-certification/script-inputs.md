@@ -992,3 +992,76 @@ replacement snapshot witness, the mutated-live-`viewModelId` witness, and
 tests accept the listed portions but do not exercise the rejected live-table
 guard, source-context/default-state-machine order, construction-time trigger
 consume, incompatible cross-File resolver, or empty-live preflight cases.
+
+## Phase-two correction after fresh review `498ca5ba1`
+
+Status: **PENDING two fresh independent reviews.** This correction addresses
+the four blockers in `498ca5ba1`; it does not certify any row before both new
+reviews accept the combined behavior.
+
+### Recovered pinned sequence
+
+- Prepared Artboard construction now crosses the backend-owned
+  state/live-table/ScriptAsset guard before `PreparedScriptArtboard::construct`
+  can run. The Luau backend checks both its concrete table (`m_self`) and
+  retained generator (`scriptAsset`) before cloning, binding, or publishing a
+  child, matching `src/scripted/scripted_object.cpp:43-59,399-405`.
+- Production and golden `ScriptReffedArtboard` paths retain the cloned source
+  occurrence, create its default state machine before consumer ViewModel
+  selection, then bind the selected consumer/parent context once across the
+  split Rust Artboard/state-machine owners. Neither path performs a
+  construction-time DataContext advance. Existing Luau userdata and golden
+  registered-File frame owners retain the selected VM for host frame-tail
+  advance, matching `src/lua/lua_artboards.cpp:21-67` and
+  `src/lua/rive_lua_libs.cpp:1234-1269`.
+- The consumer File still owns facade creation and generated ViewModel
+  selection from the fresh concrete occurrence's mutable `viewModelId`, but
+  the source RuntimeFile now remains the imported child DataBindPath resolver.
+  This preserves the authority split in
+  `src/data_bind/data_context.cpp:458-475`.
+- The first prerequisite loop now rejects `Live` sources with no concrete
+  occurrence through an allocation-free presence query. A valid bindable is
+  still retained through preflight and freshly snapshotted only at its
+  authored phase-two position.
+
+The previously accepted refreshed-live snapshot, mutable `viewModelId`,
+consumer-created ViewModel, authored outer ordering, and primary-converter
+ancestor authority are unchanged.
+
+### New falsification witnesses
+
+- `empty_live_occurrence_is_rejected_in_the_first_validation_loop` proves the
+  missing occurrence fails before resolver preparation or any phase-two write.
+- `inert_script_lifetime_returns_before_deferred_artboard_construction` and
+  `artboard_setter_checks_script_asset_before_running_prepared_constructor`
+  use constructors that count and fail if evaluated; both remain uncalled
+  behind the shared occurrence-lifetime and concrete Luau ScriptAsset guards.
+- `cross_file_script_artboard_resolves_child_data_binds_with_source_manifest`
+  uses incompatible real name/path manifests. Its negative control proves the
+  consumer resolver drives `consumerOnly=22`; the production path instead
+  retains and inherits the live source's bound `secondOnly=7` context, then
+  uses the source resolver for the consumer replacement and preserves width
+  `7`, so matching numeric indices cannot produce a false green.
+- `scripted_child_advance_does_not_consume_the_supplied_root_trigger` now has
+  an authored default state machine, proves its constructor did not see the
+  replacement consumer context, and proves construction plus child advance do
+  not consume the supplied trigger; the host frame tail does.
+
+### Correction evidence
+
+With `CARGO_INCREMENTAL=0`:
+
+- `cargo test -p nuxie-runtime hydration_atomicity_tests --lib`: 3 passed;
+- `cargo test -p nuxie-runtime scripted_hydration_ --lib`: 4 passed;
+- `cargo test -p nuxie-runtime scripted_listener_action_tests --lib`: 100
+  passed;
+- `cargo test -p nuxie-scripting --features compiler
+  artboard_setter_checks_script_asset_before_running_prepared_constructor
+  --lib`: 1 passed;
+- the new incompatible-manifest witness, the default-state-machine/frame-tail
+  witness, and both existing `live_scripted_artboard_` witnesses: 4 passed;
+- `cargo test -p nuxie-scripting --features compiler scripted_artboard_ --lib`:
+  1 passed;
+- `cargo check -p rust-golden-runner --features scripting`: passed;
+- `cargo check -p nuxie-runtime -p nuxie-scripting -p nuxie -p silver-corpus
+  --features nuxie/scripting`: passed.

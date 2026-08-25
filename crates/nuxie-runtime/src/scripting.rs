@@ -353,10 +353,22 @@ impl ScriptListenerActionHydration {
                     source,
                     resolver,
                     parent_context,
-                } => inputs.push(PreparedScriptListenerInputHydration::Artboard {
-                    name,
-                    recipe: resolver.prepare_script_artboard(&source, parent_context.as_ref())?,
-                }),
+                } => {
+                    if matches!(
+                        &source,
+                        crate::script_input_artboard::ScriptArtboardSource::Live(bindable)
+                            if !bindable.has_artboard_instance()
+                    ) {
+                        return Err(ScriptError::new(
+                            "live scripted artboard source is unavailable",
+                        ));
+                    }
+                    inputs.push(PreparedScriptListenerInputHydration::Artboard {
+                        name,
+                        recipe: resolver
+                            .prepare_script_artboard(&source, parent_context.as_ref())?,
+                    });
+                }
                 ScriptListenerInputHydration::Value { name, value } => {
                     inputs.push(PreparedScriptListenerInputHydration::Value { name, value });
                 }
@@ -450,12 +462,10 @@ impl PreparedScriptListenerActionHydration {
                     instance.set_input_core(&name, value)?;
                 }
                 PreparedScriptListenerInputHydration::Artboard { name, recipe } => {
-                    // Construction deliberately remains in authored
-                    // phase-two order: cloning the concrete occurrence,
-                    // selecting/binding its ViewModel, creating its default
-                    // state machine, and taking a live bindable snapshot all
-                    // happen here, after any earlier authored setter.
-                    instance.set_artboard_input_core(&name, recipe.construct()?)?;
+                    // The backend owns the pinned state/m_self/scriptAsset
+                    // guards. Hand it the deferred recipe intact so an inert
+                    // occurrence returns before cloning or binding the child.
+                    instance.set_prepared_artboard_input_core(&name, recipe)?;
                 }
                 PreparedScriptListenerInputHydration::ViewModel {
                     name,
@@ -3108,6 +3118,29 @@ pub trait ScriptInstance {
         self.set_artboard_input(name, artboard)
     }
 
+    /// Apply one validated Artboard input only when the concrete occurrence
+    /// still owns the state/table/script-asset context used by the pinned
+    /// setter. Construction remains at this authored phase-two position but is
+    /// deferred until after that backend-owned guard.
+    fn set_prepared_artboard_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        recipe: Box<dyn PreparedScriptArtboard>,
+    ) -> Result<(), ScriptError> {
+        if !self.script_artboard_input_context_live() {
+            return Ok(());
+        }
+        self.set_artboard_input_core(name, recipe.construct()?)
+    }
+
+    /// Backend-owned equivalent of pinned `state() != nullptr`, `m_self != 0`,
+    /// and `scriptAsset() != nullptr` for Artboard setters. Generic test and
+    /// adaptation backends inherit the occurrence-lifetime check; the Luau
+    /// backend additionally verifies its retained protocol generator.
+    fn script_artboard_input_context_live(&self) -> bool {
+        self.script_lifetime_valid()
+    }
+
     fn set_view_model_input(
         &mut self,
         name: &str,
@@ -3247,6 +3280,64 @@ mod hydration_atomicity_tests {
         }
     }
 
+    #[derive(Debug)]
+    struct DeferredFailureRecipe {
+        constructions: Rc<Cell<usize>>,
+    }
+
+    impl PreparedScriptArtboard for DeferredFailureRecipe {
+        fn construct(self: Box<Self>) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
+            self.constructions.set(self.constructions.get() + 1);
+            Err(ScriptError::new("deferred Artboard construction ran"))
+        }
+    }
+
+    #[derive(Debug)]
+    struct DeferredFailureResolver {
+        constructions: Rc<Cell<usize>>,
+    }
+
+    impl ScriptArtboardResolver for DeferredFailureResolver {
+        fn prepare_script_artboard(
+            &self,
+            _source: &crate::ScriptArtboardSource,
+            _parent_context: Option<&ScriptArtboardParentContext>,
+        ) -> Result<Box<dyn PreparedScriptArtboard>, ScriptError> {
+            Ok(Box::new(DeferredFailureRecipe {
+                constructions: Rc::clone(&self.constructions),
+            }))
+        }
+    }
+
+    struct InertScriptInstance;
+
+    impl ScriptInstance for InertScriptInstance {
+        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(false)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+
+        fn script_lifetime_valid(&self) -> bool {
+            false
+        }
+    }
+
     #[test]
     fn artboard_facade_failure_precedes_every_hydration_write() {
         let calls = Rc::new(Cell::new(0));
@@ -3276,5 +3367,60 @@ mod hydration_atomicity_tests {
         assert_eq!(calls.get(), 1);
         // Preflight owns no ScriptInstance parameter. Therefore the staged
         // scalar preceding the failed artboard cannot have reached a table.
+    }
+
+    #[test]
+    fn empty_live_occurrence_is_rejected_in_the_first_validation_loop() {
+        let resolver_calls = Rc::new(Cell::new(0));
+        let hydration = ScriptListenerActionHydration::new(
+            None,
+            vec![ScriptListenerInputHydration::Artboard {
+                name: ScriptCoreString::from("panel"),
+                source: crate::ScriptArtboardSource::Live(crate::RuntimeBindableArtboard::new(
+                    "empty live source",
+                )),
+                resolver: Rc::new(FailingArtboardResolver {
+                    calls: Rc::clone(&resolver_calls),
+                }),
+                parent_context: None,
+            }],
+        );
+
+        let error = match hydration.preflight_artboards() {
+            Ok(_) => panic!("an absent concrete occurrence must fail preflight"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.message(),
+            "live scripted artboard source is unavailable"
+        );
+        assert_eq!(
+            resolver_calls.get(),
+            0,
+            "the shared prerequisite guard runs before facade preparation"
+        );
+    }
+
+    #[test]
+    fn inert_script_lifetime_returns_before_deferred_artboard_construction() {
+        let constructions = Rc::new(Cell::new(0));
+        let hydration = ScriptListenerActionHydration::new(
+            None,
+            vec![ScriptListenerInputHydration::Artboard {
+                name: ScriptCoreString::from("panel"),
+                source: crate::ScriptArtboardSource::File(0),
+                resolver: Rc::new(DeferredFailureResolver {
+                    constructions: Rc::clone(&constructions),
+                }),
+                parent_context: None,
+            }],
+        )
+        .preflight_artboards()
+        .expect("immutable File prerequisite is valid");
+
+        hydration
+            .apply_inputs(&mut InertScriptInstance, &mut NoopScriptHost)
+            .expect("pinned inert setter returns without construction failure");
+        assert_eq!(constructions.get(), 0);
     }
 }

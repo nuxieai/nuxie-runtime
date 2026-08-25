@@ -98,7 +98,7 @@ fn apply_constraint(
             scrolling::scroll_constraint::apply(artboard, component_index, constraint)
         }
         RuntimeConstraintKind::ScrollBar => {
-            apply_scroll_bar_constraint(artboard, component_index, constraint)
+            scrolling::scroll_bar_constraint::apply(artboard, component_index, constraint)
         }
         RuntimeConstraintKind::Ik => ik_constraint::apply(artboard, component_index, constraint),
         _ => false,

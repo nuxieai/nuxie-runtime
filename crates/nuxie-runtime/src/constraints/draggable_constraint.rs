@@ -26,7 +26,7 @@ pub(crate) struct RuntimeDraggableProxy {
 }
 
 impl RuntimeDraggableProxy {
-    fn new(
+    pub(in crate::constraints) fn new(
         constraint: ComponentHandle,
         hittable: ComponentHandle,
         kind: RuntimeDraggableProxyKind,
@@ -71,25 +71,8 @@ pub(crate) fn runtime_draggable_proxies(artboard: &ArtboardInstance) -> Vec<Runt
                 false,
             ));
         }
-        if component.concrete.scroll_bar.is_some()
-            && let Some(thumb) = component.parent
-            && let Some(track) = artboard
-                .objects
-                .component(thumb)
-                .and_then(|thumb| thumb.parent)
-        {
-            proxies.push(RuntimeDraggableProxy::new(
-                handle,
-                thumb,
-                RuntimeDraggableProxyKind::Thumb,
-                true,
-            ));
-            proxies.push(RuntimeDraggableProxy::new(
-                handle,
-                track,
-                RuntimeDraggableProxyKind::Track,
-                false,
-            ));
+        if component.concrete.scroll_bar.is_some() {
+            scrolling::scroll_bar_constraint_proxy::append_proxies(artboard, handle, &mut proxies);
         }
     }
     let hit_order = artboard.runtime_hit_component_order();

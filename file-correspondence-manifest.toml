@@ -28,11 +28,11 @@ decision_rule = "divergent-by-decision requires a cited parity-gap-register D-ro
 max_multi_module_rows = 158
 
 [source_correspondence_ratchet]
-applicable_rows = 453
-direct_primary_owner_rows = 401
+applicable_rows = 456
+direct_primary_owner_rows = 404
 adjudicated_shared_owner_rows = 43
 explicit_owner_exception_rows = 9
-pending_rows = 3
+pending_rows = 0
 explicit_owner_exceptions = [
   "src/animation/animation_reset.cpp",
   "src/audio/audio_reader.cpp",
@@ -1685,39 +1685,39 @@ note = "F4/F10: clamped scrolling is partial and still needs its parity fixture.
 
 [[file]]
 upstream = "src/constraints/scrolling/elastic_scroll_physics.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/elastic_scroll_physics.rs; crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0135"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F4/F10: elastic scroll physics is absent and still needs its parity fixture."
+note = "Phase 2 follow-up direct owner: the previously packed ElasticScrollPhysicsHelper implementation now lives in constraints/scrolling/elastic_scroll_physics.rs, while variant dispatch remains in the shared ScrollPhysics lifecycle. Existing trailing-padding snap and drag/fling tests are unchanged; behavioral adjudication remains pending Phase 3 paired audit."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_bar_constraint.rs; crates/nuxie-runtime/src/constraints.rs; crates/nuxie-runtime/src/components.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0136"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F4: scroll bar constraint behavior is absent."
+note = "Phase 2 follow-up direct owner: constrain/transform dispatch now lives in constraints/scrolling/scroll_bar_constraint.rs; retained occurrence state remains in components.rs and shared scroll metrics/drag helpers remain in constraints.rs. The move is behavior-neutral and behavioral adjudication remains pending the paired audit."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_bar_constraint_proxy.rs; crates/nuxie-runtime/src/constraints/draggable_constraint.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0137"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F4: scroll bar constraint proxy behavior is absent."
+note = "Phase 2 follow-up direct owner: Thumb and Track proxy construction plus start/drag/end dispatch now live in constraints/scrolling/scroll_bar_constraint_proxy.rs; the shared DraggableProxy occurrence type and authored ordering remain in draggable_constraint.rs. The move is behavior-neutral and behavioral adjudication remains pending the paired audit."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"

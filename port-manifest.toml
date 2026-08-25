@@ -811,21 +811,21 @@ note = "F4/F10: clamped scrolling is partial and still needs its parity fixture.
 
 [[file]]
 upstream = "src/constraints/scrolling/elastic_scroll_physics.cpp"
-status = "absent"
-rust_module = ""
-note = "F4/F10: elastic scroll physics is absent and still needs its parity fixture."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/elastic_scroll_physics.rs; crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"
+note = "Phase 2 follow-up: direct ElasticScrollPhysics owner plus shared ScrollPhysics variant lifecycle; existing exact helper and interaction coverage is retained."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint.cpp"
-status = "absent"
-rust_module = ""
-note = "F4: scroll bar constraint behavior is absent."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_bar_constraint.rs; crates/nuxie-runtime/src/constraints.rs; crates/nuxie-runtime/src/components.rs"
+note = "Phase 2 follow-up: direct ScrollBarConstraint constrain owner with retained occurrence state and shared scroll metrics/drag helpers."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
-status = "absent"
-rust_module = ""
-note = "F4: scroll bar constraint proxy behavior is absent."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_bar_constraint_proxy.rs; crates/nuxie-runtime/src/constraints/draggable_constraint.rs"
+note = "Phase 2 follow-up: direct Thumb/Track proxy construction and lifecycle owner."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"

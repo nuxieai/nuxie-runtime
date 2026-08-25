@@ -819,7 +819,6 @@
             clip: true,
             host_opacity: 1.0,
             frame_origin: Cell::new(true),
-            frame_id: Cell::new(0),
             slots,
             objects,
             joysticks: Vec::new(),
@@ -926,6 +925,22 @@
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
         }
+    }
+
+    #[test]
+    fn public_clones_observe_the_single_process_wide_draw_frame_id() {
+        let source = synthetic_instance(Vec::new(), Vec::new());
+        let clone = source.clone();
+
+        source.begin_draw_frame();
+        let after_source_draw = artboard_draw_frame_id();
+        assert_eq!(source.frame_id(), after_source_draw);
+        assert_eq!(clone.frame_id(), after_source_draw);
+
+        clone.begin_draw_frame();
+        let after_clone_draw = artboard_draw_frame_id();
+        assert_eq!(source.frame_id(), after_clone_draw);
+        assert_eq!(clone.frame_id(), after_clone_draw);
     }
 
     fn synthetic_nested_artboard_instance(graph_global_id: u32) -> RuntimeNestedArtboardInstance {

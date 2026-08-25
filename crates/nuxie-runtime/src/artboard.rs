@@ -372,9 +372,6 @@ pub struct ArtboardInstance {
     /// default true; mounted nested/scripted/component-list occurrences set it
     /// false at the same ownership boundary as C++.
     pub(crate) frame_origin: Cell<bool>,
-    /// C++ `Artboard::m_FrameID`, incremented by the public draw entry before
-    /// `drawInternal`; mounted children recurse directly and do not increment.
-    pub(crate) frame_id: Cell<u64>,
     pub(crate) slots: Vec<InstanceSlot>,
     pub(crate) objects: InstanceObjectArena,
     pub(crate) joysticks: Vec<RuntimeJoystick>,
@@ -607,7 +604,6 @@ impl Clone for ArtboardInstance {
             clip: self.clip,
             host_opacity: self.host_opacity,
             frame_origin: self.frame_origin.clone(),
-            frame_id: self.frame_id.clone(),
             slots: self.slots.clone(),
             objects: self.objects.clone(),
             joysticks: self.joysticks.clone(),
@@ -2654,7 +2650,6 @@ impl ArtboardInstance {
             clip: dimensions.clip,
             host_opacity: 1.0,
             frame_origin: Cell::new(true),
-            frame_id: Cell::new(0),
             slots,
             objects,
             joysticks,
@@ -7060,12 +7055,11 @@ impl ArtboardInstance {
     }
 
     pub fn frame_id(&self) -> u64 {
-        self.frame_id.get()
+        artboard_draw_frame_id()
     }
 
     pub(crate) fn begin_draw_frame(&self) {
         nuxie_render_api::increment_artboard_draw_frame_id();
-        self.frame_id.set(self.frame_id.get().wrapping_add(1));
     }
 
     pub(crate) fn cache_epoch(&self) -> u64 {

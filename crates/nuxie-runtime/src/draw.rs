@@ -32220,7 +32220,7 @@ mod tests {
         }
     }
 
-    fn upstream_grouped_component_list_joins_layout(fixture: &str) -> bool {
+    fn upstream_grouped_component_list_layout_state(fixture: &str) -> (u64, bool) {
         let engine = TaffyRuntimeLayoutEngine;
         let runtime = read_runtime_file(&cpp_runtime_fixture(fixture))
             .unwrap_or_else(|error| panic!("{fixture} imports: {error:#}"));
@@ -32243,25 +32243,44 @@ mod tests {
             .and_then(|local| instance.component(local))
             .expect("list parent");
         assert_eq!(parent.type_name, "Node");
-        engine
-            .layout_provider_children(&instance, 0)
-            .expect("root layout providers")
-            .contains(&list.local_id)
+        let flags_key =
+            property_key_for_name("Drawable", "drawableFlags").expect("drawable flags key");
+        let flags = instance
+            .uint_property(list.local_id, flags_key)
+            .expect("component-list drawable flags are retained");
+        let mut ancestor = instance.component_parent_local(list.local_id);
+        let mut layout_owner = None;
+        while let Some(local) = ancestor {
+            let component = instance.component(local).expect("ancestor component");
+            if component.type_name == "LayoutComponent" {
+                layout_owner = Some(local);
+                break;
+            }
+            ancestor = instance.component_parent_local(local);
+        }
+        let layout_owner = layout_owner.unwrap_or(0);
+        let participates = engine
+            .layout_provider_children(&instance, layout_owner)
+            .expect("owning layout providers")
+            .contains(&list.local_id);
+        (flags, participates)
     }
 
     #[test]
     fn upstream_component_list_inside_a_group_stays_out_of_layout() {
-        assert!(!upstream_grouped_component_list_joins_layout(
-            "clipping_and_draw_order.riv"
-        ));
+        let (flags, participates) =
+            upstream_grouped_component_list_layout_state("clipping_and_draw_order.riv");
+        assert_eq!(flags & (1 << 8), 0);
+        assert!(!participates);
     }
 
     #[test]
-    #[ignore = "expected-red: ParticipatesInLayout is not decoded from the pinned list fixture"]
     fn upstream_flagged_component_list_joins_layout_through_a_group() {
-        assert!(upstream_grouped_component_list_joins_layout(
-            "layout/list_in_group_joins_layout.riv"
-        ));
+        let (flags, participates) = upstream_grouped_component_list_layout_state(
+            "layout/list_in_group_joins_layout.riv",
+        );
+        assert_eq!(flags & (1 << 8), 1 << 8);
+        assert!(participates);
     }
 
     #[test]

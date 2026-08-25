@@ -29,7 +29,18 @@ Pinned upstream: `rive-app/rive-runtime@4ac7b32798da0482e441ef09304dc3b480ed3ee5
 The frozen denominator is 157 files and 1,404 active Catch2 `TEST_CASE`s from
 `tests/unit_tests/runtime/*.cpp` and
 `tests/unit_tests/runtime/scripting/*.cpp`. The starting correspondence census
-was 655 covered cases and 749 uncovered cases.
+classified 655 cases as covered and 749 as uncovered by promoting file-level
+statuses. That estimate is retained only as historical navigation metadata. It
+is not behavioral proof.
+
+The machine-owned case ledger is `test-correspondence-cases.json`. Its truthful
+Phase 1 baseline is **0 accepted dispositions and 1,404 pending cases**. Every
+row is keyed by pinned upstream path plus one-based source ordinal, and also
+freezes the declaration line and case name. That makes duplicate Catch2 names
+unambiguous while allowing the checker to reject missing, duplicate, reordered,
+or stale rows against the pin. `test-correspondence-manifest.toml` remains the
+compatible file-level navigation/history ledger; changing one of its file
+statuses never promotes a case.
 
 A case counts as ported only when a case-level row points to a discovered Rust
 test that retains the upstream fixture, action order, and complete assertion
@@ -39,6 +50,35 @@ failing production assertion may remain `#[ignore]`, but the test body and
 expected value must remain literal and its reason must name the missing
 production behavior. Nearby coverage, a source citation, a test that only
 proves its own helper, or a weakened assertion does not count.
+
+Case ledger dispositions are deliberately narrow:
+
+- `direct` resolves one exact Rust source path, function line, and discovered
+  test symbol. `pass` evidence cannot be ignored. `expected-red` must resolve to
+  `#[ignore = "expected-red: …"]`, with the same reason recorded in the row.
+- `differential` identifies an executable `.rs`, `.py`, or `.sh` harness, its
+  stable differential id, both language entry points, and its argv command.
+- `adapted` names an approved adaptation kind, the inapplicable observable, and
+  a rationale. A wholly `not-applicable` row is reserved for C++-language-only
+  behavior; backend and Rust-safety adaptations still require executable proof.
+- `pending` is `unverified` and carries no evidence, adaptation, or note.
+
+The case ratchet is independent from the historical file ratchet. Its
+`max_pending` value may only fall, and a case that has appeared as direct,
+differential, or adapted in tracked history may not regress to pending. The
+all-pending generator refuses to overwrite an existing ledger unless `--force`
+is given, because regeneration otherwise destroys proof.
+
+Recount and validate the live ledger with:
+
+```sh
+python3 tools/runtime-frame-loop-port/check_test_correspondence.py \
+  --rive-runtime-dir /path/to/pinned/rive-runtime
+```
+
+`generate_test_case_ledger.py` exists only to establish or deliberately reset
+the all-pending skeleton. Day-to-day work edits individual case rows and lowers
+`ratchet.max_pending` by the same number of accepted promotions.
 
 Approved language/backend adaptations must preserve the meaningful observable
 sequence and record any inapplicable C++-only assertion explicitly. They must

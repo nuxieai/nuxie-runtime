@@ -121,6 +121,16 @@ class LedgerScorecardTests(unittest.TestCase):
         )
         return path
 
+    def test_file_classifications_do_not_promote_case_proof(self):
+        scorecard = aggregate_ledger_scorecard(REPO_ROOT)
+
+        self.assertEqual(
+            scorecard["tests"]["file_status_counts"],
+            {"n-a": 2, "ported-differential": 6, "ported-direct": 149},
+        )
+        self.assertEqual(scorecard["tests"]["accepted_case_dispositions"], 0)
+        self.assertEqual(scorecard["tests"]["pending_case_proof"], 1404)
+
     def test_pending_verification_is_not_reported_as_behaviorally_proven(self):
         scorecard = aggregate_ledger_scorecard(REPO_ROOT)
 
@@ -607,6 +617,21 @@ class LedgerScorecardTests(unittest.TestCase):
                 status = "ported-direct"
                 """,
             )
+            (repo / "test-correspondence-cases.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "nuxie-test-case-correspondence/v1",
+                        "case_count": 5,
+                        "cases": [
+                            {"status": "direct", "outcome": "pass"},
+                            {"status": "direct", "outcome": "expected-red"},
+                            {"status": "pending", "outcome": "unverified"},
+                            {"status": "pending", "outcome": "unverified"},
+                            {"status": "pending", "outcome": "unverified"},
+                        ],
+                    }
+                )
+            )
             self.write(
                 repo / "silver-corpus.toml",
                 """
@@ -715,10 +740,16 @@ class LedgerScorecardTests(unittest.TestCase):
             scorecard["tests"],
             {
                 "file_status_counts": {"pending": 1, "ported-direct": 1},
+                "case_status_counts": {"direct": 2, "pending": 3},
+                "case_outcome_counts": {
+                    "expected-red": 1,
+                    "pass": 1,
+                    "unverified": 3,
+                },
                 "files": 2,
                 "test_cases": 5,
-                "covered_test_cases": 2,
-                "uncovered_test_cases": 3,
+                "accepted_case_dispositions": 2,
+                "pending_case_proof": 3,
             },
         )
         self.assertEqual(
@@ -794,10 +825,16 @@ class LedgerScorecardTests(unittest.TestCase):
             },
             "tests": {
                 "file_status_counts": {"pending": 1, "ported-direct": 1},
+                "case_status_counts": {"direct": 2, "pending": 3},
+                "case_outcome_counts": {
+                    "expected-red": 1,
+                    "pass": 1,
+                    "unverified": 3,
+                },
                 "files": 2,
                 "test_cases": 5,
-                "covered_test_cases": 2,
-                "uncovered_test_cases": 3,
+                "accepted_case_dispositions": 2,
+                "pending_case_proof": 3,
             },
             "silver": {
                 "min_exact": 1,
@@ -885,8 +922,13 @@ class LedgerScorecardTests(unittest.TestCase):
             self.assertIn("`src/artboard.cpp`", completed.stdout)
             self.assertIn("`src/lua/renderer/lua_gpu.cpp`", completed.stdout)
             self.assertIn("Behavioral states: `unverified`: 456", completed.stdout)
-            self.assertIn("Covered test cases: 1387/1404", completed.stdout)
-            self.assertIn("Uncovered test cases: 17", completed.stdout)
+            self.assertIn(
+                "Historical file classifications (non-probative):", completed.stdout
+            )
+            self.assertIn(
+                "Case-level accepted dispositions: 0/1404", completed.stdout
+            )
+            self.assertIn("Pending case proof: 1404", completed.stdout)
             self.assertIn(
                 "Status counts: `diverges`: 5; `exact`: 354; `not-yet`: 5",
                 completed.stdout,
@@ -914,8 +956,16 @@ class LedgerScorecardTests(unittest.TestCase):
                 {"known-divergent": 3, "stale": 446, "unverified": 7},
             )
             self.assertEqual(
-                proof_document["evidence_dimensions"]["tests"]["uncovered_test_cases"],
-                17,
+                proof_document["evidence_dimensions"]["tests"][
+                    "pending_case_proof"
+                ],
+                1404,
+            )
+            self.assertEqual(
+                proof_document["evidence_dimensions"]["tests"][
+                    "accepted_case_dispositions"
+                ],
+                0,
             )
 
     def test_make_snapshot_persists_markdown_and_machine_owner_proof(self):
@@ -969,6 +1019,7 @@ class LedgerScorecardTests(unittest.TestCase):
             "parity-evidence-proofs.json",
             "rust-additions.toml",
             "test-correspondence-manifest.toml",
+            "test-correspondence-cases.json",
             "silver-corpus.toml",
             "corpus.toml",
         ):

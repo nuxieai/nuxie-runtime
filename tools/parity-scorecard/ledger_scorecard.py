@@ -23,6 +23,8 @@ X_ROW = re.compile(r"^- \*\*(X\d+) — (.+?)\.\*\*\s*(.*)$")
 SENTENCE_END = re.compile(r"^(.+?[.!?])(?:\s+(?=[A-Z\[`*_])|$)")
 DECISION_REFERENCE = re.compile(r"(?<![A-Za-z0-9-])D\d+\b")
 EXTENSION_REFERENCE = re.compile(r"(?<![A-Za-z0-9-])X\d+\b")
+CASE_STATUS_VALUES = {"pending", "direct", "differential", "adapted"}
+CASE_OUTCOME_VALUES = {"unverified", "pass", "expected-red", "not-applicable"}
 
 
 def aggregate_ledger_scorecard(
@@ -34,6 +36,7 @@ def aggregate_ledger_scorecard(
     file_manifest = load_toml(repo_root / "file-correspondence-manifest.toml")
     rust_additions = load_toml(repo_root / "rust-additions.toml")
     test_manifest = load_toml(repo_root / "test-correspondence-manifest.toml")
+    test_case_ledger = load_json(repo_root / "test-correspondence-cases.json")
     silver_corpus = load_toml(repo_root / "silver-corpus.toml")
     golden_corpus = load_toml(repo_root / "corpus.toml")
     frame_ownership = load_toml(
@@ -83,7 +86,31 @@ def aggregate_ledger_scorecard(
         integer_value(row.get("test_case_count"), "file.test_case_count")
         for row in test_rows
     )
-    covered_test_cases = sum(test_case_coverage(row) for row in test_rows)
+    case_rows = object_rows(test_case_ledger, "cases")
+    if test_case_ledger.get("schema") != "nuxie-test-case-correspondence/v1":
+        raise ValueError("test case ledger has an unsupported schema")
+    declared_case_total = integer_value(
+        test_case_ledger.get("case_count"), "case ledger.case_count"
+    )
+    if declared_case_total != test_case_total or len(case_rows) != test_case_total:
+        raise ValueError(
+            "case ledger denominator does not match the file correspondence census"
+        )
+    case_statuses = {str(row.get("status")) for row in case_rows}
+    unknown_case_statuses = case_statuses - CASE_STATUS_VALUES
+    if unknown_case_statuses:
+        raise ValueError(
+            f"case ledger has unknown statuses: {sorted(unknown_case_statuses)}"
+        )
+    case_outcomes = {str(row.get("outcome")) for row in case_rows}
+    unknown_case_outcomes = case_outcomes - CASE_OUTCOME_VALUES
+    if unknown_case_outcomes:
+        raise ValueError(
+            f"case ledger has unknown outcomes: {sorted(unknown_case_outcomes)}"
+        )
+    case_status_counts = status_counts(case_rows)
+    case_outcome_counts = sorted_counts(str(row.get("outcome")) for row in case_rows)
+    pending_test_cases = case_status_counts.get("pending", 0)
     silver_rows = table_rows(silver_corpus, "case")
     silver_counts = collections.Counter(
         SILVER_STATUS_LABELS.get(str(row.get("status")), str(row.get("status")))
@@ -135,10 +162,12 @@ def aggregate_ledger_scorecard(
         },
         "tests": {
             "file_status_counts": status_counts(test_rows),
+            "case_status_counts": case_status_counts,
+            "case_outcome_counts": case_outcome_counts,
             "files": len(test_rows),
             "test_cases": test_case_total,
-            "covered_test_cases": covered_test_cases,
-            "uncovered_test_cases": test_case_total - covered_test_cases,
+            "accepted_case_dispositions": test_case_total - pending_test_cases,
+            "pending_case_proof": pending_test_cases,
         },
         "silver": {
             "min_exact": minimum_exact,
@@ -305,23 +334,6 @@ def validate_file_correspondence_manifest(
             f"current_audit_rows references unknown row {unknown_current_rows[0]}"
         )
     return evidence_by_upstream
-
-
-def test_case_coverage(row: dict[str, Any]) -> int:
-    count = integer_value(row.get("test_case_count"), "file.test_case_count")
-    status = row.get("status")
-    if status in {"ported-direct", "ported-differential"}:
-        return count
-    if status == "partial":
-        covered = row.get("covered_test_cases", [])
-        if not isinstance(covered, list) or not all(
-            isinstance(name, str) and name for name in covered
-        ):
-            raise ValueError("partial test row covered_test_cases must be strings")
-        if len(covered) > count:
-            raise ValueError("partial test row covers more cases than it declares")
-        return len(covered)
-    return 0
 
 
 def build_owner_proof_report(
@@ -821,6 +833,20 @@ def load_toml(path: Path) -> dict[str, Any]:
     return document
 
 
+def load_json(path: Path) -> dict[str, Any]:
+    document = json.loads(path.read_text())
+    if not isinstance(document, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return document
+
+
+def object_rows(document: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    rows = document.get(key)
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise ValueError(f"missing {key} object rows")
+    return rows
+
+
 def table_rows(document: dict[str, Any], key: str) -> list[dict[str, Any]]:
     rows = document.get(key)
     if not isinstance(rows, list):
@@ -994,9 +1020,13 @@ def render_ledger_scorecard(scorecard: dict[str, Any]) -> str:
             "",
             f"Files: {tests['files']}",
             f"Test cases: {tests['test_cases']}",
-            f"Covered test cases: {tests['covered_test_cases']}/{tests['test_cases']}",
-            f"Uncovered test cases: {tests['uncovered_test_cases']}",
-            f"Status counts: {render_counts(tests['file_status_counts'])}",
+            "Historical file classifications (non-probative): "
+            f"{render_counts(tests['file_status_counts'])}",
+            "Case-level accepted dispositions: "
+            f"{tests['accepted_case_dispositions']}/{tests['test_cases']}",
+            f"Pending case proof: {tests['pending_case_proof']}",
+            f"Case status counts: {render_counts(tests['case_status_counts'])}",
+            f"Case outcome counts: {render_counts(tests['case_outcome_counts'])}",
             "",
             "## Silver corpus",
             "",

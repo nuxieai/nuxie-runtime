@@ -114,15 +114,21 @@
       "total": 252
     },
     "tests": {
-      "covered_test_cases": 1404,
+      "accepted_case_dispositions": 0,
+      "case_outcome_counts": {
+        "unverified": 1404
+      },
+      "case_status_counts": {
+        "pending": 1404
+      },
       "file_status_counts": {
         "n-a": 2,
         "ported-differential": 6,
         "ported-direct": 149
       },
       "files": 157,
-      "test_cases": 1404,
-      "uncovered_test_cases": 0
+      "pending_case_proof": 1404,
+      "test_cases": 1404
     }
   },
   "owners": [

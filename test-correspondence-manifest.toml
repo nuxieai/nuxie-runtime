@@ -11,10 +11,12 @@ source_globs = ["tests/unit_tests/runtime/*.cpp", "tests/unit_tests/runtime/scri
 row_count = 157
 test_case_count = 1404
 status_values = ["ported-differential", "ported-direct", "partial", "pending", "n-a"]
+case_ledger = "test-correspondence-cases.json"
 
-# Status counts are recensused from the [[file]] rows on every check; only the
-# monotonic guards below are pinned. Concurrent lanes moving rows never edit
-# this block -- lower max_pending occasionally to lock in progress.
+# These historical file classifications remain for compatibility and source
+# navigation. They do not prove any TEST_CASE. Case proof lives only in the
+# machine-owned JSON ledger named above. The file ratchet remains independent
+# from that ledger's case-level ratchet.
 [ratchet]
 max_pending = 0
 

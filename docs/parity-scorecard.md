@@ -1124,9 +1124,11 @@ Addition categories: `baseline-adaptation`: 8; `codegen`: 17; `product-data`: 1;
 
 Files: 157
 Test cases: 1404
-Covered test cases: 1404/1404
-Uncovered test cases: 0
-Status counts: `n-a`: 2; `ported-differential`: 6; `ported-direct`: 149
+Historical file classifications (non-probative): `n-a`: 2; `ported-differential`: 6; `ported-direct`: 149
+Case-level accepted dispositions: 0/1404
+Pending case proof: 1404
+Case status counts: `pending`: 1404
+Case outcome counts: `unverified`: 1404
 
 ## Silver corpus
 

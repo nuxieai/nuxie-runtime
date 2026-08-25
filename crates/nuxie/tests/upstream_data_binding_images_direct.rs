@@ -378,9 +378,7 @@ fn image_fit_alignment_preserves_generated_owners_and_all_three_twenty_frame_pha
         let no_scale = image_locals
             .iter()
             .copied()
-            .find(|local| {
-                artboard.raw().debug_uint_property(*local, fit_key) == Some(0)
-            })
+            .find(|local| artboard.raw().debug_uint_property(*local, fit_key) == Some(5))
             .expect("Image with Fit::none");
         let parent_local = artboard
             .artboard()
@@ -399,9 +397,8 @@ fn image_fit_alignment_preserves_generated_owners_and_all_three_twenty_frame_pha
                 .object_world_transform(parent_local)
                 .and_then(nuxie_render_api::Mat2D::invert)
                 .map(|inverse_parent| {
-                    inverse_parent.transform_point(nuxie_render_api::Vec2D::new(
-                        world.0[4], world.0[5],
-                    ))
+                    inverse_parent
+                        .transform_point(nuxie_render_api::Vec2D::new(world.0[4], world.0[5]))
                 })
                 .expect("no-scale Image parent transform is invertible"),
             None => nuxie_render_api::Vec2D::new(world.0[4], world.0[5]),
@@ -586,7 +583,18 @@ fn x_axis_scale(transform: nuxie_render_api::Mat2D) -> f32 {
 }
 
 fn catch_approx_eq(actual: f32, expected: f32) -> bool {
-    (actual - expected).abs() <= f32::EPSILON * 100.0 * expected.abs()
+    let actual = f64::from(actual);
+    let expected = f64::from(expected);
+    let scale = f64::from(f32::EPSILON) * 100.0 * expected.abs();
+    let difference = (actual - expected).abs();
+    difference <= scale
+}
+
+#[test]
+fn catch_approx_widens_float_operands_before_comparing() {
+    let expected = f32::from_bits(0x0072_abfc);
+    let actual = f32::from_bits(expected.to_bits() + 90);
+    assert!(!catch_approx_eq(actual, expected));
 }
 
 #[test]

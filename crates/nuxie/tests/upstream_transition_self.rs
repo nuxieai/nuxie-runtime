@@ -4,8 +4,6 @@ use std::path::PathBuf;
 
 use nuxie::{File, PersistentFactory};
 use nuxie_render_api::SerializingFactory;
-use nuxie_runtime::{RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance};
-use silver_corpus::{compare_sriv, parse_sriv};
 
 fn pinned() -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -34,7 +32,7 @@ fn advance_draw(
 }
 
 #[test]
-#[ignore = "expected-red: the exact concrete empty-list-item mutation stream diverges from the pinned transition_self_comparator_test prefix"]
+#[ignore = "expected-red: Rust list owner cannot construct the pinned null ViewModelInstanceListItem required by the first addItem action"]
 fn transition_self_conditions_reach_empty_list_swap_seam() {
     let file = Box::leak(Box::new(File::import(&pinned()).expect("fixture imports")));
     let mut artboard = file
@@ -168,137 +166,14 @@ fn transition_self_conditions_reach_empty_list_swap_seam() {
         0.0,
     );
 
-    let child_view_model_index = file
-        .runtime()
-        .view_models()
-        .iter()
-        .position(|view_model| view_model.object.string_property("name") == Some("child"))
-        .expect("empty child ViewModel type");
-    let empty_item = || {
-        RuntimeOwnedViewModelHandle::new(
-            RuntimeOwnedViewModelInstance::new(file.runtime(), child_view_model_index)
-                .expect("concrete empty child list item"),
-        )
-    };
-
-    // C++ creates and appends two concrete empty ViewModelInstanceListItems.
-    factory.borrow_mut().add_frame();
-    assert!(
+    assert_eq!(
         view_model
             .handle()
-            .insert_list_item_by_property_name_path("lis", 0, &empty_item(),)
+            .list_item_count_by_property_name_path("lis"),
+        Some(0),
+        "the pinned first list action starts from an empty retained list owner",
     );
-    assert!(
-        view_model
-            .handle()
-            .insert_list_item_by_property_name_path("lis", 1, &empty_item(),)
+    panic!(
+        "Rust list owner cannot construct the pinned null ViewModelInstanceListItem required by the first addItem action"
     );
-    advance_draw(
-        &mut artboard,
-        &mut machine,
-        &mut view_model,
-        &mut factory,
-        0.0,
-    );
-
-    factory.borrow_mut().add_frame();
-    assert!(
-        view_model
-            .handle()
-            .insert_list_item_by_property_name_path("lis", 2, &empty_item(),)
-    );
-    advance_draw(
-        &mut artboard,
-        &mut machine,
-        &mut view_model,
-        &mut factory,
-        0.0,
-    );
-
-    factory.borrow_mut().add_frame();
-    assert!(
-        view_model
-            .handle()
-            .insert_list_item_by_property_name_path("lis", 0, &empty_item(),)
-    );
-    advance_draw(
-        &mut artboard,
-        &mut machine,
-        &mut view_model,
-        &mut factory,
-        0.0,
-    );
-
-    factory.borrow_mut().add_frame();
-    assert!(
-        !view_model
-            .handle()
-            .insert_list_item_by_property_name_path("lis", 10, &empty_item(),),
-        "an out-of-range concrete item insertion must be a no-op"
-    );
-    advance_draw(
-        &mut artboard,
-        &mut machine,
-        &mut view_model,
-        &mut factory,
-        0.0,
-    );
-
-    factory.borrow_mut().add_frame();
-    assert!(
-        view_model
-            .handle()
-            .swap_list_items_by_property_name_path("lis", 0, 1),
-        "counted empty list items must be concrete occurrences for swap notification"
-    );
-    advance_draw(
-        &mut artboard,
-        &mut machine,
-        &mut view_model,
-        &mut factory,
-        0.0,
-    );
-
-    factory.borrow_mut().add_frame();
-    assert!(
-        view_model
-            .handle()
-            .remove_list_item_by_property_name_path("lis", 0)
-    );
-    advance_draw(
-        &mut artboard,
-        &mut machine,
-        &mut view_model,
-        &mut factory,
-        0.0,
-    );
-
-    factory.borrow_mut().add_frame();
-    assert!(
-        !view_model
-            .handle()
-            .remove_list_item_by_property_name_path("lis", 10),
-        "an out-of-range concrete item removal must be a no-op"
-    );
-    advance_draw(
-        &mut artboard,
-        &mut machine,
-        &mut view_model,
-        &mut factory,
-        0.0,
-    );
-
-    let expected = parse_sriv(&pinned_silver()).expect("pinned C++ silver");
-    let actual = parse_sriv(&factory.borrow().bytes()).expect("Rust SRIV");
-    compare_sriv(&expected, &actual).unwrap_or_else(|difference| {
-        panic!("transition_self_comparator_test differs: {difference}")
-    });
-}
-
-fn pinned_silver() -> Vec<u8> {
-    let root = std::env::var_os("RIVE_RUNTIME_DIR")
-        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
-    let path =
-        PathBuf::from(root).join("tests/unit_tests/silvers/transition_self_comparator_test.sriv");
-    std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
 }

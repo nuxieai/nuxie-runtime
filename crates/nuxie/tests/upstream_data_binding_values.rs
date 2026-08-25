@@ -2,11 +2,17 @@
 
 use std::{path::PathBuf, rc::Rc};
 
-use nuxie::File;
+use nuxie::{File, PersistentFactory};
+use nuxie_render_api::SerializingFactory;
 use nuxie_runtime::{ViewModelRuntime, ViewModelRuntimeDataType};
+use silver_corpus::{compare_sriv, parse_sriv};
 
 fn catch_approx_eq(actual: f32, expected: f32) -> bool {
-    (actual - expected).abs() <= f32::EPSILON * 100.0 * expected.abs()
+    let actual = f64::from(actual);
+    let expected = f64::from(expected);
+    let scale = f64::from(f32::EPSILON) * 100.0 * expected.abs();
+    let difference = (actual - expected).abs();
+    difference <= scale
 }
 
 fn assert_catch_approx(actual: f32, expected: f32) {
@@ -23,6 +29,22 @@ fn pinned(name: &str) -> Vec<u8> {
         .join("tests/unit_tests/assets")
         .join(name);
     std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+}
+
+fn pinned_silver(name: &str) -> Vec<u8> {
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let path = PathBuf::from(root)
+        .join("tests/unit_tests/silvers")
+        .join(name);
+    std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+}
+
+#[test]
+fn catch_approx_widens_float_operands_before_comparing() {
+    let expected = f32::from_bits(0x0072_abfc);
+    let actual = f32::from_bits(expected.to_bits() + 90);
+    assert!(!catch_approx_eq(actual, expected));
 }
 
 fn key(owner: &str, property: &str) -> u16 {
@@ -802,15 +824,41 @@ fn triggers_updated_by_events_update_parent_state() {
 
 #[test]
 fn custom_property_trigger_binding_has_exact_initial_owners() {
-    let (mut artboard, mut machine, mut view_model) =
-        fixture("custom_property_trigger.riv", "Main");
+    let file = Box::leak(Box::new(
+        File::import(&pinned("custom_property_trigger.riv")).expect("fixture imports"),
+    ));
+    let mut artboard = file
+        .artboard_named("Main")
+        .expect("Main artboard")
+        .instantiate()
+        .expect("artboard instantiates");
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut factory)
+        .expect("renderer initializes");
+    let mut machine = artboard
+        .default_state_machine_instance()
+        .expect("default state machine");
+    let mut view_model = artboard
+        .instantiate_default_view_model_instance()
+        .or_else(|| artboard.instantiate_view_model())
+        .expect("artboard view model");
+    assert!(machine.bind_owned_view_model_handle(view_model.handle()));
+    let _ = artboard.bind_view_model(&view_model);
+    let (width, height) = artboard.artboard_dimensions();
+    factory.borrow_mut().frame_size(width as u32, height as u32);
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
 
-    let circle = artboard
+    let circle_descriptor = artboard
         .artboard()
         .graph()
         .component_named("MainCircle")
-        .expect("MainCircle owner");
+        .expect("MainCircle descriptor");
+    let circle = artboard
+        .raw()
+        .component(circle_descriptor.local_id)
+        .expect("live MainCircle owner");
+    assert_eq!(circle.global_id, circle_descriptor.global_id);
     assert!(
         nuxie_schema::definition_by_name(circle.type_name)
             .is_some_and(|definition| definition.is_a("Shape"))
@@ -818,25 +866,48 @@ fn custom_property_trigger_binding_has_exact_initial_owners() {
     assert_eq!(
         artboard
             .raw()
-            .double_property(circle.local_id, key("Node", "scaleX")),
+            .double_property(circle_descriptor.local_id, key("Node", "scaleX")),
         Some(1.0)
     );
     assert_eq!(
         artboard
             .raw()
-            .double_property(circle.local_id, key("Node", "scaleY")),
+            .double_property(circle_descriptor.local_id, key("Node", "scaleY")),
         Some(1.0)
     );
 
-    let trigger = artboard
+    let trigger_descriptor = artboard
         .artboard()
         .graph()
         .component_named("Trig")
-        .expect("Trig owner");
+        .expect("Trig descriptor");
+    let trigger = artboard
+        .raw()
+        .component(trigger_descriptor.local_id)
+        .expect("live CustomPropertyTrigger owner");
+    assert_eq!(trigger.global_id, trigger_descriptor.global_id);
     assert!(
         nuxie_schema::definition_by_name(trigger.type_name)
             .is_some_and(|definition| definition.is_a("CustomPropertyTrigger"))
     );
+
+    let mut renderer = factory.borrow().make_renderer();
+    artboard
+        .draw(&mut factory, &mut renderer)
+        .expect("initial trigger frame draws");
+    for _ in 0..(1.0_f32 / 0.16_f32) as usize {
+        factory.borrow_mut().add_frame();
+        advance(&mut artboard, &mut machine, &mut view_model, 0.16);
+        let mut renderer = factory.borrow().make_renderer();
+        artboard
+            .draw(&mut factory, &mut renderer)
+            .expect("trigger animation frame draws");
+    }
+    let expected =
+        parse_sriv(&pinned_silver("custom_property_trigger_bind.sriv")).expect("pinned C++ silver");
+    let actual = parse_sriv(&factory.borrow().bytes()).expect("Rust SRIV");
+    compare_sriv(&expected, &actual)
+        .unwrap_or_else(|difference| panic!("custom_property_trigger_bind differs: {difference}"));
 }
 
 #[test]

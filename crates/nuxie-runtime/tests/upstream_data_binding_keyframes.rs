@@ -126,7 +126,18 @@ fn first_text_run(fixture: &Fixture) -> Option<Vec<u8>> {
 }
 
 fn catch_approx_eq(actual: f32, expected: f32) -> bool {
-    (actual - expected).abs() <= f32::EPSILON * 100.0 * expected.abs()
+    let actual = f64::from(actual);
+    let expected = f64::from(expected);
+    let scale = f64::from(f32::EPSILON) * 100.0 * expected.abs();
+    let difference = (actual - expected).abs();
+    difference <= scale
+}
+
+#[test]
+fn catch_approx_widens_float_operands_before_comparing() {
+    let expected = f32::from_bits(0x0072_abfc);
+    let actual = f32::from_bits(expected.to_bits() + 90);
+    assert!(!catch_approx_eq(actual, expected));
 }
 
 fn any_node_has_x(fixture: &Fixture, expected: f32) -> bool {

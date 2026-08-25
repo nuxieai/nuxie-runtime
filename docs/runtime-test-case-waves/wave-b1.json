@@ -243,7 +243,7 @@
       "line": 79,
       "name": "Font data bind stores and clears the font on the property",
       "status": "direct",
-      "outcome": "pass",
+      "outcome": "expected-red",
       "evidence": [
         {
           "kind": "rust-test",
@@ -252,7 +252,8 @@
           "symbol": "font_data_bind_stores_and_clears_the_font_on_the_property"
         }
       ],
-      "note": "Executable Rust owner-flow port replays the complete pinned fixture/action/assertion sequence."
+      "note": "The executable Rust owner-flow observes the decoded font retained by the property backing FontAsset and reaches the concrete live-font replacement divergence.",
+      "expected_red_reason": "expected-red: live font assignment does not replace the decoded font retained by the property backing FontAsset owner"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_images_test.cpp#1",
@@ -265,12 +266,12 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
-          "line": 96,
-          "symbol": "data_binding_images_from_file_assets"
+          "path": "crates/nuxie-runtime/src/artboard/wave_b1_image_owner_tests.rs",
+          "line": 2,
+          "symbol": "wave_b1_data_binding_images_preserve_exact_root_and_nested_image_asset_owners"
         }
       ],
-      "note": "Executable Rust owner-flow port performs the pinned fixture setup, actions, and behavioral assertions."
+      "note": "The cfg(test) executable observes the exact live root and nested Image owners and their stable selected ImageAsset identities before and after both pinned mutations."
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_images_test.cpp#2",
@@ -279,16 +280,17 @@
       "line": 103,
       "name": "Embedded images can be reset by passing null",
       "status": "direct",
-      "outcome": "pass",
+      "outcome": "expected-red",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "tools/silver-corpus/tests/wave_b1.rs",
-          "line": 228,
-          "symbol": "wave_b1_viewmodel_image_reset"
+          "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
+          "line": 160,
+          "symbol": "embedded_images_can_be_reset_by_passing_live_image_null"
         }
       ],
-      "note": "Executable Rust owner-flow port replays the complete pinned fixture/action/assertion sequence."
+      "note": "The executable Rust owner-flow calls the live ViewModelInstanceAssetImage null action and stops when that exact action is rejected, before the pinned two-frame draw flow.",
+      "expected_red_reason": "expected-red: exact live ViewModelInstanceAssetImage null action is rejected before the pinned two-frame draw flow"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_images_test.cpp#3",
@@ -320,7 +322,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
-          "line": 432,
+          "line": 429,
           "symbol": "dynamic_image_binding_with_listener_action"
         }
       ],
@@ -338,13 +340,13 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "tools/silver-corpus/tests/wave_b1.rs",
-          "line": 127,
-          "symbol": "wave_b1_image_fit_alignment"
+          "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
+          "line": 232,
+          "symbol": "image_fit_alignment_preserves_generated_owners_and_all_three_twenty_frame_phases"
         }
       ],
-      "note": "Executable Rust owner-flow port replays the complete pinned fixture/action/assertion sequence.",
-      "expected_red_reason": "expected-red: frame 2 op 115 transform tx is -197.96802 instead of 462.03198"
+      "note": "The executable owner flow preserves generated fit/alignment setters and getters, selects Fit::none, asserts both post-swap local transforms, and executes all three 20-frame phases.",
+      "expected_red_reason": "expected-red: after the exact image2 swap, the no-scale Image local transform translation is nonnegative instead of pinned C++ negative x/y"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_images_test.cpp#6",
@@ -412,7 +414,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
-          "line": 594,
+          "line": 602,
           "symbol": "layout_image_composes_user_scale_on_top_of_fit_for_7_2_files"
         }
       ],
@@ -431,7 +433,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
-          "line": 662,
+          "line": 670,
           "symbol": "stateful_component_image_bind"
         }
       ],
@@ -468,7 +470,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_data_binding_keyframes.rs",
-          "line": 213,
+          "line": 224,
           "symbol": "keyframe_value_binds_resolve_view_model_values_on_the_first_frame"
         }
       ],
@@ -486,7 +488,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_data_binding_keyframes.rs",
-          "line": 228,
+          "line": 239,
           "symbol": "keyframe_value_binds_update_when_the_source_view_model_changes"
         }
       ],
@@ -504,7 +506,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_data_binding_keyframes.rs",
-          "line": 249,
+          "line": 260,
           "symbol": "keyframe_interpolation_reads_the_data_bound_start_value"
         }
       ],
@@ -522,7 +524,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_data_binding_keyframes.rs",
-          "line": 275,
+          "line": 286,
           "symbol": "standalone_animation_instance_ignores_keyframe_value_binds"
         }
       ],
@@ -540,7 +542,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 899,
+          "line": 970,
           "symbol": "artboard_has_bound_properties"
         }
       ],
@@ -558,7 +560,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 843,
+          "line": 914,
           "symbol": "state_machine_is_led_by_bound_enum_and_trigger"
         }
       ],
@@ -576,7 +578,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 493,
+          "line": 515,
           "symbol": "advance_and_apply_can_skip_view_model_reset"
         }
       ],
@@ -594,7 +596,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 245,
+          "line": 267,
           "symbol": "calculate_and_to_string_converters_with_numbers"
         }
       ],
@@ -612,7 +614,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 293,
+          "line": 315,
           "symbol": "trim_string_converter"
         }
       ],
@@ -630,7 +632,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 347,
+          "line": 369,
           "symbol": "to_string_converter_with_color_formatters"
         }
       ],
@@ -648,7 +650,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 398,
+          "line": 420,
           "symbol": "range_mapper"
         }
       ],
@@ -666,7 +668,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 455,
+          "line": 477,
           "symbol": "pad_string"
         }
       ],
@@ -685,7 +687,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 993,
+          "line": 1064,
           "symbol": "boolean_toggle_converter_negates_bound_value"
         }
       ],
@@ -703,7 +705,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 698,
+          "line": 720,
           "symbol": "same_view_model_instance_is_shared_by_two_properties"
         }
       ],
@@ -721,7 +723,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 723,
+          "line": 745,
           "symbol": "different_view_model_instances_are_not_shared_by_two_properties"
         }
       ],
@@ -739,7 +741,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 748,
+          "line": 770,
           "symbol": "newly_created_view_model_instances_do_not_share_nested_instances"
         }
       ],
@@ -757,7 +759,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 773,
+          "line": 795,
           "symbol": "triggers_updated_by_events_update_parent_state"
         }
       ],
@@ -775,12 +777,12 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_transition_self.rs",
-          "line": 38,
+          "line": 36,
           "symbol": "transition_self_conditions_reach_empty_list_swap_seam"
         }
       ],
-      "note": "Executable Rust owner-flow port performs the pinned fixture setup, actions, and behavioral assertions.",
-      "expected_red_reason": "expected-red: after faithfully replaying scalar and empty-list count transitions, Rust cannot swap the counted empty list items because the public list stores no concrete item occurrences"
+      "note": "The executable owner flow preserves every scalar transition and stops at the first list action because Rust cannot construct the pinned nullable empty ViewModelInstanceListItem owner.",
+      "expected_red_reason": "expected-red: Rust list owner cannot construct the pinned null ViewModelInstanceListItem required by the first addItem action"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_test.cpp#15",
@@ -848,12 +850,12 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "tools/silver-corpus/tests/wave_b1.rs",
-          "line": 78,
-          "symbol": "wave_b1_custom_property_trigger_bind"
+          "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
+          "line": 826,
+          "symbol": "custom_property_trigger_binding_has_exact_initial_owners"
         }
       ],
-      "note": "Executable Rust owner-flow port replays the complete pinned fixture/action/assertion sequence."
+      "note": "The executable owner flow observes the live instantiated MainCircle and CustomPropertyTrigger occurrences, preserves their exact assertions, and replays the complete pinned draw stream."
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_test.cpp#19",
@@ -940,7 +942,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 524,
+          "line": 546,
           "symbol": "view_model_runtime_properties"
         }
       ],
@@ -1085,7 +1087,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 631,
+          "line": 653,
           "symbol": "two_way_source_change_reaches_target_under_target_first_precedence"
         }
       ],
@@ -1251,7 +1253,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 671,
+          "line": 693,
           "symbol": "two_way_target_change_reaches_source_under_source_first_precedence"
         }
       ],

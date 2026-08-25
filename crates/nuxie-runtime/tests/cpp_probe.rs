@@ -19296,14 +19296,22 @@ fn upstream_file_dependencies_are_as_expected() {
     assert_eq!(shape.parent_local, Some(node_b.local_id));
     assert_eq!(path.parent_local, Some(shape.local_id));
     assert_eq!(node_b.dependent_locals.len(), 2);
-    assert!(node_a.graph_order > Some(0));
-    assert!(node_b.graph_order > node_a.graph_order);
-    assert!(node_c.graph_order > node_b.graph_order);
-    assert!(shape.graph_order > node_b.graph_order);
-    assert!(path.graph_order > shape.graph_order);
     let mut artboard =
         ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
             .expect("instantiate dependency fixture");
+    let graph_order = |local_id| {
+        artboard
+            .component(local_id)
+            .and_then(RuntimeComponent::graph_order)
+            .unwrap_or_else(|| panic!("missing graph order for local {local_id}"))
+    };
+    let artboard_graph_order = graph_order(0);
+    assert_eq!(artboard_graph_order, 0);
+    assert!(graph_order(node_a.local_id) > artboard_graph_order);
+    assert!(graph_order(node_b.local_id) > graph_order(node_a.local_id));
+    assert!(graph_order(node_c.local_id) > graph_order(node_b.local_id));
+    assert!(graph_order(shape.local_id) > graph_order(node_b.local_id));
+    assert!(graph_order(path.local_id) > graph_order(shape.local_id));
     artboard.update_pass();
     let world = artboard
         .object_world_transform(shape.local_id)
@@ -19350,7 +19358,22 @@ fn upstream_bad_skin_without_parent_skinnable_does_not_crash() {
         ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
             .expect("instantiate bad skin fixture");
     artboard.update_pass();
-    assert!(!graph.paths.is_empty());
+    let point_paths = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "PointsPath")
+        .map(|component| component.local_id)
+        .collect::<Vec<_>>();
+    assert!(!point_paths.is_empty());
+    for path_local in point_paths {
+        let _ = artboard.add_dirt(path_local, ComponentDirt::PATH, false);
+        assert!(
+            artboard
+                .debug_component_dirt(path_local)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::PATH)),
+            "PointsPath::markPathDirty leaves PATH dirt on local {path_local}",
+        );
+    }
     artboard.update_pass();
 }
 

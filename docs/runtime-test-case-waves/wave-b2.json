@@ -256,7 +256,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 20885,
+          "line": 20908,
           "symbol": "upstream_default_state_machine_fixture_contract"
         }
       ],
@@ -310,7 +310,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 20766,
+          "line": 20789,
           "symbol": "upstream_cubic_and_elastic_fixture_assertions_match_cpp_probe"
         }
       ],
@@ -332,7 +332,7 @@
           "symbol": "upstream_elastic_ease_numeric_contract"
         }
       ],
-      "note": "The production-owner unit port retains all five pinned actual-amplitude and easing numeric assertions."
+      "note": "The production-owner unit port retains all five pinned actual-amplitude and easing numeric assertions, including Catch Approx's expected-magnitude-scaled epsilon semantics."
     },
     {
       "id": "tests/unit_tests/runtime/enums_test.cpp#1",
@@ -345,16 +345,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 49,
-          "symbol": "flag_operator_or"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 233,
+          "symbol": "wave_b2_flag_operator_or"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -368,16 +368,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 60,
-          "symbol": "flag_operator_and"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 258,
+          "symbol": "wave_b2_flag_operator_and"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -391,16 +391,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 71,
-          "symbol": "flag_operator_xor"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 263,
+          "symbol": "wave_b2_flag_operator_xor"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -414,16 +414,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 82,
-          "symbol": "flag_operator_not"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 268,
+          "symbol": "wave_b2_flag_operator_not"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -437,16 +437,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 90,
-          "symbol": "flag_operator_or_assign"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 273,
+          "symbol": "wave_b2_flag_operator_or_assign"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -460,16 +460,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 102,
-          "symbol": "flag_operator_and_assign"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 287,
+          "symbol": "wave_b2_flag_operator_and_assign"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -483,16 +483,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 114,
-          "symbol": "flag_operator_xor_assign"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 301,
+          "symbol": "wave_b2_flag_operator_xor_assign"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -506,16 +506,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 126,
-          "symbol": "is_single_flag"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 319,
+          "symbol": "wave_b2_is_single_flag"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -529,16 +529,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 149,
-          "symbol": "is_flag_set"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 356,
+          "symbol": "wave_b2_is_flag_set"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -552,16 +552,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 171,
-          "symbol": "underlying_value"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 362,
+          "symbol": "wave_b2_underlying_value"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -575,16 +575,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 179,
-          "symbol": "incr"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 368,
+          "symbol": "wave_b2_incr"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -598,16 +598,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 188,
-          "symbol": "decr"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 377,
+          "symbol": "wave_b2_decr"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -621,16 +621,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 197,
-          "symbol": "any_flag_set_unmasked"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 386,
+          "symbol": "wave_b2_any_flag_set_unmasked"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -644,16 +644,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 207,
-          "symbol": "any_flag_set_masked"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 396,
+          "symbol": "wave_b2_any_flag_set_masked"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -667,16 +667,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 216,
-          "symbol": "all_flags_set"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 402,
+          "symbol": "wave_b2_all_flags_set"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -690,16 +690,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 225,
-          "symbol": "no_flags_set_unmasked"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 408,
+          "symbol": "wave_b2_no_flag_set_unmasked"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -713,16 +713,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_enums.rs",
-          "line": 234,
-          "symbol": "no_flags_set_masked"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_b2_enums_exact.rs",
+          "line": 414,
+          "symbol": "wave_b2_no_flags_set_masked"
         }
       ],
-      "note": "The Rust-language port runs the pinned basic and 1,000 deterministic randomized bitmask checks against the native integer owner.",
+      "note": "The Rust-language port uses a faithful test-only std::mt19937_64 fixture seeded with 0xf934929 and typed Rust flag wrappers to compare enum operations with their integral oracle.",
       "adaptation": {
         "kind": "cxx-language-only",
         "inapplicable_observable": "C++ enum-class detection, overloaded-operator syntax, and underlying-type template identity",
-        "rationale": "Rust deliberately retains native integer bitmask operations while preserving every runtime-observable value check, including the pinned Flags64 accidental decr call."
+        "rationale": "Typed Rust flag wrappers preserve the enum-versus-integral oracle, the pinned std::mt19937_64 sample stream, and every runtime-observable value check, including the pinned Flags64 accidental decr call."
       }
     },
     {
@@ -831,7 +831,7 @@
           "symbol": "upstream_file_dependencies_are_as_expected"
         }
       ],
-      "note": "The executable Rust port preserves the pinned fixture, owner actions, and assertions."
+      "note": "The executable Rust port reads graphOrder from each retained Artboard runtime component owner and preserves every pinned ordering assertion."
     },
     {
       "id": "tests/unit_tests/runtime/file_test.cpp#7",
@@ -845,7 +845,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19316,
+          "line": 19324,
           "symbol": "upstream_long_name_object_is_parsed_correctly"
         }
       ],
@@ -863,7 +863,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19325,
+          "line": 19333,
           "symbol": "upstream_file_with_in_band_images_can_have_them_stripped"
         }
       ],
@@ -882,11 +882,11 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19343,
+          "line": 19351,
           "symbol": "upstream_bad_skin_without_parent_skinnable_does_not_crash"
         }
       ],
-      "note": "The executable Rust port preserves the pinned fixture, owner actions, and assertions."
+      "note": "The executable Rust port performs the pinned PointsPath markPathDirty actions in order between the two Artboard update passes and proves PATH dirt reaches each retained owner."
     },
     {
       "id": "tests/unit_tests/runtime/file_test.cpp#10",
@@ -900,7 +900,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19358,
+          "line": 19381,
           "symbol": "upstream_file_with_bad_keyed_property_loads"
         }
       ],
@@ -918,7 +918,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19373,
+          "line": 19396,
           "symbol": "upstream_file_can_be_read_with_verified_signed_scripts"
         }
       ],

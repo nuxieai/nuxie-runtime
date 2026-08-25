@@ -1300,9 +1300,16 @@ mod tests {
         let shift = period / 4.0;
         assert_eq!(elastic_actual_amplitude(0.0, amplitude, shift), 1.0);
         assert_eq!(elastic_actual_amplitude(1.57, amplitude, shift), 0.5);
-        assert!((elastic_ease_out(0.22, amplitude, period, shift) - 0.8307).abs() <= 0.0001);
-        assert!((elastic_ease_in(1.58, amplitude, period, shift) - 14.01086).abs() <= 0.0001);
-        assert!((elastic_ease_in_out(1.58, amplitude, period, shift) - 1.0).abs() <= 0.0001);
+        let assert_catch_approx = |actual: f32, expected: f32| {
+            let margin = f32::EPSILON * 100.0 * expected.abs();
+            assert!(
+                (actual - expected).abs() <= margin,
+                "pinned Catch::Approx mismatch: expected {expected} ± {margin}, got {actual}",
+            );
+        };
+        assert_catch_approx(elastic_ease_out(0.22, amplitude, period, shift), 0.8307);
+        assert_catch_approx(elastic_ease_in(1.58, amplitude, period, shift), 14.01086);
+        assert_catch_approx(elastic_ease_in_out(1.58, amplitude, period, shift), 1.0);
     }
 
     #[test]

@@ -1819,9 +1819,9 @@ note = "Consolidated Rust port for math."
 
 [[file]]
 upstream = "src/nested_artboard.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/nested_artboard.rs"
-note = "F13: nested artboards are ported; latent hit-propagation ceilings remain."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/nested_artboard.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/nested_artboard.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
+note = "Phase 3 paired owner audit: mounted occurrence lifecycle, replacement, binding, focus, draw/hit routing, lookup, timing, nested-animation-before-child advance, collapse, reset, and teardown match the pin. The former F13 hit ceiling was a converted-test seam error: Artboard::advance had been narrowed to update_components and the second Artboard-only advance had been widened to a root-machine frame helper."
 
 [[file]]
 upstream = "src/nested_artboard_layout.cpp"

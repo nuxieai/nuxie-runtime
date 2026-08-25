@@ -209,9 +209,9 @@ FEATURE_ROWS.update(
             "P1-m/F12 faithful RiveProfile records, lifecycle, nested-host paths, transition/listener hooks, and exact BinaryWriter wire bytes checked by a source-derived oracle compiled against the pinned C++ types and VectorBinaryWriter.",
         ),
         "src/nested_artboard.cpp": (
-            "partial",
-            "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/nested_artboard.rs",
-            "F13: nested artboards are ported; latent hit-propagation ceilings remain.",
+            "ported",
+            "crates/nuxie-runtime/src/nested_artboard.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/nested_artboard.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
+            "Phase 3 paired owner audit: mounted occurrence lifecycle, replacement, binding, focus, draw/hit routing, lookup, timing, nested-animation-before-child advance, collapse, reset, and teardown match the pin. The former F13 hit ceiling was a converted-test seam error: Artboard::advance had been narrowed to update_components and the second Artboard-only advance had been widened to a root-machine frame helper.",
         ),
         "src/data_bind/context/context_value_artboard.cpp": (
             "ported",

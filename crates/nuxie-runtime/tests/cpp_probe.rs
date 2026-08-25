@@ -21435,7 +21435,6 @@ fn upstream_state_machine_event_reporting_contracts() {
 }
 
 #[test]
-#[ignore = "expected-red: nested_event_test.riv leaves the parent Boolean 1 input false after the nested event pointer/advance sequence"]
 fn upstream_nested_state_machine_event_reaches_parent_listener() {
     let (_, graph, artboard_index, mut artboard, mut machine) =
         upstream_event_fixture_instance("nested_event_test.riv", None);
@@ -21448,13 +21447,12 @@ fn upstream_nested_state_machine_event_reaches_parent_listener() {
         .filter(|component| component.type_name == "NestedArtboard")
         .count();
     assert_eq!(nested_count, 1);
-    artboard.update_components();
+    artboard.advance(0.0).expect("initial Artboard advance");
     artboard.advance_state_machine_instance(&mut machine, 0.0);
     machine.pointer_down(&mut artboard, 250.0, 100.0, 1);
-    artboard.advance_state_machine_instances_with_nested(
-        std::slice::from_mut(&mut machine),
-        0.0,
-    );
+    artboard
+        .advance_frame_components_with_state_machine(0.0, &mut machine)
+        .expect("nested-event Artboard advance");
     assert_eq!(machine.input(boolean).and_then(|input| input.bool_value()), Some(true));
     artboard.advance_state_machine_instance(&mut machine, 0.0);
     assert_eq!(machine.reported_event_count(), 0);

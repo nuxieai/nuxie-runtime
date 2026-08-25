@@ -3781,13 +3781,13 @@ note = "Direct behavior-neutral source owner extracted from draw.rs; tuple-vecto
 upstream = "src/nested_artboard.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/nested_artboard.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/nested_artboard.rs; crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/nested_artboard.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/artboard/nested_artboard.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0303"
-b6_verdict = "DIVERGENT"
+b6_verdict = "ADAPTED"
 b6_cluster = "artboard"
-audit_record = "docs/b6-audit/results/artboard.md"
-note = "FL-D5 direct mounted-occurrence owner with animation-before-child teardown, cold clone, replacement, and nested advance settlement. MR-2b/C04 justified exception: remaining nested construction and frame advance recurse through the common Artboard lifecycle shared with B6-0094. MR-2b/C05 justified exception: one nested-artboard preparation/draw recursion dispatches siblings B6-0304 NestedArtboardLayout and B6-0305 NestedArtboardLeaf as well as this row."
+audit_record = "docs/parity-audits/nested-artboard.md"
+note = "Phase 3 current-pin paired audit supersedes B6-0303/F13: direct mounted-occurrence ownership plus shared Artboard/draw/state-machine seams preserve construction, replacement, stateful binding, focus, draw/hit routing, timing, animation-before-child advance, collapse, reset, and teardown. The one apparent hit failure was a converted upstream-test action mismatch, corrected without runtime changes."
 
 [[file]]
 upstream = "src/nested_artboard_layout.cpp"

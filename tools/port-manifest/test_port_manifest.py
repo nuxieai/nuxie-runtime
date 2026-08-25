@@ -575,7 +575,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/profiler/profiler.cpp": ("ported", "P1-m/F12"),
             "src/profiler/rive_profile.cpp": ("ported", "P1-m/F12"),
             "src/listener_group.cpp": ("ported", "Phase 3"),
-            "src/nested_artboard.cpp": ("partial", "F13"),
+            "src/nested_artboard.cpp": ("ported", "Phase 3"),
             "src/data_bind/context/context_value_artboard.cpp": (
                 "ported",
                 "Phase 3",

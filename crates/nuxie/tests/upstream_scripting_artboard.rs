@@ -88,7 +88,7 @@ fn script_instances_artboard_input_with_proper_origin() {
 }
 
 #[test]
-#[ignore = "expected-red: toLeft mutation does not restore didChange on the third frame"]
+#[ignore = "expected-red: didChange lifecycle passes; frame 0 op 11 omits a retained makeRenderPaint"]
 fn script_node_advance_affects_did_change_via_dirt() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("script_affects_has_changed.riv"))

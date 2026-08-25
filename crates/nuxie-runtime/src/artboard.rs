@@ -3611,13 +3611,6 @@ impl ArtboardInstance {
             .cloned()
             .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
         handle.borrow_mut().set_input(name, value)?;
-        if handle
-            .borrow_mut()
-            .has_method(ScriptMethod::Advance)
-            .unwrap_or(false)
-        {
-            self.set_script_owner_advance_active(global_id, true);
-        }
         self.mark_script_owner_update_pending(global_id);
         let local_id = self.component_local_for_global(global_id);
         if let Some(local_id) = local_id {

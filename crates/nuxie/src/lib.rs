@@ -1518,9 +1518,12 @@ fn hydrate_prepared_scripted_object_inputs(
     factory: &mut dyn Factory,
 ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
     let runtime = &file.runtime;
-    for (name, value) in
-        resolved_layout_inputs(runtime, graph_global_id, target.local_id, root_view_model)?
-    {
+    for (name, value) in resolved_scripted_primitive_inputs(
+        runtime,
+        graph_global_id,
+        target.local_id,
+        root_view_model,
+    )? {
         script.set_input(&name, value)?;
     }
 
@@ -1573,7 +1576,7 @@ fn hydrate_prepared_scripted_object_inputs(
 }
 
 #[cfg(feature = "scripting")]
-fn resolved_layout_inputs(
+fn resolved_scripted_primitive_inputs(
     runtime: &RuntimeFile,
     graph_global_id: u32,
     scripted_local_id: usize,
@@ -4281,7 +4284,7 @@ fn advance_scripted_artboard_frame_with_factory(
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
     let _ = mount_scripted_artboard_tree(file, root_graph, instance, factory, root_view_model)?;
     if let Some(root_view_model) = root_view_model {
-        rehydrate_bound_layout_inputs(file, root_graph, instance, root_view_model.handle())?;
+        rehydrate_bound_script_inputs(file, root_graph, instance, root_view_model.handle())?;
         let mut visitor = |_: usize, graph_global_id: u32, nested: &mut RuntimeArtboardInstance| {
             let graph = file
                 .graph
@@ -4290,10 +4293,10 @@ fn advance_scripted_artboard_frame_with_factory(
                 .find(|graph| graph.global_id == graph_global_id)
                 .ok_or_else(|| {
                     nuxie_runtime::ScriptError::new(format!(
-                        "nested scripted layout graph {graph_global_id} is unavailable"
+                        "nested scripted graph {graph_global_id} is unavailable"
                     ))
                 })?;
-            rehydrate_bound_layout_inputs(file, graph, nested, root_view_model.handle())
+            rehydrate_bound_script_inputs(file, graph, nested, root_view_model.handle())
         };
         instance.try_visit_artboard_tree_instances_mut(&mut visitor)?;
     }
@@ -4335,19 +4338,26 @@ fn advance_scripted_artboard_frame_with_factory(
 }
 
 #[cfg(feature = "scripting")]
-fn rehydrate_bound_layout_inputs(
+fn rehydrate_bound_script_inputs(
     file: &File,
     graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
     root_view_model: &RuntimeOwnedViewModelHandle,
 ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
-    for component in graph
-        .components
-        .iter()
-        .filter(|component| component.type_name == "ScriptedLayout")
-    {
+    // An artboard-owned C++ DataBind writes the concrete ScriptInput property;
+    // its generated propertyValueChanged callback immediately forwards the
+    // value to ScriptedObject and schedules ScriptUpdate. Rust's owned
+    // ViewModel cells bypass that generated Component setter, so replay every
+    // changed primitive input at this pre-update boundary
+    // (`data_bind.cpp:70-93`; `script_input_boolean.cpp:60-68` and siblings).
+    for component in graph.components.iter().filter(|component| {
+        matches!(
+            component.type_name,
+            "ScriptedDrawable" | "ScriptedLayout" | "ScriptedPathEffect"
+        )
+    }) {
         let mut hydrated = false;
-        for (name, value) in resolved_layout_inputs(
+        for (name, value) in resolved_scripted_primitive_inputs(
             &file.runtime,
             graph.global_id,
             component.local_id,
@@ -4359,7 +4369,7 @@ fn rehydrate_bound_layout_inputs(
                 value,
             )?;
         }
-        if hydrated {
+        if hydrated && component.type_name == "ScriptedLayout" {
             instance.did_hydrate_scripted_layout(component.local_id);
         }
     }

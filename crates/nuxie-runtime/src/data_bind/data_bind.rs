@@ -781,6 +781,7 @@ mod tests {
     struct FakeTarget {
         value: RuntimeViewModelCellValue,
         applied: Vec<RuntimeViewModelCellValue>,
+        reads: usize,
     }
 
     impl FakeTarget {
@@ -788,6 +789,7 @@ mod tests {
             Self {
                 value: RuntimeViewModelCellValue::Number(value),
                 applied: Vec::new(),
+                reads: 0,
             }
         }
     }
@@ -799,6 +801,7 @@ mod tests {
         }
 
         fn read_target(&mut self) -> Option<RuntimeViewModelCellValue> {
+            self.reads += 1;
             Some(self.value.clone())
         }
     }
@@ -1297,5 +1300,99 @@ mod tests {
             bind.pending_dirt().is_empty(),
             "an unbound bind observes nothing"
         );
+    }
+
+    #[test]
+    fn source_originated_container_update_never_runs_target_to_source_complete_upstream_flow() {
+        use crate::data_bind_container_owner::RuntimeDataBindContainerQueue;
+
+        let source = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(5.0));
+        let mut bind = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        bind.set_source(source);
+        let mut queue = RuntimeDataBindContainerQueue::default();
+        let occurrence = queue.add_data_bind(&mut bind, false);
+        let mut target = FakeTarget::number(0.0);
+
+        for expected_updates in 1..=2 {
+            bind.mark_source_changed();
+            let scheduled = queue
+                .begin_update(|candidate| candidate == occurrence && bind.to_source())
+                .expect("non-recursive container update");
+            assert_eq!(scheduled, vec![occurrence]);
+            queue.begin_occurrence(occurrence);
+            assert!(bind.update(&mut target));
+            queue.finish_update();
+            assert_eq!(target.applied.len(), expected_updates);
+            assert_eq!(target.reads, 0, "source dirt never polls target-to-source");
+        }
+    }
+
+    #[test]
+    #[ignore = "expected-red: a ToTarget-only retained bind currently rejects the pinned target-origin updateSourceBinding call"]
+    fn target_originated_container_update_runs_target_to_source_complete_upstream_flow() {
+        use crate::data_bind_container_owner::RuntimeDataBindContainerQueue;
+
+        let source = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(0.0));
+        let mut bind = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        bind.set_source(source);
+        let mut queue = RuntimeDataBindContainerQueue::default();
+        let occurrence = queue.add_data_bind(&mut bind, false);
+        let mut target = FakeTarget::number(7.0);
+
+        bind.mark_target_changed();
+        let scheduled = queue
+            .begin_update(|candidate| candidate == occurrence && bind.target_origin())
+            .expect("non-recursive container update");
+        assert_eq!(scheduled, vec![occurrence]);
+        queue.begin_occurrence(occurrence);
+        assert!(bind.update_source_binding(&mut target));
+        queue.finish_update();
+        assert_eq!(target.reads, 1);
+    }
+
+    #[test]
+    fn persisting_container_bind_polls_target_to_source_complete_upstream_flow() {
+        use crate::data_bind_container_owner::RuntimeDataBindContainerQueue;
+
+        let source = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(0.0));
+        let mut bind = RuntimeRetainedDataBind::new(TO_SOURCE, false);
+        bind.set_source(source.clone());
+        let mut queue = RuntimeDataBindContainerQueue::default();
+        let occurrence = queue.add_data_bind(&mut bind, true);
+        let mut target = FakeTarget::number(13.0);
+
+        assert!(queue.is_persisting(occurrence));
+        let scheduled = queue
+            .begin_update(|candidate| candidate == occurrence && bind.to_source())
+            .expect("non-recursive container update");
+        assert_eq!(scheduled, vec![occurrence]);
+        queue.begin_occurrence(occurrence);
+        assert!(bind.update_source_binding(&mut target));
+        queue.finish_update();
+        assert_eq!(target.reads, 1);
+        assert_eq!(source.value(), RuntimeViewModelCellValue::Number(13.0));
+    }
+
+    #[test]
+    fn add_dirt_latches_one_change_origin_complete_upstream_flow() {
+        let mut bind = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        bind.mark_source_changed();
+        assert!(!bind.target_origin());
+        bind.mark_target_changed();
+        assert!(bind.target_origin());
+        bind.wake_state.suppress_dirt.set(true);
+        bind.mark_source_changed();
+        assert!(bind.target_origin(), "suppressed self-notify preserves origin");
+
+        let mut favor_target = RuntimeRetainedDataBind::new(TWO_WAY, false);
+        favor_target.mark_rebind_reconcile();
+        assert!(favor_target.target_origin());
+
+        let mut favor_source = RuntimeRetainedDataBind::new(
+            TWO_WAY | DATA_BIND_FLAG_SOURCE_TO_TARGET_RUNS_FIRST,
+            false,
+        );
+        favor_source.mark_rebind_reconcile();
+        assert!(!favor_source.target_origin());
     }
 }

@@ -1589,6 +1589,86 @@ mod upstream_viewmodel_instance_contract_tests {
     use nuxie_schema::definition_by_name;
 
     #[test]
+    fn blob_property_stores_swaps_and_clears_complete_upstream_flow() {
+        let mut property = RuntimeOwnedViewModelBlobAsset::new(
+            0,
+            RuntimeBlobAssetValue::from_file_asset_index(
+                RuntimeBlobAssetValue::MISSING_FILE_ASSET_INDEX,
+            ),
+        );
+        assert!(property.value().live_blob_asset().is_none());
+
+        let first: Arc<[u8]> = Arc::from(&[1, 2, 3, 4][..]);
+        assert!(property.set_live_bytes(Some(Arc::clone(&first))));
+        let stored = property.value();
+        assert_eq!(stored.live_blob_bytes().map(<[u8]>::len), Some(4));
+        assert!(
+            stored
+                .live_blob_bytes_arc()
+                .is_some_and(|bytes| Arc::ptr_eq(&bytes, &first))
+        );
+
+        let second: Arc<[u8]> = Arc::from(&[9, 9][..]);
+        assert!(property.set_live_bytes(Some(Arc::clone(&second))));
+        let stored = property.value();
+        assert_eq!(stored.live_blob_bytes().map(<[u8]>::len), Some(2));
+        assert!(
+            stored
+                .live_blob_bytes_arc()
+                .is_some_and(|bytes| Arc::ptr_eq(&bytes, &second))
+        );
+
+        assert!(property.set_live_bytes(None));
+        assert!(property.value().live_blob_asset().is_none());
+    }
+
+    #[test]
+    fn blob_data_value_applies_to_instance_property_complete_upstream_flow() {
+        let mut property = RuntimeOwnedViewModelBlobAsset::new(
+            0,
+            RuntimeBlobAssetValue::from_file_asset_index(
+                RuntimeBlobAssetValue::MISSING_FILE_ASSET_INDEX,
+            ),
+        );
+        let blob = Arc::new(RuntimeBlobAsset::new(
+            "payload",
+            Arc::from(&[5, 6, 7][..]),
+        ));
+        let data_value = RuntimeBlobAssetValue::from_live_asset(Arc::clone(&blob));
+        assert!(
+            data_value
+                .live_blob_asset()
+                .is_some_and(|value| Arc::ptr_eq(value, &blob))
+        );
+
+        assert!(property.apply_data_bind_value(&data_value));
+        let applied = property.value();
+        assert!(
+            applied
+                .live_blob_asset()
+                .is_some_and(|value| Arc::ptr_eq(value, &blob))
+        );
+        assert_eq!(applied.live_blob_bytes().map(<[u8]>::len), Some(3));
+    }
+
+    #[test]
+    fn blob_data_value_with_only_an_id_applies_the_id_complete_upstream_flow() {
+        let mut property = RuntimeOwnedViewModelBlobAsset::new(
+            0,
+            RuntimeBlobAssetValue::from_file_asset_index(
+                RuntimeBlobAssetValue::MISSING_FILE_ASSET_INDEX,
+            ),
+        );
+        let data_value = RuntimeBlobAssetValue::from_file_asset_index(7);
+        assert!(data_value.live_blob_asset().is_none());
+
+        assert!(property.apply_data_bind_value(&data_value));
+        let applied = property.value();
+        assert_eq!(applied.file_asset_index(), 7);
+        assert!(applied.live_blob_asset().is_none());
+    }
+
+    #[test]
     fn scalar_transaction_reports_the_underlying_setter_change_status() {
         let file = two_number_instance_file();
         let root = RuntimeOwnedViewModelHandle::new(

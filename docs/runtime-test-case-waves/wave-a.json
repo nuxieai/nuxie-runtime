@@ -1319,17 +1319,16 @@
       "line": 70,
       "name": "artboard is clipped correctly",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; the prior rotated-clip test was only nearby coverage.",
+      "outcome": "pass",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 19,
-          "symbol": "clip_artboard_is_clipped_correctly_direct_port_expected_red"
+          "line": 18,
+          "symbol": "clip_artboard_is_clipped_correctly_complete_port"
         }
-      ],
-      "expected_red_reason": "expected-red: typed Rust port lacks the pinned frameOrigin/worldPath point assertions"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/clip_test.cpp#3",
@@ -4384,13 +4383,13 @@
       "name": "source-originated dirt does not run target->source",
       "status": "direct",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/data_bind.rs",
-          "line": 1060,
-          "symbol": "one_sided_changes_latch_their_own_origin"
+          "line": 1306,
+          "symbol": "source_originated_container_update_never_runs_target_to_source_complete_upstream_flow"
         }
       ]
     },
@@ -4401,16 +4400,17 @@
       "line": 314,
       "name": "target-originated dirt runs target->source",
       "status": "direct",
-      "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "outcome": "expected-red",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/data_bind.rs",
-          "line": 1060,
-          "symbol": "one_sided_changes_latch_their_own_origin"
+          "line": 1332,
+          "symbol": "target_originated_container_update_runs_target_to_source_complete_upstream_flow"
         }
-      ]
+      ],
+      "expected_red_reason": "expected-red: ToTarget-only retained bind rejects the pinned target-origin updateSourceBinding call"
     },
     {
       "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#11",
@@ -4420,13 +4420,13 @@
       "name": "persisting bind polls target->source regardless of origin",
       "status": "direct",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
-          "line": 203,
-          "symbol": "persisting_occurrences_run_first_and_are_not_duplicated_by_dirt"
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind.rs",
+          "line": 1354,
+          "symbol": "persisting_container_bind_polls_target_to_source_complete_upstream_flow"
         }
       ]
     },
@@ -4438,13 +4438,13 @@
       "name": "addDirt latches a single change origin",
       "status": "direct",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/data_bind.rs",
-          "line": 1025,
-          "symbol": "reconcile_favors_the_declared_direction"
+          "line": 1377,
+          "symbol": "add_dirt_latches_one_change_origin_complete_upstream_flow"
         }
       ]
     },
@@ -4530,16 +4530,16 @@
       "name": "Test data binding artboards from same and different sources",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
-          "line": 97,
+          "line": 274,
           "symbol": "data_binding_artboards_from_same_and_different_sources"
         }
       ],
-      "expected_red_reason": "expected-red: external bindable-artboard registration is absent"
+      "expected_red_reason": "expected-red: live initial draw reaches missing nested artboard graph for global 7"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#2",
@@ -4549,16 +4549,16 @@
       "name": "Test recursive data binding artboards is skipped",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
-          "line": 165,
+          "line": 342,
           "symbol": "recursive_data_binding_artboards_are_skipped"
         }
       ],
-      "expected_red_reason": "expected-red: recursive artboard stream diverges at frame 1 makeRenderPaint"
+      "expected_red_reason": "expected-red: complete live stream reaches the unavailable pinned SRIV comparator"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#3",
@@ -4604,16 +4604,16 @@
       "name": "Test default data binding artboard from different source",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
-          "line": 211,
+          "line": 388,
           "symbol": "default_data_binding_artboard_from_different_source"
         }
       ],
-      "expected_red_reason": "expected-red: external default bindable-artboard registration is absent"
+      "expected_red_reason": "expected-red: live cross-File draw reaches missing nested artboard graph for global 7"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#6",
@@ -4623,16 +4623,16 @@
       "name": "Test Scripted Artboard Input data bound to internal and external artboards",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
-          "line": 245,
+          "line": 422,
           "symbol": "scripted_artboard_input_bound_to_internal_and_external_artboards"
         }
       ],
-      "expected_red_reason": "expected-red: scripted external Artboard input registration is absent"
+      "expected_red_reason": "expected-red: complete live scripted Artboard stream reaches the unavailable pinned SRIV comparator"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#7",
@@ -4642,16 +4642,16 @@
       "name": "Data bind external artboard with no initial source artboard",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
-          "line": 291,
+          "line": 468,
           "symbol": "external_artboard_with_no_initial_source"
         }
       ],
-      "expected_red_reason": "expected-red: external artboard plus view-model graph registration is absent"
+      "expected_red_reason": "expected-red: live cross-File set reaches the missing bound ViewModelInstanceArtboard setter"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#8",
@@ -4661,16 +4661,16 @@
       "name": "Data bound artboard with view model instance resets its properties",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
-          "line": 317,
+          "line": 494,
           "symbol": "bound_artboard_with_view_model_instance_resets_properties"
         }
       ],
-      "expected_red_reason": "expected-red: external artboard with bound view-model injection is absent"
+      "expected_red_reason": "expected-red: imported bound ViewModel instance cannot yet be injected into ViewModelInstanceArtboard"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#9",
@@ -4680,16 +4680,16 @@
       "name": "Data bound artboards with multiple targets bound to same property bidirectionally",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
-          "line": 363,
+          "line": 540,
           "symbol": "multiple_targets_bound_to_same_artboard_property_bidirectionally"
         }
       ],
-      "expected_red_reason": "expected-red: multiple external artboard targets are not registered"
+      "expected_red_reason": "expected-red: live initial draw reaches missing nested artboard graph for global 794"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#10",
@@ -4699,16 +4699,16 @@
       "name": "Null-bound artboard swap survives pending layout sync",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
-          "line": 401,
+          "line": 578,
           "symbol": "null_bound_artboard_swap_survives_pending_layout_sync"
         }
       ],
-      "expected_red_reason": "expected-red: nested-artboard instance presence is not exposed through the facade"
+      "expected_red_reason": "expected-red: facade has no callable nested-Artboard occurrence-presence query"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_blobs_test.cpp#1",
@@ -4718,13 +4718,13 @@
       "name": "Blob data bind stores and clears the blob on the property",
       "status": "direct",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/state_machine/bindables.rs",
-          "line": 2279,
-          "symbol": "bindable_blob_retains_live_empty_payload_and_replaces_it_for_id_binds"
+          "path": "crates/nuxie-runtime/src/viewmodel/viewmodel_instance.rs",
+          "line": 1592,
+          "symbol": "blob_property_stores_swaps_and_clears_complete_upstream_flow"
         }
       ]
     },
@@ -4736,13 +4736,13 @@
       "name": "Blob data value applies to the instance property",
       "status": "direct",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/blob_view_model.rs",
-          "line": 55,
-          "symbol": "blob_runtime_wrapper_stores_swaps_and_clears_live_values"
+          "path": "crates/nuxie-runtime/src/viewmodel/viewmodel_instance.rs",
+          "line": 1626,
+          "symbol": "blob_data_value_applies_to_instance_property_complete_upstream_flow"
         }
       ]
     },
@@ -4754,13 +4754,13 @@
       "name": "Blob data value with only an id applies the id",
       "status": "direct",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/blob_view_model.rs",
-          "line": 13,
-          "symbol": "blob_property_imports_and_preserves_live_empty_values"
+          "path": "crates/nuxie-runtime/src/viewmodel/viewmodel_instance.rs",
+          "line": 1655,
+          "symbol": "blob_data_value_with_only_an_id_applies_the_id_complete_upstream_flow"
         }
       ]
     },
@@ -4790,16 +4790,16 @@
       "name": "Data bind blobs internally and externally",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "tools/silver-corpus/tests/wave_a.rs",
-          "line": 188,
-          "symbol": "data_binding_blobs_internal_external"
+          "path": "crates/nuxie/tests/upstream_wave_a_final.rs",
+          "line": 91,
+          "symbol": "data_bind_blobs_internal_external_complete_action_flow"
         }
       ],
-      "expected_red_reason": "expected-red: silver replay lacks data_bind_blob_test required runtime feature"
+      "expected_red_reason": "expected-red: complete live blob stream reaches the unavailable pinned data_bind_blob_test SRIV comparator"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_computed_values_test.cpp#1",
@@ -4828,16 +4828,16 @@
       "name": "Image computed width/height track layout resize",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal pinned fixture/action/assertion stream is retained; the known renderer result remains expected-red.",
+      "note": "Complete executable port preserves the pinned fixture, action order, production owners, and assertions; expected-red rows stop only at the first concrete missing or divergent boundary.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "tools/silver-corpus/tests/wave_a.rs",
-          "line": 200,
-          "symbol": "data_binding_computed_image_resize"
+          "path": "crates/nuxie/tests/upstream_wave_a_final.rs",
+          "line": 32,
+          "symbol": "image_computed_width_height_tracks_layout_resize_complete_port"
         }
       ],
-      "expected_red_reason": "expected-red: silver replay lacks image_computed_transform_bind required runtime feature"
+      "expected_red_reason": "expected-red: live Image computedWidth is 0 at the first pinned assertion instead of approximately 150"
     }
   ]
 }

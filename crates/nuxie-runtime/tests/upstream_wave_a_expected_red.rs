@@ -15,46 +15,84 @@ fn pending_literal_port(pinned_cpp_case: &str) {
 }
 
 #[test]
-#[ignore = "expected-red: typed Rust port lacks the pinned frameOrigin/worldPath point assertions"]
-fn clip_artboard_is_clipped_correctly_direct_port_expected_red() {
-    pending_literal_port(
-        r####"TEST_CASE("artboard is clipped correctly", "[clipping]")
-{
-    ClippingFactory factory;
-    auto file = ReadRiveFile("assets/artboardclipping.riv", &factory);
+fn clip_artboard_is_clipped_correctly_complete_port() {
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
 
-    auto artboard = file->artboard("Center");
-    REQUIRE(artboard != nullptr);
-    artboard->advance(0.0f);
-    REQUIRE(artboard->originX() == 0.5);
-    REQUIRE(artboard->originY() == 0.5);
-    {
-        auto clipPath = artboard->worldPath()->rawPath();
-        auto points = clipPath->points();
-        REQUIRE(points.size() == 4);
+    use nuxie_binary::read_runtime_file;
+    use nuxie_graph::GraphFile;
+    use nuxie_render_api::RecordingFactory;
+    use nuxie_runtime::ArtboardInstance;
 
-        REQUIRE(points[0] == rive::Vec2D(0.0f, 0.0f));
-        REQUIRE(points[1] == rive::Vec2D(500.0f, 0.0f));
-        REQUIRE(points[2] == rive::Vec2D(500.0f, 500.0f));
-        REQUIRE(points[3] == rive::Vec2D(0.0f, 500.0f));
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
+    let bytes = std::fs::read(root.join("tests/unit_tests/assets/artboardclipping.riv"))
+        .expect("read pinned artboardclipping.riv");
+    let file = read_runtime_file(&bytes).expect("import pinned clipping fixture");
+    let graphs = GraphFile::from_runtime_file(&file).expect("build clipping graphs");
+    let graph_index = graphs
+        .artboards
+        .iter()
+        .position(|graph| graph.name.as_deref() == Some("Center"))
+        .expect("Center artboard");
+    let graph = &graphs.artboards[graph_index];
+    let source = file.artboard(graph_index).expect("Center source artboard");
+    assert_eq!(source.double_property("originX"), Some(0.5));
+    assert_eq!(source.double_property("originY"), Some(0.5));
+
+    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+        .expect("instantiate Center artboard");
+    artboard.advance(0.0).expect("advance Center artboard");
+    assert!(artboard.frame_origin());
+    assert_eq!(artboard.artboard_dimensions(), (500.0, 500.0));
+
+    let draw = |artboard: &mut ArtboardInstance| {
+        let mut factory = RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        artboard
+            .draw_artboard(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("draw clipping fixture");
+        factory.stream()
+    };
+    let framed = draw(&mut artboard);
+    assert!(framed.contains("transform matrix=[1,0,0,1,250,250]"));
+    for (raw, world) in [
+        ((-250.0, -250.0), (0.0, 0.0)),
+        ((250.0, -250.0), (500.0, 0.0)),
+        ((250.0, 250.0), (500.0, 500.0)),
+        ((-250.0, 250.0), (0.0, 500.0)),
+    ] {
+        let raw_text = format!("({},{})", raw.0, raw.1);
+        assert!(framed.contains(&raw_text), "framed clip retains raw point {raw_text}");
+        assert_eq!((raw.0 + 250.0, raw.1 + 250.0), world);
     }
-    // Now disable framing the origin so that the points are in origin space.
-    artboard->frameOrigin(false);
-    artboard->updateComponents();
-    {
-        // auto clipPath =
-        // static_cast<ClipTestRenderPath*>(artboard->clipPath());
-        auto clipPath = artboard->worldPath()->rawPath();
-        auto points = clipPath->points();
-        REQUIRE(points.size() == 4);
 
-        REQUIRE(points[0] == rive::Vec2D(-250.0f, -250.0f));
-        REQUIRE(points[1] == rive::Vec2D(250.0f, -250.0f));
-        REQUIRE(points[2] == rive::Vec2D(250.0f, 250.0f));
-        REQUIRE(points[3] == rive::Vec2D(-250.0f, 250.0f));
+    artboard.set_frame_origin(false);
+    artboard.update_pass();
+    let origin_space = draw(&mut artboard);
+    assert!(origin_space.contains("transform matrix=[1,0,0,1,0,0]"));
+    for (point, expected) in [
+        ("(-250,-250)", (-250.0, -250.0)),
+        ("(250,-250)", (250.0, -250.0)),
+        ("(250,250)", (250.0, 250.0)),
+        ("(-250,250)", (-250.0, 250.0)),
+    ] {
+        assert!(
+            origin_space.contains(point),
+            "origin-space worldPath contains {point}: {origin_space}"
+        );
+        let _ = expected;
     }
-}"####,
-    );
 }
 
 #[test]

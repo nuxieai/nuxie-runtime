@@ -1489,7 +1489,7 @@ impl PartialEq for GpuCanvasResourceLifetime {
 impl Eq for GpuCanvasResourceLifetime {}
 
 /// One sampled texture view bound by an authored GPU-canvas pass.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct GpuCanvasTextureBinding {
     /// Stable identity of the authored `GPUTexture` occurrence. Attachment
     /// and sampled views with the same id must resolve to one backend texture.
@@ -1511,7 +1511,67 @@ pub struct GpuCanvasTextureBinding {
     pub base_array_layer: u32,
     pub array_layer_count: u32,
     pub uploads: Vec<GpuCanvasTextureUpload>,
+    /// Exact renderer image retained by `Image:view()`. Authored GPUTexture
+    /// bindings leave this empty and continue to use their upload snapshot.
+    pub external_image: Option<Rc<dyn RenderImage>>,
 }
+
+impl std::fmt::Debug for GpuCanvasTextureBinding {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GpuCanvasTextureBinding")
+            .field("resource_id", &self.resource_id)
+            .field("lifetime", &self.lifetime)
+            .field("group", &self.group)
+            .field("binding", &self.binding)
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .field("depth_or_array_layers", &self.depth_or_array_layers)
+            .field("format", &self.format)
+            .field("texture_type", &self.texture_type)
+            .field("render_target", &self.render_target)
+            .field("sample_count", &self.sample_count)
+            .field("mip_level_count", &self.mip_level_count)
+            .field("view_dimension", &self.view_dimension)
+            .field("base_mip_level", &self.base_mip_level)
+            .field("mip_level_count_in_view", &self.mip_level_count_in_view)
+            .field("base_array_layer", &self.base_array_layer)
+            .field("array_layer_count", &self.array_layer_count)
+            .field("uploads", &self.uploads)
+            .field("has_external_image", &self.external_image.is_some())
+            .finish()
+    }
+}
+
+impl PartialEq for GpuCanvasTextureBinding {
+    fn eq(&self, other: &Self) -> bool {
+        self.resource_id == other.resource_id
+            && self.lifetime == other.lifetime
+            && self.group == other.group
+            && self.binding == other.binding
+            && self.width == other.width
+            && self.height == other.height
+            && self.depth_or_array_layers == other.depth_or_array_layers
+            && self.format == other.format
+            && self.texture_type == other.texture_type
+            && self.render_target == other.render_target
+            && self.sample_count == other.sample_count
+            && self.mip_level_count == other.mip_level_count
+            && self.view_dimension == other.view_dimension
+            && self.base_mip_level == other.base_mip_level
+            && self.mip_level_count_in_view == other.mip_level_count_in_view
+            && self.base_array_layer == other.base_array_layer
+            && self.array_layer_count == other.array_layer_count
+            && self.uploads == other.uploads
+            && match (&self.external_image, &other.external_image) {
+                (None, None) => true,
+                (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+                _ => false,
+            }
+    }
+}
+
+impl Eq for GpuCanvasTextureBinding {}
 
 /// One sampler bound by an authored GPU-canvas pass.
 #[derive(Debug, Clone, PartialEq)]
@@ -1918,6 +1978,57 @@ pub trait Renderer {
     fn modulate_opacity(&mut self, opacity: f32);
 }
 
+/// One active 2D frame targeting a renderer-owned offscreen canvas.
+///
+/// This is the Rust ownership translation of the `RiveRenderer` allocated by
+/// pinned `ScriptedCanvas::beginFrame()`. Finishing consumes the frame because
+/// the source renderer is invalid immediately after the canvas flush.
+pub trait RenderCanvasFrame: Renderer {
+    fn renderer(&mut self) -> &mut dyn Renderer;
+    fn finish(self: Box<Self>) -> Result<(), RenderCanvasError>;
+}
+
+/// A texture-backed 2D canvas that is also exposed as a normal render image.
+///
+/// Direct public-seam counterpart of pinned `gpu::RenderCanvas`: the image and
+/// render target share one backend texture, while the backend keeps both
+/// concrete owners opaque.
+pub trait RenderCanvas {
+    fn width(&self) -> u32;
+    fn height(&self) -> u32;
+    fn render_image(&self) -> Rc<dyn RenderImage>;
+    fn begin_frame(
+        &mut self,
+        clear_color: ColorInt,
+    ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError>;
+}
+
+/// A render factory could not create or submit an exact offscreen canvas.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderCanvasError {
+    message: String,
+}
+
+impl RenderCanvasError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    pub fn unsupported() -> Self {
+        Self::new("render factory does not support RenderCanvas")
+    }
+}
+
+impl std::fmt::Display for RenderCanvasError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for RenderCanvasError {}
+
 trait PersistentFactoryAccess {
     fn with_factory(&self, callback: &mut dyn FnMut(&mut dyn Factory));
 }
@@ -2040,6 +2151,29 @@ pub trait Factory {
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath>;
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint>;
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
+
+    /// Allocate the exact renderer-owned image/target pair used by the pinned
+    /// Lua `Canvas` binding. Zero extents are handled by that binding and never
+    /// reach this seam.
+    fn make_render_canvas(
+        &mut self,
+        _width: u32,
+        _height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        Err(RenderCanvasError::unsupported())
+    }
+
+    /// Validate the exact renderer-owned image occurrence used by pinned
+    /// `Image:view`. Every authored GPU-texture binding made from the cached
+    /// view retains the returned owner.
+    fn make_gpu_canvas_image_view(
+        &mut self,
+        _image: Rc<dyn RenderImage>,
+    ) -> Result<Rc<dyn RenderImage>, GpuCanvasError> {
+        Err(GpuCanvasError::new(
+            "Image:view() not supported on this backend",
+        ))
+    }
 
     /// Validate and take ownership of encoded font bytes.
     ///
@@ -2202,6 +2336,21 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         self.borrow_mut().decode_image(data)
+    }
+
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.borrow_mut().make_render_canvas(width, height)
+    }
+
+    fn make_gpu_canvas_image_view(
+        &mut self,
+        image: Rc<dyn RenderImage>,
+    ) -> Result<Rc<dyn RenderImage>, GpuCanvasError> {
+        self.borrow_mut().make_gpu_canvas_image_view(image)
     }
 
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {

@@ -128,11 +128,6 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
     DrawContents, FlushDescriptor, InterlockMode, IAABB,
 };
-#[cfg(any(
-    feature = "native-ore-metal-experimental",
-    feature = "native-ore-vulkan-experimental",
-    feature = "ore-gl"
-))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 #[cfg(any(
     feature = "native-ore-metal-experimental",
@@ -342,11 +337,6 @@ pub trait RenderContextHelperBackendContract:
         srgb: bool,
         generate_mips: bool,
     ) -> rcp<Texture>;
-    #[cfg(any(
-        feature = "native-ore-metal-experimental",
-        feature = "native-ore-vulkan-experimental",
-        feature = "ore-gl"
-    ))]
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
         let _ = (width, height);
         rcp::new()
@@ -436,11 +426,6 @@ where
     ) -> rcp<Texture> {
         RenderContextHelperBackendContract::makeImageTexture(self, w, h, l, f, d, bw, bh, s, g)
     }
-    #[cfg(any(
-        feature = "native-ore-metal-experimental",
-        feature = "native-ore-vulkan-experimental",
-        feature = "ore-gl"
-    ))]
     fn makeRenderCanvas(&mut self, w: u32, h: u32) -> rcp<RenderCanvas> {
         RenderContextHelperBackendContract::makeRenderCanvas(self, w, h)
     }

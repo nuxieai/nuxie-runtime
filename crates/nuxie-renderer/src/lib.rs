@@ -9,7 +9,8 @@ pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};
 #[cfg(any(
     feature = "renderer-vulkan",
     feature = "renderer-webgpu",
-    feature = "renderer-webgl2"
+    feature = "renderer-webgl2",
+    feature = "renderer-metal"
 ))]
 mod exact_source_adapter;
 

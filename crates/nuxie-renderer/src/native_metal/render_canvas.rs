@@ -2,6 +2,7 @@
 
 use std::any::Any;
 use std::cell::RefCell;
+use std::pin::Pin;
 use std::rc::Rc;
 
 use objc2::rc::Retained;
@@ -20,15 +21,22 @@ use super::image_texture::NativeMetalImageTexture;
 use super::mechanical_render_context::MechanicalRenderContext;
 #[cfg(test)]
 use super::render_target::RenderTargetMetal;
-use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
-use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
-use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
-use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 #[cfg(test)]
 use crate::RendererError;
+use crate::exact_source_adapter::ExactSourceRendererAdapter;
+use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::FrameDescriptor;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
+#[cfg(feature = "native-ore-metal-experimental")]
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
+#[cfg(feature = "native-ore-metal-experimental")]
 use nuxie_ore_metal::metal::context::ContextMetal as OreContextMetal;
-use nuxie_render_api::RenderImage;
+use nuxie_render_api::{
+    BlendMode, ColorInt, ImageSampler, Mat2D, RenderBuffer, RenderCanvas as RenderCanvasContract,
+    RenderCanvasError, RenderCanvasFrame, RenderImage, RenderPaint, RenderPath, Renderer,
+};
 
 /// One exact source RenderCanvas plus its mechanical execution domain.
 ///
@@ -241,6 +249,7 @@ impl NativeMetalRenderCanvas {
     /// Creates an ORE texture view from this canvas's retained shared texture.
     /// The returned ORE resource owns its native retain; no ORE-context-specific
     /// view is cached in the canvas.
+    #[cfg(feature = "native-ore-metal-experimental")]
     pub fn wrap_ore_texture(&self, context: &OreContextMetal) -> Option<AnyResourceHandle> {
         context.wrap_native_texture(
             self.retained_metal_texture()?,
@@ -253,5 +262,139 @@ impl NativeMetalRenderCanvas {
     fn source_ref(source: &rcp<RenderCanvas>) -> &RenderCanvas {
         // SAFETY: from_source rejects null and this handle owns the rcp retain.
         unsafe { &*source.get() }
+    }
+}
+
+impl RenderCanvasContract for NativeMetalRenderCanvas {
+    fn width(&self) -> u32 {
+        NativeMetalRenderCanvas::width(self)
+    }
+
+    fn height(&self) -> u32 {
+        NativeMetalRenderCanvas::height(self)
+    }
+
+    fn render_image(&self) -> Rc<dyn RenderImage> {
+        Rc::from(NativeMetalRenderCanvas::render_image(self))
+    }
+
+    fn begin_frame(
+        &mut self,
+        clear_color: ColorInt,
+    ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
+        let (width, height) = (self.width(), self.height());
+        let (source, resource_domain, execution_guard) = match &self.inner {
+            NativeMetalRenderCanvasInner::Guarded {
+                source,
+                resource_domain,
+                execution_guard,
+                ..
+            } => (source, resource_domain, execution_guard),
+            #[cfg(test)]
+            NativeMetalRenderCanvasInner::Allocated { .. } => {
+                return Err(RenderCanvasError::new(
+                    "private RenderCanvas allocation staging cannot begin a frame",
+                ));
+            }
+        };
+        let renderer = {
+            let mut mechanical = execution_guard.borrow_mut();
+            let context = unsafe { Pin::get_unchecked_mut(mechanical.render_context_mut()) };
+            context.beginFrameExecutable(&FrameDescriptor {
+                renderTargetWidth: width,
+                renderTargetHeight: height,
+                clearColor: clear_color,
+                ..FrameDescriptor::default()
+            });
+            unsafe { ExactSourceRendererAdapter::new(context, resource_domain.clone()) }
+        };
+        Ok(Box::new(NativeMetalRenderCanvasFrame {
+            renderer,
+            source: rcp::copy_ctor(source),
+            execution_guard: Rc::clone(execution_guard),
+        }))
+    }
+}
+
+struct NativeMetalRenderCanvasFrame {
+    renderer: ExactSourceRendererAdapter,
+    source: rcp<RenderCanvas>,
+    execution_guard: Rc<RefCell<MechanicalRenderContext>>,
+}
+
+impl RenderCanvasFrame for NativeMetalRenderCanvasFrame {
+    fn renderer(&mut self) -> &mut dyn Renderer {
+        self
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), RenderCanvasError> {
+        let mut mechanical = self.execution_guard.borrow_mut();
+        let context = unsafe { Pin::get_unchecked_mut(mechanical.render_context_mut()) };
+        // SAFETY: the canvas frame retains this nonnull exact source owner and
+        // is the sole owner allowed to finish its begun frame.
+        context.finishRenderCanvasExecutable(unsafe { &mut *self.source.get() });
+        Ok(())
+    }
+}
+
+impl Renderer for NativeMetalRenderCanvasFrame {
+    fn save(&mut self) {
+        self.renderer.save();
+    }
+
+    fn restore(&mut self) {
+        self.renderer.restore();
+    }
+
+    fn transform(&mut self, transform: Mat2D) {
+        self.renderer.transform(transform);
+    }
+
+    fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
+        self.renderer.draw_path(path, paint);
+    }
+
+    fn clip_path(&mut self, path: &dyn RenderPath) {
+        self.renderer.clip_path(path);
+    }
+
+    fn draw_image(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
+    ) {
+        self.renderer
+            .draw_image(image, sampler, blend_mode, opacity);
+    }
+
+    fn draw_image_mesh(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
+    ) {
+        self.renderer.draw_image_mesh(
+            image,
+            sampler,
+            vertices,
+            uv_coords,
+            indices,
+            vertex_count,
+            index_count,
+            blend_mode,
+            opacity,
+        );
+    }
+
+    fn modulate_opacity(&mut self, opacity: f32) {
+        self.renderer.modulate_opacity(opacity);
     }
 }

@@ -13,13 +13,18 @@ use std::pin::Pin;
 use std::rc::Rc;
 
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
-    RenderShader, Renderer,
+    BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, ImageDecodeError, ImageSampler, Mat2D,
+    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderCanvas as RenderCanvasContract, RenderCanvasError, RenderCanvasFrame, RenderImage,
+    RenderPaint, RenderPath, RenderShader, Renderer,
 };
 
+use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use crate::mechanical_port::source::include::rive::renderer_hpp::RendererContract;
-use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::RenderContext;
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas as SourceRenderCanvas;
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
+    FrameDescriptor, RenderContext,
+};
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::{
     RenderResourceDomain, RiveRenderBufferHandle,
 };
@@ -28,6 +33,158 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
 use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 use crate::{RenderMode, RendererError};
+
+/// Shared renderer projection used when a product adapter owns an exact
+/// `RiveRenderer` outside the primary onscreen frame wrapper (notably a Lua
+/// RenderCanvas frame).
+pub(crate) struct ExactSourceRendererAdapter {
+    renderer: RiveRenderer,
+    resource_domain: RenderResourceDomain,
+}
+
+impl ExactSourceRendererAdapter {
+    /// # Safety
+    /// The context must outlive this adapter and remain in one begun frame
+    /// until the adapter is dropped or its owning frame is finished.
+    pub(crate) unsafe fn new(
+        context: &mut RenderContext,
+        resource_domain: RenderResourceDomain,
+    ) -> Self {
+        Self {
+            renderer: unsafe { RiveRenderer::new_from_context(context) },
+            resource_domain,
+        }
+    }
+}
+
+impl Renderer for ExactSourceRendererAdapter {
+    fn save(&mut self) {
+        <RiveRenderer as RendererContract>::save(&mut self.renderer);
+    }
+
+    fn restore(&mut self) {
+        <RiveRenderer as RendererContract>::restore(&mut self.renderer);
+    }
+
+    fn transform(&mut self, transform: Mat2D) {
+        <RiveRenderer as RendererContract>::transform(&mut self.renderer, &transform);
+    }
+
+    fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
+        let Some(path) = path.as_any().downcast_ref::<RiveRenderPathHandle>() else {
+            return;
+        };
+        let Some(paint) = paint.as_any().downcast_ref::<RiveRenderPaintHandle>() else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::drawPath(
+                &mut self.renderer,
+                path.source_base() as *const _ as *mut _,
+                paint.source_base() as *const _ as *mut _,
+            );
+        }
+    }
+
+    fn clip_path(&mut self, path: &dyn RenderPath) {
+        let Some(path) = path.as_any().downcast_ref::<RiveRenderPathHandle>() else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::clipPath(
+                &mut self.renderer,
+                path.source_base() as *const _ as *mut _,
+            );
+        }
+    }
+
+    fn draw_image(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
+    ) {
+        let Some(image) =
+            image.and_then(|value| value.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::drawImage(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                blend_mode,
+                opacity,
+            );
+        }
+    }
+
+    fn draw_image_mesh(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
+    ) {
+        let Some(image) =
+            image.and_then(|value| value.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(vertices) =
+            vertices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(uv_coords) =
+            uv_coords.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(indices) =
+            indices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        if !vertices.belongs_to(&self.resource_domain)
+            || !uv_coords.belongs_to(&self.resource_domain)
+            || !indices.belongs_to(&self.resource_domain)
+        {
+            return;
+        }
+        unsafe {
+            <RiveRenderer as RendererContract>::drawImageMesh(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                vertices.source_owner_unchecked(),
+                uv_coords.source_owner_unchecked(),
+                indices.source_owner_unchecked(),
+                vertex_count,
+                index_count,
+                blend_mode,
+                opacity,
+            );
+        }
+    }
+
+    fn modulate_opacity(&mut self, opacity: f32) {
+        <RiveRenderer as RendererContract>::modulateOpacity(&mut self.renderer, opacity);
+    }
+}
 
 #[cfg(feature = "rive-decoders")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
@@ -264,6 +421,248 @@ impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
             })
             .map(|image| Box::new(image) as Box<dyn RenderImage>)
             .ok_or(ImageDecodeError)
+    }
+
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvasContract>, RenderCanvasError> {
+        let source = self.with_context(|context| context.makeRenderCanvasExecutable(width, height));
+        if source.get().is_null() {
+            return Err(RenderCanvasError::new(
+                "RenderCanvas creation returned null",
+            ));
+        }
+        Ok(Box::new(ExactSourceRenderCanvas {
+            source,
+            backend: Rc::clone(&self.backend),
+            resource_domain: self.resource_domain.clone(),
+        }))
+    }
+
+    fn make_gpu_canvas_image_view(
+        &mut self,
+        image: Rc<dyn RenderImage>,
+    ) -> Result<Rc<dyn RenderImage>, GpuCanvasError> {
+        let Some(source) = image.as_any().downcast_ref::<RiveRenderImageHandle>() else {
+            return Err(GpuCanvasError::new(
+                "Image is not a GPU-backed RiveRenderImage",
+            ));
+        };
+        if source.source_base_for(&self.resource_domain).is_none() || !source.has_source_texture() {
+            return Err(GpuCanvasError::new("Image GPU texture not available"));
+        }
+        Ok(image)
+    }
+}
+
+struct ExactSourceRenderCanvas<B: ExactSourceBackend> {
+    source: rcp<SourceRenderCanvas>,
+    backend: Rc<RefCell<B>>,
+    resource_domain: RenderResourceDomain,
+}
+
+impl<B: ExactSourceBackend> ExactSourceRenderCanvas<B> {
+    fn source_ref(&self) -> &SourceRenderCanvas {
+        // SAFETY: construction rejects the nullable source allocation and the
+        // retained rcp owns it for this complete borrow.
+        unsafe { &*self.source.get() }
+    }
+}
+
+impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceRenderCanvas<B> {
+    fn width(&self) -> u32 {
+        self.source_ref().width()
+    }
+
+    fn height(&self) -> u32 {
+        self.source_ref().height()
+    }
+
+    fn render_image(&self) -> Rc<dyn RenderImage> {
+        let image = RiveRenderImageHandle::from_exact(self.source_ref().ref_render_image())
+            .expect("a source RenderCanvas always owns a nonnull render image")
+            .with_execution_domain(
+                self.resource_domain.clone(),
+                Rc::clone(&self.backend) as Rc<dyn Any>,
+            );
+        Rc::new(image)
+    }
+
+    fn begin_frame(
+        &mut self,
+        clear_color: ColorInt,
+    ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
+        let renderer = {
+            let mut backend = self.backend.borrow_mut();
+            let context = unsafe { Pin::get_unchecked_mut(backend.context_mut()) };
+            context.beginFrameExecutable(&FrameDescriptor {
+                renderTargetWidth: self.width(),
+                renderTargetHeight: self.height(),
+                clearColor: clear_color,
+                ..FrameDescriptor::default()
+            });
+            unsafe { RiveRenderer::new_from_context(context) }
+        };
+        Ok(Box::new(ExactSourceRenderCanvasFrame {
+            renderer,
+            source: rcp::copy_ctor(&self.source),
+            backend: Rc::clone(&self.backend),
+            resource_domain: self.resource_domain.clone(),
+        }))
+    }
+}
+
+struct ExactSourceRenderCanvasFrame<B: ExactSourceBackend> {
+    renderer: RiveRenderer,
+    source: rcp<SourceRenderCanvas>,
+    backend: Rc<RefCell<B>>,
+    resource_domain: RenderResourceDomain,
+}
+
+impl<B: ExactSourceBackend> RenderCanvasFrame for ExactSourceRenderCanvasFrame<B> {
+    fn renderer(&mut self) -> &mut dyn Renderer {
+        self
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), RenderCanvasError> {
+        let mut backend = self.backend.borrow_mut();
+        let context = unsafe { Pin::get_unchecked_mut(backend.context_mut()) };
+        // SAFETY: this frame retains the nonnull source canvas returned by the
+        // same context and has exclusive finish ownership of the active frame.
+        let canvas = unsafe { &mut *self.source.get() };
+        context.finishRenderCanvasExecutable(canvas);
+        Ok(())
+    }
+}
+
+impl<B: ExactSourceBackend> Renderer for ExactSourceRenderCanvasFrame<B> {
+    fn save(&mut self) {
+        <RiveRenderer as RendererContract>::save(&mut self.renderer);
+    }
+
+    fn restore(&mut self) {
+        <RiveRenderer as RendererContract>::restore(&mut self.renderer);
+    }
+
+    fn transform(&mut self, transform: Mat2D) {
+        <RiveRenderer as RendererContract>::transform(&mut self.renderer, &transform);
+    }
+
+    fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
+        let Some(path) = path.as_any().downcast_ref::<RiveRenderPathHandle>() else {
+            return;
+        };
+        let Some(paint) = paint.as_any().downcast_ref::<RiveRenderPaintHandle>() else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::drawPath(
+                &mut self.renderer,
+                path.source_base() as *const _ as *mut _,
+                paint.source_base() as *const _ as *mut _,
+            );
+        }
+    }
+
+    fn clip_path(&mut self, path: &dyn RenderPath) {
+        let Some(path) = path.as_any().downcast_ref::<RiveRenderPathHandle>() else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::clipPath(
+                &mut self.renderer,
+                path.source_base() as *const _ as *mut _,
+            );
+        }
+    }
+
+    fn draw_image(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
+    ) {
+        let Some(image) =
+            image.and_then(|value| value.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::drawImage(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                blend_mode,
+                opacity,
+            );
+        }
+    }
+
+    fn draw_image_mesh(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
+    ) {
+        let Some(image) =
+            image.and_then(|value| value.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(vertices) =
+            vertices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(uv_coords) =
+            uv_coords.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(indices) =
+            indices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        if !vertices.belongs_to(&self.resource_domain)
+            || !uv_coords.belongs_to(&self.resource_domain)
+            || !indices.belongs_to(&self.resource_domain)
+        {
+            return;
+        }
+        unsafe {
+            <RiveRenderer as RendererContract>::drawImageMesh(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                vertices.source_owner_unchecked(),
+                uv_coords.source_owner_unchecked(),
+                indices.source_owner_unchecked(),
+                vertex_count,
+                index_count,
+                blend_mode,
+                opacity,
+            );
+        }
+    }
+
+    fn modulate_opacity(&mut self, opacity: f32) {
+        <RiveRenderer as RendererContract>::modulateOpacity(&mut self.renderer, opacity);
     }
 }
 

@@ -4773,7 +4773,6 @@ pub mod source_execution {
             self.replace_buffer_ring(metal, name, capacity);
         }
 
-        #[cfg(feature = "native-ore-metal-experimental")]
         pub fn make_render_canvas<E: MetalExecution>(
             &mut self,
             metal: &mut E,

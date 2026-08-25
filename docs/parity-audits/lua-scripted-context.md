@@ -48,9 +48,8 @@ green. The three remaining ignored cases among the five public facade silvers
 are denominators for ScriptInput hydration or shared raw-path rendering, not
 gaps in this Context owner.
 
-Canvas 2D is the one approved adaptation. The Rust renderer boundary has no
-C++ `RenderContext`/ORE Canvas userdata, so the method remains present and
-fails deterministically with
-`unsupported: scripted-context-canvas binding is unavailable`. This is counted
-as exact parity only under that explicit immutable adaptation, never as a
-literal implementation of the C++ Canvas surface.
+The later paired `lua_gpu.cpp` owner audit replaced the former Canvas 2D
+placeholder. `context:canvas` now creates the exact deferred or sized
+renderer-owned Canvas occurrence and preserves the pinned resize, image,
+begin/end-frame, drawing-phase, and submission lifecycle. Its evidence and
+cross-crate renderer ownership are recorded in `docs/parity-audits/lua-gpu.md`.

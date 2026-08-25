@@ -48,12 +48,7 @@ impl RendererBindings {
     ) -> Result<bool> {
         let lua = table.lua();
         self.verify_render_context(factory)?;
-        let scripted_renderer = lua.create_userdata(ScriptedRenderer {
-            renderer: RefCell::new(erase_renderer_lifetime(renderer)),
-            bindings: self.clone(),
-            save_count: Cell::new(0),
-            valid: Cell::new(true),
-        })?;
+        let scripted_renderer = ScriptedRenderer::create_userdata(&lua, renderer, self.clone())?;
         let result = table.call_function_unit("draw", (table.clone(), scripted_renderer.clone()));
 
         let balanced = {
@@ -79,7 +74,20 @@ pub(super) struct ScriptedRenderer {
 }
 
 impl ScriptedRenderer {
-    fn end(&self) -> bool {
+    pub(super) fn create_userdata(
+        lua: &luaur_rt::Lua,
+        renderer: &mut dyn Renderer,
+        bindings: RendererBindings,
+    ) -> Result<AnyUserData> {
+        lua.create_userdata(Self {
+            renderer: RefCell::new(erase_renderer_lifetime(renderer)),
+            bindings,
+            save_count: Cell::new(0),
+            valid: Cell::new(true),
+        })
+    }
+
+    pub(super) fn end(&self) -> bool {
         let balanced = self.save_count.get() == 0;
         while self.save_count.get() > 0 {
             let mut renderer = self.renderer.borrow_mut();

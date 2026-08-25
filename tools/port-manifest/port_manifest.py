@@ -50,9 +50,9 @@ FEATURE_ROWS = {
         "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass exact live C++/Rust VM differentials; image decode is a separate lane.",
     ),
     "src/lua/renderer/lua_gpu.cpp": (
-        "partial",
-        "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie/src/ore_metal_gpu_canvas.rs",
-        "GPUCEIL/D18: the GPU-prefixed Lua candidate includes retained multi-pipeline submissions, explicit empty-pass/orphan handling, occurrence-lifetime cross-submission external texture identity, and an exact Metal product adaptation. Editor-side shader translation is tracked separately. X3 records the additive direct-bytecode scalar input projection. Mixed-file Canvas 2D/Image:view residue remains F7/F8.",
+        "ported",
+        "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-scripting/src/vm/lua_canvas.rs; crates/nuxie-scripting/src/vm/lua_image.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie-renderer/src/exact_source_adapter.rs; crates/nuxie/src/ore_metal_gpu_canvas.rs",
+        "Paired owner audit at pinned 4ac7b327 closes the mixed-file residue: context:canvas owns the exact deferred/resize/frame/image lifecycle and submits through the mechanically ported RenderCanvas path; Image:view validates and retains the exact renderer image behind one cached sampled-texture identity. GPU-prefixed userdata remains governed by GPUCEIL/D18, including retained multi-pipeline submissions, explicit empty-pass/orphan handling, and cross-submission resource identity. X3 records the additive direct-bytecode scalar input projection.",
     ),
     "src/joystick.cpp": (
         "ported",
@@ -286,8 +286,8 @@ for _path in {
 
 FEATURE_ROWS["src/lua/lua_scripted_context.cpp"] = (
     "ported",
-    "crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-scripting/src/vm/lua_image.rs; crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie/src/lib.rs",
-    "Owner audit at pinned 4ac7b327: the complete Context surface and lifetime are ported, file-scoped image ownership and component markNeedsUpdate routing are verified, and all 17 private upstream Context cases are active and green. Canvas 2D is the explicit fixed Rust-renderer adaptation behind its exact named unsupported diagnostic; see docs/parity-audits/lua-scripted-context.md.",
+    "crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-scripting/src/vm/lua_canvas.rs; crates/nuxie-scripting/src/vm/lua_image.rs; crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie-renderer/src/exact_source_adapter.rs; crates/nuxie/src/lib.rs",
+    "Owner audit at pinned 4ac7b327: the complete Context surface and lifetime are ported, file-scoped image ownership and component markNeedsUpdate routing are verified, and all 17 private upstream Context cases are active and green. The later lua_gpu.cpp owner audit replaced the Canvas 2D placeholder with the exact deferred/resize/frame/image lifecycle through the mechanically ported RenderCanvas seam; see docs/parity-audits/lua-scripted-context.md and docs/parity-audits/lua-gpu.md.",
 )
 
 FEATURE_ROWS.update(

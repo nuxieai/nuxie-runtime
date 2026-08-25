@@ -1714,11 +1714,23 @@ impl UserData for ScriptedContext {
             this.require_live("audio")?;
             super::lua_audio::ScriptedAudioAssets::lookup(lua, &name)
         });
-        methods.add_method("canvas", |_, this, _: MultiValue| {
+        methods.add_method("canvas", |lua, this, descriptor: Option<Table>| {
             this.require_live("canvas")?;
-            Err::<Value, _>(luaur_rt::Error::runtime(
-                "unsupported: scripted-context-canvas binding is unavailable",
-            ))
+            let bindings =
+                super::lua_renderer_library::RendererBindings::for_lua(lua).ok_or_else(|| {
+                    luaur_rt::Error::runtime(
+                        "context:canvas() requires a RenderContext — call setRenderContext() first",
+                    )
+                })?;
+            let (width, height) = match descriptor {
+                Some(descriptor) => (
+                    descriptor.get::<Option<u32>>("width")?.unwrap_or(0),
+                    descriptor.get::<Option<u32>>("height")?.unwrap_or(0),
+                ),
+                None => (0, 0),
+            };
+            super::lua_canvas::ScriptedCanvas::create(lua, bindings, width, height)
+                .map(Value::UserData)
         });
         methods.add_method("gpuCanvas", |lua, this, descriptor: Option<Table>| {
             this.require_live("gpuCanvas")?;
@@ -2125,7 +2137,7 @@ mod tests {
     }
 
     #[test]
-    fn context_canvas_names_the_missing_binding() {
+    fn context_canvas_requires_the_upstream_render_context() {
         let lua = Lua::new();
         let context = lua
             .create_userdata(ScriptedContext::new(
@@ -2140,11 +2152,11 @@ mod tests {
         let error = lua
             .load("context:canvas({ width = 16, height = 16 })")
             .exec()
-            .expect_err("2D canvas has no Rust backing surface");
+            .expect_err("2D canvas requires an installed renderer context");
         assert!(
-            error
-                .to_string()
-                .contains("unsupported: scripted-context-canvas binding is unavailable"),
+            error.to_string().contains(
+                "context:canvas() requires a RenderContext — call setRenderContext() first"
+            ),
             "got: {error}"
         );
     }

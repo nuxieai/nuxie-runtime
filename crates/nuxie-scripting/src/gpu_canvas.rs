@@ -146,7 +146,7 @@ impl UserData for GpuBuffer {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct GpuTexture {
     resource_id: u64,
     lifetime: GpuCanvasResourceLifetime,
@@ -159,6 +159,27 @@ struct GpuTexture {
     sample_count: u32,
     mip_level_count: u32,
     uploads: Rc<RefCell<Vec<GpuCanvasTextureUpload>>>,
+    external_image: Option<Rc<dyn RenderImage>>,
+}
+
+impl std::fmt::Debug for GpuTexture {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GpuTexture")
+            .field("resource_id", &self.resource_id)
+            .field("lifetime", &self.lifetime)
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .field("depth_or_array_layers", &self.depth_or_array_layers)
+            .field("format", &self.format)
+            .field("texture_type", &self.texture_type)
+            .field("render_target", &self.render_target)
+            .field("sample_count", &self.sample_count)
+            .field("mip_level_count", &self.mip_level_count)
+            .field("uploads", &self.uploads)
+            .field("has_external_image", &self.external_image.is_some())
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -204,6 +225,7 @@ impl GpuTextureView {
             base_array_layer: self.base_array_layer,
             array_layer_count: self.array_layer_count,
             uploads: texture.uploads.borrow().clone(),
+            external_image: texture.external_image.clone(),
         })
     }
 
@@ -225,6 +247,62 @@ impl GpuTextureView {
 impl UserData for GpuTextureView {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("format", |_, this| Ok(this.format()));
+    }
+}
+
+/// Cached renderer-backed texture occurrence used by pinned `Image:view`.
+/// Each property access creates a fresh Lua view userdata while all views keep
+/// the same resource identity and retain the exact renderer image.
+#[derive(Debug, Clone)]
+pub(crate) struct GpuImageView {
+    texture: GpuTexture,
+}
+
+impl GpuImageView {
+    pub(crate) fn new(image: Rc<dyn RenderImage>) -> Self {
+        Self {
+            texture: GpuTexture {
+                resource_id: NEXT_GPU_TEXTURE_RESOURCE_ID.fetch_add(1, Ordering::Relaxed),
+                lifetime: GpuCanvasResourceLifetime::new(),
+                width: image.width(),
+                height: image.height(),
+                depth_or_array_layers: 1,
+                format: "rgba8unorm".into(),
+                texture_type: "2d".into(),
+                render_target: false,
+                sample_count: 1,
+                mip_level_count: 1,
+                uploads: Rc::new(RefCell::new(Vec::new())),
+                external_image: Some(image),
+            },
+        }
+    }
+
+    pub(crate) fn create_userdata(&self, lua: &luaur_rt::Lua) -> Result<AnyUserData> {
+        lua.create_userdata(GpuTextureView {
+            texture: Some(self.texture.clone()),
+            canvas: None,
+            dimension: "2d".into(),
+            base_mip_level: 0,
+            mip_level_count: 1,
+            base_array_layer: 0,
+            array_layer_count: 1,
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn binding_for_test(&self) -> GpuCanvasTextureBinding {
+        GpuTextureView {
+            texture: Some(self.texture.clone()),
+            canvas: None,
+            dimension: "2d".into(),
+            base_mip_level: 0,
+            mip_level_count: 1,
+            base_array_layer: 0,
+            array_layer_count: 1,
+        }
+        .to_binding(0, 0)
+        .expect("renderer-backed image views are sampleable")
     }
 }
 
@@ -2366,6 +2444,7 @@ fn install_gpu_canvas_globals_with_budget(
             sample_count,
             mip_level_count,
             uploads: Rc::new(RefCell::new(Vec::new())),
+            external_image: None,
         })
     })?;
     install_constructor(lua, "GPUSampler", |lua, descriptor| {

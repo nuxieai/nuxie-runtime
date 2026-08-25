@@ -2,8 +2,8 @@
 
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
-    RenderShader, Renderer,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderCanvas, RenderCanvasError,
+    RenderImage, RenderPaint, RenderPath, RenderShader, Renderer,
 };
 use web_sys::HtmlCanvasElement;
 
@@ -92,6 +92,14 @@ impl Factory for WebGl2Factory {
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         self.core.decode_image(data)
+    }
+
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.core.make_render_canvas(width, height)
     }
 }
 

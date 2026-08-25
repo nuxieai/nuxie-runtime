@@ -54,7 +54,6 @@ pub(crate) mod pipeline_cache;
 #[cfg(test)]
 #[allow(dead_code)]
 mod pipeline_names;
-#[cfg(feature = "native-ore-metal-experimental")]
 #[allow(dead_code)]
 mod render_canvas;
 #[cfg(test)]
@@ -93,8 +92,8 @@ use capabilities::{select_capabilities, ApplePlatform, MetalDeviceCapabilities};
 use context::NativeMetalContext;
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
-    RenderShader, Renderer,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderCanvas, RenderCanvasError,
+    RenderImage, RenderPaint, RenderPath, RenderShader, Renderer,
 };
 use objc2::runtime::{AnyObject, ProtocolObject};
 #[cfg(test)]
@@ -114,7 +113,6 @@ use objc2_metal::MTLGPUFamily;
 use objc2_metal::{MTLRenderPipelineDescriptor, MTLRenderPipelineState};
 #[cfg(test)]
 use objc2_metal::MTLLibrary;
-#[cfg(feature = "native-ore-metal-experimental")]
 pub use render_canvas::NativeMetalRenderCanvas;
 use std::any::Any;
 use std::cell::RefCell;
@@ -590,7 +588,6 @@ impl NativeMetalFactory {
 
     /// Creates a private texture shared by a render-target owner and a
     /// sampleable-image owner, matching the pinned Metal RenderCanvas factory.
-    #[cfg(feature = "native-ore-metal-experimental")]
     pub fn make_metal_render_canvas(
         &self,
         width: u32,
@@ -772,6 +769,39 @@ impl Factory for NativeMetalFactory {
             .map(|image| image.with_execution_domain(domain, Rc::clone(&mechanical) as Rc<dyn Any>))
             .map(|image| Box::new(image) as Box<dyn RenderImage>)
             .ok_or(ImageDecodeError)
+    }
+
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.make_metal_render_canvas(width, height)
+            .map(|canvas| Box::new(canvas) as Box<dyn RenderCanvas>)
+            .map_err(|error| RenderCanvasError::new(error.to_string()))
+    }
+
+    fn make_gpu_canvas_image_view(
+        &mut self,
+        image: Rc<dyn RenderImage>,
+    ) -> Result<Rc<dyn RenderImage>, nuxie_render_api::GpuCanvasError> {
+        let Some(source) = image.as_any().downcast_ref::<RiveRenderImageHandle>() else {
+            return Err(nuxie_render_api::GpuCanvasError::new(
+                "Image is not a GPU-backed RiveRenderImage",
+            ));
+        };
+        let mechanical = self.mechanical_context().map_err(|_| {
+            nuxie_render_api::GpuCanvasError::new(
+                "GPU context not available for Image:view()",
+            )
+        })?;
+        let domain = mechanical.borrow().resource_domain();
+        if source.source_base_for(&domain).is_none() || !source.has_source_texture() {
+            return Err(nuxie_render_api::GpuCanvasError::new(
+                "Image GPU texture not available",
+            ));
+        }
+        Ok(image)
     }
 }
 

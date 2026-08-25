@@ -4935,13 +4935,33 @@ impl RenderContext {
         unsafe { RiveRenderBufferHandle::from_source(source) }
     }
 
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     pub fn makeRenderCanvasExecutable(
         &mut self,
         width: u32,
         height: u32,
     ) -> crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>{
         self.m_impl.contract_mut().makeRenderCanvas(width, height)
+    }
+
+    /// Product adapter for the exact `ScriptedCanvas::endFrame()` sequence in
+    /// pinned `src/lua/renderer/lua_gpu.cpp`: allocate one backend command
+    /// buffer, flush into the canvas target, then commit that same buffer.
+    pub fn finishRenderCanvasExecutable(
+        &mut self,
+        canvas: &mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
+    ) {
+        let command_buffer = self.m_impl.contract_mut().makeCommandBuffer();
+        let resources = FlushResources {
+            renderTarget: canvas.renderTarget(),
+            externalCommandBuffer: command_buffer,
+            ..FlushResources::default()
+        };
+        unsafe { self.flushExecutable(&resources) };
+        unsafe {
+            self.m_impl
+                .contract_mut()
+                .commitCommandBuffer(command_buffer)
+        };
     }
 
     #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
@@ -8043,7 +8063,6 @@ impl RenderContextContract for RenderContext {
     fn parametricSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16> {
         RenderContext::parametricSegmentCountsAllocator(self)
     }
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     fn makeRenderCanvas(&mut self,width:u32,height:u32)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>{
         self.makeRenderCanvasExecutable(width, height)
     }

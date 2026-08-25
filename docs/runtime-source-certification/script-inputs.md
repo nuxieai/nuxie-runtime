@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **PENDING A FRESH TWO-REVIEW CYCLE AFTER THE SECOND CORRECTION**
+Adversarial review: **REJECTED BY THE FIRST FRESH REVIEW AFTER `edb32c9ec`**
 
 This receipt deliberately includes executable methods defined inline in the
 handwritten `include/rive/script_input_*.hpp` headers. Those methods exposed
@@ -1578,3 +1578,129 @@ This evidence only establishes that the rejected blockers have a scoped
 correction and falsifying witnesses. The ScriptInput receipt remains pending
 until two fresh independent reviewers inspect the corrected production and
 golden paths from the correction commit.
+
+## First fresh independent review after `edb32c9ec`
+
+Status: **REJECTED.** The correction closes the three blockers recorded by
+review `6823d7881`: public ViewModel prerequisites now cross the phase-one
+type-state boundary, golden cold hydration is a two-loop transaction, and the
+three live rehydrate/refresh owners added in the correction defer Artboard
+construction until after their concrete occurrence guard. A complete sibling
+entry-point census found two remaining operative parity failures outside those
+focused witnesses.
+
+### Accepted correction edges
+
+The public `ScriptListenerActionHydration::apply` and `apply_inputs` paths now
+preflight both Artboard and ViewModel prerequisites. An unresolved ViewModel
+rejects before Context or an earlier scalar setter, a valid nullable child
+continues without a table write, and phase two resolves the property again in
+authored order. The state-machine witness enters the real hydration/init owner,
+not only the helper.
+
+The golden cold, live rehydrate, and bound-refresh helpers now share a real
+first validation loop. Failed cold Artboard/ViewModel prerequisites suppress
+all setters, user init, `didHydrateScriptInputs`, ScriptedPathEffect completion,
+and ScriptedLayout completion. Both golden live constructors and the public
+`nuxie` bound-Artboard constructor are handed to a setter-owned closure after
+the table/ScriptAsset guard; their inert witnesses observe zero construction,
+zero ScriptUpdate dirt, and zero resolved-id projection.
+
+The previously accepted ownership remains intact on the reviewed paths:
+Artboard construction uses the source runtime for the cloned source objects,
+the consumer File/ViewModel for the scripting facade, the default state
+machine is constructed before the selected ViewModel bind, binding occurs
+exactly once, and construction does not call `advance_data_context`; the
+registered host frame tail still owns that advance. Direct live updates also
+retain the refreshed bindable snapshot and guard before resolver preparation.
+
+### Retry owners prepare hydration before recreating the script table
+
+Pinned `Artboard::initScriptedObjects` and
+`StateMachineInstance::initScriptedObjects` call
+`ScriptAsset::initScriptedObject` when user init is not complete. That calls
+`ensureScriptInitialized`, which recreates `m_self`/Context (or exits inert on
+generator failure). Only after that generator/table boundary returns do the
+owners call `hydrateScriptInputs`; that method immediately checks `state()` and
+`m_self` before validating any input prerequisite.
+
+Every Rust reinit sibling reverses the generator and hydration-preparation
+parts of this order. For the main state-machine owner,
+`hydrate_and_initialize_scripted_object_instance` and its
+`after_context_install` sibling call `prepare_hydration` and
+`preflight_artboards` before `prepare_init_retry`. The state-machine DataBind
+converter, listener-owned converter, DataConverterGroup, and
+ScriptedInterpolator owners repeat the same shape. `preflight_artboards` is
+not allocation-free validation: it calls each Artboard resolver's
+`prepare_script_artboard` and calls each ViewModel resolver once. Those calls
+can acquire a prepared recipe or return a typed resource/prerequisite error
+before the failed/deferred occurrence's generator has recreated its table.
+
+This is observable in both directions. A generator retry that would fail or
+remain inert can currently surface a later input resolver error first. A
+successful retry whose generator changes context-dependent state validates
+against the old pre-recreation state rather than the new table lifetime.
+Neither behavior matches the pinned generator-then-state-guard-then-preflight
+sequence. The new public atomicity tests use an already-live probe; the
+init-retry tests do not combine an invalid lifetime with a fallible Artboard or
+ViewModel resolver, so none enters this ordering edge.
+
+The correction needs one shared lifecycle boundary, used by all five sibling
+owners, that installs the already-resolved DataContext barrier, recreates the
+generator/table when required, checks the concrete state/table/ScriptAsset
+lifetime, and only then performs the two-loop prerequisite/apply transaction.
+An inert or failed recreation must not prepare a recipe, resolve a ViewModel,
+publish an error from those later stages, set input/dirt/result state, call
+user init, or publish a hydration-completion hook.
+
+### Public nested-tree refresh loses both source File and owner DataContext
+
+`nuxie::rehydrate_bound_script_input_tree` visits every nested Artboard
+occurrence, but identifies each child graph by looking up its numeric
+`graph_global_id` in the root/consumer `File`. It then passes the same root
+`RuntimeOwnedViewModelHandle` to every child. The callee resolves primitive and
+Artboard input DataBinds against that root handle and constructs the child
+Artboard input with a parent context made from that root.
+
+Pinned nested Artboards do not inherit those authorities by numeric identity.
+The concrete nested occurrence retains its source File, and its scripted
+object observes the nested Artboard's local DataContext plus its parent chain.
+Consequently the current public path has two reachable failures:
+
+- a cross-File nested source whose graph id is absent from the root File
+  errors before reaching the source occurrence; a colliding id selects the
+  wrong root-File graph and wrong ScriptInput catalogue;
+- even for a same-File nested graph, a relative/local ScriptInput binding is
+  resolved from the root ViewModel, and the newly projected Artboard facade
+  receives a root-only parent context instead of the nested owner's
+  local-plus-parent chain.
+
+The golden refresh correction demonstrates the right principle for one
+sibling by accepting the retained owner handle and proving a parent-only path.
+The public `nuxie` guard witness added by `edb32c9ec` contains only a root graph
+and an inert table, so it proves deferred construction but cannot distinguish
+the wrong nested File, wrong local source, or wrong parent chain. Exact parity
+requires tree traversal to carry each concrete child's source File and
+occurrence-owned DataContext into primitive resolution, Artboard resolution,
+and deferred facade construction; numeric graph lookup in the root File is not
+a valid substitute.
+
+### Independent evidence
+
+All commands below used `CARGO_INCREMENTAL=0` where Cargo was involved:
+
+- the four focused public/state-machine ViewModel atomicity and authored-order
+  witnesses passed;
+- golden cold atomicity, golden inert rehydrate/refresh, golden parent-only
+  refresh, and the public `nuxie` inert bound-Artboard witness passed;
+- combined checks for `nuxie-runtime`, `nuxie-scripting`, scripting-enabled
+  `nuxie`, `silver-corpus`, and scripting-enabled `rust-golden-runner` passed;
+- source correspondence remained 456 applicable rows with zero pending;
+- symbol correspondence remained 1,105 owners / 7,818 authority units with
+  generated authority replayed, and all 33 checker tests passed.
+
+Those green results accept the scoped correction but contain no operative
+witness for either rejected edge. The 42 out-of-line plus 11 executable inline
+ScriptInput census remains sound; complete certification is rejected until the
+shared retry ordering and nested source/context ownership are corrected, then
+reviewed by two fresh independent auditors.

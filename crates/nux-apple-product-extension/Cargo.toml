@@ -10,7 +10,11 @@ crate-type = ["staticlib", "rlib"]
 
 [features]
 default = []
-apple-runtime = ["nux-capi/apple-metal", "nux-capi/scripting"]
+apple-runtime = [
+    "nux-capi/apple-authored-msl",
+    "nux-capi/apple-metal",
+    "nux-capi/scripting",
+]
 
 [dependencies]
 nux-capi = { path = "../nux-capi", default-features = false }

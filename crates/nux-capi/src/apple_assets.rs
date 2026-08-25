@@ -5,6 +5,8 @@ use super::{
     ffi_guard_with_handle_result, publish_result, register_handle, struct_size_supports,
     with_platform_callback,
 };
+#[cfg(feature = "apple-authored-msl")]
+use nuxie::ore_metal_gpu_canvas::OreMetalGpuCanvas;
 use nuxie::{
     ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan,
     GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderLoad, GpuCanvasShaderProfile,
@@ -167,9 +169,25 @@ pub(crate) struct AppleAssetCatalog {
 pub(crate) struct AppleAssetFactory<'a> {
     inner: &'a mut PersistentFactory<NativeMetalFactory>,
     catalog: &'a AppleAssetCatalog,
+    #[cfg(feature = "apple-authored-msl")]
+    gpu_canvas: &'a mut OreMetalGpuCanvas,
 }
 
 impl AppleAssetCatalog {
+    #[cfg(feature = "apple-authored-msl")]
+    pub(crate) fn wrap_factory<'a>(
+        &'a self,
+        inner: &'a mut PersistentFactory<NativeMetalFactory>,
+        gpu_canvas: &'a mut OreMetalGpuCanvas,
+    ) -> AppleAssetFactory<'a> {
+        AppleAssetFactory {
+            inner,
+            catalog: self,
+            gpu_canvas,
+        }
+    }
+
+    #[cfg(not(feature = "apple-authored-msl"))]
     pub(crate) fn wrap_factory<'a>(
         &'a self,
         inner: &'a mut PersistentFactory<NativeMetalFactory>,
@@ -270,28 +288,56 @@ impl Factory for AppleAssetFactory<'_> {
     }
 
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
-        self.inner.gpu_canvas_shader_profile()
+        #[cfg(feature = "apple-authored-msl")]
+        {
+            self.gpu_canvas.shader_profile()
+        }
+        #[cfg(not(feature = "apple-authored-msl"))]
+        {
+            self.inner.gpu_canvas_shader_profile()
+        }
     }
 
     fn make_gpu_canvas_shader_artifact(
         &mut self,
         shader: &GpuCanvasShaderArtifact,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
-        self.inner.make_gpu_canvas_shader_artifact(shader)
+        #[cfg(feature = "apple-authored-msl")]
+        {
+            self.gpu_canvas.make_shader_artifact(shader)
+        }
+        #[cfg(not(feature = "apple-authored-msl"))]
+        {
+            self.inner.make_gpu_canvas_shader_artifact(shader)
+        }
     }
 
     fn load_gpu_canvas_shader_artifact(
         &mut self,
         shader: &GpuCanvasShaderArtifact,
     ) -> GpuCanvasShaderLoad {
-        self.inner.load_gpu_canvas_shader_artifact(shader)
+        #[cfg(feature = "apple-authored-msl")]
+        {
+            GpuCanvasShaderLoad::Ready(self.gpu_canvas.make_shader_artifact(shader))
+        }
+        #[cfg(not(feature = "apple-authored-msl"))]
+        {
+            self.inner.load_gpu_canvas_shader_artifact(shader)
+        }
     }
 
     fn make_gpu_canvas_shader_occurrence(
         &mut self,
         prepared: &Arc<dyn RenderGpuCanvasShader>,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
-        self.inner.make_gpu_canvas_shader_occurrence(prepared)
+        #[cfg(feature = "apple-authored-msl")]
+        {
+            self.gpu_canvas.make_shader_occurrence(prepared)
+        }
+        #[cfg(not(feature = "apple-authored-msl"))]
+        {
+            self.inner.make_gpu_canvas_shader_occurrence(prepared)
+        }
     }
 
     fn make_gpu_canvas_image(
@@ -309,8 +355,15 @@ impl Factory for AppleAssetFactory<'_> {
         pipelines: &[GpuCanvasPipelineShaders],
         plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
-        self.inner
-            .make_gpu_canvas_image_with_pipelines(pipelines, plan)
+        #[cfg(feature = "apple-authored-msl")]
+        {
+            self.gpu_canvas.make_image_with_pipelines(pipelines, plan)
+        }
+        #[cfg(not(feature = "apple-authored-msl"))]
+        {
+            self.inner
+                .make_gpu_canvas_image_with_pipelines(pipelines, plan)
+        }
     }
 }
 

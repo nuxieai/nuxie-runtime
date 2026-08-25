@@ -13,6 +13,7 @@ default = []
 scripting = ["nuxie/scripting"]
 apple-metal = ["nuxie/renderer-metal", "dep:dispatch2", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-metal", "dep:objc2", "dep:objc2-metal", "dep:objc2-quartz-core"]
 android-vulkan = ["nuxie/renderer-vulkan", "dep:nuxie-renderer", "nuxie-renderer/renderer-vulkan"]
+apple-authored-msl = ["nuxie/ore-metal-authored-msl"]
 
 [dependencies]
 nuxie = { path = "../nuxie", default-features = false }

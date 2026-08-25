@@ -3300,6 +3300,22 @@ mod tests {
     }
 
     #[test]
+    fn noninteractive_viewport_start_preserves_cpp_proxy_state() {
+        let (mut instance, scroll_local, _) = scroll_bar_proxy_fixture();
+        let interactive = property_key_for_name("ScrollConstraint", "interactive").unwrap();
+        assert!(instance.set_bool_property(scroll_local, interactive, false));
+        let mut proxy = runtime_draggable_proxies(&instance)
+            .into_iter()
+            .find(|proxy| proxy.kind == RuntimeDraggableProxyKind::Viewport)
+            .unwrap();
+        proxy.viewport_is_dragging = true;
+
+        runtime_draggable_proxy_start(&mut instance, &mut proxy, (10.0, 10.0), 1.0);
+
+        assert!(proxy.viewport_is_dragging);
+    }
+
+    #[test]
     fn finite_drag_without_physics_clamps_stored_overscroll_before_the_next_delta() {
         let (mut instance, scroll_local, _) = scroll_bar_proxy_fixture();
         let constraint = instance
@@ -4340,5 +4356,15 @@ mod tests {
         assert!(helper.target.is_nan());
         assert_eq!(rive_math_clamp(f32::NAN, -10.0, 0.0), -10.0);
         assert_eq!(rive_math_clamp(5.0, 10.0, 0.0), 0.0);
+
+        let mut clamped = crate::components::RuntimeScrollPhysicsState::clamped();
+        clamped.run((1.0, -10.0), (0.0, 0.0), (0.5, f32::NAN), &[], 1.0, 1.0);
+        assert_eq!(clamped.clamp((1.0, -10.0), (0.0, 0.0), (0.5, f32::NAN)), (0.0, -10.0));
+        assert!(matches!(
+            clamped.kind,
+            crate::components::RuntimeScrollPhysicsKind::Clamped {
+                value: (0.0, -10.0)
+            }
+        ));
     }
 }

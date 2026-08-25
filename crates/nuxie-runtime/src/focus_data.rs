@@ -95,6 +95,12 @@ struct RuntimeFocusDomain {
     focus_nodes: BTreeMap<(u64, usize), FocusNodeId>,
     focus_targets: BTreeMap<(u64, usize), FocusNodeId>,
     mounts: BTreeMap<u64, RuntimeFocusMount>,
+    /// Rust cannot call `FocusData::scrollIntoView` from `FocusManager`'s
+    /// retained-id transition because the Artboard borrow lives at the frame
+    /// boundary. Retain the newly focused occurrence until that boundary,
+    /// preserving the pinned focused-before-listener ordering without
+    /// rediscovering the focus graph.
+    pending_focus_scroll: Option<(u64, usize)>,
 }
 
 impl RuntimeFocusDomain {
@@ -645,11 +651,15 @@ impl RuntimeFocusTree {
         target_local: usize,
     ) -> bool {
         let mut domain = self.domain.borrow_mut();
-        domain
+        let changed = domain
             .focus_targets
             .get(&(owner_identity, target_local))
             .copied()
-            .is_some_and(|node_id| domain.manager.set_focus(node_id))
+            .is_some_and(|node_id| domain.manager.set_focus(node_id));
+        if changed {
+            domain.pending_focus_scroll = Some((owner_identity, target_local));
+        }
+        changed
     }
 
     /// Mirror the constructor-time `FocusData::focusNode()` path without
@@ -721,7 +731,7 @@ impl RuntimeFocusTree {
 
     pub(crate) fn traverse(&mut self, traversal_kind: u64) -> bool {
         let mut domain = self.domain.borrow_mut();
-        match traversal_kind {
+        let changed = match traversal_kind {
             0 => domain.manager.focus_next(),
             1 => domain.manager.focus_previous(),
             2 => domain.manager.focus_up(),
@@ -729,7 +739,22 @@ impl RuntimeFocusTree {
             4 => domain.manager.focus_left(),
             5 => domain.manager.focus_right(),
             _ => domain.manager.focus_next(),
+        };
+        if changed
+            && let Some(focusable) = domain
+                .manager
+                .primary_focus()
+                .and_then(|node_id| domain.manager.focusable(node_id))
+        {
+            domain.pending_focus_scroll = Some((focusable.owner_identity, focusable.target_local));
         }
+        changed
+    }
+
+    /// Consume the retained `FocusData::focused -> scrollIntoView` request at
+    /// the first boundary that owns the mutable Artboard occurrence.
+    pub(crate) fn take_pending_focus_scroll(&mut self) -> Option<(u64, usize)> {
+        self.domain.borrow_mut().pending_focus_scroll.take()
     }
 
     pub(crate) fn refresh_after_property_change(
@@ -2019,6 +2044,26 @@ mod tests {
 
         assert!(tree.take_owner_events().is_empty());
         assert!(tree.target_has_focus(7));
+    }
+
+    #[test]
+    fn focused_occurrence_retains_the_pinned_scroll_request_until_artboard_handoff() {
+        let mut tree = RuntimeFocusTree {
+            owner_identity: 11,
+            ..RuntimeFocusTree::default()
+        };
+        {
+            let mut domain = tree.domain.borrow_mut();
+            let mut node = FocusNode::new();
+            node.set_focusable(RuntimeFocusable::new(11, 7, 8));
+            let target = domain.create_node(node);
+            domain.focus_targets.insert((11, 7), target);
+            domain.manager.add_child(None, target);
+        }
+
+        assert!(tree.set_focus_target(7));
+        assert_eq!(tree.take_pending_focus_scroll(), Some((11, 7)));
+        assert_eq!(tree.take_pending_focus_scroll(), None);
     }
 
     #[test]

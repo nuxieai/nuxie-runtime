@@ -3959,7 +3959,6 @@ impl StateMachineInstance {
                 && key.data_local_id == route.data_local_id;
             data.set_focused_state(focused, Some(&mut tree.manager));
         }
-        tree.pending_focus_scroll = Some(route);
         true
     }
 
@@ -6950,6 +6949,16 @@ impl StateMachineInstance {
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
+        // Pinned `FocusData::focused` scrolls before it notifies focus
+        // listeners. Rust retains the exact focused occurrence at the
+        // manager transition and performs that mutation here, the first
+        // boundary that owns the mutable Artboard.
+        let focus_scroll_changed =
+            self.focus
+                .take_pending_focus_scroll()
+                .is_some_and(|(owner_identity, target_local)| {
+                    artboard.scroll_focus_target_into_view(owner_identity, target_local)
+                });
         let semantic_scroll_changed = self
             .semantic_tree
             .as_mut()
@@ -6959,7 +6968,7 @@ impl StateMachineInstance {
             });
         let definitions = artboard.state_machine_definition_owner(self);
         let Some(state_machine) = definitions.get(self.state_machine_index) else {
-            return Ok(semantic_scroll_changed);
+            return Ok(focus_scroll_changed | semantic_scroll_changed);
         };
         if new_frame && let Some(context) = owned_context.as_deref_mut() {
             self.bind_owned_view_model_context_mut(context);
@@ -6979,7 +6988,7 @@ impl StateMachineInstance {
         {
             total_order.borrow_mut().push(phase);
         }
-        Ok(advanced | semantic_scroll_changed)
+        Ok(advanced | focus_scroll_changed | semantic_scroll_changed)
     }
 
     pub(crate) fn advance(

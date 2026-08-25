@@ -336,6 +336,7 @@ impl std::ops::Mul<(f32, f32)> for Mat2D {
 #[cfg(test)]
 mod tests {
     use super::Mat2D;
+    use crate::components::TransformComponents;
 
     struct UpstreamRand(u64);
 
@@ -886,6 +887,66 @@ mod tests {
                 0x4248_e3a0,
                 0xc38f_2347,
             ]
+        );
+    }
+
+    #[test]
+    #[ignore = "expected-red: decompose omits pinned C++ contraction"]
+    fn decompose_preserves_pinned_cpp_contraction_bits() {
+        let components = Mat2D([
+            1.000_000_1,
+            std::f32::consts::PI,
+            std::f32::consts::E,
+            -f32::EPSILON,
+            5.0,
+            6.0,
+        ])
+        .decompose();
+
+        assert_eq!(
+            [
+                components.x.to_bits(),
+                components.y.to_bits(),
+                components.scale_x.to_bits(),
+                components.scale_y.to_bits(),
+                components.rotation.to_bits(),
+                components.skew.to_bits(),
+            ],
+            [
+                0x40a0_0000,
+                0x40c0_0000,
+                0x4053_008c,
+                0xc025_c63e,
+                0x3fa1_9dc5,
+                0x3e7a_efac,
+            ],
+            "expected bits captured from pinned C++ Mat2D::decompose"
+        );
+    }
+
+    #[test]
+    #[ignore = "expected-red: compose omits pinned C++ skew contraction"]
+    fn compose_preserves_pinned_cpp_skew_contraction_bits() {
+        let components = TransformComponents {
+            x: 5.0,
+            y: 6.0,
+            scale_x: f32::from_bits(0x4053_008c),
+            scale_y: f32::from_bits(0xc025_c63e),
+            rotation: f32::from_bits(0x3fa1_9dc5),
+            skew: f32::from_bits(0x3e7a_efac),
+        };
+
+        assert_eq!(
+            Mat2D::compose(components).0.map(f32::to_bits),
+            [
+                0x3f80_0000,
+                0x4049_0fdb,
+                0x402d_a5fb,
+                0xbc81_59e8,
+                0x40a0_0000,
+                0x40c0_0000,
+            ],
+            "expected bits captured from pinned C++ Mat2D::compose"
         );
     }
 }

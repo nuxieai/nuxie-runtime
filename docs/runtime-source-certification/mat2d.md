@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: pending
+Adversarial review: **rejected at the current pin**
 
 ## `src/math/mat2d.cpp`
 
@@ -18,15 +18,17 @@ Adversarial review: pending
 | `Mat2D::mapBoundingBox(Vec2D*, size_t)` | `Mat2D::map_bounding_box` | exact | `upstream_map_bounding_box_complete_sequence` |
 | `Mat2D::mapBoundingBox(AABB)` | `Mat2D::map_bounds` | exact | `upstream_map_bounding_box_complete_sequence` |
 | `Mat2D::invert` | `Mat2D::invert` | adapted | safe-Rust `Option<Mat2D>` preserves false-with-unchanged-output without an output pointer; constructor/operator test |
-| `Mat2D::decompose` | `Mat2D::decompose` | exact | constructor/operator test; constraint owner suites |
-| `Mat2D::compose` | `Mat2D::compose` | exact | constructor/operator test; constraint owner suites |
+| `Mat2D::decompose` | `Mat2D::decompose` | **missing exact contraction behavior** | `decompose_preserves_pinned_cpp_contraction_bits` is expected-red |
+| `Mat2D::compose` | `Mat2D::compose` | **missing exact contraction behavior** | `compose_preserves_pinned_cpp_skew_contraction_bits` is expected-red |
 | `Mat2D::scaleByValues` | `Mat2D::scale_by_values` | exact | constructor/operator test; constraint owner suites |
 
 The bounding-box translation preserves the source's non-obvious sequence: it
 maps without translation, selects extrema with NaN-ignoring min/max behavior,
-rejects any final non-finite extent using `right - left >= 0` and
+rejects any non-finite pre-translation extent using `right - left >= 0` and
 `bottom - top >= 0`, and only then adds translation. Empty, all-NaN, and
-infinite boxes therefore collapse to `(0, 0, 0, 0)` exactly as pinned C++.
+infinite point boxes therefore collapse to `(0, 0, 0, 0)` exactly as pinned
+C++. An infinite matrix translation is applied after that check and remains
+infinite, as it does in a release C++ build.
 
 ## `include/rive/math/mat2d.hpp`
 
@@ -59,11 +61,55 @@ same two constructors; they do not represent additional source behavior. The
 tuple/vector and `Option` differences are approved Rust-language adaptations,
 not algorithm changes.
 
+## Adversarial findings
+
+The new `mapBoundingBox` owners survive adversarial review. The complete
+upstream sequence is green, and two additional bit-exact cases cover the
+translation-after-affine grouping and mixed-sign-zero SIMD reduction that the
+upstream `Approx` assertions do not distinguish. The empty, partial-NaN,
+all-NaN, and infinite-point collapse cases also match. `map_bounds` uses the
+exact pinned corner order `(left, top)`, `(right, top)`, `(right, bottom)`,
+`(left, bottom)`.
+
+The review instead falsified the pre-existing `decompose` and `compose` rows.
+The pinned arm64 C++ source oracle was compiled with the same release
+`-ffp-contract=on` policy already cited by the Mat2D inverse/multiply evidence.
+For the matrix
+`[1.0000001, PI, E, -EPSILON, 5, 6]`, pinned `decompose()` returns skew bits
+`0x3e7aefac`; Rust returns `0x3e7aefaa`. Given the exact pinned decomposed
+components, pinned `compose()` returns `yy` bits `0xbc8159e8`; Rust returns
+`0xbc8159e0`. The upstream expressions are multiply-plus-add contraction sites:
+`m0 * m2 + m1 * m3` in `decompose`, and both
+`result[linear] * sk + result[skew]` writes in `compose`. Their Rust owners use
+ordinary `*` followed by `+`, unlike the already corrected `multiply`,
+`determinant`, and `invert` owners. The simple axis-aligned round trip cited by
+the implementing receipt cannot observe either discrepancy.
+
+This is a translation failure, not a platform-specific replacement algorithm:
+the correction should transliterate those pinned contraction sites with the
+same explicit Rust `mul_add` strategy used elsewhere in this owner and retain
+the expected-bit evidence. The reviewer did not modify production behavior.
+
+Focused evidence run with `CARGO_INCREMENTAL=0`:
+
+- `cargo test -p nuxie-runtime --lib --no-run`: passed;
+- `cargo test -p nuxie-runtime math::mat2d`: all ordinary Mat2D and
+  `findMaxScale` tests passed;
+- `cargo test -p nuxie-runtime --test mat2d_adversarial`: both bit-exact
+  bounding-box cases passed;
+- the two new ignored expected-red contraction tests fail at the exact bit
+  assertions above;
+- the source-symbol correspondence check passed against pinned
+  `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
+
 ## Result
 
-All 44 v2 authority rows have concrete dispositions. This pass found one real
-missing translation: both `mapBoundingBox` overloads had only an ignored
-expected-red test backed by a zero-returning stub. The production owner is now
-a direct pinned translation, that complete upstream test executes normally,
-and the stale expected-red note in `test-correspondence-manifest.toml` is
-removed. The receipt remains pending independent adversarial review.
+All 44 v2 authority rows have concrete Rust owners or a justified
+not-applicable/adapted disposition. The implementing pass correctly recovered
+both missing `mapBoundingBox` overloads and activated the complete upstream
+test. Independent review accepts those owners and the 33 header authority
+rows, but rejects certification because the two out-of-line `decompose` and
+`compose` rows are not numerically source-exact under the pinned contraction
+contract. The receipt remains rejected until those two translation failures
+are corrected, their expected-red tests are made ordinary green evidence, and
+a separate reviewer accepts the correction.

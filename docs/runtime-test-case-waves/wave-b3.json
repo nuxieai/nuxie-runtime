@@ -1,0 +1,1571 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "b3",
+  "case_count": 85,
+  "ratchet": {
+    "max_pending": 0
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 1,
+      "line": 79,
+      "name": "FocusNode default properties",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 63,
+          "symbol": "wave_b3_focus_test_001_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 2,
+      "line": 96,
+      "name": "FocusNode property setters",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 69,
+          "symbol": "wave_b3_focus_test_002_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 3,
+      "line": 119,
+      "name": "FocusNode with Focusable",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 75,
+          "symbol": "wave_b3_focus_test_003_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 4,
+      "line": 143,
+      "name": "FocusNode without Focusable doesn't crash",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 81,
+          "symbol": "wave_b3_focus_test_004_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 5,
+      "line": 154,
+      "name": "FocusNode setFocusable/clearFocusable",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 87,
+          "symbol": "wave_b3_focus_test_005_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 6,
+      "line": 168,
+      "name": "FocusNode hierarchy",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 93,
+          "symbol": "wave_b3_focus_test_006_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 7,
+      "line": 191,
+      "name": "FocusManager basic focus operations",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 99,
+          "symbol": "wave_b3_focus_test_007_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 8,
+      "line": 212,
+      "name": "FocusManager focus change notifications",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 105,
+          "symbol": "wave_b3_focus_test_008_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 9,
+      "line": 231,
+      "name": "FocusManager respects canFocus",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 111,
+          "symbol": "wave_b3_focus_test_009_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 10,
+      "line": 243,
+      "name": "FocusManager hierarchy",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 117,
+          "symbol": "wave_b3_focus_test_010_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 11,
+      "line": 270,
+      "name": "FocusManager hasFocus with descendants",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 123,
+          "symbol": "wave_b3_focus_test_011_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 12,
+      "line": 292,
+      "name": "FocusManager removeChild clears focus",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 129,
+          "symbol": "wave_b3_focus_test_012_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 13,
+      "line": 307,
+      "name": "List row reparent: FocusNode removeFromParent preserves primary focus",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 135,
+          "symbol": "wave_b3_focus_test_013_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 14,
+      "line": 335,
+      "name": "hasFocusableContent invalidates when canFocus toggles after caching",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 141,
+          "symbol": "wave_b3_focus_test_014_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 15,
+      "line": 356,
+      "name": "hasFocusableContent invalidates when focusable backing toggles after caching",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 147,
+          "symbol": "wave_b3_focus_test_015_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 16,
+      "line": 378,
+      "name": "hasFocusableContent invalidates when a backed node is added then removed",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 153,
+          "symbol": "wave_b3_focus_test_016_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 17,
+      "line": 399,
+      "name": "hasFocusableContent invalidates when the last root is erased",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 159,
+          "symbol": "wave_b3_focus_test_017_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 18,
+      "line": 419,
+      "name": "FocusManager input routing",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 165,
+          "symbol": "wave_b3_focus_test_018_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#19",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 19,
+      "line": 453,
+      "name": "FocusManager traversal basic",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 171,
+          "symbol": "wave_b3_focus_test_019_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#20",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 20,
+      "line": 481,
+      "name": "FocusManager traversal with tabIndex",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 177,
+          "symbol": "wave_b3_focus_test_020_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#21",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 21,
+      "line": 507,
+      "name": "FocusManager traversal skips non-traversable",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 183,
+          "symbol": "wave_b3_focus_test_021_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#22",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 22,
+      "line": 527,
+      "name": "FocusManager edge behavior closedLoop",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 189,
+          "symbol": "wave_b3_focus_test_022_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#23",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 23,
+      "line": 547,
+      "name": "FocusManager edge behavior stop",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 195,
+          "symbol": "wave_b3_focus_test_023_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#24",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 24,
+      "line": 567,
+      "name": "FocusManager ancestor notification on focus",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 201,
+          "symbol": "wave_b3_focus_test_024_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#25",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 25,
+      "line": 593,
+      "name": "FocusManager common ancestor optimization",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 207,
+          "symbol": "wave_b3_focus_test_025_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#26",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 26,
+      "line": 622,
+      "name": "FocusManager traversal focuses leaves only",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 213,
+          "symbol": "wave_b3_focus_test_026_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#27",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 27,
+      "line": 644,
+      "name": "FocusManager nested scopes focus deepest leaf",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 219,
+          "symbol": "wave_b3_focus_test_027_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#28",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 28,
+      "line": 662,
+      "name": "FocusManager edge behavior parentScope exits to parent",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 225,
+          "symbol": "wave_b3_focus_test_028_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#29",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 29,
+      "line": 689,
+      "name": "FocusManager clearFocus clears hasFocus flag chain",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 231,
+          "symbol": "wave_b3_focus_test_029_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#30",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 30,
+      "line": 715,
+      "name": "FocusManager removeChild clears manager reference",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 237,
+          "symbol": "wave_b3_focus_test_030_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#31",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 31,
+      "line": 727,
+      "name": "Freeing a FocusNode clears the parent pointer of a child that outlives it",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 243,
+          "symbol": "wave_b3_focus_test_031_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#32",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 32,
+      "line": 752,
+      "name": "FocusManager::addChild removes a migrating root from its previous manager",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 249,
+          "symbol": "wave_b3_focus_test_032_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#33",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 33,
+      "line": 773,
+      "name": "A migrated focus scope survives destruction of its previous manager",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 255,
+          "symbol": "wave_b3_focus_test_033_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#34",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 34,
+      "line": 795,
+      "name": "FocusManager traversal backward from first leaf exits scope",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 261,
+          "symbol": "wave_b3_focus_test_034_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#35",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 35,
+      "line": 819,
+      "name": "FocusManager closedLoop wraps backward",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 267,
+          "symbol": "wave_b3_focus_test_035_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#36",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 36,
+      "line": 839,
+      "name": "FocusManager stop prevents backward traversal",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 273,
+          "symbol": "wave_b3_focus_test_036_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#37",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 37,
+      "line": 859,
+      "name": "StateMachineInstance hasFocusNodes ignores non-traversable scopes",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 279,
+          "symbol": "wave_b3_focus_test_037_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#38",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 38,
+      "line": 875,
+      "name": "StateMachineInstance hasFocusNodes sees leaves under a transparent scope",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 285,
+          "symbol": "wave_b3_focus_test_038_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#39",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 39,
+      "line": 905,
+      "name": "StateMachineInstance hasFocusNodes counts focus data that is currently ineligible for traversal",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 291,
+          "symbol": "wave_b3_focus_test_039_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#40",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 40,
+      "line": 929,
+      "name": "FocusManager traversal descends through a transparent scope and keeps sibling order",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 297,
+          "symbol": "wave_b3_focus_test_040_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#41",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 41,
+      "line": 969,
+      "name": "FocusManager drops focus when a leaf under a transparent scope becomes hidden",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 303,
+          "symbol": "wave_b3_focus_test_041_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#42",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 42,
+      "line": 996,
+      "name": "FocusManager rebuilding one scope's subtree preserves focus in a sibling scope",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 309,
+          "symbol": "wave_b3_focus_test_042_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#43",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 43,
+      "line": 1035,
+      "name": "FocusActionTraversal perform advances focus with traversalKind next",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 315,
+          "symbol": "wave_b3_focus_test_043_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#44",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 44,
+      "line": 1059,
+      "name": "FocusActionTraversal perform moves focus back with traversalKind previous",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 321,
+          "symbol": "wave_b3_focus_test_044_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#45",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 45,
+      "line": 1084,
+      "name": "FocusActionTraversal perform unknown traversalKind defaults to next",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 327,
+          "symbol": "wave_b3_focus_test_045_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#46",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 46,
+      "line": 1108,
+      "name": "StateMachineInstance exposes hasFocusNodes, focusNext, focusPrevious from focusManager",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 333,
+          "symbol": "wave_b3_focus_test_046_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#47",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 47,
+      "line": 1133,
+      "name": "FocusActionTraversal perform ignores null StateMachineInstance",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 339,
+          "symbol": "wave_b3_focus_test_047_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#48",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 48,
+      "line": 1148,
+      "name": "Focusable::acceptsKeyboardInput defaults to false",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 345,
+          "symbol": "wave_b3_focus_test_048_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#49",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 49,
+      "line": 1157,
+      "name": "StateMachineInstance::focusState reports no focus when nothing is focused",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 351,
+          "symbol": "wave_b3_focus_test_049_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#50",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 50,
+      "line": 1172,
+      "name": "StateMachineInstance::focusState reports focused non-keyboard focusable",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 357,
+          "symbol": "wave_b3_focus_test_050_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#51",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 51,
+      "line": 1192,
+      "name": "StateMachineInstance::focusState reports keyboard expectation when focused focusable accepts keys",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 363,
+          "symbol": "wave_b3_focus_test_051_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#52",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 52,
+      "line": 1212,
+      "name": "StateMachineInstance::focusState clears when focus is cleared",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 369,
+          "symbol": "wave_b3_focus_test_052_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#53",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 53,
+      "line": 1235,
+      "name": "StateMachineInstance::focusState tracks switches between focusables",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 375,
+          "symbol": "wave_b3_focus_test_053_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#54",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 54,
+      "line": 1273,
+      "name": "StateMachineInstance::focusState uses external focus manager when set",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 381,
+          "symbol": "wave_b3_focus_test_054_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#55",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 55,
+      "line": 1299,
+      "name": "StateMachineInstance::clearFocus clears internal focus manager",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 387,
+          "symbol": "wave_b3_focus_test_055_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#56",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 56,
+      "line": 1322,
+      "name": "FocusManager setFocus on a scope descends to first leaf",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 393,
+          "symbol": "wave_b3_focus_test_056_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#57",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 57,
+      "line": 1339,
+      "name": "FocusManager setFocus on a scope descends depth-first",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 399,
+          "symbol": "wave_b3_focus_test_057_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#58",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 58,
+      "line": 1358,
+      "name": "FocusManager setFocus on a scope with no eligible leaf falls back",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 405,
+          "symbol": "wave_b3_focus_test_058_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#59",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 59,
+      "line": 1375,
+      "name": "FocusManager setFocus on an ineligible scope is a no-op",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 411,
+          "symbol": "wave_b3_focus_test_059_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#60",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 60,
+      "line": 1393,
+      "name": "FocusManager setFocus on a leaf is unchanged",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 417,
+          "symbol": "wave_b3_focus_test_060_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#61",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 61,
+      "line": 1409,
+      "name": "FocusManager Tab after focusing a scope traverses leaf siblings",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 423,
+          "symbol": "wave_b3_focus_test_061_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#62",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 62,
+      "line": 1434,
+      "name": "FocusActionClear perform clears the primary focus",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 429,
+          "symbol": "wave_b3_focus_test_062_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#63",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 63,
+      "line": 1456,
+      "name": "FocusActionClear perform is a no-op when nothing is focused",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 435,
+          "symbol": "wave_b3_focus_test_063_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#64",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 64,
+      "line": 1473,
+      "name": "FocusActionClear perform ignores null StateMachineInstance",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 441,
+          "symbol": "wave_b3_focus_test_064_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#65",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 65,
+      "line": 1485,
+      "name": "TransitionFocusCondition uses the reassigned core type key",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 447,
+          "symbol": "wave_b3_focus_test_065_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#66",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 66,
+      "line": 1502,
+      "name": "TransitionFocusCondition evaluate returns false for a null StateMachineInstance",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 453,
+          "symbol": "wave_b3_focus_test_066_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#67",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 67,
+      "line": 1512,
+      "name": "TransitionFocusCondition evaluate returns false when no target comparator is configured",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 459,
+          "symbol": "wave_b3_focus_test_067_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#68",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 68,
+      "line": 1530,
+      "name": "Swapping bindable artboard registers nested focus nodes for Tab",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 465,
+          "symbol": "wave_b3_focus_test_068_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#69",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 69,
+      "line": 1593,
+      "name": "Swapping a bindable nested artboard preserves focus held elsewhere",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 471,
+          "symbol": "wave_b3_focus_test_069_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#70",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 70,
+      "line": 1639,
+      "name": "FocusManager skips collapsed nodes and fully transparent nodes",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 477,
+          "symbol": "wave_b3_focus_test_070_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#71",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 71,
+      "line": 1758,
+      "name": "Focused elements receive keyboard inputs",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 483,
+          "symbol": "wave_b3_focus_test_071_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#72",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 72,
+      "line": 1838,
+      "name": "Keyboard inputs with different key combinations",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 489,
+          "symbol": "wave_b3_focus_test_072_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#73",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 73,
+      "line": 1954,
+      "name": "Text input events are handled on focused nodes",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 495,
+          "symbol": "wave_b3_focus_test_073_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#74",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 74,
+      "line": 2001,
+      "name": "Focus traversal listener actions",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 501,
+          "symbol": "wave_b3_focus_test_074_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#75",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 75,
+      "line": 2084,
+      "name": "Focus traversal clears focus when it reaches edge of root scope",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 507,
+          "symbol": "wave_b3_focus_test_075_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#76",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 76,
+      "line": 2135,
+      "name": "ArtboardComponentList list scope is registered on shared FocusManager",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 514,
+          "symbol": "wave_b3_focus_test_076_direct_port"
+        }
+      ],
+      "note": "The ignored Rust test imports and advances the pinned component_list_1.riv fixture, then reaches the concrete missing retained list-focus topology seam.",
+      "expected_red_reason": "expected-red: component_list_1.riv does not register authored list rows in the retained focus tree"
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#77",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 77,
+      "line": 2166,
+      "name": "List under Node: when parent has a direct FocusData, findClosestFocusNode from list matches that node",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 521,
+          "symbol": "wave_b3_focus_test_077_direct_port"
+        }
+      ],
+      "note": "The ignored Rust test imports and advances the pinned component_list_1.riv fixture, then reaches the concrete missing retained list-focus topology seam.",
+      "expected_red_reason": "expected-red: the Node-hosted component list exposes no authored focus stop after focus-tree construction"
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#78",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 78,
+      "line": 2205,
+      "name": "Focus is correctly built and updated for lists",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 527,
+          "symbol": "wave_b3_focus_test_078_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#79",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 79,
+      "line": 2286,
+      "name": "Focus based transitions work",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 533,
+          "symbol": "wave_b3_focus_test_079_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#80",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 80,
+      "line": 2319,
+      "name": "List item focus tree stays under its row when the item's state machine is (re)wired during the focus sync",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 539,
+          "symbol": "wave_b3_focus_test_080_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#81",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 81,
+      "line": 2404,
+      "name": "Swappable artboard slot keeps its place in tab order",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 545,
+          "symbol": "wave_b3_focus_test_081_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#82",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 82,
+      "line": 2502,
+      "name": "Repeat focus-tree build keeps focus inside an untouched nested artboard",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 551,
+          "symbol": "wave_b3_focus_test_082_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#83",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 83,
+      "line": 2550,
+      "name": "Cross-file swaps keep slot order and share the focus manager",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 557,
+          "symbol": "wave_b3_focus_test_083_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#84",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 84,
+      "line": 2629,
+      "name": "Unresolvable artboard swap leaves focus and tab order untouched",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 563,
+          "symbol": "wave_b3_focus_test_084_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    },
+    {
+      "id": "tests/unit_tests/runtime/focus_test.cpp#85",
+      "upstream": "tests/unit_tests/runtime/focus_test.cpp",
+      "ordinal": 85,
+      "line": 2685,
+      "name": "Initially-empty bindable slot keeps its authored tab position on first swap",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 569,
+          "symbol": "wave_b3_focus_test_085_direct_port"
+        }
+      ],
+      "note": "The dedicated Rust entry point executes the translated pinned focus owner flow through retained FocusNode/FocusManager or the named real runtime fixture."
+    }
+  ]
+}

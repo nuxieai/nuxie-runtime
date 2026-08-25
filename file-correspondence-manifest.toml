@@ -1678,10 +1678,10 @@ verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0134"
-b6_verdict = "TRACKED-GAP"
+b6_verdict = "ADAPTED"
 b6_cluster = "constraints"
-audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "Phase 3 paired audit: ClampedScrollPhysics advance/run/clamp are owned by the shared RuntimeScrollPhysicsState variant lifecycle. The audit corrected run and clamp to use pinned math::clamp fminf/fmaxf semantics for NaN and reversed bounds instead of f32::clamp. Base run/stop state ordering and one-advance completion match the pin. MR-2b/C03 remains the justified shared-owner exception."
+audit_record = "docs/parity-audits/clamped-scroll-physics.md"
+note = "Phase 3 current-pin paired audit supersedes B6-0134: advance/run/clamp and the retained shared ScrollPhysics lifecycle match the pin, including fminf/fmaxf math::clamp float-edge semantics. MR-2b/C03 records shared file ownership, not partial behavior."
 
 [[file]]
 upstream = "src/constraints/scrolling/elastic_scroll_physics.cpp"

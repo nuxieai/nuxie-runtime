@@ -119,9 +119,9 @@ FEATURE_ROWS.update(
             "P3F/F3F6/S4-45: semantic command dispatch, diff delivery, view mapping, and blob handle/message/view-model behavior bring faithful equivalents to all 83 pinned command_queue_test.cpp cases. FL-E1's scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and scripting VM seam; render-api contract surface stays with its crate.",
         ),
         "src/constraints/scrolling/clamped_scroll_physics.cpp": (
-            "partial",
+            "ported",
             "crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs",
-            "Phase 3 paired audit: advance/run/clamp match the pin, including fminf/fmaxf math::clamp float-edge semantics; the variant remains in the shared ScrollPhysics lifecycle.",
+            "Phase 3 paired audit: advance/run/clamp match the pin, including fminf/fmaxf math::clamp float-edge semantics; shared ScrollPhysics lifecycle ownership is exact and is not a partial port.",
         ),
         "src/constraints/scrolling/scroll_bar_constraint.cpp": (
             "ported",

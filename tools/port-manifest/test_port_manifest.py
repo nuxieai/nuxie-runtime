@@ -512,7 +512,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/command_queue.cpp": ("ported", "P3F"),
             "src/command_server.cpp": ("ported", "P3F"),
             "src/constraints/scrolling/clamped_scroll_physics.cpp": (
-                "partial",
+                "ported",
                 "Phase 3",
             ),
             "src/constraints/scrolling/elastic_scroll_physics.cpp": (

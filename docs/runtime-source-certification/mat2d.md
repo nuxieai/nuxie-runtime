@@ -514,3 +514,30 @@ surface; no live `PathDraw::Make` path calls it.
 
 This implementing lane does not self-certify the correction. Verdict:
 **PENDING two fresh independent re-reviews.**
+
+## Runtime `mapBoundingBox` correction after independent AABB review — PENDING
+
+The first post-`d2605b4de` AABB reviewer found that the public runtime-only
+`Mat2D::map_bounding_box` owner still retained the older scalar point fold even
+though the operative renderer owner had been corrected. Internal callers do
+not currently reach this runtime owner, so the finding did not invalidate the
+renderer AABB review. It did invalidate the broader Mat2D claim that every
+public owner preserved the pinned algorithm.
+
+The runtime tuple-based owner now spells the same pinned pair-lane algorithm
+as the accepted render-API owner: odd-first initialization; two-point lane
+loads; the zero-skew specialization; authored affine FMA grouping; SIMD
+min/max NaN and signed-zero selection; cross-lane reduction; nonfinite
+normalization before translation; and final post-translation non-negative
+width/height debug assertions. It does not redirect through the render-API
+type or invent a new shared abstraction, so the runtime source owner remains
+visible for direct comparison.
+
+Direct witnesses now preserve negative-zero minima and positive-zero maxima
+for both two-point orders, normalize a nonfinite linear result to the zero box
+before translation, and panic in debug for positive-infinity translation after
+finite linear bounds. The complete existing upstream `mapBoundingBox` sequence
+and the full runtime Mat2D suite pass: 12 passed, 0 failed, 0 ignored.
+
+This implementing lane does not self-certify the correction. Verdict:
+**PENDING two fresh independent re-reviews.**

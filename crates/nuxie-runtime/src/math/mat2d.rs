@@ -5,6 +5,36 @@ fn map_points_fma(point_lane: f32, matrix_lane: f32, addend_lane: f32) -> f32 {
     point_lane.mul_add(matrix_lane, addend_lane)
 }
 
+#[inline(always)]
+fn map_bounds_simd_min(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() | second.to_bits())
+    } else if second < first {
+        second
+    } else {
+        first
+    }
+}
+
+#[inline(always)]
+fn map_bounds_simd_max(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() & second.to_bits())
+    } else if first < second {
+        second
+    } else {
+        first
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Mat2D(pub [f32; 6]);
 
@@ -275,45 +305,78 @@ impl Mat2D {
     /// Return the tight transformed bounds of `points` as
     /// `(left, top, right, bottom)`.
     ///
-    /// This is the scalar Rust translation of pinned
-    /// `Mat2D::mapBoundingBox(const Vec2D[], size_t)`. In particular, the
-    /// translation is added only after the per-axis extrema are selected,
-    /// individual NaN coordinates are ignored by `f32::min`/`f32::max`, and
-    /// an empty, all-NaN, or infinite result collapses to the zero box.
+    /// Exact scalar spelling of pinned
+    /// `Mat2D::mapBoundingBox(const Vec2D[], size_t)`. Pair-lane
+    /// initialization/reduction, SIMD min/max selection, fused affine
+    /// grouping, translation-after-extrema, and final debug contracts are all
+    /// preserved.
     pub fn map_bounding_box(self, points: &[(f32, f32)]) -> (f32, f32, f32, f32) {
-        let [a, b, c, d, e, f] = self.0;
-        let mut left = f32::INFINITY;
-        let mut top = f32::INFINITY;
-        let mut right = f32::NEG_INFINITY;
-        let mut bottom = f32::NEG_INFINITY;
+        let [scale_x, skew_y, skew_x, scale_y, translate_x, translate_y] = self.0;
+        let no_skew = skew_y == 0.0 && skew_x == 0.0;
+        let mut mins = [f32::INFINITY; 4];
+        let mut maxes = [f32::NEG_INFINITY; 4];
+        let mut index = 0;
 
-        if b == 0.0 && c == 0.0 {
-            for &(x, y) in points {
-                let mapped_x = a * x;
-                let mapped_y = d * y;
-                left = left.min(mapped_x);
-                top = top.min(mapped_y);
-                right = right.max(mapped_x);
-                bottom = bottom.max(mapped_y);
+        if points.len() & 1 != 0 {
+            let (x, y) = points[0];
+            let mapped = if no_skew {
+                [scale_x * x, scale_y * y]
+            } else {
+                [
+                    scale_x.mul_add(x, skew_x * y),
+                    scale_y.mul_add(y, skew_y * x),
+                ]
+            };
+            mins[0] = mapped[0];
+            mins[1] = mapped[1];
+            maxes[0] = mapped[0];
+            maxes[1] = mapped[1];
+            index = 1;
+        }
+
+        while index < points.len() {
+            let (first_x, first_y) = points[index];
+            let (second_x, second_y) = points[index + 1];
+            let mapped = if no_skew {
+                [
+                    scale_x * first_x,
+                    scale_y * first_y,
+                    scale_x * second_x,
+                    scale_y * second_y,
+                ]
+            } else {
+                [
+                    scale_x.mul_add(first_x, skew_x * first_y),
+                    scale_y.mul_add(first_y, skew_y * first_x),
+                    scale_x.mul_add(second_x, skew_x * second_y),
+                    scale_y.mul_add(second_y, skew_y * second_x),
+                ]
+            };
+            for lane in 0..4 {
+                mins[lane] = map_bounds_simd_min(mapped[lane], mins[lane]);
+                maxes[lane] = map_bounds_simd_max(mapped[lane], maxes[lane]);
             }
+            index += 2;
+        }
+
+        let min_x = map_bounds_simd_min(mins[0], mins[2]);
+        let min_y = map_bounds_simd_min(mins[1], mins[3]);
+        let max_x = map_bounds_simd_max(maxes[0], maxes[2]);
+        let max_y = map_bounds_simd_max(maxes[1], maxes[3]);
+
+        let bounds = if !(max_x - min_x >= 0.0 && max_y - min_y >= 0.0) {
+            (0.0, 0.0, 0.0, 0.0)
         } else {
-            for &(x, y) in points {
-                let mapped_x = a.mul_add(x, c * y);
-                let mapped_y = d.mul_add(y, b * x);
-                left = left.min(mapped_x);
-                top = top.min(mapped_y);
-                right = right.max(mapped_x);
-                bottom = bottom.max(mapped_y);
-            }
-        }
-
-        // Match the source's inverse non-negative extent test. Writing the
-        // comparison this way deliberately rejects `inf - inf` and every
-        // remaining NaN instead of accidentally accepting equal infinities.
-        if !(right - left >= 0.0 && bottom - top >= 0.0) {
-            return (0.0, 0.0, 0.0, 0.0);
-        }
-        (left + e, top + f, right + e, bottom + f)
+            (
+                min_x + translate_x,
+                min_y + translate_y,
+                max_x + translate_x,
+                max_y + translate_y,
+            )
+        };
+        debug_assert!(bounds.2 - bounds.0 >= 0.0);
+        debug_assert!(bounds.3 - bounds.1 >= 0.0);
+        bounds
     }
 
     /// Four-corner overload corresponding to pinned
@@ -779,6 +842,65 @@ mod tests {
             .height(),
             0.0
         );
+    }
+
+    #[test]
+    fn map_bounding_box_preserves_pinned_pair_lanes_and_nonfinite_normalization() {
+        let signed_zero_translation = Mat2D([1.0, 0.0, 0.0, 1.0, -0.0, -0.0]);
+        let forward = signed_zero_translation
+            .map_bounding_box(&[(0.0, 0.0), (-0.0, -0.0)]);
+        assert_eq!(
+            [
+                forward.0.to_bits(),
+                forward.1.to_bits(),
+                forward.2.to_bits(),
+                forward.3.to_bits(),
+            ],
+            [
+                (-0.0_f32).to_bits(),
+                (-0.0_f32).to_bits(),
+                0.0_f32.to_bits(),
+                0.0_f32.to_bits(),
+            ]
+        );
+
+        let reverse = signed_zero_translation
+            .map_bounding_box(&[(-0.0, -0.0), (0.0, 0.0)]);
+        assert_eq!(
+            [
+                reverse.0.to_bits(),
+                reverse.1.to_bits(),
+                reverse.2.to_bits(),
+                reverse.3.to_bits(),
+            ],
+            [
+                (-0.0_f32).to_bits(),
+                (-0.0_f32).to_bits(),
+                0.0_f32.to_bits(),
+                0.0_f32.to_bits(),
+            ]
+        );
+
+        let infinite_x = Mat2D([f32::INFINITY, 0.0, 0.0, 1.0, 19.0, 23.0])
+            .map_bounds((0.0, 0.0, 1.0, 1.0));
+        assert_eq!(
+            [
+                infinite_x.0.to_bits(),
+                infinite_x.1.to_bits(),
+                infinite_x.2.to_bits(),
+                infinite_x.3.to_bits(),
+            ],
+            [0; 4],
+            "pinned source normalizes the nonfinite linear result before translation"
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic]
+    fn map_bounding_box_retains_pinned_post_translation_extent_assertions() {
+        Mat2D([1.0, 0.0, 0.0, 1.0, f32::INFINITY, 0.0])
+            .map_bounding_box(&[(0.0, 0.0), (1.0, 1.0)]);
     }
 
     #[test]

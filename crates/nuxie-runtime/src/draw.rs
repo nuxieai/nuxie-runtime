@@ -11556,16 +11556,56 @@ struct TaffyRuntimeLayoutEngine;
 #[cfg(test)]
 thread_local! {
     static TAFFY_LAYOUT_SOLVE_ENTRIES: Cell<usize> = const { Cell::new(0) };
+    static TAFFY_LAYOUT_SOLVE_WAVES: Cell<usize> = const { Cell::new(0) };
+    static TAFFY_LAYOUT_SOLVE_DEPTH: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+struct TaffyLayoutSolveEntry;
+
+#[cfg(test)]
+impl TaffyLayoutSolveEntry {
+    fn enter() -> Self {
+        TAFFY_LAYOUT_SOLVE_ENTRIES.with(|count| count.set(count.get() + 1));
+        TAFFY_LAYOUT_SOLVE_DEPTH.with(|depth| {
+            let current = depth.get();
+            if current == 0 {
+                TAFFY_LAYOUT_SOLVE_WAVES.with(|count| count.set(count.get() + 1));
+            }
+            depth.set(current + 1);
+        });
+        Self
+    }
+}
+
+#[cfg(test)]
+impl Drop for TaffyLayoutSolveEntry {
+    fn drop(&mut self) {
+        TAFFY_LAYOUT_SOLVE_DEPTH.with(|depth| {
+            depth.set(
+                depth
+                    .get()
+                    .checked_sub(1)
+                    .expect("balanced Taffy solve depth"),
+            );
+        });
+    }
 }
 
 #[cfg(test)]
 pub(crate) fn reset_taffy_layout_solve_entries() {
     TAFFY_LAYOUT_SOLVE_ENTRIES.with(|count| count.set(0));
+    TAFFY_LAYOUT_SOLVE_WAVES.with(|count| count.set(0));
 }
 
 #[cfg(test)]
 pub(crate) fn taffy_layout_solve_entries() -> usize {
     TAFFY_LAYOUT_SOLVE_ENTRIES.with(Cell::get)
+}
+
+#[cfg(test)]
+pub(crate) fn taffy_layout_solve_waves() -> usize {
+    TAFFY_LAYOUT_SOLVE_WAVES.with(Cell::get)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -11765,7 +11805,7 @@ impl TaffyRuntimeLayoutEngine {
             return None;
         }
         #[cfg(test)]
-        TAFFY_LAYOUT_SOLVE_ENTRIES.with(|count| count.set(count.get() + 1));
+        let _solve_entry = TaffyLayoutSolveEntry::enter();
         let mut taffy = TaffyTree::<TaffyMeasureContext>::new();
         taffy.disable_rounding();
         let mut build = TaffyLayoutBuild::default();

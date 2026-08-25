@@ -7588,8 +7588,13 @@
              nested layout in the same frame; got {child_width}"
         );
         assert!(
-            crate::draw::taffy_layout_solve_entries() <= 9,
+            crate::draw::taffy_layout_solve_waves() <= 9,
             "one transferred child dirt generation must settle in one bounded decomposed-layout wave instead of re-solving until the 100-pass safety cap; got {} solves",
+            crate::draw::taffy_layout_solve_waves()
+        );
+        assert!(
+            crate::draw::taffy_layout_solve_entries() <= 35,
+            "one transferred child dirt generation must keep its nested hug measurements bounded; got {} total solves",
             crate::draw::taffy_layout_solve_entries()
         );
     }

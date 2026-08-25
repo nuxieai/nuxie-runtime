@@ -6999,14 +6999,21 @@ impl ArtboardInstance {
                 self.layout_revision = self.layout_revision.wrapping_add(1);
             }
             if size_changed {
-                let layout_handle = self.component_handle(local_id);
                 let affected_text = self
                     .components()
                     .iter()
                     .filter_map(|component| {
                         (matches!(component.type_name, "Text" | "TextInput")
-                            && layout_handle
-                                .is_some_and(|layout| component.layout_ancestors.contains(&layout)))
+                            // `LayoutComponent::propagateSizeToChildren`
+                            // skips nested LayoutComponents and transparent
+                            // layout containers such as Group/Solo. Rust's
+                            // supported Text control-size seam is the exact
+                            // direct-child case represented by
+                            // `runtime_text_layout_constraint`; an arbitrary
+                            // layout ancestor must not manufacture Text Path
+                            // dirt (`layout_component.cpp:981-1025`,
+                            // `text.cpp:160-178`).
+                            && self.component_parent_local(component.local_id) == Some(local_id))
                         .then_some(component.local_id)
                     })
                     .collect::<Vec<_>>();
@@ -31762,6 +31769,60 @@ mod tests {
     }
 
     #[test]
+    fn layout_size_change_does_not_control_text_behind_a_solo() {
+        for (bytes, expected_text_shape_dirt) in [
+            (synthetic_layout_text_bounds_riv(), true),
+            (synthetic_layout_solo_text_bounds_riv(), false),
+        ] {
+            let file = read_runtime_file(&bytes).expect("synthetic layout Text riv imports");
+            let graphs =
+                GraphFile::from_runtime_file(&file).expect("synthetic layout Text riv graphs");
+            let graph = graphs.artboards.first().expect("fixture has an artboard");
+            let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+            let layout_local = instance
+                .components()
+                .iter()
+                .find(|component| component.type_name == "LayoutComponent")
+                .expect("fixture has a layout")
+                .local_id;
+            let text_local = instance
+                .components()
+                .iter()
+                .find(|component| component.type_name == "Text")
+                .expect("fixture has Text")
+                .local_id;
+
+            let bounds = |width| RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width,
+                height: 50.0,
+            };
+            instance.retain_runtime_layout_component_bounds(
+                layout_local,
+                bounds(100.0),
+                Some(&BTreeMap::from([(layout_local, bounds(100.0))])),
+            );
+            instance.component_mut(text_local).unwrap().dirt = ComponentDirt::NONE;
+            instance.retain_runtime_layout_component_bounds(
+                layout_local,
+                bounds(120.0),
+                Some(&BTreeMap::from([(layout_local, bounds(120.0))])),
+            );
+
+            assert_eq!(
+                instance
+                    .component(text_local)
+                    .expect("Text stays live")
+                    .dirt
+                    .contains(ComponentDirt::TEXT_SHAPE),
+                expected_text_shape_dirt,
+                "only the direct Text child receives pinned C++ controlSize dirt"
+            );
+        }
+    }
+
+    #[test]
     fn component_list_behind_transparent_group_requires_layout_opt_in() {
         let bytes = cpp_runtime_fixture("nested_hug.riv");
         let file = read_runtime_file(&bytes).expect("nested hug fixture imports");
@@ -34619,6 +34680,38 @@ mod tests {
             push_f32(bytes, "Text", "height", 10.0);
             push_f32(bytes, "Text", "originX", 0.25);
             push_f32(bytes, "Text", "originY", 0.5);
+        });
+        bytes
+    }
+
+    fn synthetic_layout_solo_text_bounds_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9659);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 50.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "Solo", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_uint(bytes, "Solo", "activeComponentId", 4);
+        });
+        push_object(&mut bytes, "Text", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_uint(bytes, "Text", "sizingValue", 0);
+            push_f32(bytes, "Text", "width", 20.0);
+            push_f32(bytes, "Text", "height", 10.0);
         });
         bytes
     }

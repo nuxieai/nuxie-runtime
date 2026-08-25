@@ -37,7 +37,7 @@ upstream = "tests/unit_tests/runtime/artboard_transform_test.cpp"
 test_case_count = 6
 status = "ported-direct"
 evidence = ["crates/nuxie-runtime/tests/upstream_artboard_transform.rs"]
-note = "All six fixture and assertion sequences are directly translated: exact self scale/rotation draw matrices, transform-count delta, inverse-mapped rotated hit target and bool input, nested child root-transform movement, the complete 11-frame opacity/transform silver scenario, and the composed transform at clipPath. The silver case remains expected-red at the missing pinned SRIV comparator; the nested case remains expected-red because Rust does not expose the exact ArtboardInstance::rootTransform(point) owner, and no object-world-transform proxy is accepted."
+note = "All six fixture and assertion sequences are directly translated: exact self scale/rotation draw matrices, transform-count delta, inverse-mapped rotated hit target and bool input, nested child root-transform movement, the complete 11-frame opacity/transform silver scenario, and the composed transform at clipPath. The production root_transform owner now retains the mounted host-space matrix and applies the child's live self transform in pinned C++ order. The silver case remains expected-red only because its pinned SRIV comparator is not wired in this test surface; it is a harness denominator, not an Artboard behavior fallback."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/audio_test.cpp"
@@ -605,7 +605,7 @@ upstream = "tests/unit_tests/runtime/render_test.cpp"
 test_case_count = 1
 status = "ported-direct"
 evidence = ["crates/nuxie/tests/upstream_render_change.rs"]
-note = "Direct fixture port preserves default-artboard/state-machine/view-model construction and binding, the initial 0.1-second advance and draw, and all ten repeated 0.1-second advance/didChange/draw assertions. It is expected-red because the first repeated advance leaves Rust Artboard::did_change false."
+note = "Direct fixture port preserves default-artboard/state-machine/view-model construction and binding, the initial 0.1-second advance and draw, and all ten repeated 0.1-second advance/didChange/draw assertions. All ten assertions are active and green: a mounted child's SolidColor callback now propagates the same false-to-true Artboard::changed() edge through each value-owned Rust parent before nested advance returns."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/rive_testing.cpp"

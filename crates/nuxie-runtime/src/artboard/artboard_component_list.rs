@@ -586,6 +586,7 @@ impl ArtboardInstance {
         let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
         let mut source_changed = false;
         let mut child_dirty = false;
+        let mut child_requested_parent_change = false;
         let mut keep_going = false;
         let mut first_script_error = None;
         let Some(items) = self.component_list_items_mut(list_local) else {
@@ -670,6 +671,7 @@ impl ArtboardInstance {
                 .child
                 .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
             child_dirty |= item.child.has_dirt(ComponentDirt::COMPONENTS);
+            child_requested_parent_change |= item.child.take_parent_change_request();
             if item
                 .context_rebind_sink
                 .peek_dirt()
@@ -688,6 +690,9 @@ impl ArtboardInstance {
         }
         if child_dirty {
             self.add_dirt(list_local, ComponentDirt::COMPONENTS, false);
+        }
+        if child_requested_parent_change {
+            self.mark_render_paint_changed();
         }
         if let Some(error) = first_script_error {
             return Err(error);

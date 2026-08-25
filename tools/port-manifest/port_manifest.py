@@ -15,9 +15,9 @@ import tomllib
 STATUSES = {"ported", "partial", "absent", "not-applicable"}
 FEATURE_ROWS = {
     "src/artboard.cpp": (
-        "partial",
+        "ported",
         "crates/nuxie-runtime/src/artboard.rs",
-        "P2F2: core Artboard behavior includes retained volume/audio-engine configuration, recursive propagation to nested and component-list occurrences, and Artboard-scoped sound teardown. Additive host extensions X1 semantic-geometry cache authority and X2 scripted-global occurrence broadcast are recorded separately and do not replace baseline Artboard behavior. Other historical Artboard ceilings keep this legacy row partial.",
+        "Phase 3 paired owner audit: the complete pinned Artboard lifecycle is retained across the direct owner and its draw/facade seams. The final source discrepancies were the omitted nested rootTransform(point) host walk and omitted SolidColor Artboard::changed() propagation through mounted parents; both now use exact source ordering under safe Rust ownership. P2F2 audio/volume behavior and the earlier FL-D7 update/advance/draw/default-selection audit remain closed. Additive X1/X2 host extensions do not replace baseline behavior.",
     ),
     "src/text/cursor.cpp": (
         "ported",

@@ -4281,6 +4281,7 @@ impl ArtboardInstance {
         // C++ `Artboard::drawInternal` clears this before the opacity early
         // return, so an invisible artboard still consumes its change bit.
         self.did_change.set(false);
+        self.parent_change_requested.set(false);
         if self.child_opacity() == 0.0 {
             return Ok(());
         }

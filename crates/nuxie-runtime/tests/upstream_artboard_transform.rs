@@ -250,7 +250,6 @@ fn artboard_rotation_is_honored_in_state_machine_hit_testing() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust does not expose exact ArtboardInstance::rootTransform(point)"]
 fn nested_artboards_own_rotation_affects_root_transform() {
     let mut fixture = fixture("nested_artboard_opacity.riv", None);
     fixture.artboard.update_pass();
@@ -280,8 +279,8 @@ fn nested_artboards_own_rotation_affects_root_transform() {
     assert!(saw_nested);
 }
 
-fn nested_root_transform(_: &mut ArtboardInstance, _: Vec2D) -> Vec2D {
-    panic!("Rust does not expose the exact C++ ArtboardInstance::rootTransform(point) owner")
+fn nested_root_transform(artboard: &mut ArtboardInstance, point: Vec2D) -> Vec2D {
+    artboard.root_transform(point)
 }
 
 fn default_view_model(fixture: &Fixture) -> RuntimeOwnedViewModelHandle {

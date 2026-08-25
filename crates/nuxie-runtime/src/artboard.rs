@@ -3849,6 +3849,42 @@ impl ArtboardInstance {
         Ok(())
     }
 
+    /// Run the pinned state/table/ScriptAsset guard before constructing a
+    /// deferred Artboard input. The boolean distinguishes an operative setter
+    /// from an inert occurrence so callers do not publish projections or
+    /// completion/dirt state for work the C++ setter would skip.
+    #[doc(hidden)]
+    pub fn set_prepared_script_artboard_input_for_global(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        construct: impl FnOnce() -> Result<Box<dyn ScriptArtboard>, ScriptError>,
+    ) -> Result<bool, ScriptError> {
+        let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
+            return Ok(false);
+        };
+        let mut instance = handle.borrow_mut();
+        if !instance.script_artboard_input_context_live() {
+            return Ok(false);
+        }
+        let artboard = construct()?;
+        instance.set_artboard_input(name, artboard)?;
+        drop(instance);
+
+        self.mark_script_owner_update_pending(global_id);
+        if let Some(local_id) = self.component_local_for_global(global_id) {
+            self.add_dirt(local_id, ComponentDirt::SCRIPT_UPDATE, false);
+        }
+        Ok(true)
+    }
+
+    #[doc(hidden)]
+    pub fn script_artboard_input_context_live_for_global(&self, global_id: u32) -> bool {
+        self.script_instances_by_global
+            .get(&global_id)
+            .is_some_and(|handle| handle.borrow_mut().script_artboard_input_context_live())
+    }
+
     #[doc(hidden)]
     pub fn script_artboard_input_matches_for_global(
         &self,
@@ -3873,6 +3909,26 @@ impl ArtboardInstance {
         self.resolved_script_artboard_inputs
             .insert((global_id, name.to_owned()), artboard_id);
         Ok(())
+    }
+
+    /// Guard, construct, set, and publish the resolved-id projection as one
+    /// occurrence transaction. An inert target must not construct renderer
+    /// resources or make a bound projection look applied.
+    #[doc(hidden)]
+    pub fn set_prepared_resolved_script_artboard_input_for_global(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        artboard_id: u64,
+        construct: impl FnOnce() -> Result<Box<dyn ScriptArtboard>, ScriptError>,
+    ) -> Result<bool, ScriptError> {
+        let applied =
+            self.set_prepared_script_artboard_input_for_global(global_id, name, construct)?;
+        if applied {
+            self.resolved_script_artboard_inputs
+                .insert((global_id, name.to_owned()), artboard_id);
+        }
+        Ok(applied)
     }
 
     /// Seed the live resolved-id edge when a newly attached script table was

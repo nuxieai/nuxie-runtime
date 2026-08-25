@@ -1221,6 +1221,9 @@ fn refresh_bound_script_artboard_inputs(
         else {
             continue;
         };
+        if !instance.script_artboard_input_context_live_for_global(scripted_global_id) {
+            continue;
+        }
         let Some(bound_artboard_id) =
             nuxie_runtime::bound_script_artboard_input(runtime, &context.borrow(), input)
                 .map_err(|error| anyhow!(error))?
@@ -1236,22 +1239,23 @@ fn refresh_bound_script_artboard_inputs(
         }
         let artboard_index = usize::try_from(bound_artboard_id)
             .context("bound script artboard id does not fit usize")?;
-        let script_artboard = new_refreshed_runner_script_artboard(
-            runtime,
-            artboards,
-            artboard_index,
-            Rc::clone(render_state),
-            context,
-        )?;
         let name = input.string_property("name").unwrap_or_default();
-        instance
-            .set_script_artboard_input_for_global(
-                scripted_global_id,
-                name,
-                Box::new(script_artboard),
-            )
+        let applied = instance
+            .set_prepared_script_artboard_input_for_global(scripted_global_id, name, || {
+                new_refreshed_runner_script_artboard(
+                    runtime,
+                    artboards,
+                    artboard_index,
+                    Rc::clone(render_state),
+                    context,
+                )
+                .map(|artboard| Box::new(artboard) as Box<dyn ScriptArtboard>)
+                .map_err(|error| ScriptError::new(error.to_string()))
+            })
             .with_context(|| format!("failed to update bound artboard script input '{name}'"))?;
-        *current_artboard_id = bound_artboard_id;
+        if applied {
+            *current_artboard_id = bound_artboard_id;
+        }
     }
     Ok(())
 }
@@ -2657,6 +2661,58 @@ fn apply_input_event(
 mod tests {
     use super::*;
 
+    #[cfg(feature = "scripting")]
+    struct GoldenHydrationProbe {
+        setters: Rc<std::cell::Cell<usize>>,
+        init_calls: Rc<std::cell::Cell<usize>>,
+        artboard_context_live: bool,
+    }
+
+    #[cfg(feature = "scripting")]
+    impl nuxie_runtime::ScriptInstance for GoldenHydrationProbe {
+        fn script_artboard_input_context_live(&self) -> bool {
+            self.artboard_context_live
+        }
+
+        fn has_method(&self, method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Init)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn nuxie_runtime::ScriptHost,
+        ) -> std::result::Result<ScriptValue, ScriptError> {
+            if method == ScriptMethod::Init {
+                self.init_calls.set(self.init_calls.get() + 1);
+            }
+            Ok(ScriptValue::Bool(true))
+        }
+
+        fn get_input(&self, _name: &str) -> std::result::Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(
+            &mut self,
+            _name: &str,
+            _value: ScriptValue,
+        ) -> std::result::Result<(), ScriptError> {
+            self.setters.set(self.setters.get() + 1);
+            Ok(())
+        }
+
+        fn set_artboard_input(
+            &mut self,
+            _name: &str,
+            _artboard: Box<dyn ScriptArtboard>,
+        ) -> std::result::Result<(), ScriptError> {
+            self.setters.set(self.setters.get() + 1);
+            Ok(())
+        }
+    }
+
     #[test]
     fn input_script_parser_matches_golden_runner_shape() {
         let events = parse_input_script(
@@ -3268,6 +3324,224 @@ mod tests {
             .expect("unresolved ViewModel property is an inert hydration miss")
         );
         assert_eq!(applied.get(), 0);
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn cold_hydration_preflight_blocks_earlier_setters_and_user_init() {
+        use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
+
+        fn property(type_name: &str, property_name: &str, value: FixtureValue) -> FixtureProperty {
+            let definition = nuxie_schema::definition_by_name(type_name)
+                .expect("cold hydration fixture type exists");
+            let key = std::iter::once(definition)
+                .chain(
+                    definition
+                        .ancestors
+                        .iter()
+                        .filter_map(|ancestor| nuxie_schema::definition_by_name(ancestor)),
+                )
+                .flat_map(|owner| owner.properties)
+                .find(|property| property.name == property_name)
+                .expect("cold hydration fixture property exists")
+                .key
+                .int;
+            FixtureProperty { key, value }
+        }
+
+        fn record(type_name: &str, properties: Vec<(&str, FixtureValue)>) -> FixtureRecord {
+            FixtureRecord {
+                type_key: nuxie_schema::definition_by_name(type_name)
+                    .expect("cold hydration fixture type exists")
+                    .type_key
+                    .int,
+                properties: properties
+                    .into_iter()
+                    .map(|(name, value)| property(type_name, name, value))
+                    .collect(),
+            }
+        }
+
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("ScriptedDrawable", Vec::new()),
+            record(
+                "ScriptInputNumber",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("first".to_owned())),
+                    ("propertyValue", FixtureValue::Double(3.0)),
+                ],
+            ),
+            record(
+                "ScriptInputArtboard",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("missing".to_owned())),
+                    ("artboardId", FixtureValue::Uint(99)),
+                ],
+            ),
+        ])
+        .expect("cold hydration fixture imports");
+        let graph = GraphFile::from_runtime_file(&runtime).expect("cold hydration graph builds");
+        let artboard = graph.artboards.first().expect("fixture artboard exists");
+        let setters = Rc::new(std::cell::Cell::new(0));
+        let init_calls = Rc::new(std::cell::Cell::new(0));
+        let mut script = GoldenHydrationProbe {
+            setters: Rc::clone(&setters),
+            init_calls: Rc::clone(&init_calls),
+            artboard_context_live: true,
+        };
+
+        let hydrated = hydrate_script_inputs(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            1,
+            &mut script,
+            Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default())),
+            None,
+        )
+        .expect("a missing cold Artboard is an inert hydration miss");
+        if hydrated {
+            nuxie_runtime::ScriptInstance::call_method(
+                &mut script,
+                ScriptMethod::Init,
+                &[],
+                &mut NoopScriptHost,
+            )
+            .expect("fixture init would succeed");
+        }
+
+        assert!(!hydrated);
+        assert_eq!(setters.get(), 0, "the earlier scalar was not published");
+        assert_eq!(init_calls.get(), 0, "user init remained suppressed");
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn golden_rehydrate_and_refresh_guard_precedes_construction_dirt_and_projection() {
+        use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
+
+        fn property(type_name: &str, property_name: &str, value: FixtureValue) -> FixtureProperty {
+            let definition = nuxie_schema::definition_by_name(type_name)
+                .expect("golden guard fixture type exists");
+            let key = std::iter::once(definition)
+                .chain(
+                    definition
+                        .ancestors
+                        .iter()
+                        .filter_map(|ancestor| nuxie_schema::definition_by_name(ancestor)),
+                )
+                .flat_map(|owner| owner.properties)
+                .find(|property| property.name == property_name)
+                .expect("golden guard fixture property exists")
+                .key
+                .int;
+            FixtureProperty { key, value }
+        }
+
+        fn record(type_name: &str, properties: Vec<(&str, FixtureValue)>) -> FixtureRecord {
+            FixtureRecord {
+                type_key: nuxie_schema::definition_by_name(type_name)
+                    .expect("golden guard fixture type exists")
+                    .type_key
+                    .int,
+                properties: properties
+                    .into_iter()
+                    .map(|(name, value)| property(type_name, name, value))
+                    .collect(),
+            }
+        }
+
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Root".to_owned()))],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![("viewModelId", FixtureValue::Uint(0))],
+            ),
+            record("Artboard", Vec::new()),
+            record("ScriptedDrawable", Vec::new()),
+            record(
+                "ScriptInputArtboard",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("panel".to_owned())),
+                    ("artboardId", FixtureValue::Uint(0)),
+                ],
+            ),
+        ])
+        .expect("guard fixture imports");
+        let graph = GraphFile::from_runtime_file(&runtime).expect("guard fixture graph builds");
+        let artboard = graph.artboards.first().expect("guard fixture artboard");
+        let scripted = artboard
+            .local_objects
+            .iter()
+            .find(|object| object.type_name == Some("ScriptedDrawable"))
+            .expect("guard fixture scripted owner");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
+                .expect("guard fixture instance builds");
+        instance.set_script_instance_for_global(
+            scripted.global_id,
+            Box::new(GoldenHydrationProbe {
+                setters: Rc::new(std::cell::Cell::new(0)),
+                init_calls: Rc::new(std::cell::Cell::new(0)),
+                artboard_context_live: false,
+            }),
+        );
+        instance.clear_component_dirt(scripted.local_id);
+        TEST_SCRIPT_ARTBOARD_CONSTRUCTIONS.with(|count| count.set(0));
+
+        let rehydrated = rehydrate_script_inputs(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            scripted.local_id,
+            scripted.global_id,
+            &mut instance,
+            Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default())),
+            None,
+        )
+        .expect("an inert golden rehydrate is a non-error");
+        assert!(
+            !rehydrated,
+            "the operative rehydrate reports an inert target"
+        );
+
+        let owner_context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+                .expect("guard fixture owner context builds"),
+        );
+        let mut current_artboards = BTreeMap::new();
+        refresh_bound_script_artboard_inputs(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            &Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default())),
+            Some(&owner_context),
+            &mut current_artboards,
+        )
+        .expect("an inert golden refresh is a non-error");
+
+        TEST_SCRIPT_ARTBOARD_CONSTRUCTIONS.with(|count| assert_eq!(count.get(), 0));
+        assert!(
+            !instance
+                .debug_component_dirt(scripted.local_id)
+                .is_some_and(|dirt| dirt.contains(nuxie_runtime::ComponentDirt::SCRIPT_UPDATE)),
+            "an inert occurrence publishes no ScriptUpdate dirt"
+        );
+        assert_eq!(
+            current_artboards,
+            BTreeMap::new(),
+            "the operative bound refresh publishes no resolved-id projection"
+        );
     }
 
     #[cfg(feature = "scripting")]
@@ -4099,6 +4373,20 @@ impl RunnerScriptArtboard {
 }
 
 #[cfg(feature = "scripting")]
+#[cfg(test)]
+thread_local! {
+    static TEST_SCRIPT_ARTBOARD_CONSTRUCTIONS: std::cell::Cell<usize> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
+#[cfg(feature = "scripting")]
+#[cfg(test)]
+fn note_test_script_artboard_construction() {
+    TEST_SCRIPT_ARTBOARD_CONSTRUCTIONS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(feature = "scripting")]
 fn new_rehydrated_runner_script_artboard(
     runtime: &RuntimeFile,
     artboards: &[ArtboardGraph],
@@ -4106,6 +4394,8 @@ fn new_rehydrated_runner_script_artboard(
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
 ) -> Result<RunnerScriptArtboard> {
+    #[cfg(test)]
+    note_test_script_artboard_construction();
     let mut artboard = RunnerScriptArtboard::new_with_parent_context(
         runtime,
         artboards,
@@ -4131,6 +4421,8 @@ fn new_refreshed_runner_script_artboard(
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     owner_context: &RuntimeOwnedViewModelHandle,
 ) -> Result<RunnerScriptArtboard> {
+    #[cfg(test)]
+    note_test_script_artboard_construction();
     let owner_context = RuntimeOwnedViewModelContextHandle::root(runtime, owner_context.clone());
     let parent_context = nuxie_runtime::ScriptArtboardParentContext::root(&owner_context);
     let mut artboard = RunnerScriptArtboard::new_with_parent_context(
@@ -4640,9 +4932,9 @@ fn initialize_scripted_drawables_for_artboard(
                 .borrow_mut()
                 .defer_script_init(local_object.global_id);
         }
-        let mut hydration_succeeded = !defer_cold_hydration && !has_init;
+        let mut hydration_succeeded = false;
         if !defer_cold_hydration {
-            hydrate_script_inputs(
+            let hydrated = hydrate_script_inputs(
                 runtime,
                 artboard,
                 artboards,
@@ -4651,7 +4943,9 @@ fn initialize_scripted_drawables_for_artboard(
                 Rc::clone(&render_state),
                 bound_context_model.as_ref(),
             )?;
-            if has_init {
+            if hydrated && !has_init {
+                hydration_succeeded = true;
+            } else if hydrated && has_init {
                 let initialized = match script_instance.call_init_with_factory(&mut host, factory) {
                     Ok(initialized) => initialized,
                     Err(error) => {
@@ -4670,6 +4964,10 @@ fn initialize_scripted_drawables_for_artboard(
                 } else {
                     hydration_succeeded = true;
                 }
+            } else if !hydrated && has_init {
+                render_state
+                    .borrow_mut()
+                    .defer_script_init(local_object.global_id);
             }
         } else if has_init {
             script_instance.invalidate_for_init_retry();
@@ -6230,59 +6528,49 @@ fn hydrate_script_inputs(
     script_instance: &mut dyn nuxie_runtime::ScriptInstance,
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     context_view_model: Option<&ScriptViewModel>,
-) -> Result<()> {
+) -> Result<bool> {
     let object_range = artboard_object_range(runtime, artboard, artboards);
-    for global_id in object_range {
-        let Some(object) = runtime.object(global_id) else {
-            continue;
-        };
-        let type_name = object.type_name;
-        if !type_name.starts_with("ScriptInput") {
-            continue;
-        }
-        if object.uint_property("parentId") != Some(scripted_local_id as u64) {
-            continue;
-        }
-        let Some(name) = object.string_property("name") else {
-            continue;
-        };
-        if type_name == "ScriptInputArtboard" {
-            let Some(artboard_index) = object.uint_property("artboardId") else {
-                continue;
-            };
-            let parent_context = context_view_model.map(|view_model| {
-                nuxie_runtime::ScriptArtboardParentContext::root(&view_model.owned_handle())
-            });
-            let mut artboard = RunnerScriptArtboard::new_with_parent_context(
-                runtime,
-                artboards,
-                artboard_index as usize,
-                Rc::clone(&render_state),
-                parent_context.as_ref(),
-                None,
-                None,
-            )?;
-            artboard.bind_view_model();
-            script_instance
-                .set_artboard_input(name, Box::new(artboard))
-                .with_context(|| format!("failed to hydrate artboard script input '{name}'"))?;
-            continue;
-        }
-        // Generated C++ input objects always hydrate their inherited default
-        // cell, even when `propertyValue` was omitted from the file
-        // (`custom_property_number_base.hpp:32-38` and sibling generated
-        // bases). Leaving the VM's script-authored default in place makes
-        // different ScriptedPathEffect occurrences share the wrong effective
-        // inputs.
-        let value = default_script_input_value(object);
-        if let Some(value) = value {
-            script_instance
-                .set_input(name, value)
-                .with_context(|| format!("failed to hydrate script input '{name}'"))?;
-        }
-    }
-
-    Ok(())
+    rehydrate_script_inputs_in_range(
+        runtime,
+        artboards,
+        object_range,
+        scripted_local_id,
+        None,
+        |object, name| {
+            if object.type_name == "ScriptInputArtboard" {
+                let artboard_index = object
+                    .uint_property("artboardId")
+                    .and_then(|index| usize::try_from(index).ok())
+                    .expect("validated cold ScriptInputArtboard keeps its referenced index");
+                let parent_context = context_view_model.map(|view_model| {
+                    nuxie_runtime::ScriptArtboardParentContext::root(&view_model.owned_handle())
+                });
+                let mut artboard = RunnerScriptArtboard::new_with_parent_context(
+                    runtime,
+                    artboards,
+                    artboard_index,
+                    Rc::clone(&render_state),
+                    parent_context.as_ref(),
+                    None,
+                    None,
+                )?;
+                artboard.bind_view_model();
+                script_instance
+                    .set_artboard_input(name, Box::new(artboard))
+                    .with_context(|| format!("failed to hydrate artboard script input '{name}'"))?;
+                return Ok(true);
+            }
+            // Generated C++ input objects always hydrate their inherited
+            // default cell, even when `propertyValue` was omitted from the
+            // file (`custom_property_number_base.hpp:32-38` and siblings).
+            if let Some(value) = default_script_input_value(object) {
+                script_instance
+                    .set_input(name, value)
+                    .with_context(|| format!("failed to hydrate script input '{name}'"))?;
+            }
+            Ok(true)
+        },
+    )
 }
 
 #[cfg(feature = "scripting")]
@@ -6390,6 +6678,12 @@ fn rehydrate_script_inputs(
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     owned_view_model_context: Option<&RuntimeOwnedViewModelContextHandle>,
 ) -> Result<bool> {
+    // Pinned `hydrateScriptInputs` rejects a missing state/table before its
+    // validation loop. The concrete backend folds ScriptAsset authority into
+    // this same guard, which must precede deferred Artboard construction.
+    if !instance.script_artboard_input_context_live_for_global(scripted_global_id) {
+        return Ok(false);
+    }
     rehydrate_script_inputs_in_range(
         runtime,
         artboards,
@@ -6405,19 +6699,18 @@ fn rehydrate_script_inputs(
                     .expect("validated ScriptInputArtboard keeps its referenced index");
                 let parent_context =
                     owned_view_model_context.map(nuxie_runtime::ScriptArtboardParentContext::root);
-                let artboard = new_rehydrated_runner_script_artboard(
-                    runtime,
-                    artboards,
-                    artboard_index,
-                    Rc::clone(&render_state),
-                    parent_context.as_ref(),
-                )?;
                 instance
-                    .set_script_artboard_input_for_global(
-                        scripted_global_id,
-                        name,
-                        Box::new(artboard),
-                    )
+                    .set_prepared_script_artboard_input_for_global(scripted_global_id, name, || {
+                        new_rehydrated_runner_script_artboard(
+                            runtime,
+                            artboards,
+                            artboard_index,
+                            Rc::clone(&render_state),
+                            parent_context.as_ref(),
+                        )
+                        .map(|artboard| Box::new(artboard) as Box<dyn ScriptArtboard>)
+                        .map_err(|error| ScriptError::new(error.to_string()))
+                    })
                     .with_context(|| format!("failed to rebind artboard script input '{name}'"))?;
                 return Ok(true);
             }

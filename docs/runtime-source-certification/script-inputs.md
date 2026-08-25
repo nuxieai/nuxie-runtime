@@ -1481,3 +1481,100 @@ an initially unresolved public ViewModel batch, cold invalid-Artboard
 atomicity/init suppression, or an inert golden rehydrate/refresh target. The
 receipt remains rejected and requires a new correction plus a fresh two-review
 cycle.
+
+## Correction after first post-`0c1e2b675` review
+
+Status: **PENDING — TWO FRESH INDEPENDENT REVIEWS REQUIRED.** This correction
+addresses only the three blockers identified by review `6823d7881`; it does
+not self-certify ScriptInput authority.
+
+### Public phase-one now validates every typed prerequisite
+
+`ScriptListenerActionHydration::preflight_artboards` now resolves each
+`ScriptInputViewModelProperty` once in phase one as well as validating every
+Artboard. An error rejects the complete public batch before Context or any
+authored input setter. `Ok(None)` remains the distinct valid-null-child state.
+The resolved value is deliberately discarded and the resolver is retained in
+the prepared type state so phase two repeats the lookup at the input's authored
+position, after any earlier setter, exactly as pinned
+`validateHydrationPrerequisites` plus `hydrateScriptInput` do.
+
+The witnesses cover all three edges:
+
+- `unresolved_view_model_preflight_precedes_public_apply_setters` enters the
+  public `new`/`apply` boundary and proves a later unresolved ViewModel runs no
+  Context or earlier scalar setter;
+- `scripted_hydration_initially_unresolved_viewmodel_is_atomic` proves the
+  state-machine facade likewise reaches no earlier input or user init;
+- `scripted_hydration_accepts_valid_null_viewmodel_and_continues_to_init` and
+  `scripted_hydration_resolves_artboard_then_viewmodel_in_authored_apply_order`
+  prove nullable acceptance and two distinct phase-one/phase-two resolutions.
+
+### Golden cold hydration now uses the same two-loop transaction
+
+The operative `hydrate_script_inputs` now delegates to
+`rehydrate_script_inputs_in_range`: the first loop validates every referenced
+Artboard before the second loop publishes any scalar or constructs any child.
+It returns the pinned hydration boolean to
+`initialize_scripted_drawables_for_artboard`. A false result suppresses user
+init and leaves `hydration_succeeded` false for no-init scripts too, so neither
+ScriptedPathEffect `didHydrateScriptInputs` nor ScriptedLayout completion can
+be published after a prerequisite miss.
+
+`cold_hydration_preflight_blocks_earlier_setters_and_user_init` uses an earlier
+number and later invalid Artboard through the operative cold helper and proves
+zero setters and zero init calls.
+
+### Golden rehydrate and refresh now guard deferred construction
+
+`ArtboardInstance::set_prepared_script_artboard_input_for_global` owns a
+non-bypassable handoff: it locates the occurrence, checks the concrete
+state/table/ScriptAsset guard, and only then invokes the retained constructor,
+sets the field, and publishes ScriptUpdate dirt. Its boolean result prevents a
+bound refresh from publishing its resolved-id projection when the setter was
+inert.
+
+Both operative golden callers use this handoff. In addition,
+`rehydrate_script_inputs` checks the guard before its entire validation/apply
+transaction, matching pinned `hydrateScriptInputs`' initial state/m_self
+guard, while `refresh_bound_script_artboard_inputs` checks it before bound
+resolution and construction.
+
+The sibling audit found the same pre-guard construction in the public
+`nuxie::rehydrate_bound_script_inputs` facade path. It now checks the concrete
+occurrence before bound resolution and hands the child constructor to
+`set_prepared_resolved_script_artboard_input_for_global`, which publishes the
+resolved-id projection only after the guarded setter succeeds. The remaining
+direct constructor call sites are cold construction or test-only witnesses;
+no live rehydrate/refresh caller constructs before this guard.
+
+`golden_rehydrate_and_refresh_guard_precedes_construction_dirt_and_projection`
+drives both operative golden functions against an inert occurrence. A
+test-only counter at the two child constructors remains zero; rehydrate returns
+false; and refresh publishes neither ScriptUpdate dirt nor a resolved-id
+projection.
+
+`bound_artboard_rehydrate_guards_before_construction_dirt_and_projection`
+drives both mounted-live and pre-advance phases of the public facade sibling.
+Its `FileScriptArtboard` counter remains zero; both phases return false; and
+the occurrence publishes neither ScriptUpdate dirt nor a resolved-id
+projection.
+
+### Correction evidence
+
+With `CARGO_INCREMENTAL=0`:
+
+- complete `scripted_listener_action_tests`: 102 passed;
+- public hydration atomicity tests: 4 passed;
+- complete golden-runner scripting unit suite: 19 passed;
+- focused public-facade bound-Artboard operative witness: passed;
+- combined `nuxie-runtime`, `nuxie-scripting`, scripting-enabled `nuxie`,
+  `silver-corpus`, and golden-runner checks: passed;
+- source correspondence: 456 applicable rows, zero pending;
+- symbol correspondence: 1,105 owners / 7,818 authority units;
+- symbol-checker unit suite: 33 passed.
+
+This evidence only establishes that the rejected blockers have a scoped
+correction and falsifying witnesses. The ScriptInput receipt remains pending
+until two fresh independent reviewers inspect the corrected production and
+golden paths from the correction commit.

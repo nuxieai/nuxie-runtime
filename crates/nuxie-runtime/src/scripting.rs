@@ -339,11 +339,10 @@ impl ScriptListenerActionHydration {
         }
     }
 
-    /// Validate every facade-owned Artboard prerequisite and retain the
-    /// authority needed to construct it later. Pinned C++ performs this
-    /// validation in its first loop, but does not clone the Artboard or bind
-    /// its ViewModel/DataContext until the input's authored position in the
-    /// second loop.
+    /// Validate every facade-owned typed prerequisite and retain the authority
+    /// needed to apply it later. Pinned C++ performs this validation in its
+    /// first loop, but repeats the live ViewModel lookup and does not construct
+    /// an Artboard until the input's authored position in the second loop.
     pub fn preflight_artboards(self) -> Result<PreparedScriptListenerActionHydration, ScriptError> {
         let mut inputs = Vec::with_capacity(self.inputs.len());
         for input in self.inputs {
@@ -377,12 +376,21 @@ impl ScriptListenerActionHydration {
                     input_global_id,
                     path,
                     resolver,
-                } => inputs.push(PreparedScriptListenerInputHydration::ViewModel {
-                    name,
-                    input_global_id,
-                    path,
-                    resolver,
-                }),
+                } => {
+                    // `Ok(None)` is a valid ViewModel-valued property whose
+                    // current child reference is null. An error means the
+                    // property/path prerequisite itself is unresolved and
+                    // rejects the complete batch before any table setter.
+                    // Discard the selected child: pinned phase two resolves it
+                    // again after any earlier authored setters have run.
+                    let _ = resolver.resolve_script_view_model(input_global_id, &path)?;
+                    inputs.push(PreparedScriptListenerInputHydration::ViewModel {
+                        name,
+                        input_global_id,
+                        path,
+                        resolver,
+                    });
+                }
                 ScriptListenerInputHydration::Trigger { name } => {
                     inputs.push(PreparedScriptListenerInputHydration::Trigger { name });
                 }
@@ -415,8 +423,8 @@ impl ScriptListenerActionHydration {
     }
 }
 
-/// A hydration batch whose every Artboard prerequisite has been validated and
-/// whose deferred constructor authority has been retained. Its fields are
+/// A hydration batch whose every typed prerequisite has been validated and
+/// whose deferred/re-resolution authority has been retained. Its fields are
 /// private and it can only be created by
 /// `ScriptListenerActionHydration::preflight_artboards`, making the validation
 /// boundary a type-state invariant rather than a caller convention.
@@ -437,7 +445,7 @@ impl PreparedScriptListenerActionHydration {
         self.apply_inputs(instance, host)
     }
 
-    /// Install the live DataContext only after every Artboard in this batch
+    /// Install the live DataContext only after every typed input in this batch
     /// has crossed the non-bypassable prerequisite-validation boundary.
     pub fn install_context(&self, instance: &mut dyn ScriptInstance) -> Result<(), ScriptError> {
         if self.context_resolved {
@@ -3349,6 +3357,55 @@ mod hydration_atomicity_tests {
         }
     }
 
+    #[derive(Debug)]
+    struct UnresolvedViewModelResolver;
+
+    impl ScriptViewModelInputResolver for UnresolvedViewModelResolver {
+        fn resolve_script_view_model(
+            &self,
+            _input_global_id: u32,
+            _path: &crate::ScriptInputViewModelPropertyPath,
+        ) -> Result<Option<ScriptViewModel>, ScriptError> {
+            Err(ScriptError::new("unresolved ViewModel prerequisite"))
+        }
+    }
+
+    struct SetterCountingScriptInstance {
+        calls: Rc<Cell<usize>>,
+    }
+
+    impl ScriptInstance for SetterCountingScriptInstance {
+        fn set_context_view_model(
+            &mut self,
+            _view_model: Option<ScriptViewModel>,
+        ) -> Result<(), ScriptError> {
+            self.calls.set(self.calls.get() + 1);
+            Ok(())
+        }
+
+        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(false)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            self.calls.set(self.calls.get() + 1);
+            Ok(())
+        }
+    }
+
     #[test]
     fn artboard_facade_failure_precedes_every_hydration_write() {
         let calls = Rc::new(Cell::new(0));
@@ -3409,6 +3466,44 @@ mod hydration_atomicity_tests {
             resolver_calls.get(),
             0,
             "the shared prerequisite guard runs before facade preparation"
+        );
+    }
+
+    #[test]
+    fn unresolved_view_model_preflight_precedes_public_apply_setters() {
+        let setter_calls = Rc::new(Cell::new(0));
+        let hydration = ScriptListenerActionHydration::new(
+            None,
+            vec![
+                ScriptListenerInputHydration::Value {
+                    name: ScriptCoreString::from("before"),
+                    value: ScriptValue::Number(7.0),
+                },
+                ScriptListenerInputHydration::ViewModel {
+                    name: ScriptCoreString::from("child"),
+                    input_global_id: 42,
+                    path: crate::ScriptInputViewModelPropertyPath {
+                        path_ids: vec![1],
+                        resolved_path_ids: vec![1],
+                        is_relative: false,
+                    },
+                    resolver: Rc::new(UnresolvedViewModelResolver),
+                },
+            ],
+        );
+        let mut instance = SetterCountingScriptInstance {
+            calls: Rc::clone(&setter_calls),
+        };
+
+        let error = hydration
+            .apply(&mut instance, &mut NoopScriptHost)
+            .expect_err("an unresolved ViewModel rejects public apply");
+
+        assert_eq!(error.message(), "unresolved ViewModel prerequisite");
+        assert_eq!(
+            setter_calls.get(),
+            0,
+            "phase one rejects before Context or the earlier scalar setter"
         );
     }
 

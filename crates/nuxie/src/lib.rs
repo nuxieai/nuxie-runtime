@@ -3548,6 +3548,11 @@ struct FileScriptArtboard {
     frame_origin: bool,
 }
 
+#[cfg(all(test, feature = "scripting"))]
+thread_local! {
+    static TEST_FILE_SCRIPT_ARTBOARD_CONSTRUCTIONS: Cell<usize> = const { Cell::new(0) };
+}
+
 #[cfg(feature = "scripting")]
 struct FileScriptArtboardResolver {
     file: Arc<File>,
@@ -3740,6 +3745,8 @@ impl FileScriptArtboard {
         artboard_index: usize,
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
     ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
+        #[cfg(test)]
+        TEST_FILE_SCRIPT_ARTBOARD_CONSTRUCTIONS.with(|count| count.set(count.get() + 1));
         Self::new_with_view_model(file, artboard_index, parent_context, None)
     }
 
@@ -5047,6 +5054,9 @@ fn rehydrate_bound_script_inputs(
             any_hydrated |= hydrated;
             continue;
         }
+        if !instance.script_artboard_input_context_live_for_global(component.global_id) {
+            continue;
+        }
         let start = graph.global_id as usize;
         let end = ((start + 1)..file.runtime.object_count())
             .find(|global_id| {
@@ -5103,16 +5113,23 @@ fn rehydrate_bound_script_inputs(
                     input.id,
                 ))
             })?;
-            let artboard =
-                FileScriptArtboard::new(Arc::clone(file), artboard_index, Some(&parent_context))?;
-            artboard.initialize_renderer(factory)?;
-            instance.set_resolved_script_artboard_input_for_global(
+            let applied = instance.set_prepared_resolved_script_artboard_input_for_global(
                 component.global_id,
                 name,
                 artboard_id,
-                Box::new(artboard),
+                || {
+                    let artboard = FileScriptArtboard::new(
+                        Arc::clone(file),
+                        artboard_index,
+                        Some(&parent_context),
+                    )?;
+                    artboard
+                        .initialize_renderer(factory)
+                        .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
+                    Ok(Box::new(artboard))
+                },
             )?;
-            hydrated = true;
+            hydrated |= applied;
         }
         if hydrated && component.type_name == "ScriptedLayout" {
             instance.did_hydrate_scripted_layout(component.local_id);
@@ -9829,6 +9846,129 @@ mod owned_instance_tests {
 
     fn script_factory() -> ScriptFactory {
         PersistentFactory::new(RecordingFactory::new())
+    }
+
+    #[cfg(feature = "scripting")]
+    struct InertScriptArtboardInputProbe;
+
+    #[cfg(feature = "scripting")]
+    impl ScriptInstance for InertScriptArtboardInputProbe {
+        fn script_artboard_input_context_live(&self) -> bool {
+            false
+        }
+
+        fn has_method(&self, _method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
+            Ok(false)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> std::result::Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn get_input(&self, _name: &str) -> std::result::Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(
+            &mut self,
+            _name: &str,
+            _value: ScriptValue,
+        ) -> std::result::Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn bound_artboard_rehydrate_guards_before_construction_dirt_and_projection() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Root".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelInstance",
+                vec![("viewModelId", FixtureValue::Uint(0))],
+            ),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("ScriptedDrawable", Vec::new()),
+            fixture_record(
+                "ScriptInputArtboard",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("panel".to_owned())),
+                    ("artboardId", FixtureValue::Uint(99)),
+                ],
+            ),
+        ])
+        .expect("bound Artboard guard fixture imports");
+        let file = Arc::new(File::from_runtime(runtime).expect("bound Artboard guard file builds"));
+        let graph = file
+            .graph
+            .artboards
+            .first()
+            .expect("bound Artboard guard graph exists");
+        let scripted = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "ScriptedDrawable")
+            .expect("bound Artboard guard scripted owner");
+        let mut instance = RuntimeArtboardInstance::from_graph_with_artboards(
+            &file.runtime,
+            graph,
+            &file.graph.artboards,
+        )
+        .expect("bound Artboard guard instance builds");
+        instance.set_script_instance_for_global(
+            scripted.global_id,
+            Box::new(InertScriptArtboardInputProbe),
+        );
+        instance.clear_component_dirt(scripted.local_id);
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file.runtime, 0, 0)
+                .expect("bound Artboard guard root context builds"),
+        );
+        let mut factory = script_factory();
+        TEST_FILE_SCRIPT_ARTBOARD_CONSTRUCTIONS.with(|count| count.set(0));
+
+        let mounted = rehydrate_bound_script_inputs(
+            &file,
+            graph,
+            &mut instance,
+            &root,
+            &mut factory,
+            ScriptInputHydrationPhase::ArtboardMountedLive,
+        )
+        .expect("an inert mounted refresh is a non-error");
+        let applied = rehydrate_bound_script_inputs(
+            &file,
+            graph,
+            &mut instance,
+            &root,
+            &mut factory,
+            ScriptInputHydrationPhase::ArtboardBeforeAdvance,
+        )
+        .expect("an inert pre-advance refresh is a non-error");
+
+        assert!(!mounted);
+        assert!(!applied);
+        TEST_FILE_SCRIPT_ARTBOARD_CONSTRUCTIONS.with(|count| assert_eq!(count.get(), 0));
+        assert!(
+            !instance
+                .debug_component_dirt(scripted.local_id)
+                .is_some_and(|dirt| dirt.contains(nuxie_runtime::ComponentDirt::SCRIPT_UPDATE)),
+            "an inert bound refresh publishes no ScriptUpdate dirt"
+        );
+        assert!(
+            !instance.script_artboard_input_matches_for_global(scripted.global_id, "panel", 99,),
+            "an inert mounted refresh publishes no resolved-id projection"
+        );
     }
 
     #[cfg(feature = "scripting")]

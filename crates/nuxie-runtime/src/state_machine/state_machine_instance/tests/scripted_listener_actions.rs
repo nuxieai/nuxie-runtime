@@ -426,6 +426,7 @@ impl ScriptArtboardResolver for GuardProbeArtboardResolver {
 struct AfterArtboardViewModelResolver {
     trace: Rc<RefCell<Vec<String>>>,
     artboard_applied: Rc<Cell<bool>>,
+    calls: Cell<usize>,
 }
 
 impl crate::ScriptViewModelInputResolver for AfterArtboardViewModelResolver {
@@ -434,9 +435,20 @@ impl crate::ScriptViewModelInputResolver for AfterArtboardViewModelResolver {
         _input_global_id: u32,
         _path: &crate::ScriptInputViewModelPropertyPath,
     ) -> Result<Option<ScriptViewModel>, ScriptError> {
-        self.trace
-            .borrow_mut()
-            .push("resolve-view-model".to_owned());
+        let call = self.calls.get();
+        self.calls.set(call + 1);
+        self.trace.borrow_mut().push(if call == 0 {
+            "resolve-view-model-preflight".to_owned()
+        } else {
+            "resolve-view-model-apply".to_owned()
+        });
+        if call == 0 {
+            assert!(
+                !self.artboard_applied.get(),
+                "phase one validates before any authored setter"
+            );
+            return Ok(None);
+        }
         assert!(
             self.artboard_applied.get(),
             "the earlier authored Artboard setter must run before the later ViewModel lookup"
@@ -448,6 +460,24 @@ impl crate::ScriptViewModelInputResolver for AfterArtboardViewModelResolver {
 #[derive(Debug)]
 struct NullViewModelResolver {
     trace: Rc<RefCell<Vec<String>>>,
+}
+
+#[derive(Debug)]
+struct UnresolvedViewModelResolver {
+    trace: Rc<RefCell<Vec<String>>>,
+}
+
+impl crate::ScriptViewModelInputResolver for UnresolvedViewModelResolver {
+    fn resolve_script_view_model(
+        &self,
+        _input_global_id: u32,
+        _path: &crate::ScriptInputViewModelPropertyPath,
+    ) -> Result<Option<ScriptViewModel>, ScriptError> {
+        self.trace
+            .borrow_mut()
+            .push("reject-view-model-preflight".to_owned());
+        Err(ScriptError::new("initial ViewModel prerequisite is unresolved"))
+    }
 }
 
 impl crate::ScriptViewModelInputResolver for NullViewModelResolver {
@@ -1130,6 +1160,7 @@ fn scripted_hydration_resolves_artboard_then_viewmodel_in_authored_apply_order()
         Rc::new(AfterArtboardViewModelResolver {
             trace: Rc::clone(&trace),
             artboard_applied: Rc::clone(&artboard_applied),
+            calls: Cell::new(0),
         });
 
     let error = machine
@@ -1171,9 +1202,10 @@ fn scripted_hydration_resolves_artboard_then_viewmodel_in_authored_apply_order()
         [
             "context",
             "validate",
+            "resolve-view-model-preflight",
             "construct-artboard:7",
             "set-artboard:panel",
-            "resolve-view-model",
+            "resolve-view-model-apply",
         ],
         "phase two re-resolves each typed input at its authored position, so the later ViewModel lookup observes the earlier Artboard setter (`scripted_object.cpp:417-426`; `script_input_viewmodel_property.cpp:77-113`)"
     );
@@ -1226,12 +1258,66 @@ fn scripted_hydration_accepts_valid_null_viewmodel_and_continues_to_init() {
             "context",
             "validate",
             "resolve-null-view-model",
+            "resolve-null-view-model",
             "set:after",
             "init-check",
             "init",
         ],
         "C++ accepts the ViewModel-valued property cell, leaves its existing table field unchanged when referenceViewModelInstance is null, then hydrates later inputs and calls init (`script_input_viewmodel_property.cpp:60-113`; `scripted_object.cpp:399-426`)"
     );
+}
+
+#[test]
+fn scripted_hydration_initially_unresolved_viewmodel_is_atomic() {
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let artboard_applied = Rc::new(Cell::new(false));
+    let (mut machine, action_global_id) = hydration_trace_machine(&trace, &artboard_applied);
+    let resolver: Rc<dyn crate::ScriptViewModelInputResolver> =
+        Rc::new(UnresolvedViewModelResolver {
+            trace: Rc::clone(&trace),
+        });
+
+    let error = machine
+        .hydrate_and_initialize_scripted_listener_action_instance(
+            action_global_id,
+            crate::ScriptListenerActionHydration::new(None, Vec::new()),
+            true,
+            None,
+            |_| {
+                trace.borrow_mut().push("validate".to_owned());
+                Ok(crate::ScriptListenerActionHydration::new(
+                    None,
+                    vec![
+                        crate::ScriptListenerInputHydration::Value {
+                            name: ScriptCoreString::from("before"),
+                            value: ScriptValue::Number(1.0),
+                        },
+                        crate::ScriptListenerInputHydration::ViewModel {
+                            name: ScriptCoreString::from("child"),
+                            input_global_id: 42,
+                            path: crate::ScriptInputViewModelPropertyPath {
+                                path_ids: vec![1, 2],
+                                resolved_path_ids: vec![1, 2],
+                                is_relative: false,
+                            },
+                            resolver: Rc::clone(&resolver),
+                        },
+                    ],
+                ))
+            },
+        )
+        .expect_err("phase-one ViewModel prerequisite miss rejects the whole batch");
+
+    assert_eq!(
+        error.message(),
+        "initial ViewModel prerequisite is unresolved"
+    );
+    assert_eq!(
+        trace.borrow().as_slice(),
+        ["context", "validate", "reject-view-model-preflight"],
+        "the earlier scalar setter and user init remain unreachable after a later phase-one ViewModel miss"
+    );
+    assert!(!artboard_applied.get());
 }
 
 #[test]

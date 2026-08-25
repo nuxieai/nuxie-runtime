@@ -1134,3 +1134,91 @@ applicable rows; symbol correspondence replayed 7,818 authority units across
 
 This implementing lane does not certify its own correction. Verdict:
 **PENDING TWO FRESH INDEPENDENT COMPLETE REVIEWS.**
+
+## First fresh independent complete review after `ca52fa1a3` — rejected
+
+This review independently re-enumerated the pinned `Mat2D`, `Vec2D`,
+`findMaxScale`, Wang, text-origin, and Tendon authorities and followed their
+operative runtime, renderer, scripting, and graph consumers. It accepts the
+core scalar/bulk/bounding-box Mat2D routing, N-slicer capture, GPU and
+RiveRenderer local matrix owners, left-biased `findMaxScale`, transformed
+area/winding/clip/threshold paths, the restored three-step text-origin
+composition itself, and private/public graph Tendon inversion. It does not
+accept the correction as complete.
+
+The decisive finite control failure is in both corrected transformed-Wang
+owners:
+
+- `nuxie-renderer/src/draw.rs::max_transformed_cubic_second_difference`;
+- `nuxie-renderer/src/mechanical_port/source/renderer/src/draw_cpp.rs::transformed_cubic_segment_count`.
+
+Pinned `wangs_formula.hpp::cubic_pow4` first computes `float4 vv = v * v` and
+then reduces each pair with an addition. Actual pinned clang 22.1.8 AArch64
+at `-O3 -ffp-contract=on` emits the expected FMAs for the second difference
+and `VectorXform`, then a separate vector multiply for `v * v` and a separate
+pairwise add. The Rust owners instead use
+`x.mul_add(x, y * y)`, introducing an additional contraction that does not
+exist in the pinned program.
+
+For cubic point bits
+`[[412b7e28,4086c8b4], [c1e782aa,4138be77],
+[4215f15b,c1c1edc6], [c1c1a33a,c0e8d4fe]]`, linear matrix bits
+`[3fce0aa6,bcef34d7,c03d4af5,bf0318fc]`, and precision 4, actual pinned
+clang/AArch64 returns Wang value `0x42040001` and 34 segments. The
+source-shaped current Rust expression returns `0x42040000` and 33 segments in
+both debug and fat LTO. This is finite, changes subdivision control, and is
+not within the compiler-specific NaN-payload ceiling. The present
+actual-owner tests pass because their fixture does not distinguish the fused
+square reduction from the authored separate multiplication and addition.
+
+The promised complete consumer census also found live residues outside the
+five corrected owners:
+
+- Runtime `draw.rs::dot_point` and `draw.rs::cross_point` remain ordinary
+  arithmetic while driving rounded-path ideal-control-distance and rotation.
+  Pinned `Path` reaches contracted `Vec2D::dot` and `Vec2D::cross`. For
+  `a=(26cd29b3,d01ad4bb)` and `b=(2533fdc2,ce87d5a9)`, pinned cross is the
+  negative finite value `0xa7eec560`, while the ordinary expression is
+  positive zero; the sign-swapped construction exposes the corresponding dot
+  residue.
+- Runtime `rectangles_to_contour.rs::cross` is another ordinary live
+  substitute. `RuntimeRectangleContour::is_clockwise` uses it, and text
+  selection uses that result to reverse contour orientation. Pinned
+  `rectangles_to_contour.cpp` calls `Vec2D::cross`.
+- Runtime `math/vec2d.rs::lerp_point`, used by contour measurement, and the
+  raw-path weighted interpolation path still require direct contraction/order
+  adjudication rather than exclusion from the Vec2D census.
+- Scripting `vm/lua_vec2d.rs` still spells `Vector.cross`, three-component
+  dot, scale-and-add/subtract, and component lerp with ordinary arithmetic.
+  The approved three-component adapter does not authorize changing the
+  arithmetic of the pinned Lua/Vec2D operations; the same finite cross witness
+  reaches this public scripting owner.
+- `StaticTextModifierGroup::transform` restores the pinned origin operation
+  order, but not the pinned early return for a non-path group that modifies no
+  transform. An opacity-only group with nonzero coverage returns its incoming
+  CTM directly upstream; Rust still multiplies identity by that CTM. That is a
+  live branch mismatch and can change exceptional classification through
+  terms such as `0 * infinity`.
+
+The graph Tendon correction is accepted: private inversion and public
+`SkeletalTendonNode.inverse_bind` route through the contracted determinant and
+translation-numerator order, while runtime hydration and skin update retain
+canonical Mat2D inversion/multiplication. The `findMaxScale` owners are also
+accepted: runtime, live renderer draw, and RiveRenderer source owners preserve
+the left-biased axis selection and the pinned contraction candidates.
+
+Focused evidence ran with `CARGO_INCREMENTAL=0`. Debug actual-consumer tests
+passed for runtime Mat2D (15), text origin (1), private graph Tendon (1),
+public graph projection (1), renderer Wang (2), and live renderer Vec2D (1).
+The same filters passed under release fat LTO with one codegen unit. Feature
+checks passed for renderer Metal, Vulkan, WebGPU, and WebGL2. File
+correspondence passed all 456 applicable owners with no pending absent rows;
+symbol correspondence replayed 7,818 authority units across 1,105 owners; and
+the checker passed all 33 unit tests.
+
+Verdict: **REJECTED.** Restore the separate Wang square multiplication and
+lane addition in both operative owners, add the finite 34-versus-33 segment
+fixture at both actual consumers, adjudicate and correct every live Vec2D and
+text no-transform residue above, then repeat the complete census and obtain
+two fresh independent complete reviews. No production source was changed by
+this review.

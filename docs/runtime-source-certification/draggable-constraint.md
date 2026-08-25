@@ -153,15 +153,50 @@ same synchronous execution environment as the interrupted event.
   `disablePointer=true`, while `dragEnd` enables before dispatch and performs
   its final timestamped Move.
 
+## First independent correction review
+
+**ACCEPTED at correction commit `56fb3bcf0`.** This review independently read
+the complete pinned `draggable_constraint.cpp` and handwritten header, the
+pinned `StateMachineInstance::updateListeners`/`dragStart`/`dragEnd` owners,
+the base `ListenerGroup` phase owner, and the Rust production constructor,
+hit-owner, listener-group, recursive-resume, proxy, and scripting call paths.
+It found no remaining blocker in the Draggable authority boundary.
+
+The review specifically confirmed that:
+
+- a successful first proxy drag restores the instance-owned listener and hit
+  vectors, synchronously re-enters the complete DragStart traversal at the
+  pinned call site, then resumes the interrupted hit owner immediately after
+  the triggering group;
+- scrolled completion performs proxy `endDrag`, synchronously re-enters
+  DragEnd, clears the group-global scroll bit only after that call, and keeps
+  DragEnd's required final timestamped Move;
+- the contextual recursive helpers reborrow the caller's actual
+  `ScriptHost`, owned view-model context, and event context rather than
+  substituting the no-op facade values; nested protected callback failures
+  return through the outer fallible pointer entry, while the final Move still
+  runs after a DragEnd failure as the pinned owner requires;
+- the draggable subclass's empty `enable`/`disable` overrides remain literal
+  no-ops, so recursive DragStart/DragEnd cannot rewrite its pointer phase;
+- provider order, one fresh proxy/group per state-machine occurrence,
+  proxy-specific opacity, non-early-out Down/Up registration, previous/current
+  phase decisions, group-global `has_scrolled`, and Exit release behavior
+  remain consistent with the pinned owners.
+
+As execution evidence, the production `scroll_threshold.riv` fixture test
+`component_provided_drag_recursion_preserves_script_host_and_atomic_errors`
+passed under `CARGO_INCREMENTAL=0`. It exercises the real component-provided
+hit owner with an authored scripted listener and a non-no-op atomic host; the
+source review, rather than that test alone, supplies the context and ordering
+verdict.
+
 ## Certification boundary and verdict
 
-**Script-context correction implemented; independent adversarial re-review
-pending.** The phase, group-global scroll, provider-order, draggable no-op
-enable/disable, recursion-position, scroll-result, and final-Move corrections
-remain intact. The state-machine invocation owner now also preserves the
-active host and contexts through nested DragStart, DragEnd, and final Move,
-with direct production-path evidence for host publication and atomic error
-propagation. This implementing lane does not self-certify the result.
+**First independent adversarial correction review accepted; second independent
+review pending.** The phase, group-global scroll, provider-order, draggable
+no-op enable/disable, recursion-position, scroll-result, final-Move, and active
+script-context corrections remain intact. This first review does not satisfy
+the campaign's two-review closeout rule by itself.
 
 Concrete proxy algorithms owned by `ScrollConstraint` and
 `ScrollBarConstraint` remain dependencies and are not silently certified by

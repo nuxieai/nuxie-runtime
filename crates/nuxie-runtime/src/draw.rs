@@ -21840,9 +21840,9 @@ fn inner_feather_path_commands(
     if !feather.inner {
         return Vec::new();
     }
-    let bounds = path_command_bounds(source).unwrap_or_else(|| PathBounds::from_point(0.0, 0.0));
-    let pad = feather.strength * 1.5;
-    let mut commands = rect_commands(bounds.pad(pad));
+    let raw_path = runtime_raw_path_from_commands(source);
+    let bounds = raw_path.bounds().unwrap_or_default();
+    let mut commands = rect_commands(bounds.pad(feather.strength * 1.5));
     let mut reversed_source = path_commands_backwards(source);
     let mut offset = (feather.offset_x, feather.offset_y);
     if feather.space_value == 0 {
@@ -23442,55 +23442,7 @@ fn runtime_cubic_value_f64(p0: f64, p1: f64, p2: f64, p3: f64, t: f64) -> f64 {
         + t.powi(3) * p3
 }
 
-#[derive(Debug, Clone, Copy)]
-struct PathBounds {
-    min_x: f32,
-    min_y: f32,
-    max_x: f32,
-    max_y: f32,
-}
-
-impl PathBounds {
-    fn from_point(x: f32, y: f32) -> Self {
-        Self {
-            min_x: x,
-            min_y: y,
-            max_x: x,
-            max_y: y,
-        }
-    }
-
-    fn include(&mut self, x: f32, y: f32) {
-        self.min_x = self.min_x.min(x);
-        self.min_y = self.min_y.min(y);
-        self.max_x = self.max_x.max(x);
-        self.max_y = self.max_y.max(y);
-    }
-
-    fn pad(self, amount: f32) -> Self {
-        Self {
-            min_x: self.min_x - amount,
-            min_y: self.min_y - amount,
-            max_x: self.max_x + amount,
-            max_y: self.max_y + amount,
-        }
-    }
-}
-
-fn path_command_bounds(commands: &[RuntimePathCommand]) -> Option<PathBounds> {
-    let mut bounds: Option<PathBounds> = None;
-    for command in commands {
-        for (x, y) in command_points(command) {
-            match &mut bounds {
-                Some(bounds) => bounds.include(x, y),
-                None => bounds = Some(PathBounds::from_point(x, y)),
-            }
-        }
-    }
-    bounds
-}
-
-fn rect_commands(bounds: PathBounds) -> Vec<RuntimePathCommand> {
+fn rect_commands(bounds: FloatAabb) -> Vec<RuntimePathCommand> {
     vec![
         RuntimePathCommand::Move {
             x: bounds.min_x,
@@ -25533,12 +25485,7 @@ mod tests {
         let graphs = GraphFile::from_runtime_file(&file).expect("minimal artboard graph builds");
         let graph = graphs.artboards.first().expect("minimal artboard");
         let artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard instance");
-        let source = rect_commands(PathBounds {
-            min_x: 1.0,
-            min_y: 1.0,
-            max_x: 5.0,
-            max_y: 6.0,
-        });
+        let source = rect_commands(FloatAabb::new(1.0, 1.0, 5.0, 6.0));
         let dashes = [
             DashNode {
                 local_id: usize::MAX - 1,

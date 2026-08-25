@@ -11,6 +11,8 @@ pub struct TypedAabb<T> {
 }
 
 pub type IntegerAabb = TypedAabb<i32>;
+pub type AABBi16 = TypedAabb<i16>;
+pub type AABBu16 = TypedAabb<u16>;
 
 pub trait AabbScalarBounds: Copy {
     const MIN: Self;

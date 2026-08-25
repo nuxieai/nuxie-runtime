@@ -188,9 +188,11 @@ fn root_transform_bounds(transform: Mat2D, bounds: SemanticBounds) -> SemanticBo
         transform.transform_point(bounds.max_x, bounds.min_y),
         transform.transform_point(bounds.max_x, bounds.max_y),
         transform.transform_point(bounds.min_x, bounds.max_y),
-    ]
-    .map(|(x, y)| nuxie_render_api::Vec2D::new(x, y));
-    let bounds = crate::FloatAabb::from_points(&corners);
+    ];
+    let mut bounds = crate::FloatAabb::for_expansion();
+    for (x, y) in corners {
+        bounds.expand_to(nuxie_render_api::Vec2D::new(x, y));
+    }
     SemanticBounds::new(bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
 }
 

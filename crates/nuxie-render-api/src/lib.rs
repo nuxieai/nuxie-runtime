@@ -14,7 +14,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 mod aabb;
 mod serializing;
-pub use aabb::{Aabb, AabbInteger, AabbScalarBounds, IntegerAabb, TypedAabb};
+pub use aabb::{
+    AABBi16, AABBu16, Aabb, AabbInteger, AabbScalarBounds, IntegerAabb, TypedAabb,
+};
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
 pub use serializing::{SerializingFactory, SerializingRenderer};
 

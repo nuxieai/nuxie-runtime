@@ -1282,3 +1282,85 @@ correspondence checker tests passed.
 
 This implementing lane does not certify its own correction. Verdict:
 **PENDING TWO FRESH INDEPENDENT COMPLETE REVIEWS.**
+
+## First fresh independent complete review after `f176f6849` — REJECTED
+
+This review restarted from pinned authority
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5` and independently followed the
+shared Mat2D and Vec2D owners, renderer-local matrix/vector owners, both live
+transformed-Wang consumers, text modifier composition, graph Tendon
+construction, and public scripting dispatch.
+
+The correction in `f176f6849` is accepted on its named Wang and Vec2D paths.
+Both transformed-cubic owners preserve the authored second-difference and
+`VectorXform` contractions, followed by separate lane squaring and addition.
+The finite review fixture returns Wang bits `0x42040001` and 34 segments in
+both debug and fat-LTO release. Runtime rounded-path and rectangle-contour
+consumers preserve contracted dot/cross cancellation. Contour `Vec2D::lerp`
+and raw-path weighted interpolation retain their distinct pinned groupings.
+
+The scripting route is also accepted. Direct compiled `Vector.*` calls reach
+the corrected Rive fastcall slots, while function-table-indirect calls reach
+the corrected Rust closures. The two-component cross and three-component
+dot, length, distance, normalize, lerp, scale-and-add/subtract, and cross
+owners retain the source-derived groupings. `LUA_VECTOR_SIZE` is the pinned
+constant 3 in this build; generic four-component branches are compile-time
+inoperative and were not used as parity evidence. In particular, the shared
+lerp primitive is syntactically referenced by the inactive four-component
+branch, so the claim here is limited to the operative Rive three-component
+backend adaptation rather than a hypothetical four-component Luau build.
+
+The prior matrix and graph corrections remain accepted. Scalar point mapping,
+bulk `mapPoints`, both `mapBoundingBox` owners, N-slicer scalar routing and
+captured inverse, renderer-local multiply/invert/determinant, two-diagonal
+clip conversion, transformed area and its strict threshold, left-biased
+`findMaxScale`, listener/Lua inverse routing, and private/public graph Tendon
+inversion all reach their corrected owners. The text no-transform branch now
+returns the incoming CTM directly, and a transforming group retains the
+pinned add-origin, exact multiply, subtract-origin sequence.
+
+The complete `TextModifierGroup` owner is nevertheless still not exact. Two
+finite arithmetic sites adjacent to those accepted branches remain ordinary
+Rust expressions even though actual pinned clang/AArch64 contracts them:
+
+- In `TextModifierGroup::transform`, pinned scale interpolation evaluates
+  `iamount + scaleX() * amount` with a final `fmadd`. For amount bits
+  `0x69bf3df8` and scale bits `0x4e0f25f8`, actual pinned clang 22.1.8 at
+  `-O3 -ffp-contract=on` returns `0x7855dff5`. The current Rust expression in
+  `StaticTextModifierGroup::transform` emits separate `fmul`/`fadd` under the
+  workspace fat-LTO/single-codegen-unit profile and returns `0x7855dff6`.
+  The same residue exists independently for the y scale lane.
+- In `TextModifierGroup::computeOpacity`, the inverted-opacity branch
+  `current * (1 - t) + opacity * t` separately computes the opacity product
+  and contracts the current product into it. For current bits `0xc389eceb`,
+  amount bits `0x3c8a8fc1`, and opacity bits `0xc321b678`, pinned clang returns
+  `0xc388f5ce`; the current Rust expression emits two products and a separate
+  add and returns `0xc388f5cf` under fat LTO.
+
+Both discrepancies are finite, live in ordinary text modifier evaluation,
+and alter matrix or opacity output. They are not compiler-selected NaN payload
+latitude. They also demonstrate why accepting the restored no-transform and
+origin branches cannot certify the complete source owner. Correct these two
+authored contraction sites from pinned source, add direct actual-owner finite
+witnesses, and do not generalize the correction into a blanket FMA policy.
+
+Focused evidence, always with `CARGO_INCREMENTAL=0` where applicable:
+
+- debug Mat2D, adversarial Mat2D, rounded-path Vec2D, rectangle-contour Vec2D,
+  contour/raw-path lerp, text early-return/origin, N-slicer, graph Tendon,
+  scripting direct/indirect vector, and renderer Wang/Vec2D filters passed;
+- the corresponding focused runtime, graph, scripting, and renderer witnesses
+  passed under fat LTO with one codegen unit;
+- renderer Metal, Vulkan, WebGPU, and WebGL2 feature checks passed;
+- source correspondence passed all 456 applicable owners with no pending
+  absent rows; symbol correspondence replayed 7,818 authority units across
+  1,105 owners; and all 33 checker unit tests passed;
+- direct actual pinned clang and source-shaped fat-LTO Rust assembly/execution
+  reproduced both finite one-ULP counterexamples above.
+
+Verdict: **REJECTED while accepting the `f176f6849` Wang, Vec2D, scripting,
+and text branch/origin corrections plus all previously named matrix and graph
+owners.** Restore exact scale and inverted-opacity arithmetic in the shared
+text modifier owner, add the two finite witnesses at the live owner, and
+obtain two fresh independent complete reviews. No production source was
+changed by this review.

@@ -1804,6 +1804,47 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_allows_exact_android_vulkan_feature_forwarding(self) -> None:
+        self.create_portable_abi_facade()
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-vulkan = ["nuxie/renderer-vulkan"]
+
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_android_vulkan_forwarding_under_an_alias(self) -> None:
+        self.create_portable_abi_facade()
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            helper = ["nuxie/renderer-vulkan"]
+
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "feature 'helper' forwards forbidden portable ABI facade feature "
+            "'renderer-vulkan'",
+            result.stderr,
+        )
+
     def test_rejects_apple_authored_msl_forwarding_under_an_alias(self) -> None:
         self.create_portable_abi_facade()
         self.create_package(
@@ -2045,6 +2086,28 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_allows_exact_apple_render_canvas_symbols(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/apple_assets.rs").write_text(
+            "use nuxie::{RenderCanvas, RenderCanvasError};\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_apple_render_canvas_symbols_outside_exact_file(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/not_apple_assets.rs").write_text(
+            "use nuxie::{RenderCanvas, RenderCanvasError};\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("portable ABI facade symbol 'RenderCanvas'", result.stderr)
+        self.assertIn("portable ABI facade symbol 'RenderCanvasError'", result.stderr)
 
     def test_rejects_authored_msl_extension_symbols_outside_exact_files(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")

@@ -704,3 +704,61 @@ Focused evidence, all with `CARGO_INCREMENTAL=0` where Cargo was used:
 Implementation status: **CORRECTED CANDIDATE ACCEPTED BY FIRST FRESH
 INDEPENDENT REVIEW**. Certification status: **PENDING SECOND FRESH INDEPENDENT
 REVIEW**.
+
+## Second fresh independent review of correction `d2605b4de`
+
+Verdict: **ACCEPTED** at correction commit
+`d2605b4ded833e276d857717e953ef7e6503c582` and reviewed HEAD
+`3cbcac6ef2fae56477a9486a93a049ed793f6d9e`.
+
+This review independently derived the correction contract from pinned upstream
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`; it did not rely on the first
+post-correction review. The complete operative renderer sweep found no
+remaining bypass or ordering defect in the corrected surface:
+
+1. `Mat2D::map_bounding_box` performs invalid-extent normalization before
+   translation, constructs the final translated `Aabb`, and only then applies
+   the pinned width and height assertions. A positive-infinity translation
+   therefore fails the debug assertion after a valid pre-translation extent,
+   while the assertions are absent from release builds. The existing invalid
+   linear/nonfinite path still normalizes to the all-zero box before the final
+   checks.
+
+2. The operative `PathDraw::Make` bridge recomputes bounds in debug builds even
+   when the caller supplies precomputed bounds, while release keeps the pinned
+   precomputed early return. Both split Rust routes preserve the authored
+   duplicate assertions: ordinary paths check after mapping and before
+   `round_out`; stroke/Feather paths check after mapping and before mapped
+   outset and rounding. All production PathDraw construction reaches
+   `make_path_draw_from_source` and then one of these two routes.
+
+3. `allocateFeatherAtlasDrawExecutable` retains the pinned sequence: scalar
+   coordinate/extent assertions, `x` and `y` writes, `padded_region`
+   construction, the enclosing `AABBu16::contains` assertion, atlas-maximum
+   updates, final maximum assertions, and pending-draw insertion. The enclosing
+   check calls the shared `TypedAabb<u16>::contains` owner rather than expanding
+   its four comparisons locally.
+
+The wider AABB caller audit also reconfirmed that clip-path and clip-rectangle
+mapping reach shared `Mat2D` owners and that renderer integer intersection,
+containment, union, and emptiness calls reach shared typed-AABB methods. The
+separate transformed-area correction after `d2605b4de` does not change these
+contracts.
+
+Independent evidence, with `CARGO_INCREMENTAL=0` for every Cargo command:
+
+- debug render-API `map_bounding_box`: 2/2 passed, including the required
+  post-translation panic;
+- renderer `path_pixel_bounds_`: passed; renderer `feather_pixel_bounds`: 2/2
+  passed;
+- release render-API `map_bounding_box`: passed with the debug-only witness
+  correctly absent;
+- translated upstream AABB suite: 12/12 passed;
+- individual renderer checks passed for Vulkan, WebGPU, WebGL2, and Metal;
+- file correspondence passed with 456 applicable rows and zero pending rows;
+- symbol correspondence passed with 7,818 units across 1,105 owners, including
+  generated-authority replay.
+
+Implementation status: **CORRECTED CANDIDATE ACCEPTED BY SECOND FRESH
+INDEPENDENT REVIEW**. Certification status: **ACCEPTED BY TWO FRESH INDEPENDENT
+REVIEWS**.

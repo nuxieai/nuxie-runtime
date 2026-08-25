@@ -860,18 +860,24 @@ fn mul(a: Mat2D, b: Mat2D) -> Mat2D {
     let [a0, a1, a2, a3, a4, a5] = a.0;
     let [b0, b1, b2, b3, b4, b5] = b.0;
     Mat2D([
-        a0 * b0 + a2 * b1,
-        a1 * b0 + a3 * b1,
-        a0 * b2 + a2 * b3,
-        a1 * b2 + a3 * b3,
-        a0 * b4 + a2 * b5 + a4,
-        a1 * b4 + a3 * b5 + a5,
+        a0.mul_add(b0, a2 * b1),
+        a1.mul_add(b0, a3 * b1),
+        a0.mul_add(b2, a2 * b3),
+        a1.mul_add(b2, a3 * b3),
+        a0.mul_add(b4, a2 * b5) + a4,
+        a1.mul_add(b4, a3 * b5) + a5,
     ])
 }
-fn inverse(m: Mat2D) -> Option<Mat2D> {
+
+fn determinant(m: Mat2D) -> f32 {
+    let [a, b, c, d, _, _] = m.0;
+    a.mul_add(d, -(c * b))
+}
+
+fn invert(m: Mat2D) -> Option<Mat2D> {
     let [a, b, c, d, tx, ty] = m.0;
-    let det = a * d - b * c;
-    if det == 0.0 || !det.is_finite() {
+    let det = determinant(m);
+    if det == 0.0 {
         return None;
     }
     let inv = 1.0 / det;
@@ -880,9 +886,99 @@ fn inverse(m: Mat2D) -> Option<Mat2D> {
         -b * inv,
         -c * inv,
         a * inv,
-        (c * ty - d * tx) * inv,
-        (b * tx - a * ty) * inv,
+        c.mul_add(ty, -(d * tx)) * inv,
+        b.mul_add(tx, -(a * ty)) * inv,
     ]))
+}
+
+#[cfg(test)]
+mod renderer_mat2d_owner_tests {
+    use super::{Mat2D, RendererContract, RiveRenderer, determinant, invert, mul};
+
+    fn from_bits(bits: [u32; 6]) -> Mat2D {
+        Mat2D(bits.map(f32::from_bits))
+    }
+
+    fn bits(matrix: Mat2D) -> [u32; 6] {
+        matrix.0.map(f32::to_bits)
+    }
+
+    #[test]
+    fn renderer_inverse_preserves_pinned_finite_cancellation_and_nonfinite_determinants() {
+        let cancellation = from_bits([
+            0x26cd_29b3,
+            0x2533_fdc2,
+            0xd01a_d4bb,
+            0xce87_d5a9,
+            0,
+            0,
+        ]);
+        assert_eq!(determinant(cancellation).to_bits(), 0xa7ee_c560);
+        assert_eq!(
+            bits(invert(cancellation).expect("pinned finite determinant is nonzero")),
+            [
+                0x6611_a2d3,
+                0x3cc0_fa97,
+                0xe7a6_00cd,
+                0xbe5b_f782,
+                0x8000_0000,
+                0x8000_0000,
+            ],
+        );
+
+        let max_diagonal = Mat2D([f32::MAX, 0.0, 0.0, f32::MAX, 0.0, 0.0]);
+        assert_eq!(determinant(max_diagonal), f32::INFINITY);
+        assert_eq!(
+            bits(invert(max_diagonal).expect("pinned invert accepts an infinite determinant")),
+            [
+                0x0000_0000,
+                0x8000_0000,
+                0x8000_0000,
+                0x0000_0000,
+                0x0000_0000,
+                0x0000_0000,
+            ],
+        );
+
+        let nan_determinant = Mat2D([f32::NAN, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert!(invert(nan_determinant).is_some());
+    }
+
+    #[test]
+    fn renderer_transform_concatenates_with_pinned_mat2d_multiply() {
+        let current = from_bits([
+            0x9422_bf8a,
+            0x9788_280a,
+            0xd2ec_7e6e,
+            0x4d52_6674,
+            0xe887_c79b,
+            0x4bce_95e3,
+        ]);
+        let next = from_bits([
+            0xb12b_6d28,
+            0x2f8c_b036,
+            0xdeb1_8044,
+            0x4f30_2db7,
+            0x155f_c859,
+            0x4858_db48,
+        ]);
+        let expected = [
+            0xc301_f7ed,
+            0x3d67_41b5,
+            0xe2a2_c127,
+            0x5d10_cc02,
+            0xe887_c79b,
+            0x5632_3ab1,
+        ];
+        assert_eq!(bits(mul(current, next)), expected);
+
+        // This consumer is the mechanically translated
+        // `RiveRenderer::transform`, not a parallel test-only calculation.
+        let mut renderer = unsafe { RiveRenderer::new(core::ptr::null_mut()) };
+        renderer.current_state_mut().matrix = current;
+        RendererContract::transform(&mut renderer, &next);
+        assert_eq!(bits(renderer.current_state().matrix), expected);
+    }
 }
 fn max_scale(m: Mat2D) -> f32 {
     let [xx, xy, yx, yy, _, _] = m.0;
@@ -944,7 +1040,7 @@ fn invert_clockwise_path(
     let inverse = make_rcp(RiveRenderPath::default);
     let owner = unsafe { &mut *inverse.get() };
     owner.m_fillRule = FillRule::Clockwise;
-    if let Some(inv) = inverse_matrix(matrix) {
+    if let Some(inv) = invert(matrix) {
         let mut corners = [
             Vec2D::new(bounds.left as f32, bounds.top as f32),
             Vec2D::new(bounds.right as f32, bounds.top as f32),
@@ -953,7 +1049,7 @@ fn invert_clockwise_path(
         ];
         inv.map_points_in_place(&mut corners);
         owner.move_to(corners[0].x, corners[0].y);
-        let det = matrix.0[0] * matrix.0[3] - matrix.0[2] * matrix.0[1];
+        let det = determinant(matrix);
         let order = if det >= 0.0 { [1, 2, 3] } else { [3, 2, 1] };
         for i in order {
             owner.line_to(corners[i].x, corners[i].y);
@@ -969,7 +1065,9 @@ fn invert_clockwise_path(
 
 #[cfg(test)]
 mod map_points_caller_tests {
-    use super::{FillRule, Mat2D, RiveRenderPath, gpu, invert_clockwise_path};
+    use super::{
+        FillRule, Mat2D, RiveRenderPath, determinant, gpu, invert_clockwise_path,
+    };
 
     #[test]
     fn inverse_clockwise_path_uses_pinned_four_point_in_place_batch() {
@@ -995,10 +1093,37 @@ mod map_points_caller_tests {
         // the former scalar transform_point substitute produced 0x577fffff.
         assert_eq!(points[2].y.to_bits(), 0x5780_0000);
     }
-}
 
-fn inverse_matrix(m: Mat2D) -> Option<Mat2D> {
-    inverse(m)
+    #[test]
+    fn inverse_clockwise_path_uses_pinned_contracted_winding_determinant() {
+        let view_matrix = Mat2D(
+            [
+                0x26cd_29b3,
+                0x2533_fdc2,
+                0xd01a_d4bb,
+                0xce87_d5a9,
+                0,
+                0,
+            ]
+            .map(f32::from_bits),
+        );
+        assert_eq!(determinant(view_matrix).to_bits(), 0xa7ee_c560);
+
+        let path = RiveRenderPath::default();
+        let inverse = invert_clockwise_path(
+            &path,
+            FillRule::Clockwise,
+            view_matrix,
+            gpu::IAABB::new(-1, -2, 3, 4),
+        );
+        let points = unsafe { (&*inverse.get()).getRawPath().points() };
+
+        // Pinned determinant is negative, so corner 3 follows corner 0.
+        // The former uncontracted determinant rounded to +0 and selected
+        // corner 1 (and its inverse rejected this matrix outright).
+        assert_eq!(points[1].x.to_bits(), 0xe8aa_8de4);
+        assert_eq!(points[1].y.to_bits(), 0xbf61_ff57);
+    }
 }
 
 fn simd_min(first: f32, second: f32) -> f32 {
@@ -1037,7 +1162,7 @@ fn transform_rect_to_new_space(
     if current_matrix == new_matrix {
         return true;
     }
-    let Some(mut current_to_new) = inverse(new_matrix) else {
+    let Some(mut current_to_new) = invert(new_matrix) else {
         return false;
     };
     current_to_new = mul(current_to_new, current_matrix);
@@ -1091,6 +1216,52 @@ mod transform_rect_to_new_space_tests {
             admitted_tiny_skew.map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0));
         assert_eq!(four_corner_substitute.min_x.to_bits(), 0xb727_c5ac);
         assert_ne!(rect, four_corner_substitute);
+    }
+
+    #[test]
+    fn finite_clip_rect_uses_pinned_inverse_and_composition_bits() {
+        let current_matrix = Mat2D(
+            [
+                0x9422_bf8a,
+                0x9788_280a,
+                0xd2ec_7e6e,
+                0x4d52_6674,
+                0xe887_c79b,
+                0x4bce_95e3,
+            ]
+            .map(f32::from_bits),
+        );
+        let new_matrix = Mat2D(
+            [
+                0xb12b_6d28,
+                0x2f8c_b036,
+                0xdeb1_8044,
+                0x4f30_2db7,
+                0x155f_c859,
+                0x4858_db48,
+            ]
+            .map(f32::from_bits),
+        );
+        let mut rect = Aabb::new(
+            f32::from_bits(0xdaea_f96f),
+            f32::from_bits(0xa4ee_fdb1),
+            f32::from_bits(0x1c3a_27c6),
+            f32::from_bits(0x2b86_6340),
+        );
+        assert!(transform_rect_to_new_space(
+            &mut rect,
+            current_matrix,
+            new_matrix,
+        ));
+        assert_eq!(
+            [
+                rect.min_x.to_bits(),
+                rect.min_y.to_bits(),
+                rect.max_x.to_bits(),
+                rect.max_y.to_bits(),
+            ],
+            [0xe8f5_3a36, 0x4943_d3df, 0xe8f5_3a36, 0x4943_d3df],
+        );
     }
 }
 

@@ -747,3 +747,59 @@ Verdict: **REJECTED while accepting the N-slicer, batch, bounding-box,
 transformed-area, threshold, and two-diagonal portions.** Restore exact local
 renderer multiply/invert/determinant ownership at every live caller, add the
 direct witnesses above, and obtain two fresh complete reviews.
+
+## Renderer local-owner correction after `0f3f7232b` — PENDING TWO FRESH INDEPENDENT REVIEWS
+
+The renderer-local Mat2D owner in `rive_renderer_cpp.rs` now preserves the
+pinned arithmetic and branches instead of using the older algebraic
+substitutes. All six matrix-multiply lanes use the source's single contracted
+multiply-add followed, for translation, by the separately grouped final
+translation add. The shared local determinant uses the authored
+`a * d - c * b` contraction. `invert` tests only `det == 0`, accepts infinite
+and NaN determinants as the source does, and preserves the source contraction
+in both translation numerators.
+
+Every live consumer was audited and corrected through those owners:
+
+- `transform_rect_to_new_space` uses exact local invert and multiply before
+  its already-certified epsilon gate and two-point batch map;
+- `invertClockwisePath` uses exact local invert and the same exact determinant
+  for its winding branch;
+- `RendererContract::transform` uses exact local multiply for renderer matrix
+  concatenation.
+
+No other call to the removed inverse alias, uncontracted local multiply, or
+uncontracted renderer winding determinant remains in this owner. Direct
+non-circular witnesses record actual pinned clang/AArch64 results:
+
+- finite cancellation determinant `0xa7eec560`, successful inversion, and all
+  six inverse result bits;
+- successful `FLT_MAX` diagonal inversion with
+  `[+0, -0, -0, +0, +0, +0]`, plus source acceptance of a NaN determinant;
+- all six finite renderer-concatenation result bits through the live
+  `RendererContract::transform` consumer;
+- clip-rect result
+  `[e8f53a36, 4943d3df, e8f53a36, 4943d3df]` through the live inverse/multiply
+  composition;
+- negative contracted winding control through `invertClockwisePath`, where
+  the second emitted path point is pinned corner 3 with bits
+  `[e8aa8de4, bf61ff57]`.
+
+Focused evidence, all with `CARGO_INCREMENTAL=0` where applicable:
+
+- renderer-metal debug owner tests: 2 passed; inverse-clockwise tests and both
+  clip-rect tests passed;
+- the workspace release profile's fat LTO and single codegen unit ran all six
+  `rive_renderer_cpp` witnesses: 6 passed;
+- renderer Metal, Vulkan, WebGPU, and WebGL2 feature checks passed;
+- source correspondence passed with 456 applicable owners and no pending
+  absent rows;
+- source-symbol correspondence passed with 7,818 authority units across
+  1,105 owners and generated authority replayed;
+- source-symbol checker unit tests: 33 passed;
+- pinned `mat2d.cpp` compiled locally on ARM64 with clang `-O3
+  -ffp-contract=on` produced the frozen multiply, inverse, determinant, and
+  mapped-corner bits used by the witnesses.
+
+This implementing lane does not self-certify the correction. Verdict:
+**PENDING TWO FRESH INDEPENDENT REVIEWS.**

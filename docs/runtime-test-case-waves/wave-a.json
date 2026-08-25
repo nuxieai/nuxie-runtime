@@ -566,13 +566,13 @@
       "name": "audio engine initializes",
       "status": "adapted",
       "outcome": "pass",
-      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "note": "The native-audio port constructs the engine at the pinned two-channel, 44.1 kHz configuration and verifies the live engine owner rather than substituting a decode test.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/audio_core.rs",
-          "line": 17,
-          "symbol": "factory_decode_audio_owns_and_decodes_the_pinned_wav"
+          "path": "crates/nuxie/tests/upstream_audio.rs",
+          "line": 47,
+          "symbol": "upstream_audio_case_01_engine_initializes"
         }
       ],
       "adaptation": {
@@ -588,21 +588,22 @@
       "line": 37,
       "name": "audio source can be opened",
       "status": "adapted",
-      "outcome": "pass",
-      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "outcome": "expected-red",
+      "note": "The executable native-audio port performs engine construction, pinned WAV open, all three reader configurations, initial level reads, playback, two 512-frame pulls, and post-pull level assertions before retaining the exact C++ frame-count assertion as red.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/audio_core.rs",
-          "line": 17,
-          "symbol": "factory_decode_audio_owns_and_decodes_the_pinned_wav"
+          "path": "crates/nuxie/tests/upstream_audio.rs",
+          "line": 55,
+          "symbol": "upstream_audio_case_02_source_reader_levels_and_playback"
         }
       ],
       "adaptation": {
         "kind": "native-audio",
         "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
-        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
-      }
+        "rationale": "The campaign permanently retains the Rust-native audio backend, but the translated test keeps the pinned reader and mixer observables exact instead of blessing its current resampler rounding."
+      },
+      "expected_red_reason": "expected-red: native reader reports 10545 and 7030 frames where the pinned C++ readers report 10544 and 7029"
     },
     {
       "id": "tests/unit_tests/runtime/audio_test.cpp#3",
@@ -612,13 +613,13 @@
       "name": "file with audio loads correctly",
       "status": "adapted",
       "outcome": "pass",
-      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "note": "The native-audio port imports sound.riv, instantiates its default artboard, asserts exactly one direct AudioEvent, resolves that event's authored AudioAsset, and verifies the asset owns a decoded audio source.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/audio_core.rs",
-          "line": 28,
-          "symbol": "sound_fixture_loads_embedded_audio_and_host_loader_gets_first_refusal"
+          "path": "crates/nuxie/tests/upstream_audio.rs",
+          "line": 98,
+          "symbol": "upstream_audio_case_03_file_with_audio_loads_correctly"
         }
       ],
       "adaptation": {
@@ -635,13 +636,13 @@
       "name": "audio sound can outlive engine",
       "status": "adapted",
       "outcome": "pass",
-      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "note": "The native-audio port opens the pinned WAV, creates and pulls a sound from a temporary engine, drops that engine, and then stops the retained sound handle.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/audio_core.rs",
-          "line": 155,
-          "symbol": "audio_event_artboard_clone_retains_its_asset_and_stops_independently"
+          "path": "crates/nuxie/tests/upstream_audio.rs",
+          "line": 136,
+          "symbol": "upstream_audio_case_04_sound_can_outlive_engine"
         }
       ],
       "adaptation": {
@@ -658,13 +659,13 @@
       "name": "many audio sounds can outlive engine",
       "status": "adapted",
       "outcome": "pass",
-      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "note": "The native-audio port opens the pinned WAV, creates twenty sounds, pulls 512 stereo frames, drops their engine, and stops every retained sound handle.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/audio_core.rs",
-          "line": 155,
-          "symbol": "audio_event_artboard_clone_retains_its_asset_and_stops_independently"
+          "path": "crates/nuxie/tests/upstream_audio.rs",
+          "line": 152,
+          "symbol": "upstream_audio_case_05_many_sounds_can_outlive_engine"
         }
       ],
       "adaptation": {
@@ -704,13 +705,13 @@
       "name": "Artboard has audio",
       "status": "adapted",
       "outcome": "pass",
-      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "note": "The native-audio port instantiates the pinned child artboard, attaches a two-channel 44.1 kHz engine, asserts exactly one direct AudioEvent, and asserts hasAudio is true.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/audio_core.rs",
-          "line": 76,
-          "symbol": "sound_fixtures_match_direct_nested_and_no_audio_queries"
+          "path": "crates/nuxie/tests/upstream_audio.rs",
+          "line": 174,
+          "symbol": "upstream_audio_case_07_artboard_has_direct_audio"
         }
       ],
       "adaptation": {
@@ -727,13 +728,13 @@
       "name": "Artboard has audio in nested artboard",
       "status": "adapted",
       "outcome": "pass",
-      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "note": "The native-audio port instantiates the pinned grand-parent artboard, attaches a two-channel 44.1 kHz engine, asserts zero direct AudioEvents, and asserts nested hasAudio is true.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/audio_core.rs",
-          "line": 76,
-          "symbol": "sound_fixtures_match_direct_nested_and_no_audio_queries"
+          "path": "crates/nuxie/tests/upstream_audio.rs",
+          "line": 179,
+          "symbol": "upstream_audio_case_08_artboard_has_nested_audio"
         }
       ],
       "adaptation": {
@@ -750,13 +751,13 @@
       "name": "Artboard does not have audio",
       "status": "adapted",
       "outcome": "pass",
-      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "note": "The native-audio port instantiates the pinned no-audio artboard, attaches a two-channel 44.1 kHz engine, asserts zero direct AudioEvents, and asserts hasAudio is false.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/audio_core.rs",
-          "line": 76,
-          "symbol": "sound_fixtures_match_direct_nested_and_no_audio_queries"
+          "path": "crates/nuxie/tests/upstream_audio.rs",
+          "line": 184,
+          "symbol": "upstream_audio_case_09_artboard_does_not_have_audio"
         }
       ],
       "adaptation": {
@@ -796,13 +797,13 @@
       "name": "audio source duration from file",
       "status": "adapted",
       "outcome": "pass",
-      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "note": "The native-audio port opens the pinned WAV, verifies channel and sample rate, asserts the 9688/44100 duration, then calls duration a second time and asserts the cached value is unchanged.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 150,
-          "symbol": "audio_source_reader_and_headless_schedule_match_pinned_cpp"
+          "path": "crates/nuxie/tests/upstream_audio.rs",
+          "line": 189,
+          "symbol": "upstream_audio_case_11_file_duration_is_cached"
         }
       ],
       "adaptation": {

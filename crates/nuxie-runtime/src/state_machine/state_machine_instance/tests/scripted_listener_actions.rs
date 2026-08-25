@@ -4,9 +4,7 @@ use crate::state_machine::focus_action_target::RuntimeFocusActionTarget;
 use crate::state_machine::focus_listener_group::RuntimeFocusListenerGroup;
 use crate::state_machine::gamepad_listener_group::RuntimeGamepadListenerGroup;
 use crate::state_machine::keyboard_listener_group::RuntimeKeyboardListenerGroup;
-use nuxie_binary::{
-    FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, read_runtime_file,
-};
+use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, read_runtime_file};
 use nuxie_graph::GraphFile;
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
@@ -476,7 +474,9 @@ impl crate::ScriptViewModelInputResolver for UnresolvedViewModelResolver {
         self.trace
             .borrow_mut()
             .push("reject-view-model-preflight".to_owned());
-        Err(ScriptError::new("initial ViewModel prerequisite is unresolved"))
+        Err(ScriptError::new(
+            "initial ViewModel prerequisite is unresolved",
+        ))
     }
 }
 
@@ -1757,12 +1757,9 @@ fn component_provided_scroll_artboard_and_machine() -> (ArtboardInstance, StateM
         .iter()
         .find(|artboard| artboard.name.as_deref() == Some("vertical-scroll"))
         .expect("vertical scroll artboard");
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(
-        &file,
-        vertical,
-        &graph.artboards,
-    )
-    .expect("instantiate vertical scroll artboard");
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&file, vertical, &graph.artboards)
+            .expect("instantiate vertical scroll artboard");
     let mut machine = artboard
         .state_machine_instance(0)
         .expect("vertical scroll state machine");
@@ -1922,7 +1919,11 @@ fn component_provided_scroll_recurses_drag_events_at_the_pinned_call_site() {
             &mut NoopScriptHost,
         )
         .expect("pointer up");
-    assert_eq!(up, HitResult::HitOpaque, "a scrolled completion returns scroll");
+    assert_eq!(
+        up,
+        HitResult::HitOpaque,
+        "a scrolled completion returns scroll"
+    );
     let up_trace = trace.borrow().clone();
     let drag_end = up_trace
         .iter()
@@ -1936,7 +1937,10 @@ fn component_provided_scroll_recurses_drag_events_at_the_pinned_call_site() {
         .iter()
         .position(|item| item.contains("process:after-draggable:false:Up:2.5"))
         .expect("outer pointer up resumes after recursion");
-    assert!(drag_end < final_move && final_move < outer_up, "{up_trace:?}");
+    assert!(
+        drag_end < final_move && final_move < outer_up,
+        "{up_trace:?}"
+    );
     assert!(
         machine
             .draggable_proxies
@@ -2137,8 +2141,7 @@ fn draggable_uses_phase_transitions_for_repeated_and_outside_down() {
         .expect("repeated pointer down");
     for (index, first_position) in &active {
         assert_eq!(
-            machine.draggable_proxies[*index].last_position,
-            *first_position,
+            machine.draggable_proxies[*index].last_position, *first_position,
             "pinned startDrag runs only on a non-Down to Down phase transition",
         );
     }
@@ -4225,11 +4228,7 @@ fn text_input_parent_precedes_scripted_and_listener_keyboard_dispatch() {
                 property("TextInput", "parentId", FixtureValue::Uint(0)),
                 property("TextInput", "opacity", FixtureValue::Double(1.0)),
                 property("TextInput", "multiline", FixtureValue::Bool(true)),
-                property(
-                    "TextInput",
-                    "text",
-                    FixtureValue::String("seed".to_owned()),
-                ),
+                property("TextInput", "text", FixtureValue::String("seed".to_owned())),
             ],
         ),
         record(
@@ -8132,6 +8131,99 @@ fn fl_c5_bind_typed_context_apis_delegate_without_signature_changes() {
     let _: bool = machine
         .bind_script_artboard_data_context(&ScriptArtboardDataContext::root(&context_handle));
     assert!(machine.owned_data_context.is_some());
+}
+
+#[test]
+fn upstream_focus_case_046_fresh_state_machine_adds_two_focusables_then_traverses() {
+    let (artboard, mut machine) = scripted_listener_artboard_and_machine();
+    assert!(!machine.has_focus_nodes());
+    let first = machine.focus.add_root_focusable_for_test(101, 201, false);
+    let second = machine.focus.add_root_focusable_for_test(102, 202, false);
+    assert!(machine.has_focus_nodes());
+    assert!(machine.focus.set_focus_node_for_test(first));
+    assert_eq!(machine.focus.primary_focus_id(), Some(first));
+    assert!(machine.focus_next(&artboard));
+    assert_eq!(machine.focus.primary_focus_id(), Some(second));
+    assert!(machine.focus_previous(&artboard));
+    assert_eq!(machine.focus.primary_focus_id(), Some(first));
+}
+
+#[test]
+fn upstream_focus_case_049_fresh_state_machine_focus_state_is_empty() {
+    let machine = scripted_listener_machine();
+    assert_eq!(
+        machine.focus_state(),
+        FocusState {
+            has_focus: false,
+            expects_keyboard_input: false,
+        }
+    );
+}
+
+#[test]
+fn upstream_focus_case_053_plain_keyboard_plain_focus_state_switch() {
+    let machine = scripted_listener_machine();
+    let plain = machine.focus.add_root_focusable_for_test(101, 201, false);
+    let keyboard = machine.focus.add_root_focusable_for_test(102, 202, true);
+
+    assert!(machine.focus.set_focus_node_for_test(plain));
+    assert_eq!(
+        machine.focus_state(),
+        FocusState {
+            has_focus: true,
+            expects_keyboard_input: false,
+        }
+    );
+    assert!(machine.focus.set_focus_node_for_test(keyboard));
+    assert_eq!(
+        machine.focus_state(),
+        FocusState {
+            has_focus: true,
+            expects_keyboard_input: true,
+        }
+    );
+    assert!(machine.focus.set_focus_node_for_test(plain));
+    assert_eq!(
+        machine.focus_state(),
+        FocusState {
+            has_focus: true,
+            expects_keyboard_input: false,
+        }
+    );
+}
+
+#[test]
+#[ignore = "expected-red: selecting an external manager clears its focused node's keyboard capability before focusState reads it"]
+fn upstream_focus_case_054_external_manager_focus_state_is_selected() {
+    let mut machine = scripted_listener_machine();
+    let external = scripted_listener_machine();
+    assert_eq!(machine.focus_state(), FocusState::default());
+    let keyboard = external.focus.add_root_focusable_for_test(102, 202, true);
+    assert!(external.focus.set_focus_node_for_test(keyboard));
+    machine.install_external_focus(&external.focus, external.focus.owner_identity());
+    assert_eq!(
+        machine.focus_state(),
+        FocusState {
+            has_focus: true,
+            expects_keyboard_input: true,
+        }
+    );
+}
+
+#[test]
+fn upstream_focus_case_055_state_machine_clear_focus_facade_clears_both_fields() {
+    let mut machine = scripted_listener_machine();
+    let keyboard = machine.focus.add_root_focusable_for_test(102, 202, true);
+    assert!(machine.focus.set_focus_node_for_test(keyboard));
+    assert_eq!(
+        machine.focus_state(),
+        FocusState {
+            has_focus: true,
+            expects_keyboard_input: true,
+        }
+    );
+    assert!(machine.clear_focus());
+    assert_eq!(machine.focus_state(), FocusState::default());
 }
 
 #[test]

@@ -213,6 +213,37 @@ impl RuntimeFocusTree {
         Rc::ptr_eq(&self.domain, &other.domain)
     }
 
+    /// Test-only construction seam for the pinned FocusManager/StateMachine
+    /// owner-flow tests. This mutates the real retained manager; it is not a
+    /// second focus implementation.
+    #[cfg(test)]
+    pub(crate) fn add_root_focusable_for_test(
+        &self,
+        target_local: usize,
+        focus_data_local: usize,
+        accepts_keyboard_input: bool,
+    ) -> FocusNodeId {
+        let mut focusable =
+            RuntimeFocusable::new(self.owner_identity, target_local, focus_data_local);
+        focusable.accepts_keyboard_input = accepts_keyboard_input;
+        let mut node = FocusNode::new();
+        node.set_focusable(focusable);
+        let mut domain = self.domain.borrow_mut();
+        let node_id = domain.create_node(node);
+        assert!(domain.manager.add_child(None, node_id));
+        node_id
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_focus_node_for_test(&self, node_id: FocusNodeId) -> bool {
+        self.domain.borrow_mut().manager.set_focus(node_id)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn primary_focus_id(&self) -> Option<FocusNodeId> {
+        self.domain.borrow().manager.primary_focus()
+    }
+
     /// Create the focus-manager identity used by one state-machine occurrence
     /// without building the authored focus topology yet.
     ///
@@ -1422,6 +1453,184 @@ fn nested_host_is_paused(artboard: &ArtboardInstance, local_id: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        RuntimeBindableArtboard, RuntimeOwnedViewModelContext, RuntimeOwnedViewModelHandle,
+        RuntimeOwnedViewModelInstance, StateMachineInstance,
+    };
+    use nuxie_binary::{RuntimeFile, read_runtime_file};
+    use nuxie_graph::GraphFile;
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum ExactOwnerInput<'a> {
+        Key {
+            key: u32,
+            modifiers: u32,
+            down: bool,
+            repeat: bool,
+        },
+        Text(&'a str),
+        Gamepad {
+            device_id: u32,
+            button_mask: u64,
+        },
+        Focused,
+        Blurred,
+    }
+
+    fn invoke_exact_focus_node_owner(
+        node: &FocusNode,
+        expected: Option<RuntimeFocusable>,
+        input: ExactOwnerInput<'_>,
+    ) -> Result<bool, &'static str> {
+        assert_eq!(node.focusable(), expected);
+        let _ = input;
+        Err("FocusNode has no key/text/focused/blurred owner-delegation surface")
+    }
+
+    fn invoke_exact_focus_manager_owner(
+        manager: &FocusManager,
+        input: ExactOwnerInput<'_>,
+    ) -> Result<bool, &'static str> {
+        let Some(primary) = manager.primary_focus() else {
+            return Ok(false);
+        };
+        assert!(manager.focusable(primary).is_some());
+        let _ = input;
+        Err("FocusManager has no key/text/gamepad primary-owner routing surface")
+    }
+
+    struct ExactFocusFixture {
+        runtime: RuntimeFile,
+        graphs: GraphFile,
+        artboard: ArtboardInstance,
+        machine: StateMachineInstance,
+        context: RuntimeOwnedViewModelContext,
+    }
+
+    impl ExactFocusFixture {
+        fn load(asset: &str, artboard_name: Option<&str>) -> Self {
+            let mut fixture = Self::load_before_frames(asset, artboard_name);
+            fixture.frames(2);
+            fixture
+        }
+
+        fn load_before_frames(asset: &str, artboard_name: Option<&str>) -> Self {
+            let path = std::path::Path::new(
+                option_env!("RIVE_RUNTIME_DIR").unwrap_or("/Users/levi/dev/oss/rive-runtime"),
+            )
+            .join("tests/unit_tests")
+            .join(asset);
+            let bytes = std::fs::read(&path)
+                .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+            let runtime = read_runtime_file(&bytes).expect("import pinned focus fixture");
+            let graphs = GraphFile::from_runtime_file(&runtime).expect("graph focus fixture");
+            let (artboard_index, graph) = graphs
+                .artboards
+                .iter()
+                .enumerate()
+                .find(|(_, graph)| {
+                    artboard_name.is_none_or(|name| graph.name.as_deref() == Some(name))
+                })
+                .expect("selected artboard");
+            let mut artboard =
+                ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                    .expect("instantiate selected artboard");
+            let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
+            let view_model_index = runtime
+                .artboard(artboard_index)
+                .and_then(|object| object.uint_property("viewModelId"))
+                .and_then(|value| usize::try_from(value).ok())
+                .expect("selected artboard view model");
+            let main = RuntimeOwnedViewModelInstance::from_instance(&runtime, view_model_index, 0)
+                .or_else(|| RuntimeOwnedViewModelInstance::new(&runtime, view_model_index))
+                .expect("default view model");
+            let mut context = RuntimeOwnedViewModelContext::from_main(main);
+            context.complete_for_artboard(&runtime, artboard_index);
+            artboard.bind_owned_view_model_artboard_contexts(&runtime, &context);
+            assert!(machine.bind_owned_view_model_contexts(&context));
+            machine.advance_data_context();
+            Self {
+                runtime,
+                graphs,
+                artboard,
+                machine,
+                context,
+            }
+        }
+
+        fn frames(&mut self, count: usize) {
+            for _ in 0..count {
+                StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                    &mut self.artboard,
+                    std::slice::from_mut(&mut self.machine),
+                    0.016,
+                    true,
+                    || false,
+                )
+                .expect("stateful focus frame");
+            }
+        }
+
+        fn root(&self) -> RuntimeOwnedViewModelHandle {
+            self.context
+                .main_handle()
+                .expect("main view-model handle")
+                .clone()
+        }
+
+        fn source(&self, name: &str) -> RuntimeBindableArtboard {
+            let graph = self
+                .graphs
+                .artboards
+                .iter()
+                .find(|graph| graph.name.as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("missing source artboard {name}"));
+            let instance = ArtboardInstance::from_graph_with_artboards(
+                &self.runtime,
+                graph,
+                &self.graphs.artboards,
+            )
+            .expect("instantiate bindable source");
+            RuntimeBindableArtboard::new_with_artboard_instance(name, &instance)
+        }
+
+        fn primary_id(&self) -> Option<FocusNodeId> {
+            self.machine.focus_tree_for_test().primary_focus_id()
+        }
+
+        fn focused_artboard_name(&mut self) -> Option<String> {
+            let owner = self
+                .machine
+                .focus_tree_for_test()
+                .focused_listener_chain()
+                .first()
+                .map(|(owner, _, _)| *owner)?;
+            if self.artboard.instance_identity() == owner {
+                return Some(self.artboard.profile_name.clone());
+            }
+            let mut name = None;
+            self.artboard
+                .try_visit_artboard_tree_instances_mut(&mut |_, _, artboard| {
+                    if artboard.instance_identity() == owner {
+                        name = Some(artboard.profile_name.clone());
+                    }
+                    Ok::<_, ()>(())
+                })
+                .expect("visit focus owner artboard");
+            name
+        }
+
+        fn tab_order(&mut self) -> Vec<String> {
+            let mut order = Vec::new();
+            while self.machine.focus_next(&self.artboard) {
+                order.push(
+                    self.focused_artboard_name()
+                        .expect("successful traversal has immediate artboard"),
+                );
+            }
+            order
+        }
+    }
 
     #[test]
     fn upstream_focus_node_defaults_and_property_setters() {
@@ -1473,6 +1682,107 @@ mod tests {
         assert_eq!(node.focusable(), Some(replacement));
         node.clear_focusable();
         assert_eq!(node.focusable(), None);
+    }
+
+    #[test]
+    #[ignore = "expected-red: FocusNode retains the exact Focusable identity but has no direct key/text/focused/blurred delegation owner"]
+    fn upstream_focus_case_003_focus_node_delegates_every_action_to_same_focusable() {
+        let focusable = RuntimeFocusable::new(7, 11, 12);
+        let mut node = FocusNode::new();
+        node.set_focusable(focusable);
+        assert_eq!(node.focusable(), Some(focusable));
+        let results = [
+            invoke_exact_focus_node_owner(
+                &node,
+                Some(focusable),
+                ExactOwnerInput::Key {
+                    key: 65,
+                    modifiers: 0,
+                    down: true,
+                    repeat: false,
+                },
+            ),
+            invoke_exact_focus_node_owner(&node, Some(focusable), ExactOwnerInput::Text("hello")),
+            invoke_exact_focus_node_owner(&node, Some(focusable), ExactOwnerInput::Focused),
+            invoke_exact_focus_node_owner(&node, Some(focusable), ExactOwnerInput::Blurred),
+        ];
+        assert!(results.iter().all(Result::is_ok), "{results:?}");
+    }
+
+    #[test]
+    #[ignore = "expected-red: a FocusNode without Focusable has no direct no-op key/text/focused/blurred owner surface"]
+    fn upstream_focus_case_004_focus_node_without_focusable_executes_noop_actions() {
+        let node = FocusNode::new();
+        assert!(node.focusable().is_none());
+        let results = [
+            invoke_exact_focus_node_owner(
+                &node,
+                None,
+                ExactOwnerInput::Key {
+                    key: 65,
+                    modifiers: 0,
+                    down: true,
+                    repeat: false,
+                },
+            ),
+            invoke_exact_focus_node_owner(&node, None, ExactOwnerInput::Text("hello")),
+            invoke_exact_focus_node_owner(&node, None, ExactOwnerInput::Focused),
+            invoke_exact_focus_node_owner(&node, None, ExactOwnerInput::Blurred),
+        ];
+        assert!(results.iter().all(Result::is_ok), "{results:?}");
+    }
+
+    #[test]
+    #[ignore = "expected-red: FocusManager reaches exact no-focus actions but lacks primary Focusable key/text/gamepad routing"]
+    fn upstream_focus_case_018_manager_routes_exact_inputs_only_after_focus() {
+        let mut manager = FocusManager::new();
+        let focusable = RuntimeFocusable::new(7, 11, 12);
+        let mut node = FocusNode::new();
+        node.set_focusable(focusable);
+        let node = manager.create_node(node);
+        assert!(manager.add_child(None, node));
+        let no_focus = [
+            invoke_exact_focus_manager_owner(
+                &manager,
+                ExactOwnerInput::Key {
+                    key: 65,
+                    modifiers: 0,
+                    down: true,
+                    repeat: false,
+                },
+            ),
+            invoke_exact_focus_manager_owner(&manager, ExactOwnerInput::Text("hello")),
+            invoke_exact_focus_manager_owner(
+                &manager,
+                ExactOwnerInput::Gamepad {
+                    device_id: 1,
+                    button_mask: 1,
+                },
+            ),
+        ];
+        assert_eq!(no_focus, [Ok(false), Ok(false), Ok(false)]);
+        assert!(manager.set_focus(node));
+        assert_eq!(manager.primary_focus(), Some(node));
+        let focused = [
+            invoke_exact_focus_manager_owner(
+                &manager,
+                ExactOwnerInput::Key {
+                    key: 66,
+                    modifiers: 0,
+                    down: true,
+                    repeat: false,
+                },
+            ),
+            invoke_exact_focus_manager_owner(&manager, ExactOwnerInput::Text("world")),
+            invoke_exact_focus_manager_owner(
+                &manager,
+                ExactOwnerInput::Gamepad {
+                    device_id: 1,
+                    button_mask: 1,
+                },
+            ),
+        ];
+        assert!(focused.iter().all(Result::is_ok), "{focused:?}");
     }
 
     #[test]
@@ -2090,6 +2400,359 @@ mod tests {
             tree.take_owner_events(),
             [(7, 8, FocusEventKind::Focused)],
             "draining the snapshot may not consume the source callback"
+        );
+    }
+
+    #[test]
+    fn upstream_focus_case_068_swap_focuses_the_new_nested_occurrence() {
+        let mut fixture = ExactFocusFixture::load("assets/bindable_focus_tree_swap.riv", None);
+        assert!(fixture.machine.focus_next(&fixture.artboard));
+        assert!(!fixture.machine.focus_next(&fixture.artboard));
+        assert!(fixture.machine.focus_previous(&fixture.artboard));
+        let focusable = fixture.source("Focusable");
+        assert!(
+            fixture
+                .root()
+                .borrow_mut()
+                .set_runtime_artboard_by_property_name("bindedArt", Some(focusable))
+        );
+        fixture.frames(1);
+        assert!(fixture.machine.focus_next(&fixture.artboard));
+        assert_eq!(
+            fixture.focused_artboard_name().as_deref(),
+            Some("Focusable")
+        );
+    }
+
+    #[test]
+    #[ignore = "expected-red: retained list scope reaches the exact owner but has no pinned ArtboardComponentListScope name"]
+    fn upstream_focus_case_076_list_scope_exact_owner_contract() {
+        let fixture = ExactFocusFixture::load("assets/component_list_1.riv", Some("Main"));
+        let graph = fixture.artboard.runtime_graph().expect("runtime graph");
+        let list = graph
+            .components
+            .iter()
+            .find(|component| {
+                component.type_name == "ArtboardComponentList"
+                    && component.name.as_deref() == Some("List")
+            })
+            .expect("named list");
+        let root = RuntimeFocusOccurrenceKey::root(
+            fixture.artboard.graph_global_id,
+            fixture.artboard.instance_identity(),
+        );
+        let scope_key = root.child(
+            FOCUS_KEY_LIST_SCOPE,
+            list.local_id as u64,
+            u64::from(list.global_id),
+        );
+        let tree = fixture.machine.focus_tree_for_test();
+        let domain = tree.domain.borrow();
+        let scope = *domain
+            .retained_nodes
+            .get(&scope_key)
+            .expect("list scope node");
+        let node = domain.manager.node(scope).expect("retained list scope");
+        assert!(domain.manager.contains(scope));
+        assert!(!node.can_focus());
+        assert!(!node.can_traverse());
+        assert!(node.focusable().is_none());
+        assert_eq!(node.name(), b"ArtboardComponentListScope");
+    }
+
+    #[test]
+    fn upstream_focus_case_077_list_closest_focus_is_direct_parent_focus_data() {
+        let fixture = ExactFocusFixture::load("assets/component_list_1.riv", Some("Main"));
+        let graph = fixture.artboard.runtime_graph().expect("runtime graph");
+        let list = graph
+            .components
+            .iter()
+            .find(|component| {
+                component.type_name == "ArtboardComponentList"
+                    && component.name.as_deref() == Some("List")
+            })
+            .expect("named list");
+        let parent = graph
+            .components
+            .iter()
+            .find(|component| Some(component.local_id) == list.parent_local)
+            .expect("list Node parent");
+        assert!(
+            parent.capabilities.container,
+            "Rust's generated LayoutComponent owner is the pinned Node container"
+        );
+        let direct_focus = parent
+            .children
+            .iter()
+            .filter_map(|local| {
+                graph
+                    .components
+                    .iter()
+                    .find(|child| child.local_id == *local)
+            })
+            .find(|child| child.type_name == "FocusData");
+        let Some(direct_focus) = direct_focus else {
+            return;
+        };
+        let root = RuntimeFocusOccurrenceKey::root(
+            fixture.artboard.graph_global_id,
+            fixture.artboard.instance_identity(),
+        );
+        let focus_key = root.child(
+            FOCUS_KEY_AUTHORED,
+            direct_focus.local_id as u64,
+            u64::from(direct_focus.global_id),
+        );
+        let scope_key = root.child(
+            FOCUS_KEY_LIST_SCOPE,
+            list.local_id as u64,
+            u64::from(list.global_id),
+        );
+        let domain = fixture.machine.focus_tree_for_test().domain.borrow();
+        assert_eq!(
+            domain.retained_parents.get(&scope_key),
+            Some(&Some(focus_key.clone())),
+            "the list's closest retained focus owner is its parent's direct FocusData"
+        );
+        let scope = domain.retained_nodes[&scope_key];
+        let focus = domain.retained_nodes[&focus_key];
+        assert_eq!(domain.manager.parent(scope), Some(focus));
+    }
+
+    #[test]
+    #[ignore = "expected-red: rebuilding a forced list-item manager mismatch does not reinstall the shared parent manager"]
+    fn upstream_focus_case_080_rebuilds_mismatched_list_item_under_its_row() {
+        let mut fixture = ExactFocusFixture::load("assets/list_focus_order.riv", None);
+        let graph = fixture.artboard.runtime_graph().expect("runtime graph");
+        let list = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "ArtboardComponentList")
+            .expect("single component list");
+        let list_local = list.local_id;
+        let root = RuntimeFocusOccurrenceKey::root(
+            fixture.artboard.graph_global_id,
+            fixture.artboard.instance_identity(),
+        );
+        let tree = fixture.machine.focus_tree_for_test();
+        let target = fixture
+            .artboard
+            .component_list_items(list_local)
+            .expect("mounted list rows")
+            .iter()
+            .enumerate()
+            .find_map(|(index, item)| {
+                let row_key = root.child(
+                    FOCUS_KEY_LIST_ROW,
+                    list_local as u64,
+                    item.occurrence_identity,
+                );
+                let domain = tree.domain.borrow();
+                let row = domain.retained_nodes.get(&row_key).copied()?;
+                (!item.state_machines.is_empty()
+                    && domain
+                        .manager
+                        .children(row)
+                        .is_some_and(|children| !children.is_empty()))
+                .then_some((index, row_key))
+            })
+            .expect("row with focus subtree and state machine");
+        {
+            let item = &mut fixture
+                .artboard
+                .component_list_items_mut(list_local)
+                .expect("mutable list rows")[target.0];
+            assert!(item.state_machines[0].clear_external_focus_manager());
+            assert!(
+                !item.state_machines[0]
+                    .focus_tree_for_test()
+                    .shares_manager(fixture.machine.focus_tree_for_test())
+            );
+        }
+        fixture
+            .machine
+            .focus_tree_for_test()
+            .cleanup_focus_tree(&fixture.artboard);
+        fixture
+            .machine
+            .focus_tree_for_test()
+            .build_focus_tree(&fixture.artboard);
+        let domain = fixture.machine.focus_tree_for_test().domain.borrow();
+        let row = domain.retained_nodes[&target.1];
+        assert!(domain.manager.contains(row));
+        assert!(
+            domain
+                .manager
+                .children(row)
+                .is_some_and(|children| !children.is_empty())
+        );
+        drop(domain);
+        let item = &fixture.artboard.component_list_items(list_local).unwrap()[target.0];
+        assert!(
+            item.state_machines[0]
+                .focus_tree_for_test()
+                .shares_manager(fixture.machine.focus_tree_for_test())
+        );
+    }
+
+    #[test]
+    fn upstream_focus_case_081_exact_tab_order_and_held_identity_across_swaps() {
+        let mut fixture =
+            ExactFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+        assert_eq!(
+            fixture.tab_order(),
+            ["Main", "Swappable1", "StaticNestWithFocusable"]
+        );
+        let swappable2 = fixture.source("Swappable2");
+        assert!(
+            fixture
+                .root()
+                .borrow_mut()
+                .set_runtime_artboard_by_property_name("artboardProp", Some(swappable2),)
+        );
+        fixture.frames(1);
+        assert_eq!(fixture.tab_order(), ["Main", "StaticNestWithFocusable"]);
+        assert!(fixture.machine.focus_next(&fixture.artboard));
+        assert_eq!(fixture.focused_artboard_name().as_deref(), Some("Main"));
+        let held = fixture.primary_id().expect("held Main focus");
+        let swappable1 = fixture.source("Swappable1");
+        assert!(
+            fixture
+                .root()
+                .borrow_mut()
+                .set_runtime_artboard_by_property_name("artboardProp", Some(swappable1),)
+        );
+        fixture.frames(1);
+        assert_eq!(fixture.primary_id(), Some(held));
+        assert_eq!(fixture.focused_artboard_name().as_deref(), Some("Main"));
+        assert!(fixture.machine.focus_next(&fixture.artboard));
+        assert_eq!(
+            fixture.focused_artboard_name().as_deref(),
+            Some("Swappable1")
+        );
+        assert!(fixture.machine.focus_next(&fixture.artboard));
+        assert_eq!(
+            fixture.focused_artboard_name().as_deref(),
+            Some("StaticNestWithFocusable")
+        );
+        assert!(!fixture.machine.focus_next(&fixture.artboard));
+    }
+
+    #[test]
+    fn upstream_focus_case_082_repeat_build_preserves_exact_nested_focus() {
+        let mut fixture =
+            ExactFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+        for expected in ["Main", "Swappable1", "StaticNestWithFocusable"] {
+            assert!(fixture.machine.focus_next(&fixture.artboard));
+            assert_eq!(fixture.focused_artboard_name().as_deref(), Some(expected));
+        }
+        let held = fixture.primary_id().expect("held nested focus");
+        fixture
+            .machine
+            .focus_tree_for_test()
+            .build_focus_tree(&fixture.artboard);
+        assert_eq!(fixture.primary_id(), Some(held));
+        assert_eq!(
+            fixture.focused_artboard_name().as_deref(),
+            Some("StaticNestWithFocusable")
+        );
+    }
+
+    #[test]
+    fn upstream_focus_case_083_foreign_occurrence_keeps_order_and_shared_manager() {
+        let mut fixture =
+            ExactFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+        let foreign = ExactFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+        let foreign_swappable = foreign.source("Swappable1");
+        assert!(
+            fixture
+                .root()
+                .borrow_mut()
+                .set_runtime_artboard_by_property_name("artboardProp", Some(foreign_swappable),)
+        );
+        fixture.frames(1);
+        assert_eq!(
+            fixture.tab_order(),
+            ["Main", "Swappable1", "StaticNestWithFocusable"]
+        );
+        let leaf_machine = fixture
+            .artboard
+            .nested_artboards
+            .values()
+            .find(|nested| nested.child.profile_name == "Swappable1")
+            .and_then(|nested| {
+                nested
+                    .animations
+                    .iter()
+                    .find_map(|animation| match animation {
+                        crate::artboard::RuntimeNestedAnimationInstance::StateMachine(
+                            occurrence,
+                        ) => occurrence.state_machine(),
+                        _ => None,
+                    })
+            })
+            .expect("foreign leaf state machine");
+        assert!(
+            leaf_machine
+                .focus_tree_for_test()
+                .shares_manager(fixture.machine.focus_tree_for_test())
+        );
+    }
+
+    #[test]
+    fn upstream_focus_case_084_unresolved_swap_preserves_identity_and_order() {
+        let mut fixture =
+            ExactFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+        assert!(fixture.machine.focus_next(&fixture.artboard));
+        assert_eq!(fixture.focused_artboard_name().as_deref(), Some("Main"));
+        let held = fixture.primary_id().expect("held Main focus");
+        assert!(
+            fixture
+                .root()
+                .borrow_mut()
+                .set_artboard_by_property_name("artboardProp", 9999)
+        );
+        fixture.frames(1);
+        assert_eq!(fixture.primary_id(), Some(held));
+        assert_eq!(fixture.focused_artboard_name().as_deref(), Some("Main"));
+        assert!(fixture.machine.focus_next(&fixture.artboard));
+        assert_eq!(
+            fixture.focused_artboard_name().as_deref(),
+            Some("Swappable1")
+        );
+        assert!(fixture.machine.focus_next(&fixture.artboard));
+        assert_eq!(
+            fixture.focused_artboard_name().as_deref(),
+            Some("StaticNestWithFocusable")
+        );
+        assert!(!fixture.machine.focus_next(&fixture.artboard));
+    }
+
+    #[test]
+    fn upstream_focus_case_085_initially_empty_slot_retains_middle_position() {
+        let mut fixture = ExactFocusFixture::load_before_frames(
+            "assets/swappable_artboards_focus.riv",
+            Some("Main"),
+        );
+        assert!(
+            fixture
+                .root()
+                .borrow_mut()
+                .set_artboard_by_property_name("artboardProp", u64::from(u32::MAX))
+        );
+        fixture.frames(2);
+        assert_eq!(fixture.tab_order(), ["Main", "StaticNestWithFocusable"]);
+        let swappable1 = fixture.source("Swappable1");
+        assert!(
+            fixture
+                .root()
+                .borrow_mut()
+                .set_runtime_artboard_by_property_name("artboardProp", Some(swappable1),)
+        );
+        fixture.frames(1);
+        assert_eq!(
+            fixture.tab_order(),
+            ["Main", "Swappable1", "StaticNestWithFocusable"]
         );
     }
 }

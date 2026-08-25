@@ -2214,6 +2214,11 @@ impl StateMachineInstance {
         self.focus.build_focus_tree(artboard);
     }
 
+    #[cfg(test)]
+    pub(crate) fn focus_tree_for_test(&self) -> &RuntimeFocusTree {
+        &self.focus
+    }
+
     fn rebind_file_trigger_cells_after_clone(
         &mut self,
         active_file_view_model_binding: Option<(usize, usize)>,

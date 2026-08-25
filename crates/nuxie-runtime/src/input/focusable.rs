@@ -69,6 +69,10 @@ mod tests {
             .expect("TextInput implements Focusable");
         let nested = RuntimeFocusable::from_component_type(1, 2, 3, "NestedArtboard")
             .expect("NestedArtboard implements Focusable");
+        assert!(!text.accepts_keyboard_input);
+        let mut keyboard = text;
+        keyboard.accepts_keyboard_input = true;
+        assert!(keyboard.accepts_keyboard_input);
         assert!(!text.gamepad_dispatch_default());
         assert!(!nested.gamepad_dispatch_default());
     }

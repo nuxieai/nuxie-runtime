@@ -289,7 +289,7 @@ pub enum ScriptListenerInputSnapshotValue {
     Artboard(crate::script_input_artboard::ScriptArtboardSource),
 }
 
-/// A fully resolved, occurrence-local listener hydration batch.
+/// An occurrence-local listener hydration batch.
 ///
 /// Callers construct the whole batch before touching a script table. Applying
 /// it always installs `Context.viewModel` first, then the authored/bound input
@@ -339,10 +339,11 @@ impl ScriptListenerActionHydration {
         }
     }
 
-    /// Resolve every facade-owned artboard into a type that is the only input
-    /// application authority. Pinned C++ constructs the exact
-    /// `ScriptedArtboard` before `setArtboardInput`; an unresolved hydration
-    /// can therefore never be passed to the internal write boundary.
+    /// Validate every facade-owned Artboard prerequisite and retain the
+    /// authority needed to construct it later. Pinned C++ performs this
+    /// validation in its first loop, but does not clone the Artboard or bind
+    /// its ViewModel/DataContext until the input's authored position in the
+    /// second loop.
     pub fn preflight_artboards(self) -> Result<PreparedScriptListenerActionHydration, ScriptError> {
         let mut inputs = Vec::with_capacity(self.inputs.len());
         for input in self.inputs {
@@ -402,10 +403,11 @@ impl ScriptListenerActionHydration {
     }
 }
 
-/// A hydration batch whose every fallible Artboard facade has already been
-/// resolved. Its fields are private and it can only be created by
-/// `ScriptListenerActionHydration::preflight_artboards`, making the atomic
-/// preflight a type-state invariant rather than a caller convention.
+/// A hydration batch whose every Artboard prerequisite has been validated and
+/// whose deferred constructor authority has been retained. Its fields are
+/// private and it can only be created by
+/// `ScriptListenerActionHydration::preflight_artboards`, making the validation
+/// boundary a type-state invariant rather than a caller convention.
 pub struct PreparedScriptListenerActionHydration {
     context_view_model: Option<ScriptViewModel>,
     context_parent_view_models: Vec<Option<ScriptViewModel>>,
@@ -424,7 +426,7 @@ impl PreparedScriptListenerActionHydration {
     }
 
     /// Install the live DataContext only after every Artboard in this batch
-    /// has crossed the non-bypassable preflight boundary.
+    /// has crossed the non-bypassable prerequisite-validation boundary.
     pub fn install_context(&self, instance: &mut dyn ScriptInstance) -> Result<(), ScriptError> {
         if self.context_resolved {
             instance.set_context_view_model_chain(
@@ -448,11 +450,12 @@ impl PreparedScriptListenerActionHydration {
                     instance.set_input_core(&name, value)?;
                 }
                 PreparedScriptListenerInputHydration::Artboard { name, recipe } => {
-                    // Recipe construction is infallible and deliberately
-                    // remains in authored phase-two order: an earlier scalar
-                    // write is observable before this facade is constructed,
-                    // exactly as in pinned C++.
-                    instance.set_artboard_input_core(&name, recipe.construct())?;
+                    // Construction deliberately remains in authored
+                    // phase-two order: cloning the concrete occurrence,
+                    // selecting/binding its ViewModel, creating its default
+                    // state machine, and taking a live bindable snapshot all
+                    // happen here, after any earlier authored setter.
+                    instance.set_artboard_input_core(&name, recipe.construct()?)?;
                 }
                 PreparedScriptListenerInputHydration::ViewModel {
                     name,
@@ -2641,9 +2644,10 @@ impl ScriptArtboardDataContext {
 /// matching `ScriptInputArtboard::artboardIdChanged/updateArtboard`, without
 /// moving renderer/file authority into the state-machine core.
 pub trait ScriptArtboardResolver: fmt::Debug {
-    /// Validate and retain every authority needed to construct one Artboard
-    /// facade later without failure. This method must not construct the
-    /// facade: `construct` remains in authored phase-two order.
+    /// Validate immutable prerequisites and retain the authority needed to
+    /// construct one Artboard facade later. This method must not construct the
+    /// facade: fallible semantic construction remains in authored phase-two
+    /// order.
     fn prepare_script_artboard(
         &self,
         source: &crate::script_input_artboard::ScriptArtboardSource,
@@ -2655,17 +2659,20 @@ pub trait ScriptArtboardResolver: fmt::Debug {
         source: &crate::script_input_artboard::ScriptArtboardSource,
         parent_context: Option<&ScriptArtboardParentContext>,
     ) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
-        Ok(self
-            .prepare_script_artboard(source, parent_context)?
-            .construct())
+        self.prepare_script_artboard(source, parent_context)?
+            .construct()
     }
 }
 
-/// Infallible deferred Artboard construction produced by resolver preflight.
-/// This is the type-state fence that lets validation fail before table writes
-/// while preserving pinned authored construction/publication order.
+/// Deferred Artboard construction produced by resolver validation.
+///
+/// The prepared value is a non-bypassable type-state fence, but it retains
+/// constructor authority rather than a preconstructed occurrence. Rust-only
+/// semantic failures therefore surface at the input's authored phase-two
+/// position instead of being moved into the validation loop or hidden by an
+/// `expect`.
 pub trait PreparedScriptArtboard: fmt::Debug {
-    fn construct(self: Box<Self>) -> Box<dyn ScriptArtboard>;
+    fn construct(self: Box<Self>) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
 }
 
 /// Occurrence-owned phase-two lookup for ScriptInputViewModelProperty.

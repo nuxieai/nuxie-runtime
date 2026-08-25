@@ -260,16 +260,22 @@ struct ProjectionArtboardResolver;
 
 #[derive(Debug)]
 struct PreparedProjectionArtboard {
-    artboard: ProjectionArtboard,
+    width: f32,
     trace: Option<(Rc<RefCell<Vec<String>>>, String)>,
+    construct_failure: Option<(&'static str, &'static str)>,
 }
 
 impl crate::PreparedScriptArtboard for PreparedProjectionArtboard {
-    fn construct(self: Box<Self>) -> Box<dyn crate::ScriptArtboard> {
+    fn construct(self: Box<Self>) -> Result<Box<dyn crate::ScriptArtboard>, ScriptError> {
         if let Some((trace, label)) = self.trace {
-            trace.borrow_mut().push(format!("resolve-artboard:{label}"));
+            trace
+                .borrow_mut()
+                .push(format!("construct-artboard:{label}"));
         }
-        Box::new(self.artboard)
+        if let Some((message, resource_code)) = self.construct_failure {
+            return Err(ScriptError::with_resource_code(message, resource_code));
+        }
+        Ok(Box::new(ProjectionArtboard { width: self.width }))
     }
 }
 
@@ -281,8 +287,9 @@ impl ScriptArtboardResolver for ProjectionArtboardResolver {
     ) -> Result<Box<dyn crate::PreparedScriptArtboard>, ScriptError> {
         match source {
             crate::ScriptArtboardSource::File(7) => Ok(Box::new(PreparedProjectionArtboard {
-                artboard: ProjectionArtboard { width: 7.0 },
+                width: 7.0,
                 trace: None,
+                construct_failure: None,
             })),
             crate::ScriptArtboardSource::File(8) => {
                 Err(ScriptError::new("ordinary missing artboard"))
@@ -369,8 +376,18 @@ impl ScriptArtboardResolver for HydrationArtboardResolver {
         };
         if source == &crate::ScriptArtboardSource::File(7) {
             Ok(Box::new(PreparedProjectionArtboard {
-                artboard: ProjectionArtboard { width: 7.0 },
+                width: 7.0,
                 trace: Some((Rc::clone(&self.trace), label)),
+                construct_failure: None,
+            }))
+        } else if source == &crate::ScriptArtboardSource::File(10) {
+            Ok(Box::new(PreparedProjectionArtboard {
+                width: 0.0,
+                trace: Some((Rc::clone(&self.trace), label)),
+                construct_failure: Some((
+                    "terminal Artboard construction failure",
+                    "script.resource.construct",
+                )),
             }))
         } else {
             Err(ScriptError::with_resource_code(
@@ -1088,7 +1105,7 @@ fn scripted_hydration_resolves_artboard_then_viewmodel_in_authored_apply_order()
         [
             "context",
             "validate",
-            "resolve-artboard:7",
+            "construct-artboard:7",
             "set-artboard:panel",
             "resolve-view-model",
         ],
@@ -1240,6 +1257,53 @@ fn public_hydration_apply_and_apply_inputs_cannot_bypass_artboard_preparation() 
         );
         assert!(!artboard_applied.get());
     }
+}
+
+#[test]
+fn prepared_artboard_semantic_failure_occurs_at_its_authored_phase_two_position() {
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let artboard_applied = Rc::new(Cell::new(false));
+    let resolver: Rc<dyn ScriptArtboardResolver> = Rc::new(HydrationArtboardResolver {
+        trace: Rc::clone(&trace),
+    });
+    let hydration = crate::ScriptListenerActionHydration::new(
+        None,
+        vec![
+            crate::ScriptListenerInputHydration::Value {
+                name: ScriptCoreString::from("before"),
+                value: ScriptValue::Number(1.0),
+            },
+            crate::ScriptListenerInputHydration::Artboard {
+                name: ScriptCoreString::from("panel"),
+                source: crate::ScriptArtboardSource::File(10),
+                resolver,
+                parent_context: None,
+            },
+            crate::ScriptListenerInputHydration::Value {
+                name: ScriptCoreString::from("after"),
+                value: ScriptValue::Number(2.0),
+            },
+        ],
+    );
+    let prepared = hydration
+        .preflight_artboards()
+        .expect("validation retains constructor authority without constructing");
+    assert!(trace.borrow().is_empty());
+
+    let mut script = HydrationTraceScript {
+        trace: Rc::clone(&trace),
+        artboard_applied: Rc::clone(&artboard_applied),
+    };
+    let error = prepared
+        .apply(&mut script, &mut NoopScriptHost)
+        .expect_err("construction failure terminates phase two");
+    assert_eq!(error.resource_code(), Some("script.resource.construct"));
+    assert_eq!(
+        trace.borrow().as_slice(),
+        ["context", "set:before", "construct-artboard:10"],
+        "the earlier authored setter is observable before concrete Artboard construction, while the later setter and table publication never run"
+    );
+    assert!(!artboard_applied.get());
 }
 
 fn scripted_listener_artboard_and_machine() -> (ArtboardInstance, StateMachineInstance) {

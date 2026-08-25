@@ -3549,32 +3549,15 @@ struct FileScriptArtboard {
 }
 
 #[cfg(feature = "scripting")]
-struct PreparedFileScriptArtboardData {
-    file: Arc<File>,
-    source_file_pin: Option<Arc<File>>,
-    source_runtime: Arc<RuntimeFile>,
-    source_artboards: Arc<Vec<nuxie_graph::ArtboardGraph>>,
-    source_external_image_assets: BTreeMap<u32, Arc<[u8]>>,
-    source_max_retained_decoded_image_bytes: Option<usize>,
-    artboard_index: usize,
-    source_is_live: bool,
-    instance: RuntimeArtboardInstance,
-    state_machine: Option<StateMachineInstance>,
-    view_model: Option<nuxie_runtime::ScriptViewModel>,
-    parent_context: Option<nuxie_runtime::ScriptArtboardParentContext>,
-    data_context: Option<nuxie_runtime::ScriptArtboardDataContext>,
-    width: f32,
-    height: f32,
-}
-
-#[cfg(feature = "scripting")]
 struct FileScriptArtboardResolver {
     file: Arc<File>,
 }
 
 #[cfg(feature = "scripting")]
 struct PreparedFileScriptArtboard {
-    data: PreparedFileScriptArtboardData,
+    file: Arc<File>,
+    source: nuxie_runtime::ScriptArtboardSource,
+    parent_context: Option<nuxie_runtime::ScriptArtboardParentContext>,
 }
 
 #[cfg(feature = "scripting")]
@@ -3588,8 +3571,32 @@ impl std::fmt::Debug for PreparedFileScriptArtboard {
 
 #[cfg(feature = "scripting")]
 impl nuxie_runtime::PreparedScriptArtboard for PreparedFileScriptArtboard {
-    fn construct(self: Box<Self>) -> Box<dyn nuxie_runtime::ScriptArtboard> {
-        Box::new(FileScriptArtboard::from_prepared(self.data))
+    fn construct(
+        self: Box<Self>,
+    ) -> std::result::Result<Box<dyn nuxie_runtime::ScriptArtboard>, nuxie_runtime::ScriptError>
+    {
+        let artboard = match &self.source {
+            nuxie_runtime::ScriptArtboardSource::File(artboard_id) => {
+                let artboard_index = usize::try_from(*artboard_id).map_err(|_| {
+                    nuxie_runtime::ScriptError::new(format!(
+                        "script artboard id {artboard_id} does not fit this platform",
+                    ))
+                })?;
+                FileScriptArtboard::new(
+                    Arc::clone(&self.file),
+                    artboard_index,
+                    self.parent_context.as_ref(),
+                )?
+            }
+            nuxie_runtime::ScriptArtboardSource::Live(bindable) => {
+                FileScriptArtboard::new_from_live(
+                    Arc::clone(&self.file),
+                    bindable,
+                    self.parent_context.as_ref(),
+                )?
+            }
+        };
+        Ok(Box::new(artboard))
     }
 }
 
@@ -3645,24 +3652,30 @@ impl nuxie_runtime::ScriptArtboardResolver for FileScriptArtboardResolver {
         Box<dyn nuxie_runtime::PreparedScriptArtboard>,
         nuxie_runtime::ScriptError,
     > {
-        let data = match source {
+        match source {
             nuxie_runtime::ScriptArtboardSource::File(artboard_id) => {
                 let artboard_index = usize::try_from(*artboard_id).map_err(|_| {
                     nuxie_runtime::ScriptError::new(format!(
                         "script artboard id {artboard_id} does not fit this platform",
                     ))
                 })?;
-                FileScriptArtboard::prepare(Arc::clone(&self.file), artboard_index, parent_context)?
+                self.file
+                    .graph
+                    .artboards
+                    .get(artboard_index)
+                    .ok_or_else(|| {
+                        nuxie_runtime::ScriptError::new(format!(
+                            "missing scripted artboard index {artboard_index}",
+                        ))
+                    })?;
             }
-            nuxie_runtime::ScriptArtboardSource::Live(bindable) => {
-                FileScriptArtboard::prepare_from_live(
-                    Arc::clone(&self.file),
-                    bindable,
-                    parent_context,
-                )?
-            }
-        };
-        Ok(Box::new(PreparedFileScriptArtboard { data }))
+            nuxie_runtime::ScriptArtboardSource::Live(_) => {}
+        }
+        Ok(Box::new(PreparedFileScriptArtboard {
+            file: Arc::clone(&self.file),
+            source: source.clone(),
+            parent_context: parent_context.cloned(),
+        }))
     }
 }
 
@@ -3673,14 +3686,9 @@ impl FileScriptArtboard {
         bindable: &nuxie_runtime::RuntimeBindableArtboard,
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
     ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
-        Self::prepare_from_live(resolver_file, bindable, parent_context).map(Self::from_prepared)
-    }
-
-    fn prepare_from_live(
-        resolver_file: Arc<File>,
-        bindable: &nuxie_runtime::RuntimeBindableArtboard,
-        parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
-    ) -> std::result::Result<PreparedFileScriptArtboardData, nuxie_runtime::ScriptError> {
+        // Take the concrete live snapshot only at the authored
+        // `setArtboardInput` position. The prepared recipe deliberately
+        // retains `bindable`, not this clone.
         let source = bindable.artboard_instance().ok_or_else(|| {
             nuxie_runtime::ScriptError::new("live scripted artboard source is unavailable")
         })?;
@@ -3703,7 +3711,7 @@ impl FileScriptArtboard {
             .map_or(resolver_file.max_retained_decoded_image_bytes, |file| {
                 file.max_retained_decoded_image_bytes
             });
-        Self::prepare_from_concrete(
+        Self::from_concrete(
             resolver_file,
             source_file_pin,
             source_runtime,
@@ -3723,15 +3731,7 @@ impl FileScriptArtboard {
         artboard_index: usize,
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
     ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
-        Self::prepare(file, artboard_index, parent_context).map(Self::from_prepared)
-    }
-
-    fn prepare(
-        file: Arc<File>,
-        artboard_index: usize,
-        parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
-    ) -> std::result::Result<PreparedFileScriptArtboardData, nuxie_runtime::ScriptError> {
-        Self::prepare_with_view_model(file, artboard_index, parent_context, None)
+        Self::new_with_view_model(file, artboard_index, parent_context, None)
     }
 
     fn new_with_view_model(
@@ -3740,23 +3740,13 @@ impl FileScriptArtboard {
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
         supplied_view_model: Option<nuxie_runtime::ScriptViewModel>,
     ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
-        Self::prepare_with_view_model(file, artboard_index, parent_context, supplied_view_model)
-            .map(Self::from_prepared)
-    }
-
-    fn prepare_with_view_model(
-        file: Arc<File>,
-        artboard_index: usize,
-        parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
-        supplied_view_model: Option<nuxie_runtime::ScriptViewModel>,
-    ) -> std::result::Result<PreparedFileScriptArtboardData, nuxie_runtime::ScriptError> {
         let graph = file.graph.artboards.get(artboard_index).ok_or_else(|| {
             nuxie_runtime::ScriptError::new(format!(
                 "missing scripted artboard index {artboard_index}",
             ))
         })?;
         let external_font_assets = file.external_font_assets.snapshot();
-        let mut instance = RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs_and_asset_owners(
+        let instance = RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs_and_asset_owners(
                 &file.runtime,
                 graph,
                 &file.graph.artboards,
@@ -3773,7 +3763,7 @@ impl FileScriptArtboard {
         debug_assert_eq!(source_artboard_index, artboard_index);
         let source_external_image_assets = file.external_image_assets.clone();
         let source_max_retained_decoded_image_bytes = file.max_retained_decoded_image_bytes;
-        Self::prepare_from_concrete(
+        Self::from_concrete(
             file,
             None,
             source_runtime,
@@ -3789,7 +3779,7 @@ impl FileScriptArtboard {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn prepare_from_concrete(
+    fn from_concrete(
         file: Arc<File>,
         source_file_pin: Option<Arc<File>>,
         source_runtime: Arc<RuntimeFile>,
@@ -3801,31 +3791,28 @@ impl FileScriptArtboard {
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
         supplied_view_model: Option<nuxie_runtime::ScriptViewModel>,
         source_is_live: bool,
-    ) -> std::result::Result<PreparedFileScriptArtboardData, nuxie_runtime::ScriptError> {
+    ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
         instance.set_frame_origin(false);
         let view_model = supplied_view_model.or_else(|| {
             // `ScriptReffedArtboard` asks the consumer File to construct the
             // ViewModel for the already-resolved concrete source Artboard.
-            // Read the Artboard's copied authored id from its source catalog,
-            // but resolve/create that id in the consumer File.
-            let owned_view_model = source_runtime
-                .artboard(artboard_index)
-                .and_then(|artboard| artboard.uint_property("viewModelId"))
+            // Read the current generated property from the fresh concrete
+            // clone, not immutable source metadata, then create that model in
+            // the consumer File exactly like `File::createViewModelInstance`.
+            let view_model_key = nuxie_schema::definition_by_name("Artboard")
+                .and_then(|definition| {
+                    definition
+                        .properties
+                        .iter()
+                        .find(|property| property.name == "viewModelId")
+                })
+                .map(|property| property.key.int);
+            let owned_view_model = view_model_key
+                .and_then(|key| instance.debug_uint_property(0, key))
                 .filter(|index| *index != u64::from(u32::MAX))
                 .and_then(|index| usize::try_from(index).ok())
                 .and_then(|view_model_index| {
-                    file.runtime
-                        .view_model_default_instance(view_model_index)
-                        .and_then(|instance| {
-                            RuntimeOwnedViewModelInstance::from_instance(
-                                &file.runtime,
-                                view_model_index,
-                                instance.instance_index,
-                            )
-                        })
-                        .or_else(|| {
-                            RuntimeOwnedViewModelInstance::new(&file.runtime, view_model_index)
-                        })
+                    RuntimeOwnedViewModelInstance::new(&file.runtime, view_model_index)
                         .map(RuntimeOwnedViewModelHandle::new)
                 });
             owned_view_model.as_ref().and_then(|instance| {
@@ -3856,9 +3843,9 @@ impl FileScriptArtboard {
             state_machine.advance_data_context();
         }
         let (width, height) = instance.artboard_dimensions();
-        Ok(PreparedFileScriptArtboardData {
+        Ok(Self {
             file,
-            source_file_pin,
+            _source_file_pin: source_file_pin,
             source_runtime,
             source_artboards,
             source_external_image_assets,
@@ -3869,31 +3856,11 @@ impl FileScriptArtboard {
             state_machine,
             view_model,
             parent_context: parent_context.cloned(),
-            data_context,
+            _data_context: data_context,
             width,
             height,
-        })
-    }
-
-    fn from_prepared(data: PreparedFileScriptArtboardData) -> Self {
-        Self {
-            file: data.file,
-            _source_file_pin: data.source_file_pin,
-            source_runtime: data.source_runtime,
-            source_artboards: data.source_artboards,
-            source_external_image_assets: data.source_external_image_assets,
-            source_max_retained_decoded_image_bytes: data.source_max_retained_decoded_image_bytes,
-            artboard_index: data.artboard_index,
-            source_is_live: data.source_is_live,
-            instance: data.instance,
-            state_machine: data.state_machine,
-            view_model: data.view_model,
-            parent_context: data.parent_context,
-            _data_context: data.data_context,
-            width: data.width,
-            height: data.height,
             frame_origin: false,
-        }
+        })
     }
 
     fn new_occurrence(
@@ -3908,7 +3875,7 @@ impl FileScriptArtboard {
                 view_model,
             );
         }
-        Self::prepare_from_concrete(
+        Self::from_concrete(
             Arc::clone(&self.file),
             self._source_file_pin.as_ref().map(Arc::clone),
             Arc::clone(&self.source_runtime),
@@ -3921,7 +3888,6 @@ impl FileScriptArtboard {
             view_model,
             true,
         )
-        .map(Self::from_prepared)
     }
 
     fn initialize_renderer(
@@ -10253,6 +10219,84 @@ mod owned_instance_tests {
         File::from_runtime(runtime).expect("facade view-model graph")
     }
 
+    fn facade_two_view_model_file() -> File {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("First".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelPropertyString",
+                vec![("name", FixtureValue::String("firstOnly".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Second".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelPropertyNumber",
+                vec![("name", FixtureValue::String("secondOnly".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelInstance",
+                vec![
+                    ("name", FixtureValue::String("First defaults".to_owned())),
+                    ("viewModelId", FixtureValue::Uint(0)),
+                ],
+            ),
+            fixture_record(
+                "ViewModelInstanceString",
+                vec![
+                    ("viewModelPropertyId", FixtureValue::Uint(0)),
+                    ("propertyValue", FixtureValue::String("first".to_owned())),
+                ],
+            ),
+            fixture_record(
+                "ViewModelInstance",
+                vec![
+                    ("name", FixtureValue::String("Second defaults".to_owned())),
+                    ("viewModelId", FixtureValue::Uint(1)),
+                ],
+            ),
+            fixture_record(
+                "ViewModelInstanceNumber",
+                vec![
+                    ("viewModelPropertyId", FixtureValue::Uint(0)),
+                    ("propertyValue", FixtureValue::Double(22.0)),
+                ],
+            ),
+            fixture_record("Artboard", vec![("viewModelId", FixtureValue::Uint(0))]),
+            fixture_record("Shape", vec![("parentId", FixtureValue::Uint(0))]),
+            fixture_record(
+                "Rectangle",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("width", FixtureValue::Double(5.0)),
+                ],
+            ),
+            fixture_record(
+                "DataBindContext",
+                vec![
+                    (
+                        "propertyKey",
+                        FixtureValue::Uint(u64::from(
+                            fixture_property(
+                                "Rectangle",
+                                "width",
+                                FixtureValue::Double(0.0),
+                            )
+                            .key,
+                        )),
+                    ),
+                    ("sourcePathIds", FixtureValue::Bytes(vec![1, 0])),
+                ],
+            ),
+        ])
+        .expect("two-view-model fixture imports");
+        File::from_runtime(runtime).expect("two-view-model graph")
+    }
+
     fn assert_extended_view_model_facade(mut view_model: ViewModelInstance) {
         assert_eq!(
             view_model.raw().color_value_by_property_name_path("tint"),
@@ -10422,6 +10466,102 @@ mod owned_instance_tests {
         );
         drop(scripted);
         assert!(weak_source_file.upgrade().is_none());
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn prepared_live_script_artboard_snapshots_the_occurrence_during_construct() {
+        let file = Arc::new(facade_view_model_file());
+        let mut first = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+            .expect("instantiate the first live source");
+        assert!(first.raw_mut().set_artboard_dimensions(111.0, 55.0));
+        let bindable = nuxie_runtime::RuntimeBindableArtboard::new_with_artboard_instance(
+            "source",
+            first.raw(),
+        );
+        let resolver = FileScriptArtboardResolver {
+            file: Arc::clone(&file),
+        };
+        let recipe = nuxie_runtime::ScriptArtboardResolver::prepare_script_artboard(
+            &resolver,
+            &nuxie_runtime::ScriptArtboardSource::Live(bindable.clone()),
+            None,
+        )
+        .expect("validation retains the live bindable");
+
+        let mut second = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+            .expect("instantiate the replacement live source");
+        assert!(second.raw_mut().set_artboard_dimensions(222.0, 77.0));
+        bindable.refresh_artboard_instance(second.raw());
+
+        let scripted = recipe
+            .construct()
+            .expect("construction snapshots the current occurrence");
+        assert_eq!(scripted.width(), 222.0);
+        assert_eq!(scripted.height(), 77.0);
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn live_scripted_artboard_selects_consumer_view_model_from_mutated_occurrence() {
+        let source_file = Arc::new(facade_two_view_model_file());
+        let resolver_file = Arc::new(facade_two_view_model_file());
+        let mut source = OwnedArtboardInstance::instantiate_default(Arc::clone(&source_file))
+            .expect("instantiate the authored first-model source");
+        let view_model_key = definition_by_name("Artboard")
+            .and_then(|definition| {
+                definition
+                    .properties
+                    .iter()
+                    .find(|property| property.name == "viewModelId")
+            })
+            .map(|property| property.key.int)
+            .expect("Artboard.viewModelId key");
+        assert_eq!(source.raw().debug_uint_property(0, view_model_key), Some(0));
+        assert!(source.raw_mut().set_uint_property(0, view_model_key, 1));
+
+        let bindable =
+            nuxie_runtime::RuntimeBindableArtboard::new_with_artboard_instance_and_file_authority(
+                "source",
+                source.raw(),
+                Rc::new(Arc::clone(&source_file)),
+            );
+        let mut scripted =
+            FileScriptArtboard::new_from_live(Arc::clone(&resolver_file), &bindable, None)
+                .expect("the consumer File wraps the mutated live occurrence");
+        let selected = scripted
+            .view_model
+            .as_ref()
+            .expect("the mutated second model is selected")
+            .clone();
+        assert_eq!(
+            selected.property("secondOnly"),
+            Some(nuxie_runtime::ScriptViewModelProperty::Number)
+        );
+        assert_eq!(selected.property("firstOnly"), None);
+        let rectangle_width_key = fixture_property(
+            "Rectangle",
+            "width",
+            FixtureValue::Double(0.0),
+        )
+        .key;
+        nuxie_runtime::ScriptArtboard::advance(&mut scripted, 0.0)
+            .expect("the selected model advances the cloned occurrence's DataBinds");
+        assert_eq!(
+            scripted
+                .instance
+                .double_property(2, rectangle_width_key),
+            Some(0.0),
+            "the selected second model's numeric property binds to the clone; the immutable first model exposes a string at the same path and could not drive this numeric target"
+        );
+        assert_eq!(
+            source_file
+                .runtime()
+                .artboard(0)
+                .and_then(|artboard| artboard.uint_property("viewModelId")),
+            Some(0),
+            "the immutable source catalog remains authored to the first model; only the concrete live occurrence changed"
+        );
     }
 
     #[cfg(feature = "scripting")]

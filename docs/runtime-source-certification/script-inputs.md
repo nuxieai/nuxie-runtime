@@ -784,3 +784,78 @@ Those results accept the structural fence, adapter migration, cross-File pin,
 and ancestry correction. They do not cover either rejected production
 counterexample. Certification remains rejected pending a correction and a
 new two-review cycle.
+
+## Phase-two timing and live-ViewModel correction candidate
+
+Status: **PENDING two fresh independent reviews.** Neither review may inherit
+an acceptance from the rejected `6b3f7c320` cycle.
+
+The correction keeps the non-bypassable prepared hydration type, but changes
+what it is allowed to retain. `prepare_script_artboard` now validates and
+retains only constructor authority:
+
+- a File source validates its immutable Artboard catalog entry and retains the
+  consumer File, source id, and parent context;
+- a live source retains the stable `RuntimeBindableArtboard` handle itself;
+- neither path clones an `ArtboardInstance`, selects or creates a ViewModel,
+  binds a DataContext, constructs a default state machine, advances that
+  context, or snapshots a public live occurrence during validation.
+
+`PreparedScriptArtboard::construct` is now honestly fallible. The authored
+phase-two loop calls it at the corresponding `setArtboardInput` position, so
+Rust-only semantic errors surface there instead of being moved into the first
+loop or hidden by `expect`. The File facade takes the live bindable snapshot,
+clones/constructs the concrete occurrence, sets `frameOrigin(false)`, selects
+and binds the ViewModel/DataContext, creates the default state machine, and
+advances its DataContext only at that boundary. The golden and silver adapters
+now preserve the same validation/construction split.
+
+The auto-created ViewModel now reads the fresh concrete occurrence's live
+root `Artboard.viewModelId`. It resolves that id in the consumer File and uses
+the generated `File::createViewModelInstance` analogue rather than an authored
+default instance. Immutable `source_runtime.artboard(index)` metadata is no
+longer consulted for this selection.
+
+### Correction witnesses
+
+- `scripted_hydration_resolves_artboard_then_viewmodel_in_authored_apply_order`
+  constructs a real `ProjectionArtboard` recipe only after validation and
+  records construction before publication;
+- `prepared_artboard_semantic_failure_occurs_at_its_authored_phase_two_position`
+  proves an earlier scalar setter runs before a prepared Artboard's semantic
+  construction failure, while publication and later setters do not run;
+- `prepared_live_script_artboard_snapshots_the_occurrence_during_construct`
+  validates one live bindable occurrence, refreshes it, and proves construct
+  uses the replacement occurrence's dimensions;
+- `live_scripted_artboard_selects_consumer_view_model_from_mutated_occurrence`
+  leaves the immutable source Artboard at `viewModelId == 0`, mutates the live
+  occurrence to `viewModelId == 1`, and proves the consumer File creates and
+  binds the second model: its numeric property drives a concrete Rectangle
+  DataBind whose same-index property is a string in the immutable first model.
+
+### Correction evidence
+
+With `CARGO_INCREMENTAL=0`:
+
+- `cargo test -p nuxie-runtime scripted_hydration_ --lib`: 4 passed;
+- `cargo test -p nuxie-runtime
+  prepared_artboard_semantic_failure_occurs_at_its_authored_phase_two_position
+  --lib`: 1 passed;
+- `cargo test -p nuxie-runtime
+  public_hydration_apply_and_apply_inputs_cannot_bypass_artboard_preparation
+  --lib`: 1 passed;
+- the two new `nuxie` live-occurrence witnesses and the existing cross-File
+  ownership witness: 3 passed;
+- `cargo test -p nuxie-runtime scripted_listener_action_tests --lib`: 100
+  passed;
+- `cargo test -p nuxie --features scripting --lib`: 56 passed, 1 ignored,
+  and the unrelated
+  `inert_script_import_tests::file_host_log_sink_reaches_its_lazy_scripting_vm`
+  fixture failed because its embedded Luau bytecode version `1` is outside the
+  current supported range `3..=13`; the failure reproduces in isolation;
+- `cargo check -p nuxie-runtime -p nuxie -p silver-corpus --features
+  nuxie/scripting`: passed;
+- `cargo check -p rust-golden-runner --features scripting`: passed.
+
+These results justify restarting the two-review cycle. They do not certify the
+rows themselves.

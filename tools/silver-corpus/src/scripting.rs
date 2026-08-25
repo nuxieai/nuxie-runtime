@@ -197,15 +197,31 @@ enum PreparedScriptInput {
 #[derive(Debug)]
 struct SilverScriptArtboardResolver;
 
+#[derive(Debug)]
+struct PreparedSilverScriptArtboard {
+    source: nuxie_runtime::ScriptArtboardSource,
+}
+
+impl nuxie_runtime::PreparedScriptArtboard for PreparedSilverScriptArtboard {
+    fn construct(
+        self: Box<Self>,
+    ) -> std::result::Result<Box<dyn nuxie_runtime::ScriptArtboard>, ScriptError> {
+        Err(ScriptError::new(format!(
+            "silver harness does not realize script artboard {:?}",
+            self.source
+        )))
+    }
+}
+
 impl nuxie_runtime::ScriptArtboardResolver for SilverScriptArtboardResolver {
     fn prepare_script_artboard(
         &self,
         source: &nuxie_runtime::ScriptArtboardSource,
         _parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
     ) -> std::result::Result<Box<dyn nuxie_runtime::PreparedScriptArtboard>, ScriptError> {
-        Err(ScriptError::new(format!(
-            "silver harness does not realize script artboard {source:?}"
-        )))
+        Ok(Box::new(PreparedSilverScriptArtboard {
+            source: source.clone(),
+        }))
     }
 }
 

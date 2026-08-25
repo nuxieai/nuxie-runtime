@@ -836,7 +836,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_require_check.cpp"
 test_case_count = 11
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/tests/upstream_scripting_require_check.rs", "crates/nuxie-scripting/src/vm.rs::context_init_tests::scripting_require_removed_module_works"]
-note = "All eleven cases preserve the literal module and test sources, registration/removal ordering, result arity, and exact assertions. Nine are green. The malformed-module and removed-module cases remain honestly expected-red because Rust double-wraps the require error and omits the pinned test_source:1 attribution; the upstream exact strings remain asserted. Module removal is exercised beside the private VM cache owner without adding a production API."
+note = "All eleven cases are active and preserve the literal module and test sources, registration/removal ordering, result arity, and exact assertions. The paired-source correction restores lua_requireinternal's registry lookup and error path as a raw Lua stack owner, so malformed and removed modules retain pinned test_source:1 attribution without adapter double-wrapping. Module removal is exercised beside the private VM cache owner without adding a production API."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_scope_test.cpp"

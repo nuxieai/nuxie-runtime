@@ -3607,7 +3607,7 @@ b6_row_id = "B6-0288"
 b6_verdict = "DIVERGENT"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "2026-08-03 LT-2 faithful candidate for the corpus-gated umbrella: install_rive_globals registers the pinned standard/Rive binding equivalents before sandboxing, is idempotent, and now includes the completed DataValue, property/state, and Gradient semantics. The paired-source canvas audit adds the direct safe-Rust owner for ScriptingContext::canvasDrawingPhase and ScopedCanvasDrawingPhase, preserving nullable construction and nested restoration. crates/nuxie-scripting/tests/vm_boot.rs covers ordering/lifecycle; the active upstream canvas-phase test covers the new state owner. MR-2/C08 exception remains justified across vm.rs, canvas_drawing_phase.rs, and view_model.rs."
+note = "2026-08-03 LT-2 faithful candidate for the corpus-gated umbrella: install_rive_globals registers the pinned standard/Rive binding equivalents before sandboxing, is idempotent, and includes completed DataValue, property/state, and Gradient semantics. The paired-source audit adds the direct safe-Rust owner for ScriptingContext::canvasDrawingPhase and ScopedCanvasDrawingPhase, and restores lua_requireinternal's registry lookup and error path as a raw Lua stack function so luaL_error retains exact caller attribution without adapter double-wrapping. Active VM boot, require, and canvas-phase tests cover these owners. MR-2/C08 exception remains justified across vm.rs, canvas_drawing_phase.rs, and view_model.rs."
 
 [[file]]
 upstream = "src/math/aabb.cpp"

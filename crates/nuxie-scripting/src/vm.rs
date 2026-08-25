@@ -55,7 +55,14 @@ use luaur_rt::{
     Vector as LuaVector, VmState,
 };
 use luaur_vm::functions::lua_callbacks::lua_callbacks;
+use luaur_vm::functions::lua_getfield::lua_getfield;
+use luaur_vm::functions::lua_l_error_l::lua_l_error_l;
+use luaur_vm::functions::lua_remove::lua_remove;
+use luaur_vm::functions::lua_settop::lua_settop;
+use luaur_vm::functions::lua_type::lua_type;
 use luaur_vm::functions::luau_load::luau_load;
+use luaur_vm::macros::lua_l_checkstring::luaL_checkstring;
+use luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     ScriptArtboard, ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall,
@@ -79,7 +86,41 @@ pub use resource_limits::{ScriptResourceGuard, ScriptResourceLimit};
 
 /// Registry key for the require cache (C++: `registeredCacheTableKey` in
 /// `src/lua/rive_lua_libs.cpp`).
-const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
+const MODULE_CACHE_KEY: &str = "_MODULES";
+
+/// Direct safe-host translation of pinned `lua_requireinternal`'s registered
+/// module lookup and error path.
+///
+/// This remains a raw Lua function because `luaL_error` must observe the
+/// authored Lua caller at stack level 1. Returning `Error::runtime` from a
+/// high-level Rust callback would stringify the adapter error before Luau
+/// raises it, losing the caller location and adding a second `runtime error:`
+/// prefix.
+unsafe fn lua_require_registered_module(
+    state: *mut luaur_vm::records::lua_state::lua_State,
+) -> core::ffi::c_int {
+    unsafe { lua_settop(state, 1) };
+    let path = luaL_checkstring!(state, 1);
+    unsafe { lua_getfield(state, LUA_REGISTRYINDEX, c"_MODULES".as_ptr()) };
+    unsafe { lua_getfield(state, -1, path) };
+    if unsafe { lua_type(state, -1) }
+        == luaur_vm::enums::lua_type::lua_Type::LUA_TNIL as core::ffi::c_int
+    {
+        unsafe { lua_settop(state, 1) };
+        let path = unsafe { std::ffi::CStr::from_ptr(path) }.to_string_lossy();
+        unsafe {
+            lua_l_error_l(
+                state,
+                c"require could not find a script named %s".as_ptr(),
+                format_args!("require could not find a script named {path}"),
+            )
+        };
+        return 0;
+    }
+
+    unsafe { lua_remove(state, -2) };
+    1
+}
 const SCRIPT_VM_MEMORY_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const SCRIPT_SAFEPOINTS_PER_CYCLE: usize = 100_000;
 
@@ -1642,10 +1683,26 @@ impl ScriptVm {
 
     #[cfg(all(test, feature = "compiler"))]
     fn load(&self, name: &str, source: &str) -> Result<Function> {
-        self.ensure_initialized()?;
-        self.reserve_parent_stack_headroom()?;
-        let result = self.lua.load(source).set_name(name).into_function();
-        self.track_resource_result(result)
+        use luaur_compiler::functions::luau_compile::luau_compile;
+
+        luaur_common::set_all_flags(true);
+        let mut output_size = 0;
+        let output = luau_compile(
+            source.as_ptr().cast(),
+            source.len(),
+            core::ptr::null_mut(),
+            &mut output_size,
+        );
+        if output.is_null() || output_size == 0 {
+            return Err(Error::runtime("pinned Luau compiler returned no bytecode"));
+        }
+        let bytecode = unsafe { core::slice::from_raw_parts(output.cast::<u8>(), output_size) };
+        let result = self.load_bytecode(name, bytecode);
+        unsafe extern "C" {
+            fn free(pointer: *mut core::ffi::c_void);
+        }
+        unsafe { free(output.cast()) };
+        result
     }
 
     /// Load precompiled Luau *bytecode* (the payload `.riv` files carry)
@@ -1662,8 +1719,8 @@ impl ScriptVm {
                 "ScriptAsset '{chunk_name}': malformed Luau bytecode: {error}"
             ))));
         }
-        let name = CString::new(format!("={chunk_name}"))
-            .unwrap_or_else(|_| CString::new("=script").expect("static"));
+        let name =
+            CString::new(chunk_name).unwrap_or_else(|_| CString::new("script").expect("static"));
         let result = unsafe {
             self.lua.exec_raw((), |state| {
                 let rc = luau_load(
@@ -1764,15 +1821,14 @@ impl ScriptVm {
     /// Install Rive's custom `require`. Library dependencies are prelinked by
     /// the exporter, so runtime lookup uses the requested module name verbatim.
     fn install_require_global(&self, cache: Table) -> Result<()> {
-        let lookup = cache.clone();
-        let require = self.lua.create_function(move |_, name: String| {
-            match lookup.get::<Value>(name.as_str())? {
-                Value::Nil => Err(Error::runtime(format!(
-                    "require could not find a script named {name}"
-                ))),
-                value => Ok(value),
-            }
-        })?;
+        // Keep the cache argument in the owner signature so installation can
+        // only occur after the named-registry table exists, matching
+        // `checkRegisteredModules` initialization order.
+        let _ = cache;
+        let require = unsafe {
+            self.lua
+                .create_c_function(Some(lua_require_registered_module))?
+        };
         self.lua.globals().set("require", require)?;
         Ok(())
     }
@@ -3882,7 +3938,6 @@ mod context_init_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: require errors are double-wrapped and omit the pinned test_source:1 attribution"]
     fn scripting_require_removed_module_works() {
         let vm = ScriptVm::new();
         vm.install_rive_globals().expect("Rive globals");

@@ -34,7 +34,6 @@ fn scripting_require() {
 }
 
 #[test]
-#[ignore = "expected-red: require errors are double-wrapped and omit the pinned test_source:1 attribution"]
 fn scripting_require_with_bad_code() {
     let vm = vm_with_rive_globals();
     let _registration_error = vm.register_source_module("utilities", "return { 'name' = 'hello' }");

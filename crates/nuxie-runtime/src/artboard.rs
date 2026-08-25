@@ -403,6 +403,19 @@ pub struct ArtboardInstance {
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) script_instances_by_global:
         RuntimeScriptState<BTreeMap<u32, RuntimeScriptedObjectOccurrence>>,
+    /// Last source value observed through each live primitive ScriptInput
+    /// DataBind. C++ registers the concrete DataBind as a dependent and only
+    /// writes the ScriptInput when that source subsequently changes; the
+    /// source's initial value after a DataContext bind is only the baseline.
+    resolved_script_primitive_inputs:
+        RuntimeScriptState<BTreeMap<(u32, String), ScriptValue>>,
+    /// Last artboard id projected through each live `ScriptInputArtboard`.
+    /// C++ retains this on the concrete input occurrence and only calls
+    /// `ScriptedObject::setArtboardInput` when its DataBind changes the
+    /// referenced Artboard. Keep the same occurrence-owned edge here so a
+    /// steady frame does not clone another scripted Artboard.
+    resolved_script_artboard_inputs:
+        RuntimeScriptState<BTreeMap<(u32, String), u64>>,
     /// Generation of concrete script occurrence attachments. Rust's
     /// authenticated facade mounts these after Artboard cloning, while C++
     /// mounts them before state-machine input-group construction.
@@ -604,6 +617,8 @@ impl Clone for ArtboardInstance {
             empty_linear_animation: self.empty_linear_animation.clone(),
             state_machines: self.state_machines.clone(),
             script_instances_by_global: self.script_instances_by_global.clone(),
+            resolved_script_primitive_inputs: self.resolved_script_primitive_inputs.clone(),
+            resolved_script_artboard_inputs: self.resolved_script_artboard_inputs.clone(),
             script_attachment_generation: self.script_attachment_generation,
             scripted_data_converter_instances_by_global: self
                 .scripted_data_converter_instances_by_global
@@ -1243,6 +1258,10 @@ impl ArtboardInstance {
 
     fn restore_transient_script_handles_from(&mut self, source: &Self) {
         self.script_instances_by_global.0 = source.script_instances_by_global.0.clone();
+        self.resolved_script_primitive_inputs.0 =
+            source.resolved_script_primitive_inputs.0.clone();
+        self.resolved_script_artboard_inputs.0 =
+            source.resolved_script_artboard_inputs.0.clone();
         self.scripted_data_converter_instances_by_global.0 =
             source.scripted_data_converter_instances_by_global.0.clone();
         for (local_id, source_nested) in source.nested_artboards.iter() {
@@ -2597,6 +2616,8 @@ impl ArtboardInstance {
             empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
             state_machines: Arc::new(state_machines),
             script_instances_by_global: RuntimeScriptState::default(),
+            resolved_script_primitive_inputs: RuntimeScriptState::default(),
+            resolved_script_artboard_inputs: RuntimeScriptState::default(),
             script_attachment_generation: 0,
             scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
             has_scripted_drawables: graph.components.iter().any(|component| {
@@ -3649,6 +3670,38 @@ impl ArtboardInstance {
         Ok(true)
     }
 
+    /// Observe one live primitive ScriptInput DataBind at the post-advance
+    /// boundary. The first value establishes the source baseline without
+    /// replacing the authored cold-init input. Later changes follow the
+    /// generated `propertyValueChanged` callback into `ScriptedObject`.
+    #[doc(hidden)]
+    pub fn sync_bound_script_input_for_global(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        value: ScriptValue,
+        initialize: bool,
+    ) -> Result<bool, ScriptError> {
+        let key = (global_id, name.to_owned());
+        let Some(previous) = self.resolved_script_primitive_inputs.get(&key) else {
+            if !initialize {
+                return Ok(false);
+            }
+            self.resolved_script_primitive_inputs
+                .insert(key, value.clone());
+            return self.set_script_input_for_global_if_changed(global_id, name, value);
+        };
+        if initialize {
+            return Ok(false);
+        }
+        if *previous == value {
+            return Ok(false);
+        }
+        self.resolved_script_primitive_inputs.insert(key, value.clone());
+        self.set_script_input_for_global(global_id, name, value)?;
+        Ok(true)
+    }
+
     /// Writes one input to every currently retained occurrence of the same
     /// authored scripted object below this artboard. `None` means the authored
     /// global has no live occurrence in this tree; `Some(false)` means every
@@ -3717,15 +3770,54 @@ impl ArtboardInstance {
             .cloned()
             .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
         handle.borrow_mut().set_artboard_input(name, artboard)?;
-        if handle
-            .borrow_mut()
-            .has_method(ScriptMethod::Advance)
-            .unwrap_or(false)
-        {
-            self.set_script_owner_advance_active(global_id, true);
-        }
         self.mark_script_owner_update_pending(global_id);
+        if let Some(local_id) = self.component_local_for_global(global_id) {
+            // Direct counterpart of `ScriptedObject::setArtboardInput`: the
+            // property write schedules ScriptUpdate. The component update
+            // phase, rather than this setter, decides whether `advance`
+            // becomes active again (`scripted_object.cpp:43-59`).
+            self.add_dirt(local_id, ComponentDirt::SCRIPT_UPDATE, false);
+        }
         Ok(())
+    }
+
+    #[doc(hidden)]
+    pub fn script_artboard_input_matches_for_global(
+        &self,
+        global_id: u32,
+        name: &str,
+        artboard_id: u64,
+    ) -> bool {
+        self.resolved_script_artboard_inputs
+            .get(&(global_id, name.to_owned()))
+            .is_some_and(|resolved| *resolved == artboard_id)
+    }
+
+    #[doc(hidden)]
+    pub fn set_resolved_script_artboard_input_for_global(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        artboard_id: u64,
+        artboard: Box<dyn ScriptArtboard>,
+    ) -> Result<(), ScriptError> {
+        self.set_script_artboard_input_for_global(global_id, name, artboard)?;
+        self.resolved_script_artboard_inputs
+            .insert((global_id, name.to_owned()), artboard_id);
+        Ok(())
+    }
+
+    /// Seed the live resolved-id edge when a newly attached script table was
+    /// hydrated with this Artboard during the same mount transaction.
+    #[doc(hidden)]
+    pub fn record_resolved_script_artboard_input_for_global(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        artboard_id: u64,
+    ) {
+        self.resolved_script_artboard_inputs
+            .insert((global_id, name.to_owned()), artboard_id);
     }
 
     pub fn set_script_view_model_input_for_global(

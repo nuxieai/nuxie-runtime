@@ -1,5 +1,6 @@
 // State-machine instance integration for the C++ `listener_viewmodel_change.cpp` source.
 use super::*;
+use crate::view_model::RuntimeViewModelPointer;
 
 impl RuntimeStateMachineListenerActionExecutor<'_> {
     pub(in crate::state_machine) fn perform_scheduled_view_model_change(
@@ -55,6 +56,10 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
                 .source_path_for_data_bind(data_bind_index)
         });
         let source_changed = if let Some(data_bind_index) = data_bind_index
+            && self.owned_data_context.is_some()
+        {
+            self.perform_owned_data_context_change(data_bind_index, value, &mut targets)
+        } else if let Some(data_bind_index) = data_bind_index
             && let Some(context) = self.owned_view_model_context.take()
         {
             let changed = self.perform_owned_view_model_change(
@@ -65,10 +70,6 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
             );
             self.owned_view_model_context = Some(context);
             changed
-        } else if let Some(data_bind_index) = data_bind_index
-            && self.owned_data_context.is_some()
-        {
-            self.perform_owned_data_context_change(data_bind_index, value, &mut targets)
         } else if let Some(data_bind_index) = data_bind_index {
             self.data_bind_graph
                 .set_active_view_model_source_for_data_bind(data_bind_index, artboard_value.clone())
@@ -185,16 +186,39 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
             }
             RuntimeListenerViewModelChangeValue::Trigger(_) => unreachable!(),
         };
-        let mut context = context_handle.borrow_mut();
-        let Some(context_changed) =
-            StateMachineInstance::apply_listener_view_model_change_at_property_path(
-                &mut context,
-                &property_path,
-                value,
-                asset_value.as_ref(),
-            )
-        else {
-            return false;
+        let context_changed = match value {
+            RuntimeListenerViewModelChangeValue::ViewModel(
+                RuntimeViewModelPointer::DataContextRoot,
+            ) => {
+                let Some(value) = self
+                    .owned_data_context
+                    .as_ref()
+                    .and_then(RuntimeOwnedDataContext::main_view_model_handle)
+                else {
+                    return false;
+                };
+                let Ok(changed) =
+                    context_handle.link_view_model_by_property_path(&property_path, &value)
+                else {
+                    return false;
+                };
+                changed
+            }
+            RuntimeListenerViewModelChangeValue::ViewModel(_) => return false,
+            _ => {
+                let mut context = context_handle.borrow_mut();
+                let Some(changed) =
+                    StateMachineInstance::apply_listener_view_model_change_at_property_path(
+                        &mut context,
+                        &property_path,
+                        value,
+                        asset_value.as_ref(),
+                    )
+                else {
+                    return false;
+                };
+                changed
+            }
         };
         let graph_changed = self
             .data_bind_graph

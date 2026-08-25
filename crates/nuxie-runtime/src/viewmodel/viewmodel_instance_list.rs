@@ -239,10 +239,8 @@ impl RuntimeOwnedViewModelListValue {
         // not register the inserted instance as a structural parent child.
         // Keep that observable lifetime/propagation asymmetry separate from
         // the authored-list insertion API above.
-        self.items.insert(
-            index,
-            RuntimeOwnedViewModelListItem::new(instance),
-        );
+        self.items
+            .insert(index, RuntimeOwnedViewModelListItem::new(instance));
         self.item_count = self.items.len();
         true
     }
@@ -351,9 +349,12 @@ impl Drop for RuntimeOwnedViewModelListValue {
 fn reset_runtime_owned_triggers(triggers: &mut [RuntimeOwnedViewModelTrigger]) -> bool {
     let mut changed = false;
     for trigger in triggers {
-        if trigger.set_value(0) {
-            changed = true;
-        }
+        changed |= trigger.value() != 0;
+        // C++ calls ViewModelInstanceTrigger::advanced(), which resets the
+        // counter through propertyValue(0) under SuppressDelegation. Calling
+        // the ordinary setter here replayed script delegates for the internal
+        // acknowledgment edge.
+        trigger.advanced();
     }
     changed
 }
@@ -456,8 +457,8 @@ fn runtime_owned_view_model_lists_for_instance(
                         let hydrated = items
                             .into_iter()
                             .filter_map(|item| {
-                                let reference = file
-                                    .referenced_view_model_instance_for_list_item_object(item)?;
+                                let reference =
+                                    file.referenced_view_model_instance_for_list_item_object(item)?;
                                 runtime_owned_view_model_list_item_instance(file, reference).map(
                                     |(instance, source_object_id)| {
                                         RuntimeOwnedViewModelListItem::from_authored(

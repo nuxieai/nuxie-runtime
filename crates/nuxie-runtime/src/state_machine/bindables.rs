@@ -1957,10 +1957,6 @@ fn runtime_bindable_view_model_default_view_model_source<'a>(
     default_instance: Option<&RuntimeObject>,
     converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableViewModelDefaultViewModelSource> {
-    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
-    if property_key_for_name("BindablePropertyViewModel", "propertyValue") != Some(property_key) {
-        return None;
-    }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
     let Some(reference) =
         file.data_context_view_model_instance_for_instance(default_instance?, &path)

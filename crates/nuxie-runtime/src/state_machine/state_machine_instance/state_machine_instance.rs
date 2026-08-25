@@ -6712,17 +6712,17 @@ impl StateMachineInstance {
                         .data_bind_graph
                         .bindable_data_bind_to_source_index(bindable_global_id);
                     let source_changed = data_bind_index.is_some_and(|data_bind_index| {
-                        if let Some(context) = owned_context.as_deref_mut() {
-                            self.perform_listener_view_model_change(
-                                data_bind_index,
-                                &value,
-                                Some(context),
-                            )
-                        } else if let Some(data_context) = self.owned_data_context.clone() {
+                        if let Some(data_context) = self.owned_data_context.clone() {
                             self.perform_listener_view_model_change_for_data_context(
                                 &data_context,
                                 data_bind_index,
                                 &value,
+                            )
+                        } else if let Some(context) = owned_context.as_deref_mut() {
+                            self.perform_listener_view_model_change(
+                                data_bind_index,
+                                &value,
+                                Some(context),
                             )
                         } else {
                             self.perform_listener_view_model_change(data_bind_index, &value, None)

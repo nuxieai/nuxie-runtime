@@ -5,6 +5,7 @@ use super::state_machine_instance::{
     runtime_owned_font_asset_value_for_state_machine_source,
 };
 use super::*;
+use crate::view_model::RuntimeViewModelPointer;
 impl StateMachineInstance {
     /// Install one cloned `ScriptedObject`'s live DataContext without
     /// hydrating or initializing its script table.
@@ -1024,6 +1025,19 @@ impl StateMachineInstance {
         else {
             return false;
         };
+        if matches!(
+            value,
+            RuntimeListenerViewModelChangeValue::ViewModel(
+                RuntimeViewModelPointer::DataContextRoot
+            )
+        ) {
+            let Some(value) = data_context.main_view_model_handle() else {
+                return false;
+            };
+            return context
+                .link_view_model_by_property_path(&property_path, &value)
+                .unwrap_or(false);
+        }
         let mut context = context.borrow_mut();
         let changed = match value {
             RuntimeListenerViewModelChangeValue::Trigger(value) => Some(

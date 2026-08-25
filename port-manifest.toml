@@ -805,9 +805,9 @@ note = "Consolidated Rust port for constraints."
 
 [[file]]
 upstream = "src/constraints/scrolling/clamped_scroll_physics.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"
-note = "Phase 3 paired audit: advance/run/clamp match the pin, including fminf/fmaxf math::clamp float-edge semantics; the variant remains in the shared ScrollPhysics lifecycle."
+note = "Phase 3 paired audit: advance/run/clamp match the pin, including fminf/fmaxf math::clamp float-edge semantics; shared ScrollPhysics lifecycle ownership is exact and is not a partial port."
 
 [[file]]
 upstream = "src/constraints/scrolling/elastic_scroll_physics.cpp"

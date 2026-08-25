@@ -10,7 +10,7 @@
 // break there can also hide behind a warm build cache, so exercising it at
 // runtime — and asserting the produced message — is the durable safety net.
 
-use luaur_rt::{Lua, Result};
+use luaur_rt::{Error, Lua, Result};
 
 /// Run `src` (named `name`) to completion and return the error message it
 /// raises. Panics if it did *not* error.
@@ -85,6 +85,29 @@ fn test_coroutine_resume_error_has_position() -> Result<()> {
     assert!(
         msg.contains(":2:"),
         "missing position from coroutine-resume error path: {msg}"
+    );
+    Ok(())
+}
+
+/// A translated C callback that used `luaL_error` must attribute the error to
+/// its Lua caller without nesting the Rust `RuntimeError` display prefix.
+#[test]
+fn test_lua_l_runtime_error_has_caller_position() -> Result<()> {
+    let lua = Lua::new();
+    let fail = lua.create_function(|_, ()| -> Result<()> {
+        Err(Error::lua_l_runtime("translated callback failed."))
+    })?;
+    lua.globals().set("fail", fail)?;
+
+    let function = lua
+        .load("return function()\n  fail()\nend")
+        .set_name("callbackChunk")
+        .eval::<luaur_rt::Function>()?;
+    let error = function.call::<()>(()).unwrap_err().to_string();
+
+    assert_eq!(
+        error,
+        "runtime error: =callbackChunk:2: translated callback failed."
     );
     Ok(())
 }

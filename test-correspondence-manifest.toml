@@ -828,8 +828,8 @@ note = "All 22 cases are represented. The original broad property case is decomp
 upstream = "tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp"
 test_case_count = 4
 status = "ported-direct"
-evidence = ["crates/nuxie-scripting/tests/upstream_scripting_renderer.rs"]
-note = "All four source scripts, callback sequences, 1000-frame loop, elapsed time, stack/GC checks, balance assertions, exact retained-renderer error, and silver names are translated. The call-renderer case is honestly ignored because Rust emits a nested runtime error without the pinned test_source:9 attribution or trailing period. The unbalanced end-result case is honestly ignored because Rust cleanup does not expose end()'s boolean. Both oval cases are honestly ignored at the absent pinned silver matcher, and the animated case also preserves the currently unavailable raw stack-top assertion."
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_renderer.rs", "crates/nuxie-scripting/src/vm/lua_renderer.rs::scripted_renderer_end_reports_an_unbalanced_save_stack", "tools/silver-corpus/tests/upstream_scripting_renderer.rs"]
+note = "All four source scripts, callback sequences, 1000-frame loop, elapsed time, stack/GC checks, balance assertions, exact retained-renderer error, and silver names are active. The retained-renderer case has exact luaL_error caller attribution and punctuation. The unbalanced case uses the owner's test-only end-result seam and retains both automatic restore actions. The oval cases execute through SerializingFactory and the existing sriv-v1-epsilon comparator against the pinned silvers; the animated case checks the raw Lua stack top and performs raw full GC in each frame."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_require_check.cpp"

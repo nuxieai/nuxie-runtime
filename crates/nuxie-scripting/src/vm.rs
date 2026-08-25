@@ -1619,6 +1619,23 @@ impl ScriptVm {
         &self.lua
     }
 
+    /// Exact `ScriptedRenderer::end()` result seam for literal upstream test
+    /// ports that live outside this crate. This is deliberately absent from
+    /// normal runtime builds.
+    #[cfg(feature = "upstream-test-seams")]
+    #[doc(hidden)]
+    pub fn upstream_test_call_draw_with_balance(
+        &self,
+        table: &Table,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+    ) -> std::result::Result<bool, ScriptError> {
+        self.reset_execution_budget();
+        self.renderer_bindings
+            .call_draw_with_balance(table, factory, renderer)
+            .map_err(|error| self.script_error(error))
+    }
+
     /// Consume every owner-tracked, parentless script view-model root at the
     /// end of the host frame. The host calls this once after its root state
     /// machine advance; script-driven child artboards deliberately do not.

@@ -885,8 +885,8 @@ class LedgerScorecardTests(unittest.TestCase):
             self.assertIn("`src/artboard.cpp`", completed.stdout)
             self.assertIn("`src/lua/renderer/lua_gpu.cpp`", completed.stdout)
             self.assertIn("Behavioral states: `unverified`: 456", completed.stdout)
-            self.assertIn("Covered test cases: 655/1404", completed.stdout)
-            self.assertIn("Uncovered test cases: 749", completed.stdout)
+            self.assertIn("Covered test cases: 1387/1404", completed.stdout)
+            self.assertIn("Uncovered test cases: 17", completed.stdout)
             self.assertIn(
                 "Status counts: `diverges`: 5; `exact`: 354; `not-yet`: 5",
                 completed.stdout,
@@ -915,7 +915,7 @@ class LedgerScorecardTests(unittest.TestCase):
             )
             self.assertEqual(
                 proof_document["evidence_dimensions"]["tests"]["uncovered_test_cases"],
-                749,
+                17,
             )
 
     def test_make_snapshot_persists_markdown_and_machine_owner_proof(self):

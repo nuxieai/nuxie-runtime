@@ -16,6 +16,22 @@ mod serializing;
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
 pub use serializing::{SerializingFactory, SerializingRenderer};
 
+// C++ owns this counter on Artboard, but its SerializingFactory also advances
+// it from the renderer utility layer. The Rust crate split keeps the shared
+// counter at their lowest common dependency so both translated owners observe
+// the same process-wide frame identity.
+static ARTBOARD_DRAW_FRAME_ID: AtomicU64 = AtomicU64::new(0);
+
+#[doc(hidden)]
+pub fn artboard_draw_frame_id() -> u64 {
+    ARTBOARD_DRAW_FRAME_ID.load(Ordering::Relaxed)
+}
+
+#[doc(hidden)]
+pub fn increment_artboard_draw_frame_id() {
+    ARTBOARD_DRAW_FRAME_ID.fetch_add(1, Ordering::Relaxed);
+}
+
 pub type ColorInt = u32;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

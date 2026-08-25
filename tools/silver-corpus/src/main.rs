@@ -46,6 +46,11 @@ fn validate(options: Options) -> anyhow::Result<()> {
     let mut unsupported = 0usize;
     let mut probed = 0usize;
     let mut probe_exact = 0usize;
+    let scripted_exact = manifest
+        .cases
+        .iter()
+        .filter(|case| case.lane == Lane::Scripted && case.status == Status::Exact)
+        .count();
     for case in &manifest.cases {
         if options.lane.is_some_and(|lane| lane != case.lane) {
             continue;
@@ -161,6 +166,7 @@ fn validate(options: Options) -> anyhow::Result<()> {
         }
     }
 
+    let cpp_rust_exact = byte_exact + epsilon_exact + scripted_exact;
     println!(
         "silver-corpus summary: entries={} provenanced={} runtime={} scripted={} selected={} executed={} cpp-baseline-exact={} cpp-rust-exact={} byte-exact={} epsilon={} divergent={} unsupported={} pending={} pending-scripted={} diverges={} unsupported-feature={} provenance-unknown={} operations={} bytes={}",
         summary.entries,
@@ -170,7 +176,7 @@ fn validate(options: Options) -> anyhow::Result<()> {
         selected,
         executed,
         summary.cpp_baseline_exact,
-        byte_exact + epsilon_exact,
+        cpp_rust_exact,
         byte_exact,
         epsilon_exact,
         divergent,
@@ -201,9 +207,9 @@ fn validate(options: Options) -> anyhow::Result<()> {
     );
     if options.id.is_none() && options.lane.is_none_or(|lane| lane == Lane::Runtime) {
         anyhow::ensure!(
-            byte_exact + epsilon_exact >= manifest.corpus.min_cpp_rust_exact,
-            "executed cpp-rust-exact={} is below ratchet {}",
-            byte_exact + epsilon_exact,
+            cpp_rust_exact >= manifest.corpus.min_cpp_rust_exact,
+            "accounted cpp-rust-exact={} is below ratchet {}",
+            cpp_rust_exact,
             manifest.corpus.min_cpp_rust_exact
         );
     }

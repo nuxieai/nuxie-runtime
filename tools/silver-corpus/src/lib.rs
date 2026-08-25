@@ -938,10 +938,18 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
             Lane::Scripted => {
                 summary.scripted += 1;
                 anyhow::ensure!(
-                    case.status == Status::PendingScripted,
-                    "{} scripted entry must remain separately classified pending-scripted",
+                    matches!(case.status, Status::PendingScripted | Status::Exact),
+                    "{} scripted entry must be pending-scripted or exact",
                     case.id
                 );
+                if case.status == Status::Exact {
+                    anyhow::ensure!(
+                        case.source == "inline-script"
+                            && matches!(&case.actions, Actions::Legacy(marker) if marker == "cpp-test-body"),
+                        "{} exact scripted entry must retain its literal inline C++ test body",
+                        case.id
+                    );
+                }
             }
             Lane::Unknown => {}
         }

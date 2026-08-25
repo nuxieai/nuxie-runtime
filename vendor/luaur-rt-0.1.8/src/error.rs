@@ -37,6 +37,14 @@ pub enum Error {
     /// A Lua runtime error (`error(..)`, a failed `assert`, a type error, or a
     /// Rust callback returning `Err`).
     RuntimeError(String),
+    /// A Rust callback error that must be raised with Lua's `luaL_error`
+    /// semantics: prepend the Lua caller's source location and use the message
+    /// itself as the Lua error object.
+    ///
+    /// This is an embedding adapter for translated C callbacks that called
+    /// `luaL_error` directly. Ordinary Rust callback errors should continue to
+    /// use [`Error::RuntimeError`].
+    LuaLRuntimeError(String),
     /// A memory allocation error reported by the VM.
     MemoryError(String),
     /// A value could not be converted **from** a Lua value into the requested
@@ -156,6 +164,12 @@ impl Error {
         Error::RuntimeError(message.to_string())
     }
 
+    /// Raise a translated C callback error with `luaL_error` caller
+    /// attribution when it crosses the Rust callback trampoline.
+    pub fn lua_l_runtime<S: fmt::Display>(message: S) -> Self {
+        Error::LuaLRuntimeError(message.to_string())
+    }
+
     /// Try to view the wrapped external error as a concrete type `T`.
     ///
     /// Mirrors the common `mlua::Error::downcast_ref` use: only
@@ -186,6 +200,7 @@ impl fmt::Display for Error {
         match self {
             Error::SyntaxError { message, .. } => write!(f, "syntax error: {message}"),
             Error::RuntimeError(msg) => write!(f, "runtime error: {msg}"),
+            Error::LuaLRuntimeError(msg) => write!(f, "runtime error: {msg}"),
             Error::MemoryError(msg) => write!(f, "memory error: {msg}"),
             Error::FromLuaConversionError { from, to, message } => {
                 write!(f, "error converting Lua {from} to {to}")?;

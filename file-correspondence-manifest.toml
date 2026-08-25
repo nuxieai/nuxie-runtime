@@ -3733,13 +3733,13 @@ note = "MR-3 justification: W120 faithful candidate under FLR-18: pinned process
 upstream = "src/math/raw_path.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/math/raw_path.rs"
+rust_module = "crates/nuxie-render-api/src/lib.rs; crates/nuxie-runtime/src/math/raw_path.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0299"
 b6_verdict = "ADAPTED"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Consolidated Rust port for math."
+note = "The paired-source audit corrected the primary owner mapping: RawPath storage and direct operations live at the render-api ownership seam, while runtime command conversion remains in the private runtime module. The previously omitted addOval/addPoly bodies and both PathDirection branches now directly follow pinned raw_path.cpp. C17 exception: the retained modules cross the renderer contract/runtime adapter crate boundary."
 
 [[file]]
 upstream = "src/math/raw_path_utils.cpp"

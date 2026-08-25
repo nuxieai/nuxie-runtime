@@ -297,6 +297,19 @@ pub enum FillRule {
     Clockwise = 2,
 }
 
+/// Contour direction from pinned C++ `rive::PathDirection`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum PathDirection {
+    Clockwise = 0,
+    Counterclockwise = 1,
+}
+
+impl PathDirection {
+    pub const CW: Self = Self::Clockwise;
+    pub const CCW: Self = Self::Counterclockwise;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum PathVerb {
@@ -552,14 +565,97 @@ impl RawPath {
         }
     }
 
-    /// Append a clockwise rectangle, matching pinned C++ `RawPath::addRect`.
+    /// Append a clockwise rectangle, matching the default direction of pinned
+    /// C++ `RawPath::addRect`.
     pub fn add_rect(&mut self, bounds: Aabb) {
+        self.add_rect_with_direction(bounds, PathDirection::Clockwise);
+    }
+
+    /// Append a rectangle in the requested pinned C++ `PathDirection`.
+    pub fn add_rect_with_direction(&mut self, bounds: Aabb, direction: PathDirection) {
         self.reserve(6, 5);
         self.move_to(bounds.min_x, bounds.min_y);
-        self.line_to(bounds.max_x, bounds.min_y);
-        self.line_to(bounds.max_x, bounds.max_y);
-        self.line_to(bounds.min_x, bounds.max_y);
+        if direction == PathDirection::Clockwise {
+            self.line_to(bounds.max_x, bounds.min_y);
+            self.line_to(bounds.max_x, bounds.max_y);
+            self.line_to(bounds.min_x, bounds.max_y);
+        } else {
+            self.line_to(bounds.min_x, bounds.max_y);
+            self.line_to(bounds.max_x, bounds.max_y);
+            self.line_to(bounds.max_x, bounds.min_y);
+        }
         self.close();
+    }
+
+    /// Append a clockwise four-cubic oval, matching the default direction of
+    /// pinned C++ `RawPath::addOval`.
+    pub fn add_oval(&mut self, bounds: Aabb) {
+        self.add_oval_with_direction(bounds, PathDirection::Clockwise);
+    }
+
+    /// Direct translation of pinned C++ `RawPath::addOval`.
+    pub fn add_oval_with_direction(&mut self, bounds: Aabb, direction: PathDirection) {
+        // https://spencermortensen.com/articles/bezier-circle/
+        const C: f32 = 0.5519150244935105707435627_f32;
+        const UNIT: [Vec2D; 13] = [
+            Vec2D::new(1.0, 0.0),
+            Vec2D::new(1.0, C),
+            Vec2D::new(C, 1.0),
+            Vec2D::new(0.0, 1.0),
+            Vec2D::new(-C, 1.0),
+            Vec2D::new(-1.0, C),
+            Vec2D::new(-1.0, 0.0),
+            Vec2D::new(-1.0, -C),
+            Vec2D::new(-C, -1.0),
+            Vec2D::new(0.0, -1.0),
+            Vec2D::new(C, -1.0),
+            Vec2D::new(1.0, -C),
+            Vec2D::new(1.0, 0.0),
+        ];
+
+        let dx = (bounds.min_x + bounds.max_x) * 0.5;
+        let dy = (bounds.min_y + bounds.max_y) * 0.5;
+        let sx = bounds.width() * 0.5;
+        let sy = bounds.height() * 0.5;
+        let map = |point: Vec2D| Vec2D::new(point.x * sx + dx, point.y * sy + dy);
+
+        self.reserve(6, 13);
+        if direction == PathDirection::Clockwise {
+            let start = map(UNIT[0]);
+            self.move_to(start.x, start.y);
+            for index in (1..=10).step_by(3) {
+                let control0 = map(UNIT[index]);
+                let control1 = map(UNIT[index + 1]);
+                let end = map(UNIT[index + 2]);
+                self.cubic_to(control0.x, control0.y, control1.x, control1.y, end.x, end.y);
+            }
+        } else {
+            let start = map(UNIT[12]);
+            self.move_to(start.x, start.y);
+            for index in (2..=11).rev().step_by(3) {
+                let control0 = map(UNIT[index]);
+                let control1 = map(UNIT[index - 1]);
+                let end = map(UNIT[index - 2]);
+                self.cubic_to(control0.x, control0.y, control1.x, control1.y, end.x, end.y);
+            }
+        }
+        self.close();
+    }
+
+    /// Direct translation of pinned C++ `RawPath::addPoly`.
+    pub fn add_poly(&mut self, points: &[Vec2D], closed: bool) {
+        let Some(first) = points.first() else {
+            return;
+        };
+        let capacity = points.len() + usize::from(closed);
+        self.reserve(capacity, capacity);
+        self.move_to(first.x, first.y);
+        for point in &points[1..] {
+            self.line_to(point.x, point.y);
+        }
+        if closed {
+            self.close();
+        }
     }
 
     pub fn add_path(&mut self, path: &RawPath, transform: Mat2D) {
@@ -4280,6 +4376,39 @@ mod tests {
         distinct_object.renew_mutation_id();
         assert_eq!(distinct_object, snapshot);
         assert_ne!(distinct_object.mutation_id(), snapshot.mutation_id());
+    }
+
+    #[test]
+    fn raw_path_helper_direction_and_empty_poly_match_the_pinned_source() {
+        let bounds = Aabb::new(-3.0, -6.0, 3.0, 6.0);
+        let mut clockwise = RawPath::new();
+        clockwise.add_oval_with_direction(bounds, PathDirection::Clockwise);
+        let mut counterclockwise = RawPath::new();
+        counterclockwise.add_oval_with_direction(bounds, PathDirection::Counterclockwise);
+        assert_eq!(clockwise.verbs(), counterclockwise.verbs());
+        assert_eq!(
+            counterclockwise.points(),
+            clockwise.points().iter().rev().copied().collect::<Vec<_>>()
+        );
+
+        let mut rectangle = RawPath::new();
+        rectangle.add_rect_with_direction(bounds, PathDirection::Counterclockwise);
+        assert_eq!(
+            rectangle.points(),
+            &[
+                Vec2D::new(-3.0, -6.0),
+                Vec2D::new(-3.0, 6.0),
+                Vec2D::new(3.0, 6.0),
+                Vec2D::new(3.0, -6.0),
+            ]
+        );
+
+        let mut empty_poly = RawPath::new();
+        let mutation_id = empty_poly.mutation_id();
+        empty_poly.add_poly(&[], true);
+        assert!(empty_poly.verbs().is_empty());
+        assert!(empty_poly.points().is_empty());
+        assert_eq!(empty_poly.mutation_id(), mutation_id);
     }
 
     #[test]

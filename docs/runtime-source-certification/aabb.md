@@ -1,6 +1,7 @@
 # AABB source certification
 
-> **Correction candidate complete; two fresh independent adversarial reviews pending.**
+> **First independent correction review: REJECTED. Correction and two fresh
+> accepted adversarial reviews are still required.**
 
 ## Authority and scope
 
@@ -85,8 +86,77 @@ semantic unions, cross-type casts, general rounding, and valid corner access.
 - Focused runtime HitTester tests and `cargo check -p nuxie-runtime` are part of
   the correction gate.
 
+## First independent correction review
+
+Verdict: **REJECTED** at correction commit `64c8f852c`.
+
+This review re-read all 49 pinned header units and all nine pinned source units,
+including the `math_types.hpp` comparison/cast helpers on which templated
+`TAABB` depends. The direct bodies in `crates/nuxie-render-api/src/aabb.rs` are
+substantially faithful: the cross-signed `i128` comparison domain covers all
+six types instantiated by the pinned tests; `std::min`/`std::max` first-operand
+NaN and signed-zero behavior is preserved; `factorFrom` retains the pinned
+asymmetric Y grouping; and the `Option` results for failed lossless casts and
+invalid corners are reasonable safe-Rust boundaries for source assertions or
+`RIVE_UNREACHABLE`. Finite in-range `round` and `roundOut` are also literal;
+Rust's defined saturating float-to-integer behavior remains only an adaptation
+outside the C++ conversion domain.
+
+The candidate nevertheless fails actual-call-path and single-owner review:
+
+1. `SemanticProvider::rootTransformAABB` is translated with the wrong AABB
+   operation. Pinned `src/semantic/semantic_provider.cpp:35-42` constructs
+   `AABB::forExpansion()` and calls `AABB::expandTo` four times, in corner
+   order. Rust `semantic_provider.rs:185-194` constructs a four-point slice and
+   calls `FloatAabb::from_points`, which is the distinct
+   `AABB(Span<Vec2D>)` algorithm. The two algorithms differ on real source
+   boundary values: `expandTo` ignores a NaN coordinate until a comparable
+   coordinate arrives, while the span constructor preserves a first-point NaN
+   through source-ordered `std::min`/`std::max`; positive infinity also leaves
+   the `forExpansion` minimum at `f32::MAX` instead of initializing both edges
+   to infinity. Calling the new shared owner is insufficient when it calls the
+   wrong pinned unit.
+
+2. The live inner-feather path still bypasses the shared owner. Pinned
+   `src/shapes/paint/feather.cpp:73-88` evaluates
+   `path->rawPath()->bounds().pad(strength() * 1.5f)`, reaching the span
+   constructor and `AABB::pad/outset/inset`. Rust `draw.rs:21823-21842` instead
+   reaches `PathBounds` in `draw.rs:23435-23480`, whose `include` uses
+   `f32::min`/`f32::max` and whose `pad` manually edits four fields. Those
+   extrema choose different NaN and signed-zero results from the pinned
+   first-operand `std::min`/`std::max` contract. This is a production path, not
+   dead support code, and directly contradicts the receipt's claim that the
+   competing extrema policies were removed.
+
+3. The 20 `TAABB` units are not the workspace's operative integer-bounds
+   owner. Production renderer code still declares separate `IAABB` and
+   `AABBu16` structs in at least
+   `mechanical_port/source/renderer/include/rive/renderer/gpu_hpp.rs`,
+   `render_context_hpp.rs`, and `render_target_hpp.rs`, then executes separate
+   `intersect_*`, `join_*`, `clamp_bounds_u16`, `boundsToU16`, and `makeWH`
+   implementations across the shared, WebGL2, Vulkan, and other renderer
+   paths. The new module exports no `AABBi16` or `AABBu16` aliases and its
+   templated intersection/cast/join surface is reached only by the focused
+   runtime tests. This violates the pinned single `rive/math/aabb.hpp` source
+   owner and leaves the supposedly corrected integer authority test-only for
+   the consumers that exercise it most heavily.
+
+Evidence remains green but does not discharge these blockers:
+
+- `cargo test -p nuxie-render-api
+  raw_path_bounds_use_the_shared_pinned_aabb_extrema_contracts`: 1/1 passed.
+- `cargo test -p nuxie-runtime --test upstream_aabb`: 12/12 passed.
+
+Required correction: preserve the exact source operation at each caller
+(`forExpansion` plus ordered `expandTo` for semantic root transforms, span
+bounds plus `pad` for Feather), and make the shared typed AABB the operative
+renderer dependency instead of retaining local type/algorithm substitutes.
+Then repeat both independent reviews from the corrected commit.
+
 ## Provisional result
 
-Implementation status: **CORRECTION CANDIDATE COMPLETE**. Certification status:
-**PENDING TWO INDEPENDENT ADVERSARIAL REVIEWS**. Neither green tests nor this
-implementer-authored receipt may promote the family to accepted parity.
+Implementation status: **CORRECTION REQUIRED**. Certification status:
+**REJECTED BY FIRST INDEPENDENT CORRECTION REVIEW**. Neither green tests nor the
+direct 58-unit implementation can promote the family while operative callers
+select different source units and production renderer paths retain substitute
+owners.

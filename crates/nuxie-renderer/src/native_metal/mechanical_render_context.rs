@@ -41,7 +41,6 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
     RenderContextImpl, RenderContextImplContract,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
-#[cfg(feature = "native-ore-metal-experimental")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::OreContext;
 #[cfg(feature = "native-ore-metal-experimental")]
 use nuxie_ore_metal::metal::context::ContextMetal as OreContextMetal;
@@ -432,6 +431,14 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
         let owner = self.execution.take_ore_context_owner(handle)?;
         let context = owner.downcast::<OreContextMetal>().ok()?;
         Some(Box::new(OreContext::Metal(context)))
+    }
+
+    #[cfg(all(
+        not(feature = "native-ore-metal-experimental"),
+        any(feature = "native-ore-vulkan-experimental", feature = "ore-gl")
+    ))]
+    fn makeOreContext(&mut self) -> Option<Box<OreContext>> {
+        None
     }
 
     fn resizeFlushUniformBuffer(&mut self, sizeInBytes: usize) {

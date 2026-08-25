@@ -77,6 +77,7 @@ PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {
     "scripting",
 }
 PORTABLE_ABI_FACADE_ALLOWED_FEATURE_FORWARDINGS = {
+    ("android-vulkan", "renderer-vulkan"),
     ("apple-authored-msl", "ore-metal-authored-msl"),
 }
 PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
@@ -157,6 +158,12 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
             "OreMetalGpuCanvas",
             "OreMetalGpuCanvasImage",
         },
+    },
+}
+PORTABLE_ABI_FACADE_FILE_SYMBOLS = {
+    "crates/nux-capi/src/apple_assets.rs": {
+        "RenderCanvas",
+        "RenderCanvasError",
     },
 }
 PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
@@ -1084,6 +1091,9 @@ def portable_abi_facade_feature_errors(
 def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     errors = []
     test_module_ranges = cfg_test_module_ranges(source)
+    allowed_root_symbols = PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS | (
+        PORTABLE_ABI_FACADE_FILE_SYMBOLS.get(relative, set())
+    )
     file_module_symbols = PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS.get(relative, {})
     file_associated_items = PORTABLE_ABI_FACADE_FILE_ASSOCIATED_ITEMS.get(
         relative, set()
@@ -1148,7 +1158,7 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             body,
             re.DOTALL,
         )
-        allowed_symbols = PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS
+        allowed_symbols = allowed_root_symbols
         if direct is not None:
             imported_symbols = [direct.group(1)]
         elif grouped is not None:
@@ -1209,7 +1219,7 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             approved = nested_symbol in module_symbols
             reported_symbol = f"{symbol}::{nested_symbol}"
         else:
-            approved = symbol in PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS
+            approved = symbol in allowed_root_symbols
             reported_symbol = symbol
         if not approved:
             line = source.count("\n", 0, match.start()) + 1
@@ -1219,7 +1229,7 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             )
     for match in re.finditer(r"\bimpl\b(?P<header>[^{};]*)\{", source, re.DOTALL):
         header = match.group("header")
-        symbol_pattern = "|".join(sorted(PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS))
+        symbol_pattern = "|".join(sorted(allowed_root_symbols))
         target = re.search(
             rf"\bfor\s+(?:\(\s*)*(?:::)?(?:nuxie\s*::\s*)?"
             rf"(?:{symbol_pattern})\b",

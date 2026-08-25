@@ -263,7 +263,7 @@ impl OreMetalGpuCanvas {
         let descriptor = MTLTextureDescriptor::new();
         descriptor.setPixelFormat(MTLPixelFormat::RGBA8Unorm);
         descriptor.setStorageMode(MTLStorageMode::Shared);
-        descriptor.setUsage(MTLTextureUsage::RenderTarget);
+        descriptor.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
         let width = usize::try_from(plan.width)
             .map_err(|_| unsupported("canvas width exceeds NSUInteger"))?;
         let height = usize::try_from(plan.height)
@@ -391,7 +391,7 @@ impl OreMetalGpuCanvas {
             width: plan.width,
             height: plan.height,
             pixels: pixels.into(),
-            _texture: texture,
+            texture,
             _view: view,
         }))
     }
@@ -644,13 +644,19 @@ pub struct OreMetalGpuCanvasImage {
     width: u32,
     height: u32,
     pixels: Arc<[u8]>,
-    _texture: Retained<ProtocolObject<dyn MTLTexture>>,
+    texture: Retained<ProtocolObject<dyn MTLTexture>>,
     _view: AnyResourceHandle,
 }
 
 impl OreMetalGpuCanvasImage {
     pub fn pixels(&self) -> &[u8] {
         &self.pixels
+    }
+
+    /// Retains the same-device output for adoption by the product Metal
+    /// renderer without a second texture allocation or pixel upload.
+    pub fn retained_metal_texture(&self) -> Retained<ProtocolObject<dyn MTLTexture>> {
+        self.texture.clone()
     }
 }
 

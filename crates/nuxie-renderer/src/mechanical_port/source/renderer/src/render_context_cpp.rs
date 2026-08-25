@@ -5959,6 +5959,10 @@ impl LogicalFlush {
                 right: ix as u16 + padded_width,
                 bottom: iy as u16 + padded_height,
             };
+            debug_assert!(
+                AABBu16::new(0, 0, atlas_max_width, atlas_max_height)
+                    .contains(*padded_region)
+            );
             self.m_feather_atlas_max_x = self
                 .m_feather_atlas_max_x
                 .max((*padded_region).right as u32);

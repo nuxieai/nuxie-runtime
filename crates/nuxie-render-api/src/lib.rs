@@ -218,11 +218,14 @@ impl Mat2D {
 
         // Source deliberately uses extent subtraction so equal infinities and
         // every remaining NaN take the nonfinite/empty normalization branch.
-        if !(max_x - min_x >= 0.0 && max_y - min_y >= 0.0) {
+        let bounds = if !(max_x - min_x >= 0.0 && max_y - min_y >= 0.0) {
             Aabb::default()
         } else {
             Aabb::new(min_x + tx, min_y + ty, max_x + tx, max_y + ty)
-        }
+        };
+        debug_assert!(bounds.width() >= 0.0);
+        debug_assert!(bounds.height() >= 0.0);
+        bounds
     }
 
     /// Four-corner overload of pinned `Mat2D::mapBoundingBox(const AABB&)`.
@@ -4874,6 +4877,14 @@ mod tests {
             [0; 4],
             "pinned source normalizes the nonfinite linear result before translation"
         );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic]
+    fn map_bounding_box_retains_pinned_post_translation_extent_assertions() {
+        Mat2D([1.0, 0.0, 0.0, 1.0, f32::INFINITY, 0.0])
+            .map_bounding_box(&[Vec2D::new(0.0, 0.0), Vec2D::new(1.0, 1.0)]);
     }
 
     #[test]

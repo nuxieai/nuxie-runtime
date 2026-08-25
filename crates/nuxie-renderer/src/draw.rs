@@ -456,6 +456,8 @@ fn feather_pixel_bounds_impl(
     .then(|| softened_path_for_feathering(path, paint_feather * 1.5, matrix_scale));
     let path = softened_path.as_ref().unwrap_or(path);
     let mut mapped_bounds = transform.map_bounding_box(path.points());
+    debug_assert!(mapped_bounds.width() >= 0.0);
+    debug_assert!(mapped_bounds.height() >= 0.0);
     let mut radius = stroke.map_or(0.0, |(thickness, join, cap)| {
         let stroke_radius = thickness * 0.5;
         if join == StrokeJoin::Miter {
@@ -477,7 +479,10 @@ fn feather_pixel_bounds_impl(
 }
 
 pub(crate) fn path_pixel_bounds(path: &RawPath, transform: Mat2D) -> Option<[i32; 4]> {
-    let bounds = transform.map_bounding_box(path.points()).round_out();
+    let mapped_bounds = transform.map_bounding_box(path.points());
+    debug_assert!(mapped_bounds.width() >= 0.0);
+    debug_assert!(mapped_bounds.height() >= 0.0);
+    let bounds = mapped_bounds.round_out();
     Some([bounds.left, bounds.top, bounds.right, bounds.bottom])
 }
 
@@ -3896,6 +3901,20 @@ mod tests {
         // before `roundOut`; a pointwise scalar fold instead returns `None`.
         let transform = Mat2D([f32::INFINITY, 0.0, 0.0, 1.0, 0.0, 0.0]);
         assert_eq!(path_pixel_bounds(&path, transform), Some([0, 0, 0, 0]));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic]
+    fn path_pixel_bounds_retains_pinned_post_translation_width_assertion() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(1.0, 1.0);
+
+        path_pixel_bounds(
+            &path,
+            Mat2D([1.0, 0.0, 0.0, 1.0, f32::INFINITY, 0.0]),
+        );
     }
 
     #[test]

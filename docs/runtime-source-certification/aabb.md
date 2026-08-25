@@ -616,3 +616,24 @@ independent AABB reviews from the corrected commit.
 
 Implementation status: **CORRECTED CANDIDATE REJECTED**. Certification status:
 **REJECTED BY SECOND FRESH INDEPENDENT REVIEW**.
+
+## Correction after post-`42ea58166` reviews
+
+The two independently reported source-contract omissions are restored without
+changing release geometry:
+
+1. The shared `Mat2D::map_bounding_box` owner now retains the pinned final
+   `width() >= 0` and `height() >= 0` debug assertions after translation.
+   Both ordinary and stroke/Feather `PathDraw::Make` routes repeat those checks
+   at their source boundary before rounding or outset, matching the authored
+   duplicate assertions. Debug witnesses now panic for positive-infinity
+   translation while the separate nonfinite-linear normalization witness still
+   returns the pinned zero box.
+
+2. `allocateFeatherAtlasDraw` now performs the final shared
+   `AABBu16::contains(*padded_region)` debug assertion after constructing the
+   region, in addition to the source's preceding scalar coordinate/extent
+   checks.
+
+Implementation status: **CORRECTED CANDIDATE**. Certification status:
+**PENDING TWO FRESH INDEPENDENT REVIEWS**.

@@ -6655,21 +6655,12 @@ impl ArtboardInstance {
                 .and_then(|bounds| bounds.get(&local_id).copied())
                 .or_else(|| self.runtime_supported_layout_component_bounds(local_id, graph))
         {
-            let (origin_x, origin_y) =
-                self.nested_artboards
-                    .get(&local_id)
-                    .map_or((0.0, 0.0), |nested| {
-                        (
-                            nested.child.width * nested.child.origin_x,
-                            nested.child.height * nested.child.origin_y,
-                        )
-                    });
             let mut world = if mat2d_linear_is_identity(component.transform.local_transform) {
                 Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y])
             } else {
                 let mut components = component.transform.local_transform.decompose();
-                components.x = bounds.x + origin_x;
-                components.y = bounds.y + origin_y;
+                components.x = bounds.x;
+                components.y = bounds.y;
                 Mat2D::compose(components)
             };
             if let Some(parent_local) = self.component_parent_local(local_id) {
@@ -6710,6 +6701,9 @@ impl ArtboardInstance {
                         world.0[5] += parent_world.0[1] * delta_x + parent_world.0[3] * delta_y;
                     }
                 }
+            }
+            if let Some(nested) = self.nested_artboards.get(&local_id) {
+                world = runtime_mounted_artboard_origin_back(nested.child.as_ref()).multiply(world);
             }
             return world;
         }
@@ -16056,22 +16050,12 @@ impl RuntimeArtboardPathState {
         if component.type_name == "NestedArtboardLayout"
             && let Some(bounds) = layout_bounds.get(&local_id).copied()
         {
-            let (origin_x, origin_y) = instance
-                .nested_artboards
-                .get(&local_id)
-                .map(|nested| {
-                    (
-                        nested.child.width * nested.child.origin_x,
-                        nested.child.height * nested.child.origin_y,
-                    )
-                })
-                .unwrap_or((0.0, 0.0));
             let mut world = if mat2d_linear_is_identity(component.transform.local_transform) {
                 Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y])
             } else {
                 let mut components = component.transform.local_transform.decompose();
-                components.x = bounds.x + origin_x;
-                components.y = bounds.y + origin_y;
+                components.x = bounds.x;
+                components.y = bounds.y;
                 Mat2D::compose(components)
             };
             if let Some(parent_local) = instance.component_parent_local(local_id)
@@ -19655,13 +19639,41 @@ fn runtime_draw_component_list_with_state(
 }
 
 include!("math/aabb.rs");
+
+/// Exact C++ `-artboard->origin()` translation used by mounted layout
+/// artboards after their retained layout position has been composed.
+fn runtime_mounted_artboard_origin_back(child: &ArtboardInstance) -> Mat2D {
+    if child.frame_origin() {
+        return Mat2D::IDENTITY;
+    }
+    let (width, height) = child
+        .component(0)
+        .and_then(|component| component.concrete.layout.as_ref())
+        .map(|layout| {
+            let (_, _, width, height) = layout.current_bounds();
+            (width, height)
+        })
+        .unwrap_or((child.width, child.height));
+    Mat2D([
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        width * child.origin_x,
+        height * child.origin_y,
+    ])
+}
+
 /// Port the translation owner used by `NestedArtboardLayout::update`.
 ///
 /// The parent solve supplies size/target bounds, but the mounted child
 /// Artboard retains the current interpolated Yoga left/top. Start with the
 /// ordinary host transform and replace only the solved parent-local
 /// translation with that retained position, preserving authored linear
-/// transforms and parent affine composition
+/// transforms and parent affine composition. Finally apply C++'s `back`
+/// translation: a mounted Artboard with frame-origin disabled reports a
+/// negative layout origin, so `-artboard->origin()` adds that origin exactly
+/// once before `drawInternal` renders the child's origin-relative paths
 /// (`nested_artboard_layout.cpp:53-78`; `artboard.cpp:1120-1137`).
 fn runtime_nested_artboard_layout_world_transform(
     instance: &ArtboardInstance,
@@ -19673,10 +19685,10 @@ fn runtime_nested_artboard_layout_world_transform(
 ) -> Mat2D {
     let mut world =
         path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
-    let Some((retained_x, retained_y)) = child
+    let Some((retained_x, retained_y, _, _)) = child
         .component(0)
         .and_then(|component| component.concrete.layout.as_ref())
-        .map(|layout| layout.position())
+        .map(|layout| layout.current_bounds())
     else {
         return world;
     };
@@ -19703,7 +19715,7 @@ fn runtime_nested_artboard_layout_world_transform(
     let delta_y = retained_y - solved_parent_local.1;
     world.0[4] += parent_world.0[0] * delta_x + parent_world.0[2] * delta_y;
     world.0[5] += parent_world.0[1] * delta_x + parent_world.0[3] * delta_y;
-    world
+    runtime_mounted_artboard_origin_back(child).multiply(world)
 }
 
 fn runtime_nested_artboard_leaf_world_transform(
@@ -31049,8 +31061,9 @@ mod tests {
             .artboards
             .first()
             .expect("fixture has a parent artboard");
-        let instance = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-            .expect("instance builds");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("instance builds");
         let container_local = instance
             .components()
             .iter()
@@ -31135,6 +31148,38 @@ mod tests {
             )
             .0,
             [1.0, 0.0, 0.0, 1.0, 150.0, 260.0],
+        );
+
+        // Exact `NestedArtboardLayout::update`: after substituting the
+        // mounted Artboard's retained layout position, `back =
+        // -artboard->origin()` compensates its origin before `drawInternal`
+        // emits origin-relative child paths. This remains a world-space
+        // translation even while the parent layout is interpolating.
+        {
+            let nested = instance
+                .nested_artboards
+                .get_mut(&host_local)
+                .expect("host owns a mutable mounted child");
+            nested.child.origin_x = 0.5;
+            nested.child.origin_y = 0.25;
+            nested.child.set_frame_origin(false);
+        }
+        let nested = instance
+            .nested_artboards
+            .get(&host_local)
+            .expect("host retains the mounted child");
+        let mut path_cache = RuntimeArtboardPathState::default();
+        assert_mat2d_near(
+            runtime_nested_artboard_layout_world_transform(
+                &instance,
+                graph,
+                host_local,
+                nested.child.as_ref(),
+                Some(&solved_bounds),
+                &mut path_cache,
+            )
+            .0,
+            [1.0, 0.0, 0.0, 1.0, 200.0, 285.0],
         );
     }
 

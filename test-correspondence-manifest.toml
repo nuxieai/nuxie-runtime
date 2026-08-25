@@ -682,7 +682,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
 test_case_count = 8
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/tests/upstream_scripting_converter.rs", "crates/nuxie/tests/upstream_scripting_converter.rs"]
-note = "The six exact inline converter sources pass with the upstream String/Boolean/Number/Color values, channel mutations, implemented-method checks, and three repeated Number-to-String direction flips. Rust's owned Luaur API replaces C++'s raw lua_gettop bookkeeping while retaining the repeated-call stack-lifetime pressure. Both frozen-render cases preserve fixtures, ViewModel selection/binding, exact mutations, timing, frames, draws, and named silvers; both honestly remain red at Rust's frameSize stream prefix before pinned C++ makeRenderPaint."
+note = "The six exact inline converter sources pass with the upstream String/Boolean/Number/Color values, channel mutations, implemented-method checks, and three repeated Number-to-String direction flips. Rust's owned Luaur API replaces C++'s raw lua_gettop bookkeeping while retaining the repeated-call stack-lifetime pressure. Both frozen-render cases preserve fixtures, ViewModel selection/binding, exact mutations, timing, frames, draws, and named silvers. Phase 3's factory-late Artboard initialization correction makes scripted_string_converter exact. The bound-input case is honestly ignored at its newly exposed first real difference: frame 0 op 28 addRawPath has 295 Rust fields versus 1517 upstream fields."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"

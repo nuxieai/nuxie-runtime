@@ -864,18 +864,23 @@
       "ordinal": 1,
       "line": 34,
       "name": "chop_cubic_at",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "The executable Rust port retains the pinned single-buffer overwrite observable, randomized action flow, production multi-chop owner, and all assertion groups.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 191,
+          "line": 256,
           "symbol": "chop_cubic_at_complete_direct_port_expected_red"
         }
       ],
-      "expected_red_reason": "expected-red: Rust multi-chop is not exact for equal and repeated endpoint roots"
+      "expected_red_reason": "expected-red: Rust multi-chop is not exact for equal and repeated endpoint roots",
+      "adaptation": {
+        "kind": "rust-safety",
+        "inapplicable_observable": "simultaneous overlapping const and mutable borrows of the same allocation",
+        "rationale": "Rust forbids the C++ aliasing call shape; the test ends the value-copy read before overwriting the same buffer and asserts the identical final observable."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#2",
@@ -883,17 +888,22 @@
       "ordinal": 2,
       "line": 131,
       "name": "chop_cubic_at(tValues=null)",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Option::None is the Rust-safe nullable-input action and reaches the production multi-chop owner with the pinned equally spaced null-T semantics.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 201,
+          "line": 266,
           "symbol": "chop_cubic_at_t_values_null"
         }
-      ]
+      ],
+      "adaptation": {
+        "kind": "rust-safety",
+        "inapplicable_observable": "dereferenceable nullable raw pointer for optional T values",
+        "rationale": "Rust represents the nullable input as Option; the None branch preserves the pinned equal-spacing behavior and assertions."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#3",
@@ -921,12 +931,12 @@
       "name": "find_cubic_convex_180_chops",
       "status": "direct",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "Literal Rust port now executes the complete inflection, rotation, cusp, exhaustive-corner, hex-bit, epsilon-boundary, and no-fast-math assertion flow.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 317,
+          "line": 519,
           "symbol": "find_cubic_convex_180_chops_direct_port"
         }
       ]
@@ -957,12 +967,12 @@
       "name": "EvalCubic",
       "status": "direct",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "The retained production cubic evaluator executes both pinned lane samples for every fixture and preserves the polynomial-reference assertions.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 376,
+          "line": 617,
           "symbol": "eval_cubic_direct_port"
         }
       ]
@@ -973,15 +983,17 @@
       "ordinal": 7,
       "line": 639,
       "name": "find_cubic_coeffs_tangents_glsl",
-      "status": "direct",
+      "status": "differential",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "The live harness byte-checks and compiles the repo-owned production GLSL as C++, then executes the exact pinned randomized coefficient/tangent case.",
       "evidence": [
         {
-          "kind": "rust-test",
-          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 401,
-          "symbol": "find_cubic_coeffs_tangents_glsl_direct_port"
+          "kind": "live-differential",
+          "harness_path": "crates/nuxie-renderer/tests/bezier_utils_live_differential.py",
+          "differential_id": "bezier-glsl-coefficients-tangents",
+          "cpp_entry": "TEST_CASE(find_cubic_coeffs_tangents_glsl)",
+          "rust_entry": "renderer_src_shaders_bezier_utils_glsl__generated_input.source",
+          "command": ["python3", "crates/nuxie-renderer/tests/bezier_utils_live_differential.py", "--case", "find_cubic_coeffs_tangents_glsl"]
         }
       ]
     },
@@ -991,15 +1003,17 @@
       "ordinal": 8,
       "line": 670,
       "name": "clamped_divide_glsl",
-      "status": "direct",
+      "status": "differential",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "The live harness compiles the byte-identical repo-owned production GLSL and executes all pinned finite, infinity, and NaN assertions.",
       "evidence": [
         {
-          "kind": "rust-test",
-          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 456,
-          "symbol": "clamped_divide_glsl_direct_port"
+          "kind": "live-differential",
+          "harness_path": "crates/nuxie-renderer/tests/bezier_utils_live_differential.py",
+          "differential_id": "bezier-glsl-clamped-divide",
+          "cpp_entry": "TEST_CASE(clamped_divide_glsl)",
+          "rust_entry": "renderer_src_shaders_bezier_utils_glsl__generated_input.source",
+          "command": ["python3", "crates/nuxie-renderer/tests/bezier_utils_live_differential.py", "--case", "clamped_divide_glsl"]
         }
       ]
     },
@@ -1009,15 +1023,17 @@
       "ordinal": 9,
       "line": 716,
       "name": "find_cubic_max_height_glsl",
-      "status": "direct",
+      "status": "differential",
       "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "The live harness compiles the byte-identical repo-owned production GLSL and executes the full fixed, corner, and randomized maximum-height flow.",
       "evidence": [
         {
-          "kind": "rust-test",
-          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 504,
-          "symbol": "find_cubic_max_height_glsl_direct_port"
+          "kind": "live-differential",
+          "harness_path": "crates/nuxie-renderer/tests/bezier_utils_live_differential.py",
+          "differential_id": "bezier-glsl-maximum-height",
+          "cpp_entry": "TEST_CASE(find_cubic_max_height_glsl)",
+          "rust_entry": "renderer_src_shaders_bezier_utils_glsl__generated_input.source",
+          "command": ["python3", "crates/nuxie-renderer/tests/bezier_utils_live_differential.py", "--case", "find_cubic_max_height_glsl"]
         }
       ]
     },
@@ -1028,17 +1044,16 @@
       "line": 958,
       "name": "find_cubic_convex_90_chops",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "outcome": "pass",
+      "note": "Literal Rust port executes the pinned deprecated convex-90 helper, production multi-chop owner, full fixed/corner/randomized flow, cusp skipping, and rotation assertions.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 551,
+          "line": 896,
           "symbol": "find_cubic_convex_90_chops_direct_port"
         }
-      ],
-      "expected_red_reason": "expected-red: deprecated convex-90 test helper has no Rust shader execution bridge"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#11",
@@ -1046,18 +1061,19 @@
       "ordinal": 11,
       "line": 1042,
       "name": "measure_cubic_local_curvature_glsl",
-      "status": "direct",
-      "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "status": "differential",
+      "outcome": "pass",
+      "note": "The live harness compiles the byte-identical repo-owned production GLSL and executes the exact pinned convex-90 chopping, curvature guess, spread, and randomized assertions.",
       "evidence": [
         {
-          "kind": "rust-test",
-          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 560,
-          "symbol": "measure_cubic_local_curvature_glsl_direct_port"
+          "kind": "live-differential",
+          "harness_path": "crates/nuxie-renderer/tests/bezier_utils_live_differential.py",
+          "differential_id": "bezier-glsl-local-curvature",
+          "cpp_entry": "TEST_CASE(measure_cubic_local_curvature_glsl)",
+          "rust_entry": "renderer_src_shaders_bezier_utils_glsl__generated_input.source",
+          "command": ["python3", "crates/nuxie-renderer/tests/bezier_utils_live_differential.py", "--case", "measure_cubic_local_curvature_glsl"]
         }
-      ],
-      "expected_red_reason": "expected-red: GLSL curvature helper has no Rust shader execution bridge"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/binary_reader_test.cpp#1",

@@ -1215,7 +1215,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 91664,
+          "line": 91656,
           "symbol": "upstream_raw_path_coarse_and_precise_bounds_are_ported"
         }
       ]
@@ -3898,7 +3898,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19153,
+          "line": 19152,
           "symbol": "upstream_component_origin_overrides_the_mounted_instance_origin"
         }
       ],
@@ -3917,7 +3917,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19190,
+          "line": 19189,
           "symbol": "upstream_component_origin_pivots_a_layout_transform"
         }
       ],
@@ -4212,7 +4212,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 20766,
+          "line": 20758,
           "symbol": "upstream_cubic_and_elastic_fixture_assertions_match_cpp_probe"
         }
       ]

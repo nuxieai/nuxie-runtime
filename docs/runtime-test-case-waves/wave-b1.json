@@ -248,7 +248,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_data_binding_fonts.rs",
-          "line": 124,
+          "line": 128,
           "symbol": "font_data_bind_stores_and_clears_the_font_on_the_property"
         }
       ],
@@ -320,7 +320,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
-          "line": 160,
+          "line": 432,
           "symbol": "dynamic_image_binding_with_listener_action"
         }
       ],
@@ -412,7 +412,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
-          "line": 318,
+          "line": 594,
           "symbol": "layout_image_composes_user_scale_on_top_of_fit_for_7_2_files"
         }
       ],
@@ -431,7 +431,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
-          "line": 386,
+          "line": 662,
           "symbol": "stateful_component_image_bind"
         }
       ],
@@ -468,7 +468,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_data_binding_keyframes.rs",
-          "line": 209,
+          "line": 213,
           "symbol": "keyframe_value_binds_resolve_view_model_values_on_the_first_frame"
         }
       ],
@@ -486,7 +486,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_data_binding_keyframes.rs",
-          "line": 224,
+          "line": 228,
           "symbol": "keyframe_value_binds_update_when_the_source_view_model_changes"
         }
       ],
@@ -504,7 +504,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_data_binding_keyframes.rs",
-          "line": 245,
+          "line": 249,
           "symbol": "keyframe_interpolation_reads_the_data_bound_start_value"
         }
       ],
@@ -522,7 +522,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_data_binding_keyframes.rs",
-          "line": 271,
+          "line": 275,
           "symbol": "standalone_animation_instance_ignores_keyframe_value_binds"
         }
       ],
@@ -540,7 +540,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 754,
+          "line": 899,
           "symbol": "artboard_has_bound_properties"
         }
       ],
@@ -558,7 +558,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 714,
+          "line": 843,
           "symbol": "state_machine_is_led_by_bound_enum_and_trigger"
         }
       ],
@@ -576,7 +576,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 458,
+          "line": 493,
           "symbol": "advance_and_apply_can_skip_view_model_reset"
         }
       ],
@@ -594,7 +594,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 233,
+          "line": 245,
           "symbol": "calculate_and_to_string_converters_with_numbers"
         }
       ],
@@ -612,7 +612,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 281,
+          "line": 293,
           "symbol": "trim_string_converter"
         }
       ],
@@ -630,7 +630,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 335,
+          "line": 347,
           "symbol": "to_string_converter_with_color_formatters"
         }
       ],
@@ -648,7 +648,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 386,
+          "line": 398,
           "symbol": "range_mapper"
         }
       ],
@@ -666,7 +666,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 420,
+          "line": 455,
           "symbol": "pad_string"
         }
       ],
@@ -685,7 +685,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 852,
+          "line": 993,
           "symbol": "boolean_toggle_converter_negates_bound_value"
         }
       ],
@@ -703,7 +703,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 611,
+          "line": 698,
           "symbol": "same_view_model_instance_is_shared_by_two_properties"
         }
       ],
@@ -721,7 +721,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 636,
+          "line": 723,
           "symbol": "different_view_model_instances_are_not_shared_by_two_properties"
         }
       ],
@@ -739,7 +739,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 661,
+          "line": 748,
           "symbol": "newly_created_view_model_instances_do_not_share_nested_instances"
         }
       ],
@@ -757,7 +757,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 683,
+          "line": 773,
           "symbol": "triggers_updated_by_events_update_parent_state"
         }
       ],
@@ -775,7 +775,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_transition_self.rs",
-          "line": 36,
+          "line": 38,
           "symbol": "transition_self_conditions_reach_empty_list_swap_seam"
         }
       ],
@@ -940,7 +940,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 489,
+          "line": 524,
           "symbol": "view_model_runtime_properties"
         }
       ],
@@ -1085,7 +1085,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 552,
+          "line": 631,
           "symbol": "two_way_source_change_reaches_target_under_target_first_precedence"
         }
       ],
@@ -1251,7 +1251,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 584,
+          "line": 671,
           "symbol": "two_way_target_change_reaches_source_under_source_first_precedence"
         }
       ],

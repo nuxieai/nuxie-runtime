@@ -148,9 +148,8 @@ struct CppAudioRivOracle {
 
 #[test]
 fn audio_source_reader_and_headless_schedule_match_pinned_cpp() {
-    let probe = build_and_require_probe(
-        "audio_source_reader_and_headless_schedule_match_pinned_cpp",
-    );
+    let probe =
+        build_and_require_probe("audio_source_reader_and_headless_schedule_match_pinned_cpp");
     let fixture = cpp_runtime_fixture("audio/what.wav");
     let mp3_fixture = cpp_runtime_fixture("audio/song.mp3");
     let output = Command::new(probe)
@@ -19345,36 +19344,6 @@ fn upstream_file_with_in_band_images_can_have_them_stripped() {
     panic!(
         "the remaining assertions call File::stripAssets with an empty set and with +         ImageAsset::typeKey; the Rust binary owner has no strip operation"
     );
-}
-
-#[test]
-fn upstream_bad_skin_without_parent_skinnable_does_not_crash() {
-    let bytes = std::fs::read(cpp_runtime_fixture("bad_skin.riv")).expect("read bad skin fixture");
-    let runtime = read_runtime_file(&bytes).expect("import bad skin fixture");
-    let graphs = GraphFile::from_runtime_file(&runtime).expect("graph bad skin fixture");
-    let graph = &graphs.artboards[0];
-    assert_eq!(graph.name.as_deref(), Some("Illustration WOman.svg"));
-    let mut artboard =
-        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
-            .expect("instantiate bad skin fixture");
-    artboard.update_pass();
-    let point_paths = graph
-        .components
-        .iter()
-        .filter(|component| component.type_name == "PointsPath")
-        .map(|component| component.local_id)
-        .collect::<Vec<_>>();
-    assert!(!point_paths.is_empty());
-    for path_local in point_paths {
-        let _ = artboard.add_dirt(path_local, ComponentDirt::PATH, false);
-        assert!(
-            artboard
-                .debug_component_dirt(path_local)
-                .is_some_and(|dirt| dirt.contains(ComponentDirt::PATH)),
-            "PointsPath::markPathDirty leaves PATH dirt on local {path_local}",
-        );
-    }
-    artboard.update_pass();
 }
 
 #[test]

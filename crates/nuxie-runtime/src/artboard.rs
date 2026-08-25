@@ -11727,6 +11727,33 @@ fn nested_state_machine_instance(
 }
 
 #[cfg(test)]
+impl ArtboardInstance {
+    pub(crate) fn points_path_skin_local_for_test(&self, path_local: usize) -> Option<usize> {
+        let path = self.component_handle(path_local)?;
+        let skin = self
+            .objects
+            .component(path)?
+            .concrete
+            .skinnable
+            .as_ref()?
+            .skin?;
+        self.objects.component_local_id(skin)
+    }
+
+    pub(crate) fn skin_skinnable_local_for_test(&self, skin_local: usize) -> Option<usize> {
+        let skin = self.component_handle(skin_local)?;
+        let skinnable = self
+            .objects
+            .component(skin)?
+            .concrete
+            .skin
+            .as_ref()?
+            .skinnable?;
+        self.objects.component_local_id(skinnable)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     include!("artboard/tests.rs");
 }

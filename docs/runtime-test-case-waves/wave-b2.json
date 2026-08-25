@@ -256,7 +256,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 20908,
+          "line": 20877,
           "symbol": "upstream_default_state_machine_fixture_contract"
         }
       ],
@@ -310,7 +310,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 20789,
+          "line": 20758,
           "symbol": "upstream_cubic_and_elastic_fixture_assertions_match_cpp_probe"
         }
       ],
@@ -737,7 +737,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19224,
+          "line": 19223,
           "symbol": "upstream_transform_order_is_as_expected"
         }
       ],
@@ -791,7 +791,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19240,
+          "line": 19239,
           "symbol": "upstream_file_with_animation_can_be_read"
         }
       ],
@@ -827,7 +827,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19274,
+          "line": 19273,
           "symbol": "upstream_file_dependencies_are_as_expected"
         }
       ],
@@ -845,7 +845,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19324,
+          "line": 19323,
           "symbol": "upstream_long_name_object_is_parsed_correctly"
         }
       ],
@@ -863,7 +863,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19333,
+          "line": 19332,
           "symbol": "upstream_file_with_in_band_images_can_have_them_stripped"
         }
       ],
@@ -881,12 +881,12 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19351,
+          "path": "crates/nuxie-runtime/src/shapes/points_path.rs",
+          "line": 46,
           "symbol": "upstream_bad_skin_without_parent_skinnable_does_not_crash"
         }
       ],
-      "note": "The executable Rust port performs the pinned PointsPath markPathDirty actions in order between the two Artboard update passes and proves PATH dirt reaches each retained owner."
+      "note": "The cfg(test) executable at the exact PointsPath owner imports bad_skin.riv, proves all 77 retained PointsPaths, seven attached Skin owners and one orphan Skin, then invokes and asserts Skin-before-Path dirt ordering for every path between the two Artboard update passes."
     },
     {
       "id": "tests/unit_tests/runtime/file_test.cpp#10",
@@ -900,7 +900,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19381,
+          "line": 19350,
           "symbol": "upstream_file_with_bad_keyed_property_loads"
         }
       ],
@@ -918,7 +918,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 19396,
+          "line": 19365,
           "symbol": "upstream_file_can_be_read_with_verified_signed_scripts"
         }
       ],

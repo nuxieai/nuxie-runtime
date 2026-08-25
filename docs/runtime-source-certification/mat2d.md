@@ -803,3 +803,100 @@ Focused evidence, all with `CARGO_INCREMENTAL=0` where applicable:
 
 This implementing lane does not self-certify the correction. Verdict:
 **PENDING TWO FRESH INDEPENDENT REVIEWS.**
+
+## First fresh independent complete review after `f4707d9e6` — REJECTED
+
+This review accepts the correction made in `rive_renderer_cpp.rs` itself. Its
+local multiply preserves the six pinned contraction groups and the separate
+final translation adds. Its determinant and inverse preserve the pinned
+contractions, the sole `det == 0` failure branch, and acceptance of infinite
+and NaN determinants. The three live consumers are routed through those
+owners: renderer transform concatenation, clip-rect inverse/composition, and
+inverse-clockwise inversion and winding. The finite cancellation, finite
+composition, infinite-determinant, NaN-determinant, mapped-corner, and winding
+witnesses all pass in debug and under fat LTO.
+
+The earlier accepted portions also remain correct in isolation. All six
+operative N-slicer matrix-vector sites use scalar `transform_point`, rather
+than the distinct bulk grouping. Runtime and render-API `mapPoints` preserve
+the zero-skew branch, odd-first and pair traversal, load-before-store in-place
+behavior, and authored FMA groups. Both `mapBoundingBox` owners preserve pair
+lanes, source-order SIMD min/max, nonfinite normalization before translation,
+and debug extent assertions. `find_transformed_area` retains four-point batch
+mapping and the pinned cross contraction, and its live `PathDraw::Make`
+threshold consumer takes the frozen sides of the strict `512 * 512` branch.
+Only compiler-specific NaN payload selection with unchanged classification and
+control was treated as latitude.
+
+The complete Mat2D claim still fails because the corrected renderer owner is
+not the only operative hand-written Mat2D owner:
+
+- `gpu_cpp.rs` retains ordinary, uncontracted `multiply_mat2d` and
+  `inverse_mat2d`. They are live in `ClipRectInverseMatrix::reset` and in every
+  image/gradient/clip-matrix branch of `PaintAuxData::set`. With finite matrix
+  bits `[26cd29b3, 2533fdc2, d01ad4bb, ce87d5a9, 0, 0]`, pinned clang/AArch64
+  produces determinant `0xa7eec560` and admits inversion. The current ordinary
+  Rust expression produces `0x00000000` even under fat LTO and rejects it.
+  This changes clip coverage and paint-matrix control, not merely a payload.
+- The same uncontracted determinant substitute remains live in
+  `draw_cpp.rs::contour_directions_for_path`, both triangulator winding fields
+  constructed by `make_path_draw_from_source`,
+  `draw.rs::build_interior_tessellation`, and the live
+  `gr_triangulator.rs::InnerFanTriangulator::new` it constructs. The mapped
+  `RiveRenderPath::isClockwiseDominant` owner and the currently test-only
+  `draw.rs::clockwise_atomic_negate_coverage` helper repeat the same residue,
+  so they cannot serve as exact fallback owners. The finite witness is
+  negative in pinned source but positive zero in Rust, reversing clockwise
+  contour selection, `reverseTriangles`, and winding negation in the live
+  paths; the mapped dominant-winding owner would likewise return the opposite
+  result if called.
+- The six N-slicer scalar calls are correctly selected, but their captured
+  `inverse_world` is built by `draw.rs::runtime_mat2d_invert`, not by the exact
+  shared inverse. That helper contracts its determinant but not its two
+  translation numerators. For all-finite matrix bits
+  `[494a16e6, b6c7c10d, f5c3ef08, 206746c7, f14fd57a, 25756691]`, actual pinned
+  clang/AArch64 returns inverse bits
+  `[80000000, 89273d80, c8240aad, 9ba9320a, 2e1d3fdc, bb07c630]`; the current
+  fat-LTO Rust helper returns the same lanes except translated x
+  `0x2e1d3fdd`. This finite one-ULP difference propagates through every
+  N-slicer path that captures the inverse.
+- `Mat2D::findMaxScale` and renderer-local `max_scale` still translate the
+  pinned `sdot` and discriminant contraction candidates as ordinary
+  multiplication and addition. For linear matrix bits
+  `[c32d8148, c2d1a0c5, 42d93be7, 4345c7ae]`, actual pinned clang/AArch64
+  returns `0x43928724`; both current fat-LTO Rust spellings return
+  `0x43928723`. The shared runtime owner is presently reached only by its
+  tests, while the renderer-local duplicate is live in feather coverage and
+  softening selection.
+
+This census also found two pre-existing non-renderer duplicates that contradict
+the established pinned contraction policy: `ListenerAlignTarget` and the Lua
+Mat2D binding retain uncontracted inverse owners. They require correction in
+their own source-owner lanes; they are not accepted as evidence that the C++
+pin is nonfused.
+
+Focused evidence, with `CARGO_INCREMENTAL=0` where applicable:
+
+- debug: runtime Mat2D 13, N-slicer caller 1, adversarial Mat2D 2,
+  render-API library 30, and upstream RawPath 7 passed;
+- fat LTO and one codegen unit: runtime Mat2D 13, N-slicer caller 1,
+  adversarial Mat2D 2, render-API library 29, and upstream RawPath 7 passed;
+- renderer debug and fat-LTO groups passed: local owners 2,
+  inverse-clockwise plus transformed-area callers 5, clip-rect 2, and
+  transformed-area/threshold 4;
+- renderer Metal, Vulkan, WebGPU, and WebGL2 feature checks passed;
+- source correspondence passed with 456 applicable owners and no pending
+  absent rows;
+- source-symbol correspondence passed with 7,818 authority units across
+  1,105 owners and generated authority replayed;
+- source-symbol checker unit tests passed, 33 tests;
+- independent source-shaped probes used pinned clang `-O3
+  -ffp-contract=on` on ARM64 and the workspace-equivalent Rust fat-LTO/single
+  codegen-unit profile for the determinant, N-slicer inverse-translation, and
+  max-scale witnesses above.
+
+Verdict: **REJECTED while accepting the corrected `rive_renderer_cpp.rs`
+owner, scalar N-slicer routing, batch, bounding-box, transformed-area, and
+threshold portions.** Restore exact ownership in the remaining GPU, draw,
+triangulator, N-slicer inverse, and max-scale paths, add direct finite/control
+witnesses at their live consumers, and obtain two fresh complete reviews.

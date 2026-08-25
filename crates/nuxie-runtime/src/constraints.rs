@@ -3271,6 +3271,15 @@ mod tests {
         let (mut instance, scroll_local, scroll_bar_local) = scroll_bar_proxy_fixture();
         let mut proxies = runtime_draggable_proxies(&instance);
         assert_eq!(proxies.len(), 3);
+        assert_eq!(
+            proxies.iter().map(|proxy| proxy.kind).collect::<Vec<_>>(),
+            [
+                RuntimeDraggableProxyKind::Viewport,
+                RuntimeDraggableProxyKind::Thumb,
+                RuntimeDraggableProxyKind::Track,
+            ],
+            "listener groups retain provider/object order; hit components are sorted later",
+        );
         assert!(
             proxies.iter().any(|proxy| {
                 proxy.kind == RuntimeDraggableProxyKind::Viewport && !proxy.opaque

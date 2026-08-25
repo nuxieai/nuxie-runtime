@@ -75,12 +75,5 @@ pub(crate) fn runtime_draggable_proxies(artboard: &ArtboardInstance) -> Vec<Runt
             scrolling::scroll_bar_constraint_proxy::append_proxies(artboard, handle, &mut proxies);
         }
     }
-    let hit_order = artboard.runtime_hit_component_order();
-    proxies.sort_by_key(|proxy| {
-        hit_order
-            .iter()
-            .position(|component| *component == proxy.hittable)
-            .unwrap_or(usize::MAX)
-    });
     proxies
 }

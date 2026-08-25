@@ -1404,8 +1404,7 @@ fn fl_c5_pointer_drag_discards_event_timestamps_then_follows_with_move() {
     );
 }
 
-#[test]
-fn component_provided_scroll_recurses_drag_events_at_the_pinned_call_site() {
+fn component_provided_scroll_artboard_and_machine() -> (ArtboardInstance, StateMachineInstance) {
     let fixture = PathBuf::from(
         std::env::var_os("RIVE_RUNTIME_DIR")
             .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
@@ -1431,6 +1430,12 @@ fn component_provided_scroll_recurses_drag_events_at_the_pinned_call_site() {
     let _ = machine.advance_on_artboard(&mut artboard, 0.1, true, None);
     artboard.update_components();
     assert!(!machine.draggable_proxies.is_empty());
+    (artboard, machine)
+}
+
+#[test]
+fn component_provided_scroll_recurses_drag_events_at_the_pinned_call_site() {
+    let (mut artboard, mut machine) = component_provided_scroll_artboard_and_machine();
 
     let trace = Rc::new(RefCell::new(Vec::new()));
     machine.hit_components.push(Box::new(RecordingHitComponent {
@@ -1533,6 +1538,158 @@ fn component_provided_scroll_recurses_drag_events_at_the_pinned_call_site() {
             .draggable_proxies
             .iter()
             .all(|proxy| !proxy.has_scrolled)
+    );
+}
+
+#[test]
+fn draggable_uses_phase_transitions_for_repeated_and_outside_down() {
+    let (mut artboard, mut machine) = component_provided_scroll_artboard_and_machine();
+    let x = artboard.width / 2.0;
+    let pointer_id = 42;
+    machine
+        .update_listeners(
+            &mut artboard,
+            RuntimeListenerType::Down,
+            x,
+            70.0,
+            pointer_id,
+            1.0,
+            None,
+            None,
+            &mut NoopScriptHost,
+        )
+        .expect("initial pointer down");
+    let active = machine
+        .draggable_proxies
+        .iter()
+        .enumerate()
+        .filter(|(_, proxy)| proxy.active_pointers.contains(&pointer_id))
+        .map(|(index, proxy)| (index, proxy.last_position))
+        .collect::<Vec<_>>();
+    assert!(!active.is_empty(), "fixture down starts a draggable proxy");
+
+    machine
+        .update_listeners(
+            &mut artboard,
+            RuntimeListenerType::Down,
+            x,
+            69.0,
+            pointer_id,
+            2.0,
+            None,
+            None,
+            &mut NoopScriptHost,
+        )
+        .expect("repeated pointer down");
+    for (index, first_position) in &active {
+        assert_eq!(
+            machine.draggable_proxies[*index].last_position,
+            *first_position,
+            "pinned startDrag runs only on a non-Down to Down phase transition",
+        );
+    }
+
+    machine
+        .update_listeners(
+            &mut artboard,
+            RuntimeListenerType::Down,
+            -10_000.0,
+            -10_000.0,
+            pointer_id,
+            3.0,
+            None,
+            None,
+            &mut NoopScriptHost,
+        )
+        .expect("outside pointer down");
+    for (index, _) in active {
+        assert!(
+            !machine.draggable_proxies[index]
+                .active_pointers
+                .contains(&pointer_id),
+            "a Down-to-Out phase transition ends the proxy even though the event is not Up",
+        );
+    }
+}
+
+#[test]
+fn releasing_one_pointer_does_not_clear_group_global_scroll_state() {
+    let (mut artboard, mut machine) = component_provided_scroll_artboard_and_machine();
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    machine.hit_components.push(Box::new(RecordingHitComponent {
+        label: "after-draggable",
+        result: HitResult::None,
+        trace: Rc::clone(&trace),
+        component: None,
+    }));
+    let x = artboard.width / 2.0;
+    for pointer_id in [51, 52] {
+        machine
+            .update_listeners(
+                &mut artboard,
+                RuntimeListenerType::Down,
+                x,
+                70.0,
+                pointer_id,
+                0.0,
+                None,
+                None,
+                &mut NoopScriptHost,
+            )
+            .expect("pointer down");
+    }
+    let proxy_index = machine
+        .draggable_proxies
+        .iter()
+        .position(|proxy| {
+            proxy.active_pointers.contains(&51) && proxy.active_pointers.contains(&52)
+        })
+        .expect("both pointers share the component-provided group");
+    machine.draggable_proxies[proxy_index].has_scrolled = true;
+
+    machine
+        .update_listeners(
+            &mut artboard,
+            RuntimeListenerType::Exit,
+            x,
+            70.0,
+            51,
+            1.0,
+            None,
+            None,
+            &mut NoopScriptHost,
+        )
+        .expect("pointer exit");
+    assert!(
+        machine.draggable_proxies[proxy_index].has_scrolled,
+        "ListenerGroup::releaseEvent releases only pointer 51; pinned m_hasScrolled remains group-global",
+    );
+    assert!(
+        !machine.draggable_proxies[proxy_index]
+            .active_pointers
+            .contains(&51)
+    );
+
+    trace.borrow_mut().clear();
+    machine
+        .update_listeners(
+            &mut artboard,
+            RuntimeListenerType::Move,
+            x,
+            40.0,
+            52,
+            2.0,
+            None,
+            None,
+            &mut NoopScriptHost,
+        )
+        .expect("remaining pointer move");
+    assert!(
+        trace
+            .borrow()
+            .iter()
+            .all(|item| !item.contains(":DragStart:")),
+        "the remaining pointer must not emit a second dragStart after another pointer exits",
     );
 }
 

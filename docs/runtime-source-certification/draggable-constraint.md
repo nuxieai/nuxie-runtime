@@ -23,7 +23,7 @@ inline definitions.
 
 | Pinned definition | Literal behavior and side effects | Rust owner |
 | --- | --- | --- |
-| `DraggableConstraint::listenerGroups` | Iterates concrete draggable proxies in returned order; allocates a `componentProvided` single listener and one draggable listener group per proxy; reads the proxy hittable and opacity; for a non-null Component hittable, creates one `HitTarget` and appends one `ListenerGroupWithTargets`. | `runtime_draggable_proxies` creates a fresh typed proxy set per `StateMachineInstance`; `initialize_component_provided_groups` creates a draggable `ListenerGroup`, attaches it to the exact hittable, carries opacity, and retains provider order before hit sorting. Invalid/unresolved typed targets fail closed instead of retaining raw pointers. |
+| `DraggableConstraint::listenerGroups` | Iterates concrete draggable proxies in returned order; allocates a `componentProvided` single listener and one draggable listener group per proxy; reads the proxy hittable and opacity; for a non-null Component hittable, creates one `HitTarget` and appends one `ListenerGroupWithTargets`. | `runtime_draggable_proxies` creates a fresh typed proxy set per `StateMachineInstance` in artboard object/provider order and each provider's proxy order; `initialize_component_provided_groups` creates a draggable `ListenerGroup`, attaches it to the exact hittable, and carries opacity. Hit components are sorted only at the later state-machine hit-sort boundary. Invalid/unresolved typed targets fail closed instead of retaining raw pointers. |
 | `DraggableConstraintListenerGroup::processEvent` | Captures the previous pointer phase, runs base `ListenerGroup::processEvent`, then: ends the proxy on Down-to-Clicked/Out; if it had scrolled, recursively calls `StateMachineInstance::dragEnd`, clears `m_hasScrolled`, and returns `scroll`; starts the proxy on the first transition into Down and clears scroll state; on Move while Down, drags the proxy and, on the first successful drag, recursively calls `dragStart(position,time,false,pointerId)` before setting `m_hasScrolled`; every successful drag returns `scroll`; all other paths return `none`. | `process_listener_group_event` preserves the same phase branches and proxy start/drag/end mutations. A successful first drag or scrolled completion interrupts the outer Rust hit traversal, restores the temporarily taken group/hit owners, recursively invokes the complete state-machine drag traversal, retakes the recursively mutated owners, and resumes immediately after the triggering group. Completion clears `has_scrolled` only after `dragEnd`; `dragEnd` retains its final `pointerMove`. |
 
 ## Sixteen executable inline definitions
@@ -74,6 +74,31 @@ empty bodies. Rust now makes those methods literal no-ops only for
 `ListenerGroupKind::Draggable`; authored and TextInput group behavior is
 unchanged.
 
+### Decisions use previous/current pointer phase
+
+The corrected branch now consumes `ListenerGroup::process`'s exact phase
+transition. `startDrag` runs only for non-Down to Down, `endDrag` runs for
+Down to Clicked/Out regardless of whether the event was Up or Down, and
+`drag` runs only for Move while the resulting phase is Down. A repeated
+hovered Down therefore does not restart the proxy, while a Down outside an
+existing capture ends it.
+
+### Pointer release does not clear group-global scroll state
+
+Exit still releases the individual pointer record and Rust's auxiliary active
+pointer bookkeeping, but it no longer clears the proxy/group's shared
+`has_scrolled`. This matches `ListenerGroup::releaseEvent`, which does not
+touch `DraggableConstraintListenerGroup::m_hasScrolled`, and preserves the
+two-pointer behavior until a new start transition or scrolled completion
+clears the group-global bit.
+
+### Provider order and hit order remain separate
+
+The proxy constructor no longer sorts by draw/hit order. It retains the
+pinned artboard-object provider order and each concrete provider's
+`draggables()` order. The existing state-machine hit-sort pass still orders
+the separately registered hit components afterward.
+
 ## Direct regression evidence
 
 - `component_provided_scroll_recurses_drag_events_at_the_pinned_call_site`
@@ -84,6 +109,15 @@ unchanged.
   retained scroll state.
 - `draggable_enable_and_disable_are_literal_no_ops` proves neither override
   creates pointer data, disables the pointer, nor consumes the group.
+- `draggable_uses_phase_transitions_for_repeated_and_outside_down` proves a
+  repeated Down does not restart a proxy and a captured Down-to-Out transition
+  ends it even though the second event is not Up.
+- `releasing_one_pointer_does_not_clear_group_global_scroll_state` proves Exit
+  releases only that pointer, retains the shared scroll bit, and prevents the
+  remaining Down pointer from emitting a second DragStart.
+- `draggable_proxy_lifecycle_matches_cpp_owner_state` now asserts the concrete
+  provider order `Viewport`, `Thumb`, `Track` before the independent hit-sort
+  pass.
 - `fl_c5_pointer_drag_discards_event_timestamps_then_follows_with_move`
   continues to prove ordinary `dragStart` uses the default
   `disablePointer=true`, while `dragEnd` enables before dispatch and performs
@@ -91,52 +125,18 @@ unchanged.
 
 ## Certification boundary and verdict
 
-**Independent adversarial review: rejected.** The first-drag recursion and
-scrolled-completion recursion follow the pinned reentrant call site, including
-restoring the temporarily taken owner vectors before recursion, resuming after
-the triggering group, preserving `canHit` for the rest of that target, mapping
-`scroll` to opaque blocking, and retaining `m_hasScrolled` until the recursive
-`dragEnd` (and its final `pointerMove`) returns. The draggable-only no-op
-`enable`/`disable` specialization also leaves authored-group behavior intact.
-The following counterexamples prevent source certification:
+**Correction implemented; independent adversarial re-review pending.** The
+three counterexamples from the rejected review now have literal source
+corrections and direct evidence: previous/current phase predicates replace
+event-name heuristics, Exit retains group-global scroll state, and proxy/group
+construction retains provider order until the later hit sort. The earlier
+first-drag and completion recursion, draggable-only no-op enable/disable, and
+concrete proxy behavior are unchanged and remain covered by their existing
+tests.
 
-1. The Rust event branches do not use the pinned previous/current phase
-   predicates. Pinned C++ calls `startDrag` only for a transition from a
-   non-Down phase into Down. Rust calls `runtime_draggable_proxy_start` for
-   every hovered Down, even when that pointer was already Down. A repeated
-   hovered Down therefore restarts the concrete proxy and clears
-   `has_scrolled`; pinned C++ does neither. Conversely, pinned C++ calls
-   `endDrag` for any Down-to-Clicked/Out transition. A Down outside the target
-   after an earlier captured Down transitions the C++ pointer to Out and ends
-   the proxy immediately. Rust's Down branch does nothing when not hovered,
-   retains the pointer in `active_pointers`, and can continue dragging it on a
-   later Move.
-2. Rust clears proxy-global `has_scrolled` on Exit both in the draggable event
-   branch and again in `release_draggable_pointer`. Pinned Exit does not change
-   the phase inside `processEvent`; `releaseEvent` removes only that pointer's
-   record and does not clear group-global `m_hasScrolled`. This is observable
-   with two active pointers: after pointer A scrolls and exits while pointer B
-   remains Down, B's next successful Move must not emit another `dragStart` in
-   C++, but Rust emits one because A's Exit cleared the shared flag.
-3. The `listenerGroups` owner row says Rust retains provider order before hit
-   sorting, but `runtime_draggable_proxies` sorts proxies by hittable draw order
-   before it constructs listener groups. Pinned C++ constructs groups in
-   artboard provider order and each provider's `draggables()` order, then sorts
-   hit components later. No governing adaptation or behavioral proof currently
-   establishes that changing the owner-vector order is inert.
-
-The existing direct regression uses one ordinary Down/Move/Up pointer. It
-therefore proves the repaired happy-path recursion but cannot observe repeated
-Down, Down-to-Out cancellation, or the two-pointer Exit state leak above.
-Concrete proxy algorithms owned by `ScrollConstraint` and
-`ScrollBarConstraint` remain dependencies and are not silently certified by
-this translation-unit audit.
-
-There is also a denominator tooling defect independent of the runtime verdict:
-the generated symbol row for the inline
-`DraggableConstraintListenerGroup` constructor is currently named
-`DraggableConstraintListenerGroup::m_draggable`, having selected the final
-initializer-list member instead of the constructor declarator. The receipt's
-human count of 16 executable inline definitions is correct, but that malformed
-machine ID cannot serve as constructor disposition evidence until the generic
-initializer-list parser is corrected and the snapshot regenerated.
+This implementing lane does not self-certify the receipt. Concrete proxy
+algorithms owned by `ScrollConstraint` and `ScrollBarConstraint` remain
+dependencies and are not silently certified by this translation-unit audit.
+The malformed constructor machine ID noted by the rejected review was fixed
+generically in the denominator parser and regenerated snapshot before this
+correction.

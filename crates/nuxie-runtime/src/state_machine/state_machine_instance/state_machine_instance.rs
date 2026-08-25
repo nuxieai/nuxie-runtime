@@ -4555,63 +4555,40 @@ impl StateMachineInstance {
                 let Some(proxy) = self.draggable_proxies.get_mut(proxy_index) else {
                     return Ok((false, None));
                 };
-                let hovered = pointer_state.current_hovered;
                 let mut blocking = false;
                 let mut recursion = None;
-                match hit_type {
-                    RuntimeListenerType::Down if hovered => {
-                        if !proxy.active_pointers.contains(&pointer_id) {
-                            proxy.active_pointers.push(pointer_id);
-                        }
-                        runtime_draggable_proxy_start(artboard, proxy, position, timestamp_seconds);
-                        group.is_consumed = true;
-                    }
-                    RuntimeListenerType::Move if proxy.active_pointers.contains(&pointer_id) => {
-                        if runtime_draggable_proxy_drag(
-                            artboard,
-                            proxy,
+                if pointer_state.phase_was_down && !pointer_state.phase_is_down {
+                    proxy.active_pointers.retain(|active| *active != pointer_id);
+                    runtime_draggable_proxy_end(artboard, proxy);
+                    if proxy.has_scrolled {
+                        blocking = true;
+                        recursion = Some(ComponentProvidedDragRecursion::End {
+                            proxy_index,
                             position,
                             timestamp_seconds,
-                        ) {
-                            if !proxy.has_scrolled {
-                                recursion = Some(ComponentProvidedDragRecursion::Start {
-                                    proxy_index,
-                                    position,
-                                    timestamp_seconds,
-                                    pointer_id,
-                                });
-                            }
-                            blocking = true;
-                            group.is_consumed = true;
+                            pointer_id,
+                        });
+                    }
+                    group.is_consumed = true;
+                } else if !pointer_state.phase_was_down && pointer_state.phase_is_down {
+                    if !proxy.active_pointers.contains(&pointer_id) {
+                        proxy.active_pointers.push(pointer_id);
+                    }
+                    runtime_draggable_proxy_start(artboard, proxy, position, timestamp_seconds);
+                    group.is_consumed = true;
+                } else if hit_type == RuntimeListenerType::Move && pointer_state.phase_is_down {
+                    if runtime_draggable_proxy_drag(artboard, proxy, position, timestamp_seconds) {
+                        if !proxy.has_scrolled {
+                            recursion = Some(ComponentProvidedDragRecursion::Start {
+                                proxy_index,
+                                position,
+                                timestamp_seconds,
+                                pointer_id,
+                            });
                         }
+                        blocking = true;
+                        group.is_consumed = true;
                     }
-                    RuntimeListenerType::Up => {
-                        if let Some(index) = proxy
-                            .active_pointers
-                            .iter()
-                            .position(|active| *active == pointer_id)
-                        {
-                            proxy.active_pointers.remove(index);
-                            runtime_draggable_proxy_end(artboard, proxy);
-                            if proxy.has_scrolled {
-                                blocking = true;
-                                recursion = Some(ComponentProvidedDragRecursion::End {
-                                    proxy_index,
-                                    position,
-                                    timestamp_seconds,
-                                    pointer_id,
-                                });
-                            } else {
-                                proxy.has_scrolled = false;
-                            }
-                            group.is_consumed = true;
-                        }
-                    }
-                    RuntimeListenerType::Exit => {
-                        proxy.active_pointers.retain(|active| *active != pointer_id);
-                        proxy.has_scrolled = false;
-                    }
-                    _ => {}
                 }
                 return Ok((blocking, recursion));
             }
@@ -5272,7 +5249,6 @@ impl StateMachineInstance {
         // `draggable_constraint.cpp:32-85`).
         for proxy in &mut self.draggable_proxies {
             proxy.active_pointers.retain(|active| *active != pointer_id);
-            proxy.has_scrolled = false;
         }
     }
 

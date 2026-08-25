@@ -27,6 +27,24 @@ decision_rule = "divergent-by-decision requires a cited parity-gap-register D-ro
 [scatter_ratchet]
 max_multi_module_rows = 158
 
+[source_correspondence_ratchet]
+applicable_rows = 453
+direct_primary_owner_rows = 401
+adjudicated_shared_owner_rows = 43
+explicit_owner_exception_rows = 9
+pending_rows = 3
+explicit_owner_exceptions = [
+  "src/animation/animation_reset.cpp",
+  "src/audio/audio_reader.cpp",
+  "src/audio/audio_source.cpp",
+  "src/lua/lua_buffer_ext.cpp",
+  "src/lua/lua_listener_invocation.cpp",
+  "src/lua/lua_state.cpp",
+  "src/lua/math/lua_input.cpp",
+  "src/lua/renderer/lua_gradient.cpp",
+  "src/simple_array.cpp",
+]
+
 [[file]]
 upstream = "src/advancing_component.cpp"
 status = "faithful"
@@ -3150,14 +3168,14 @@ note = "MR (layout lifecycle): Cycle S4 faithful layout-participant owner semant
 upstream = "src/layout/layout_sizing_style.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/layout/layout_sizing_style.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0456"
 audit_rust_source_sha256 = "3fc7b1b14d34726c0b35b732d5124e8cbd4c1e5c92e9e80be3070b3e4d74c901"
 b6_verdict = "ADAPTED"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Cycle S4 faithful layout-sizing owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
+note = "Direct behavior-neutral source owner extracted from the former draw.rs coordinator; it retains the exact property-key projection consumed by the Taffy adaptation without changing the D3 layout-engine decision."
 
 [[file]]
 upstream = "src/layout/layout_node_provider.cpp"
@@ -3595,25 +3613,25 @@ note = "2026-08-03 LT-2 faithful candidate for the corpus-gated umbrella: instal
 upstream = "src/math/aabb.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/math/aabb.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0289"
 b6_verdict = "ISOMORPHIC"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Justified exception: runtime Aabb accumulation and matrix projection are interleaved in draw.rs with B6-0302 Vec2D and B6-0294 Mat2D consumers; there is no behavior-neutral per-row seam."
+note = "Direct behavior-neutral source owner extracted from draw.rs with its private namespace and call sites unchanged."
 
 [[file]]
 upstream = "src/math/bezier_utils.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/math/bezier_utils.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0290"
 b6_verdict = "ISOMORPHIC"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Justified exception: private Bezier subdivision and evaluation helpers in draw.rs jointly serve B6-0292 ContourMeasure and B6-0297 PathMeasure; there is no behavior-neutral per-row seam."
+note = "Direct behavior-neutral source owner extracted from draw.rs; its helpers remain private siblings of the contour and path-measure owners."
 
 [[file]]
 upstream = "src/math/bit_field_loc.cpp"
@@ -3631,13 +3649,13 @@ note = "Canonical bit offset and width mask helper used by occurrence property s
 upstream = "src/math/contour_measure.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/math/contour_measure.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0292"
 b6_verdict = "ADAPTED"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Justified exception: TrimContour owns shared segment storage and evaluation helpers for B6-0290 BezierUtils and B6-0297 PathMeasure in draw.rs; there is no behavior-neutral per-row seam."
+note = "Direct behavior-neutral source owner extracted from draw.rs; shared helpers remain private one-to-one sibling includes."
 
 [[file]]
 upstream = "src/math/hit_test.cpp"
@@ -3691,13 +3709,13 @@ note = "Justified exception: stop analysis and mapped-offset helpers are jointly
 upstream = "src/math/path_measure.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/math/path_measure.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0297"
 b6_verdict = "ADAPTED"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Justified exception: RuntimePathMeasure shares TrimContour storage and Bezier evaluation with B6-0292 ContourMeasure and B6-0290 BezierUtils in draw.rs; there is no behavior-neutral per-row seam."
+note = "Direct behavior-neutral source owner extracted from draw.rs; it retains the same private TrimContour collaboration."
 
 [[file]]
 upstream = "src/math/random.cpp"
@@ -3727,13 +3745,13 @@ note = "Consolidated Rust port for math."
 upstream = "src/math/raw_path_utils.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/math/raw_path_utils.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0300"
 b6_verdict = "ISOMORPHIC"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Justified exception: raw-path conversion operates on the B6-0299 RawPath public primitive and shares draw.rs command helpers with B6-0290 BezierUtils; there is no behavior-neutral per-row seam."
+note = "Direct behavior-neutral source owner extracted from draw.rs; cubic extraction and subdivision retain their same-module callers."
 
 [[file]]
 upstream = "src/math/rectangles_to_contour.cpp"
@@ -3751,13 +3769,13 @@ note = "F2: text selection rectangle-to-contour construction remains absent."
 upstream = "src/math/vec2d.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
+rust_module = "crates/nuxie-runtime/src/math/vec2d.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0302"
 b6_verdict = "ISOMORPHIC"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Justified exception: tuple-vector arithmetic is interleaved in draw.rs with B6-0289 Aabb and B6-0290 BezierUtils; there is no behavior-neutral per-row seam."
+note = "Direct behavior-neutral source owner extracted from draw.rs; tuple-vector representation remains the approved safe-Rust adaptation."
 
 [[file]]
 upstream = "src/nested_artboard.cpp"

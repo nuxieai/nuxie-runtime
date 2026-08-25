@@ -75,6 +75,7 @@ RUNTIME_DIFFERENTIAL_LOG_DIR ?= $(RUNTIME_DIFFERENTIAL_REPORT_DIR)/diagnostics
 FILE_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/file-correspondence-manifest.toml
 RUST_ADDITIONS ?= $(CURDIR)/rust-additions.toml
 RUST_ATTRIBUTION_TOOL ?= $(CURDIR)/tools/b6-audit/rust_attribution.py
+SOURCE_CORRESPONDENCE_TOOL ?= $(CURDIR)/tools/source-correspondence/check.py
 RUNTIME_BEHAVIOR_INVENTORY_TOOL ?= $(CURDIR)/tools/runtime-behavior-inventory/behavior_inventory.py
 RUNTIME_BEHAVIOR_INVENTORY ?= $(CURDIR)/runtime-behavior-inventory.json
 PURE_RUNTIME_BOUNDARY_TOOL ?= $(CURDIR)/tools/pure-runtime-boundary/check.py
@@ -429,6 +430,18 @@ rust-attribution-gate:
 	@tools/report-all.sh "rust-attribution" \
 		"rust attribution tool unit tests" "$(MAKE) --no-print-directory rust-attribution-test" \
 		"rust attribution coverage check" "$(MAKE) --no-print-directory rust-attribution-check"
+
+.PHONY: runtime-source-correspondence-test runtime-source-correspondence-check runtime-source-correspondence-gate
+runtime-source-correspondence-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/source-correspondence -p 'test_*.py' -v
+
+runtime-source-correspondence-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(SOURCE_CORRESPONDENCE_TOOL)" --repo-root "$(CURDIR)" --manifest "$(FILE_CORRESPONDENCE_MANIFEST)"
+
+runtime-source-correspondence-gate:
+	@tools/report-all.sh "runtime-source-correspondence" \
+		"source correspondence tool unit tests" "$(MAKE) --no-print-directory runtime-source-correspondence-test" \
+		"source correspondence bijection check" "$(MAKE) --no-print-directory runtime-source-correspondence-check"
 
 runtime-behavior-inventory-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-behavior-inventory -p 'test_*.py' -v

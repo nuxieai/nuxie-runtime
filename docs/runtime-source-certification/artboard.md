@@ -33,7 +33,7 @@ call site, followed ordinary nested measurement through style registration and
 the Taffy callback, and reran the focused evidence against the exact reviewed
 commit. No production change was needed. This acceptance is deliberately
 narrow: the later frame-counter and fixture-test corrections are tracked
-separately below and still require two fresh independent reviews.
+separately below and still require their own independent review sequence.
 
 ### Exact denominator
 
@@ -132,7 +132,8 @@ The remaining header definitions are:
    applies the same per-axis finite-mode clamp as pinned
    `NestedArtboard::measureLayout`.
 
-3. **The inline frame counter mismatch is corrected, pending fresh review.**
+3. **The inline frame counter mismatch is corrected; first fresh review
+   accepted.**
    Pinned `frameId()` is a static process-wide counter incremented by root
    `Artboard::draw`. Correction `eba0a89b2` removes the invented clone-owned
    Rust counter. Both `artboard_draw_frame_id()` and
@@ -140,7 +141,71 @@ The remaining header definitions are:
    `nuxie-render-api` owner; public root draw and
    `SerializingFactory::add_frame` remain the only increment paths. Nested,
    component-list, and scripted internal draws still enter `drawInternal` and
-   do not increment. This correction requires two fresh independent reviews.
+   do not increment. The first of two required fresh independent reviews is
+   accepted below; a second fresh acceptance is still required.
+
+## First fresh independent adversarial review of `eba0a89b2`: accepted
+
+This review independently re-read the pinned `Artboard::sm_frameId`, inline
+`frameId`/`incFrameId`, public `Artboard::draw`, `Artboard::drawInternal`,
+`NestedArtboard::draw`, `ArtboardComponentList::draw`, Lua
+`ScriptedArtboard::draw`, and `SerializingFactory::addFrame` owners at
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`. It then traced every Rust read and
+increment of the translated owner, the complete public/internal draw entry
+split, clone construction, and the two corrected layout fixtures. No
+counterexample was found. Correction `eba0a89b2` is **ACCEPTED by the first
+fresh reviewer**; this is not the second required acceptance and does not by
+itself certify the Artboard family.
+
+The pinned owner is the single static `uint64_t Artboard::sm_frameId`.
+`Artboard::draw` increments it before `drawCanvases` and `drawInternal`, while
+the nested-artboard, component-list, and Lua scripted draw paths call
+`drawInternal` directly. `SerializingFactory::addFrame` calls the conditional
+public `Artboard::incFrameId`, so it advances that same static owner. Rust now
+has the same ownership shape across its crate split: one
+`ARTBOARD_DRAW_FRAME_ID` at the lowest dependency shared by the runtime and
+serializer; `ArtboardInstance::frame_id` is only a read of that owner; and
+`Clone` neither copies nor initializes an occurrence-local frame field.
+`rg` found only two production increment callers: runtime
+`begin_draw_frame`, reached by the public `draw_artboard` entry, and
+`SerializingFactory::add_frame`. The public entry increments before scripted
+canvases and internal rendering. Its scripted sibling passes
+`begin_draw_frame = false`; mounted nested and component-list recursion stays
+inside the internal renderer and never re-enters the public entry. Two
+`#[cfg(test)]` legacy draw helpers also call `begin_draw_frame`, but they model
+public draws and do not exist in a production build.
+
+The committed clone witness proves two independent occurrences always read
+the latest process-wide value. To avoid accepting a helper-only proof, this
+review also built a disposable integration witness (removed after the run): a
+real public facade draw advanced the ID by exactly one and an already-created
+clone observed it; `SerializingFactory::add_frame` then advanced the same owner
+by exactly one and both occurrences observed that value. The existing Lua
+facade witness proved a scripted internal draw leaves the value unchanged.
+The static call graph supplies the complementary nested/component-list proof:
+their pinned and Rust recursion paths both enter only the internal renderer,
+which contains no increment.
+
+The layout-fixture correction is also accepted. Pinned
+`clipping_and_draw_order.riv` has one `ArtboardComponentList` under a `Node`,
+leaves `DrawableFlag::ParticipatesInLayout` unset, and keeps the owning layout
+a leaf. Pinned `layout/list_in_group_joins_layout.riv` has the same topology
+with serialized `drawableFlags` key `129` retaining value `256`, making the
+owning layout non-leaf. The corrected Rust helper asserts the unique list and
+its direct `Node` parent, reads the retained flag from the concrete occurrence,
+walks the occurrence hierarchy to its actual `LayoutComponent` owner, and
+queries provider discovery there. The unflagged fixture returns bit 8 clear
+and excludes the list; the flagged fixture returns bit 8 set and includes it.
+This directly distinguishes decoder retention from the earlier false-negative
+root-local query.
+
+Focused evidence from this review:
+
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --lib artboard::tests::public_clones_observe_the_single_process_wide_draw_frame_id -- --exact --nocapture` — pass.
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --lib draw::tests::upstream_component_list_inside_a_group_stays_out_of_layout -- --exact --nocapture` — pass.
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --lib draw::tests::upstream_flagged_component_list_joins_layout_through_a_group -- --exact --nocapture` — pass.
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie --lib --features scripting owned_instance_tests::lua_scripted_artboard_draw_uses_the_internal_frame_boundary -- --exact --nocapture` — pass.
+- Disposable integration witness `public_draw_and_serializer_share_the_process_wide_frame_owner` — pass; the temporary source was removed and is not part of the receipt commit.
 
 ### Areas accepted by the adversarial pass
 
@@ -191,7 +256,7 @@ follows.
 
 | C++ symbols, exhaustively enumerated | Exact Rust owner symbols | Disposition |
 | --- | --- | --- |
-| `Artboard::sm_frameId` | process-wide `artboard_draw_frame_id`; `ArtboardInstance::frame_id` reads the same static owner | Corrected by `eba0a89b2`; pending two fresh reviews |
+| `Artboard::sm_frameId` | process-wide `artboard_draw_frame_id`; `ArtboardInstance::frame_id` reads the same static owner | Corrected by `eba0a89b2`; first fresh review accepted, second pending |
 | `Artboard::Artboard`, `Artboard::~Artboard`, `ArtboardInstance::ArtboardInstance`, `ArtboardInstance::~ArtboardInstance`, `canContinue`, `Artboard::validateObjects`, `Artboard::initialize` | `ArtboardInstance::from_graph_inner`, `ArtboardInstance::build_component_occurrence_relations`, `Drop for ArtboardInstance`, Rust field drop order | Owner-safe equivalent; rejected objects become import errors rather than dangling nullable slots |
 | `Artboard::addObject`, `addAnimation`, `addStateMachine`, `addScriptedObject`, `sortDependencies`, `cloneObjectDataBinds` | `from_graph_inner`, `build_component_interface_schedules`, retained `objects`, `linear_animations`, `state_machines`, script-owner tables, `RuntimeRetainedDataBind::clone` | Owner-safe equivalent |
 | `Artboard::sortDrawOrder`, `clearRedundantOperations` | `RuntimeDrawableList::from_graph`, `sort_draw_order`, `clear_redundant_operations`, retained clipping/draw-rule ordering in `draw.rs` | Equivalent retained draw list |
@@ -319,10 +384,11 @@ an unresolved `path_cache_image_dimensions`; the exact-commit worktree removes
 that unrelated failure from this verdict.
 
 The two remaining blockers from the prior reviews were corrected by
-`eba0a89b2`. The Artboard family is still **PENDING / UNCERTIFIED** until two
-fresh independent reviews accept that exact correction; a green focused suite
-does not certify it. The corrected 1,105-owner/7,818-unit campaign denominator
-is accepted and is no longer an open Artboard finding.
+`eba0a89b2`. The first fresh independent review above accepts that correction.
+The Artboard family is still **PENDING / UNCERTIFIED** until a second fresh
+independent review also accepts it; a green focused suite does not certify it.
+The corrected 1,105-owner/7,818-unit campaign denominator is accepted and is no
+longer an open Artboard finding.
 
 ## Second independent adversarial re-review of `d3df628c7`: corrections accepted
 
@@ -366,4 +432,5 @@ worktree at exact commit `d3df628c7` with `CARGO_INCREMENTAL=0` (the repository'
 ignored fixture files were mirrored into that worktree solely so the lib-test
 target could compile). This second acceptance is limited to the two earlier
 corrected rows. The subsequent frame-counter and fixture-test correction is
-tracked at `eba0a89b2` and remains pending two fresh independent reviews.
+tracked at `eba0a89b2`; its first fresh independent review is accepted above
+and its second remains pending.

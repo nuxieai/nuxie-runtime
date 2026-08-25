@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **REJECTED AFTER SECOND INDEPENDENT RE-REVIEW OF `01e0c65bf`**
+Adversarial review: **PENDING A FRESH TWO-REVIEW CYCLE AFTER THE SECOND CORRECTION**
 
 This receipt deliberately includes executable methods defined inline in the
 handwritten `include/rive/script_input_*.hpp` headers. Those methods exposed
@@ -101,17 +101,17 @@ every nonzero changed Core value invokes the named table callback.
 |---|---|---|---|
 | `ScriptInputArtboard::~ScriptInputArtboard` | owning occurrence drop; `RuntimeScriptInputArtboardOccurrence` drop | adapted | occurrence replacement/disposal tests |
 | `ScriptInputArtboard::import` | binary Backboard + scripted-object context validation; runtime definition builders | exact | `runtime_import_status_tracks_scripted_object_input_contexts`; C++/Rust import comparison |
-| `ScriptInputArtboard::initScriptedValue` | artboard branch of `prepare_script_listener_hydration`; `ScriptListenerActionHydration::preflight_artboards`; `apply_inputs` | rejected | resolution is reordered before authored phase-two writes; source-File facade uses the opposite pinned File |
+| `ScriptInputArtboard::initScriptedValue` | artboard branch of `prepare_script_listener_hydration`; prepared Artboard recipe; `apply_inputs` | pending fresh review | consumer-File/concrete-source regression; non-bypassable prepared-recipe ordering tests |
 | `ScriptInputArtboard::validateForScriptInit` (inline) | resolved-reference preflight | exact | typed-artboard validation failure tests |
 | `ScriptInputArtboard::validateForColdScriptInit` | cold phase accepts the unresolved live context | exact | cold/live hydration lifecycle tests |
 | `ScriptInputArtboard::validateHydrationPrerequisites` | snapshot/reference preflight before any writes | exact | `scripted_hydration_validation_failure_applies_no_inputs_or_init` |
-| `ScriptInputArtboard::hydrateScriptInput` | authored phase-two artboard resolution and projection | rejected | ordinary callers pre-resolve Artboards outside authored phase two; public hydration paths can still resolve inline after writes |
+| `ScriptInputArtboard::hydrateScriptInput` | prepared-recipe validation plus authored-order construction and projection | pending fresh review | public and doc-hidden hydration boundary tests; successful authored-order trace |
 | `ScriptInputArtboard::syncReferencedArtboard` | `set_artboard_input_core`; live `apply_scripted_input_update` | exact | converter production-path regression observes one projection carrying the retained live identity |
 | `ScriptInputArtboard::onAddedClean` | ordered input/binding-definition construction | exact | imported input order/count comparison |
 | `ScriptInputArtboard::clone` | `RuntimeScriptInputArtboardOccurrence::clone_for_scripted_object` | exact | `fresh_clone_preserves_the_exact_live_bindable_identity` |
 | `ScriptInputArtboard::file` (inline) | `RuntimeScriptInputArtboardOccurrence::file_attached` | exact | resolved/unresolved clone authority test |
 | `ScriptInputArtboard::artboardIdChanged` | `RuntimeScriptInputProperties::apply_target`; `apply_artboard_id_changed` | exact | missing-id clear and generated-id separation tests |
-| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | rejected | ordinary owner/ancestor selection is corrected, but `StateMachineInstance::clone` drops listener converter-state ancestry |
+| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | pending fresh review | ordinary and fresh-cloned primary-converter ancestor-authority tests |
 | `ScriptInputArtboard::referencedArtboardId` | generated value in `RuntimeScriptInputProperties::value`; binary `cpp_artboard_referencer_index` | exact | import resolver and generated-id tests |
 
 The generated `artboardId` and retained referenced Artboard remain separate.
@@ -604,3 +604,76 @@ that preserves pinned authored phase-two behavior, and ancestor authority on
 the listener-converter `StateMachineInstance::clone` path. Silver-corpus then
 needs a separate API-shape migration before the blocked `nuxie` evidence can
 compile and run.
+
+## Second correction after the two independent rejections
+
+Verdict: **PENDING A FRESH TWO-REVIEW CYCLE.** This section records the
+implementing lane's correction; it does not supersede either rejection until
+two different reviewers have independently accepted the complete pinned call
+chain and the three rows above.
+
+The cross-File facade now retains the source `File` only as a lifetime pin.
+The consumer/script `File` remains the operative `ScriptReffedArtboard` File
+for ViewModel lookup, DataContext binding, and scripting authority. The
+already-resolved concrete source Artboard carries its exact immutable runtime,
+graph catalog, graph index, and source rendering resources into the recipe.
+No numeric `graph_global_id` lookup is performed in either File, so a colliding
+consumer graph cannot replace the concrete source.
+
+Hydration now has an explicit unprepared/prepared type-state boundary.
+`ScriptListenerActionHydration::apply` and `apply_inputs` own that boundary,
+and every doc-hidden state-machine, converter, and interpolator callback turns
+an unprepared callback result into a prepared batch before any authored
+phase-two input write. Preparation consumes every fallible Artboard branch.
+For a File source it resolves the graph index, constructs and validates the
+runtime occurrence, retains the exact catalog, and prepares the consumer-File
+ViewModel/DataContext/state-machine state. For a live source it retains the
+concrete occurrence, lifetime pin, exact source catalog/resources, and the
+same consumer-File state. The resulting production recipe's `construct`
+method can only move those immutable prepared fields into
+`FileScriptArtboard` and box it; it performs no lookup, resolver call, runtime
+construction, or fallible operation. Allocation failure remains Rust's normal
+abort/panic domain rather than a semantic `Result` branch.
+
+This preserves the pinned successful phase-two trace: recipe construction and
+table publication still happen at the Artboard input's authored position, so
+an earlier scalar write precedes them. A preparation failure occurs before
+any authored phase-two input write. The pinned Context-before-validation route
+remains Context-first at the state-machine boundary, while direct public batch
+application validates before installing Context.
+
+`RuntimeScriptedListenerActionBindingOccurrence::fresh_clone` now copies the
+primary converter state's Artboard ancestor-source authority into the fresh
+state. This closes the `StateMachineInstance::clone` path that the second
+review separated from already-correct nested converter clones.
+
+The unconditional silver-corpus workspace adapter and the golden runner now
+use `ScriptArtboardSource` and the prepared resolver contract. The former
+retains its deliberately inert Artboard policy; the latter discharges its
+fallible harness construction during preparation.
+
+Focused correction evidence with `CARGO_INCREMENTAL=0` and warnings suppressed
+only to keep the existing vendor warning volume readable:
+
+- `cargo check -p nuxie-runtime -p nuxie -p silver-corpus --features
+  nuxie/scripting`: passed;
+- `cargo check -p rust-golden-runner`: passed;
+- `scripted_hydration_`: 4 passed, including successful authored construction
+  order and preparation failure before phase-two writes;
+- `public_hydration_apply_and_apply_inputs_cannot_bypass_artboard_preparation`:
+  passed for both public entry points;
+- `fresh_clone_preserves_primary_converter_artboard_ancestor_authority`:
+  passed;
+- `converter_owned_`: 7 passed;
+- `live_scripted_artboard_uses_consumer_file_and_retains_concrete_cross_file_source`:
+  passed, including the colliding-id concrete source and source-pin lifetime.
+
+The broader shared-worktree run reached 1,109 passing runtime library tests
+with eight failures outside this receipt: seven are in the concurrently dirty
+HitTester/semantic-geometry lane and one is the AABB/layout solve-count test.
+The full `nuxie` library run reached 54 passing tests with the unrelated
+malformed-Luau-bytecode host-log expectation failing. None of those failures
+intersects the focused ScriptInput owners above; they are recorded rather than
+silently treated as a green workspace gate.
+
+These tests justify returning the three rows to review, not self-acceptance.

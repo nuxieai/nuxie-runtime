@@ -296,6 +296,7 @@ pub enum ScriptListenerInputSnapshotValue {
 /// values in source order. Trigger entries represent a bound trigger edge;
 /// ordinary initial trigger hydration intentionally produces no entry because
 /// the table field is the authored callback itself.
+#[derive(Clone)]
 pub struct ScriptListenerActionHydration {
     context_view_model: Option<ScriptViewModel>,
     context_parent_view_models: Vec<Option<ScriptViewModel>>,
@@ -338,12 +339,11 @@ impl ScriptListenerActionHydration {
         }
     }
 
-    /// Resolve every facade-owned artboard before the hydration transaction
-    /// can touch `Context` or any authored table field. Pinned C++ constructs
-    /// the exact `ScriptedArtboard` before `setArtboardInput`; keeping that
-    /// prerequisite outside `apply` prevents a later facade error from
-    /// leaving preceding scalar inputs partially installed.
-    pub fn preflight_artboards(mut self) -> Result<Self, ScriptError> {
+    /// Resolve every facade-owned artboard into a type that is the only input
+    /// application authority. Pinned C++ constructs the exact
+    /// `ScriptedArtboard` before `setArtboardInput`; an unresolved hydration
+    /// can therefore never be passed to the internal write boundary.
+    pub fn preflight_artboards(self) -> Result<PreparedScriptListenerActionHydration, ScriptError> {
         let mut inputs = Vec::with_capacity(self.inputs.len());
         for input in self.inputs {
             match input {
@@ -352,17 +352,68 @@ impl ScriptListenerActionHydration {
                     source,
                     resolver,
                     parent_context,
-                } => inputs.push(ScriptListenerInputHydration::PreparedArtboard {
+                } => inputs.push(PreparedScriptListenerInputHydration::Artboard {
                     name,
-                    artboard: resolver.resolve_script_artboard(&source, parent_context.as_ref())?,
+                    recipe: resolver.prepare_script_artboard(&source, parent_context.as_ref())?,
                 }),
-                input => inputs.push(input),
+                ScriptListenerInputHydration::Value { name, value } => {
+                    inputs.push(PreparedScriptListenerInputHydration::Value { name, value });
+                }
+                ScriptListenerInputHydration::ViewModel {
+                    name,
+                    input_global_id,
+                    path,
+                    resolver,
+                } => inputs.push(PreparedScriptListenerInputHydration::ViewModel {
+                    name,
+                    input_global_id,
+                    path,
+                    resolver,
+                }),
+                ScriptListenerInputHydration::Trigger { name } => {
+                    inputs.push(PreparedScriptListenerInputHydration::Trigger { name });
+                }
             }
         }
-        self.inputs = inputs;
-        Ok(self)
+        Ok(PreparedScriptListenerActionHydration {
+            context_view_model: self.context_view_model,
+            context_parent_view_models: self.context_parent_view_models,
+            context_resolved: self.context_resolved,
+            inputs,
+        })
     }
 
+    pub fn apply(
+        self,
+        instance: &mut dyn ScriptInstance,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        self.preflight_artboards()?.apply(instance, host)
+    }
+
+    /// Apply the already validated authored inputs after the context is live
+    /// and, when needed, the failed occurrence has recreated its table.
+    pub fn apply_inputs(
+        self,
+        instance: &mut dyn ScriptInstance,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        self.preflight_artboards()?.apply_inputs(instance, host)
+    }
+}
+
+/// A hydration batch whose every fallible Artboard facade has already been
+/// resolved. Its fields are private and it can only be created by
+/// `ScriptListenerActionHydration::preflight_artboards`, making the atomic
+/// preflight a type-state invariant rather than a caller convention.
+pub struct PreparedScriptListenerActionHydration {
+    context_view_model: Option<ScriptViewModel>,
+    context_parent_view_models: Vec<Option<ScriptViewModel>>,
+    context_resolved: bool,
+    inputs: Vec<PreparedScriptListenerInputHydration>,
+}
+
+impl PreparedScriptListenerActionHydration {
     pub fn apply(
         self,
         instance: &mut dyn ScriptInstance,
@@ -372,10 +423,8 @@ impl ScriptListenerActionHydration {
         self.apply_inputs(instance, host)
     }
 
-    /// Install the live DataContext before any failed-init retry recreates the
-    /// scripted table. C++ assigns `ScriptedObject::m_dataContext` before
-    /// `ensureScriptInitialized`, so the generator itself can observe the
-    /// newly bound occurrence.
+    /// Install the live DataContext only after every Artboard in this batch
+    /// has crossed the non-bypassable preflight boundary.
     pub fn install_context(&self, instance: &mut dyn ScriptInstance) -> Result<(), ScriptError> {
         if self.context_resolved {
             instance.set_context_view_model_chain(
@@ -388,8 +437,6 @@ impl ScriptListenerActionHydration {
         Ok(())
     }
 
-    /// Apply the already validated authored inputs after the context is live
-    /// and, when needed, the failed occurrence has recreated its table.
     pub fn apply_inputs(
         self,
         instance: &mut dyn ScriptInstance,
@@ -397,23 +444,17 @@ impl ScriptListenerActionHydration {
     ) -> Result<(), ScriptError> {
         for input in self.inputs {
             match input {
-                ScriptListenerInputHydration::Value { name, value } => {
+                PreparedScriptListenerInputHydration::Value { name, value } => {
                     instance.set_input_core(&name, value)?;
                 }
-                ScriptListenerInputHydration::Artboard {
-                    name,
-                    source,
-                    resolver,
-                    parent_context,
-                } => {
-                    let artboard =
-                        resolver.resolve_script_artboard(&source, parent_context.as_ref())?;
-                    instance.set_artboard_input_core(&name, artboard)?;
+                PreparedScriptListenerInputHydration::Artboard { name, recipe } => {
+                    // Recipe construction is infallible and deliberately
+                    // remains in authored phase-two order: an earlier scalar
+                    // write is observable before this facade is constructed,
+                    // exactly as in pinned C++.
+                    instance.set_artboard_input_core(&name, recipe.construct())?;
                 }
-                ScriptListenerInputHydration::PreparedArtboard { name, artboard } => {
-                    instance.set_artboard_input_core(&name, artboard)?;
-                }
-                ScriptListenerInputHydration::ViewModel {
+                PreparedScriptListenerInputHydration::ViewModel {
                     name,
                     input_global_id,
                     path,
@@ -427,7 +468,7 @@ impl ScriptListenerActionHydration {
                         instance.set_view_model_input_core(&name, view_model)?;
                     }
                 }
-                ScriptListenerInputHydration::Trigger { name } => {
+                PreparedScriptListenerInputHydration::Trigger { name } => {
                     instance.call_input_trigger_core(&name, host)?;
                 }
             }
@@ -437,6 +478,7 @@ impl ScriptListenerActionHydration {
 }
 
 /// One resolved listener input operation.
+#[derive(Clone)]
 pub enum ScriptListenerInputHydration {
     Value {
         name: ScriptCoreString,
@@ -448,10 +490,25 @@ pub enum ScriptListenerInputHydration {
         resolver: Rc<dyn ScriptArtboardResolver>,
         parent_context: Option<ScriptArtboardParentContext>,
     },
-    #[doc(hidden)]
-    PreparedArtboard {
+    ViewModel {
         name: ScriptCoreString,
-        artboard: Box<dyn ScriptArtboard>,
+        input_global_id: u32,
+        path: crate::ScriptInputViewModelPropertyPath,
+        resolver: Rc<dyn ScriptViewModelInputResolver>,
+    },
+    Trigger {
+        name: ScriptCoreString,
+    },
+}
+
+enum PreparedScriptListenerInputHydration {
+    Value {
+        name: ScriptCoreString,
+        value: ScriptValue,
+    },
+    Artboard {
+        name: ScriptCoreString,
+        recipe: Box<dyn PreparedScriptArtboard>,
     },
     ViewModel {
         name: ScriptCoreString,
@@ -2584,11 +2641,31 @@ impl ScriptArtboardDataContext {
 /// matching `ScriptInputArtboard::artboardIdChanged/updateArtboard`, without
 /// moving renderer/file authority into the state-machine core.
 pub trait ScriptArtboardResolver: fmt::Debug {
+    /// Validate and retain every authority needed to construct one Artboard
+    /// facade later without failure. This method must not construct the
+    /// facade: `construct` remains in authored phase-two order.
+    fn prepare_script_artboard(
+        &self,
+        source: &crate::script_input_artboard::ScriptArtboardSource,
+        parent_context: Option<&ScriptArtboardParentContext>,
+    ) -> Result<Box<dyn PreparedScriptArtboard>, ScriptError>;
+
     fn resolve_script_artboard(
         &self,
         source: &crate::script_input_artboard::ScriptArtboardSource,
         parent_context: Option<&ScriptArtboardParentContext>,
-    ) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
+    ) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
+        Ok(self
+            .prepare_script_artboard(source, parent_context)?
+            .construct())
+    }
+}
+
+/// Infallible deferred Artboard construction produced by resolver preflight.
+/// This is the type-state fence that lets validation fail before table writes
+/// while preserving pinned authored construction/publication order.
+pub trait PreparedScriptArtboard: fmt::Debug {
+    fn construct(self: Box<Self>) -> Box<dyn ScriptArtboard>;
 }
 
 /// Occurrence-owned phase-two lookup for ScriptInputViewModelProperty.
@@ -3153,11 +3230,11 @@ mod hydration_atomicity_tests {
     }
 
     impl ScriptArtboardResolver for FailingArtboardResolver {
-        fn resolve_script_artboard(
+        fn prepare_script_artboard(
             &self,
             _source: &crate::ScriptArtboardSource,
             _parent_context: Option<&ScriptArtboardParentContext>,
-        ) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
+        ) -> Result<Box<dyn PreparedScriptArtboard>, ScriptError> {
             self.calls.set(self.calls.get() + 1);
             Err(ScriptError::new("facade rejected the live artboard"))
         }

@@ -560,6 +560,14 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
                             converter.detach_scripted_instance();
                             converter.clear_retained_owned_operands();
                         }
+                        let ancestor_sources =
+                            binding.converter_state.scripted_artboard_ancestor_sources();
+                        let mut converter_state =
+                            RuntimeDataBindGraphConverterState::for_converter(converter.as_ref());
+                        if let Some(ancestor_sources) = ancestor_sources {
+                            converter_state
+                                .set_scripted_artboard_ancestor_sources(ancestor_sources);
+                        }
                         let mut occurrence = RuntimeScriptedListenerInputDataBindOccurrence {
                             is_context: binding.is_context,
                             source_path: binding.source_path.clone(),
@@ -571,9 +579,7 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
                                 binding.flags,
                                 binding.flags & DATA_BIND_FLAG_ONCE != 0,
                             ),
-                            converter_state: RuntimeDataBindGraphConverterState::for_converter(
-                                converter.as_ref(),
-                            ),
+                            converter_state,
                             converter_data_binds: binding.converter_data_binds.fresh_clone(),
                             converter,
                             formula_random_source:
@@ -3698,6 +3704,26 @@ mod tests {
             vec![(10, Vec::new(), 7, true)],
             "the cold clone retains the authored converter occurrence for a later reinit"
         );
+    }
+
+    #[test]
+    fn fresh_clone_preserves_primary_converter_artboard_ancestor_authority() {
+        let file = scripted_listener_asset_fixture(ScriptAssetFixture::Missing);
+        let graph = nuxie_graph::GraphFile::from_runtime_file(&file)
+            .expect("fixture graph")
+            .artboards
+            .remove(0);
+        let owner = crate::ArtboardInstance::from_graph(&file, &graph).expect("owner artboard");
+        let expected = owner.artboard_referencer_ancestor_sources();
+        let mut live = occurrence(vec![number_input(10, scripted_converter(7, Vec::new()))]);
+        live.set_artboard_ancestor_sources(expected.clone());
+
+        let cold = live.fresh_clone();
+        let actual = cold.inputs[0]
+            .binding
+            .as_ref()
+            .and_then(|binding| binding.converter_state.scripted_artboard_ancestor_sources());
+        assert_eq!(actual, Some(expected));
     }
 
     #[test]

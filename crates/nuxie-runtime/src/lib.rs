@@ -271,8 +271,10 @@ pub use scripted_interpolator::{
     RuntimeScriptedInterpolatorDataConverterBindStep, RuntimeScriptedInterpolatorDiagnostic,
     RuntimeScriptedInterpolatorFactory,
 };
+#[doc(hidden)]
+pub use scripting::PreparedScriptListenerActionHydration;
 pub use scripting::{
-    NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
+    NoopScriptHost, PreparedScriptArtboard, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
     ScriptArtboardDataContext, ScriptArtboardParentContext, ScriptArtboardResolver,
     ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall, ScriptError,
     ScriptFont, ScriptHost, ScriptImage, ScriptImageAssets, ScriptInstance,

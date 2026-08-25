@@ -4529,6 +4529,26 @@ impl ArtboardInstance {
         self.runtime_graph_for_global(self.graph_global_id)
     }
 
+    /// Retain the exact immutable runtime/graph catalog that constructed this
+    /// concrete occurrence. Scripted Artboard facades use this instead of
+    /// rediscovering a cross-File source through a non-unique numeric id.
+    #[doc(hidden)]
+    pub fn scripted_artboard_source_catalog(
+        &self,
+    ) -> Option<(Arc<RuntimeFile>, Arc<Vec<ArtboardGraph>>, usize)> {
+        let context = self.build_context.as_ref()?;
+        let graph_index = context
+            .artboard_index_by_global
+            .get(usize::try_from(self.graph_global_id).ok()?)
+            .copied()
+            .flatten()?;
+        Some((
+            Arc::clone(&context.file),
+            Arc::clone(&context.artboards),
+            graph_index,
+        ))
+    }
+
     #[cfg(feature = "tools")]
     #[doc(hidden)]
     pub fn debug_static_text_layout_report(

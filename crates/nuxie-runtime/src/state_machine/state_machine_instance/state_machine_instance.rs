@@ -3399,13 +3399,43 @@ impl StateMachineInstance {
     where
         F: FnOnce(&Self) -> Result<crate::ScriptListenerActionHydration, ScriptError>,
     {
-        self.install_scripted_object_data_context(global_id, &context)?;
-        self.hydrate_and_initialize_scripted_object_instance_after_context_install(
-            global_id,
-            inits,
-            factory,
-            prepare_hydration,
-        )
+        // Context assignment precedes validation exactly as pinned. The
+        // validation callback then produces deferred Artboard recipes; recipe
+        // preparation can fail before any authored phase-two input write,
+        // while infallible construction remains at its authored position.
+        let context = context.preflight_artboards()?;
+        let handle = self
+            .scripted_instances_by_global
+            .get(&global_id)
+            .cloned()
+            .ok_or_else(|| {
+                ScriptError::new(format!(
+                    "scripted object global {global_id} is not attached"
+                ))
+            })?;
+        let mut factory = factory;
+        {
+            let mut instance = handle.borrow_mut();
+            context.install_context(&mut **instance)?;
+        }
+        let hydration = prepare_hydration(self)?.preflight_artboards()?;
+        {
+            let mut instance = handle.borrow_mut();
+            if let Some(factory) = factory.as_deref_mut() {
+                instance.prepare_init_retry_with_factory(factory)?;
+            } else {
+                instance.prepare_init_retry()?;
+            }
+        }
+        let mut instance = handle.borrow_mut();
+        hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;
+        if !inits || !instance.user_init_pending()? {
+            return Ok(true);
+        }
+        match factory {
+            Some(factory) => instance.call_init_with_factory(&mut NoopScriptHost, factory),
+            None => instance.call_init(&mut NoopScriptHost),
+        }
     }
 
     /// Complete one cloned `ScriptedObject`'s generator retry, hydration, and
@@ -3422,6 +3452,7 @@ impl StateMachineInstance {
     where
         F: FnOnce(&Self) -> Result<crate::ScriptListenerActionHydration, ScriptError>,
     {
+        let hydration = prepare_hydration(self)?.preflight_artboards()?;
         let handle = self
             .scripted_instances_by_global
             .get(&global_id)
@@ -3441,7 +3472,6 @@ impl StateMachineInstance {
             }
         }
 
-        let hydration = prepare_hydration(self)?;
         let mut instance = handle.borrow_mut();
         hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;
         if !inits {

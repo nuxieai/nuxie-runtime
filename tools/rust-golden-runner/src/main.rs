@@ -3476,6 +3476,29 @@ impl std::fmt::Debug for RunnerScriptArtboardResolver {
 }
 
 #[cfg(feature = "scripting")]
+struct PreparedRunnerScriptArtboard {
+    artboard: RunnerScriptArtboard,
+    artboard_index: usize,
+}
+
+#[cfg(feature = "scripting")]
+impl std::fmt::Debug for PreparedRunnerScriptArtboard {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PreparedRunnerScriptArtboard")
+            .field("artboard_index", &self.artboard_index)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl nuxie_runtime::PreparedScriptArtboard for PreparedRunnerScriptArtboard {
+    fn construct(self: Box<Self>) -> Box<dyn ScriptArtboard> {
+        Box::new(self.artboard)
+    }
+}
+
+#[cfg(feature = "scripting")]
 impl std::fmt::Debug for RunnerScriptViewModelInputResolver {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -3486,16 +3509,26 @@ impl std::fmt::Debug for RunnerScriptViewModelInputResolver {
 
 #[cfg(feature = "scripting")]
 impl nuxie_runtime::ScriptArtboardResolver for RunnerScriptArtboardResolver {
-    fn resolve_script_artboard(
+    fn prepare_script_artboard(
         &self,
-        artboard_id: u64,
+        source: &nuxie_runtime::ScriptArtboardSource,
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
-    ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
-        let artboard_index = usize::try_from(artboard_id).map_err(|_| {
+    ) -> std::result::Result<Box<dyn nuxie_runtime::PreparedScriptArtboard>, ScriptError> {
+        let nuxie_runtime::ScriptArtboardSource::File(artboard_id) = source else {
+            return Err(ScriptError::new(
+                "golden harness does not realize live script Artboards",
+            ));
+        };
+        let artboard_index = usize::try_from(*artboard_id).map_err(|_| {
             ScriptError::new(format!(
                 "script artboard id {artboard_id} does not fit this platform"
             ))
         })?;
+        if self.artboards.get(artboard_index).is_none() {
+            return Err(ScriptError::new(format!(
+                "missing scripted artboard index {artboard_index}"
+            )));
+        }
         let mut artboard = RunnerScriptArtboard::new_with_parent_context(
             &self.runtime,
             &self.artboards,
@@ -3511,7 +3544,10 @@ impl nuxie_runtime::ScriptArtboardResolver for RunnerScriptArtboardResolver {
         artboard
             .prepare_state_machine_once()
             .map_err(|error| ScriptError::new(error.to_string()))?;
-        Ok(Box::new(artboard))
+        Ok(Box::new(PreparedRunnerScriptArtboard {
+            artboard,
+            artboard_index,
+        }))
     }
 }
 
@@ -4569,7 +4605,7 @@ enum RunnerPreparedScriptInput {
     },
     Artboard {
         name: nuxie_runtime::ScriptCoreString,
-        artboard_id: usize,
+        source: nuxie_runtime::ScriptArtboardSource,
     },
     ViewModel {
         input_global_id: u32,
@@ -4723,7 +4759,13 @@ fn prepare_state_machine_script_hydration_from_snapshots(
                         input.id
                     )));
                 }
-                prepared.push(RunnerPreparedScriptInput::Artboard { name, artboard_id });
+                prepared.push(RunnerPreparedScriptInput::Artboard {
+                    name,
+                    source: nuxie_runtime::ScriptArtboardSource::File(
+                        u64::try_from(artboard_id)
+                            .expect("validated ScriptInputArtboard id originated as u64"),
+                    ),
+                });
             }
             nuxie_runtime::ScriptListenerInputKind::ViewModelProperty => {
                 if phase == RunnerScriptHydrationPhase::Cold {
@@ -4774,11 +4816,10 @@ fn prepare_state_machine_script_hydration_from_snapshots(
             RunnerPreparedScriptInput::Value { name, value } => {
                 inputs.push(nuxie_runtime::ScriptListenerInputHydration::Value { name, value });
             }
-            RunnerPreparedScriptInput::Artboard { name, artboard_id } => {
+            RunnerPreparedScriptInput::Artboard { name, source } => {
                 inputs.push(nuxie_runtime::ScriptListenerInputHydration::Artboard {
                     name,
-                    artboard_id: u64::try_from(artboard_id)
-                        .expect("validated ScriptInputArtboard id originated as u64"),
+                    source,
                     resolver: Rc::clone(&artboard_resolver),
                     parent_context: artboard_parent_context.clone(),
                 });

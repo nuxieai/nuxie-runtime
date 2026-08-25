@@ -20,6 +20,12 @@ impl StateMachineInstance {
         global_id: u32,
         context: &crate::ScriptListenerActionHydration,
     ) -> Result<(), ScriptError> {
+        // Even this split collection-wide context barrier accepts only a
+        // batch that has structurally crossed Artboard preflight. Cloning is
+        // cheap here (context batches contain no facade boxes) and prevents a
+        // public caller from installing Context before a failing Artboard in
+        // the same hydration value.
+        let context = context.clone().preflight_artboards()?;
         let handle = self
             .scripted_instances_by_global
             .get(&global_id)

@@ -18,7 +18,7 @@ use nuxie_graph::ArtboardGraph;
 use nuxie_render_api::Factory as RenderFactory;
 use nuxie_runtime::{
     ArtboardInstance, NoopScriptHost, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelContextHandle, ScriptArtboard, ScriptError, ScriptValue, ScriptViewModel,
+    RuntimeOwnedViewModelContextHandle, ScriptError, ScriptValue, ScriptViewModel,
     StateMachineInstance,
 };
 use nuxie_scripting::vm::{ScriptProgram, ScriptVm};
@@ -182,7 +182,7 @@ enum PreparedScriptInput {
     },
     Artboard {
         name: nuxie_runtime::ScriptCoreString,
-        artboard_id: usize,
+        source: nuxie_runtime::ScriptArtboardSource,
     },
     ViewModel {
         input_global_id: u32,
@@ -198,13 +198,13 @@ enum PreparedScriptInput {
 struct SilverScriptArtboardResolver;
 
 impl nuxie_runtime::ScriptArtboardResolver for SilverScriptArtboardResolver {
-    fn resolve_script_artboard(
+    fn prepare_script_artboard(
         &self,
-        artboard_id: u64,
+        source: &nuxie_runtime::ScriptArtboardSource,
         _parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
-    ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
+    ) -> std::result::Result<Box<dyn nuxie_runtime::PreparedScriptArtboard>, ScriptError> {
         Err(ScriptError::new(format!(
-            "silver harness does not realize script artboard {artboard_id}"
+            "silver harness does not realize script artboard {source:?}"
         )))
     }
 }
@@ -348,13 +348,11 @@ fn prepare_state_machine_script_hydration_from_snapshots(
             nuxie_runtime::ScriptListenerInputKind::Trigger => {}
             nuxie_runtime::ScriptListenerInputKind::Artboard => {
                 let artboard_id = match snapshot.value {
-                    Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Artboard(value)) => {
-                        Some(value)
-                    }
+                    Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Artboard(
+                        nuxie_runtime::ScriptArtboardSource::File(id),
+                    )) if id != u64::from(u32::MAX) => usize::try_from(id).ok(),
                     _ => None,
                 }
-                .filter(|id| *id != u64::from(u32::MAX))
-                .and_then(|id| usize::try_from(id).ok())
                 .ok_or_else(|| {
                     ScriptError::new(format!(
                         "{owner} input global {}: referenced artboard is unresolved",
@@ -367,7 +365,13 @@ fn prepare_state_machine_script_hydration_from_snapshots(
                         input.id
                     )));
                 }
-                prepared.push(PreparedScriptInput::Artboard { name, artboard_id });
+                prepared.push(PreparedScriptInput::Artboard {
+                    name,
+                    source: nuxie_runtime::ScriptArtboardSource::File(
+                        u64::try_from(artboard_id)
+                            .expect("validated ScriptInputArtboard id originated as u64"),
+                    ),
+                });
             }
             nuxie_runtime::ScriptListenerInputKind::ViewModelProperty => {
                 if phase == HydrationPhase::Cold {
@@ -413,11 +417,10 @@ fn prepare_state_machine_script_hydration_from_snapshots(
             PreparedScriptInput::Value { name, value } => {
                 inputs.push(nuxie_runtime::ScriptListenerInputHydration::Value { name, value });
             }
-            PreparedScriptInput::Artboard { name, artboard_id } => {
+            PreparedScriptInput::Artboard { name, source } => {
                 inputs.push(nuxie_runtime::ScriptListenerInputHydration::Artboard {
                     name,
-                    artboard_id: u64::try_from(artboard_id)
-                        .expect("validated ScriptInputArtboard id originated as u64"),
+                    source,
                     resolver: Rc::clone(&artboard_resolver),
                     parent_context: artboard_parent_context.clone(),
                 });

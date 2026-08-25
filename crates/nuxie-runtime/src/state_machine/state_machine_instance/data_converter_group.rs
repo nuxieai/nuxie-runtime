@@ -321,6 +321,7 @@ impl StateMachineInstance {
     where
         F: FnOnce(&Self) -> Result<crate::ScriptListenerActionHydration, ScriptError>,
     {
+        let context = context.preflight_artboards()?;
         let handle = self
             .data_bind_graph
             .scripted_converter_instance_at_occurrence(
@@ -336,6 +337,10 @@ impl StateMachineInstance {
         {
             let mut instance = handle.borrow_mut();
             context.install_context(&mut **instance)?;
+        }
+        let hydration = prepare_hydration(self)?.preflight_artboards()?;
+        {
+            let mut instance = handle.borrow_mut();
             if let Some(factory) = factory.as_deref_mut() {
                 instance.prepare_init_retry_with_factory(factory)?;
             } else {
@@ -343,7 +348,6 @@ impl StateMachineInstance {
             }
         }
 
-        let hydration = prepare_hydration(self)?;
         let mut instance = handle.borrow_mut();
         hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;
         let hydrated = if !inits || !instance.user_init_pending()? {
@@ -486,6 +490,7 @@ impl StateMachineInstance {
     where
         F: FnOnce(&Self) -> Result<crate::ScriptListenerActionHydration, ScriptError>,
     {
+        let context = context.preflight_artboards()?;
         let handle = self
             .scripted_object_bindings
             .iter()
@@ -504,6 +509,10 @@ impl StateMachineInstance {
         {
             let mut instance = handle.borrow_mut();
             context.install_context(&mut **instance)?;
+        }
+        let hydration = prepare_hydration(self)?.preflight_artboards()?;
+        {
+            let mut instance = handle.borrow_mut();
             if let Some(factory) = factory.as_deref_mut() {
                 instance.prepare_init_retry_with_factory(factory)?;
             } else {
@@ -511,7 +520,6 @@ impl StateMachineInstance {
             }
         }
 
-        let hydration = prepare_hydration(self)?;
         let mut instance = handle.borrow_mut();
         hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;
         let hydrated = if !inits || !instance.user_init_pending()? {

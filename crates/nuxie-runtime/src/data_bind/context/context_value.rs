@@ -4245,7 +4245,7 @@ impl RuntimeDataBindGraphConverterState {
         }
     }
 
-    fn scripted_artboard_ancestor_sources(
+    pub(crate) fn scripted_artboard_ancestor_sources(
         &self,
     ) -> Option<crate::artboard::RuntimeArtboardAncestorSources> {
         match self {

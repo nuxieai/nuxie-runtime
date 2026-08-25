@@ -287,6 +287,7 @@ impl RuntimeScriptedInterpolatorBindingOccurrence {
     where
         F: FnOnce(&Self) -> Result<ScriptListenerActionHydration, ScriptError>,
     {
+        let context = context.preflight_artboards()?;
         let handle = self
             .inner
             .scripted_converter_instance_at_path(input_global_id, converter_path)
@@ -298,9 +299,12 @@ impl RuntimeScriptedInterpolatorBindingOccurrence {
         {
             let mut instance = handle.borrow_mut();
             context.install_context(&mut **instance)?;
+        }
+        let hydration = prepare_hydration(self)?.preflight_artboards()?;
+        {
+            let mut instance = handle.borrow_mut();
             instance.prepare_init_retry()?;
         }
-        let hydration = prepare_hydration(self)?;
         let mut instance = handle.borrow_mut();
         hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;
         let hydrated = if !inits || !instance.user_init_pending()? {

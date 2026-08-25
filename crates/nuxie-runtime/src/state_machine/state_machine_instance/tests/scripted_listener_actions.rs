@@ -258,15 +258,35 @@ impl crate::ScriptArtboard for ProjectionArtboard {
 #[derive(Debug)]
 struct ProjectionArtboardResolver;
 
+#[derive(Debug)]
+struct PreparedProjectionArtboard {
+    artboard: ProjectionArtboard,
+    trace: Option<(Rc<RefCell<Vec<String>>>, String)>,
+}
+
+impl crate::PreparedScriptArtboard for PreparedProjectionArtboard {
+    fn construct(self: Box<Self>) -> Box<dyn crate::ScriptArtboard> {
+        if let Some((trace, label)) = self.trace {
+            trace.borrow_mut().push(format!("resolve-artboard:{label}"));
+        }
+        Box::new(self.artboard)
+    }
+}
+
 impl ScriptArtboardResolver for ProjectionArtboardResolver {
-    fn resolve_script_artboard(
+    fn prepare_script_artboard(
         &self,
         source: &crate::ScriptArtboardSource,
         _parent_context: Option<&crate::ScriptArtboardParentContext>,
-    ) -> Result<Box<dyn crate::ScriptArtboard>, ScriptError> {
+    ) -> Result<Box<dyn crate::PreparedScriptArtboard>, ScriptError> {
         match source {
-            crate::ScriptArtboardSource::File(7) => Ok(Box::new(ProjectionArtboard { width: 7.0 })),
-            crate::ScriptArtboardSource::File(8) => Err(ScriptError::new("ordinary missing artboard")),
+            crate::ScriptArtboardSource::File(7) => Ok(Box::new(PreparedProjectionArtboard {
+                artboard: ProjectionArtboard { width: 7.0 },
+                trace: None,
+            })),
+            crate::ScriptArtboardSource::File(8) => {
+                Err(ScriptError::new("ordinary missing artboard"))
+            }
             _ => Err(ScriptError::with_resource_code(
                 "terminal artboard resource failure",
                 "script.resource.test",
@@ -338,20 +358,20 @@ struct HydrationArtboardResolver {
 }
 
 impl ScriptArtboardResolver for HydrationArtboardResolver {
-    fn resolve_script_artboard(
+    fn prepare_script_artboard(
         &self,
         source: &crate::ScriptArtboardSource,
         _parent_context: Option<&crate::ScriptArtboardParentContext>,
-    ) -> Result<Box<dyn crate::ScriptArtboard>, ScriptError> {
+    ) -> Result<Box<dyn crate::PreparedScriptArtboard>, ScriptError> {
         let label = match source {
             crate::ScriptArtboardSource::File(id) => id.to_string(),
             crate::ScriptArtboardSource::Live(_) => "live".to_owned(),
         };
-        self.trace
-            .borrow_mut()
-            .push(format!("resolve-artboard:{label}"));
         if source == &crate::ScriptArtboardSource::File(7) {
-            Ok(Box::new(ProjectionArtboard { width: 7.0 }))
+            Ok(Box::new(PreparedProjectionArtboard {
+                artboard: ProjectionArtboard { width: 7.0 },
+                trace: Some((Rc::clone(&self.trace), label)),
+            }))
         } else {
             Err(ScriptError::with_resource_code(
                 "terminal artboard resource failure",
@@ -1174,10 +1194,52 @@ fn scripted_hydration_typed_artboard_failure_stops_later_inputs_and_init() {
     assert_eq!(error.resource_code(), Some("script.resource.test"));
     assert_eq!(
         trace.borrow().as_slice(),
-        ["context", "validate", "set:before", "resolve-artboard:9"],
-        "a phase-two failure preserves earlier authored writes but suppresses every later input and user init (`scripted_object.cpp:417-437`)"
+        ["context", "validate"],
+        "the mandatory deferred-recipe preflight rejects a fallible Artboard before any authored phase-two write; successful recipes still construct at their authored position"
     );
     assert!(!artboard_applied.get());
+}
+
+#[test]
+fn public_hydration_apply_and_apply_inputs_cannot_bypass_artboard_preparation() {
+    for apply_context in [true, false] {
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let artboard_applied = Rc::new(Cell::new(false));
+        let mut script = HydrationTraceScript {
+            trace: Rc::clone(&trace),
+            artboard_applied: Rc::clone(&artboard_applied),
+        };
+        let resolver: Rc<dyn ScriptArtboardResolver> = Rc::new(HydrationArtboardResolver {
+            trace: Rc::clone(&trace),
+        });
+        let hydration = crate::ScriptListenerActionHydration::new(
+            None,
+            vec![
+                crate::ScriptListenerInputHydration::Value {
+                    name: ScriptCoreString::from("before"),
+                    value: ScriptValue::Number(1.0),
+                },
+                crate::ScriptListenerInputHydration::Artboard {
+                    name: ScriptCoreString::from("panel"),
+                    source: crate::ScriptArtboardSource::File(9),
+                    resolver,
+                    parent_context: None,
+                },
+            ],
+        );
+        let error = if apply_context {
+            hydration.apply(&mut script, &mut NoopScriptHost)
+        } else {
+            hydration.apply_inputs(&mut script, &mut NoopScriptHost)
+        }
+        .expect_err("the unresolved public batch must cross preparation first");
+        assert_eq!(error.resource_code(), Some("script.resource.test"));
+        assert!(
+            trace.borrow().is_empty(),
+            "neither public application entry can install Context or an earlier scalar before preparation fails"
+        );
+        assert!(!artboard_applied.get());
+    }
 }
 
 fn scripted_listener_artboard_and_machine() -> (ArtboardInstance, StateMachineInstance) {

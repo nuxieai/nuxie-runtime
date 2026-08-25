@@ -4,8 +4,8 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **final-add qNaN operand-order correction implemented;
-fresh independent re-reviews pending**
+Adversarial review: **first complete post-`db1f0bb51` re-review rejected on
+two finite live-caller substitutions**
 
 ## `src/math/mat2d.cpp`
 
@@ -541,3 +541,84 @@ and the full runtime Mat2D suite pass: 12 passed, 0 failed, 0 ignored.
 
 This implementing lane does not self-certify the correction. Verdict:
 **PENDING two fresh independent re-reviews.**
+
+## First complete post-`db1f0bb51` fresh independent re-review — REJECTED
+
+This review accepts the corrected core arithmetic owners. Runtime and
+render-API `mapPoints` preserve the pinned zero-skew specialization,
+odd-first/pair traversal, load-before-store in-place behavior, and authored
+affine FMA grouping. Runtime and render-API `mapBoundingBox` preserve the
+pair-lane extrema algorithm, SIMD NaN/signed-zero selection, nonfinite
+normalization before translation, and final debug assertions. The corrected
+`gpu.cpp::find_transformed_area` cross-product contraction returns pinned
+finite bits in debug and release fat LTO, and its live `PathDraw::Make`
+consumer takes the correct side of the strict `512 * 512` threshold. The
+approved ceiling was respected: this review did not require a particular NaN
+payload when classification and control behavior remained unchanged.
+
+The complete caller audit nevertheless found two finite source-mapping
+failures, so the broader Mat2D certification cannot close.
+
+First, live N-slicing still routes pinned scalar matrix-vector operators
+through the distinct bulk `mapPoints` owner. Pinned
+`NSlicedNode::updateMapWorldPoint` evaluates both `inverseWorld * worldP` and
+`world * slicedP`, and `NSlicedNode::deformLocalPoint` evaluates both
+`worldTransform * point` and `inverseWorld * deformedWorldP`. The corresponding
+Rust paths in `layout/n_sliced_node.rs` use `Mat2D::map_point`, whose owner
+deliberately delegates to `mapPoints`, at all six operative call sites. This
+is not merely a naming discrepancy: the already established finite witness
+
+```text
+m = [bf185aa5, bf185aa5, 3f5b24a3, 3f5b24a3, 3f20f4c4, 3f20f4c4]
+p = [bf33ac98, 3f3a0788]
+```
+
+returns `0x3fd590f7` from pinned `Mat2D * Vec2D` but `0x3fd590f6` from pinned
+`mapPoints`. A fresh optimized Rust probe reproduced that split. The N-slicer
+callers must reach `transform_point`, and their correction needs direct
+non-circular evidence rather than comparison with `map_point`.
+
+Second, `RiveRenderer::clipRectImplSource` replaces pinned
+`transform_rect_to_new_space` with `to_new.map_bounds(rect)`. Pinned source
+maps only the two diagonal points in place through `mapPoints`, then performs
+one SIMD min/max between those results. The four-corner `mapBoundingBox`
+substitute is observably different for matrices admitted by the source's
+epsilon test. With identity destination space, rect `[0, 0, 1, 1]`, and
+`currentToNew = [1, 0, -0.00001, 1, 0, 0]`, `maxSkew` remains below pinned
+`math::EPSILON`, so the rect path is retained. An actual pinned clang/AArch64
+`-O3 -ffp-contract=on` probe returned two-point bounds bits
+
+```text
+[00000000, 00000000, 3f7fff58, 3f800000]
+```
+
+while the current four-corner substitute returns
+
+```text
+[b727c5ac, 00000000, 3f800000, 3f800000]
+```
+
+This also shows why the current general `map_bounds` tests cannot certify
+this caller: both helpers can be individually correct while substituting one
+for the other is not.
+
+Focused evidence, with `CARGO_INCREMENTAL=0` where applicable:
+
+- `cargo test -p nuxie-runtime math::mat2d --lib`: 14 passed;
+- `cargo test -p nuxie-runtime --test mat2d_adversarial`: 2 passed;
+- `cargo test -p nuxie-render-api --lib`: 30 passed;
+- `cargo test -p nuxie-renderer --features renderer-metal transformed_area_ --lib`: 4 passed;
+- the same four transformed-area tests passed in release with fat LTO and one
+  codegen unit;
+- source correspondence passed with 456 applicable owners and no pending
+  absent rows;
+- source-symbol correspondence passed with 7,818 authority units across
+  1,105 owners and generated authority replayed;
+- source-symbol checker unit tests: 33 passed;
+- direct pinned C++ and optimized Rust probes reproduced both finite
+  counterexamples above.
+
+Verdict: **REJECTED while accepting the three named core corrections.** Route
+every scalar N-slicer operator call to the scalar operator owner, restore the
+literal two-point `transform_rect_to_new_space` algorithm, add direct finite
+witnesses at both live callers, and obtain new independent complete reviews.

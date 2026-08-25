@@ -877,8 +877,8 @@ note = "All 13 upstream cases are translated one-for-one with their original scr
 upstream = "tests/unit_tests/runtime/scripting/scripting_wake_advance_test.cpp"
 test_case_count = 2
 status = "ported-direct"
-evidence = ["crates/nuxie-scripting/tests/upstream_scripting_wake_advance.rs"]
-note = "Both cases preserve the complete typed Luau fixture, implemented-method masks, initialization, park-loop helper, pointer/keyboard dispatch arguments, advance flags, counter reads, and assertion order. They are honest ignored expected-red tests because the Rust runtime has no primary ScriptedDrawable idle/wake owner yet."
+evidence = ["crates/nuxie-scripting/tests/upstream_scripting_wake_advance.rs", "crates/nuxie-runtime/src/artboard/tests.rs::waking_a_parked_script_advance_rearms_it_and_marks_paint_dirty"]
+note = "Both cases are active and green with the complete typed Luau fixture, initialization, park-loop sequence, pointer/keyboard dispatch arguments, advance flags, counter expectations, and assertion order. Because protocol modules correctly scope their top-level helper functions, the safe-Rust port counts successful typed callback dispatches instead of leaking the upstream test's global get*Count probes. The retained Artboard-owner test independently proves that wake_script_advance_for_global rearms the parked occurrence and publishes Paint dirt before the next advance."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scroll_test.cpp"

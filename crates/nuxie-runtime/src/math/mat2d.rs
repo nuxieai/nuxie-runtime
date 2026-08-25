@@ -122,14 +122,14 @@ impl Mat2D {
         // Ported from C++ `src/math/mat2d.cpp`.
         let [m0, m1, m2, m3, x, y] = self.0;
         let rotation = m1.atan2(m0);
-        let denom = m0 * m0 + m1 * m1;
+        let denom = m0.mul_add(m0, m1 * m1);
         let scale_x = denom.sqrt();
         let scale_y = if scale_x == 0.0 {
             0.0
         } else {
-            (m0 * m3 - m2 * m1) / scale_x
+            m0.mul_add(m3, -(m2 * m1)) / scale_x
         };
-        let skew = (m0 * m2 + m1 * m3).atan2(denom);
+        let skew = m0.mul_add(m2, m1 * m3).atan2(denom);
         TransformComponents {
             x,
             y,
@@ -148,8 +148,8 @@ impl Mat2D {
         result.scale_by_values(components.scale_x, components.scale_y);
 
         if components.skew != 0.0 {
-            result.0[2] = result.0[0] * components.skew + result.0[2];
-            result.0[3] = result.0[1] * components.skew + result.0[3];
+            result.0[2] = result.0[0].mul_add(components.skew, result.0[2]);
+            result.0[3] = result.0[1].mul_add(components.skew, result.0[3]);
         }
         result
     }
@@ -891,7 +891,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "expected-red: decompose omits pinned C++ contraction"]
     fn decompose_preserves_pinned_cpp_contraction_bits() {
         let components = Mat2D([
             1.000_000_1,
@@ -925,7 +924,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "expected-red: compose omits pinned C++ skew contraction"]
     fn compose_preserves_pinned_cpp_skew_contraction_bits() {
         let components = TransformComponents {
             x: 5.0,

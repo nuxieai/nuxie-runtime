@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **rejected at the current pin**
+Adversarial review: **correction implemented; independent re-review pending**
 
 ## `src/math/mat2d.cpp`
 
@@ -18,8 +18,8 @@ Adversarial review: **rejected at the current pin**
 | `Mat2D::mapBoundingBox(Vec2D*, size_t)` | `Mat2D::map_bounding_box` | exact | `upstream_map_bounding_box_complete_sequence` |
 | `Mat2D::mapBoundingBox(AABB)` | `Mat2D::map_bounds` | exact | `upstream_map_bounding_box_complete_sequence` |
 | `Mat2D::invert` | `Mat2D::invert` | adapted | safe-Rust `Option<Mat2D>` preserves false-with-unchanged-output without an output pointer; constructor/operator test |
-| `Mat2D::decompose` | `Mat2D::decompose` | **missing exact contraction behavior** | `decompose_preserves_pinned_cpp_contraction_bits` is expected-red |
-| `Mat2D::compose` | `Mat2D::compose` | **missing exact contraction behavior** | `compose_preserves_pinned_cpp_skew_contraction_bits` is expected-red |
+| `Mat2D::decompose` | `Mat2D::decompose` | corrected; pending re-review | `decompose_preserves_pinned_cpp_contraction_bits` |
+| `Mat2D::compose` | `Mat2D::compose` | corrected; pending re-review | `compose_preserves_pinned_cpp_skew_contraction_bits` |
 | `Mat2D::scaleByValues` | `Mat2D::scale_by_values` | exact | constructor/operator test; constraint owner suites |
 
 The bounding-box translation preserves the source's non-obvious sequence: it
@@ -85,10 +85,12 @@ ordinary `*` followed by `+`, unlike the already corrected `multiply`,
 `determinant`, and `invert` owners. The simple axis-aligned round trip cited by
 the implementing receipt cannot observe either discrepancy.
 
-This is a translation failure, not a platform-specific replacement algorithm:
-the correction should transliterate those pinned contraction sites with the
-same explicit Rust `mul_add` strategy used elsewhere in this owner and retain
-the expected-bit evidence. The reviewer did not modify production behavior.
+This was a translation failure, not a platform-specific replacement
+algorithm. The correction transliterates every contraction candidate in the
+two methods with the same explicit Rust `mul_add` strategy used elsewhere in
+this owner: the denominator, determinant numerator, and skew numerator in
+`decompose`, plus both skew writes in `compose`. The expected-bit tests are now
+ordinary green evidence.
 
 Focused evidence run with `CARGO_INCREMENTAL=0`:
 
@@ -97,19 +99,16 @@ Focused evidence run with `CARGO_INCREMENTAL=0`:
   `findMaxScale` tests passed;
 - `cargo test -p nuxie-runtime --test mat2d_adversarial`: both bit-exact
   bounding-box cases passed;
-- the two new ignored expected-red contraction tests fail at the exact bit
-  assertions above;
+- the two contraction tests pass at the exact pinned bit assertions above;
 - the source-symbol correspondence check passed against pinned
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
 
 ## Result
 
 All 44 v2 authority rows have concrete Rust owners or a justified
-not-applicable/adapted disposition. The implementing pass correctly recovered
-both missing `mapBoundingBox` overloads and activated the complete upstream
-test. Independent review accepts those owners and the 33 header authority
-rows, but rejects certification because the two out-of-line `decompose` and
-`compose` rows are not numerically source-exact under the pinned contraction
-contract. The receipt remains rejected until those two translation failures
-are corrected, their expected-red tests are made ordinary green evidence, and
-a separate reviewer accepts the correction.
+not-applicable/adapted disposition. The implementing pass recovered both
+missing `mapBoundingBox` overloads, and the first independent review accepted
+those owners plus 31 of the remaining 33 header/out-of-line rows. Its two
+contraction counterexamples are now corrected and green. This implementing
+lane does not self-certify them; the receipt remains pending until a separate
+reviewer accepts the correction.

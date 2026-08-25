@@ -2116,3 +2116,138 @@ ignored with only the already-recorded host-log wording failure. Source
 correspondence remained 456 applicable rows with zero pending; symbol
 correspondence remained 1,105 owners / 7,818 authority units with generated
 authority replayed, and all 33 checker tests passed.
+
+## First fresh independent review after `a04ae4144`
+
+Status: **REJECTED.** The correction retains the concrete occurrence context
+through phase-two ScriptInput hydration and authored `init`, but it installs
+that context too late for the generator and does not mount a component-list
+row created during the same public lifecycle. The two evidence gaps admitted
+by the correction are therefore real parity gaps, not merely absent tests.
+
+### Generator construction still uses the File-wide default context
+
+Pinned `Artboard::internalDataContext` first assigns the concrete Artboard
+DataContext to every `ScriptedObject` and only then calls
+`initScriptedObjects`. `ScriptAsset::initScriptedObject` reaches
+`ensureScriptInitialized`, whose `ScriptedContext` reads that already-assigned
+occurrence DataContext while invoking the generator. The generator and later
+`init` reuse that same Context (`artboard.cpp:2581-2603,875-890`;
+`scripted_object.cpp:310-388,399-435`). A nested or component-list scripted
+object therefore sees its local ViewModel and retained parent chain during
+construction, before any authored input is hydrated.
+
+Both corrected Rust mount constructors reverse this edge:
+
+- `instantiate_script_mounts` calls
+  `instantiate_registered_script_with_factory`, which invokes the generator
+  with the VM's File-wide `default_context_view_model`; only after the
+  generator returns does it call `set_context_view_model_chain` with the
+  group's retained occurrence context.
+- `instantiate_script_mounts_async` likewise invokes
+  `instantiate_registered_script_with_factory_async` with the File-wide
+  default chain and patches the occurrence chain afterward.
+
+This is observable even when all later scalar inputs and `init` are correct.
+A generator that reads `context:viewModel()` or `context:dataContext():parent()`
+can branch, allocate resources, return a different table, or mark requested
+data missing from the outer root before the correction installs the row or
+nested context. In a cross-File group, the default itself may have been
+projected from the consumer root while the concrete source File and occurrence
+own the script. The synchronous VM already exposes the correct
+`instantiate_registered_script_with_factory_and_context` boundary; the mount
+path does not use it, and the asynchronous sibling has no occurrence-context
+equivalent at this call site.
+
+The two new cold mount witnesses do execute a real generator, but that
+generator ignores its Context and returns a fixed table. Their authored
+`init` observes only scalar fields hydrated after the late context replacement,
+so both witnesses remain green under this failure.
+
+### A dynamically created scripted row cannot mount in its creation lifecycle
+
+The public sync and async owners collect and instantiate the existing tree
+before `flush_scripted_artboard_tree` or frame advance. Script/DataBind work in
+that later traversal can materialize or reconstruct a component-list row. No
+second mount transaction follows. Instead,
+`verify_scripted_artboard_tree_attached` recollects the enlarged tree and
+returns an error as soon as it finds the row's unattached scripted target. The
+comment in `prepare_scripted_artboard_tree` explicitly defers mounting a newly
+materialized child to the next preparation call, but the immediately-following
+verification prevents the current draw/frame from completing.
+
+Pinned `ArtboardComponentList::bindArtboard` binds the row ViewModel with the
+owning Artboard DataContext as parent during row creation. That bind reaches
+the child Artboard's `internalDataContext`, which installs the row-first chain
+and calls `initScriptedObjects` in the same lifecycle
+(`artboard_component_list.cpp:1528-1543`; `artboard.cpp:2581-2603`). The Rust
+error/defer path is therefore neither the pinned timing nor a successful
+adaptation. Fresh row creation, context-driven reconstruction, and pool
+restoration can all reach the same gap when they occur after initial mount
+collection.
+
+The two component-list witnesses cited by the correction are runtime-core
+fixtures. They attach a type-erased `u32` authority and prove inheritance,
+refresh, and pool identity, but they never construct an `Arc<File>` facade,
+prepare a File VM, invoke a ScriptAsset generator, hydrate a ScriptInput, call
+authored `init`, or enter either public mount owner. There is still no
+operative dynamically-created scripted-row mount witness.
+
+### ScriptInputArtboard facade evidence remains helper-level
+
+The corrected phase-two branch does pass `group.parent_context` to primitive,
+Artboard, and ViewModel resolution, and `FileScriptArtboard::from_concrete`
+builds a child-local context whose parent is that retained opaque chain. Source
+catalogue authority remains `group.file`, while the constructed scripting
+facade remains consumer-File-owned. Those source-level routes were not
+falsified.
+
+They are not, however, covered through the requested concrete lifecycle. The
+new fixture contains only `ScriptInputNumber` fields. Its pre-mount assertions
+manually bind a `ScriptArtboardParentContext` and call the occurrence resolver;
+that proves the fixture's `[0, 0]` local and `[1, 0]` parent path encoding, not
+that a mounted `ScriptInputArtboard` carries the chain. The existing
+`scripted_drawable_artboard_input_is_projected_before_init` fixture proves only
+that a root Artboard input permits mount, while the detailed parent/source
+tests construct `FileScriptArtboard` or a prepared resolver directly. No real
+nested or row generator is followed by phase-two Artboard construction and an
+authored `init` that traverses the projected facade's local-plus-parent
+DataContext. That witness is required after the generator-order correction so
+fixture encoding cannot stand in for production behavior.
+
+### Accepted portions and independent evidence
+
+Independent inspection accepts the new group's retained selected ViewModel,
+local-plus-parent projected chain, opaque parent context, and source File for
+phase-two primitive/Artboard/ViewModel hydration. Synchronous and detached
+preparation preserve the captured context through later `init`; lazy
+interpolator fallback selection now uses the occurrence VM. Multi-File runtime
+preparation, cold nested source discovery, ordinary live rehydrate/refresh,
+guard ordering, source/consumer separation, and component-list File-authority
+inheritance were not falsified by this review.
+
+All Cargo commands used `CARGO_INCREMENTAL=0`:
+
+- cold sync/detached occurrence mounts and cold cross-File source mount: 3
+  passed;
+- root real `ScriptInputArtboard` mount and cross-File child DataBind facade:
+  2 passed;
+- complete scripted-listener/ScriptInput suite: 102 passed;
+- component-list authority/refresh/pool witnesses: 2 passed;
+- scripting-enabled golden-runner suite: 19 passed;
+- silver-corpus suites: 15 passed / 17 ignored;
+- combined checks for `nuxie-runtime`, `nuxie-scripting`, scripting-enabled
+  `nuxie`, `silver-corpus`, and `rust-golden-runner`: passed;
+- complete scripting-enabled `nuxie` lib suite: 63 passed / 1 ignored, with
+  only the already-recorded host-log wording assertion failing;
+- source correspondence: 456 applicable rows, zero pending;
+- symbol correspondence: 1,105 owners / 7,818 authority units with generated
+  authority replayed; all 33 checker tests passed.
+
+Those green results validate the accepted subpaths but cannot accept complete
+ScriptInput/mount parity. The next correction must invoke every generator with
+the exact occurrence context already installed in both sync and async mount
+transactions, integrate late row creation/reconstruction/pool reuse with a
+same-lifecycle real mount, and add concrete nested and dynamic-row
+ScriptInputArtboard facade witnesses through generator, hydration, and
+authored `init`. Two fresh independent reviews are required afterward.

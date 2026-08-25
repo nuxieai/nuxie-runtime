@@ -7134,6 +7134,14 @@ fn nested_child_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bo
             // ArtboardBase::clipPropertyKey in C++ generated/artboard_base.hpp.
             && data_bind.property_key == 196
             && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("Artboard")
+            // Artboard inherits WorldTransformComponentBase::opacityPropertyKey.
+            && data_bind.property_key == 18
+            && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("Artboard")
+            // Artboard inherits TransformComponentBase::rotationPropertyKey.
+            && data_bind.property_key == 15
+            && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))
         || (data_bind.target_type_name == Some("Node")
             // NodeBase::x/yPropertyKey in C++ generated/node_base.hpp.
             && matches!(data_bind.property_key, 13 | 14)

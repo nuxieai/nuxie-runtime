@@ -183,10 +183,9 @@ impl Mat2D {
     }
 
     pub fn transform_point(self, x: f32, y: f32) -> (f32, f32) {
-        (
-            self.0[0] * x + self.0[2] * y + self.0[4],
-            self.0[1] * x + self.0[3] * y + self.0[5],
-        )
+        let [xx, yx, xy, yy, tx, ty] = self.0;
+        // Pinned C++ contracts the two linear products, then adds translation.
+        (xx.mul_add(x, xy * y) + tx, yx.mul_add(x, yy * y) + ty)
     }
 
     pub fn map_point(self, x: f32, y: f32) -> (f32, f32) {
@@ -287,7 +286,9 @@ impl Mat2D {
     }
 
     pub fn transform_direction(self, x: f32, y: f32) -> (f32, f32) {
-        (self.0[0] * x + self.0[2] * y, self.0[1] * x + self.0[3] * y)
+        let [xx, yx, xy, yy, _, _] = self.0;
+        // Pinned Vec2D::transformDir contracts each two-product sum.
+        (xx.mul_add(x, xy * y), yx.mul_add(x, yy * y))
     }
 }
 
@@ -807,7 +808,7 @@ mod tests {
             matrix.translate((7.0, 8.0)),
             Mat2D([1.0, 2.0, 3.0, 4.0, 12.0, 14.0])
         );
-        assert_eq!(matrix * (7.0, 8.0), matrix.transform_point(7.0, 8.0));
+        assert_eq!(matrix * (7.0, 8.0), (36.0, 52.0));
 
         let rhs = Mat2D([2.0, 0.0, 0.0, 3.0, 4.0, 5.0]);
         assert_eq!(matrix * rhs, matrix.multiply(rhs));
@@ -887,6 +888,51 @@ mod tests {
                 0x4248_e3a0,
                 0xc38f_2347,
             ]
+        );
+    }
+
+    #[test]
+    fn point_and_direction_transforms_preserve_pinned_cpp_contraction_bits() {
+        // These are literal output bits from pinned arm64 C++ compiled with
+        // `-O3 -ffp-contract=on`. The first case distinguishes the emitted
+        // two-product contraction from Rust's ordinary `*`/`+` evaluation.
+        let contraction = Mat2D([1.000_000_1, 1.000_000_1, 1.000_000_1, 1.000_000_1, 0.0, 0.0]);
+        let point = (std::f32::consts::PI, -2.718_281_7);
+        let transformed = contraction.transform_point(point.0, point.1);
+        assert_eq!(
+            [transformed.0.to_bits(), transformed.1.to_bits()],
+            [0x3ed8_bc3d, 0x3ed8_bc3d],
+            "expected bits captured from pinned C++ matrix-vector operator"
+        );
+        let transformed = contraction * point;
+        assert_eq!(
+            [transformed.0.to_bits(), transformed.1.to_bits()],
+            [0x3ed8_bc3d, 0x3ed8_bc3d],
+            "Mul must reach the same pinned matrix-vector owner"
+        );
+        let transformed = contraction.transform_direction(point.0, point.1);
+        assert_eq!(
+            [transformed.0.to_bits(), transformed.1.to_bits()],
+            [0x3ed8_bc3d, 0x3ed8_bc3d],
+            "expected bits captured from pinned C++ Vec2D::transformDir"
+        );
+
+        // The second pinned oracle distinguishes the operator's separate
+        // final translation add from Mat2D::mapPoints' nested affine FMA.
+        let translation_grouping = Mat2D([
+            f32::from_bits(0xbf18_5aa5),
+            f32::from_bits(0xbf18_5aa5),
+            f32::from_bits(0x3f5b_24a3),
+            f32::from_bits(0x3f5b_24a3),
+            f32::from_bits(0x3f20_f4c4),
+            f32::from_bits(0x3f20_f4c4),
+        ]);
+        let translated = translation_grouping
+            .transform_point(f32::from_bits(0xbf33_ac98), f32::from_bits(0x3f3a_0788));
+        assert_eq!(
+            [translated.0.to_bits(), translated.1.to_bits()],
+            [0x3fd5_90f7, 0x3fd5_90f7],
+            "expected bits captured from pinned C++ matrix-vector operator"
         );
     }
 

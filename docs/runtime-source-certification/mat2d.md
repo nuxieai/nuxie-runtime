@@ -4,8 +4,8 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **first independent correction review rejects certification;
-the `decompose`/`compose` correction itself is accepted**
+Adversarial review: **matrix-vector correction implemented; fresh independent
+re-review pending**
 
 ## `src/math/mat2d.cpp`
 
@@ -53,7 +53,7 @@ The v2 denominator contains 33 header authority rows:
 | `translation` | `Mat2D::translation` | adapted: tuple-vector representation |
 | six overloaded scalar setters | `set_xx`, `set_xy`, `set_yx`, `set_yy`, `set_tx`, `set_ty` | adapted: Rust cannot overload getter/setter names |
 | `determinant` | `Mat2D::determinant` | exact |
-| matrix-vector `operator*` | `Mul<(f32, f32)>`; `transform_point`; render-API `Mat2D::transform_point` | **rejected: tuple-vector representation is adapted, but both live scalar owners omit the pinned two-product contraction** |
+| matrix-vector `operator*` | `Mul<(f32, f32)>`; `transform_point`; render-API `Mat2D::transform_point` | corrected; pending fresh independent re-review; tuple-vector representation is the approved adaptation; pinned-oracle evidence in `point_and_direction_transforms_preserve_pinned_cpp_contraction_bits` and render-API `mat2d_point_transform_preserves_pinned_cpp_operator_contraction_bits` |
 | matrix-matrix `operator*` | `Mul<Mat2D>` | exact |
 | `operator==` and `operator!=` | derived `PartialEq` | exact |
 
@@ -193,3 +193,55 @@ Verdict: **REJECTED for Mat2D certification, while accepting the
 matrix-vector owners from the pinned instruction grouping, add a non-circular
 bit-exact counterexample, and obtain a new independent review. Track the IK
 skew-write correction under its own source owner.
+
+## Matrix-vector correction after first re-review — PENDING
+
+The rejected matrix-vector row is mechanically corrected in both live owners.
+Pinned arm64 C++ emits a separate `m[2] * y` product, contracts
+`m[0] * x + product`, and performs the translation add afterward. Runtime
+`Mat2D::transform_point` and render-API `Mat2D::transform_point` now spell that
+exact grouping as `m0.mul_add(x, m2 * y) + tx` for each coordinate. Runtime
+`Mat2D::transform_direction`, the approved tuple-vector owner for pinned
+`Vec2D::transformDir`, uses the same contraction without translation. Rust's
+explicit `f32::mul_add` makes the proven pinned contraction portable instead
+of depending on the Rust compiler to reassociate ordinary arithmetic.
+
+The shared-helper audit distinguishes two upstream algorithms that must not be
+collapsed:
+
+- runtime `map_point`, `map_points`, and `map_points_in_place`, render-API
+  `map_raw_path_point`, and draw's `map_point_affine` represent pinned
+  `Mat2D::mapPoints`; they correctly keep translation inside the skew addend
+  before the outer contraction;
+- scalar point, direction, `Mul<(f32, f32)>`, mesh UV, slice-mesh UV, hit-test,
+  input, semantic, constraint, bone, and text callers all reach one of the
+  corrected operator/`Vec2D` owners instead of retaining another ordinary
+  multiply-plus-add copy.
+
+The old constructor/operator assertion was circular because it compared
+`Mul<(f32, f32)>` only with `transform_point`. It now checks the literal
+non-adversarial result `(36, 52)`. New tests use two direct pinned C++ oracles:
+
+- the review witness returns `0x3ed8bc3d` in both coordinates and distinguishes
+  the contracted two-product sum from the former Rust expression;
+- a second pinned witness returns `0x3fd590f7` in both coordinates, while the
+  nested `mapPoints` grouping returns `0x3fd590f6`, proving translation remains
+  a separate final add.
+
+Focused correction evidence, with `CARGO_INCREMENTAL=0`:
+
+- `cargo test -p nuxie-runtime math::mat2d --lib`: 10 passed;
+- `cargo test -p nuxie-runtime --test mat2d_adversarial`: 2 passed;
+- `cargo test -p nuxie-render-api mat2d_point_transform_preserves_pinned_cpp_operator_contraction_bits --lib`: 1 passed;
+- `cargo test -p nuxie-render-api --lib`: 27 passed;
+- source correspondence: 456 applicable owners, 0 pending absent rows;
+- source-symbol correspondence: 7,818 authority units across 1,105 owners,
+  with generated authority replayed;
+- source-symbol checker unit suite: 33 passed;
+- direct arm64 C++ `-O3 -ffp-contract=on` execution and assembly inspection
+  produced the expected bits and the `fmul`/`fmla`/final-`fadd` sequence.
+
+The separate inline IK skew-write finding remains outside this correction and
+belongs to `IKConstraint::constrainRotation` ownership. This implementing lane
+does not self-certify the corrected Mat2D/Vec2D owners. Verdict: **PENDING a
+fresh independent re-review.**

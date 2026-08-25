@@ -88,9 +88,10 @@ impl Mat2D {
 
     pub fn transform_point(self, point: Vec2D) -> Vec2D {
         let [xx, yx, xy, yy, tx, ty] = self.0;
+        // Pinned C++ contracts the two linear products, then adds translation.
         Vec2D {
-            x: xx * point.x + xy * point.y + tx,
-            y: yx * point.x + yy * point.y + ty,
+            x: xx.mul_add(point.x, xy * point.y) + tx,
+            y: yx.mul_add(point.x, yy * point.y) + ty,
         }
     }
 }
@@ -4488,6 +4489,38 @@ fn write_float(out: &mut String, value: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mat2d_point_transform_preserves_pinned_cpp_operator_contraction_bits() {
+        // Literal outputs from the pinned arm64 C++ matrix-vector operator,
+        // compiled with `-O3 -ffp-contract=on`.
+        let contraction = Mat2D([1.000_000_1, 1.000_000_1, 1.000_000_1, 1.000_000_1, 0.0, 0.0]);
+        let transformed =
+            contraction.transform_point(Vec2D::new(std::f32::consts::PI, -2.718_281_7));
+        assert_eq!(
+            [transformed.x.to_bits(), transformed.y.to_bits()],
+            [0x3ed8_bc3d, 0x3ed8_bc3d]
+        );
+
+        // This oracle also proves translation remains a separate final add,
+        // rather than using RawPath/Mat2D::mapPoints' nested FMA grouping.
+        let translation_grouping = Mat2D([
+            f32::from_bits(0xbf18_5aa5),
+            f32::from_bits(0xbf18_5aa5),
+            f32::from_bits(0x3f5b_24a3),
+            f32::from_bits(0x3f5b_24a3),
+            f32::from_bits(0x3f20_f4c4),
+            f32::from_bits(0x3f20_f4c4),
+        ]);
+        let transformed = translation_grouping.transform_point(Vec2D::new(
+            f32::from_bits(0xbf33_ac98),
+            f32::from_bits(0x3f3a_0788),
+        ));
+        assert_eq!(
+            [transformed.x.to_bits(), transformed.y.to_bits()],
+            [0x3fd5_90f7, 0x3fd5_90f7]
+        );
+    }
 
     #[test]
     fn encoded_image_metadata_reports_supported_raster_identity() {

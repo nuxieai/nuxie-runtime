@@ -334,6 +334,88 @@ Correction gates:
 Implementation status: **CORRECTED CANDIDATE**. Certification status:
 **PENDING TWO FRESH INDEPENDENT REVIEWS**.
 
+## First post-`42ea58166` fresh independent adversarial review
+
+Verdict: **REJECTED**.
+
+This review started from the combined correction at exact commit
+`42ea58166c4e27da0008b3682f5d9fdb61fd18f7` and independently re-read the
+pinned AABB, Mat2D, RawPath, PathDraw, RenderContext, RiveRenderer, and backend
+call chains. It did not use the earlier review conclusions as authority. The
+two bypasses corrected by `42ea58166` are genuinely repaired: the operative
+`PathDraw::Make` route now maps the complete raw point span, maps the
+stroke/Feather outset through the four-corner overload, no longer rejects a
+nonfinite mapped box as `None`, and `LogicalFlush::pushDraws` now calls
+`!bounds.empty()`. Two other exact-source omissions prevent acceptance:
+
+1. Pinned `src/math/mat2d.cpp:164-167` bit-casts the final translated lanes to
+   `AABB`, then asserts `width() >= 0` and `height() >= 0` before returning.
+   Pinned `renderer/src/draw.cpp:452-455` immediately repeats those two checks
+   for `PathDraw::Make`. Rust `nuxie-render-api/src/lib.rs:152-159` returns the
+   translated AABB without either post-translation assertion, and the ordinary
+   live path at `nuxie-renderer/src/draw.rs:479-481` rounds it without restoring
+   the PathDraw checks. This differs when finite points have a nonfinite
+   translation: a debug C++ witness compiled against the pinned `mat2d.cpp`
+   with identity linear terms and positive-infinity X translation terminated
+   at line 165 with exit 134, while the corresponding Rust witness did not
+   panic and returned positive-infinity left/right with a NaN width. Linear
+   nonfinite normalization is correct; the missing checks occur after the
+   authored translation step.
+
+2. Pinned `renderer/src/render_context.cpp:707-719` performs the scalar
+   Feather-atlas allocation checks, constructs `paddedRegion`, and then
+   separately asserts that an atlas-sized `AABBu16` contains the resulting
+   region. Rust `render_context_cpp.rs:5950-5961` retains the scalar checks and
+   constructs the shared typed AABB, but omits the final
+   `AABBu16::contains(*padded_region)` call. The scalar checks make the result
+   redundant for a valid rectanizer return, but they do not translate this
+   authored typed-AABB operation and cannot certify the complete operative
+   call graph.
+
+The remaining requested surface survived the fresh audit. `RawPath::bounds`
+retains the odd/even pair-lane seed, correct operand order, numeric-over-NaN
+selection, signed-zero extrema, infinity handling, and final XY/ZW reduction;
+the odd first-point seed leaves ZW at the source infinities until the final
+fold. `Mat2D::map_bounding_box` otherwise retains zero-skew multiplication,
+affine fused grouping, pair-lane initialization and reduction, normalization
+before translation, and exact four-corner order. Float `Aabb` retains
+`#[repr(C)]`, four-float size/alignment, and field offsets. The live inner
+Feather path reaches `RawPath::bounds`, and no `transformed_control_bounds` or
+renderer-local float-map substitute survives. All renderer integer aliases
+resolve to the shared `TypedAabb`; aside from the missing Feather-atlas call
+above, the operative scissor, flush, RiveRenderer, WebGL2, WebGPU, Vulkan, and
+Metal containment/intersection/empty call sites reach that owner. The manual
+comparison in `isOutsideCurrentFrame` remains the separately authored pinned
+SIMD-shaped predicate rather than a hidden TAABB expansion.
+
+Evidence from the detached exact-commit worktree:
+
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-render-api`: all 42 repository tests
+  passed; a disposable Rust exceptional witness additionally confirmed the
+  missing post-translation panic.
+- The compiled pinned C++ exceptional witness terminated with exit 134 at
+  `Mat2D::mapBoundingBox`'s width assertion for positive-infinity translation;
+  its finite affine, odd/even RawPath, signed-zero, numeric-over-NaN,
+  four-corner, and nonfinite-linear probes matched the Rust results.
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --test upstream_aabb`:
+  12/12 passed.
+- The focused live inner-Feather first-NaN test passed 1/1 after mirroring only
+  the repository's ignored fixture assets into the detached worktree.
+- The two path-bound tests and both transformed Feather/stroke-outset tests in
+  `nuxie-renderer` passed 4/4.
+- Independent `CARGO_INCREMENTAL=0 cargo check -p nuxie-renderer --features`
+  runs passed for `renderer-vulkan`, `renderer-webgpu`, `renderer-webgl2`, and
+  `renderer-metal`.
+
+Required correction: restore the post-translation width/height debug checks in
+the shared `Mat2D::map_bounding_box` owner (and retain the PathDraw boundary as
+needed for literal correspondence), and restore the live atlas-sized
+`AABBu16::contains(*padded_region)` assertion. Then restart both post-correction
+independent reviews.
+
+Implementation status: **CORRECTED CANDIDATE REJECTED**. Certification status:
+**REJECTED BY FIRST POST-`42ea58166` FRESH INDEPENDENT REVIEW**.
+
 ## First fresh independent review of correction `ed8692bed`
 
 Verdict: **REJECTED**.
@@ -449,3 +531,88 @@ typed-AABB, and float-layout owners are unchanged.
 
 Implementation status: **CORRECTED CANDIDATE**. Certification status:
 **PENDING TWO FRESH INDEPENDENT REVIEWS**.
+
+## Second fresh independent review of correction `42ea58166`
+
+Verdict: **REJECTED**.
+
+This review independently audited the combined `ed8692bed` and `42ea58166`
+candidate against pinned runtime
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`, including the operative callers
+shared by the Vulkan, WebGPU, WebGL2, and Metal product roots. The rejected
+`PathDraw::Make` and `pushDraws` bypasses are corrected, but two exact-source
+omissions remain:
+
+1. Pinned `renderer/src/render_context.cpp:707-719` first asserts the scalar
+   Feather-atlas coordinates and extents, constructs `paddedRegion`, and then
+   separately asserts
+   `(AABBu16{0, 0, atlasMaxWidth, atlasMaxHeight}).contains(*paddedRegion)`.
+   Rust `render_context_cpp.rs:5950-5961` retains the scalar assertions and
+   constructs the same `AABBu16`, but never performs the final shared typed
+   `contains` call. The earlier scalar checks make this assertion redundant
+   for an ordinary allocator result, but they do not replace the pinned
+   typed-AABB owner or satisfy the requirement to translate every operative
+   `TAABB::contains`/`empty` call.
+
+2. Pinned `src/math/mat2d.cpp:164-167` bit-casts the translated lanes to an
+   `AABB` and then asserts `width() >= 0` and `height() >= 0` before returning.
+   Rust `Mat2D::map_bounding_box` returns immediately after adding translation
+   and omits both post-translation debug assertions. This is observable for a
+   nonfinite translation even though the pre-translation extrema are valid.
+   A fresh debug C++ probe compiled directly with the pinned `mat2d.cpp`, using
+   identity linear terms and positive-infinity X translation, terminated with
+   exit 134 at the pinned width assertion. The corresponding Rust probe did
+   not panic and returned positive-infinity left and right coordinates. The
+   normalization-before-translation branch itself is correct; the missing
+   final assertions are the divergence.
+
+The remainder of the requested surface survived the independent adversarial
+sweep:
+
+- `RawPath::bounds` preserves odd/even pair-lane initialization, source
+  operand order in the pair folds, and XY/ZW reduction. The Rust `Option`
+  empty-path API is normalized by the operative renderer callers to the
+  pinned zero AABB.
+- `Mat2D::map_bounding_box` preserves the zero-skew branch, odd XY-only seed,
+  even pair processing, affine fused grouping, invalid-extent/nonfinite
+  normalization, translation timing, and four-corner AABB order, apart from
+  the final assertions above. Independent affine, odd-lane, empty, and
+  nonfinite probes passed after comparison with hand-derived source results.
+- The live path-draw route now sends the complete raw point span through the
+  shared `Mat2D::map_bounding_box` owner. Stroke/Feather computes the pinned
+  miter/square/Feather radius, maps `{0, 0, radius, radius}` through all four
+  corners, and applies its mapped width/height plus one pixel before rounding.
+  `transformed_control_bounds` has been removed and has no remaining symbol.
+- The other operative typed-AABB member calls correspond: shared render
+  context scissor containment, `pushDraws` empty, flush-update empty, and
+  tightened-clip containment; `RiveRenderer` clipped/combined empties; and
+  Vulkan target/draw containment and empty checks. Local vector/container
+  emptiness and platform rectangle conversion were not misclassified as
+  `TAABB` calls. `pushDraws` now uses `!bounds.empty()` exactly.
+- Float `Aabb` retains its explicit C layout, four contiguous floats, and
+  field-order/offset evidence. All four renderer feature roots compile through
+  the corrected shared path owner.
+
+Evidence was run from a clean detached worktree at exact commit
+`42ea58166c4e27da0008b3682f5d9fdb61fd18f7`:
+
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-render-api`: 42/42 passed.
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --test upstream_aabb`:
+  12/12 passed.
+- The focused live nonfinite path-bound witness passed 1/1.
+- A temporary independent render-API exceptional probe passed 2/2 for affine
+  four-corner mapping, odd RawPath lanes, empty input, and nonfinite linear
+  normalization. A separate Rust translation probe passed 1/1 by confirming
+  the missing-panic behavior described above; the paired pinned C++ probe
+  exited 134 at `Mat2D::mapBoundingBox`'s width assertion.
+- Independent `CARGO_INCREMENTAL=0 cargo check -p nuxie-renderer --features`
+  runs passed for `renderer-vulkan`, `renderer-webgpu`, `renderer-webgl2`, and
+  `renderer-metal` (warnings only).
+
+Required correction: restore the final typed `AABBu16::contains` assertion in
+`allocateFeatherAtlasDraw`, and restore the pinned post-translation width and
+height debug assertions in `Mat2D::map_bounding_box`. Then restart both fresh
+independent AABB reviews from the corrected commit.
+
+Implementation status: **CORRECTED CANDIDATE REJECTED**. Certification status:
+**REJECTED BY SECOND FRESH INDEPENDENT REVIEW**.

@@ -445,7 +445,7 @@ runtime-source-correspondence-gate:
 		"source correspondence tool unit tests" "$(MAKE) --no-print-directory runtime-source-correspondence-test" \
 		"source correspondence bijection check" "$(MAKE) --no-print-directory runtime-source-correspondence-check"
 
-.PHONY: runtime-source-symbol-test runtime-source-symbol-snapshot runtime-source-symbol-check runtime-source-symbol-gate
+.PHONY: runtime-source-symbol-test runtime-source-symbol-snapshot runtime-source-symbol-check runtime-source-symbol-gate runtime-generated-authority-check runtime-generated-authority-gate
 runtime-source-symbol-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/source-symbol-correspondence -p 'test_*.py' -v
 
@@ -455,10 +455,18 @@ runtime-source-symbol-snapshot:
 runtime-source-symbol-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(SOURCE_SYMBOL_CORRESPONDENCE_TOOL)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(FILE_CORRESPONDENCE_MANIFEST)" --denominator "$(SOURCE_SYMBOL_DENOMINATOR)"
 
+runtime-generated-authority-check:
+	PYTHONDONTWRITEBYTECODE=1 CARGO_INCREMENTAL=0 python3 "$(SOURCE_SYMBOL_CORRESPONDENCE_TOOL)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(FILE_CORRESPONDENCE_MANIFEST)" --denominator "$(SOURCE_SYMBOL_DENOMINATOR)" --verify-generated-authority
+
+runtime-generated-authority-gate:
+	@tools/report-all.sh "runtime-generated-authority" \
+		"frozen generated authority and schema codegen replay" "$(MAKE) --no-print-directory runtime-generated-authority-check"
+
 runtime-source-symbol-gate:
 	@tools/report-all.sh "runtime-source-symbol" \
 		"source symbol tool unit tests" "$(MAKE) --no-print-directory runtime-source-symbol-test" \
-		"source symbol denominator check" "$(MAKE) --no-print-directory runtime-source-symbol-check"
+		"source symbol denominator check" "$(MAKE) --no-print-directory runtime-source-symbol-check" \
+		"generated source/schema authority" "$(MAKE) --no-print-directory runtime-generated-authority-check"
 
 runtime-behavior-inventory-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-behavior-inventory -p 'test_*.py' -v

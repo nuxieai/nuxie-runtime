@@ -673,11 +673,11 @@ impl ExactSourceBackend for WebGpuProductBackend {
         plan: &GpuCanvasPlan,
         execution_anchor: Rc<dyn Any>,
     ) -> Result<RiveRenderImageHandle, GpuCanvasError> {
-        if self.active_frame {
-            return Err(GpuCanvasError::new(
-                "exact WebGPU GPU-canvas submission overlaps the presentation frame",
-            ));
-        }
+        // Scripted drawables materialize their offscreen image while the outer
+        // presentation frame is being recorded. WebGPU permits a second
+        // encoder to submit at that point: queue order makes the completed
+        // offscreen write visible before the still-unsubmitted presentation
+        // commands sample it. The two ORE contexts never share an encoder.
         let canvas = self.implementation_mut().makeRenderCanvas(plan.width, plan.height);
         if !canvas.operator_bool() {
             return Err(GpuCanvasError::new(

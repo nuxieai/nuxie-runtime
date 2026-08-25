@@ -794,7 +794,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_paint_test.cpp"
 test_case_count = 2
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/tests/upstream_scripting_paint.rs"]
-note = "Both upstream cases are translated one-for-one with every original script, userdata/nil type check, action order, assertion order, value, and approximate feather comparison. Construction is active and green. Gradient clearing is honestly ignored expected-red because Paint.copy({gradient=false}) currently rejects false instead of clearing the gradient; no runtime fix is included in this phase."
+note = "Both upstream cases execute one-for-one with every original script, userdata/nil type check, action order, assertion order, value, and approximate feather comparison. The production Paint owner now preserves lua_torive(..., allowNil=true): a Gradient userdata installs the shader and false, nil, or a different userdata clears it."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_path_effect_test.cpp"

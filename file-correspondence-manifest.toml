@@ -3559,7 +3559,7 @@ b6_row_id = "B6-0284"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "P1-d direct owner split at d788e8ec: the existing adapted Paint registration, ScriptedPaintData/ScriptedPaint owners, copy/setter behavior, and paint enum coercions moved without behavioral rewrite to crates/nuxie-scripting/src/vm/lua_paint.rs:15-375."
+note = "MR-3 paired audit: the fixed Rust-native scripting owner preserves Paint registration, ScriptedPaintData/ScriptedPaint state, copy/setter behavior, enum coercions, and upstream allowNil gradient coercion: Gradient installs a shader while false, nil, or a different userdata clears it."
 
 [[file]]
 upstream = "src/lua/renderer/lua_path.cpp"

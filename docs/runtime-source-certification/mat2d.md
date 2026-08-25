@@ -666,3 +666,84 @@ Focused evidence, all with `CARGO_INCREMENTAL=0` where applicable:
 
 This implementing lane does not self-certify either correction. Verdict:
 **PENDING TWO FRESH INDEPENDENT REVIEWS.**
+
+## First fresh independent complete review after `60076a4a8` — REJECTED
+
+This review accepts the N-slicer correction. All six operative Rust sites now
+reach scalar `transform_point`, preserving pinned `Mat2D * Vec2D` grouping
+instead of the distinct `mapPoints` grouping. The actual deformation witness
+returns finite bits `0x3fd590f7` in debug and fat-LTO release, while the
+deliberately contrasted batch owner returns `0x3fd590f6`. No production
+N-slicer site still calls `map_point`.
+
+It also accepts the core batch, bounding-box, and transformed-area owners.
+Runtime and render-API `mapPoints` retain the zero-skew branch, odd-first and
+pair traversal, load-before-store in-place behavior, and authored FMA
+grouping. Both `mapBoundingBox` owners retain pair lanes, source-order SIMD
+min/max, signed-zero selection, nonfinite normalization before translation,
+and the post-translation debug contracts. `find_transformed_area` retains the
+pinned cross contraction, and the live `PathDraw::Make` route takes the
+correct sides of the strict `512 * 512` threshold in debug and fat-LTO. The
+compiler-only NaN-payload ceiling was not treated as a blocker where
+classification and control remained unchanged.
+
+The restored two-diagonal shape of `transform_rect_to_new_space` is correct,
+including its equal-matrix return, epsilon gate, in-place two-point
+`mapPoints`, and source-order final SIMD min/max. Its inversion and
+composition are not correct, however. The function reuses local renderer
+helpers `inverse` and `mul`, which are older algebraic substitutes rather than
+the pinned Mat2D owners:
+
+- local `inverse` evaluates determinant and translation numerators without
+  the pinned contractions and adds a non-source `!det.is_finite()` failure
+  branch. With the entirely finite matrix
+  `[26cd29b3, 2533fdc2, d01ad4bb, ce87d5a9, 0, 0]`, actual pinned clang/AArch64
+  returns determinant bits `0xa7eec560` and `invert` succeeds; the current
+  ordinary determinant rounds to positive zero and returns `None`. With
+  `[FLT_MAX, 0, 0, FLT_MAX, 0, 0]`, pinned `invert` also succeeds and returns
+  `[+0, -0, -0, +0, +0, +0]`, while the extra finite check rejects it. This
+  changes both clip-rect fallback control and whether `invertClockwisePath`
+  emits its bounds rectangle.
+- local `mul` likewise omits all pinned multiply contractions. With current
+  matrix bits
+  `[9422bf8a, 9788280a, d2ec7e6e, 4d526674, e887c79b, 4bce95e3]`, new-space
+  matrix bits
+  `[b12b6d28, 2f8cb036, deb18044, 4f302db7, 155fc859, 4858db48]`, and rect bits
+  `[daeaf96f, a4eefdb1, 1c3a27c6, 2b866340]`, both algorithms admit the rect.
+  Actual pinned clang/AArch64 returns
+  `[e8f53a36, 4943d3df, e8f53a36, 4943d3df]`; the current helper returns
+  `[e8f53a37, 4943d3df, e8f53a37, 4943d3df]`. This is a finite one-ULP source
+  difference, not NaN-payload latitude.
+
+The same helpers expose wider live-call damage. `inverse_matrix` routes
+`invertClockwisePath` through the rejected inverse, its later determinant
+winding test is independently uncontracted, and `RendererContract::transform`
+routes every renderer concatenation through the rejected `mul`. Correcting
+only the new clip-rect helper would therefore leave other live pinned Mat2D
+callers divergent. The three local uses need one exact renderer Mat2D
+multiply/invert owner, plus direct non-circular tests for finite multiply bits,
+invert success/failure control, nonfinite determinant behavior, and inverse
+path winding/order.
+
+Focused evidence, with `CARGO_INCREMENTAL=0` where applicable:
+
+- runtime Mat2D: 14 passed; adversarial Mat2D: 2 passed;
+- render-API library: 30 passed;
+- N-slicer caller, transformed-area/threshold (4), two-diagonal clip-rect,
+  and inverse-clockwise batch tests passed in debug;
+- the same focused caller coverage passed under fat LTO and one codegen unit;
+- renderer Metal, Vulkan, WebGPU, and WebGL2 feature checks passed;
+- source correspondence passed with 456 applicable owners and no pending
+  absent rows;
+- source-symbol correspondence passed with 7,818 authority units across
+  1,105 owners and generated authority replayed;
+- source-symbol checker unit tests: 33 passed;
+- actual pinned `mat2d.cpp` compiled with clang/AArch64 `-O3
+  -ffp-contract=on` reproduced the finite rect, finite cancellation, and
+  infinite-determinant witnesses above; a source-shaped current-helper probe
+  reproduced the Rust results.
+
+Verdict: **REJECTED while accepting the N-slicer, batch, bounding-box,
+transformed-area, threshold, and two-diagonal portions.** Restore exact local
+renderer multiply/invert/determinant ownership at every live caller, add the
+direct witnesses above, and obtain two fresh complete reviews.

@@ -88,7 +88,7 @@ impl WeightedPathContext<'_> {
 
 impl RuntimeNSlicedNodeContext {
     fn deform_world_point(&self, x: f32, y: f32) -> (f32, f32) {
-        let (local_x, local_y) = self.inverse_world.map_point(x, y);
+        let (local_x, local_y) = self.inverse_world.transform_point(x, y);
         let sliced_x = if self.scale_x == 0.0 {
             0.0
         } else {
@@ -109,7 +109,7 @@ impl RuntimeNSlicedNodeContext {
                 local_y,
             ) * runtime_copysign_one(self.scale_y)
         };
-        self.world.map_point(sliced_x, sliced_y)
+        self.world.transform_point(sliced_x, sliced_y)
     }
 }
 
@@ -314,9 +314,9 @@ pub(super) fn runtime_deform_path_point_with_nsliced_node(
     if path_kind == ShapePaintPathKind::World {
         return context.deform_world_point(x, y);
     }
-    let (world_x, world_y) = shape_world.map_point(x, y);
+    let (world_x, world_y) = shape_world.transform_point(x, y);
     let (deformed_x, deformed_y) = context.deform_world_point(world_x, world_y);
-    inverse_shape_world.map_point(deformed_x, deformed_y)
+    inverse_shape_world.transform_point(deformed_x, deformed_y)
 }
 
 pub(super) fn runtime_deform_local_gradient_point_with_nsliced_node(
@@ -326,9 +326,58 @@ pub(super) fn runtime_deform_local_gradient_point_with_nsliced_node(
     shape_world: Mat2D,
     inverse_shape_world: Mat2D,
 ) -> (f32, f32) {
-    let (world_x, world_y) = shape_world.map_point(x, y);
+    let (world_x, world_y) = shape_world.transform_point(x, y);
     let (deformed_x, deformed_y) = context.deform_world_point(world_x, world_y);
-    inverse_shape_world.map_point(deformed_x, deformed_y)
+    inverse_shape_world.transform_point(deformed_x, deformed_y)
+}
+
+#[cfg(test)]
+mod mat2d_caller_tests {
+    use super::{Mat2D, RuntimeNSlicedNodeContext, RuntimeNSlicerScaleInfo};
+
+    #[test]
+    fn deform_world_point_uses_pinned_scalar_matrix_vector_grouping() {
+        let matrix = Mat2D([
+            f32::from_bits(0xbf18_5aa5),
+            f32::from_bits(0xbf18_5aa5),
+            f32::from_bits(0x3f5b_24a3),
+            f32::from_bits(0x3f5b_24a3),
+            f32::from_bits(0x3f20_f4c4),
+            f32::from_bits(0x3f20_f4c4),
+        ]);
+        let point = (
+            f32::from_bits(0xbf33_ac98),
+            f32::from_bits(0x3f3a_0788),
+        );
+        let context = RuntimeNSlicedNodeContext {
+            world: Mat2D::IDENTITY,
+            inverse_world: matrix,
+            width: 2.0,
+            height: 2.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            x_px_stops: vec![0.0, 2.0],
+            y_px_stops: vec![0.0, 2.0],
+            x_scale_info: RuntimeNSlicerScaleInfo {
+                use_scale: true,
+                scale_factor: 1.0,
+                fallback_size: 0.0,
+            },
+            y_scale_info: RuntimeNSlicerScaleInfo {
+                use_scale: true,
+                scale_factor: 1.0,
+                fallback_size: 0.0,
+            },
+        };
+
+        let deformed = context.deform_world_point(point.0, point.1);
+        assert_eq!(deformed.0.to_bits(), 0x3fd5_90f7);
+        assert_eq!(deformed.1.to_bits(), 0x3fd5_90f7);
+
+        // Pinned `Mat2D::mapPoints` has a distinct authored grouping. This
+        // proves the N-slicer path is not accidentally routed through it.
+        assert_eq!(matrix.map_point(point.0, point.1).0.to_bits(), 0x3fd5_90f6);
+    }
 }
 
 pub(super) fn runtime_nslicer_uv_stops(

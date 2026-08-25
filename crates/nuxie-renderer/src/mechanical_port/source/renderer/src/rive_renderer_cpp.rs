@@ -1001,6 +1001,99 @@ fn inverse_matrix(m: Mat2D) -> Option<Mat2D> {
     inverse(m)
 }
 
+fn simd_min(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() | second.to_bits())
+    } else if second < first {
+        second
+    } else {
+        first
+    }
+}
+
+fn simd_max(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() & second.to_bits())
+    } else if first < second {
+        second
+    } else {
+        first
+    }
+}
+
+fn transform_rect_to_new_space(
+    rect: &mut Aabb,
+    current_matrix: Mat2D,
+    new_matrix: Mat2D,
+) -> bool {
+    if current_matrix == new_matrix {
+        return true;
+    }
+    let Some(mut current_to_new) = inverse(new_matrix) else {
+        return false;
+    };
+    current_to_new = mul(current_to_new, current_matrix);
+    let max_skew = current_to_new.0[2]
+        .abs()
+        .max(current_to_new.0[1].abs());
+    let max_scale = current_to_new.0[0]
+        .abs()
+        .max(current_to_new.0[3].abs());
+    if max_skew > MATH_EPSILON && max_scale > MATH_EPSILON {
+        return false;
+    }
+    let mut points = [
+        Vec2D::new(rect.min_x, rect.min_y),
+        Vec2D::new(rect.max_x, rect.max_y),
+    ];
+    current_to_new.map_points_in_place(&mut points);
+    *rect = Aabb::new(
+        simd_min(points[0].x, points[1].x),
+        simd_min(points[0].y, points[1].y),
+        simd_max(points[0].x, points[1].x),
+        simd_max(points[0].y, points[1].y),
+    );
+    true
+}
+
+#[cfg(test)]
+mod transform_rect_to_new_space_tests {
+    use super::{Aabb, Mat2D, transform_rect_to_new_space};
+
+    #[test]
+    fn tiny_skew_maps_only_the_pinned_diagonal_points() {
+        let mut rect = Aabb::new(0.0, 0.0, 1.0, 1.0);
+        let admitted_tiny_skew = Mat2D([1.0, 0.0, -0.00001, 1.0, 0.0, 0.0]);
+        assert!(transform_rect_to_new_space(
+            &mut rect,
+            admitted_tiny_skew,
+            Mat2D::IDENTITY,
+        ));
+        assert_eq!(
+            [
+                rect.min_x.to_bits(),
+                rect.min_y.to_bits(),
+                rect.max_x.to_bits(),
+                rect.max_y.to_bits(),
+            ],
+            [0x0000_0000, 0x0000_0000, 0x3f7f_ff58, 0x3f80_0000],
+        );
+
+        let four_corner_substitute =
+            admitted_tiny_skew.map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0));
+        assert_eq!(four_corner_substitute.min_x.to_bits(), 0xb727_c5ac);
+        assert_ne!(rect, four_corner_substitute);
+    }
+}
+
 impl RiveRenderer {
     pub fn implementation_source_identity() -> &'static str {
         "renderer/src/rive_renderer.cpp@4ac7b32798da0482e441ef09304dc3b480ed3ee5"
@@ -1012,17 +1105,10 @@ impl RiveRenderer {
             return;
         }
         if !state.clipRectInverseMatrix.is_null() {
-            let Some(to_new) = inverse(state.clipRectMatrix).map(|i| mul(i, state.matrix)) else {
-                unsafe { self.clipPathImplSource(original_path) };
-                return;
-            };
-            let skew = to_new.0[2].abs().max(to_new.0[1].abs());
-            let scale = to_new.0[0].abs().max(to_new.0[3].abs());
-            if skew > MATH_EPSILON && scale > MATH_EPSILON {
+            if !transform_rect_to_new_space(&mut rect, state.matrix, state.clipRectMatrix) {
                 unsafe { self.clipPathImplSource(original_path) };
                 return;
             }
-            rect = to_new.map_bounds(rect);
         }
         let matrix = if state.clipRectInverseMatrix.is_null() {
             state.matrix

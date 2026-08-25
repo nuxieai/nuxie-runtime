@@ -622,3 +622,47 @@ Verdict: **REJECTED while accepting the three named core corrections.** Route
 every scalar N-slicer operator call to the scalar operator owner, restore the
 literal two-point `transform_rect_to_new_space` algorithm, add direct finite
 witnesses at both live callers, and obtain new independent complete reviews.
+
+## Finite live-caller correction after `caca34d63` — PENDING TWO FRESH REVIEWS
+
+The two rejected caller substitutions are mechanically corrected without
+changing either shared Mat2D algorithm. All six operative matrix-vector sites
+in `layout/n_sliced_node.rs` now call the scalar `transform_point` owner used by
+pinned `Mat2D * Vec2D`: the inverse/world pair in
+`NSlicedNode::updateMapWorldPoint`, and the world/inverse pair in each of the
+local path and local gradient deformation paths. A direct N-slicer context
+witness preserves pinned finite result `0x3fd590f7` through the actual
+deformation path; routing its first transform through `mapPoints` instead
+produces `0x3fd590f6`.
+
+`rive_renderer.cpp::transform_rect_to_new_space` is restored as a visible
+source owner. It retains the equal-matrix early return, inversion and
+composition order, authored epsilon rejection, a two-element diagonal-point
+array mapped in place through `mapPoints`, and source-order SIMD min/max. The
+live `clipRectImplSource` consumer calls this owner instead of substituting the
+four-corner `map_bounds` algorithm. The admitted tiny-skew witness returns
+exact pinned bits `[00000000, 00000000, 3f7fff58, 3f800000]`; the removed
+four-corner substitute returns
+`[b727c5ac, 00000000, 3f800000, 3f800000]`.
+
+The consumer census found one pinned `transform_rect_to_new_space` call, in
+`clipRectImpl`, and six Rust N-slicer transform sites corresponding to the
+four upstream matrix-vector expressions (the local path and gradient routes
+share `NSlicedNode::deformLocalPoint` semantics). No N-slicer production site
+still calls `map_point`, and no clip-rect production site still calls
+`map_bounds` for the current-to-existing-clip conversion.
+
+Focused evidence, all with `CARGO_INCREMENTAL=0` where applicable:
+
+- the actual N-slicer and renderer two-point finite witnesses passed in debug;
+- both witnesses passed under the workspace release profile's fat LTO and
+  single codegen unit;
+- renderer Metal, Vulkan, WebGPU, and WebGL2 feature checks passed;
+- source correspondence passed with 456 applicable owners and no pending
+  absent rows;
+- source-symbol correspondence passed with 7,818 authority units across
+  1,105 owners and generated authority replayed;
+- the source-symbol checker unit suite passed, 33 tests.
+
+This implementing lane does not self-certify either correction. Verdict:
+**PENDING TWO FRESH INDEPENDENT REVIEWS.**

@@ -148,9 +148,9 @@ struct CppAudioRivOracle {
 
 #[test]
 fn audio_source_reader_and_headless_schedule_match_pinned_cpp() {
-    let Some(probe) = probe_path() else {
-        return;
-    };
+    let probe = build_and_require_probe(
+        "audio_source_reader_and_headless_schedule_match_pinned_cpp",
+    );
     let fixture = cpp_runtime_fixture("audio/what.wav");
     let mp3_fixture = cpp_runtime_fixture("audio/song.mp3");
     let output = Command::new(probe)
@@ -24796,7 +24796,7 @@ fn assert_cpp_scripted_input_matches_rust(
         ("artboard", Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Artboard(value))) => {
             assert_eq!(
                 cpp.referenced_artboard_id,
-                Some(*value as i32),
+                script_artboard_source_id(value),
                 "{label} artboard"
             )
         }
@@ -93837,4 +93837,28 @@ fn upstream_text_feather_falloff_repro_structure_body_is_ported() {
         })
         .count();
     assert!(repro_styles >= 1);
+}
+
+fn build_and_require_probe(test: &str) -> PathBuf {
+    if let Some(path) = probe_path() {
+        return path;
+    }
+
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let status = Command::new("make")
+        .arg("cpp-probe")
+        .current_dir(repo_root())
+        .env("RIVE_RUNTIME_DIR", runtime_root)
+        .status()
+        .unwrap_or_else(|error| panic!("{test}: failed to build the pinned C++ probe: {error}"));
+    assert!(status.success(), "{test}: pinned C++ probe build failed");
+    probe_path().unwrap_or_else(|| panic!("{test}: cpp-probe build produced no executable"))
+}
+
+fn script_artboard_source_id(source: &nuxie_runtime::ScriptArtboardSource) -> Option<i32> {
+    match source {
+        nuxie_runtime::ScriptArtboardSource::File(id) => Some(*id as i32),
+        nuxie_runtime::ScriptArtboardSource::Live(_) => None,
+    }
 }

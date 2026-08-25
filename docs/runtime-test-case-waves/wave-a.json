@@ -603,7 +603,7 @@
         "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
         "rationale": "The campaign permanently retains the Rust-native audio backend, but the translated test keeps the pinned reader and mixer observables exact instead of blessing its current resampler rounding."
       },
-      "expected_red_reason": "expected-red: native reader reports 10545 and 7030 frames where the pinned C++ readers report 10544 and 7029"
+      "expected_red_reason": "expected-red: native reader rounds the pinned 48 kHz and 32 kHz resamples one frame longer than C++"
     },
     {
       "id": "tests/unit_tests/runtime/audio_test.cpp#3",
@@ -918,7 +918,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 254,
+          "line": 324,
           "symbol": "measure_non_inflect_cubic_rotation_direct_port"
         }
       ]
@@ -954,7 +954,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
-          "line": 345,
+          "line": 586,
           "symbol": "find_cubic_convex_180_chops_lines_direct_port"
         }
       ]
@@ -1252,7 +1252,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/src/lib.rs",
-          "line": 9937,
+          "line": 10220,
           "symbol": "hosted_image_cdn_descriptor_matches_pinned_cpp"
         }
       ]
@@ -1270,7 +1270,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/src/lib.rs",
-          "line": 9960,
+          "line": 10243,
           "symbol": "hosted_font_cdn_descriptor_matches_pinned_cpp"
         }
       ]
@@ -1525,7 +1525,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 155,
+          "line": 159,
           "symbol": "foreground_color_is_applied_for_ffff_color_index"
         }
       ]
@@ -1562,7 +1562,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 186,
+          "line": 192,
           "symbol": "raw_text_renders_with_color_glyph_font_without_crashing"
         }
       ]
@@ -1598,7 +1598,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 200,
+          "line": 199,
           "symbol": "shaping_with_fallback_uses_emoji_font_for_missing_glyphs"
         }
       ],
@@ -1617,7 +1617,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 208,
+          "line": 207,
           "symbol": "colrv0_layers_have_solid_paint_type"
         }
       ]
@@ -1635,7 +1635,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 219,
+          "line": 218,
           "symbol": "all_known_color_glyph_ids_return_layers"
         }
       ]
@@ -1653,7 +1653,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 231,
+          "line": 230,
           "symbol": "cached_layers_update_foreground_color_correctly"
         }
       ]
@@ -1671,7 +1671,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 248,
+          "line": 247,
           "symbol": "get_color_layers_returns_zero_for_non_color_font"
         }
       ]
@@ -1689,7 +1689,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 260,
+          "line": 259,
           "symbol": "get_color_layers_appends_to_existing_vector"
         }
       ]
@@ -1707,7 +1707,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 273,
+          "line": 272,
           "symbol": "is_color_glyph_is_false_for_high_glyph_ids"
         }
       ]
@@ -1725,7 +1725,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 281,
+          "line": 280,
           "symbol": "raw_text_with_multiple_color_glyphs_renders_without_crashing"
         }
       ]
@@ -1743,7 +1743,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 287,
+          "line": 286,
           "symbol": "raw_text_with_mixed_regular_and_emoji_text_renders_without_crashing"
         }
       ]
@@ -1761,7 +1761,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 294,
+          "line": 293,
           "symbol": "raw_text_at_small_font_size_with_emoji_does_not_crash"
         }
       ]
@@ -1779,7 +1779,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 300,
+          "line": 299,
           "symbol": "raw_text_at_large_font_size_with_emoji_does_not_crash"
         }
       ]
@@ -3597,18 +3597,19 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
-          "line": 352,
-          "symbol": "wave_a_component_list_case_16_manual_scroll_direct_assertions"
-        },
-        {
-          "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_a.rs",
           "line": 54,
-          "symbol": "component_list_virtualized_scroll_manual"
+          "symbol": "component_list_virtualized_scroll_manual",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+              "line": 352,
+              "symbol": "wave_a_component_list_case_16_manual_scroll_direct_assertions"
+            }
+          ]
         }
       ],
-      "expected_red_reason": "expected-red: direct scroll assertions pass, but the pinned component_list_virtualized_scroll_manual SRIV stream diverges"
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for component_list_virtualized_scroll_manual"
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#17",
@@ -3679,18 +3680,19 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
-          "line": 380,
-          "symbol": "wave_a_component_list_case_20_non_layout_initial_positions"
-        },
-        {
-          "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_a.rs",
           "line": 78,
-          "symbol": "component_list_non_layout_position"
+          "symbol": "component_list_non_layout_position",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+              "line": 380,
+              "symbol": "wave_a_component_list_case_20_non_layout_initial_positions"
+            }
+          ]
         }
       ],
-      "expected_red_reason": "expected-red: direct initial child-position assertions pass, but the pinned component_list_grouped SRIV stream diverges"
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for component_list_grouped"
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#21",
@@ -3704,15 +3706,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
-          "line": 391,
-          "symbol": "wave_a_component_list_case_21_follow_path_initial_item_count"
-        },
-        {
-          "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_a.rs",
           "line": 83,
-          "symbol": "component_list_follow_path"
+          "symbol": "component_list_follow_path",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+              "line": 391,
+              "symbol": "wave_a_component_list_case_21_follow_path_initial_item_count"
+            }
+          ]
         }
       ]
     },
@@ -4411,7 +4414,7 @@
           "symbol": "target_originated_container_update_runs_target_to_source_complete_upstream_flow"
         }
       ],
-      "expected_red_reason": "expected-red: ToTarget-only retained bind rejects the pinned target-origin updateSourceBinding call"
+      "expected_red_reason": "expected-red: a ToTarget-only retained bind currently rejects the pinned target-origin updateSourceBinding call"
     },
     {
       "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#11",
@@ -4671,7 +4674,7 @@
           "symbol": "bound_artboard_with_view_model_instance_resets_properties"
         }
       ],
-      "expected_red_reason": "expected-red: imported bound ViewModel instance cannot yet be injected into ViewModelInstanceArtboard"
+      "expected_red_reason": "expected-red: imported bound ViewModel cannot yet be injected into ViewModelInstanceArtboard"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#9",
@@ -4800,7 +4803,7 @@
           "symbol": "data_bind_blobs_internal_external_complete_action_flow"
         }
       ],
-      "expected_red_reason": "expected-red: complete live blob stream reaches the unavailable pinned data_bind_blob_test SRIV comparator"
+      "expected_red_reason": "expected-red: pinned SRIV comparator is not wired into nuxie integration tests"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_computed_values_test.cpp#1",
@@ -4838,7 +4841,7 @@
           "symbol": "image_computed_width_height_tracks_layout_resize_complete_port"
         }
       ],
-      "expected_red_reason": "expected-red: live Image computedWidth is 0 at the first pinned assertion instead of approximately 150"
+      "expected_red_reason": "expected-red: live Image computedWidth/Height remains 0 instead of pinned initial 150"
     }
   ]
 }

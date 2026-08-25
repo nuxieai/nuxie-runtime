@@ -350,6 +350,23 @@ def validate_case_evidence(
         validate_live_differential(repo_root, locator, f"{context}.evidence[0]")
         return
     rust_test = resolve_rust_test(repo_root, locator, f"{context}.evidence[0]")
+    supporting = locator.get("supporting_rust_tests", [])
+    if not isinstance(supporting, list) or not all(
+        isinstance(item, dict) for item in supporting
+    ):
+        raise CheckFailure(
+            f"{context}.evidence[0].supporting_rust_tests must be a list of Rust test locators"
+        )
+    for index, supporting_locator in enumerate(supporting):
+        supporting_test = resolve_rust_test(
+            repo_root,
+            supporting_locator,
+            f"{context}.evidence[0].supporting_rust_tests[{index}]",
+        )
+        if supporting_test.ignored:
+            raise CheckFailure(
+                f"{context} supporting Rust test must be an executable passing assertion body"
+            )
     if outcome == "pass" and rust_test.ignored:
         raise CheckFailure(f"{context} pass evidence points to an ignored Rust test")
     if outcome == "expected-red":

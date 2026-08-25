@@ -21424,6 +21424,113 @@ fn upstream_solo_path_fixture(
     (runtime, graph, artboard_index, artboard)
 }
 
+#[test]
+#[ignore = "expected-red: external Rust API cannot inspect child NestedArtboard shape occurrences"]
+fn upstream_collapsed_nested_artboards_do_not_advance() {
+    let fixture = cpp_runtime_fixture("solos_with_nested_artboards.riv");
+    let bytes = std::fs::read(&fixture).expect("read solos_with_nested_artboards.riv");
+    let runtime = read_runtime_file(&bytes).expect("import solos_with_nested_artboards.riv");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("graph nested-solo fixture");
+    let artboard_index = graph
+        .artboards
+        .iter()
+        .position(|artboard| artboard.name.as_deref() == Some("main-artboard"))
+        .expect("main-artboard");
+    let mut artboard = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        &graph.artboards[artboard_index],
+        &graph.artboards,
+    )
+    .expect("instantiate main-artboard");
+    artboard.update_components();
+    assert_eq!(
+        graph.artboards[artboard_index]
+            .components
+            .iter()
+            .filter(|component| component.type_name == "Solo")
+            .count(),
+        1
+    );
+    let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    artboard.advance_state_machine_instance(&mut machine, 0.75);
+    panic!(
+        "nested_artboard_test.cpp requires red-artboard child Shape.x > 50 and green-artboard child Shape.x == 50; Rust retains no external nested-child occurrence query"
+    );
+}
+
+fn upstream_first_machine_fixture(
+    fixture_name: &str,
+    artboard_name: &str,
+) -> (RuntimeFile, GraphFile, usize, ArtboardInstance, StateMachineInstance) {
+    let fixture = cpp_runtime_fixture(fixture_name);
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("import {fixture_name}: {error}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("graph {fixture_name}: {error}"));
+    let artboard_index = graph
+        .artboards
+        .iter()
+        .position(|artboard| artboard.name.as_deref() == Some(artboard_name))
+        .unwrap_or_else(|| panic!("missing artboard {artboard_name:?}"));
+    let mut artboard = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        &graph.artboards[artboard_index],
+        &graph.artboards,
+    )
+    .expect("instantiate artboard");
+    let machine = artboard.state_machine_instance(0).expect("state machine 0");
+    (runtime, graph, artboard_index, artboard, machine)
+}
+
+#[test]
+#[ignore = "expected-red: Rust parent machine stops after the first 1.0s nested-loop advance"]
+fn upstream_looping_nested_animation_keeps_parent_machine_advancing() {
+    let (_, _, _, mut artboard, mut machine) =
+        upstream_first_machine_fixture("ball_test.riv", "Artboard");
+    assert!(artboard.advance_state_machine_instance(&mut machine, 0.0));
+    assert!(artboard.advance_state_machine_instance(&mut machine, 1.0));
+    assert!(artboard.advance_state_machine_instance(&mut machine, 1.0));
+}
+
+#[test]
+#[ignore = "expected-red: Rust parent machine stops before the pinned nested one-shot event frame"]
+fn upstream_one_shot_nested_animation_stops_parent_machine_after_event() {
+    let (_, graph, artboard_index, mut artboard, mut machine) =
+        upstream_first_machine_fixture("ball_test.riv", "Artboard 2");
+    assert!(!graph.artboards[artboard_index].state_machines.is_empty());
+    assert!(artboard.advance_state_machine_instance(&mut machine, 0.0));
+    assert!(artboard.advance_state_machine_instance(&mut machine, 0.9));
+    assert!(artboard.advance_state_machine_instance(&mut machine, 0.1));
+    assert!(artboard.advance_state_machine_instance(&mut machine, 0.1));
+    assert!(!artboard.advance_state_machine_instance(&mut machine, 0.1));
+}
+
+#[test]
+#[ignore = "expected-red: external Rust API cannot inspect child NestedArtboard shape occurrences"]
+fn upstream_nested_joystick_remap_applies_child_time_after_joystick() {
+    let fixture = cpp_runtime_fixture("joystick_nested_remap.riv");
+    let bytes = std::fs::read(&fixture).expect("read joystick_nested_remap.riv");
+    let runtime = read_runtime_file(&bytes).expect("import joystick_nested_remap.riv");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("graph joystick_nested_remap.riv");
+    let artboard_index = graph
+        .artboards
+        .iter()
+        .position(|artboard| artboard.name.as_deref() == Some("parent"))
+        .expect("parent artboard");
+    let artboard_graph = &graph.artboards[artboard_index];
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .expect("instantiate parent");
+    artboard.update_components();
+    assert!(artboard_graph.component_named("child").is_some());
+    panic!(
+        "nested_artboard_test.cpp requires child NestedArtboard instance Shape 'rect'.x == 250"
+    );
+}
+
 fn assert_clipping_contour_count_unavailable(_artboard: &ArtboardInstance, expected: usize) {
     panic!("path_test.cpp requires ClippingShape::path()->numContours() == {expected}");
 }

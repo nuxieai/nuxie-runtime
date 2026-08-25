@@ -530,10 +530,9 @@ note = "All three cases execute the pinned fixture actions and assertions direct
 [[file]]
 upstream = "tests/unit_tests/runtime/nested_artboard_test.cpp"
 test_case_count = 9
-status = "partial"
-evidence = ["silver-corpus.toml::{nested_events,nested_hug,nested_needs_advance,pause_nested_artboard}"]
-covered_test_cases = ["Nested events don't conflict with parent events.", "All nested artboard modes respect hug", "Nested artboard needs advance", "Pause and resume nested artboards"]
-note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+status = "ported-direct"
+evidence = ["silver-corpus.toml (all nested_artboard_test.cpp provenance rows)", "crates/nuxie-runtime/tests/cpp_probe.rs::{upstream_collapsed_nested_artboards_do_not_advance,upstream_looping_nested_animation_keeps_parent_machine_advancing,upstream_one_shot_nested_animation_stops_parent_machine_after_event,upstream_nested_joystick_remap_applies_child_time_after_joystick}"]
+note = "All nine cases are represented. Five literal silver streams preserve exact/pending outcomes. The looping 0/1/1 sequence and one-shot 0/.9/.1/.1/.1 true/true/true/true/false sequence execute directly. The collapsed-solo and joystick-remap ports retain exact fixtures, artboards, advances, component assertions, and child x expectations as honest red only at the unavailable external nested-child occurrence query."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/nested_input_test.cpp"

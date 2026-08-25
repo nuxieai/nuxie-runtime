@@ -21644,6 +21644,23 @@ fn upstream_layout_image_composes_user_scale_for_7_2_files() {
     assert!(modern_scale > legacy_scale);
 }
 
+#[test]
+fn upstream_scripted_property_listener_fixture_advances_without_leaking() {
+    let fixture = cpp_runtime_fixture("scripted_memory_leak.riv");
+    let bytes = std::fs::read(&fixture).expect("read scripted_memory_leak.riv");
+    let runtime = read_runtime_file(&bytes).expect("import scripted_memory_leak.riv");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("graph scripted_memory_leak.riv");
+    let artboard_graph = graph.artboards.first().expect("default artboard");
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .expect("instantiate default artboard");
+    let mut machine = artboard.state_machine_instance(0).expect("default state machine");
+    assert!(machine.bind_default_view_model_context_on_artboard(&mut artboard));
+    machine
+        .advance_and_apply(&mut artboard, 0.0)
+        .expect("listener fixture advances without a retained-cycle leak");
+}
+
 fn assert_clipping_contour_count_unavailable(_artboard: &ArtboardInstance, expected: usize) {
     panic!("path_test.cpp requires ClippingShape::path()->numContours() == {expected}");
 }

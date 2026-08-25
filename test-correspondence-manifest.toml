@@ -746,10 +746,9 @@ note = "P2A directly ports all three upstream cancellation TEST_CASEs. Supplemen
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_input_test.cpp"
 test_case_count = 15
-status = "partial"
-evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::scripting/scripting_input_test.cpp provenance findings"]
-covered_test_cases = ["scripted object can set and read number input", "scripted object can set and read string input", "scripted object can set and read boolean input", "scripted object can set and read integer input", "scripted object can use multiple inputs", "scripted object inputs can be used in advance function", "ScriptedDrawable can be created and initialized", "ScriptedLayout can be created and initialized", "ScriptedDataConverter can be created and initialized", "ensureScriptInitialized then hydrate twice keeps same self ref", "hydrateScriptInputs runs Lua init without DataContext when inputs allow", "hydration preflight fails atomically when VM input cannot resolve"]
-note = "The exhaustive FL-B/FL-C table identifies the listed names as fully covered TEST_CASEs; mixed or finding rows remain unclaimed."
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "silver-corpus.toml::script_input_color_trigger", "crates/nuxie-scripting/src/vm/view_model.rs::upstream_script_dispose_clears_view_model_listeners_immediately", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_scripted_property_listener_fixture_advances_without_leaking"]
+note = "All 15 cases are represented. The thirteen prior direct/silver ports remain intact. The dispose port registers two color-property listeners through the real Context ViewModel, observes exactly two callbacks, drops the ScriptInstance (Rust's scriptDispose lifetime boundary), mutates again, and expects the count to stay two; it is expected-red because Rust reports four and therefore retains both listeners. The memory-leak fixture imports, instantiates its default artboard/machine, binds the default ViewModel context, and advances at 0 without retaining a cycle."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_layout_test.cpp"
@@ -789,10 +788,9 @@ note = "P2B ports both inline Luau cases without weakening their userdata assert
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_nested_viewmodel_test.cpp"
 test_case_count = 2
-status = "partial"
-evidence = ["crates/nuxie-scripting/src/vm/view_model.rs::nested_view_model_property_mints_the_referenced_type"]
-covered_test_cases = ["nested view model property mints the referenced type"]
-note = "S4-17 directly covers referenced-type minting. Refresh after a reference relink remains unclaimed."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/src/vm/view_model.rs::{nested_view_model_property_mints_the_referenced_type,upstream_nested_view_model_value_refreshes_after_reference_relink}"]
+note = "Both cases are represented. Referenced-type minting is green. The relink case retains one cached property wrapper, first-null read, later link, reread, and exact child identity assertion as expected-red at Rust's inability to construct or mutate a schema-known nested ViewModel reference to null; no alternate relink behavior is invented."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_paint_test.cpp"

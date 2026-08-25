@@ -766,7 +766,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_mat2d_test.cpp"
 test_case_count = 5
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/src/vm/lua_mat2d.rs::upstream_tests"]
-note = "All five Lua assertion sequences are direct source-script ports. Static constructors are active and green. Constructor coefficient order, invert/isIdentity, equality, and numeric indexed setters remain four honest ignored expected-red tests bound to missing or incorrect production Mat2D behavior."
+note = "All five Lua assertion sequences execute through production owners: static constructors, pinned coefficient order, instance/static inversion, isIdentity, equality, multiplication, named setters, and integer-indexed setters. The fixed Rust-native Lua adapter exposes integer userdata field dispatch explicitly so the source numeric-key behavior is retained without reverting scripting backends."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_mat4_test.cpp"

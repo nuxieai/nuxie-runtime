@@ -3451,7 +3451,7 @@ b6_row_id = "B6-0275"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "P1-d direct owner split at d788e8ec: the existing adapted Mat2D userdata, constructors, multiplication, argument coercion, and contraction-order test moved without behavioral rewrite to crates/nuxie-scripting/src/vm/lua_mat2d.rs:9-179."
+note = "MR-3 paired audit: the fixed Rust-native scripting owner now preserves pinned Mat2D coefficient order, named and integer-indexed accessors, instance/static inversion, isIdentity, equality, multiplication, constructors, and argument coercion. Integer-key field dispatch is implemented at the luaur-rt adapter seam rather than replacing the approved Rust scripting backend."
 
 [[file]]
 upstream = "src/lua/math/lua_mat4.cpp"

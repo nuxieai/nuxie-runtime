@@ -11,6 +11,8 @@ use super::{
     remove_handle, struct_size_supports, write_caller_struct,
 };
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
+#[cfg(feature = "apple-authored-msl")]
+use nuxie::ore_metal_gpu_canvas::OreMetalGpuCanvas;
 use nuxie::{Mat2D, PersistentFactory, Renderer};
 use nuxie_renderer::{
     NativeMetalExecutionInventory, NativeMetalFactory, RenderMode, RendererError,
@@ -161,9 +163,25 @@ impl Default for NuxRendererInfo {
 
 pub(crate) struct RendererState {
     factory: PersistentFactory<NativeMetalFactory>,
+    #[cfg(feature = "apple-authored-msl")]
+    gpu_canvas: OreMetalGpuCanvas,
     pixel_width: u32,
     pixel_height: u32,
     attached: bool,
+}
+
+#[cfg(feature = "apple-authored-msl")]
+fn make_gpu_canvas(factory: &NativeMetalFactory) -> Result<OreMetalGpuCanvas, ApiFailure> {
+    let queue = factory.retained_metal_queue().ok_or_else(|| {
+        ApiFailure::new(
+            NuxStatus::RuntimeError,
+            "Metal renderer did not publish its retained command queue",
+        )
+    })?;
+    Ok(OreMetalGpuCanvas::from_device_queue(
+        factory.retained_metal_device(),
+        queue,
+    ))
 }
 
 impl RendererState {
@@ -573,9 +591,19 @@ pub unsafe extern "C" fn nux_renderer_new_metal(
                 return failure.status;
             }
         };
+        #[cfg(feature = "apple-authored-msl")]
+        let gpu_canvas = match make_gpu_canvas(&factory) {
+            Ok(gpu_canvas) => gpu_canvas,
+            Err(failure) => {
+                publish_result(out_result, failure.status, failure.message);
+                return failure.status;
+            }
+        };
         let renderer = Box::into_raw(Box::new(NuxRenderer {
             state: RefCell::new(RendererState {
                 factory: PersistentFactory::new(factory),
+                #[cfg(feature = "apple-authored-msl")]
+                gpu_canvas,
                 pixel_width,
                 pixel_height,
                 attached: true,
@@ -757,6 +785,8 @@ pub unsafe extern "C" fn nux_renderer_reattach(
         }
         let factory = NativeMetalFactory::new(pixel_width.max(1), pixel_height.max(1))
             .map_err(renderer_failure)?;
+        #[cfg(feature = "apple-authored-msl")]
+        let gpu_canvas = make_gpu_canvas(&factory)?;
         let next_generation = renderer
             .domain
             .generation
@@ -772,6 +802,10 @@ pub unsafe extern "C" fn nux_renderer_reattach(
             .saturating_add(1);
         debug_assert_ne!(next_generation, 0);
         *state.factory.borrow_mut() = factory;
+        #[cfg(feature = "apple-authored-msl")]
+        {
+            state.gpu_canvas = gpu_canvas;
+        }
         state.pixel_width = pixel_width;
         state.pixel_height = pixel_height;
         state.attached = true;
@@ -963,6 +997,12 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                 )?);
             }
             if let Some(assets) = player.artboard.apple_assets.as_ref() {
+                #[cfg(feature = "apple-authored-msl")]
+                let mut factory = {
+                    let state = &mut *state;
+                    assets.wrap_factory(&mut state.factory, &mut state.gpu_canvas)
+                };
+                #[cfg(not(feature = "apple-authored-msl"))]
                 let mut factory = assets.wrap_factory(&mut state.factory);
                 artboard.draw(&mut factory, &mut *frame).map_err(|error| {
                     ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
@@ -997,6 +1037,8 @@ pub unsafe extern "C" fn nux_renderer_render_player(
 mod tests {
     use super::*;
     use crate::nux_capi_result_free;
+    #[cfg(feature = "apple-authored-msl")]
+    use nuxie::{Factory as _, GpuCanvasShaderProfile};
     use std::cell::Cell;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize};
@@ -1060,6 +1102,27 @@ mod tests {
     }
 
     unsafe extern "C" fn completion(_: *mut c_void) {}
+
+    #[cfg(feature = "apple-authored-msl")]
+    #[test]
+    fn apple_renderer_routes_shader_assets_through_its_persistent_metal_domain() {
+        let factory = NativeMetalFactory::new(8, 8).expect("native Metal factory");
+        let gpu_canvas = make_gpu_canvas(&factory).expect("authored-MSL adapter");
+        let mut state = RendererState {
+            factory: PersistentFactory::new(factory),
+            gpu_canvas,
+            pixel_width: 8,
+            pixel_height: 8,
+            attached: true,
+        };
+        let assets = crate::apple_assets::AppleAssetCatalog::default();
+        let wrapped = assets.wrap_factory(&mut state.factory, &mut state.gpu_canvas);
+
+        assert_eq!(
+            wrapped.gpu_canvas_shader_profile(),
+            GpuCanvasShaderProfile::TrustedAppleMetal,
+        );
+    }
 
     #[test]
     fn completion_context_and_callback_are_an_owned_pair() {

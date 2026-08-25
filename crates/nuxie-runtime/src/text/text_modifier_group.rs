@@ -49,42 +49,25 @@ impl StaticTextModifierGroup {
                         *child_local,
                     )?);
                 }
-                Some("TextFollowPathModifier") => {
-                    let modifier = StaticTextFollowPathModifier::from_graph(
-                        runtime,
-                        graph,
-                        *child_local,
-                    )?;
-                    follow_path_modifiers.push(modifier.clone());
-                    modifiers.push(StaticTextModifier::FollowPath(modifier));
-                }
-                Some("TextVariationModifier") => {
-                    let modifier = StaticTextVariationModifier::from_graph(
-                        runtime,
-                        graph,
-                        *child_local,
-                    )?;
-                    shape_modifier_indices.push(modifiers.len());
-                    modifiers.push(StaticTextModifier::Variation(modifier));
-                }
-                Some("TextTargetModifier") => {
-                    modifiers.push(StaticTextModifier::Target(
-                        StaticTextTargetModifier::from_graph(
-                            runtime,
-                            graph,
-                            *child_local,
-                            local_id,
-                        )?,
-                    ));
-                }
-                Some("TextModifier" | "TextShapeModifier") => {
-                    modifiers.push(StaticTextModifier::Abstract {
-                        local_id: *child_local,
-                        global_id: global_for_local(graph, *child_local)?,
-                    });
-                }
                 Some(type_name) => {
-                    bail!("static text subset does not support TextModifierGroup child {type_name}")
+                    let modifier = StaticTextModifier::from_group_child(
+                        runtime,
+                        graph,
+                        local_id,
+                        *child_local,
+                    )?
+                    .with_context(|| {
+                        format!(
+                            "static text subset does not support TextModifierGroup child {type_name}"
+                        )
+                    })?;
+                    if modifier.is_shape_modifier() {
+                        shape_modifier_indices.push(modifiers.len());
+                    }
+                    if let Some(follow_path) = modifier.follow_path() {
+                        follow_path_modifiers.push(follow_path.clone());
+                    }
+                    modifiers.push(modifier);
                 }
                 None => bail!(
                     "static text subset does not support unknown TextModifierGroup child local {child_local}"

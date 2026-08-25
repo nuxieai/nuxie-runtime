@@ -2365,9 +2365,9 @@ note = "FL-E6: direct TextInterface bridge."
 
 [[file]]
 upstream = "src/text/text_modifier.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F13: static text modifiers are ported with richer modifier ceilings."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text/text_modifier.rs; crates/nuxie-runtime/src/text/text_modifier_group.rs; crates/nuxie-runtime/src/text.rs"
+note = "Phase 3 paired owner audit: onAddedDirty direct-parent validation and authored-order TextModifierGroup registration match the pin; derived indexes remain group-owned."
 
 [[file]]
 upstream = "src/text/text_modifier_group.cpp"

@@ -961,9 +961,9 @@ note = "Consolidated Rust port for data_bind."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_artboard.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/view_model.rs"
-note = "F13: artboard context values are ported; live nested-host ceilings remain."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/data_bind/context/context_value_artboard.rs; crates/nuxie-runtime/src/data_bind/data_bind_context.rs; crates/nuxie-runtime/src/artboard.rs"
+note = "Phase 3 paired owner audit: integer fallback and ArtboardReferencer dispatch match the pin, including live/cross-file sources, explicit null, ancestor rejection, unresolved preservation, and generated-id separation."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_asset_font.cpp"

@@ -8964,22 +8964,18 @@ impl ArtboardInstance {
         runtime_artboard: Option<&RuntimeBindableArtboard>,
         first_artboard_apply: bool,
     ) -> bool {
+        if matches!(property, RuntimeArtboardNestedHostProperty::ArtboardId)
+            && let Some(changed) = crate::context_value_artboard::apply_to_nested_host(
+                self,
+                target_local_id,
+                value,
+                runtime_artboard,
+                first_artboard_apply,
+            )
+        {
+            return changed;
+        }
         match (property, value) {
-            (
-                RuntimeArtboardNestedHostProperty::ArtboardId,
-                RuntimeDataBindGraphValue::Artboard(value),
-            ) => {
-                if let Some(runtime_artboard) = runtime_artboard {
-                    let Some(source) = runtime_artboard.artboard_instance() else {
-                        return false;
-                    };
-                    self.replace_nested_artboard_artboard_instance(target_local_id, source)
-                } else if first_artboard_apply {
-                    self.replace_nested_artboard_artboard_id(target_local_id, *value)
-                } else {
-                    self.set_nested_artboard_artboard_id(target_local_id, *value)
-                }
-            }
             (
                 RuntimeArtboardNestedHostProperty::IsPaused { property_key },
                 RuntimeDataBindGraphValue::Boolean(value),

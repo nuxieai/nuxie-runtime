@@ -373,8 +373,8 @@
       "rows": 456
     },
     "silver": {
-      "candidates": 163,
-      "proven": 89,
+      "candidates": 162,
+      "proven": 90,
       "proven_rows": [
         "advance_blend_mode-inputs",
         "advance_blend_mode-vms",
@@ -443,6 +443,7 @@
         "relative_data_bind_path",
         "relative_data_binding",
         "saturation",
+        "script_create_text_runs",
         "scripted_animated_oval",
         "scripted_oval",
         "sorted_listeners",
@@ -806,7 +807,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -838,7 +839,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -870,7 +871,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -902,7 +903,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -934,7 +935,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -966,7 +967,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -998,7 +999,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1030,7 +1031,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1062,7 +1063,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1094,7 +1095,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1126,7 +1127,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1158,7 +1159,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1190,7 +1191,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1222,7 +1223,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1254,7 +1255,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1286,7 +1287,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1318,7 +1319,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1350,7 +1351,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1382,7 +1383,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1414,7 +1415,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1446,7 +1447,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1478,7 +1479,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1510,7 +1511,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1542,7 +1543,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1574,7 +1575,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1606,7 +1607,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1638,7 +1639,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1670,7 +1671,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1702,7 +1703,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1734,7 +1735,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1766,7 +1767,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1798,7 +1799,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1830,7 +1831,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1862,7 +1863,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -1894,7 +1895,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1926,7 +1927,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1958,7 +1959,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -1990,7 +1991,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2022,7 +2023,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -2054,7 +2055,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2086,7 +2087,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2118,7 +2119,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2150,7 +2151,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2182,7 +2183,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2214,7 +2215,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2246,7 +2247,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2278,7 +2279,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2310,7 +2311,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -2342,7 +2343,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2374,7 +2375,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2406,7 +2407,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2438,7 +2439,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2470,7 +2471,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -2502,7 +2503,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2534,7 +2535,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2566,7 +2567,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ordering",
@@ -2598,7 +2599,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2630,7 +2631,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2662,7 +2663,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2694,7 +2695,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2726,7 +2727,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -2886,7 +2887,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -2918,7 +2919,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -2950,7 +2951,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -2982,7 +2983,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3014,7 +3015,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3046,7 +3047,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3078,7 +3079,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3110,39 +3111,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
-        "state": "manifest-current"
-      },
-      "cluster_id": "cluster:runtime-tests:ownership",
-      "confidence": "low",
-      "discovery_value": 105,
-      "disposition": "pending-proof",
-      "evidence_links": [
-        "silver-corpus.toml",
-        "tests/unit_tests/silvers/script_create_text_runs.sriv"
-      ],
-      "evidence_state": "pending-scripted",
-      "first_signal": "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step.",
-      "id": "silver:script_create_text_runs",
-      "missing_proofs": [],
-      "owner_family": "runtime-tests",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "high"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "silver",
-      "source_row": "script_create_text_runs",
-      "subsystem": "scripting_text_runs",
-      "upstream_owner": "tests/unit_tests/runtime/scripting/scripting_text_runs.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "checked-in ledger",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3174,7 +3143,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3206,7 +3175,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3238,7 +3207,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3270,7 +3239,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3302,7 +3271,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3334,7 +3303,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3366,7 +3335,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3398,7 +3367,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3430,7 +3399,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -3462,7 +3431,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -3494,7 +3463,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -4651,7 +4620,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4683,7 +4652,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4715,7 +4684,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4747,7 +4716,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4779,7 +4748,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4811,7 +4780,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4843,7 +4812,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4875,7 +4844,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4907,7 +4876,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4939,7 +4908,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -4971,7 +4940,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5003,7 +4972,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5035,7 +5004,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5067,7 +5036,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5099,7 +5068,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5131,7 +5100,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5163,7 +5132,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5195,7 +5164,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5227,7 +5196,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5259,7 +5228,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5291,7 +5260,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5323,7 +5292,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5355,7 +5324,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5387,7 +5356,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5419,7 +5388,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5451,7 +5420,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5483,7 +5452,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5515,7 +5484,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5547,7 +5516,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5579,7 +5548,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5611,7 +5580,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5643,7 +5612,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:lifecycle",
@@ -5739,7 +5708,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -5771,7 +5740,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -5803,7 +5772,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -5835,7 +5804,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -5867,7 +5836,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -5899,7 +5868,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -5931,7 +5900,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -5963,7 +5932,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -5995,7 +5964,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6027,7 +5996,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6059,7 +6028,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6091,7 +6060,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6123,7 +6092,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6155,7 +6124,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6187,7 +6156,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6219,7 +6188,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6251,7 +6220,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6283,7 +6252,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6315,7 +6284,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6347,7 +6316,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6379,7 +6348,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -6411,7 +6380,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:ownership",
@@ -7441,7 +7410,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -7475,7 +7444,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -8311,6 +8280,41 @@
       "source_row": "src/text/text_variation_helper.cpp",
       "subsystem": "text_variation_helper",
       "upstream_owner": "src/text/text_variation_helper.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 2,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:data_bind:ownership",
+      "confidence": "low",
+      "discovery_value": 85,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/data-bind-view-model.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "structural proof is divergent; behavioral proof is unverified; freshness is stale",
+      "id": "owner:src/data_bind/data_bind_context.cpp",
+      "missing_proofs": [
+        "structural proof is divergent",
+        "behavioral proof is unverified",
+        "freshness is stale"
+      ],
+      "owner_family": "data_bind",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "high"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/data_bind/data_bind_context.cpp",
+      "subsystem": "data_bind_context",
+      "upstream_owner": "src/data_bind/data_bind_context.cpp"
     },
     {
       "churn_freshness": {
@@ -13025,41 +13029,6 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 1,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:data_bind:ownership",
-      "confidence": "low",
-      "discovery_value": 80,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/data-bind-view-model.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "structural proof is divergent; behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/data_bind/data_bind_context.cpp",
-      "missing_proofs": [
-        "structural proof is divergent",
-        "behavioral proof is unverified",
-        "freshness is stale"
-      ],
-      "owner_family": "data_bind",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "high"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/data_bind/data_bind_context.cpp",
-      "subsystem": "data_bind_context",
-      "upstream_owner": "src/data_bind/data_bind_context.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
         "recent_touch_count": 0,
         "state": "stale"
       },
@@ -14234,7 +14203,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 14,
+        "recent_touch_count": 15,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14270,7 +14239,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14341,7 +14310,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 18,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14375,7 +14344,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 12,
+        "recent_touch_count": 13,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14657,7 +14626,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 27,
+        "recent_touch_count": 28,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -16813,7 +16782,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -16845,7 +16814,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -16877,7 +16846,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -16909,7 +16878,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -16941,7 +16910,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -16973,7 +16942,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17005,7 +16974,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17037,7 +17006,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17069,7 +17038,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17101,7 +17070,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17133,7 +17102,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17165,7 +17134,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17197,7 +17166,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17229,7 +17198,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17261,7 +17230,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17293,7 +17262,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17325,7 +17294,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17357,7 +17326,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17389,7 +17358,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17654,7 +17623,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 99,
+        "recent_touch_count": 98,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -18384,7 +18353,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -19395,7 +19364,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -19633,7 +19602,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 99,
+        "recent_touch_count": 98,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -19664,7 +19633,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 99,
+        "recent_touch_count": 98,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -23371,7 +23340,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -23403,7 +23372,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -23435,7 +23404,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -23467,7 +23436,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -23499,7 +23468,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -23531,7 +23500,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -23563,7 +23532,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -23595,7 +23564,7 @@
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -24788,7 +24757,7 @@
       "semantic_boundary": "ordering"
     },
     {
-      "candidate_count": 39,
+      "candidate_count": 38,
       "candidate_ids": [
         "silver:image_scripting_property_value",
         "silver:list_index_script_access",
@@ -24806,7 +24775,6 @@
         "silver:script_converter_with_dependency_2",
         "silver:script_converter_with_dependency_with_library",
         "silver:script_converter_with_dependency_with_library_with_update",
-        "silver:script_create_text_runs",
         "silver:script_create_viewmodel_instance",
         "silver:script_input_color_trigger",
         "silver:script_layout_grid",
@@ -25668,7 +25636,6 @@
       "scripting_listener_action",
       "scripting_path_effect",
       "scripting_properties",
-      "scripting_text_runs",
       "scripting_transition_condition",
       "scroll",
       "scroll_bar_constraint",
@@ -25815,13 +25782,13 @@
   },
   "schema": "nuxie-runtime-drift-queue/v1",
   "summary": {
-    "candidate_count": 700,
+    "candidate_count": 699,
     "cluster_count": 32,
     "disposition_counts": {
       "extension": 3,
       "intentional-decision": 14,
       "known-divergence": 102,
-      "pending-proof": 96,
+      "pending-proof": 95,
       "stale-proof": 446,
       "unknown": 4,
       "unsupported": 35

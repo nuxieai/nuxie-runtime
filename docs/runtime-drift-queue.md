@@ -3,7 +3,7 @@
 Generated from the checked-in parity ledgers. JSON is authoritative; this view highlights clusters and the highest-discovery candidates.
 
 - Upstream ref: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
-- Candidates: 700
+- Candidates: 699
 - Clusters: 32
 
 ## Dispositions
@@ -13,7 +13,7 @@ Generated from the checked-in parity ledgers. JSON is authoritative; this view h
 | extension | 3 |
 | intentional-decision | 14 |
 | known-divergence | 102 |
-| pending-proof | 96 |
+| pending-proof | 95 |
 | stale-proof | 446 |
 | unknown | 4 |
 | unsupported | 35 |
@@ -30,7 +30,7 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 | `cluster:runtime-tests:lifecycle` | lifecycle | runtime-tests | 73 | 120 |
 | `cluster:runtime-tests:ordering` | ordering | runtime-tests | 20 | 120 |
 | `cluster:unresolved:ownership` | ownership | unresolved | 43 | 120 |
-| `cluster:runtime-tests:ownership` | ownership | runtime-tests | 39 | 105 |
+| `cluster:runtime-tests:ownership` | ownership | runtime-tests | 38 | 105 |
 | `cluster:animation:ownership` | ownership | animation | 93 | 103 |
 | `cluster:data_bind:ownership` | ownership | data_bind | 45 | 103 |
 | `cluster:unresolved:float-behavior` | float-behavior | unresolved | 3 | 100 |
@@ -139,7 +139,6 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 | 105 | `silver:script_artboards` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |
 | 105 | `silver:script_artboards_opacity` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |
 | 105 | `silver:script_artboards_origin` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |
-| 105 | `silver:script_create_text_runs` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_text_runs.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |
 | 105 | `silver:script_create_viewmodel_instance` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_context_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |
 | 105 | `silver:script_input_color_trigger` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_input_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |
 | 105 | `silver:script_layout_grid` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_layout_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |
@@ -163,3 +162,4 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 | 100 | `gap:F1` | pending-proof | `unresolved-owner` | **Audio** — `src/audio/**` engine/source/sound/reader, `audio_event.cpp` firing, `Artboard::volume` \| 1,030+ \| PARTIAL (P2F1/P2F2) \| Symphonia WAV/MP3/FLAC source/reader decode… |
 | 100 | `gap:F13` | pending-proof | `unresolved-owner` | Historical backlog ceilings (from the original port's status log): full ListenerGroup drag/opaque behavior, nested pointer/listener hit propagation beyond event bubbling, live dat… |
 | 100 | `gap:F15` | pending-proof | `unresolved-owner` | **Participant layout animation** — the C++ `ParticipantAnimation` lifecycle (`layout_participant.cpp:29-43,398-455,508-644`: `cascadeLayoutStyle` allocation, `advanceComponent`, `… |
+| 100 | `gap:F7` | pending-proof | `unresolved-owner` | **Unported Lua bindings** — `lua_gpu` 3,734, `lua_promise` 1,323, `lua_scripted_context` 583, `lua_buffer_ext` 538, `lua_audio` 507, `lua_data_value` 503, `lua_image_decode` 467, … |

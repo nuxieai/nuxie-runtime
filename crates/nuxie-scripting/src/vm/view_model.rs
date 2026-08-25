@@ -521,17 +521,33 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let instance_model = model.clone();
-    table.set(
-        "instance",
-        lua.create_function(move |lua, (_self, name): (Table, Option<String>)| {
-            let model = instance_model
+    let instance_method = |model: ScriptViewModel| {
+        lua.create_function(move |lua, args: MultiValue| {
+            let args = args.into_vec();
+            let name = if args.len() == 2 {
+                match &args[1] {
+                    Value::String(_) | Value::Integer(_) | Value::Number(_) => {
+                        let value: luaur_rt::LuaString = lua.unpack(args[1].clone())?;
+                        Some(value.to_string_lossy())
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            let model = model
                 .named_instance(name.as_deref())
-                .or_else(|| instance_model.named_instance(None))
+                .or_else(|| model.named_instance(None))
                 .ok_or_else(|| luaur_rt::Error::runtime("view-model instance not found"))?;
             create_scripted_view_model(lua, model)
-        })?,
-    )?;
+        })
+    };
+    // Pinned `ScriptedViewModel` dispatches both `instance` and the `new`
+    // atom to the same `ScriptedViewModel::instance` owner. The latter is what
+    // authored scripts use when minting list items from a hydrated ViewModel
+    // input (`lua_properties.cpp:940-955`).
+    table.set("instance", instance_method(model.clone())?)?;
+    table.set("new", instance_method(model.clone())?)?;
     let get_view_model = model.clone();
     table.set(
         "getViewModel",
@@ -1480,8 +1496,12 @@ impl UserData for ScriptedPropertyList {
                 .model
                 .defer_property_change_callbacks(|| this.model.pop_list_item(&this.name));
             match item {
-                Some(item) => create_scripted_view_model(lua, item).map(Value::Table),
-                None => Ok(Value::Nil),
+                Some(item) => create_scripted_view_model(lua, item)
+                    .map(|item| MultiValue::from_vec(vec![Value::Table(item)])),
+                // Pinned `property_namecall_atom` returns zero Lua values when
+                // `ViewModelInstanceList::pop()` has no item. Returning one
+                // explicit nil changes `select("#", ...)` and table packing.
+                None => Ok(MultiValue::new()),
             }
         });
         methods.add_method("shift", |lua, this, ()| {
@@ -1489,8 +1509,10 @@ impl UserData for ScriptedPropertyList {
                 .model
                 .defer_property_change_callbacks(|| this.model.shift_list_item(&this.name));
             match item {
-                Some(item) => create_scripted_view_model(lua, item).map(Value::Table),
-                None => Ok(Value::Nil),
+                Some(item) => create_scripted_view_model(lua, item)
+                    .map(|item| MultiValue::from_vec(vec![Value::Table(item)])),
+                // Same zero-result contract as the pinned empty `shift` path.
+                None => Ok(MultiValue::new()),
             }
         });
         methods.add_method("swap", |_, this, (first, second): (usize, usize)| {
@@ -2450,6 +2472,44 @@ mod tests {
     }
 
     #[test]
+    fn scripted_view_model_new_alias_matches_instance_dispatch() {
+        let (_, model) = fixture_models()
+            .into_iter()
+            .next()
+            .expect("fixture contains a view-model definition");
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model).expect("scripted model");
+        lua.globals().set("model", table).expect("model global");
+
+        let result: Table = lua
+            .load(
+                r#"
+                return {
+                    new = model:new() ~= nil,
+                    instance = model:instance() ~= nil,
+                    named = model:new("missing") ~= nil,
+                    numericName = model:new(123) ~= nil,
+                    nonString = model:new(true) ~= nil,
+                    extraArgs = model:new("missing", true) ~= nil,
+                }
+                "#,
+            )
+            .eval()
+            .expect("ScriptedViewModel constructor aliases run");
+
+        for field in [
+            "new",
+            "instance",
+            "named",
+            "numericName",
+            "nonString",
+            "extraArgs",
+        ] {
+            assert!(result.get::<bool>(field).unwrap(), "{field}");
+        }
+    }
+
+    #[test]
     fn unported_context_binding_reports_the_script_and_binding_names() {
         let vm = ScriptVm::new();
         let chunk = vm
@@ -2740,6 +2800,27 @@ mod tests {
         )
         .exec()
         .expect("nil removals are no-ops");
+    }
+
+    #[test]
+    fn empty_list_pop_and_shift_return_zero_values_like_cpp() {
+        let (model, list) = model_with_property(ScriptViewModelProperty::List);
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model).expect("scripted model");
+        lua.globals().set("model", table).expect("model global");
+        lua.globals()
+            .set("listName", list)
+            .expect("list name global");
+
+        let counts: Table = lua
+            .load(
+                "local list = model:getList(listName)\n\
+                 return { select('#', list:pop()), select('#', list:shift()) }",
+            )
+            .eval()
+            .expect("empty list result arity");
+        assert_eq!(counts.get::<i64>(1).unwrap(), 0);
+        assert_eq!(counts.get::<i64>(2).unwrap(), 0);
     }
 
     #[test]

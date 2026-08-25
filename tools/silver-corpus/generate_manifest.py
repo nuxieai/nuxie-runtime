@@ -271,6 +271,12 @@ EXACT = (
 )
 
 SCRIPTED_EXACT_NOTES = {
+    "script_create_text_runs": (
+        "The pinned C++ action sequence is active and operation-exact across authored "
+        "initialization plus push, swap, remove, insert, pop, and shift list mutations. "
+        "The paired-owner correction restores ScriptedViewModel.new construction and "
+        "DataBindContextValueList::apply -> Text::updateList shape invalidation."
+    ),
     "scripted_animated_oval": (
         "The literal 1000-frame script loop, per-frame balance and Lua stack checks, "
         "full GC, and renderer stream are operation-exact with the pinned C++ silver "

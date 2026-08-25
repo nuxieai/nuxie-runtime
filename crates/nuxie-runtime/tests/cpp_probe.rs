@@ -21206,6 +21206,201 @@ fn upstream_click_event_fixture_instance() -> (
     (runtime, artboard, machine, artboard_index, machine_index)
 }
 
+fn upstream_state_machine_fixture_instance(
+    fixture_name: &str,
+    artboard_name: Option<&str>,
+    machine_name: &str,
+) -> (
+    RuntimeFile,
+    GraphFile,
+    usize,
+    usize,
+    ArtboardInstance,
+    StateMachineInstance,
+) {
+    let fixture = cpp_runtime_fixture(fixture_name);
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("import {fixture_name}: {error}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("graph {fixture_name}: {error}"));
+    let artboard_index = artboard_name
+        .map(|name| {
+            graph
+                .artboards
+                .iter()
+                .position(|artboard| artboard.name.as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("missing artboard {name:?} in {fixture_name}"))
+        })
+        .unwrap_or(0);
+    let artboard_graph = &graph.artboards[artboard_index];
+    let machine_index = artboard_graph
+        .state_machines
+        .iter()
+        .position(|machine| machine.name.as_deref() == Some(machine_name))
+        .unwrap_or_else(|| panic!("missing state machine {machine_name:?} in {fixture_name}"));
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .unwrap_or_else(|error| panic!("instantiate {fixture_name}: {error}"));
+    let machine = artboard
+        .state_machine_instance(machine_index)
+        .unwrap_or_else(|| panic!("instantiate state machine {machine_name:?}"));
+    (
+        runtime,
+        graph,
+        artboard_index,
+        machine_index,
+        artboard,
+        machine,
+    )
+}
+
+fn current_animation_name<'a>(
+    graph: &'a GraphFile,
+    artboard_index: usize,
+    machine: &StateMachineInstance,
+) -> Option<&'a str> {
+    let animation_index = machine.current_animation(0)?.animation_index();
+    graph.artboards[artboard_index]
+        .animations
+        .get(animation_index)?
+        .name
+        .as_deref()
+}
+
+#[test]
+fn upstream_animation_state_without_animation_advances_without_crashing() {
+    let (runtime, graph, artboard_index, machine_index, mut artboard, mut machine) =
+        upstream_state_machine_fixture_instance("multiple_state_machines.riv", None, "two");
+    let artboard_graph = &graph.artboards[artboard_index];
+    assert_eq!(artboard_graph.animations.len(), 1);
+    assert_eq!(artboard_graph.state_machines.len(), 4);
+    let definition = &runtime.artboard_state_machine_graphs(artboard_index)[machine_index];
+    assert_eq!(definition.layers.len(), 1);
+    assert_eq!(definition.layers[0].states.len(), 4);
+    let state_types = definition.layers[0]
+        .states
+        .iter()
+        .filter_map(|state| state.object.map(|object| object.type_name))
+        .collect::<Vec<_>>();
+    assert!(state_types.contains(&"AnyState"));
+    assert!(state_types.contains(&"EntryState"));
+    assert!(state_types.contains(&"ExitState"));
+    assert_eq!(
+        definition.layers[0].states[3]
+            .object
+            .map(|object| object.type_name),
+        Some("AnimationState")
+    );
+    assert_eq!(machine.current_animation_count(), 0);
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+}
+
+#[test]
+fn upstream_oneshot_blend_keeps_advancing_after_animations_stop() {
+    let (_, _, _, _, mut artboard, mut machine) = upstream_state_machine_fixture_instance(
+        "oneshotblend.riv",
+        None,
+        "State Machine 1",
+    );
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    assert!(machine.needs_advance());
+    artboard.advance_state_machine_instance(&mut machine, 0.5);
+    assert!(machine.needs_advance());
+    artboard.advance_state_machine_instance(&mut machine, 1.0);
+    assert!(machine.needs_advance());
+}
+
+#[test]
+fn upstream_duration_transition_finishes_source_before_entering_target() {
+    let (_, graph, artboard_index, _, mut artboard, mut machine) =
+        upstream_state_machine_fixture_instance(
+            "state_machine_transition.riv",
+            None,
+            "State-Machine-Test",
+        );
+    let artboard_graph = &graph.artboards[artboard_index];
+    assert_eq!(artboard_graph.animations.len(), 3);
+    assert_eq!(artboard_graph.state_machines.len(), 1);
+    assert_eq!(artboard_graph.state_machines[0].layers.len(), 1);
+    assert_eq!(artboard_graph.state_machines[0].layers[0].state_count, 6);
+    let solid_color = artboard_graph
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("SolidColor"))
+        .expect("Star-Stroke SolidColor");
+    let color_key = property_key_for_name("SolidColor", "colorValue");
+    assert_eq!(
+        artboard.color_property(solid_color.local_id, color_key),
+        Some(0xff00_0000)
+    );
+    artboard.advance_state_machine_instance(&mut machine, 0.1);
+    artboard.update_components();
+    assert_eq!(
+        current_animation_name(&graph, artboard_index, &machine),
+        Some("State-2")
+    );
+    artboard.advance_state_machine_instance(&mut machine, 2.0);
+    artboard.update_components();
+    assert_eq!(
+        current_animation_name(&graph, artboard_index, &machine),
+        Some("State-3")
+    );
+    assert_eq!(
+        artboard.color_property(solid_color.local_id, color_key),
+        Some(0xffff_ffff)
+    );
+}
+
+#[test]
+#[ignore = "expected-red: external Rust API has no layerState identity query"]
+fn upstream_trigger_is_consumed_only_by_allowed_state_changes() {
+    fn assert_current_layer_state_is_animation_state(
+        _machine: &StateMachineInstance,
+        expected_authored_animation_state: usize,
+    ) {
+        panic!(
+            "state_machine_test.cpp requires layerState(0) identity for authored animation state {expected_authored_animation_state}"
+        );
+    }
+    let (runtime, graph, artboard_index, machine_index, mut artboard, mut machine) =
+        upstream_state_machine_fixture_instance(
+            "state_machine_triggers.riv",
+            Some("main"),
+            "State Machine 1",
+        );
+    let artboard_graph = &graph.artboards[artboard_index];
+    assert_eq!(artboard_graph.animations.len(), 1);
+    assert_eq!(artboard_graph.state_machines.len(), 1);
+    assert_eq!(artboard_graph.state_machines[0].inputs.len(), 1);
+    let definition = &runtime.artboard_state_machine_graphs(artboard_index)[machine_index];
+    assert_eq!(definition.layers.len(), 1);
+    assert_eq!(definition.layers[0].states.len(), 5);
+    let animation_states = definition.layers[0]
+        .states
+        .iter()
+        .enumerate()
+        .filter_map(|(index, state)| {
+            state
+                .object
+                .is_some_and(|object| object.type_name == "AnimationState")
+                .then_some(index)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(animation_states.len(), 2);
+    artboard.advance_state_machine_instance(&mut machine, 0.1);
+    let trigger_index = (0..machine.input_count())
+        .find(|index| machine.input(*index).and_then(|input| input.name()) == Some("Trigger 1"))
+        .expect("Trigger 1");
+    assert!(machine.fire_trigger(trigger_index));
+    artboard.advance_state_machine_instance(&mut machine, 0.1);
+    assert_current_layer_state_is_animation_state(&machine, animation_states[1]);
+    assert!(machine.fire_trigger(trigger_index));
+    artboard.advance_state_machine_instance(&mut machine, 0.1);
+    assert_current_layer_state_is_animation_state(&machine, animation_states[0]);
+}
+
 #[test]
 fn upstream_click_event_fixture_initial_and_first_click_contract() {
     let (runtime, mut artboard, mut machine, artboard_index, machine_index) =

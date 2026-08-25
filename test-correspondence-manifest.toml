@@ -1020,10 +1020,9 @@ note = "The sole 17-assertion fixture-loading case is directly ported."
 [[file]]
 upstream = "tests/unit_tests/runtime/state_machine_test.cpp"
 test_case_count = 19
-status = "partial"
-evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::state_machine_test.cpp provenance findings"]
-covered_test_cases = ["file with state machine be read", "file with blend states loads correctly", "Blend state animations with reset applied to them.", "Transitions with reset applied to them.", "Transition with list index can be compared to a number"]
-note = "The exhaustive FL-B/FL-C table identifies the listed names as fully covered TEST_CASEs; mixed or finding rows remain unclaimed."
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "silver-corpus.toml (all state_machine_test.cpp provenance rows)", "crates/nuxie-runtime/tests/cpp_probe.rs::{state_machine_file_fixture_contract,state_machine_blend_fixture_contract,upstream_animation_state_without_animation_advances_without_crashing,upstream_oneshot_blend_keeps_advancing_after_animations_stop,upstream_duration_transition_finishes_source_before_entering_target,upstream_trigger_is_consumed_only_by_allowed_state_changes}"]
+note = "All 19 cases are represented by literal fixture tests or exact silver action streams. The four final direct ports preserve the no-animation state structure/no-crash advance, 0/.5/1.0 one-shot blend needsAdvance sequence, black/State-2 then white/State-3 duration transition, and two-fire trigger alternation. Trigger alternation remains honestly expected-red only at the unavailable external layerState identity query; no proxy behavior or runtime fix is substituted."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/stroke_test.cpp"

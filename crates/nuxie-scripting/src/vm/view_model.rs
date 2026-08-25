@@ -2138,6 +2138,38 @@ mod tests {
             .unwrap_or_else(|| panic!("fixture has no {kind:?} property"))
     }
 
+    fn fixture_first_authored_instance(asset: &str, view_model_name: &str) -> ScriptViewModel {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets")
+            .join(asset);
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
+        let instance_name = file
+            .view_models()
+            .into_iter()
+            .find_map(|view_model| {
+                (view_model.object.string_property("name") == Some(view_model_name))
+                    .then(|| {
+                        view_model
+                            .instances
+                            .first()?
+                            .object
+                            .string_property("name")
+                            .map(ToOwned::to_owned)
+                    })
+                    .flatten()
+            })
+            .expect("authored view-model instance");
+        nuxie_runtime::script_view_models(&file)
+            .remove(view_model_name)
+            .expect("script view model")
+            .named_instance(Some(&instance_name))
+            .expect("authored instance is selectable")
+    }
+
     #[test]
     fn property_listeners_survive_userdata_gc_while_subscribed() {
         let (model, property_name) = model_with_property(ScriptViewModelProperty::Number);
@@ -2633,6 +2665,83 @@ mod tests {
 
         assert!(stable);
         assert_eq!(model.list_len(&list), Some(0));
+    }
+
+    #[test]
+    fn upstream_scripted_graph_list_values_and_listener_survive_row_removal() {
+        let model = fixture_first_authored_instance("scripted_graph.riv", "Graph");
+        let list = "points";
+        assert_eq!(model.list_len(list), Some(5));
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted Graph model");
+        lua.globals().set("model", table).unwrap();
+        let initial: Table = lua
+            .load(
+                "changed = {}\n\
+                 local points = model.points\n\
+                 local values = { points.length }\n\
+                 for i = 1, points.length do\n\
+                   table.insert(values, points[i].x.value)\n\
+                   table.insert(values, points[i].y.value)\n\
+                 end\n\
+                 local p = points[3]\n\
+                 p.y:addListener(p, function(point) table.insert(changed, point.y.value) end)\n\
+                 return values",
+            )
+            .eval()
+            .expect("provide Graph list to Luau");
+        let expected = [5.0, 0.0, 10.0, 1.0, 15.0, 2.0, 16.0, 3.0, 18.0, 4.0, 9.0];
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(initial.get::<f32>(index + 1).unwrap(), expected);
+        }
+
+        assert!(model.remove_list_item_at(list, 1));
+        let point = model.list_item(list, 1).expect("point x=2 moves to index 1");
+        assert_eq!(point.number("x"), Some(2.0));
+        assert!(point.set_number("y", 22.0));
+        let after: Table = lua
+            .load(
+                "local points = model.points\n\
+                 local values = { points.length }\n\
+                 for i = 1, points.length do\n\
+                   table.insert(values, points[i].x.value)\n\
+                   table.insert(values, points[i].y.value)\n\
+                 end\n\
+                 return values",
+            )
+            .eval()
+            .expect("iterate shortened Graph list");
+        let expected = [4.0, 0.0, 10.0, 2.0, 22.0, 3.0, 18.0, 4.0, 9.0];
+        for (index, expected) in expected.into_iter().enumerate() {
+            assert_eq!(after.get::<f32>(index + 1).unwrap(), expected);
+        }
+        assert!(point.set_number("y", 23.0));
+        let changed: Table = lua.globals().get("changed").unwrap();
+        assert_eq!(changed.get::<f32>(1).unwrap(), 22.0);
+        assert_eq!(changed.get::<f32>(2).unwrap(), 23.0);
+    }
+
+    #[test]
+    fn upstream_view_model_list_removes_every_row_for_one_instance() {
+        let model = fixture_first_authored_instance("scripted_graph.riv", "Graph");
+        let list = "points";
+        let initial_count = model.list_len(list).expect("points list");
+        assert!(initial_count >= 2);
+        let shared = model.list_item(list, 0).expect("first point");
+        assert!(model.push_list_item(list, &shared));
+        assert_eq!(model.list_len(list), Some(initial_count + 1));
+
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted Graph model");
+        lua.globals().set("model", table).unwrap();
+        lua.load("local points = model.points; points:removeAllOf(points[1])")
+            .exec()
+            .expect("remove every row for the shared instance");
+        assert_eq!(model.list_len(list), Some(initial_count - 1));
+        for index in 0..initial_count - 1 {
+            let item = model.list_item(list, index).expect("retained point");
+            assert!(!Rc::ptr_eq(&item.owned_instance(), &shared.owned_instance()));
+        }
     }
 
     #[test]

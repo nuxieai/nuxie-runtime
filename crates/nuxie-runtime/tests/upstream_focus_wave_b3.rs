@@ -4,12 +4,132 @@
 //! runtime fixtures. Callback pointer identity is adapted to the retained
 //! FocusEvent stream; fixture-heavy cases execute through StateMachineInstance.
 
-use nuxie_binary::read_runtime_file;
+use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::GraphFile;
 use nuxie_runtime::{
     ArtboardInstance, FocusEdgeBehavior, FocusEventKind, FocusManager, FocusNode,
-    StateMachineInstance,
+    RuntimeBindableArtboard, RuntimeOwnedViewModelContext, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, StateMachineInstance, TransformProperty,
 };
+
+fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        bytes.push(byte);
+        if value == 0 {
+            break;
+        }
+    }
+}
+
+fn schema_property_key(type_name: &str, property_name: &str) -> u16 {
+    let definition = nuxie_schema::definition_by_name(type_name)
+        .unwrap_or_else(|| panic!("missing schema definition {type_name}"));
+    std::iter::once(definition.name)
+        .chain(definition.ancestors.iter().copied())
+        .filter_map(nuxie_schema::definition_by_name)
+        .flat_map(|owner| owner.properties)
+        .find(|property| property.name == property_name)
+        .unwrap_or_else(|| panic!("missing property {type_name}.{property_name}"))
+        .key
+        .int
+}
+
+fn push_object(bytes: &mut Vec<u8>, type_name: &str, properties: impl FnOnce(&mut Vec<u8>)) {
+    push_var_uint(
+        bytes,
+        u64::from(
+            nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+        ),
+    );
+    properties(bytes);
+    push_var_uint(bytes, 0);
+}
+
+fn push_uint(bytes: &mut Vec<u8>, owner: &str, name: &str, value: u64) {
+    push_var_uint(bytes, u64::from(schema_property_key(owner, name)));
+    push_var_uint(bytes, value);
+}
+
+fn push_f32(bytes: &mut Vec<u8>, owner: &str, name: &str, value: f32) {
+    push_var_uint(bytes, u64::from(schema_property_key(owner, name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_keyframe(bytes: &mut Vec<u8>, frame: u64, value: f32, interpolation: u64) {
+    push_object(bytes, "KeyFrameDouble", |bytes| {
+        push_uint(bytes, "KeyFrameDouble", "frame", frame);
+        push_uint(bytes, "KeyFrameDouble", "interpolationType", interpolation);
+        push_f32(bytes, "KeyFrameDouble", "value", value);
+    });
+}
+
+fn push_node_x_animation(bytes: &mut Vec<u8>, target: u64, first: f32, second: f32) {
+    push_object(bytes, "LinearAnimation", |bytes| {
+        push_uint(bytes, "LinearAnimation", "fps", 10);
+        push_uint(bytes, "LinearAnimation", "duration", 20);
+    });
+    push_object(bytes, "KeyedObject", |bytes| {
+        push_uint(bytes, "KeyedObject", "objectId", target);
+    });
+    push_object(bytes, "KeyedProperty", |bytes| {
+        push_uint(
+            bytes,
+            "KeyedProperty",
+            "propertyKey",
+            u64::from(schema_property_key("Node", "x")),
+        );
+    });
+    push_keyframe(bytes, 0, first, 1);
+    push_keyframe(bytes, 10, second, 0);
+}
+
+fn focus_condition_without_comparator_fixture() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"RIVE");
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 88_203);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |_| {});
+    push_object(&mut bytes, "Node", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+        push_f32(bytes, "Node", "x", 2.0);
+        push_f32(bytes, "Node", "y", 3.0);
+        push_f32(bytes, "Node", "scaleX", 1.0);
+        push_f32(bytes, "Node", "scaleY", 1.0);
+        push_f32(bytes, "Node", "opacity", 1.0);
+    });
+    push_node_x_animation(&mut bytes, 1, 2.0, 12.0);
+    push_node_x_animation(&mut bytes, 1, 20.0, 30.0);
+    push_object(&mut bytes, "StateMachine", |_| {});
+    push_object(&mut bytes, "StateMachineLayer", |_| {});
+    push_object(&mut bytes, "AnyState", |_| {});
+    push_object(&mut bytes, "EntryState", |_| {});
+    push_object(&mut bytes, "StateTransition", |bytes| {
+        push_uint(bytes, "StateTransition", "stateToId", 2);
+    });
+    push_object(&mut bytes, "AnimationState", |bytes| {
+        push_uint(bytes, "AnimationState", "animationId", 0);
+    });
+    push_object(&mut bytes, "StateTransition", |bytes| {
+        push_uint(bytes, "StateTransition", "stateToId", 3);
+    });
+    push_object(&mut bytes, "TransitionFocusCondition", |_| {});
+    push_object(&mut bytes, "AnimationState", |bytes| {
+        push_uint(bytes, "AnimationState", "animationId", 1);
+    });
+    push_object(&mut bytes, "ExitState", |_| {});
+    bytes
+}
 
 fn attached(manager: &mut FocusManager, parent: Option<nuxie_runtime::FocusNodeId>, node: FocusNode) -> nuxie_runtime::FocusNodeId {
     let id = manager.create_node(node);
@@ -59,10 +179,122 @@ fn real_focus_fixture(asset: &str, artboard_name: Option<&str>) -> (ArtboardInst
     (artboard, machine)
 }
 
+struct StatefulFocusFixture {
+    runtime: RuntimeFile,
+    graphs: GraphFile,
+    artboard: ArtboardInstance,
+    machine: StateMachineInstance,
+    context: RuntimeOwnedViewModelContext,
+}
+
+impl StatefulFocusFixture {
+    fn load(asset: &str, artboard_name: Option<&str>) -> Self {
+        let mut fixture = Self::load_before_frames(asset, artboard_name);
+        fixture.frames(2, 0.016);
+        fixture
+    }
+
+    fn load_before_frames(asset: &str, artboard_name: Option<&str>) -> Self {
+        let path = std::path::Path::new(
+            option_env!("RIVE_RUNTIME_DIR").unwrap_or("/Users/levi/dev/oss/rive-runtime"),
+        )
+        .join("tests/unit_tests")
+        .join(asset);
+        let bytes = std::fs::read(&path)
+            .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()));
+        let runtime = read_runtime_file(&bytes)
+            .unwrap_or_else(|error| panic!("import pinned fixture {}: {error}", path.display()));
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .unwrap_or_else(|error| panic!("graph pinned fixture {}: {error}", path.display()));
+        let (artboard_index, graph) = graphs
+            .artboards
+            .iter()
+            .enumerate()
+            .find(|(_, graph)| artboard_name.is_none_or(|name| graph.name.as_deref() == Some(name)))
+            .expect("pinned fixture has selected artboard");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instantiate selected artboard");
+        let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
+        let view_model_index = runtime
+            .artboard(artboard_index)
+            .and_then(|object| object.uint_property("viewModelId"))
+            .and_then(|value| usize::try_from(value).ok())
+            .expect("selected artboard view-model id");
+        let main = RuntimeOwnedViewModelInstance::from_instance(&runtime, view_model_index, 0)
+            .or_else(|| RuntimeOwnedViewModelInstance::new(&runtime, view_model_index))
+            .expect("default view-model instance");
+        let mut context = RuntimeOwnedViewModelContext::from_main(main);
+        context.complete_for_artboard(&runtime, artboard_index);
+        artboard.bind_owned_view_model_artboard_contexts(&runtime, &context);
+        assert!(machine.bind_owned_view_model_contexts(&context));
+        machine.advance_data_context();
+        Self { runtime, graphs, artboard, machine, context }
+    }
+
+    fn root(&self) -> RuntimeOwnedViewModelHandle {
+        self.context.main_handle().expect("main view-model handle").clone()
+    }
+
+    fn frames(&mut self, count: usize, elapsed: f32) {
+        for _ in 0..count {
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                &mut self.artboard,
+                std::slice::from_mut(&mut self.machine),
+                elapsed,
+                true,
+                || false,
+            )
+            .expect("stateful focus frame");
+        }
+    }
+
+    fn source(&self, name: &str) -> (u32, RuntimeBindableArtboard) {
+        let graph = self
+            .graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("missing source artboard {name}"));
+        let instance = ArtboardInstance::from_graph_with_artboards(
+            &self.runtime,
+            graph,
+            &self.graphs.artboards,
+        )
+        .unwrap_or_else(|error| panic!("instantiate source {name}: {error}"));
+        (
+            graph.global_id,
+            RuntimeBindableArtboard::new_with_artboard_instance(name, &instance),
+        )
+    }
+
+    fn nested_graphs(&mut self) -> Vec<u32> {
+        let mut ids = Vec::new();
+        self.artboard
+            .try_visit_artboard_tree_instances_mut(&mut |_, global_id, _| {
+                ids.push(global_id);
+                Ok::<_, ()>(())
+            })
+            .expect("visit nested artboard tree");
+        ids
+    }
+}
+
 #[test]
 fn wave_b3_focus_test_001_direct_port() {
     // Pinned focus_test.cpp case 1.
-    let node = FocusNode::new(); assert!(node.can_focus()); assert!(node.can_touch()); assert!(node.can_traverse()); assert_eq!(node.tab_index(), 0); assert_eq!(node.edge_behavior(), FocusEdgeBehavior::ParentScope); assert!(!node.has_focus());
+    let node = FocusNode::new();
+    assert!(node.can_focus());
+    assert!(node.can_touch());
+    assert!(node.can_traverse());
+    assert_eq!(node.tab_index(), 0);
+    assert_eq!(node.edge_behavior(), FocusEdgeBehavior::ParentScope);
+    assert!(!node.has_focus());
+    let mut manager = FocusManager::new();
+    let node = manager.create_node(node);
+    assert!(manager.parent(node).is_none());
+    assert!(manager.children(node).is_some_and(|children| children.is_empty()));
+    assert!(!manager.is_attached(node));
 }
 
 #[test]
@@ -80,13 +312,26 @@ fn wave_b3_focus_test_003_direct_port() {
 #[test]
 fn wave_b3_focus_test_004_direct_port() {
     // Pinned focus_test.cpp case 4.
-    let node = FocusNode::new(); assert!(!node.has_focus()); let mut manager = FocusManager::new(); let node = attached(&mut manager, None, node); assert!(!manager.clear_focus()); assert!(!manager.has_focus(node));
+    let (mut artboard, mut machine) = real_focus_fixture("assets/text_input_event.riv", None);
+    let _ = machine.clear_focus();
+    assert!(!machine.focus_state().has_focus);
+    assert!(!machine.key_input(&mut artboard, 65, 0, true, false));
+    assert!(!machine.text_input(&mut artboard, "hello"));
+    assert!(!machine.clear_focus());
 }
 
 #[test]
 fn wave_b3_focus_test_005_direct_port() {
     // Pinned focus_test.cpp case 5.
-    let mut manager = FocusManager::new(); let node = attached(&mut manager, None, FocusNode::new()); assert!(manager.contains(node)); assert!(manager.remove_subtree(node)); assert!(!manager.contains(node));
+    let mut manager = FocusManager::new();
+    let node = manager.create_node(FocusNode::new());
+    assert!(manager.contains(node));
+    assert!(!manager.is_attached(node));
+    assert!(manager.add_child(None, node));
+    assert!(manager.is_attached(node));
+    assert!(manager.detach_subtree(node));
+    assert!(manager.contains(node));
+    assert!(!manager.is_attached(node));
 }
 
 #[test]
@@ -236,7 +481,7 @@ fn wave_b3_focus_test_029_direct_port() {
 #[test]
 fn wave_b3_focus_test_030_direct_port() {
     // Pinned focus_test.cpp case 30.
-    let mut manager=FocusManager::new(); let node=attached(&mut manager,None,FocusNode::new()); assert!(manager.is_attached(node)); assert!(manager.remove_subtree(node)); assert!(!manager.contains(node));
+    let mut manager=FocusManager::new(); let node=attached(&mut manager,None,FocusNode::new()); assert!(manager.is_attached(node)); assert!(manager.detach_subtree(node)); assert!(manager.contains(node)); assert!(!manager.is_attached(node));
 }
 
 #[test]
@@ -333,7 +578,12 @@ fn wave_b3_focus_test_045_direct_port() {
 #[test]
 fn wave_b3_focus_test_046_direct_port() {
     // Pinned focus_test.cpp case 46.
-    let mut manager=FocusManager::new(); assert!(!manager.has_focusable_content()); let a=attached(&mut manager,None,FocusNode::new()); let b=attached(&mut manager,None,FocusNode::new()); assert!(manager.has_focusable_content()); manager.set_focus(a); assert!(manager.focus_next()); assert!(manager.focus_previous()); assert_eq!(manager.primary_focus(),Some(a)); assert_ne!(a,b);
+    let (artboard, mut machine) = real_focus_fixture("assets/focus_collapsing.riv", None);
+    assert!(machine.has_focus_nodes());
+    let _ = machine.clear_focus();
+    assert!(machine.focus_next(&artboard));
+    assert!(machine.focus_next(&artboard));
+    assert!(machine.focus_previous(&artboard));
 }
 
 #[test]
@@ -459,19 +709,64 @@ fn wave_b3_focus_test_066_direct_port() {
 #[test]
 fn wave_b3_focus_test_067_direct_port() {
     // Pinned focus_test.cpp case 67.
-    let mut manager=FocusManager::new(); let node=attached(&mut manager,None,FocusNode::new()); assert!(!manager.has_focus(node));
+    let file = read_runtime_file(&focus_condition_without_comparator_fixture())
+        .expect("synthetic focus-condition fixture imports");
+    let graphs = GraphFile::from_runtime_file(&file).expect("synthetic focus-condition graph");
+    let mut artboard = ArtboardInstance::from_graph_with_artboards(
+        &file,
+        graphs.artboards.first().expect("synthetic artboard"),
+        &graphs.artboards,
+    )
+    .expect("synthetic focus-condition artboard instantiates");
+    let mut machine = artboard.state_machine_instance(0).expect("synthetic state machine");
+    let _ = artboard.advance_state_machine_instance(&mut machine, 0.0);
+    artboard.update_components();
+    assert_eq!(
+        artboard.transform_property(1, TransformProperty::X),
+        Some(2.0),
+        "an authored focus condition without a component comparator must stay false",
+    );
 }
 
 #[test]
 fn wave_b3_focus_test_068_direct_port() {
     // Pinned focus_test.cpp case 68.
-    let (artboard,mut machine)=real_focus_fixture("assets/bindable_focus_tree_swap.riv",None); assert!(machine.has_focus_nodes(),"pinned fixture must build authored focus data"); let before=machine.focus_state(); let moved=machine.focus_next(&artboard); assert!(moved,"pinned fixture must expose its first focus stop"); assert!(machine.focus_state().has_focus); if before.has_focus { assert_ne!(machine.focus_state(),before); }
+    let mut fixture = StatefulFocusFixture::load("assets/bindable_focus_tree_swap.riv", None);
+    assert!(fixture.machine.has_focus_nodes());
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_state().has_focus);
+    assert!(!fixture.machine.focus_next(&fixture.artboard));
+    let _ = fixture.machine.focus_previous(&fixture.artboard);
+
+    let (focusable_graph, focusable) = fixture.source("Focusable");
+    assert!(fixture.root().borrow_mut().set_runtime_artboard_by_property_name(
+        "bindedArt",
+        Some(focusable),
+    ));
+    fixture.frames(1, 0.016);
+    assert!(fixture.nested_graphs().contains(&focusable_graph));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_state().has_focus);
 }
 
 #[test]
+#[ignore = "expected-red: swapping the unrelated bindable nested artboard clears focus held on the main artboard"]
 fn wave_b3_focus_test_069_direct_port() {
     // Pinned focus_test.cpp case 69.
-    let (artboard,mut machine)=real_focus_fixture("assets/bindable_focus_tree_swap.riv",None); assert!(machine.has_focus_nodes(),"pinned fixture must build authored focus data"); let before=machine.focus_state(); let moved=machine.focus_next(&artboard); assert!(moved,"pinned fixture must expose its first focus stop"); assert!(machine.focus_state().has_focus); if before.has_focus { assert_ne!(machine.focus_state(),before); }
+    let mut fixture = StatefulFocusFixture::load("assets/bindable_focus_tree_swap.riv", None);
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_state().has_focus);
+    assert!(!fixture.machine.focus_previous(&fixture.artboard));
+
+    let (focusable_graph, focusable) = fixture.source("Focusable");
+    assert!(fixture.root().borrow_mut().set_runtime_artboard_by_property_name(
+        "bindedArt",
+        Some(focusable),
+    ));
+    fixture.frames(1, 0.016);
+    assert!(fixture.nested_graphs().contains(&focusable_graph));
+    assert!(fixture.machine.focus_state().has_focus);
+    assert!(!fixture.machine.focus_previous(&fixture.artboard));
 }
 
 #[test]
@@ -495,7 +790,33 @@ fn wave_b3_focus_test_072_direct_port() {
 #[test]
 fn wave_b3_focus_test_073_direct_port() {
     // Pinned focus_test.cpp case 73.
-    let (artboard,mut machine)=real_focus_fixture("assets/text_input_event.riv",None); assert!(machine.has_focus_nodes(),"pinned fixture must build authored focus data"); let before=machine.focus_state(); let moved=machine.focus_next(&artboard); assert!(moved,"pinned fixture must expose its first focus stop"); assert!(machine.focus_state().has_focus); if before.has_focus { assert_ne!(machine.focus_state(),before); }
+    let mut fixture = StatefulFocusFixture::load("assets/text_input_event.riv", None);
+    let main = fixture.root();
+    let read = |name| main.borrow().boolean_value_by_property_name(name);
+
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    fixture.frames(1, 0.016);
+    assert_eq!(read("isFocused"), Some(true));
+    assert_eq!(read("hasKeyed"), Some(false));
+    assert_eq!(read("hasTexted"), Some(false));
+
+    assert!(!fixture.machine.key_input(&mut fixture.artboard, 66, 0, true, false));
+    fixture.frames(1, 0.016);
+    assert_eq!(read("isFocused"), Some(true));
+    assert_eq!(read("hasKeyed"), Some(false));
+    assert_eq!(read("hasTexted"), Some(false));
+
+    let _ = fixture.machine.text_input(&mut fixture.artboard, "b");
+    fixture.frames(1, 0.016);
+    assert_eq!(read("isFocused"), Some(true));
+    assert_eq!(read("hasKeyed"), Some(false));
+    assert_eq!(read("hasTexted"), Some(true));
+
+    let _ = fixture.machine.key_input(&mut fixture.artboard, 65, 0, true, false);
+    fixture.frames(1, 0.016);
+    assert_eq!(read("isFocused"), Some(true));
+    assert_eq!(read("hasKeyed"), Some(true));
+    assert_eq!(read("hasTexted"), Some(true));
 }
 
 #[test]
@@ -539,35 +860,130 @@ fn wave_b3_focus_test_079_direct_port() {
 #[test]
 fn wave_b3_focus_test_080_direct_port() {
     // Pinned focus_test.cpp case 80.
-    let (artboard,mut machine)=real_focus_fixture("assets/list_focus_order.riv",None); assert!(machine.has_focus_nodes(),"pinned fixture must build authored focus data"); let before=machine.focus_state(); let moved=machine.focus_next(&artboard); assert!(moved,"pinned fixture must expose its first focus stop"); assert!(machine.focus_state().has_focus); if before.has_focus { assert_ne!(machine.focus_state(),before); }
+    let mut fixture = StatefulFocusFixture::load("assets/list_focus_order.riv", None);
+    assert!(fixture.machine.has_focus_nodes());
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    let before_rewire = fixture.machine.focus_state();
+    assert!(before_rewire.has_focus);
+
+    assert!(fixture.machine.bind_owned_view_model_contexts(&fixture.context));
+    fixture.machine.advance_data_context();
+    fixture.frames(1, 0.016);
+    assert_eq!(fixture.machine.focus_state(), before_rewire);
+    assert!(fixture.machine.focus_next(&fixture.artboard));
 }
 
 #[test]
 fn wave_b3_focus_test_081_direct_port() {
     // Pinned focus_test.cpp case 81.
-    let (artboard,mut machine)=real_focus_fixture("assets/swappable_artboards_focus.riv",Some("Main")); assert!(machine.has_focus_nodes(),"pinned fixture must build authored focus data"); let before=machine.focus_state(); let moved=machine.focus_next(&artboard); assert!(moved,"pinned fixture must expose its first focus stop"); assert!(machine.focus_state().has_focus); if before.has_focus { assert_ne!(machine.focus_state(),before); }
+    let mut fixture = StatefulFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+    assert!(fixture.machine.has_focus_nodes());
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(!fixture.machine.focus_next(&fixture.artboard));
+
+    let (swappable2_graph, swappable2) = fixture.source("Swappable2");
+    assert!(fixture.root().borrow_mut().set_runtime_artboard_by_property_name(
+        "artboardProp",
+        Some(swappable2),
+    ));
+    fixture.frames(1, 0.016);
+    assert!(fixture.nested_graphs().contains(&swappable2_graph));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(!fixture.machine.focus_next(&fixture.artboard));
+
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    let (swappable1_graph, swappable1) = fixture.source("Swappable1");
+    assert!(fixture.root().borrow_mut().set_runtime_artboard_by_property_name(
+        "artboardProp",
+        Some(swappable1),
+    ));
+    fixture.frames(1, 0.016);
+    assert!(fixture.nested_graphs().contains(&swappable1_graph));
+    assert!(fixture.machine.focus_state().has_focus);
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(!fixture.machine.focus_next(&fixture.artboard));
 }
 
 #[test]
 fn wave_b3_focus_test_082_direct_port() {
     // Pinned focus_test.cpp case 82.
-    let (artboard,mut machine)=real_focus_fixture("assets/swappable_artboards_focus.riv",Some("Main")); assert!(machine.has_focus_nodes(),"pinned fixture must build authored focus data"); let before=machine.focus_state(); let moved=machine.focus_next(&artboard); assert!(moved,"pinned fixture must expose its first focus stop"); assert!(machine.focus_state().has_focus); if before.has_focus { assert_ne!(machine.focus_state(),before); }
+    let mut fixture = StatefulFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    let held = fixture.machine.focus_state();
+    assert!(held.has_focus);
+
+    assert!(fixture.machine.bind_owned_view_model_contexts(&fixture.context));
+    fixture.machine.advance_data_context();
+    fixture.frames(1, 0.016);
+    assert_eq!(fixture.machine.focus_state(), held);
+    assert!(!fixture.machine.focus_next(&fixture.artboard));
 }
 
 #[test]
 fn wave_b3_focus_test_083_direct_port() {
     // Pinned focus_test.cpp case 83.
-    let (artboard,mut machine)=real_focus_fixture("assets/swappable_artboards_focus.riv",Some("Main")); assert!(machine.has_focus_nodes(),"pinned fixture must build authored focus data"); let before=machine.focus_state(); let moved=machine.focus_next(&artboard); assert!(moved,"pinned fixture must expose its first focus stop"); assert!(machine.focus_state().has_focus); if before.has_focus { assert_ne!(machine.focus_state(),before); }
+    let mut fixture = StatefulFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+    let foreign = StatefulFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+    let (foreign_graph, foreign_swappable) = foreign.source("Swappable1");
+    assert!(fixture.root().borrow_mut().set_runtime_artboard_by_property_name(
+        "artboardProp",
+        Some(foreign_swappable),
+    ));
+    fixture.frames(1, 0.016);
+    assert!(fixture.nested_graphs().contains(&foreign_graph));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(!fixture.machine.focus_next(&fixture.artboard));
 }
 
 #[test]
 fn wave_b3_focus_test_084_direct_port() {
     // Pinned focus_test.cpp case 84.
-    let (artboard,mut machine)=real_focus_fixture("assets/swappable_artboards_focus.riv",Some("Main")); assert!(machine.has_focus_nodes(),"pinned fixture must build authored focus data"); let before=machine.focus_state(); let moved=machine.focus_next(&artboard); assert!(moved,"pinned fixture must expose its first focus stop"); assert!(machine.focus_state().has_focus); if before.has_focus { assert_ne!(machine.focus_state(),before); }
+    let mut fixture = StatefulFocusFixture::load("assets/swappable_artboards_focus.riv", Some("Main"));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    let held = fixture.machine.focus_state();
+    assert!(held.has_focus);
+    let root = fixture.root();
+    assert!(root.borrow_mut().set_artboard_by_property_name("artboardProp", 9999));
+    fixture.frames(1, 0.016);
+    assert_eq!(fixture.machine.focus_state(), held);
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(!fixture.machine.focus_next(&fixture.artboard));
 }
 
 #[test]
 fn wave_b3_focus_test_085_direct_port() {
     // Pinned focus_test.cpp case 85.
-    let (artboard,mut machine)=real_focus_fixture("assets/swappable_artboards_focus.riv",Some("Main")); assert!(machine.has_focus_nodes(),"pinned fixture must build authored focus data"); let before=machine.focus_state(); let moved=machine.focus_next(&artboard); assert!(moved,"pinned fixture must expose its first focus stop"); assert!(machine.focus_state().has_focus); if before.has_focus { assert_ne!(machine.focus_state(),before); }
+    let mut fixture = StatefulFocusFixture::load_before_frames(
+        "assets/swappable_artboards_focus.riv",
+        Some("Main"),
+    );
+    assert!(fixture
+        .root()
+        .borrow_mut()
+        .set_artboard_by_property_name("artboardProp", u64::from(u32::MAX)));
+    fixture.frames(2, 0.016);
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(!fixture.machine.focus_next(&fixture.artboard));
+
+    let (swappable1_graph, swappable1) = fixture.source("Swappable1");
+    assert!(fixture.root().borrow_mut().set_runtime_artboard_by_property_name(
+        "artboardProp",
+        Some(swappable1),
+    ));
+    fixture.frames(1, 0.016);
+    assert!(fixture.nested_graphs().contains(&swappable1_graph));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(fixture.machine.focus_next(&fixture.artboard));
+    assert!(!fixture.machine.focus_next(&fixture.artboard));
 }

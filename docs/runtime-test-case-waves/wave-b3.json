@@ -32,7 +32,7 @@
   "wave": "b3",
   "case_count": 85,
   "ratchet": {
-    "max_pending": 32
+    "max_pending": 0
   },
   "cases": [
     {
@@ -41,9 +41,34 @@
       "ordinal": 1,
       "line": 79,
       "name": "FocusNode default properties",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 284,
+          "symbol": "wave_b3_focus_test_001_direct_port",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/src/focus_data.rs",
+              "line": 1427,
+              "symbol": "upstream_focus_node_defaults_and_property_setters"
+            },
+            {
+              "path": "crates/nuxie-runtime/src/focus_data.rs",
+              "line": 1456,
+              "symbol": "upstream_focus_node_fresh_focusable_defaults_to_null"
+            }
+          ]
+        }
+      ],
+      "note": "The dedicated test and owner-level tests cover every fresh-node default; Rust manager attachment and stable identities replace nullable raw manager/focusable pointers.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Stable FocusNodeId and RuntimeFocusable identities preserve Rust ownership while executing the same focus topology and mutation semantics.",
+        "inapplicable_observable": "C++ raw FocusNode/Focusable/FocusManager pointer addresses; attachment, topology, retained identity, callbacks, and results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#2",
@@ -57,7 +82,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 69,
+          "line": 301,
           "symbol": "wave_b3_focus_test_002_direct_port"
         }
       ],
@@ -69,9 +94,39 @@
       "ordinal": 3,
       "line": 119,
       "name": "FocusNode with Focusable",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+          "line": 3697,
+          "symbol": "scripted_drawable_subtypes_register_keyboard_text_and_gamepad_paths",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/src/focus_data.rs",
+              "line": 1465,
+              "symbol": "upstream_focus_node_retains_and_replaces_focusable_identity"
+            },
+            {
+              "path": "crates/nuxie-runtime/src/focus_data.rs",
+              "line": 1490,
+              "symbol": "focusing_child_notifies_leaf_and_ancestors"
+            },
+            {
+              "path": "crates/nuxie-runtime/src/focus_data.rs",
+              "line": 1514,
+              "symbol": "clearing_focus_blurs_leaf_and_ancestors"
+            }
+          ]
+        }
+      ],
+      "note": "Owner-level tests execute keyboard, text, gamepad, focused, and blurred delegation and retain/replace the concrete RuntimeFocusable identity.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Stable FocusNodeId and RuntimeFocusable identities preserve Rust ownership while executing the same focus topology and mutation semantics.",
+        "inapplicable_observable": "C++ raw FocusNode/Focusable/FocusManager pointer addresses; attachment, topology, retained identity, callbacks, and results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#4",
@@ -79,9 +134,22 @@
       "ordinal": 4,
       "line": 143,
       "name": "FocusNode without Focusable doesn't crash",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 313,
+          "symbol": "wave_b3_focus_test_004_direct_port"
+        }
+      ],
+      "note": "The test runs key, text, focus, and blur/clear operations with no focused runtime owner and proves the safe Rust receiver returns false without crashing.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Stable FocusNodeId and RuntimeFocusable identities preserve Rust ownership while executing the same focus topology and mutation semantics.",
+        "inapplicable_observable": "C++ raw FocusNode/Focusable/FocusManager pointer addresses; attachment, topology, retained identity, callbacks, and results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#5",
@@ -89,9 +157,29 @@
       "ordinal": 5,
       "line": 154,
       "name": "FocusNode setFocusable/clearFocusable",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/focus_data.rs",
+          "line": 1465,
+          "symbol": "upstream_focus_node_retains_and_replaces_focusable_identity",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+              "line": 324,
+              "symbol": "wave_b3_focus_test_005_direct_port"
+            }
+          ]
+        }
+      ],
+      "note": "The owner-level test sets, replaces, and clears RuntimeFocusable identity; the dedicated test proves attachment is independent and retained after detach.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Stable FocusNodeId and RuntimeFocusable identities preserve Rust ownership while executing the same focus topology and mutation semantics.",
+        "inapplicable_observable": "C++ raw FocusNode/Focusable/FocusManager pointer addresses; attachment, topology, retained identity, callbacks, and results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#6",
@@ -105,7 +193,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 93,
+          "line": 338,
           "symbol": "wave_b3_focus_test_006_direct_port"
         }
       ],
@@ -123,7 +211,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 99,
+          "line": 344,
           "symbol": "wave_b3_focus_test_007_direct_port"
         }
       ],
@@ -146,7 +234,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 105,
+          "line": 350,
           "symbol": "wave_b3_focus_test_008_direct_port"
         }
       ],
@@ -169,7 +257,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 111,
+          "line": 356,
           "symbol": "wave_b3_focus_test_009_direct_port"
         }
       ],
@@ -181,9 +269,22 @@
       "ordinal": 10,
       "line": 243,
       "name": "FocusManager hierarchy",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 362,
+          "symbol": "wave_b3_focus_test_010_direct_port"
+        }
+      ],
+      "note": "The complete hierarchy is built in the retained arena and asserts root, parent, and child ownership; scope and manager membership are represented structurally.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Stable FocusNodeId and RuntimeFocusable identities preserve Rust ownership while executing the same focus topology and mutation semantics.",
+        "inapplicable_observable": "C++ raw FocusNode/Focusable/FocusManager pointer addresses; attachment, topology, retained identity, callbacks, and results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#11",
@@ -197,7 +298,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 123,
+          "line": 368,
           "symbol": "wave_b3_focus_test_011_direct_port"
         }
       ],
@@ -215,7 +316,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 129,
+          "line": 374,
           "symbol": "wave_b3_focus_test_012_direct_port"
         }
       ],
@@ -238,7 +339,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 135,
+          "line": 380,
           "symbol": "wave_b3_focus_test_013_direct_port"
         }
       ],
@@ -261,7 +362,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 141,
+          "line": 386,
           "symbol": "wave_b3_focus_test_014_direct_port"
         }
       ],
@@ -315,7 +416,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 159,
+          "line": 404,
           "symbol": "wave_b3_focus_test_017_direct_port"
         }
       ],
@@ -327,9 +428,39 @@
       "ordinal": 18,
       "line": 419,
       "name": "FocusManager input routing",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+          "line": 3697,
+          "symbol": "scripted_drawable_subtypes_register_keyboard_text_and_gamepad_paths",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+              "line": 313,
+              "symbol": "wave_b3_focus_test_004_direct_port"
+            },
+            {
+              "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+              "line": 4151,
+              "symbol": "focused_keyboard_dispatch_bubbles_leaf_to_parent_and_stops_when_handled"
+            },
+            {
+              "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+              "line": 4201,
+              "symbol": "text_input_parent_precedes_scripted_and_listener_keyboard_dispatch"
+            }
+          ]
+        }
+      ],
+      "note": "The runtime owner tests execute keyboard, text, and gamepad routing, handled results, bubbling order, and the no-focus false path.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Stable FocusNodeId and RuntimeFocusable identities preserve Rust ownership while executing the same focus topology and mutation semantics.",
+        "inapplicable_observable": "C++ raw FocusNode/Focusable/FocusManager pointer addresses; attachment, topology, retained identity, callbacks, and results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#19",
@@ -343,7 +474,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 171,
+          "line": 416,
           "symbol": "wave_b3_focus_test_019_direct_port"
         }
       ],
@@ -361,7 +492,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 177,
+          "line": 422,
           "symbol": "wave_b3_focus_test_020_direct_port"
         }
       ],
@@ -379,7 +510,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 183,
+          "line": 428,
           "symbol": "wave_b3_focus_test_021_direct_port"
         }
       ],
@@ -397,7 +528,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 189,
+          "line": 434,
           "symbol": "wave_b3_focus_test_022_direct_port"
         }
       ],
@@ -415,7 +546,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 195,
+          "line": 440,
           "symbol": "wave_b3_focus_test_023_direct_port"
         }
       ],
@@ -433,7 +564,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 201,
+          "line": 446,
           "symbol": "wave_b3_focus_test_024_direct_port"
         }
       ],
@@ -456,7 +587,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 207,
+          "line": 452,
           "symbol": "wave_b3_focus_test_025_direct_port"
         }
       ],
@@ -479,7 +610,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 213,
+          "line": 458,
           "symbol": "wave_b3_focus_test_026_direct_port"
         }
       ],
@@ -497,7 +628,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 219,
+          "line": 464,
           "symbol": "wave_b3_focus_test_027_direct_port"
         }
       ],
@@ -515,7 +646,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 225,
+          "line": 470,
           "symbol": "wave_b3_focus_test_028_direct_port"
         }
       ],
@@ -533,7 +664,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 231,
+          "line": 476,
           "symbol": "wave_b3_focus_test_029_direct_port"
         }
       ],
@@ -550,9 +681,22 @@
       "ordinal": 30,
       "line": 715,
       "name": "FocusManager removeChild clears manager reference",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 482,
+          "symbol": "wave_b3_focus_test_030_direct_port"
+        }
+      ],
+      "note": "The test detaches the live node, proves it remains retained, and proves it is no longer attached to the manager tree.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Stable FocusNodeId and RuntimeFocusable identities preserve Rust ownership while executing the same focus topology and mutation semantics.",
+        "inapplicable_observable": "C++ raw FocusNode/Focusable/FocusManager pointer addresses; attachment, topology, retained identity, callbacks, and results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#31",
@@ -566,7 +710,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 244,
+          "line": 489,
           "symbol": "wave_b3_focus_test_031_direct_port"
         }
       ],
@@ -585,7 +729,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 250,
+          "line": 495,
           "symbol": "wave_b3_focus_test_032_direct_port"
         }
       ],
@@ -608,7 +752,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 256,
+          "line": 501,
           "symbol": "wave_b3_focus_test_033_direct_port"
         }
       ],
@@ -631,7 +775,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 262,
+          "line": 507,
           "symbol": "wave_b3_focus_test_034_direct_port"
         }
       ],
@@ -649,7 +793,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 268,
+          "line": 513,
           "symbol": "wave_b3_focus_test_035_direct_port"
         }
       ],
@@ -667,7 +811,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 274,
+          "line": 519,
           "symbol": "wave_b3_focus_test_036_direct_port"
         }
       ],
@@ -685,7 +829,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 280,
+          "line": 525,
           "symbol": "wave_b3_focus_test_037_direct_port"
         }
       ],
@@ -703,7 +847,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 286,
+          "line": 531,
           "symbol": "wave_b3_focus_test_038_direct_port"
         }
       ],
@@ -739,7 +883,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 298,
+          "line": 543,
           "symbol": "wave_b3_focus_test_040_direct_port"
         }
       ],
@@ -757,7 +901,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 304,
+          "line": 549,
           "symbol": "wave_b3_focus_test_041_direct_port"
         }
       ],
@@ -775,7 +919,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 310,
+          "line": 555,
           "symbol": "wave_b3_focus_test_042_direct_port"
         }
       ],
@@ -841,9 +985,17 @@
       "ordinal": 46,
       "line": 1108,
       "name": "StateMachineInstance exposes hasFocusNodes, focusNext, focusPrevious from focusManager",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 579,
+          "symbol": "wave_b3_focus_test_046_direct_port"
+        }
+      ],
+      "note": "A real imported StateMachineInstance executes has_focus_nodes, focus_next, and focus_previous through the public focus-manager facade."
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#47",
@@ -885,9 +1037,29 @@
       "ordinal": 49,
       "line": 1157,
       "name": "StateMachineInstance::focusState reports no focus when nothing is focused",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+          "line": 8138,
+          "symbol": "fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+              "line": 602,
+              "symbol": "wave_b3_focus_test_049_direct_port"
+            }
+          ]
+        }
+      ],
+      "note": "The owner-level focus-state test covers plain focus, keyboard capability publication, clearing, restoring, switching, and missing-target clear semantics.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Owner-safe FocusState and selected-manager projections replace borrowed C++ Focusable and FocusManager pointers while preserving focus and keyboard-capability semantics.",
+        "inapplicable_observable": "Raw MockFocusable and FocusManager pointer identity; hasFocus, expectsKeyboardInput, manager selection, switches, and clear results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#50",
@@ -895,9 +1067,29 @@
       "ordinal": 50,
       "line": 1172,
       "name": "StateMachineInstance::focusState reports focused non-keyboard focusable",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+          "line": 8138,
+          "symbol": "fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+              "line": 608,
+              "symbol": "wave_b3_focus_test_050_direct_port"
+            }
+          ]
+        }
+      ],
+      "note": "The owner-level focus-state test covers plain focus, keyboard capability publication, clearing, restoring, switching, and missing-target clear semantics.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Owner-safe FocusState and selected-manager projections replace borrowed C++ Focusable and FocusManager pointers while preserving focus and keyboard-capability semantics.",
+        "inapplicable_observable": "Raw MockFocusable and FocusManager pointer identity; hasFocus, expectsKeyboardInput, manager selection, switches, and clear results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#51",
@@ -905,9 +1097,29 @@
       "ordinal": 51,
       "line": 1192,
       "name": "StateMachineInstance::focusState reports keyboard expectation when focused focusable accepts keys",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+          "line": 8138,
+          "symbol": "fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+              "line": 614,
+              "symbol": "wave_b3_focus_test_051_direct_port"
+            }
+          ]
+        }
+      ],
+      "note": "The owner-level focus-state test covers plain focus, keyboard capability publication, clearing, restoring, switching, and missing-target clear semantics.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Owner-safe FocusState and selected-manager projections replace borrowed C++ Focusable and FocusManager pointers while preserving focus and keyboard-capability semantics.",
+        "inapplicable_observable": "Raw MockFocusable and FocusManager pointer identity; hasFocus, expectsKeyboardInput, manager selection, switches, and clear results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#52",
@@ -915,9 +1127,29 @@
       "ordinal": 52,
       "line": 1212,
       "name": "StateMachineInstance::focusState clears when focus is cleared",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+          "line": 8138,
+          "symbol": "fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+              "line": 620,
+              "symbol": "wave_b3_focus_test_052_direct_port"
+            }
+          ]
+        }
+      ],
+      "note": "The owner-level focus-state test covers plain focus, keyboard capability publication, clearing, restoring, switching, and missing-target clear semantics.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Owner-safe FocusState and selected-manager projections replace borrowed C++ Focusable and FocusManager pointers while preserving focus and keyboard-capability semantics.",
+        "inapplicable_observable": "Raw MockFocusable and FocusManager pointer identity; hasFocus, expectsKeyboardInput, manager selection, switches, and clear results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#53",
@@ -925,9 +1157,29 @@
       "ordinal": 53,
       "line": 1235,
       "name": "StateMachineInstance::focusState tracks switches between focusables",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+          "line": 8138,
+          "symbol": "fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+              "line": 626,
+              "symbol": "wave_b3_focus_test_053_direct_port"
+            }
+          ]
+        }
+      ],
+      "note": "The owner-level focus-state test covers plain focus, keyboard capability publication, clearing, restoring, switching, and missing-target clear semantics.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Owner-safe FocusState and selected-manager projections replace borrowed C++ Focusable and FocusManager pointers while preserving focus and keyboard-capability semantics.",
+        "inapplicable_observable": "Raw MockFocusable and FocusManager pointer identity; hasFocus, expectsKeyboardInput, manager selection, switches, and clear results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#54",
@@ -935,9 +1187,29 @@
       "ordinal": 54,
       "line": 1273,
       "name": "StateMachineInstance::focusState uses external focus manager when set",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+          "line": 8191,
+          "symbol": "fl_c5_focus_semantic_manager_switch_is_identity_noop_and_restores_internal",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+              "line": 632,
+              "symbol": "wave_b3_focus_test_054_direct_port"
+            }
+          ]
+        }
+      ],
+      "note": "The owner-level manager-selection test installs an external retained manager, preserves shared identity, and restores the internal manager.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Owner-safe FocusState and selected-manager projections replace borrowed C++ Focusable and FocusManager pointers while preserving focus and keyboard-capability semantics.",
+        "inapplicable_observable": "Raw MockFocusable and FocusManager pointer identity; hasFocus, expectsKeyboardInput, manager selection, switches, and clear results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#55",
@@ -945,9 +1217,29 @@
       "ordinal": 55,
       "line": 1299,
       "name": "StateMachineInstance::clearFocus clears internal focus manager",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/scripted_listener_actions.rs",
+          "line": 8138,
+          "symbol": "fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors",
+          "supporting_rust_tests": [
+            {
+              "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+              "line": 638,
+              "symbol": "wave_b3_focus_test_055_direct_port"
+            }
+          ]
+        }
+      ],
+      "note": "The owner-level focus-state test covers plain focus, keyboard capability publication, clearing, restoring, switching, and missing-target clear semantics.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Owner-safe FocusState and selected-manager projections replace borrowed C++ Focusable and FocusManager pointers while preserving focus and keyboard-capability semantics.",
+        "inapplicable_observable": "Raw MockFocusable and FocusManager pointer identity; hasFocus, expectsKeyboardInput, manager selection, switches, and clear results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#56",
@@ -961,7 +1253,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 394,
+          "line": 644,
           "symbol": "wave_b3_focus_test_056_direct_port"
         }
       ],
@@ -979,7 +1271,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 400,
+          "line": 650,
           "symbol": "wave_b3_focus_test_057_direct_port"
         }
       ],
@@ -997,7 +1289,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 406,
+          "line": 656,
           "symbol": "wave_b3_focus_test_058_direct_port"
         }
       ],
@@ -1015,7 +1307,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 412,
+          "line": 662,
           "symbol": "wave_b3_focus_test_059_direct_port"
         }
       ],
@@ -1033,7 +1325,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 418,
+          "line": 668,
           "symbol": "wave_b3_focus_test_060_direct_port"
         }
       ],
@@ -1051,7 +1343,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 424,
+          "line": 674,
           "symbol": "wave_b3_focus_test_061_direct_port"
         }
       ],
@@ -1121,7 +1413,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 448,
+          "line": 698,
           "symbol": "wave_b3_focus_test_065_direct_port"
         }
       ],
@@ -1149,9 +1441,17 @@
       "ordinal": 67,
       "line": 1512,
       "name": "TransitionFocusCondition evaluate returns false when no target comparator is configured",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 710,
+          "symbol": "wave_b3_focus_test_067_direct_port"
+        }
+      ],
+      "note": "The test imports a complete synthetic state machine with an authored TransitionFocusCondition and no comparator, advances it, and proves the guarded transition remains blocked."
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#68",
@@ -1159,9 +1459,22 @@
       "ordinal": 68,
       "line": 1530,
       "name": "Swapping bindable artboard registers nested focus nodes for Tab",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 732,
+          "symbol": "wave_b3_focus_test_068_direct_port"
+        }
+      ],
+      "note": "The real bindable_focus_tree_swap fixture executes the initial single-stop traversal, swaps in Focusable, verifies the nested source occurrence, and proves a new next stop is registered.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust exposes source graph membership, traversal results, and FocusState instead of borrowed immediate-artboard, FocusNode, and FocusManager pointers.",
+        "inapplicable_observable": "Raw primaryFocus/primaryFocusImmediateArtboard/focusManager pointer identity; source occurrence membership, tab-stop position/count, focus preservation, and traversal results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#69",
@@ -1169,9 +1482,18 @@
       "ordinal": 69,
       "line": 1593,
       "name": "Swapping a bindable nested artboard preserves focus held elsewhere",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 754,
+          "symbol": "wave_b3_focus_test_069_direct_port"
+        }
+      ],
+      "note": "The complete real swap flow fails exactly when focus held on the main artboard should survive the unrelated nested-artboard replacement.",
+      "expected_red_reason": "expected-red: swapping the unrelated bindable nested artboard clears focus held on the main artboard"
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#70",
@@ -1179,9 +1501,18 @@
       "ordinal": 70,
       "line": 1639,
       "name": "FocusManager skips collapsed nodes and fully transparent nodes",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_b3.rs",
+          "line": 39,
+          "symbol": "wave_b3_focus_collapsing"
+        }
+      ],
+      "note": "The complete pinned action stream executes and the exact SRIV comparison records the current post-focus render divergence.",
+      "expected_red_reason": "expected-red: frame 3 op 192 color paint_id is 11 instead of pinned 6"
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#71",
@@ -1189,9 +1520,18 @@
       "ordinal": 71,
       "line": 1758,
       "name": "Focused elements receive keyboard inputs",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_b3.rs",
+          "line": 43,
+          "symbol": "wave_b3_keyboard_listener"
+        }
+      ],
+      "note": "The complete pinned focused-keyboard action stream executes and fails at the first exact SRIV mismatch.",
+      "expected_red_reason": "expected-red: frame 0 op 85 expects color but Rust emits save"
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#72",
@@ -1199,9 +1539,18 @@
       "ordinal": 72,
       "line": 1838,
       "name": "Keyboard inputs with different key combinations",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_b3.rs",
+          "line": 47,
+          "symbol": "wave_b3_keyboard_listener_keyboard_input"
+        }
+      ],
+      "note": "The complete pinned key-combination stream executes and fails at the first exact SRIV mismatch.",
+      "expected_red_reason": "expected-red: frame 1 op 214 expects color but Rust emits save"
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#73",
@@ -1209,9 +1558,17 @@
       "ordinal": 73,
       "line": 1954,
       "name": "Text input events are handled on focused nodes",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 791,
+          "symbol": "wave_b3_focus_test_073_direct_port"
+        }
+      ],
+      "note": "The real text_input_event fixture executes focus, rejected B key, accepted text B, accepted A key, advances each frame, and asserts all three view-model booleans after every action."
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#74",
@@ -1219,9 +1576,17 @@
       "ordinal": 74,
       "line": 2001,
       "name": "Focus traversal listener actions",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_b3.rs",
+          "line": 50,
+          "symbol": "wave_b3_focus_traversal"
+        }
+      ],
+      "note": "The exact Silver replay executes the complete pinned focus-traversal listener-action stream and matches every SRIV operation."
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#75",
@@ -1229,9 +1594,17 @@
       "ordinal": 75,
       "line": 2084,
       "name": "Focus traversal clears focus when it reaches edge of root scope",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_b3.rs",
+          "line": 53,
+          "symbol": "wave_b3_focusable_element"
+        }
+      ],
+      "note": "The exact Silver replay executes root-edge focus clearing and matches every pinned SRIV operation."
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#76",
@@ -1245,7 +1618,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 515,
+          "line": 836,
           "symbol": "wave_b3_focus_test_076_direct_port"
         }
       ],
@@ -1264,7 +1637,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
-          "line": 522,
+          "line": 843,
           "symbol": "wave_b3_focus_test_077_direct_port"
         }
       ],
@@ -1277,9 +1650,18 @@
       "ordinal": 78,
       "line": 2205,
       "name": "Focus is correctly built and updated for lists",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_b3.rs",
+          "line": 57,
+          "symbol": "wave_b3_list_focus_order"
+        }
+      ],
+      "note": "The exact list construction/update action stream executes and fails at the first frozen path-coordinate mismatch.",
+      "expected_red_reason": "expected-red: frame 0 op 78 addRawPath y is 137.20053 instead of pinned 137.20052"
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#79",
@@ -1287,9 +1669,17 @@
       "ordinal": 79,
       "line": 2286,
       "name": "Focus based transitions work",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_b3.rs",
+          "line": 60,
+          "symbol": "wave_b3_focus_test"
+        }
+      ],
+      "note": "The exact Silver replay executes the focus-transition fixture pointer actions and matches every pinned SRIV operation."
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#80",
@@ -1297,9 +1687,22 @@
       "ordinal": 80,
       "line": 2319,
       "name": "List item focus tree stays under its row when the item's state machine is (re)wired during the focus sync",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 861,
+          "symbol": "wave_b3_focus_test_080_direct_port"
+        }
+      ],
+      "note": "The real list_focus_order fixture focuses a row, rebinds the same retained context through the public owner, advances the focus sync, proves focus preservation, and traverses the next row.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust exposes source graph membership, traversal results, and FocusState instead of borrowed immediate-artboard, FocusNode, and FocusManager pointers.",
+        "inapplicable_observable": "Raw primaryFocus/primaryFocusImmediateArtboard/focusManager pointer identity; source occurrence membership, tab-stop position/count, focus preservation, and traversal results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#81",
@@ -1307,9 +1710,22 @@
       "ordinal": 81,
       "line": 2404,
       "name": "Swappable artboard slot keeps its place in tab order",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 877,
+          "symbol": "wave_b3_focus_test_081_direct_port"
+        }
+      ],
+      "note": "The real fixture proves three initial stops, two stops with Swappable2, preserved external focus on swap-back, and three restored stops with Swappable1.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust exposes source graph membership, traversal results, and FocusState instead of borrowed immediate-artboard, FocusNode, and FocusManager pointers.",
+        "inapplicable_observable": "Raw primaryFocus/primaryFocusImmediateArtboard/focusManager pointer identity; source occurrence membership, tab-stop position/count, focus preservation, and traversal results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#82",
@@ -1317,9 +1733,22 @@
       "ordinal": 82,
       "line": 2502,
       "name": "Repeat focus-tree build keeps focus inside an untouched nested artboard",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 912,
+          "symbol": "wave_b3_focus_test_082_direct_port"
+        }
+      ],
+      "note": "The real fixture focuses the third nested stop, repeats the public retained-context tree wiring, and proves focus survives and remains at the terminal stop.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust exposes source graph membership, traversal results, and FocusState instead of borrowed immediate-artboard, FocusNode, and FocusManager pointers.",
+        "inapplicable_observable": "Raw primaryFocus/primaryFocusImmediateArtboard/focusManager pointer identity; source occurrence membership, tab-stop position/count, focus preservation, and traversal results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#83",
@@ -1327,9 +1756,22 @@
       "ordinal": 83,
       "line": 2550,
       "name": "Cross-file swaps keep slot order and share the focus manager",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 929,
+          "symbol": "wave_b3_focus_test_083_direct_port"
+        }
+      ],
+      "note": "Two independently imported files provide the foreign Swappable1 source; the test verifies its live nested graph and the complete three-stop traversal.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust exposes source graph membership, traversal results, and FocusState instead of borrowed immediate-artboard, FocusNode, and FocusManager pointers.",
+        "inapplicable_observable": "Raw primaryFocus/primaryFocusImmediateArtboard/focusManager pointer identity; source occurrence membership, tab-stop position/count, focus preservation, and traversal results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#84",
@@ -1337,9 +1779,22 @@
       "ordinal": 84,
       "line": 2629,
       "name": "Unresolvable artboard swap leaves focus and tab order untouched",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 947,
+          "symbol": "wave_b3_focus_test_084_direct_port"
+        }
+      ],
+      "note": "The real fixture focuses Main, authors unresolved artboard id 9999, advances, proves focus preservation, and proves the outgoing three-stop order remains.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust exposes source graph membership, traversal results, and FocusState instead of borrowed immediate-artboard, FocusNode, and FocusManager pointers.",
+        "inapplicable_observable": "Raw primaryFocus/primaryFocusImmediateArtboard/focusManager pointer identity; source occurrence membership, tab-stop position/count, focus preservation, and traversal results remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/focus_test.cpp#85",
@@ -1347,9 +1802,22 @@
       "ordinal": 85,
       "line": 2685,
       "name": "Initially-empty bindable slot keeps its authored tab position on first swap",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_focus_wave_b3.rs",
+          "line": 963,
+          "symbol": "wave_b3_focus_test_085_direct_port"
+        }
+      ],
+      "note": "The slot is cleared before the first frame, producing two stops; first insertion of Swappable1 then restores the source occurrence and three-stop order.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust exposes source graph membership, traversal results, and FocusState instead of borrowed immediate-artboard, FocusNode, and FocusManager pointers.",
+        "inapplicable_observable": "Raw primaryFocus/primaryFocusImmediateArtboard/focusManager pointer identity; source occurrence membership, tab-stop position/count, focus preservation, and traversal results remain asserted."
+      }
     }
   ]
 }

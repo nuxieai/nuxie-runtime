@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -41,6 +42,34 @@ class SourceSymbolExtractionTest(unittest.TestCase):
                 "Thing::operator==",
                 "Thing::operatorbool",
                 "rive_open",
+            ],
+        )
+
+    def test_extracts_direct_extern_c_function_definition(self) -> None:
+        source = r'''
+        extern "C" int rive_open(Context* context)
+        {
+            return context == nullptr ? 0 : 1;
+        }
+        '''
+        self.assertEqual(self.symbols(source), ["rive_open"])
+
+    def test_extracts_specialized_names_and_uncommon_operators(self) -> None:
+        source = r'''
+        template <> int Traits::value<std::vector<int>>() { return 1; }
+        void* Thing::operator new(size_t size) { return allocate(size); }
+        void Thing::operator delete(void* value) { release(value); }
+        long double operator "" _deg(long double value) { return value; }
+        auto Thing::operator<=>(const Thing&) const { return 0; }
+        '''
+        self.assertEqual(
+            self.symbols(source),
+            [
+                "Traits::value<std::vector<int>>",
+                "Thing::operatornew",
+                "Thing::operatordelete",
+                'operator""_deg',
+                "Thing::operator<=>",
             ],
         )
 
@@ -133,6 +162,35 @@ class SourceSymbolExtractionTest(unittest.TestCase):
             ["Child::Child"],
         )
 
+    def test_array_subscripts_in_constructor_initializers_are_not_lambdas(self) -> None:
+        source = r'''
+        struct Eval {
+            Eval(const Point points[2]) : Eval(points[0], points[1]) {}
+            Eval(Point first, Point second) : m_first{first}, m_second{second} {}
+            Point operator()(float t) const { return m_first * t + m_second; }
+            Point m_first, m_second;
+        };
+        '''
+        definitions = CHECK.extract_definitions(
+            source,
+            include_inline_class=True,
+            include_lexical_fallbacks=True,
+        )
+        self.assertEqual(
+            [definition.symbol for definition in definitions if definition.kind == "function"],
+            ["Eval::Eval", "Eval::Eval", "Eval::operator()"],
+        )
+        self.assertEqual(
+            len(
+                [
+                    definition
+                    for definition in definitions
+                    if definition.kind == "lexical-brace-authority"
+                ]
+            ),
+            2,
+        )
+
     def test_probable_member_initializer_function_names_fail_the_corpus_gate(self) -> None:
         owners = [
             {
@@ -211,6 +269,66 @@ class SourceSymbolExtractionTest(unittest.TestCase):
         self.assertEqual(symbols[0], "Outer::Inner::run")
         self.assertRegex(symbols[1], r"^Outer::<anonymous-class@[0-9]+>::call$")
 
+    def test_source_local_class_inline_methods_are_extractable(self) -> None:
+        source = r'''
+        class LocalWorker {
+        public:
+            LocalWorker(int value) : m_value(value) {}
+            int run() { return m_value; }
+        private:
+            int m_value;
+        };
+        '''
+        self.assertEqual(
+            [
+                definition.symbol
+                for definition in CHECK.extract_definitions(
+                    source, include_inline_class=True
+                )
+            ],
+            ["LocalWorker::LocalWorker", "LocalWorker::run"],
+        )
+
+    def test_qualified_source_local_class_keeps_complete_owner_name(self) -> None:
+        source = r'''
+        class Server::Loader : public Base {
+        public:
+            Loader(Server* server, Source source) : m_server(server), m_source(source) {}
+            bool load() { return m_source.ready(); }
+        };
+        '''
+        self.assertEqual(
+            [
+                definition.symbol
+                for definition in CHECK.extract_definitions(
+                    source, include_inline_class=True
+                )
+            ],
+            ["Server::Loader::Loader", "Server::Loader::load"],
+        )
+
+    def test_source_statements_include_data_and_defaulted_definitions(self) -> None:
+        source = r'''
+        using Alias = int;
+        class Forward;
+        int declared(int value);
+        extern int external_value;
+        int Counter::value = 0;
+        std::mutex Counter::mutex;
+        const Entry entries[] = {{"open", open_callback}};
+        Worker::~Worker() = default;
+        '''
+        definitions = CHECK.extract_source_statements(source)
+        self.assertEqual(
+            [definition.signature for definition in definitions],
+            [
+                "source-statement int Counter :: value = 0",
+                "source-statement std :: mutex Counter :: mutex",
+                'source-statement const Entry entries [ ] = { { "open" , open_callback } }',
+                "source-statement Worker :: ~ Worker ( ) = default",
+            ],
+        )
+
 
 class MacroAuthorityExtractionTest(unittest.TestCase):
     def test_all_defines_and_body_macro_invocations_are_explicit(self) -> None:
@@ -263,6 +381,24 @@ class MacroAuthorityExtractionTest(unittest.TestCase):
         self.assertEqual(definitions[0].line, 5)
         self.assertEqual(definitions[0].signature, "inline int ordinary ( )")
 
+    def test_source_local_macros_and_unclassified_braces_are_explicit(self) -> None:
+        source = r'''
+        #define LOCAL_LIMIT 16
+        static const Callback callbacks[] = {
+            {"open", open_callback},
+            {"close", close_callback},
+        };
+        int ordinary() { return LOCAL_LIMIT; }
+        '''
+        definitions = CHECK.extract_definitions(
+            source, include_lexical_fallbacks=True
+        )
+        definitions.extend(CHECK.extract_macro_definitions(source))
+        self.assertEqual(
+            sorted(definition.kind for definition in definitions),
+            ["function", "lexical-brace-authority", "macro-definition"],
+        )
+
 
 class GeneratedAuthorityTest(unittest.TestCase):
     def test_authority_set_freezes_paths_sizes_and_bytes(self) -> None:
@@ -303,12 +439,45 @@ class GeneratedAuthorityTest(unittest.TestCase):
                 errors = CHECK.verify_generated_schema_replay(repo_root, upstream_root)
             self.assertTrue(any("differs" in error for error in errors))
 
+    def test_tracked_upstream_authority_changes_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / "src").mkdir()
+            source = root / "src/example.cpp"
+            source.write_text("int example() { return 1; }\n")
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "src/example.cpp"], check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "-c",
+                    "user.name=Source Census Test",
+                    "-c",
+                    "user.email=source-census@example.invalid",
+                    "commit",
+                    "-qm",
+                    "fixture",
+                ],
+                check=True,
+            )
+            CHECK._require_clean_tracked_authority(root)
+            source.write_text("int example() { return 2; }\n")
+            with self.assertRaisesRegex(ValueError, "tracked changes"):
+                CHECK._require_clean_tracked_authority(root)
+
 
 class DispositionCheckTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.path = pathlib.Path(self.temp.name) / "dispositions.json"
+        self.repo_root = pathlib.Path(self.temp.name)
+        self.path = self.repo_root / "dispositions.json"
+        receipts = self.repo_root / "docs/runtime-source-certification"
+        receipts.mkdir(parents=True)
+        for name in ("a.md", "one.md", "two.md", "wrapper.md"):
+            (receipts / name).write_text(f"# {name}\n")
         self.denominator = {
             "upstream_ref": "abc",
             "owners": [
@@ -377,7 +546,44 @@ class DispositionCheckTest(unittest.TestCase):
                 },
             ]
         )
-        self.assertEqual(CHECK.check_dispositions(self.denominator, self.path), [])
+        self.assertEqual(
+            CHECK.check_dispositions(
+                self.denominator, self.path, repo_root=self.repo_root
+            ),
+            [],
+        )
+
+    def test_receipts_must_be_existing_certification_documents(self) -> None:
+        rows = [
+            {
+                "id": "src/a.cpp::one:1",
+                "disposition": "exact",
+                "rust_owners": ["crate::one"],
+                "receipt": "docs/runtime-source-certification/missing.md",
+                "independent_review": {
+                    "status": "accepted",
+                    "reviewer": "adversarial lane",
+                },
+                "evidence": ["one_matches_cpp"],
+            },
+            {
+                "id": "src/a.cpp::two:1",
+                "disposition": "exact",
+                "rust_owners": ["crate::two"],
+                "receipt": "../outside.md",
+                "independent_review": {
+                    "status": "accepted",
+                    "reviewer": "adversarial lane",
+                },
+                "evidence": ["two_matches_cpp"],
+            },
+        ]
+        self.write(rows)
+        errors = CHECK.check_dispositions(
+            self.denominator, self.path, repo_root=self.repo_root
+        )
+        self.assertTrue(any("missing receipt file" in error for error in errors))
+        self.assertTrue(any("outside the repository" in error for error in errors))
 
     def test_missing_unknown_duplicate_and_unjustified_rows_fail(self) -> None:
         self.write(
@@ -390,7 +596,9 @@ class DispositionCheckTest(unittest.TestCase):
                 {"id": "unknown", "disposition": "exact"},
             ]
         )
-        errors = CHECK.check_dispositions(self.denominator, self.path)
+        errors = CHECK.check_dispositions(
+            self.denominator, self.path, repo_root=self.repo_root
+        )
         self.assertTrue(any("duplicate" in error for error in errors))
         self.assertTrue(any("named adaptation" in error for error in errors))
         self.assertTrue(any("lack dispositions" in error for error in errors))
@@ -403,7 +611,9 @@ class DispositionCheckTest(unittest.TestCase):
                 {"id": "src/a.cpp::two:1", "disposition": "missing"},
             ]
         )
-        errors = CHECK.check_dispositions(self.denominator, self.path)
+        errors = CHECK.check_dispositions(
+            self.denominator, self.path, repo_root=self.repo_root
+        )
         self.assertTrue(any("governing decision" in error for error in errors))
         self.assertTrue(any("lacks tracking" in error for error in errors))
 
@@ -416,7 +626,9 @@ class DispositionCheckTest(unittest.TestCase):
                 {"upstream": "unknown.hpp"},
             ],
         )
-        errors = CHECK.check_dispositions(self.denominator, self.path)
+        errors = CHECK.check_dispositions(
+            self.denominator, self.path, repo_root=self.repo_root
+        )
         self.assertTrue(any("duplicate owner" in error for error in errors))
         self.assertTrue(any("owner lacks a receipt" in error for error in errors))
         self.assertTrue(any("accepted independent review" in error for error in errors))
@@ -442,7 +654,9 @@ class DispositionCheckTest(unittest.TestCase):
                 }
             ],
         )
-        errors = CHECK.check_dispositions(denominator, self.path)
+        errors = CHECK.check_dispositions(
+            denominator, self.path, repo_root=self.repo_root
+        )
         self.assertTrue(any("no-executable-units decision" in error for error in errors))
 
 

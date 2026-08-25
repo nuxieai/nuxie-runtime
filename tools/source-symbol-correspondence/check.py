@@ -413,11 +413,34 @@ def _paren_pairs(header: list[Token]) -> tuple[dict[int, int], int]:
 
 
 def _qualified_regular_name(header: list[Token], before_open: int) -> tuple[str, int] | None:
-    if before_open < 0 or header[before_open].kind != "identifier":
+    if before_open < 0:
         return None
-    if header[before_open].value in CONTROL_NAMES:
+    name_end = before_open
+    if header[before_open].value in {">", ">>"}:
+        depth = 2 if header[before_open].value == ">>" else 1
+        template_start = before_open - 1
+        while template_start >= 0 and depth:
+            if header[template_start].value == ">":
+                depth += 1
+            elif header[template_start].value == ">>":
+                depth += 2
+            elif header[template_start].value == "<":
+                depth -= 1
+            template_start -= 1
+        template_start += 1
+        if (
+            depth != 0
+            or template_start == 0
+            or header[template_start - 1].kind != "identifier"
+        ):
+            return None
+        start = template_start - 1
+    elif header[before_open].kind == "identifier":
+        start = before_open
+    else:
         return None
-    start = before_open
+    if header[start].value in CONTROL_NAMES:
+        return None
     if start > 0 and header[start - 1].value == "~":
         start -= 1
     while start >= 2 and header[start - 1].value == "::":
@@ -438,7 +461,7 @@ def _qualified_regular_name(header: list[Token], before_open: int) -> tuple[str,
         if header[qualifier_start].kind != "identifier":
             break
         start = qualifier_start
-    return "".join(token.value for token in header[start : before_open + 1]), start
+    return "".join(token.value for token in header[start : name_end + 1]), start
 
 
 def _operator_name(header: list[Token], before_open: int) -> tuple[str, int] | None:
@@ -551,7 +574,11 @@ def _function_header(
             continue
         pieces = symbol.replace("~", "").split("::")
         qualified_constructor = len(pieces) >= 2 and pieces[-1] == pieces[-2]
-        inline_class = class_scope[-1].split("<", 1)[0] if class_scope else None
+        inline_class = (
+            class_scope[-1].rsplit("::", 1)[-1].split("<", 1)[0]
+            if class_scope
+            else None
+        )
         inline_constructor = len(pieces) == 1 and pieces[-1] == inline_class
         if qualified_constructor or inline_constructor:
             after_colon = tail[colon_index + 1 :]
@@ -604,7 +631,9 @@ def _scope_kind(header: list[Token]) -> str | None:
     if keyword is None:
         return None
     value = header[keyword].value
-    if value == "namespace" or value == "extern" or (
+    if value == "namespace" or (
+        value == "extern" and not any(token.value == "(" for token in header)
+    ) or (
         value == "inline"
         and keyword + 1 < len(header)
         and header[keyword + 1].value == "namespace"
@@ -669,6 +698,23 @@ def _class_scope_name(header: list[Token]) -> str | None:
                     end += 1
                     break
             end += 1
+    while (
+        end + 1 < len(header)
+        and header[end].value == "::"
+        and header[end + 1].kind == "identifier"
+    ):
+        end += 2
+        if end < len(header) and header[end].value == "<":
+            depth = 0
+            while end < len(header):
+                if header[end].value == "<":
+                    depth += 1
+                elif header[end].value == ">":
+                    depth -= 1
+                    if depth == 0:
+                        end += 1
+                        break
+                end += 1
     return "".join(token.value for token in header[start:end])
 
 
@@ -681,6 +727,16 @@ def _contains_lambda_capture_after(header: list[Token], index: int) -> bool:
         # `[[attribute]]` is not a lambda capture.
         if cursor + 1 < len(header) and header[cursor + 1].value == "[":
             cursor += 2
+            continue
+        # A capture list begins an expression. Array subscripts in constructor
+        # initializers (`member(values[0])`) also occur after the declarator,
+        # but cannot begin an expression because the preceding token is the
+        # indexed value. Treating every square-bracket pair as a capture list
+        # collapsed the constructor and following inline methods into one
+        # lexical fallback row.
+        previous = header[cursor - 1].value if cursor else None
+        if previous not in {None, "=", "(", "{", ",", ":", ";", "return"}:
+            cursor += 1
             continue
         depth = 1
         cursor += 1
@@ -833,6 +889,87 @@ def extract_definitions(
     return definitions
 
 
+def extract_source_statements(source: str) -> list[Definition]:
+    """Freeze namespace-scope source definitions which end in semicolons.
+
+    Function bodies and inline source-local class methods are handled by
+    ``extract_definitions``. This companion census retains variable/static-data
+    definitions, aggregate tables, external body-macro invocations, and
+    explicitly defaulted/deleted out-of-line functions. Forward declarations
+    and non-authoritative aliases are intentionally excluded.
+    """
+    tokens = tokenize(source)
+    braces = _brace_pairs(tokens)
+    definitions: list[Definition] = []
+
+    def walk(start: int, end: int) -> None:
+        statement_start = start
+        cursor = start
+        while cursor < end:
+            token = tokens[cursor]
+            if token.value == ";":
+                statement = tokens[statement_start:cursor]
+                if statement:
+                    first = statement[0].value
+                    function_declaration = _function_header(statement)
+                    has_brace = any(item.value == "{" for item in statement)
+                    has_assignment = any(item.value == "=" for item in statement)
+                    skip = first in {
+                        "using",
+                        "typedef",
+                        "class",
+                        "struct",
+                        "union",
+                        "enum",
+                        "static_assert",
+                    }
+                    skip = skip or (
+                        function_declaration is not None
+                        and not has_brace
+                        and not has_assignment
+                    )
+                    skip = skip or (
+                        first == "extern" and not has_assignment and not has_brace
+                    )
+                    if not skip:
+                        definitions.append(
+                            Definition(
+                                symbol=f"<source-statement@{statement[0].line}>",
+                                signature="source-statement "
+                                + _canonical_signature(statement),
+                                line=statement[0].line,
+                                fingerprint=_sha256_bytes(
+                                    source[statement[0].start : token.end].encode("utf-8")
+                                ),
+                                kind="source-statement-authority",
+                            )
+                        )
+                statement_start = cursor + 1
+                cursor += 1
+                continue
+            if token.value != "{":
+                cursor += 1
+                continue
+            close = braces[cursor]
+            header = tokens[statement_start:cursor]
+            scope_kind = _scope_kind(header)
+            if scope_kind == "namespace":
+                walk(cursor + 1, close)
+                statement_start = close + 1
+                cursor = close + 1
+                continue
+            if scope_kind == "class" or _function_header(header) is not None:
+                statement_start = close + 1
+                cursor = close + 1
+                continue
+            # Preserve aggregate/lambda/macro braces until the terminating
+            # semicolon so the complete authored statement becomes one row.
+            cursor = close + 1
+
+    walk(0, len(tokens))
+    return definitions
+
+
 def _git_head(upstream_root: pathlib.Path) -> str:
     result = subprocess.run(
         ["git", "-C", str(upstream_root), "rev-parse", "HEAD"],
@@ -949,7 +1086,11 @@ def build_denominator(
 
     cpp_owners: list[dict[str, object]] = []
     for relative in actual_sources:
-        definitions = extract_definitions((upstream_root / relative).read_text())
+        source = (upstream_root / relative).read_text()
+        definitions = extract_definitions(source, include_inline_class=True)
+        definitions.extend(extract_source_statements(source))
+        definitions.extend(extract_macro_definitions(source))
+        definitions.sort(key=lambda item: (item.line, item.kind, item.signature))
         cpp_owners.append(_owner_row(upstream_root, relative, definitions, "cpp-source"))
 
     objective_cpp_sources = sorted(
@@ -957,15 +1098,16 @@ def build_denominator(
         for path in (upstream_root / "src").rglob("*.mm")
         if "/generated/" not in f"/{path.relative_to(upstream_root).as_posix()}"
     )
-    objective_cpp_owners = [
-        _owner_row(
-            upstream_root,
-            relative,
-            extract_definitions((upstream_root / relative).read_text()),
-            "objective-cpp-source",
+    objective_cpp_owners: list[dict[str, object]] = []
+    for relative in objective_cpp_sources:
+        source = (upstream_root / relative).read_text()
+        definitions = extract_definitions(source, include_inline_class=True)
+        definitions.extend(extract_source_statements(source))
+        definitions.extend(extract_macro_definitions(source))
+        definitions.sort(key=lambda item: (item.line, item.kind, item.signature))
+        objective_cpp_owners.append(
+            _owner_row(upstream_root, relative, definitions, "objective-cpp-source")
         )
-        for relative in objective_cpp_sources
-    ]
 
     handwritten_headers = sorted(
         path.relative_to(upstream_root).as_posix()
@@ -1023,8 +1165,9 @@ def build_denominator(
         "schema": DENOMINATOR_SCHEMA,
         "generator": "tools/source-symbol-correspondence/check.py",
         "definition_scope": (
-            "out-of-line C++ definitions, handwritten inline header bodies, all "
-            "handwritten header macro definitions, and invocations of body-generating macros"
+            "out-of-line and source-local inline C++ bodies, namespace-scope source "
+            "definitions, handwritten inline header bodies, all handwritten macro "
+            "definitions, and invocations of body-generating macros"
         ),
         "parser_policy": {
             "conditional_compilation": "all authored branches are counted without preprocessing",
@@ -1038,8 +1181,10 @@ def build_denominator(
                 "authority byte/codegen gate"
             ),
             "lexical_fallbacks": (
-                "every handwritten-header brace region not classified as namespace, class, or "
-                "function is retained as a lexical-brace-authority row"
+                "every handwritten-header brace region not classified as namespace, class, "
+                "or function is retained as a lexical-brace-authority row; source aggregate, "
+                "initializer, and external body-macro statements are retained as complete "
+                "source-statement-authority rows"
             ),
             "limits": [
                 (
@@ -1162,8 +1307,25 @@ def verify_generated_schema_replay(
     return []
 
 
+def _receipt_path_error(
+    receipt: object, repo_root: pathlib.Path | None
+) -> str | None:
+    if not isinstance(receipt, str) or not receipt.strip():
+        return "lacks a receipt path"
+    path = pathlib.PurePosixPath(receipt)
+    if path.is_absolute() or ".." in path.parts:
+        return "has a receipt path outside the repository"
+    if path.parts[:2] != ("docs", "runtime-source-certification"):
+        return "has a receipt path outside docs/runtime-source-certification"
+    if repo_root is not None and not (repo_root / path).is_file():
+        return "references a missing receipt file"
+    return None
+
+
 def check_dispositions(
-    denominator: dict[str, object], dispositions_path: pathlib.Path
+    denominator: dict[str, object],
+    dispositions_path: pathlib.Path,
+    repo_root: pathlib.Path | None = None,
 ) -> list[str]:
     errors: list[str] = []
     try:
@@ -1184,8 +1346,9 @@ def check_dispositions(
         if owner_path in seen_owners:
             errors.append(f"duplicate owner receipt: {owner_path}")
         seen_owners.add(owner_path)
-        if not isinstance(row.get("receipt"), str) or not row["receipt"].strip():
-            errors.append(f"owner lacks a receipt path: {owner_path}")
+        receipt_error = _receipt_path_error(row.get("receipt"), repo_root)
+        if receipt_error is not None:
+            errors.append(f"owner {receipt_error}: {owner_path}")
         review = row.get("independent_review")
         if (
             not isinstance(review, dict)
@@ -1233,8 +1396,9 @@ def check_dispositions(
                 isinstance(owner, str) and owner.strip() for owner in rust_owners
             ):
                 errors.append(f"{disposition} symbol lacks concrete Rust owners: {symbol_id}")
-            if not isinstance(row.get("receipt"), str) or not row["receipt"].strip():
-                errors.append(f"{disposition} symbol lacks a receipt path: {symbol_id}")
+            receipt_error = _receipt_path_error(row.get("receipt"), repo_root)
+            if receipt_error is not None:
+                errors.append(f"{disposition} symbol {receipt_error}: {symbol_id}")
             review = row.get("independent_review")
             if (
                 not isinstance(review, dict)
@@ -1293,7 +1457,11 @@ def main() -> None:
             verify_generated_schema_replay(args.manifest.parent.resolve(), args.upstream_root)
         )
     if args.dispositions is not None:
-        errors.extend(check_dispositions(expected, args.dispositions))
+        errors.extend(
+            check_dispositions(
+                expected, args.dispositions, repo_root=args.manifest.parent.resolve()
+            )
+        )
     if errors:
         raise SystemExit("Source symbol correspondence failed:\n- " + "\n- ".join(errors))
     print(

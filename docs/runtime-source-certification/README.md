@@ -11,8 +11,10 @@ render is not by itself evidence that every upstream behavior was translated.
 The v2 denominator freezes every pinned authority owner and assigns atomic rows
 to:
 
-- out-of-line definitions in the 456 manifest-bijected handwritten `.cpp`
-  files and the three independently censused Objective-C++ `.mm` files;
+- out-of-line function bodies, inline methods on source-local classes,
+  namespace-scope data/defaulted definitions, source-local macro definitions,
+  and external body-macro statements in the 456 manifest-bijected handwritten
+  `.cpp` files and the three independently censused Objective-C++ `.mm` files;
 - executable bodies in every handwritten `include/rive` or `src` `.h`/`.hpp`
   file, including inline methods, templates, constructors, destructors, and
   operators;
@@ -61,7 +63,12 @@ The machine ledger intentionally requires more than a disposition word.
 an accepted independent review with reviewer identity, and behavioral evidence
 or a specific evidence-exemption reason. `adapted` also names its approved
 adaptation. `not-applicable` requires a governing decision, and `missing`
-requires tracking. This prevents bulk-filled rows from masquerading as proof.
+requires tracking. Receipt paths must be repository-relative, must resolve to
+an existing file under `docs/runtime-source-certification`, and are checked for
+both owner and symbol rows. These structural checks make omissions and dangling
+proof references mechanically detectable. They do not prove that a named Rust
+symbol, evidence claim, reviewer identity, or prose receipt is truthful; the
+required independent adversarial read remains the semantic proof.
 
 The ledger also has a bijective owner section: every one of the 1,105 authority
 paths appears exactly once with a receipt and accepted independent review.
@@ -94,7 +101,7 @@ The campaign closes only when:
 
 - the generated source-symbol denominator matches the pinned checkout;
 - all 1,105 authority owners (456 `.cpp`, 3 `.mm`, and 646 handwritten headers)
-  have receipts and all 7,540 extracted authority units have one non-`missing`
+  have receipts and all 7,818 extracted authority units have one non-`missing`
   disposition;
 - all 369 `dev/defs` inputs, 640 generated C++ outputs, the checked-in Rust
   schema, and nuxie-codegen inputs match their frozen byte fingerprints, and a

@@ -1,13 +1,13 @@
 {
   "schema": "nuxie-runtime-source-symbol-denominator/v2",
   "generator": "tools/source-symbol-correspondence/check.py",
-  "definition_scope": "out-of-line C++ definitions, handwritten inline header bodies, all handwritten header macro definitions, and invocations of body-generating macros",
+  "definition_scope": "out-of-line and source-local inline C++ bodies, namespace-scope source definitions, handwritten inline header bodies, all handwritten macro definitions, and invocations of body-generating macros",
   "parser_policy": {
     "conditional_compilation": "all authored branches are counted without preprocessing",
     "macro_definitions": "every handwritten #define is an explicit authority unit",
     "body_macro_invocations": "invocations of macros whose replacement list contains braces or control-flow tokens are explicit authority units",
     "generated_code": "excluded from handwritten symbol parsing and frozen by the separate generated authority byte/codegen gate",
-    "lexical_fallbacks": "every handwritten-header brace region not classified as namespace, class, or function is retained as a lexical-brace-authority row",
+    "lexical_fallbacks": "every handwritten-header brace region not classified as namespace, class, or function is retained as a lexical-brace-authority row; source aggregate, initializer, and external body-macro statements are retained as complete source-statement-authority rows",
     "limits": [
       "the lexer does not expand arbitrary or externally defined macros; every local macro definition and every owner file is nevertheless byte-frozen",
       "C++ declarations synthesized only after include expansion are governed by their macro authority unit rather than assigned invented post-expansion symbols",
@@ -38,7 +38,7 @@
   "objective_cpp_owner_count": 3,
   "handwritten_header_owner_count": 646,
   "owner_count": 1105,
-  "symbol_count": 7540,
+  "symbol_count": 7818,
   "owners": [
     {
       "upstream": "src/advancing_component.cpp",
@@ -135,8 +135,64 @@
       "authority_kind": "cpp-source",
       "byte_count": 8376,
       "file_sha256": "fc5d00cd3a7fc06f6e7e0dc01ee45dbf5d21904760f1f5849a78dd0b991eeeea",
-      "symbol_count": 5,
+      "symbol_count": 14,
       "symbols": [
+        {
+          "id": "src/animation/animation_reset_factory.cpp::766d75e18f2f9bd9:1",
+          "kind": "function",
+          "symbol": "KeyedPropertyData::KeyedPropertyData",
+          "signature": "KeyedPropertyData ( const KeyedProperty * value , bool baselineValue )",
+          "line": 17,
+          "definition_sha256": "99f0dbe6929f521210596c8b7bae4a0d9a443db0ad679e0394a8937aa7cfe932"
+        },
+        {
+          "id": "src/animation/animation_reset_factory.cpp::b9d52c2d779a054a:1",
+          "kind": "function",
+          "symbol": "KeyedObjectData::KeyedObjectData",
+          "signature": "KeyedObjectData ( const uint32_t value )",
+          "line": 28,
+          "definition_sha256": "882b2811701a64a58adc435e45298c5c99150009a1f3c8b1849557441bcad0da"
+        },
+        {
+          "id": "src/animation/animation_reset_factory.cpp::8e5842fa603badc1:1",
+          "kind": "function",
+          "symbol": "KeyedObjectData::addProperties",
+          "signature": "void addProperties ( const KeyedObject * keyedObject , bool isBaseline )",
+          "line": 29,
+          "definition_sha256": "c9b13c0533ec109ab6ceaa58818ab1d868acb177e89098f34369b0aa4d7eea56"
+        },
+        {
+          "id": "src/animation/animation_reset_factory.cpp::e1d020b57db25998:1",
+          "kind": "function",
+          "symbol": "AnimationsData::getKeyedObjectData",
+          "signature": "KeyedObjectData * getKeyedObjectData ( const KeyedObject * keyedObject )",
+          "line": 59,
+          "definition_sha256": "751f063933b63f085cbb281f0ef5e8a6a91cb17408d902f101daa1745ff3b354"
+        },
+        {
+          "id": "src/animation/animation_reset_factory.cpp::5ea6ab8cd3e280e0:1",
+          "kind": "function",
+          "symbol": "AnimationsData::findKeyedObjects",
+          "signature": "void findKeyedObjects ( const LinearAnimation * animation , bool isFirstAnimation )",
+          "line": 76,
+          "definition_sha256": "490c087000c54a6e570dda20ec83c691fca29f1408b9f75c044813893378b01b"
+        },
+        {
+          "id": "src/animation/animation_reset_factory.cpp::2523a5895a86f1c7:1",
+          "kind": "function",
+          "symbol": "AnimationsData::AnimationsData",
+          "signature": "public : AnimationsData ( std :: vector < const LinearAnimation * > & animations , bool useFirstAsBaseline )",
+          "line": 90,
+          "definition_sha256": "96238f8fd59c3be650ee22dfb3502c1f2285e9c1dbb0544aa03c5a40b1c0b5c3"
+        },
+        {
+          "id": "src/animation/animation_reset_factory.cpp::1284a686a1152f30:1",
+          "kind": "function",
+          "symbol": "AnimationsData::writeObjects",
+          "signature": "void writeObjects ( AnimationReset * animationReset , ArtboardInstance * artboard )",
+          "line": 102,
+          "definition_sha256": "eabf8a28f0e336a5338e1a6a11db404aa1c136cbf18e9d0fed0925d8ec398584"
+        },
         {
           "id": "src/animation/animation_reset_factory.cpp::2346f4d013489b74:1",
           "kind": "function",
@@ -168,6 +224,22 @@
           "signature": "std :: unique_ptr < AnimationReset > AnimationResetFactory :: fromAnimations ( std :: vector < const LinearAnimation * > & animations , ArtboardInstance * artboard , bool useFirstAsBaseline )",
           "line": 214,
           "definition_sha256": "a9e2cc36f7fd0e8d1a7e815d0cb457651001be21eb8e7173a11b72b42820b4cc"
+        },
+        {
+          "id": "src/animation/animation_reset_factory.cpp::657207b5d3e3272c:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@226>",
+          "signature": "source-statement std :: vector < std :: unique_ptr < AnimationReset >> AnimationResetFactory :: m_resources",
+          "line": 226,
+          "definition_sha256": "f16a88607fc207133007055837b8ce75c3c97802d4efe8643a2322ba68b90117"
+        },
+        {
+          "id": "src/animation/animation_reset_factory.cpp::55090e183f901271:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@228>",
+          "signature": "source-statement std :: mutex AnimationResetFactory :: m_mutex",
+          "line": 228,
+          "definition_sha256": "4d113561e295f9ba4d2ab88e2238d9dbaed808e47162a0d6e8346d5e5d99befd"
         },
         {
           "id": "src/animation/animation_reset_factory.cpp::42be4d785aa6e2a4:1",
@@ -209,8 +281,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 1806,
       "file_sha256": "985a66ccff0cbe3a61befc0e7e48493bae39ebb91bdd5f1f62048608df9b3cfe",
-      "symbol_count": 5,
+      "symbol_count": 6,
       "symbols": [
+        {
+          "id": "src/animation/animation_state_instance.cpp::8a61024f7cf6a8de:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@7>",
+          "signature": "source-statement static LinearAnimation emptyAnimation",
+          "line": 7,
+          "definition_sha256": "c865e24b61f28ef874a89a7f23e15f973bde3475d18f235416fbaf35c3030cce"
+        },
         {
           "id": "src/animation/animation_state_instance.cpp::268ffd8d048fea25:1",
           "kind": "function",
@@ -258,8 +338,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 1108,
       "file_sha256": "f5c572200401e4c877488e938f85064c1387f275ed7fa619b66396a76c57de04",
-      "symbol_count": 1,
+      "symbol_count": 2,
       "symbols": [
+        {
+          "id": "src/animation/blend_animation.cpp::23724c8eeae6960d:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@9>",
+          "signature": "source-statement LinearAnimation BlendAnimation :: m_EmptyAnimation",
+          "line": 9,
+          "definition_sha256": "af7da83402b9f87ded5f061946df4281220c84dc2b7097a7f8992e93a2d5e1a1"
+        },
         {
           "id": "src/animation/blend_animation.cpp::cca0f76dc4bb2d02:1",
           "kind": "function",
@@ -616,8 +704,40 @@
       "authority_kind": "cpp-source",
       "byte_count": 2747,
       "file_sha256": "afddb2cfe50170a1454e0a7aa1ba0982ee353a6cb2a2f6fcc39dee1584308338",
-      "symbol_count": 4,
+      "symbol_count": 8,
       "symbols": [
+        {
+          "id": "src/animation/cubic_interpolator_solver.cpp::0bae61a5d03c1df2:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@6>",
+          "signature": "source-statement const int NewtonIterations = 4",
+          "line": 6,
+          "definition_sha256": "8dd6cdd249e30584e605c6d6c1d81b6aea1a2b17ab6267fa85b54d766e0da7b9"
+        },
+        {
+          "id": "src/animation/cubic_interpolator_solver.cpp::421763436fda78a9:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@7>",
+          "signature": "source-statement const float NewtonMinSlope = 0.001f",
+          "line": 7,
+          "definition_sha256": "4e526ecb7e93cee5eedf131cb8dc6da37622c637ac34bb30f3f6240ed6a54f04"
+        },
+        {
+          "id": "src/animation/cubic_interpolator_solver.cpp::e8b8f5b83f22bde3:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@8>",
+          "signature": "source-statement const float SubdivisionPrecision = 0.0000001f",
+          "line": 8,
+          "definition_sha256": "ecad0a9e29b3217dd796f71331723c3cb4a3cea8c88675724df049504a44c5d7"
+        },
+        {
+          "id": "src/animation/cubic_interpolator_solver.cpp::04b3e5ee9bec090b:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@9>",
+          "signature": "source-statement const int SubdivisionMaxIterations = 10",
+          "line": 9,
+          "definition_sha256": "ef5b9fb5fb9b0bacf1b96ff21c421441aff742082c2e6505858c4c6f475b49a6"
+        },
         {
           "id": "src/animation/cubic_interpolator_solver.cpp::af9ea0d9267b7779:1",
           "kind": "function",
@@ -1487,8 +1607,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 4906,
       "file_sha256": "df1d819e3618c100dca2218653992d7210cf3de3c3500e57b53d74b03589c6af",
-      "symbol_count": 16,
+      "symbol_count": 17,
       "symbols": [
+        {
+          "id": "src/animation/linear_animation.cpp::1fbec82b2a66c3fe:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@13>",
+          "signature": "source-statement int LinearAnimation :: deleteCount = 0",
+          "line": 13,
+          "definition_sha256": "268679b34de72be0270bd406b4f2a068e5bd33aa5274c113dc3ab29758d454ea"
+        },
         {
           "id": "src/animation/linear_animation.cpp::92118234397ed8f6:1",
           "kind": "function",
@@ -3401,7 +3529,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 117516,
       "file_sha256": "54c8c7e4ece8bfe4c72e483a1098f52e3dafa755adceefdb8a07a44558684f3c",
-      "symbol_count": 95,
+      "symbol_count": 151,
       "symbols": [
         {
           "id": "src/animation/state_machine_instance.cpp::f03c9455e20d64f3:1",
@@ -3410,6 +3538,454 @@
           "signature": "static std :: string getStateName ( const StateInstance * stateInstance )",
           "line": 95,
           "definition_sha256": "e8d27b5a867c1f6e93c16d7717bfa77b1bbc8ccb7f890219d9d3c6d275df68d8"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::2ba8f81d37c1a5fc:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@127>",
+          "signature": "source-statement constexpr std :: array < ListenerType , 9 > kPointerHitListenerTypes = { ListenerType :: enter , ListenerType :: exit , ListenerType :: down , ListenerType :: up , ListenerType :: move , ListenerType :: click , ListenerType :: dragStart , ListenerType :: dragEnd , ListenerType :: drag , }",
+          "line": 127,
+          "definition_sha256": "07f2edfd3b96d446169cb1bcfcf4ded4d2a65a0600dba17d2e0b9be9e3f2fe0b"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::a9f237f095cdaf92:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::~StateMachineLayerInstance",
+          "signature": "public : ~ StateMachineLayerInstance ( )",
+          "line": 142,
+          "definition_sha256": "5e72c492997ee0463edf41acab9f9e52a8cc88320c85fb8e730430bca591e15c"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::ccbb09b5f06d6a6c:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::init",
+          "signature": "void init ( StateMachineInstance * stateMachineInstance , const StateMachineLayer * layer , ArtboardInstance * instance )",
+          "line": 150,
+          "definition_sha256": "2ff86c979c648da57b21a5b2f715fc83a59c582bb4370fb35e35b24d017e5f65"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::9516d6f48629ce81:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::resetState",
+          "signature": "void resetState ( )",
+          "line": 177,
+          "definition_sha256": "1179825b83d14c61625f5dc6c20a19fc80d537385d626c3e59ab225fc3938e86"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::8ffaf2cc39f13af9:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::updateMix",
+          "signature": "void updateMix ( float seconds )",
+          "line": 194,
+          "definition_sha256": "037a40c4e6223b6bc918e7473ff05ff791561a07d930f18fdbbbabf1ff0ff0a7"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::d594b6ad33d59fb3:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::advance",
+          "signature": "bool advance ( float seconds , bool newFrame )",
+          "line": 225,
+          "definition_sha256": "62239dbff0fec8c691bbf812614816d7b4df4dea1a94e06a671af5c7a60e8da4"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::0471c319f3867654:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::resolvedDuration",
+          "signature": "uint32_t resolvedDuration ( )",
+          "line": 283,
+          "definition_sha256": "dd00eb3d44f10ec3a239f4f45f5c764e7060ac0e88ea671b26e62318a52cbdf7"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::98f3ba5f735a5a13:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::resolvedMixTime",
+          "signature": "float resolvedMixTime ( )",
+          "line": 294,
+          "definition_sha256": "cb0ef2fc8b6e786fb2c02cb89fbd7b8c72956310c3aaa61ac7da31e7c2f355a9"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::f029842402a8f9d4:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::isTransitioning",
+          "signature": "bool isTransitioning ( )",
+          "line": 318,
+          "definition_sha256": "73e40171c007ba7b61cdc84c7ab88039a435a85aac67f2bc45e90c1d0c803443"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::89ebf60bc430ed4e:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::updateState",
+          "signature": "bool updateState ( )",
+          "line": 324,
+          "definition_sha256": "4f8de4225072456f8e89bec65c5516adc31741edebab6dafa587ae44bd8ffddd"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::d7e12cded159ef2a:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::fireEvents",
+          "signature": "void fireEvents ( StateMachineFireOccurance occurs , const std :: vector < StateMachineFireAction * > & fireEvents )",
+          "line": 343,
+          "definition_sha256": "274f1bb0b7fc33052d82b5288b2fafc83c5f0511d44eb9966a857dde4f130669"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::98e76917cfaa75e4:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::performListenerActions",
+          "signature": "void performListenerActions ( StateMachineFireOccurance occurs , const std :: vector < std :: unique_ptr < ListenerAction >> & listenerActions )",
+          "line": 355,
+          "definition_sha256": "91cdcfb5841d584881852c28a5893e2c58a3ebe9e721b6c0668c17003feaae88"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::4d10f9673ab160b4:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::canChangeState",
+          "signature": "bool canChangeState ( const LayerState * stateTo )",
+          "line": 369,
+          "definition_sha256": "9764ed70d293d164532b54f7c7167c4cdea9a415cf3b9bac4e99287681f023a3"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::7690f64fd5adf441:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::randomValue",
+          "signature": "double randomValue ( )",
+          "line": 376,
+          "definition_sha256": "b3c6f62f3ff2c7cf2a79ecf5fb4cfdb493254a58ede33f864f3be79ffbb7f283"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::23fa2177abc27e72:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::changeState",
+          "signature": "void changeState ( const LayerState * stateTo )",
+          "line": 378,
+          "definition_sha256": "d9b6c8397830d27f92c7e1ec8a72d0595c1439466c2e5375f30c377b4eb14035"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::f8d30d95ea1d452b:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::findRandomTransition",
+          "signature": "StateTransition * findRandomTransition ( StateInstance * stateFromInstance )",
+          "line": 412,
+          "definition_sha256": "7fdae8cbca8b4afc349627b188e0da8bf320548eb0e5124d82de43c4ae9761b1"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::434073be09963ed6:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::findAllowedTransition",
+          "signature": "StateTransition * findAllowedTransition ( StateInstance * stateFromInstance )",
+          "line": 470,
+          "definition_sha256": "c9c8a5b6e09c3d637b6f55adcc662ff4414fe35d16b02579ead88ec61eea04c0"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::356690dedb332a6f:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::buildAnimationResetForTransition",
+          "signature": "void buildAnimationResetForTransition ( )",
+          "line": 511,
+          "definition_sha256": "3783be6a5309cab22a976f97a66ce74d5cffb52fc7640e990a178857c8d15c60"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::b953401c9b96a1b8:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::clearAnimationReset",
+          "signature": "void clearAnimationReset ( )",
+          "line": 519,
+          "definition_sha256": "42be6d28f7019caebc31a663529e054db6aca09f80be5d208d493920386c775d"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::649dc1614f63ccce:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::tryChangeState",
+          "signature": "bool tryChangeState ( StateInstance * stateFromInstance )",
+          "line": 528,
+          "definition_sha256": "1718af9f19c4c31ad0827d1bfd1276dbdf4077b934b48c0bd875ffbe1cb8a14e"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::b2040ef38fbc40d9:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::apply",
+          "signature": "void apply ( )",
+          "line": 632,
+          "definition_sha256": "22d8a68a8fa069e580ca814db31177ef7601aa2ce9d8853514b17afd61b0bb88"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::b01128e42b9bdaf2:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::stateChangedOnAdvance",
+          "signature": "bool stateChangedOnAdvance ( )",
+          "line": 665,
+          "definition_sha256": "ea19be282bffc6fc538c0f8adb54862fb9a0d38584cb6cb14d6c6cc55adac3e2"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::54e44b2390542625:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::currentState",
+          "signature": "const LayerState * currentState ( )",
+          "line": 670,
+          "definition_sha256": "c3d7426be5aad7e2bd9c543d2f9b8454d6362e8d9ec52b57e61749ac00097e3f"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::d2a754608ab6a400:1",
+          "kind": "function",
+          "symbol": "StateMachineLayerInstance::currentAnimation",
+          "signature": "const LinearAnimationInstance * currentAnimation ( )",
+          "line": 675,
+          "definition_sha256": "87d898bce0eeb9146eb4436d88aaeb358ae17b13952e3e62823afe60b0266dff"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::982504f4fdc19502:1",
+          "kind": "function",
+          "symbol": "HitDrawable::HitDrawable",
+          "signature": "public : HitDrawable ( Drawable * drawable , Component * component , StateMachineInstance * stateMachineInstance , bool isOpaque )",
+          "line": 718,
+          "definition_sha256": "ea1942054c02fadf99c0e15b1aac33b2a8aab1a70f25bfb4f2f7ad05bf2874de"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::4adc67b8d57de9fe:1",
+          "kind": "function",
+          "symbol": "HitDrawable::hitTest",
+          "signature": "bool hitTest ( Vec2D position )",
+          "line": 741,
+          "definition_sha256": "77195b2a14da3f4cf9aac4c429d404b48da6c8f7879f0cfbb0f3a7f52afb23dd"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::a07b82e8b868e88b:1",
+          "kind": "function",
+          "symbol": "HitDrawable::prepareEvent",
+          "signature": "void prepareEvent ( Vec2D position , ListenerType hitType , int pointerId )",
+          "line": 743,
+          "definition_sha256": "8075b261a00c509d4a6ee9f51f99600390928e88d82f9f5b3e0fc6dbd7a068af"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::e43e91df892f905c:1",
+          "kind": "function",
+          "symbol": "HitDrawable::processGamepadInvocation",
+          "signature": "HitResult processGamepadInvocation ( const ListenerInvocation & invocation , ScriptedDrawable * alreadyDispatched )",
+          "line": 769,
+          "definition_sha256": "a93701d5cb0cb78b62e8e3f65fa1db75e3ea27b241d11daa95ceeb76fd54bd8c"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::29feda58b933a1f7:1",
+          "kind": "function",
+          "symbol": "HitDrawable::processEvent",
+          "signature": "HitResult processEvent ( Vec2D position , ListenerType hitType , bool canHit , float timeStamp , int pointerId )",
+          "line": 776,
+          "definition_sha256": "b5374a628ab44b23897cc0bbc68632caa93953d81f8ec200786116388834b901"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::df5dd0d697323a0d:1",
+          "kind": "function",
+          "symbol": "HitDrawable::addListener",
+          "signature": "void addListener ( ListenerGroup * listenerGroup )",
+          "line": 820,
+          "definition_sha256": "69d6a4568d5cce0787e12fb5e18a323f5c9cb0513950d9b2b7c1be9795e7a326"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::38a2bd114c0242e7:1",
+          "kind": "function",
+          "symbol": "HitDrawable::enablePointerEvents",
+          "signature": "void enablePointerEvents ( int pointerId )",
+          "line": 840,
+          "definition_sha256": "87e450c3240cc5f173021d088b30604998dd2e35e26eb8a7b7b3096914aac0de"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::a0e51f557962fab2:1",
+          "kind": "function",
+          "symbol": "HitDrawable::disablePointerEvents",
+          "signature": "void disablePointerEvents ( int pointerId )",
+          "line": 848,
+          "definition_sha256": "8ed252d0b487762b754529fe62e71987424cde952a2213e07e9d39e6c82c6298"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::3cbbb728054f723f:1",
+          "kind": "function",
+          "symbol": "HitExpandable::HitExpandable",
+          "signature": "public : HitExpandable ( Drawable * drawable , Component * component , StateMachineInstance * stateMachineInstance , bool isOpaque = false )",
+          "line": 860,
+          "definition_sha256": "d0fdb0db0abdd75feec157404f2b8215234e3db36e5a28855f47aa10ecfdeee1"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::4adc67b8d57de9fe:2",
+          "kind": "function",
+          "symbol": "HitExpandable::hitTest",
+          "signature": "bool hitTest ( Vec2D position )",
+          "line": 868,
+          "definition_sha256": "a504897cbaca64fed9f5dbeccc48c7dfc75005b6f8e3bec28096c84b6a3c1876"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::7524fa4caecd5467:1",
+          "kind": "function",
+          "symbol": "HitTextRun::HitTextRun",
+          "signature": "public : HitTextRun ( Drawable * drawable , TextValueRun * component , StateMachineInstance * stateMachineInstance , bool isOpaque = false )",
+          "line": 876,
+          "definition_sha256": "5c44c8946fdae20690dc07044ff61dfdb8668438892fa3baaa3838682d81a9c9"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::b4a8ef52fd3c281a:1",
+          "kind": "function",
+          "symbol": "HitLayout::HitLayout",
+          "signature": "public : HitLayout ( Drawable * layout , StateMachineInstance * stateMachineInstance , bool isOpaque = false )",
+          "line": 892,
+          "definition_sha256": "f7958aa78b064c8c39d1841d55c128ecc13c8a4090ce5668726b06872ed003f9"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::4adc67b8d57de9fe:3",
+          "kind": "function",
+          "symbol": "HitLayout::hitTest",
+          "signature": "bool hitTest ( Vec2D position )",
+          "line": 899,
+          "definition_sha256": "985678690543892ec6c3a840a00cbbf89d13f6e3317f97e6288d248051a77c27"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::b24e03df46dad9ba:1",
+          "kind": "function",
+          "symbol": "HitNestedArtboard::HitNestedArtboard",
+          "signature": "public : HitNestedArtboard ( Component * nestedArtboard , StateMachineInstance * stateMachineInstance )",
+          "line": 907,
+          "definition_sha256": "b0eee77758748b8adedd7208bd3deaf6cede8e5ef5b2f1808940d7816dfa6857"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::8aad8eee6c303b0a:1",
+          "kind": "function",
+          "symbol": "HitNestedArtboard::~HitNestedArtboard",
+          "signature": "~ HitNestedArtboard ( )",
+          "line": 912,
+          "definition_sha256": "1e586d85d71c53e43cca80f69559aab4f460fb977d60b85e3c8c7b056b86b5bb"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::4adc67b8d57de9fe:4",
+          "kind": "function",
+          "symbol": "HitNestedArtboard::hitTest",
+          "signature": "bool hitTest ( Vec2D position )",
+          "line": 914,
+          "definition_sha256": "e9d4b0686ee07e3af1b2c78e908340cd4acf7f6ab59028a54f68fd057a8502c9"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::e43e91df892f905c:2",
+          "kind": "function",
+          "symbol": "HitNestedArtboard::processGamepadInvocation",
+          "signature": "HitResult processGamepadInvocation ( const ListenerInvocation & invocation , ScriptedDrawable * alreadyDispatched )",
+          "line": 942,
+          "definition_sha256": "1f2bb4220052b32c80ca100b8b9412f1a52ae8a4f98fa1b2fb7771839eebadc6"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::29feda58b933a1f7:2",
+          "kind": "function",
+          "symbol": "HitNestedArtboard::processEvent",
+          "signature": "HitResult processEvent ( Vec2D position , ListenerType hitType , bool canHit , float timeStamp , int pointerId )",
+          "line": 961,
+          "definition_sha256": "7966bde19716598dc68f1c53060fb4cca40ab2e374316177be52a6bae15b365f"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::a07b82e8b868e88b:2",
+          "kind": "function",
+          "symbol": "HitNestedArtboard::prepareEvent",
+          "signature": "void prepareEvent ( Vec2D position , ListenerType hitType , int pointerId )",
+          "line": 1068,
+          "definition_sha256": "d6a55df74d4b0cce76c54a3835b0aab59a7ab6bebf718fbe5558fbe7d3d34e67"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::bf00da40b9298c07:1",
+          "kind": "function",
+          "symbol": "HitComponentList::HitComponentList",
+          "signature": "public : HitComponentList ( Component * componentList , StateMachineInstance * stateMachineInstance )",
+          "line": 1076,
+          "definition_sha256": "d6bfc52a10c948d0d4f3e27e785c999a9402b7dd5f2dbbf3d2b8362613022198"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::f07111a7be9a6e00:1",
+          "kind": "function",
+          "symbol": "HitComponentList::~HitComponentList",
+          "signature": "~ HitComponentList ( )",
+          "line": 1081,
+          "definition_sha256": "2182833b83c79b1f85e80d3a92b08be557e9250dd22a7270cc0b66e3736fbdb4"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::4adc67b8d57de9fe:5",
+          "kind": "function",
+          "symbol": "HitComponentList::hitTest",
+          "signature": "bool hitTest ( Vec2D position )",
+          "line": 1083,
+          "definition_sha256": "74f4ce1a67ab5197674a36823b5dcb11467d45f36556f4c9fd75e1c1bf2e064a"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::29feda58b933a1f7:3",
+          "kind": "function",
+          "symbol": "HitComponentList::processEvent",
+          "signature": "HitResult processEvent ( Vec2D position , ListenerType hitType , bool canHit , float timeStamp , int pointerId )",
+          "line": 1108,
+          "definition_sha256": "bb9572476140a85474e223daa47f569ee81e021faa0b218c8649ad5aab2e069b"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::e43e91df892f905c:3",
+          "kind": "function",
+          "symbol": "HitComponentList::processGamepadInvocation",
+          "signature": "HitResult processGamepadInvocation ( const ListenerInvocation & invocation , ScriptedDrawable * alreadyDispatched )",
+          "line": 1227,
+          "definition_sha256": "d411068f5764c65afc68b106ec52bb021668566936d701f242a0182e7e8e6599"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::a07b82e8b868e88b:3",
+          "kind": "function",
+          "symbol": "HitComponentList::prepareEvent",
+          "signature": "void prepareEvent ( Vec2D position , ListenerType hitType , int pointerId )",
+          "line": 1270,
+          "definition_sha256": "d6a55df74d4b0cce76c54a3835b0aab59a7ab6bebf718fbe5558fbe7d3d34e67"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::12a06a14a5e7a286:1",
+          "kind": "function",
+          "symbol": "ListenerViewModelPropertyBinding::value",
+          "signature": "ViewModelInstanceValue * value ( )",
+          "line": 1288,
+          "definition_sha256": "58b0826ec2efc810d593d613f18b988f3ceae14069fd00282f64e795e68c6b4d"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::dfce54edc6ef8c35:1",
+          "kind": "function",
+          "symbol": "ListenerViewModel::ListenerViewModel",
+          "signature": "ListenerViewModel ( StateMachineInstance * smInstance , const StateMachineListener * listener )",
+          "line": 1326,
+          "definition_sha256": "b207536819c2679140e30a6b8299c6f08b9c230baa79cf14a74e13d3aebce51f"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::7bf420ba71020846:1",
+          "kind": "function",
+          "symbol": "ListenerViewModel::clearDataContext",
+          "signature": "void clearDataContext ( )",
+          "line": 1331,
+          "definition_sha256": "3ebe15ec15d3986e5378a08d21905b8f98c75783db51c096e0bbac9292040ad3"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::330b9d4f8e884ba1:1",
+          "kind": "function",
+          "symbol": "ListenerViewModel::bindFromContext",
+          "signature": "void bindFromContext ( rcp < DataContext > dataContext )",
+          "line": 1332,
+          "definition_sha256": "9013ac51500fb1f739828e418ae83809e5c15935f86a37f095cb07b370d0aafe"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::b548be3b98890b2a:1",
+          "kind": "function",
+          "symbol": "ListenerViewModel::reportToStateMachine",
+          "signature": "void reportToStateMachine ( ViewModelInstanceValue * value )",
+          "line": 1386,
+          "definition_sha256": "8ff83ca3dda96f34e291f299657f84764a1315632756afbec40344d1e51f6d51"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::bfa5e8e568a4c7c7:1",
+          "kind": "function",
+          "symbol": "ListenerViewModel::listener",
+          "signature": "const StateMachineListener * listener ( )",
+          "line": 1394,
+          "definition_sha256": "8ac4e78b6dd9c7a3ba8cacab4c6b10707255599ed19103acd9bd1e4e0f78839d"
+        },
+        {
+          "id": "src/animation/state_machine_instance.cpp::94aa06e3f6b71528:1",
+          "kind": "function",
+          "symbol": "ListenerViewModel::dataContext",
+          "signature": "DataContext * dataContext ( )",
+          "line": 1395,
+          "definition_sha256": "9c7263193fe1c46598c9bf960f401f2de443d85c9ee778d8cbaf2a21a8a50c96"
         },
         {
           "id": "src/animation/state_machine_instance.cpp::264d15b577cb2013:1",
@@ -4736,8 +5312,208 @@
       "authority_kind": "cpp-source",
       "byte_count": 42545,
       "file_sha256": "1ce88a3ab800f61e3b6405c40af9f7ec61da21f54b762ba8a6bc7b4c9a35b434",
-      "symbol_count": 36,
+      "symbol_count": 61,
       "symbols": [
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::5a1c2ec894f5623d:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonNone::ConditionComparisonNone",
+          "signature": "public : ConditionComparisonNone ( )",
+          "line": 31,
+          "definition_sha256": "68a294305355668ab0b52067a1f6759e13a46f1569cd28734c66312fa95df02a"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3cebcee602a03515:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonNone::compare",
+          "signature": "bool compare ( const StateMachineInstance * stateMachineInstance , StateMachineLayerInstance * layerInstance )",
+          "line": 33,
+          "definition_sha256": "5b992724b02fb652f0e2461cd55e68a062f4694c75fdf8367a1fa9d1cb0168cb"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::69f3d2d498f00a24:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonSelf::ConditionComparisonSelf",
+          "signature": "public : ConditionComparisonSelf ( BindableProperty * property )",
+          "line": 42,
+          "definition_sha256": "6b397a98ed0469cbeb144a7e8381029d02ccd6c954a6758ae738e962a9ba75b0"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3cebcee602a03515:2",
+          "kind": "function",
+          "symbol": "ConditionComparisonSelf::compare",
+          "signature": "bool compare ( const StateMachineInstance * stateMachineInstance , StateMachineLayerInstance * layerInstance )",
+          "line": 46,
+          "definition_sha256": "c4db674f58264d51fabf847d011b6d1006da2a4377c8f65364f5d9f61bbb8de9"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::b145778093fcbaad:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonNumber::ConditionComparisonNumber",
+          "signature": "public : ConditionComparisonNumber ( ConditionComparandNumber * left , ConditionComparandNumber * right , ConditionOperation * operation )",
+          "line": 70,
+          "definition_sha256": "d060be258540aaa16b9fd883d643942d5adb4ea91c6f276f8d9e96b3de3c9deb"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::757812b8f4006592:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonNumber::~ConditionComparisonNumber",
+          "signature": "~ ConditionComparisonNumber ( )",
+          "line": 78,
+          "definition_sha256": "2ad8ff9c761d28c734e7322ee911ef169375c15f88065edb4fbde3e73f61cb46"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3cebcee602a03515:3",
+          "kind": "function",
+          "symbol": "ConditionComparisonNumber::compare",
+          "signature": "bool compare ( const StateMachineInstance * stateMachineInstance , StateMachineLayerInstance * layerInstance )",
+          "line": 83,
+          "definition_sha256": "fd6f5249042581fcb5b727af3e26c1c250ae0d3baaa14df5878e1392aa6bc392"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::fbc33055aa8cd443:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonBoolean::ConditionComparisonBoolean",
+          "signature": "public : ConditionComparisonBoolean ( ConditionComparandBoolean * left , ConditionComparandBoolean * right , ConditionOperation * operation )",
+          "line": 96,
+          "definition_sha256": "c29a2ff7f0829ffed81ed6c971d5e727254cac2fba4c0d6cc1e0bdb4115b62b1"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::64b05c1a48d901cd:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonBoolean::~ConditionComparisonBoolean",
+          "signature": "~ ConditionComparisonBoolean ( )",
+          "line": 104,
+          "definition_sha256": "b93d16c14936a32bd8fc11f3dc0c075247f82a6c010c73c0cacd78cdd62e08a7"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3cebcee602a03515:4",
+          "kind": "function",
+          "symbol": "ConditionComparisonBoolean::compare",
+          "signature": "bool compare ( const StateMachineInstance * stateMachineInstance , StateMachineLayerInstance * layerInstance )",
+          "line": 109,
+          "definition_sha256": "62c047941a6aeec2e5b29140c410edf7fd28847c74bf83d6a5e5a26028260b68"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::ca5f62b04fbb56c3:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonString::ConditionComparisonString",
+          "signature": "public : ConditionComparisonString ( ConditionComparandString * left , ConditionComparandString * right , ConditionOperation * operation )",
+          "line": 123,
+          "definition_sha256": "b3a3ef7932b9349ed202a19bf69f95cb2b44f8fa2f56fff4d5e24651265f3850"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::909253d67a3dde7f:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonString::~ConditionComparisonString",
+          "signature": "~ ConditionComparisonString ( )",
+          "line": 131,
+          "definition_sha256": "a475c2762617858d71e1ff0d0b769187395d14b8ee4230f82f63264390a79278"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3cebcee602a03515:5",
+          "kind": "function",
+          "symbol": "ConditionComparisonString::compare",
+          "signature": "bool compare ( const StateMachineInstance * stateMachineInstance , StateMachineLayerInstance * layerInstance )",
+          "line": 136,
+          "definition_sha256": "b606d39ef00d06acea92183b778b688fe8f27fdd59173ece4e0eb8d7ef2cfc7b"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::a01daae5e55569ca:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonColor::ConditionComparisonColor",
+          "signature": "public : ConditionComparisonColor ( ConditionComparandColor * left , ConditionComparandColor * right , ConditionOperation * operation )",
+          "line": 150,
+          "definition_sha256": "e8ea7e465d5830e1acff3a36ead2746ff407931151aa86ce491388b36de641a5"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::51fa67f9183fc543:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonColor::~ConditionComparisonColor",
+          "signature": "~ ConditionComparisonColor ( )",
+          "line": 158,
+          "definition_sha256": "71413dc66d6fd6643d96fc9bfad37c388eb4363647d939d1f47a49acb293a89b"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3cebcee602a03515:6",
+          "kind": "function",
+          "symbol": "ConditionComparisonColor::compare",
+          "signature": "bool compare ( const StateMachineInstance * stateMachineInstance , StateMachineLayerInstance * layerInstance )",
+          "line": 163,
+          "definition_sha256": "1fa71a16b49517d756e07ed58a8cf982d17ff3ac82701b8f13023059a15eebd4"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::fc0541e7a097b958:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonEnum::ConditionComparisonEnum",
+          "signature": "public : ConditionComparisonEnum ( ConditionComparandUint32 * left , ConditionComparandUint32 * right , ConditionOperation * operation )",
+          "line": 177,
+          "definition_sha256": "00af3a78b588dd269aa7c452b0615217dd7e2e73ee0bbff1259dbe3e083af5f1"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::c4abf669c82718b5:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonEnum::~ConditionComparisonEnum",
+          "signature": "~ ConditionComparisonEnum ( )",
+          "line": 185,
+          "definition_sha256": "68cdf2fe7d55078297ef7c5bc0288bfb98d58093df65a784ad0185f98e563848"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3cebcee602a03515:7",
+          "kind": "function",
+          "symbol": "ConditionComparisonEnum::compare",
+          "signature": "bool compare ( const StateMachineInstance * stateMachineInstance , StateMachineLayerInstance * layerInstance )",
+          "line": 190,
+          "definition_sha256": "a7062666aa6ab4db36e7bf546c5f76c0e40f3ce791c496460969d4df691af72f"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3a361b89c2cb454f:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonUint32::ConditionComparisonUint32",
+          "signature": "public : ConditionComparisonUint32 ( ConditionComparandUint32 * left , ConditionComparandUint32 * right , ConditionOperation * operation )",
+          "line": 204,
+          "definition_sha256": "cfc533a72554e954ff9d5241850d930f8520413d46aed2ceaeea7df3a8c555e6"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::7884abd90d717035:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonUint32::~ConditionComparisonUint32",
+          "signature": "~ ConditionComparisonUint32 ( )",
+          "line": 212,
+          "definition_sha256": "a776c7b1a8756f18c6d03b4f2b1a634699e748b557553ea99a5e66409e9a3d5e"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3cebcee602a03515:8",
+          "kind": "function",
+          "symbol": "ConditionComparisonUint32::compare",
+          "signature": "bool compare ( const StateMachineInstance * stateMachineInstance , StateMachineLayerInstance * layerInstance )",
+          "line": 217,
+          "definition_sha256": "a7062666aa6ab4db36e7bf546c5f76c0e40f3ce791c496460969d4df691af72f"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::d78e9d74ae42930a:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonViewModel::ConditionComparisonViewModel",
+          "signature": "public : ConditionComparisonViewModel ( ConditionComparandViewModel * left , ConditionComparandViewModel * right , ConditionOperation * operation )",
+          "line": 231,
+          "definition_sha256": "3da53131b358f08b0630b6b61b8a39802033cc4aaf58ca78fed560033d14a7aa"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::af640823681b1bf0:1",
+          "kind": "function",
+          "symbol": "ConditionComparisonViewModel::~ConditionComparisonViewModel",
+          "signature": "~ ConditionComparisonViewModel ( )",
+          "line": 239,
+          "definition_sha256": "d43b01efe17515c13a7bcb63d268d23e91d67792f1cf905ddcc9dcbb12443bc1"
+        },
+        {
+          "id": "src/animation/transition_viewmodel_condition.cpp::3cebcee602a03515:9",
+          "kind": "function",
+          "symbol": "ConditionComparisonViewModel::compare",
+          "signature": "bool compare ( const StateMachineInstance * stateMachineInstance , StateMachineLayerInstance * layerInstance )",
+          "line": 244,
+          "definition_sha256": "a00604f0cdfb2f10eb2da3f9a605d4a1aaae853a838136a3c224590964aba8b3"
+        },
         {
           "id": "src/animation/transition_viewmodel_condition.cpp::556efbe2ca28b96a:1",
           "kind": "function",
@@ -5033,8 +5809,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 90091,
       "file_sha256": "736d683e587575c246c57d80ec158c35b33fed21195b817f374d2a25263e331b",
-      "symbol_count": 133,
+      "symbol_count": 134,
       "symbols": [
+        {
+          "id": "src/artboard.cpp::4fe092e90e0e6dbd:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@68>",
+          "signature": "source-statement uint64_t Artboard :: sm_frameId = 0",
+          "line": 68,
+          "definition_sha256": "27ea8106f0ab238976cc069fb41ff9ea4501fd244e7ce19dd52640057606aff7"
+        },
         {
           "id": "src/artboard.cpp::5e7a0fbdaea5f87c:1",
           "kind": "function",
@@ -6106,8 +6890,48 @@
       "authority_kind": "cpp-source",
       "byte_count": 57219,
       "file_sha256": "bec583b1fd51e74ed33a2d99a619b40ae0f124c6ab54dd15c51bb336bd38426e",
-      "symbol_count": 88,
+      "symbol_count": 93,
       "symbols": [
+        {
+          "id": "src/artboard_component_list.cpp::facde6f4aa90098d:1",
+          "kind": "function",
+          "symbol": "ArtboardListDrawIndexDependent::ArtboardListDrawIndexDependent",
+          "signature": "public : ArtboardListDrawIndexDependent ( ArtboardComponentList * list , ViewModelInstanceValue * value )",
+          "line": 44,
+          "definition_sha256": "5b26d05842aa7b36ad8c078f0b96a6f930b1617a2c7cc1c970a0797fcf4ef8b7"
+        },
+        {
+          "id": "src/artboard_component_list.cpp::d2d3d5c60d2d1b1a:1",
+          "kind": "function",
+          "symbol": "ArtboardListDrawIndexDependent::~ArtboardListDrawIndexDependent",
+          "signature": "~ ArtboardListDrawIndexDependent ( )",
+          "line": 51,
+          "definition_sha256": "62a0bbe810ba0e1e40aec4fd2fd9cace135c52fef14db5ba9ef76a624dc1ffe0"
+        },
+        {
+          "id": "src/artboard_component_list.cpp::8812492dfa5667ef:1",
+          "kind": "function",
+          "symbol": "ArtboardListDrawIndexDependent::addDirt",
+          "signature": "void addDirt ( ComponentDirt value , bool recurse )",
+          "line": 53,
+          "definition_sha256": "5411a49aca45164dd3889916c3894c3bece1e3f670a0badc602fcb31afaa90b4"
+        },
+        {
+          "id": "src/artboard_component_list.cpp::1bc1d70d452cf885:1",
+          "kind": "function",
+          "symbol": "ArtboardListDrawIndexDependent::relinkDataBind",
+          "signature": "void relinkDataBind ( )",
+          "line": 61,
+          "definition_sha256": "2c54e595aba91d0198e043043deafefed4555edcde204a2e708caec9c07ceadd"
+        },
+        {
+          "id": "src/artboard_component_list.cpp::0e962cd34e9c7794:1",
+          "kind": "function",
+          "symbol": "ArtboardListDrawIndexDependent::clear",
+          "signature": "void clear ( )",
+          "line": 63,
+          "definition_sha256": "848c556df03af8d74a355f9f6426cd995df0f27e67c77fc216aa4f1661cee8e8"
+        },
         {
           "id": "src/artboard_component_list.cpp::4af9bd5d82cbb7a7:1",
           "kind": "function",
@@ -7172,8 +7996,24 @@
       "authority_kind": "cpp-source",
       "byte_count": 3850,
       "file_sha256": "fac3fd4cb55d623caae72b32d3e557090f7216f89fc7ad88d5c1281d5274c4ec",
-      "symbol_count": 6,
+      "symbol_count": 8,
       "symbols": [
+        {
+          "id": "src/assets/manifest_asset.cpp::abd0ca1638fa61d3:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@9>",
+          "signature": "source-statement const std :: string ManifestAsset :: empty",
+          "line": 9,
+          "definition_sha256": "ef2511d47168fe750be68efec64ee8da6b171cb39b8a8b8846722944fd6d7db8"
+        },
+        {
+          "id": "src/assets/manifest_asset.cpp::6cb33f3c4f92db30:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@10>",
+          "signature": "source-statement const std :: vector < uint32_t > ManifestAsset :: emptyIntVector",
+          "line": 10,
+          "definition_sha256": "bbffab9d96be9a9a7900ff135ef94756c4b78edaaed7b412444596ce5c601d48"
+        },
         {
           "id": "src/assets/manifest_asset.cpp::bcd042c34d03b3ea:1",
           "kind": "function",
@@ -7367,8 +8207,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 9693,
       "file_sha256": "98e30a4baa0272ab7d4ae85876a5bc126f2701a7e4b52d5fadbcea03a4f5f313",
-      "symbol_count": 18,
+      "symbol_count": 19,
       "symbols": [
+        {
+          "id": "src/async/work_pool.cpp::b59b281deff3d5b1:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@12>",
+          "signature": "source-statement std :: atomic < uint64_t > WorkPool :: s_nextOwnerId { 1 }",
+          "line": 12,
+          "definition_sha256": "d1decd0a6f6135849397930becf5cc27ac2c179272893f3d7a0758c767033788"
+        },
         {
           "id": "src/async/work_pool.cpp::c2b8b8a129f11e60:1",
           "kind": "function",
@@ -7520,7 +8368,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 18141,
       "file_sha256": "7cdfff65741bd93f4cf19b2e942172b8ea0b57addb2e93fea2b1f5acbc4c2d2f",
-      "symbol_count": 27,
+      "symbol_count": 30,
       "symbols": [
         {
           "id": "src/audio/audio_engine.cpp::1a8dfa9d168b58fe:1",
@@ -7547,12 +8395,28 @@
           "definition_sha256": "4da4ce5cff6df122a7f2f36eff88fc7e4239a827c777e3b79f69f11e0a128d37"
         },
         {
+          "id": "src/audio/audio_engine.cpp::48a1a6915dd0b009:1",
+          "kind": "function",
+          "symbol": "LevelsNode::measureLevels",
+          "signature": "static void measureLevels ( ma_node * pNode , const float * * ppFramesIn , ma_uint32 * pFrameCountIn , float * * ppFramesOut , ma_uint32 * pFrameCountOut )",
+          "line": 58,
+          "definition_sha256": "305bb6354c1171c9e8885f65e7d2ad866119e53a5b1dcf58117a8399e1500ea3"
+        },
+        {
           "id": "src/audio/audio_engine.cpp::1c62050e498e40d1:1",
           "kind": "function",
           "symbol": "AudioEngine::measureLevels",
           "signature": "void AudioEngine :: measureLevels ( const float * frames , uint32_t frameCount )",
           "line": 75,
           "definition_sha256": "bfaaa8bdf57a0e5cc841e554b86ce6a92454c05500b9ae161a2932b4ef338cb2"
+        },
+        {
+          "id": "src/audio/audio_engine.cpp::d51751ecf380c6ef:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@89>",
+          "signature": "source-statement static ma_node_vtable measure_levels_vtable = { LevelsNode :: measureLevels , nullptr , 1 , 1 , MA_NODE_FLAG_PASSTHROUGH }",
+          "line": 89,
+          "definition_sha256": "bd7b60e6140ca55933a79bb929d27b708fdf21b16335c1c71463e53e1b1deb6f"
         },
         {
           "id": "src/audio/audio_engine.cpp::580a10e5769074d3:1",
@@ -7705,6 +8569,14 @@
           "signature": "float AudioEngine :: timeInSeconds ( )",
           "line": 510,
           "definition_sha256": "09c7e97a8f681f07603423a183773fb210f467f46ed24dc525340cb0e7d1b868"
+        },
+        {
+          "id": "src/audio/audio_engine.cpp::053a2868e756013e:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@515>",
+          "signature": "source-statement static rcp < AudioEngine > m_runtimeAudioEngine",
+          "line": 515,
+          "definition_sha256": "0a1fd7b76ecdbdbffeb3c70137161913d72074f9fec702569a92c4ade1ad7068"
         },
         {
           "id": "src/audio/audio_engine.cpp::b21fa708355b91b3:1",
@@ -7931,7 +8803,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 7712,
       "file_sha256": "889f7126ef91e64fe60662b02425d0ba1aedc744ab9fa14ef875f700378b6465",
-      "symbol_count": 20,
+      "symbol_count": 25,
       "symbols": [
         {
           "id": "src/audio/audio_source.cpp::a692a72ea2a58f65:1",
@@ -7980,6 +8852,46 @@
           "signature": "const rive :: Span < float > AudioSource :: bufferedSamples ( )",
           "line": 80,
           "definition_sha256": "d168547f32cb8bb0ef5a53e9353e6a0cc81c28a791f6a2e51fdd64c439bf6006"
+        },
+        {
+          "id": "src/audio/audio_source.cpp::61385955a3d8c291:1",
+          "kind": "function",
+          "symbol": "AudioSourceDecoder::AudioSourceDecoder",
+          "signature": "public : AudioSourceDecoder ( rive :: Span < uint8_t > fileBytes )",
+          "line": 89,
+          "definition_sha256": "3c088c53cfb649e5ef1f187d11bebeb6aa2b4b49a88956a2454d7fb0ddfe4247"
+        },
+        {
+          "id": "src/audio/audio_source.cpp::a73a399e48f54ef6:1",
+          "kind": "function",
+          "symbol": "AudioSourceDecoder::~AudioSourceDecoder",
+          "signature": "~ AudioSourceDecoder ( )",
+          "line": 103,
+          "definition_sha256": "ee76c6a179b9fe4d50389deb6d47879320c6e1d95020a0855bcff25b84d6195b"
+        },
+        {
+          "id": "src/audio/audio_source.cpp::db093e63ead753d5:1",
+          "kind": "function",
+          "symbol": "AudioSourceDecoder::channels",
+          "signature": "uint32_t channels ( )",
+          "line": 105,
+          "definition_sha256": "83690bd8f49e32b713dea1adc5b4b711e93ddbe1d2163087ff743b5a12fe04a2"
+        },
+        {
+          "id": "src/audio/audio_source.cpp::51d563e7fc60f0ee:1",
+          "kind": "function",
+          "symbol": "AudioSourceDecoder::sampleRate",
+          "signature": "uint32_t sampleRate ( )",
+          "line": 107,
+          "definition_sha256": "ed3dae82dcf2efed0ce2c6f073a55daa8681d6a512f2f7a1dd0107105864659e"
+        },
+        {
+          "id": "src/audio/audio_source.cpp::e801292f0cfc560a:1",
+          "kind": "function",
+          "symbol": "AudioSourceDecoder::lengthInFrames",
+          "signature": "uint64_t lengthInFrames ( )",
+          "line": 109,
+          "definition_sha256": "d4d7bc3f47e37d0efa9b36e4872830ba2fbee8adb6e63b7440bdea412466b98e"
         },
         {
           "id": "src/audio/audio_source.cpp::816d1f7849a674d0:1",
@@ -8428,8 +9340,24 @@
       "authority_kind": "cpp-source",
       "byte_count": 87645,
       "file_sha256": "188d136610849a94e821c34727f35323498b21d5b5fddf8d32b08ebc202d4494",
-      "symbol_count": 96,
+      "symbol_count": 98,
       "symbols": [
+        {
+          "id": "src/command_queue.cpp::b4e676c8d0e1c7a5:1",
+          "kind": "function",
+          "symbol": "AutoLockAndNotify::AutoLockAndNotify",
+          "signature": "public : AutoLockAndNotify ( std :: mutex & mutex , std :: condition_variable & cv )",
+          "line": 15,
+          "definition_sha256": "7d11a1e0929f7a761df462493f89eb323e3ecee7ea1ce22b7e500ce12b1e19e3"
+        },
+        {
+          "id": "src/command_queue.cpp::bf38fbbf97a94d75:1",
+          "kind": "function",
+          "symbol": "AutoLockAndNotify::~AutoLockAndNotify",
+          "signature": "~ AutoLockAndNotify ( )",
+          "line": 22,
+          "definition_sha256": "fad01356adbe9d875289eeef43f8cbc536bc28704e91aa743a8a1a2c6e9cb3ca"
+        },
         {
           "id": "src/command_queue.cpp::3776e9dccb09952b:1",
           "kind": "function",
@@ -9205,8 +10133,120 @@
       "authority_kind": "cpp-source",
       "byte_count": 160955,
       "file_sha256": "03bece5b34fc755a7605eb4c8c06c947a4cdfd0c8c10c590e2950d5325cf62b6",
-      "symbol_count": 31,
+      "symbol_count": 45,
       "symbols": [
+        {
+          "id": "src/command_server.cpp::43471f0282d5d112:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::CommandFileAssetLoader",
+          "signature": "public : CommandFileAssetLoader ( CommandServer * server , rcp < rive :: FileAssetLoader > internalLoader )",
+          "line": 23,
+          "definition_sha256": "77971e29f3df311dd23eeb251c2ff4147f6bdd8a5d873f93209db5075ad9798d"
+        },
+        {
+          "id": "src/command_server.cpp::8779f941e907127d:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::loadContents",
+          "signature": "virtual bool loadContents ( FileAsset & asset , Span < const uint8_t > inBandBytes , Factory * factory )",
+          "line": 29,
+          "definition_sha256": "2fe5faecd9ec205c5d4e483e4fb35f77b3cd057fb1bd3988a5e2eb52bbc922e9"
+        },
+        {
+          "id": "src/command_server.cpp::354d8f6762112410:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::addRenderImage",
+          "signature": "void addRenderImage ( std :: string name , RenderImageHandle handle )",
+          "line": 104,
+          "definition_sha256": "b6bea36ed58ed497586faa847469621dc4fb40bda37ae7cf91e4664f300cfdbc"
+        },
+        {
+          "id": "src/command_server.cpp::5b7ae7a8d84577a4:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::addAudioSource",
+          "signature": "void addAudioSource ( std :: string name , AudioSourceHandle handle )",
+          "line": 109,
+          "definition_sha256": "edd872e6846ef46f736e397de87a3905da3b72652756ec41e5871071efd1290c"
+        },
+        {
+          "id": "src/command_server.cpp::c9ffdaf2d124c2e5:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::addFont",
+          "signature": "void addFont ( std :: string name , FontHandle handle )",
+          "line": 114,
+          "definition_sha256": "fc4f5fefb5c3d5f94263cdae31085cde3471f3717070ebb1838845b4e3a725d2"
+        },
+        {
+          "id": "src/command_server.cpp::a2a5d6941f512423:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::removeRenderImage",
+          "signature": "void removeRenderImage ( RenderImageHandle handle )",
+          "line": 119,
+          "definition_sha256": "fb60c1d725d3f2d1e17a105e0bfccf8159a43db27a793cbfa5465886e6b7520d"
+        },
+        {
+          "id": "src/command_server.cpp::298bc773c5ddb4c3:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::removeAudioSource",
+          "signature": "void removeAudioSource ( AudioSourceHandle handle )",
+          "line": 130,
+          "definition_sha256": "8be1595ddf2495e7de255a4db86fcac6f0556ab247faba4ec16bfbd198cc33a7"
+        },
+        {
+          "id": "src/command_server.cpp::186bbfaf2138887c:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::removeFont",
+          "signature": "void removeFont ( FontHandle handle )",
+          "line": 141,
+          "definition_sha256": "af2ed2eea1e315abcbb65cafe8f1dcc1ae794ca19d1138ad29525b56a0217fde"
+        },
+        {
+          "id": "src/command_server.cpp::8f8c1b358b837bda:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::removeRenderImage",
+          "signature": "void removeRenderImage ( std :: string name )",
+          "line": 152,
+          "definition_sha256": "d1ed16aba87b1eecced0c8f3a89d540bd793cb109c2d100e6ff05426cdf8f09c"
+        },
+        {
+          "id": "src/command_server.cpp::bc07fae6eb3e2389:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::removeAudioSource",
+          "signature": "void removeAudioSource ( std :: string name )",
+          "line": 153,
+          "definition_sha256": "cc30372ee53e64e13e764b1b8d00862322d862182167de4f9ab45b9024873ebe"
+        },
+        {
+          "id": "src/command_server.cpp::cf11cb5b112875c2:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::removeFont",
+          "signature": "void removeFont ( std :: string name )",
+          "line": 154,
+          "definition_sha256": "06f6c2c0ffa1bf40ac284be98155c21b0f410f1ae1bf754d2953692069fec9d2"
+        },
+        {
+          "id": "src/command_server.cpp::6993a2e7e9df36b6:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::testing_imageNamed",
+          "signature": "RenderImageHandle testing_imageNamed ( std :: string name )",
+          "line": 157,
+          "definition_sha256": "76f4bb0406a04a36d1bc2c27ea130b13eff226d8adda32313c20e1d74d0caf58"
+        },
+        {
+          "id": "src/command_server.cpp::3913c91d68a69df1:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::testing_audioNamed",
+          "signature": "AudioSourceHandle testing_audioNamed ( std :: string name )",
+          "line": 165,
+          "definition_sha256": "b6a6f3603b95934c2fc4f749ae4157b5166fc7cc91118e433f06a41dc9c62649"
+        },
+        {
+          "id": "src/command_server.cpp::a850bb7a92cb585d:1",
+          "kind": "function",
+          "symbol": "CommandServer::CommandFileAssetLoader::testing_fontNamed",
+          "signature": "FontHandle testing_fontNamed ( std :: string name )",
+          "line": 173,
+          "definition_sha256": "494b108adc243e87ac85d35beb7c0681f34ad5b866bc667f7a16914aff455cea"
+        },
         {
           "id": "src/command_server.cpp::1657b3e4204dd98d:1",
           "kind": "function",
@@ -9593,7 +10633,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 1254,
       "file_sha256": "f9b6baee75e5554788de5e71c35f2ec5704321d8f012de5933981dd626179240",
-      "symbol_count": 6,
+      "symbol_count": 7,
       "symbols": [
         {
           "id": "src/constraints/constraint.cpp::5ec233ffdded93ef:1",
@@ -9634,6 +10674,14 @@
           "signature": "void Constraint :: onDirty ( ComponentDirt dirt )",
           "line": 35,
           "definition_sha256": "44f1bd9a4503c149c957d7f7df0c12c78621cc5f7f03ba5f6201e2c678e43c22"
+        },
+        {
+          "id": "src/constraints/constraint.cpp::b46505e0e0a46353:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@42>",
+          "signature": "source-statement static Mat2D identity",
+          "line": 42,
+          "definition_sha256": "2813103f88eae33c9d52ede4770030acb80969e762908c478e1fdfa24535687a"
         },
         {
           "id": "src/constraints/constraint.cpp::14f1fca01a449d75:1",
@@ -14030,8 +15078,80 @@
       "authority_kind": "cpp-source",
       "byte_count": 51943,
       "file_sha256": "df14e1486f73cec9fbe6e587d99e1907d125e21e4aa01a43e4ee490e3ca0ede1",
-      "symbol_count": 53,
+      "symbol_count": 63,
       "symbols": [
+        {
+          "id": "src/file.cpp::9c45bfa8ec96abbc:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@104>",
+          "signature": "source-statement size_t File :: debugTotalFileCount = 0",
+          "line": 104,
+          "definition_sha256": "43478a028c09dca4cebbc68578d94d6bad58e1a607d8ea40f04c3b30eb63a40e"
+        },
+        {
+          "id": "src/file.cpp::a795e26332208be9:1",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_FMT_U64",
+          "signature": "#define RIVE_FMT_U64",
+          "line": 110,
+          "definition_sha256": "c3a56f8af96aafe9c40e73dfa9af1103c1e97b3acc9113f77080b1ab9a22a6cf"
+        },
+        {
+          "id": "src/file.cpp::930ae6be58e4041f:1",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_FMT_I64",
+          "signature": "#define RIVE_FMT_I64",
+          "line": 111,
+          "definition_sha256": "63fcaad908d348a7bda35b662aaeec1c9dd10a95892b96902f87dff856db54d1"
+        },
+        {
+          "id": "src/file.cpp::a795e26332208be9:2",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_FMT_U64",
+          "signature": "#define RIVE_FMT_U64",
+          "line": 113,
+          "definition_sha256": "95cd1311236b397d62ca05f835d020558515f0ed1ad4d10f7898137292504609"
+        },
+        {
+          "id": "src/file.cpp::930ae6be58e4041f:2",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_FMT_I64",
+          "signature": "#define RIVE_FMT_I64",
+          "line": 114,
+          "definition_sha256": "89b1eabb3cedb6da86bc87716e52d2a2bc587525e6b1fe21c194964ddc66707d"
+        },
+        {
+          "id": "src/file.cpp::a795e26332208be9:3",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_FMT_U64",
+          "signature": "#define RIVE_FMT_U64",
+          "line": 117,
+          "definition_sha256": "9333e8b0813d6757a60fd22775ee2fc951e5fd1f204f88cc7f367beb2722b42c"
+        },
+        {
+          "id": "src/file.cpp::930ae6be58e4041f:3",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_FMT_I64",
+          "signature": "#define RIVE_FMT_I64",
+          "line": 118,
+          "definition_sha256": "c124def3a13dcff5ed879579a637f66c76a3fcd97d243509fd741600320bb6c6"
+        },
+        {
+          "id": "src/file.cpp::a795e26332208be9:4",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_FMT_U64",
+          "signature": "#define RIVE_FMT_U64",
+          "line": 121,
+          "definition_sha256": "b51760902b85051e779b6b5050cdc5a660ba3b090e56ee633b4fe27f96b17497"
+        },
+        {
+          "id": "src/file.cpp::930ae6be58e4041f:4",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_FMT_I64",
+          "signature": "#define RIVE_FMT_I64",
+          "line": 122,
+          "definition_sha256": "685b2f0fd545f65044848bed253551ffa9504cc9c520569948296a20142e55cb"
+        },
         {
           "id": "src/file.cpp::9c6dc48db10d82f3:1",
           "kind": "function",
@@ -14039,6 +15159,14 @@
           "signature": "static Core * readRuntimeObject ( BinaryReader & reader , const RuntimeHeader & header )",
           "line": 128,
           "definition_sha256": "0fe58e714a1c2678ba3fa5f2c062aded1c749f8cbcf161ff3a413921bb9af22a"
+        },
+        {
+          "id": "src/file.cpp::92f33e39a4446b24:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@198>",
+          "signature": "source-statement bool File :: deterministicMode = false",
+          "line": 198,
+          "definition_sha256": "88127f1867939f3833b476427cd0681b1f5923fb31cad1ef645497dba72a4a8c"
         },
         {
           "id": "src/file.cpp::b9e30fb3e89eec4b:1",
@@ -15679,8 +16807,24 @@
       "authority_kind": "cpp-source",
       "byte_count": 4173,
       "file_sha256": "0571d5782efcbd88ea0c44077502fe9e1c2184320f4b89220b97dd9472756abf",
-      "symbol_count": 5,
+      "symbol_count": 7,
       "symbols": [
+        {
+          "id": "src/importers/text_asset_importer.cpp::44bee0049d436e47:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@24>",
+          "signature": "source-statement const uint8_t g_scriptVerificationPublicKey [ 32 ] = { 180 , 113 , 86 , 235 , 225 , 24 , 110 , 236 , 105 , 86 , 201 , 6 , 73 , 5 , 203 , 102 , 81 , 179 , 12 , 240 , 226 , 55 , 103 , 134 , 227 , 94 , 82 , 187 , 51 , 178 , 96 , 46 }",
+          "line": 24,
+          "definition_sha256": "bb411c5a02bb1dd7f020162a0d36c4229aa96dca606a1da8a079c86604d73c30"
+        },
+        {
+          "id": "src/importers/text_asset_importer.cpp::964bd91f4b755351:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@29>",
+          "signature": "source-statement const uint8_t g_scriptVerificationPublicKey [ 32 ] = { 159 , 202 , 90 , 135 , 12 , 153 , 157 , 21 , 112 , 103 , 62 , 130 , 59 , 196 , 187 , 236 , 103 , 210 , 239 , 227 , 175 , 97 , 222 , 254 , 70 , 53 , 212 , 18 , 191 , 143 , 101 , 108 }",
+          "line": 29,
+          "definition_sha256": "62d97474c4738fcf23611da2e993464dbbb24a508d4f5e3e99e70a1e47a13bcb"
+        },
         {
           "id": "src/importers/text_asset_importer.cpp::a51a1d28520974b9:1",
           "kind": "function",
@@ -16557,8 +17701,81 @@
       "authority_kind": "cpp-source",
       "byte_count": 626,
       "file_sha256": "4872400cce306b8f20c76db7176f199eb6ca9c7899524fb4e628d52a1cc64557",
-      "symbol_count": 0,
-      "symbols": []
+      "symbol_count": 9,
+      "symbols": [
+        {
+          "id": "src/layout.cpp::db450fd93f0ea114:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@5>",
+          "signature": "source-statement const Alignment Alignment :: topLeft = Alignment ( - 1.0f , - 1.0f )",
+          "line": 5,
+          "definition_sha256": "17e4bcc00571c20036d80a6cec8e12c1330ee12c174750caf147a209eb5b4a0d"
+        },
+        {
+          "id": "src/layout.cpp::a9e1f7adfa05e324:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@7>",
+          "signature": "source-statement const Alignment Alignment :: topCenter = Alignment ( 0.0f , - 1.0f )",
+          "line": 7,
+          "definition_sha256": "7bcd4f89d9c6e5d63b8071a625fcd2a41ae4105c3c2bb36a8febb9d02e347615"
+        },
+        {
+          "id": "src/layout.cpp::593b00119d5a9e06:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@9>",
+          "signature": "source-statement const Alignment Alignment :: topRight = Alignment ( 1.0f , - 1.0f )",
+          "line": 9,
+          "definition_sha256": "dfac6663b44279af437a8605e79d4065e39b1c7cd8396dfbfe28f542795fadec"
+        },
+        {
+          "id": "src/layout.cpp::6d429457558303f4:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@11>",
+          "signature": "source-statement const Alignment Alignment :: centerLeft = Alignment ( - 1.0f , 0.0f )",
+          "line": 11,
+          "definition_sha256": "8c53abb551205ca715a775ea75864cc89ebc7bd52d6e8e81e99e6cd664663269"
+        },
+        {
+          "id": "src/layout.cpp::bca6ea2a59dcda0e:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@13>",
+          "signature": "source-statement const Alignment Alignment :: center = Alignment ( 0.0f , 0.0f )",
+          "line": 13,
+          "definition_sha256": "4abf861c2c43cda64622d329397962fc6090abeabaf96c7ca83ab8d3885fe527"
+        },
+        {
+          "id": "src/layout.cpp::f1448024b59fa8d1:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@15>",
+          "signature": "source-statement const Alignment Alignment :: centerRight = Alignment ( 1.0f , 0.0f )",
+          "line": 15,
+          "definition_sha256": "348cd170eaa7134bd7197228e64a9b615b228255cfa03b0d47445dd31f12124b"
+        },
+        {
+          "id": "src/layout.cpp::63f6057806d67326:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@17>",
+          "signature": "source-statement const Alignment Alignment :: bottomLeft = Alignment ( - 1.0f , 1.0f )",
+          "line": 17,
+          "definition_sha256": "75de6c1742772fc49cac9c30dac028540597c4c9b7683c7a4460b3405e2348f7"
+        },
+        {
+          "id": "src/layout.cpp::1c3a76ab0154ac8c:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@19>",
+          "signature": "source-statement const Alignment Alignment :: bottomCenter = Alignment ( 0.0f , 1.0f )",
+          "line": 19,
+          "definition_sha256": "912b24de21a1bbc94ea8c183cb3816357f40ec1cbd4fee2e050f19dec5e2880b"
+        },
+        {
+          "id": "src/layout.cpp::cd5702fffaead821:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@21>",
+          "signature": "source-statement const Alignment Alignment :: bottomRight = Alignment ( 1.0f , 1.0f )",
+          "line": 21,
+          "definition_sha256": "71be56113dc3fadb3c1e6ad1dcffd02d8bafad5e623b3d87af215f3619a39c64"
+        }
+      ]
     },
     {
       "upstream": "src/layout/artboard_component_list_override.cpp",
@@ -18507,7 +19724,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 50184,
       "file_sha256": "73bc9cd117a28a405f359d64895289d441a60990089737f1e8deac38f9b55c14",
-      "symbol_count": 100,
+      "symbol_count": 101,
       "symbols": [
         {
           "id": "src/layout_component.cpp::cad50867ae3f9286:1",
@@ -18548,6 +19765,14 @@
           "signature": "ComponentOrigin * originChild ( const ContainerComponent * owner )",
           "line": 116,
           "definition_sha256": "cd17c4de31d0505f85716be56b9a9bf7fafab55ff817a52d86a2c021644bd665"
+        },
+        {
+          "id": "src/layout_component.cpp::a4f8ff9790bc7373:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@130>",
+          "signature": "source-statement uint32_t LayoutData :: count = 0",
+          "line": 130,
+          "definition_sha256": "0d15e1f3709f97abb1bd1fe230b5702f632cdc99f910cfb25839a31a6310d943"
         },
         {
           "id": "src/layout_component.cpp::12928a0f4fc9cdc5:1",
@@ -19421,8 +20646,48 @@
       "authority_kind": "cpp-source",
       "byte_count": 1854,
       "file_sha256": "426c6282b1a2fb97c00345979b0f7a6394059aa61a7a79c29c9ef57a43cac389",
-      "symbol_count": 2,
+      "symbol_count": 7,
       "symbols": [
+        {
+          "id": "src/lua/logging_scripting_context.cpp::32428768434821c9:1",
+          "kind": "function",
+          "symbol": "LoggingScriptingContext::LoggingScriptingContext",
+          "signature": "public : LoggingScriptingContext ( Factory * factory , ScriptingLogSink sink )",
+          "line": 23,
+          "definition_sha256": "b87019b54a2cc59c45d8e132307c3dd14e0eee83ad08c62689337c0c5e534a25"
+        },
+        {
+          "id": "src/lua/logging_scripting_context.cpp::f0306b3910477a85:1",
+          "kind": "function",
+          "symbol": "LoggingScriptingContext::printBeginLine",
+          "signature": "void printBeginLine ( lua_State * )",
+          "line": 28,
+          "definition_sha256": "2bd33c2be46d377772d8fe16cd6c5e52682f08d40289e2496072634eb04edd83"
+        },
+        {
+          "id": "src/lua/logging_scripting_context.cpp::a003d17c6bda7d6f:1",
+          "kind": "function",
+          "symbol": "LoggingScriptingContext::print",
+          "signature": "void print ( Span < const char > data )",
+          "line": 30,
+          "definition_sha256": "c146cccef823f41909a17292e4b8bef653afdfb63ac9219799eecde4dd2c0539"
+        },
+        {
+          "id": "src/lua/logging_scripting_context.cpp::1c65d92af5e4aef4:1",
+          "kind": "function",
+          "symbol": "LoggingScriptingContext::printEndLine",
+          "signature": "void printEndLine ( )",
+          "line": 35,
+          "definition_sha256": "c7049a6255567c04dc692b0fba5b2abaf5dbed7019bc71dfca116258ffbc12f9"
+        },
+        {
+          "id": "src/lua/logging_scripting_context.cpp::4cab68c3d6f23268:1",
+          "kind": "function",
+          "symbol": "LoggingScriptingContext::printError",
+          "signature": "void printError ( lua_State * state )",
+          "line": 41,
+          "definition_sha256": "265795baeea6910c471f78b3b46e198387ef778f1f8b7932c19a8fcb59628e73"
+        },
         {
           "id": "src/lua/logging_scripting_context.cpp::8680f272ec2f67d7:1",
           "kind": "function",
@@ -19791,7 +21056,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 12907,
       "file_sha256": "d47ec75b1d92a37a216c354080784c75e5ce49c26b7632d2b76d94726793b622",
-      "symbol_count": 21,
+      "symbol_count": 22,
       "symbols": [
         {
           "id": "src/lua/lua_audio.cpp::292e13b8881b57e7:1",
@@ -19954,6 +21219,14 @@
           "definition_sha256": "df49434abf8705a0b595d40d0ee073578e11e95ca0a0d491dccda73595b1f27c"
         },
         {
+          "id": "src/lua/lua_audio.cpp::ebdb4f408143dadc:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@452>",
+          "signature": "source-statement static const luaL_Reg audioStaticMethods [ ] = { { \"time\" , audio_time } , { \"timeFrame\" , audio_time_frame } , { \"sampleRate\" , audio_sample_rate } , { \"play\" , audio_play } , { \"playAtTime\" , audio_play_at_time } , { \"playInTime\" , audio_play_in_time } , { \"playAtFrame\" , audio_play_at_frame } , { \"playInFrame\" , audio_play_in_frame } , { nullptr , nullptr } }",
+          "line": 452,
+          "definition_sha256": "47e8c039e69c5b63771d27c9a557a5ea56eafbad38fd2dab128c4491bd74a7c6"
+        },
+        {
           "id": "src/lua/lua_audio.cpp::4a14923def638399:1",
           "kind": "function",
           "symbol": "luaopen_rive_audio",
@@ -19968,8 +21241,32 @@
       "authority_kind": "cpp-source",
       "byte_count": 15329,
       "file_sha256": "283ed5d1fd87f2fdedad04adc7cb5bb4fbf5dc79a5cfe658a0f0716a9c8bce40",
-      "symbol_count": 12,
+      "symbol_count": 16,
       "symbols": [
+        {
+          "id": "src/lua/lua_buffer_ext.cpp::3b64aaacdf6419f0:1",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_BUF_NEON_F16",
+          "signature": "#define RIVE_BUF_NEON_F16",
+          "line": 10,
+          "definition_sha256": "a826155cc9aeb7d1b0dcee6f96a2c9684e27c24e22e7df5e1dfb9db850ddc67f"
+        },
+        {
+          "id": "src/lua/lua_buffer_ext.cpp::700110bc38d94630:1",
+          "kind": "macro-definition",
+          "symbol": "macro RIVE_BUF_F16C",
+          "signature": "#define RIVE_BUF_F16C",
+          "line": 16,
+          "definition_sha256": "9b4acf7b8c64516a3930e8be8d6c1d8e8a97893290acdbe960d53678b938ca87"
+        },
+        {
+          "id": "src/lua/lua_buffer_ext.cpp::af5f8db6a70edb86:1",
+          "kind": "macro-definition",
+          "symbol": "macro isoutofbounds",
+          "signature": "#define isoutofbounds(offset, len, accessize)",
+          "line": 21,
+          "definition_sha256": "1dda710c4254954c7f07007529f589d301fff81bb4b7391f38bce73e3b112669"
+        },
         {
           "id": "src/lua/lua_buffer_ext.cpp::07a5b02a54afd8f2:1",
           "kind": "function",
@@ -20065,6 +21362,14 @@
           "signature": "static int buffer_convert ( lua_State * L )",
           "line": 425,
           "definition_sha256": "f3946ed86eaadf7ee58c40ac91e5e595c6b1f53c9ce07a1df95f42f4ba7fc0f7"
+        },
+        {
+          "id": "src/lua/lua_buffer_ext.cpp::d6271b24c040ce9e:1",
+          "kind": "function",
+          "symbol": "luaopen_rive_buffer_ext",
+          "signature": "extern \"C\" int luaopen_rive_buffer_ext ( lua_State * L )",
+          "line": 518,
+          "definition_sha256": "610d58dc9d5915e8d98e7598146809de1cba5b81ab1a2ece1bbb39523225d3e2"
         }
       ]
     },
@@ -20122,7 +21427,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 15438,
       "file_sha256": "c349e79c1ecede1b0b47fd6088ed64534d3b49a05f80039adb34b9d35bef44a4",
-      "symbol_count": 17,
+      "symbol_count": 18,
       "symbols": [
         {
           "id": "src/lua/lua_data_value.cpp::c267661b3cbafde4:1",
@@ -20253,6 +21558,14 @@
           "definition_sha256": "1c12c793e9cdbfb765b05b5778340f06659d71ac87a9b901a77d4029b6a3f738"
         },
         {
+          "id": "src/lua/lua_data_value.cpp::93c9345142055521:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@396>",
+          "signature": "source-statement static const luaL_Reg dataValueStaticMethods [ ] = { { \"number\" , dataValue_number } , { \"string\" , dataValue_string } , { \"boolean\" , dataValue_boolean } , { \"color\" , dataValue_color } , { nullptr , nullptr } }",
+          "line": 396,
+          "definition_sha256": "0dd84c5e6d88d285288e659fc0ae984f939a849de462e647c592fb1d15dea674"
+        },
+        {
           "id": "src/lua/lua_data_value.cpp::c0464ba2c4b55b44:1",
           "kind": "function",
           "symbol": "luaopen_rive_data_values",
@@ -20267,8 +21580,40 @@
       "authority_kind": "cpp-source",
       "byte_count": 14460,
       "file_sha256": "ccf8e3c798df3b54cb5369ec2f2529c599f36c69ff5792cc12c35422859ed158",
-      "symbol_count": 6,
+      "symbol_count": 13,
       "symbols": [
+        {
+          "id": "src/lua/lua_image_decode.cpp::278c235b25d0cbc1:1",
+          "kind": "function",
+          "symbol": "ImageDecodeTask::execute",
+          "signature": "bool execute ( )",
+          "line": 37,
+          "definition_sha256": "fde5a96d5b36092f386b4a85224ff7e192f0434613257efe23b64d4cbbb18c1e"
+        },
+        {
+          "id": "src/lua/lua_image_decode.cpp::8a19cd59bbc3161a:1",
+          "kind": "function",
+          "symbol": "ImageDecodeTask::onComplete",
+          "signature": "void onComplete ( )",
+          "line": 54,
+          "definition_sha256": "7c07484c63ea18f4428584b3b47ba2ae0bf642184d252c89cda757d4127548eb"
+        },
+        {
+          "id": "src/lua/lua_image_decode.cpp::72dbf75cd0d69039:1",
+          "kind": "function",
+          "symbol": "ImageDecodeTask::onError",
+          "signature": "void onError ( const std :: string & error )",
+          "line": 99,
+          "definition_sha256": "ccb55be31479fd22ace9ee2ae77be3969851c331c18c83b229ef8c7281dbb5ff"
+        },
+        {
+          "id": "src/lua/lua_image_decode.cpp::0828c16a548b719c:1",
+          "kind": "function",
+          "symbol": "ImageDecodeTask::onCancel",
+          "signature": "void onCancel ( )",
+          "line": 117,
+          "definition_sha256": "c7f5b4e7a6418ed094a927ec00943cad7e5515134802d7529a29b922696da68a"
+        },
         {
           "id": "src/lua/lua_image_decode.cpp::4af0a3a18088f0c5:1",
           "kind": "function",
@@ -20278,12 +21623,36 @@
           "definition_sha256": "7baf6fb56f87fd0b86dd457fb98b6de1796d72a82239080bd6634263c433d892"
         },
         {
+          "id": "src/lua/lua_image_decode.cpp::b782d57f38a19b35:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@230>",
+          "signature": "source-statement std :: unordered_map < uint32_t , PendingDecode > s_pendingDecodes",
+          "line": 230,
+          "definition_sha256": "545d625fb7140961157363add9f302d50972fb0ba5a43dea47c1a9560967fe52"
+        },
+        {
+          "id": "src/lua/lua_image_decode.cpp::b58772fa37bab1d5:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@231>",
+          "signature": "source-statement uint32_t s_nextDecodeId = 1",
+          "line": 231,
+          "definition_sha256": "4796dd9a3e570ddc0eb6653e70477bd9d9518446a3d77bf1596f1e1d4d1f6ab1"
+        },
+        {
           "id": "src/lua/lua_image_decode.cpp::8cdf57926121366e:1",
           "kind": "function",
           "symbol": "nextDecodeId",
           "signature": "uint32_t nextDecodeId ( )",
           "line": 234,
           "definition_sha256": "8c6c106d3412262a02debe8ea32ada25271c9fcec951a8a8a6266cf702175ff1"
+        },
+        {
+          "id": "src/lua/lua_image_decode.cpp::ba7475ea2b34b704:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@247>",
+          "signature": "source-statement EM_JS ( void , wasm_start_image_decode , ( uint32_t requestId , const uint8_t * data , int dataLen ) , { var sourceView = Module [ \"HEAP8\" ] . subarray ( data , data + dataLen ) ; var buffer = new Uint8Array ( dataLen ) ; buffer . set ( sourceView ) ; var blob = new Blob ( [ buffer ] ) ; createImageBitmap ( blob ) . then ( function ( bmp ) { var canvas = new OffscreenCanvas ( bmp . width , bmp . height ) ; var ctx2d = canvas . getContext ( \"2d\" ) ; ctx2d . drawImage ( bmp , 0 , 0 ) ; var imageData = ctx2d . getImageData ( 0 , 0 , bmp . width , bmp . height ) ; var numBytes = imageData . data . length ; var ptr = Module . _malloc ( numBytes ) ; Module . HEAPU8 . set ( imageData . data , ptr ) ; Module . _wasm_image_decode_complete ( requestId , bmp . width , bmp . height , ptr , numBytes ) ; } ) . catch ( function ( err ) { var msg = err . message || \"decode failed\" ; var msgLen = Module . lengthBytesUTF8 ( msg ) + 1 ; var msgPtr = Module . _malloc ( msgLen ) ; Module . stringToUTF8 ( msg , msgPtr , msgLen ) ; Module . _wasm_image_decode_error ( requestId , msgPtr ) ; Module . _free ( msgPtr ) ; } ) ; } )",
+          "line": 247,
+          "definition_sha256": "df4f524836971276339451d4b6f9533261e109e97096be47105071f7790836ba"
         },
         {
           "id": "src/lua/lua_image_decode.cpp::93f0592dc2de0e1f:1",
@@ -21407,7 +22776,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 953,
       "file_sha256": "0dd24800b169bedbbb6ddfd8e53fc9b42fb479100b3b040191e9c94f5f89f42e",
-      "symbol_count": 2,
+      "symbol_count": 3,
       "symbols": [
         {
           "id": "src/lua/lua_rive_base.cpp::f73c70e6088631d1:1",
@@ -21416,6 +22785,14 @@
           "signature": "static int luaB_print ( lua_State * L )",
           "line": 6,
           "definition_sha256": "5e0614a3aeb9dc6ed88c00a5dbff686cc73208ef2d9d9dbf637cefc2726e4bde"
+        },
+        {
+          "id": "src/lua/lua_rive_base.cpp::6e1f56aaf54f3f63:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@32>",
+          "signature": "source-statement static const luaL_Reg base_funcs [ ] = { { \"print\" , luaB_print } , { NULL , NULL } , }",
+          "line": 32,
+          "definition_sha256": "86163f47f1b269b2998508cc6f93702be2b1309d50f1c2d71d75873f1fb25257"
         },
         {
           "id": "src/lua/lua_rive_base.cpp::541b143656040408:1",
@@ -21522,7 +22899,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 4704,
       "file_sha256": "2fc5828ee0ea9b3e0804fb27ecfc44b390ae1da072d5f5774a22f19b2b202b6b",
-      "symbol_count": 10,
+      "symbol_count": 11,
       "symbols": [
         {
           "id": "src/lua/math/lua_color.cpp::9f80313a32d26f54:1",
@@ -21597,6 +22974,14 @@
           "definition_sha256": "2f84d589bb72ccae41e1049cfd568e2f8a583f6ca5d809dcb0bb6ef46ba11305"
         },
         {
+          "id": "src/lua/math/lua_color.cpp::6be8c6c7d5fecdff:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@155>",
+          "signature": "source-statement static const luaL_Reg colorStaticMethods [ ] = { { \"red\" , color_red } , { \"green\" , color_green } , { \"blue\" , color_blue } , { \"alpha\" , color_alpha } , { \"opacity\" , color_opacity } , { \"lerp\" , color_lerp } , { \"rgb\" , color_rgb } , { \"rgba\" , color_rgba } , { \"toFloat\" , color_toFloat } , { nullptr , nullptr } }",
+          "line": 155,
+          "definition_sha256": "95755549678f648cb631c97f632ff382d9e274d40f9a81afbd8832f94efef89f"
+        },
+        {
           "id": "src/lua/math/lua_color.cpp::e0ade5f9c2dc6ee9:1",
           "kind": "function",
           "symbol": "luaopen_rive_color",
@@ -21611,7 +22996,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 6022,
       "file_sha256": "f91a2df2d2551079e88fd922ef558072cdf4f46e7aef2fb07276695cdbbcc9d7",
-      "symbol_count": 10,
+      "symbol_count": 11,
       "symbols": [
         {
           "id": "src/lua/math/lua_input.cpp::dd1aae05799e6bb8:1",
@@ -21686,6 +23071,14 @@
           "definition_sha256": "92f1004990aa86e7660b75d7bc923b16838d33f1dc3d8d7b56dc9cc08e1dd5ec"
         },
         {
+          "id": "src/lua/math/lua_input.cpp::aab5de53f6085df2:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@161>",
+          "signature": "source-statement static const luaL_Reg pointerEventsStaticMethods [ ] = { { \"new\" , pointer_event_new } , { nullptr , nullptr } }",
+          "line": 161,
+          "definition_sha256": "2fca3ebe1c984aaeca2eba9800b6d1be40035ba03c109521827f0ee20f3a5cf8"
+        },
+        {
           "id": "src/lua/math/lua_input.cpp::d5050dad1d5fdae5:1",
           "kind": "function",
           "symbol": "luaopen_rive_input",
@@ -21700,7 +23093,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 12566,
       "file_sha256": "f60d8e5be8fdd40a5e5f09296ea1b6664ff046284d9367574120b765f27a8cff",
-      "symbol_count": 23,
+      "symbol_count": 24,
       "symbols": [
         {
           "id": "src/lua/math/lua_mat2d.cpp::60d160c2c115e4ea:1",
@@ -21879,6 +23272,14 @@
           "definition_sha256": "c1d0d774b714f1957d00c2a7750507977eb9524ae2f2c4c5470735d06fde586c"
         },
         {
+          "id": "src/lua/math/lua_mat2d.cpp::3c8ff904c3c8fbc7:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@395>",
+          "signature": "source-statement static const luaL_Reg mat2dStaticMethods [ ] = { { \"withTranslation\" , mat2d_withTranslation } , { \"withRotation\" , mat2d_withRotation } , { \"withScale\" , mat2d_withScale } , { \"withScaleAndTranslation\" , mat2d_withScaleAndTranslation } , { \"identity\" , mat2d_identity } , { \"values\" , mat2d_values } , { \"invert\" , mat2d_static_invert } , { nullptr , nullptr } }",
+          "line": 395,
+          "definition_sha256": "353124754c1724d331143f34d13d1f0dd06adcdf2f2505f3cbfe5c9a2f26988f"
+        },
+        {
           "id": "src/lua/math/lua_mat2d.cpp::bc7810ad36c80e81:1",
           "kind": "function",
           "symbol": "luaopen_rive_mat2d",
@@ -21893,7 +23294,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 13862,
       "file_sha256": "e0733b351e6632be9fba1f6c5cabfc9a21b44febef375bbc0b5f2e16cac59b8f",
-      "symbol_count": 32,
+      "symbol_count": 33,
       "symbols": [
         {
           "id": "src/lua/math/lua_mat4.cpp::1c28c20d7f5c0fe8:1",
@@ -22144,6 +23545,14 @@
           "definition_sha256": "36418ef5cf34c1f9dbcf0e974c2aa5fd35a7ca345cee6a3fbd2e6ba2d9fcca51"
         },
         {
+          "id": "src/lua/math/lua_mat4.cpp::053b868f18ad554b:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@393>",
+          "signature": "source-statement static const luaL_Reg mat4StaticMethods [ ] = { { \"identity\" , mat4_identity } , { \"values\" , mat4_values } , { \"fromTranslation\" , mat4_fromTranslation } , { \"fromScale\" , mat4_fromScale } , { \"fromRotationX\" , mat4_fromRotationX } , { \"fromRotationY\" , mat4_fromRotationY } , { \"fromRotationZ\" , mat4_fromRotationZ } , { \"perspective\" , mat4_perspective } , { \"perspectiveReverseZ\" , mat4_perspectiveReverseZ } , { \"lookAt\" , mat4_lookAt } , { \"ortho\" , mat4_ortho } , { \"multiply\" , mat4_static_multiply } , { \"multiplyAffine\" , mat4_static_multiplyAffine } , { \"invert\" , mat4_static_invert } , { \"invertAffine\" , mat4_static_invertAffine } , { nullptr , nullptr } }",
+          "line": 393,
+          "definition_sha256": "05da6360927fdbdb539d93cf8d8aeee3d801eea64c39f0dcc637eddbea369048"
+        },
+        {
           "id": "src/lua/math/lua_mat4.cpp::82491ed23de23f45:1",
           "kind": "function",
           "symbol": "luaopen_rive_mat4",
@@ -22158,8 +23567,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 624,
       "file_sha256": "16053f0c6f72ade71586692c4bbee834a3b2a3001e3dbf555c8f0e39d3e2839a",
-      "symbol_count": 1,
+      "symbol_count": 2,
       "symbols": [
+        {
+          "id": "src/lua/math/lua_math.cpp::99967e7803be2a69:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@9>",
+          "signature": "source-statement static const lua_CFunction mathTypes [ ] = { luaopen_rive_vector , luaopen_rive_mat2d , luaopen_rive_mat4 , luaopen_rive_color }",
+          "line": 9,
+          "definition_sha256": "4313787ebd02437c66c9f20f16b31003a3175d08b359e1e604c09ccc05feef8f"
+        },
         {
           "id": "src/lua/math/lua_math.cpp::21a656f6b9d07126:1",
           "kind": "function",
@@ -22175,7 +23592,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 8457,
       "file_sha256": "64432b83398962e4bb2dbe44627763631f8b44a6c5c75c8f28ac7ff885a1d564",
-      "symbol_count": 21,
+      "symbol_count": 22,
       "symbols": [
         {
           "id": "src/lua/math/lua_vec2d.cpp::64e3119c695dce56:1",
@@ -22338,6 +23755,14 @@
           "definition_sha256": "1552039806cf23c74c6fc5244d01ad4e14006bdc857c5fbf6f099b29a5193d1e"
         },
         {
+          "id": "src/lua/math/lua_vec2d.cpp::90dfdceb746a63e4:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@259>",
+          "signature": "source-statement static const luaL_Reg vectorStaticMethods [ ] = { { \"distance\" , vector_distance } , { \"distanceSquared\" , vector_distanceSquared } , { \"dot\" , vector_dot } , { \"cross\" , vector_cross } , { \"cross3\" , vector_cross3 } , { \"scaleAndAdd\" , vector_scaleAndAdd } , { \"scaleAndSub\" , vector_scaleAndSub } , { \"lerp\" , vector_lerp } , { \"xy\" , vector_xy } , { \"xyz\" , vector_xyz } , { \"origin\" , vector_origin } , { \"length\" , vector_length } , { \"lengthSquared\" , vector_lengthSquared } , { \"normalized\" , vector_normalized } , { nullptr , nullptr } }",
+          "line": 259,
+          "definition_sha256": "6c1b568e2002b8fcfe6d9bc460b273bcdf526c68021092322f71b2c72f4e19e0"
+        },
+        {
           "id": "src/lua/math/lua_vec2d.cpp::0699c5d65bac2841:1",
           "kind": "function",
           "symbol": "luaopen_rive_vector",
@@ -22393,7 +23818,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 135047,
       "file_sha256": "a7ad84480b13091e16dc6566edb55ad330488dcb4e3f0bbb8472ba5470b47f7f",
-      "symbol_count": 93,
+      "symbol_count": 95,
       "symbols": [
         {
           "id": "src/lua/renderer/lua_gpu.cpp::3fbcadd2a884ced0:1",
@@ -23100,6 +24525,14 @@
           "definition_sha256": "6e646d3345067d362b5be6f35305c8ddc7bcc074a0afd457cc296b08a4ae9968"
         },
         {
+          "id": "src/lua/renderer/lua_gpu.cpp::c08eb099cb14537d:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@3401>",
+          "signature": "source-statement static const luaL_Reg empty [ ] = { { NULL , NULL } , }",
+          "line": 3401,
+          "definition_sha256": "62101071e792a4ed59bd157dd761a36384db3bd6cb6e3db2020187c4acf188e3"
+        },
+        {
           "id": "src/lua/renderer/lua_gpu.cpp::6a2c3f72ced0edde:1",
           "kind": "function",
           "symbol": "register_type_with_constructor",
@@ -23114,6 +24547,14 @@
           "signature": "int luaopen_rive_gpu ( lua_State * L )",
           "line": 3443,
           "definition_sha256": "991d3165ed88f01dc143a57a685614329eaafd06ac9c4dcbf873092c869d5370"
+        },
+        {
+          "id": "src/lua/renderer/lua_gpu.cpp::3bf8345c893ae07d:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@3617>",
+          "signature": "source-statement ScriptedImage :: ~ ScriptedImage ( ) = default",
+          "line": 3617,
+          "definition_sha256": "7af0c2c386aacabf8d1c92eba914833815a2547d912c84db394232e211e38c1f"
         },
         {
           "id": "src/lua/renderer/lua_gpu.cpp::f9d3f31273b78eb6:1",
@@ -23146,7 +24587,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 2973,
       "file_sha256": "b2590c69fc88cb7c3e3fc6eba911f22f7f2d35d2ee45e04446f8d70601bf904f",
-      "symbol_count": 4,
+      "symbol_count": 5,
       "symbols": [
         {
           "id": "src/lua/renderer/lua_gradient.cpp::d0f0ac7fa5423d7c:1",
@@ -23173,6 +24614,14 @@
           "definition_sha256": "4db043889a4c33afefd2edf3a1ed50c26e6f72356f26acc9aa966f17c0577e6c"
         },
         {
+          "id": "src/lua/renderer/lua_gradient.cpp::3bec53b35350ac60:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@77>",
+          "signature": "source-statement static const luaL_Reg gradientStaticMethods [ ] = { { \"linear\" , gradient_linear } , { \"radial\" , gradient_radial } , { nullptr , nullptr } }",
+          "line": 77,
+          "definition_sha256": "41d8daa1abeeb8adcca424ffdf818f94727cd6641562de8f39a462fa99958bef"
+        },
+        {
           "id": "src/lua/renderer/lua_gradient.cpp::d53145a7f2da98bb:1",
           "kind": "function",
           "symbol": "luaopen_rive_gradient",
@@ -23187,8 +24636,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 4805,
       "file_sha256": "709cd81d51efcb6abbb34ecde3681e1f3ee29b15a78e6af18e86afdf45058227",
-      "symbol_count": 6,
+      "symbol_count": 7,
       "symbols": [
+        {
+          "id": "src/lua/renderer/lua_image.cpp::46eca8e74a33a2f6:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@18>",
+          "signature": "source-statement ScriptedImage :: ~ ScriptedImage ( ) = default",
+          "line": 18,
+          "definition_sha256": "7af0c2c386aacabf8d1c92eba914833815a2547d912c84db394232e211e38c1f"
+        },
         {
           "id": "src/lua/renderer/lua_image.cpp::c10505ad61ca2958:1",
           "kind": "function",
@@ -23244,7 +24701,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 5544,
       "file_sha256": "0c844d3c58343c561333a6b815a4838ddcf6777c37e1604874d4751dece20c81",
-      "symbol_count": 13,
+      "symbol_count": 14,
       "symbols": [
         {
           "id": "src/lua/renderer/lua_mesh.cpp::9df12a5da91af43e:1",
@@ -23311,6 +24768,14 @@
           "definition_sha256": "6cd3ff21cc15f3293648209759acc983d3ae8cdba4821c9b636fc3b54be11906"
         },
         {
+          "id": "src/lua/renderer/lua_mesh.cpp::8d864cc1cf02ae3e:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@122>",
+          "signature": "source-statement static const luaL_Reg empty [ ] = { { NULL , NULL } , }",
+          "line": 122,
+          "definition_sha256": "62101071e792a4ed59bd157dd761a36384db3bd6cb6e3db2020187c4acf188e3"
+        },
+        {
           "id": "src/lua/renderer/lua_mesh.cpp::f25c181ac377faf5:1",
           "kind": "function",
           "symbol": "register_vertex_buffer",
@@ -23357,7 +24822,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 16755,
       "file_sha256": "9983005b223d87b816bc24cac28bb06e737971d509172f18ad4db42cbd0f3b61",
-      "symbol_count": 30,
+      "symbol_count": 31,
       "symbols": [
         {
           "id": "src/lua/renderer/lua_paint.cpp::64801d1a1b280352:1",
@@ -23584,6 +25049,14 @@
           "definition_sha256": "aaec8e73b8bb4ffac1605b9c7fc2d87a1c5f298cdc672c0598beca5071cd6ba7"
         },
         {
+          "id": "src/lua/renderer/lua_paint.cpp::c71bb4e3cf9c621e:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@562>",
+          "signature": "source-statement static const luaL_Reg paintStaticMethods [ ] = { { \"new\" , paint_new } , { \"with\" , paint_with } , { NULL , NULL } , }",
+          "line": 562,
+          "definition_sha256": "75bcd47c266d1a0081a20a4928241d795f078dd390d56f14e2214e2968a0ed8c"
+        },
+        {
           "id": "src/lua/renderer/lua_paint.cpp::d33d4c16cd8bfd4c:1",
           "kind": "function",
           "symbol": "registerPaintDirectFieldGetters",
@@ -23606,7 +25079,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 20118,
       "file_sha256": "e6ff46c97a78f5ee7643c897b9447a0fa9998f5d842b2797570d0ce7ac0e07bb",
-      "symbol_count": 42,
+      "symbol_count": 43,
       "symbols": [
         {
           "id": "src/lua/renderer/lua_path.cpp::28cff5c668a96b63:1",
@@ -23937,6 +25410,14 @@
           "definition_sha256": "8b14b35840c480f5e031308ae7a3e026159b334f7b95b9293b2c7d1bcfd09753"
         },
         {
+          "id": "src/lua/renderer/lua_path.cpp::a1f28164f31efc80:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@608>",
+          "signature": "source-statement static const luaL_Reg pathStaticMethods [ ] = { { \"new\" , path_new } , { NULL , NULL } , }",
+          "line": 608,
+          "definition_sha256": "143b9154ed8f7b0d06d50e0caeefc65a372554e457ab98eecd06cf27c370a151"
+        },
+        {
           "id": "src/lua/renderer/lua_path.cpp::88a31ea64fc4f50c:1",
           "kind": "function",
           "symbol": "luaopen_rive_path",
@@ -24080,8 +25561,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 893,
       "file_sha256": "c818d83e83bfd06ff930d22d20094da715b7d0b5bafcc083b7dc77eb54426678",
-      "symbol_count": 1,
+      "symbol_count": 2,
       "symbols": [
+        {
+          "id": "src/lua/renderer/lua_renderer_library.cpp::f506122f6487bc52:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@15>",
+          "signature": "source-statement static const lua_CFunction rendererTypes [ ] = { luaopen_rive_path , luaopen_rive_gradient , luaopen_rive_mesh , luaopen_rive_image , luaopen_rive_blob , luaopen_rive_paint , luaopen_rive_renderer , luaopen_rive_gpu , }",
+          "line": 15,
+          "definition_sha256": "59cb8d2ebc8ec97b526a45a47d0536c2287b77737e456c943c68613cf59463e9"
+        },
         {
           "id": "src/lua/renderer/lua_renderer_library.cpp::b8790976bcbb998d:1",
           "kind": "function",
@@ -24097,8 +25586,32 @@
       "authority_kind": "cpp-source",
       "byte_count": 44372,
       "file_sha256": "b988c680173dca469d95d05beec84b9ade2e4cab8f5cce5f7babb07c2ddf5bdf",
-      "symbol_count": 62,
+      "symbol_count": 69,
       "symbols": [
+        {
+          "id": "src/lua/rive_lua_libs.cpp::49042555e7e65454:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@42>",
+          "signature": "source-statement constexpr LuaAtomName atoms [ ] = { { \"length\" , ( int16_t ) LuaAtoms :: length } , { \"lengthSquared\" , ( int16_t ) LuaAtoms :: lengthSquared } , { \"normalized\" , ( int16_t ) LuaAtoms :: normalized } , { \"distance\" , ( int16_t ) LuaAtoms :: distance } , { \"distanceSquared\" , ( int16_t ) LuaAtoms :: distanceSquared } , { \"dot\" , ( int16_t ) LuaAtoms :: dot } , { \"lerp\" , ( int16_t ) LuaAtoms :: lerp } , { \"moveTo\" , ( int16_t ) LuaAtoms :: moveTo } , { \"lineTo\" , ( int16_t ) LuaAtoms :: lineTo } , { \"quadTo\" , ( int16_t ) LuaAtoms :: quadTo } , { \"cubicTo\" , ( int16_t ) LuaAtoms :: cubicTo } , { \"close\" , ( int16_t ) LuaAtoms :: close } , { \"type\" , ( int16_t ) LuaAtoms :: type } , { \"reset\" , ( int16_t ) LuaAtoms :: reset } , { \"add\" , ( int16_t ) LuaAtoms :: add } , { \"contours\" , ( int16_t ) LuaAtoms :: contours } , { \"measure\" , ( int16_t ) LuaAtoms :: measure } , { \"invert\" , ( int16_t ) LuaAtoms :: invert } , { \"isIdentity\" , ( int16_t ) LuaAtoms :: isIdentity } , { \"width\" , ( int16_t ) LuaAtoms :: width } , { \"height\" , ( int16_t ) LuaAtoms :: height } , { \"clamp\" , ( int16_t ) LuaAtoms :: clamp } , { \"repeat\" , ( int16_t ) LuaAtoms :: repeat } , { \"mirror\" , ( int16_t ) LuaAtoms :: mirror } , { \"bilinear\" , ( int16_t ) LuaAtoms :: bilinear } , { \"nearest\" , ( int16_t ) LuaAtoms :: nearest } , { \"style\" , ( int16_t ) LuaAtoms :: style } , { \"join\" , ( int16_t ) LuaAtoms :: join } , { \"cap\" , ( int16_t ) LuaAtoms :: cap } , { \"thickness\" , ( int16_t ) LuaAtoms :: thickness } , { \"blendMode\" , ( int16_t ) LuaAtoms :: blendMode } , { \"feather\" , ( int16_t ) LuaAtoms :: feather } , { \"gradient\" , ( int16_t ) LuaAtoms :: gradient } , { \"color\" , ( int16_t ) LuaAtoms :: color } , { \"stroke\" , ( int16_t ) LuaAtoms :: stroke } , { \"fill\" , ( int16_t ) LuaAtoms :: fill } , { \"miter\" , ( int16_t ) LuaAtoms :: miter } , { \"round\" , ( int16_t ) LuaAtoms :: round } , { \"bevel\" , ( int16_t ) LuaAtoms :: bevel } , { \"butt\" , ( int16_t ) LuaAtoms :: butt } , { \"square\" , ( int16_t ) LuaAtoms :: square } , { \"srcOver\" , ( int16_t ) LuaAtoms :: srcOver } , { \"screen\" , ( int16_t ) LuaAtoms :: screen } , { \"overlay\" , ( int16_t ) LuaAtoms :: overlay } , { \"darken\" , ( int16_t ) LuaAtoms :: darken } , { \"lighten\" , ( int16_t ) LuaAtoms :: lighten } , { \"colorDodge\" , ( int16_t ) LuaAtoms :: colorDodge } , { \"colorBurn\" , ( int16_t ) LuaAtoms :: colorBurn } , { \"hardLight\" , ( int16_t ) LuaAtoms :: hardLight } , { \"softLight\" , ( int16_t ) LuaAtoms :: softLight } , { \"difference\" , ( int16_t ) LuaAtoms :: difference } , { \"exclusion\" , ( int16_t ) LuaAtoms :: exclusion } , { \"multiply\" , ( int16_t ) LuaAtoms :: multiply } , { \"hue\" , ( int16_t ) LuaAtoms :: hue } , { \"saturation\" , ( int16_t ) LuaAtoms :: saturation } , { \"luminosity\" , ( int16_t ) LuaAtoms :: luminosity } , { \"copy\" , ( int16_t ) LuaAtoms :: copy } , { \"drawPath\" , ( int16_t ) LuaAtoms :: drawPath } , { \"drawImage\" , ( int16_t ) LuaAtoms :: drawImage } , { \"drawImageMesh\" , ( int16_t ) LuaAtoms :: drawImageMesh } , { \"clipPath\" , ( int16_t ) LuaAtoms :: clipPath } , { \"save\" , ( int16_t ) LuaAtoms :: save } , { \"restore\" , ( int16_t ) LuaAtoms :: restore } , { \"transform\" , ( int16_t ) LuaAtoms :: transform } , { \"value\" , ( int16_t ) LuaAtoms :: value } , { \"red\" , ( int16_t ) LuaAtoms :: red } , { \"green\" , ( int16_t ) LuaAtoms :: green } , { \"blue\" , ( int16_t ) LuaAtoms :: blue } , { \"alpha\" , ( int16_t ) LuaAtoms :: alpha } , { \"getNumber\" , ( int16_t ) LuaAtoms :: getNumber } , { \"getTrigger\" , ( int16_t ) LuaAtoms :: getTrigger } , { \"getString\" , ( int16_t ) LuaAtoms :: getString } , { \"getBoolean\" , ( int16_t ) LuaAtoms :: getBoolean } , { \"getColor\" , ( int16_t ) LuaAtoms :: getColor } , { \"getList\" , ( int16_t ) LuaAtoms :: getList } , { \"getViewModel\" , ( int16_t ) LuaAtoms :: getViewModel } , { \"getEnum\" , ( int16_t ) LuaAtoms :: getEnum } , { \"getIndex\" , ( int16_t ) LuaAtoms :: getIndex } , { \"getImage\" , ( int16_t ) LuaAtoms :: getImage } , { \"getFont\" , ( int16_t ) LuaAtoms :: getFont } , { \"getBlob\" , ( int16_t ) LuaAtoms :: getBlob } , { \"values\" , ( int16_t ) LuaAtoms :: values } , { \"addListener\" , ( int16_t ) LuaAtoms :: addListener } , { \"removeListener\" , ( int16_t ) LuaAtoms :: removeListener } , { \"fire\" , ( int16_t ) LuaAtoms :: fire } , { \"push\" , ( int16_t ) LuaAtoms :: push } , { \"insert\" , ( int16_t ) LuaAtoms :: insert } , { \"pop\" , ( int16_t ) LuaAtoms :: pop } , { \"swap\" , ( int16_t ) LuaAtoms :: swap } , { \"shift\" , ( int16_t ) LuaAtoms :: shift } , { \"clear\" , ( int16_t ) LuaAtoms :: clear } , { \"draw\" , ( int16_t ) LuaAtoms :: draw } , { \"advance\" , ( int16_t ) LuaAtoms :: advance } , { \"frameOrigin\" , ( int16_t ) LuaAtoms :: frameOrigin } , { \"data\" , ( int16_t ) LuaAtoms :: data } , { \"instance\" , ( int16_t ) LuaAtoms :: instance } , { \"animation\" , ( int16_t ) LuaAtoms :: animation } , { \"new\" , ( int16_t ) LuaAtoms :: newAtom } , { \"bounds\" , ( int16_t ) LuaAtoms :: bounds } , { \"pointerDown\" , ( int16_t ) LuaAtoms :: pointerDown } , { \"pointerUp\" , ( int16_t ) LuaAtoms :: pointerUp } , { \"pointerMove\" , ( int16_t ) LuaAtoms :: pointerMove } , { \"pointerExit\" , ( int16_t ) LuaAtoms :: pointerExit } , { \"isNumber\" , ( int16_t ) LuaAtoms :: isNumber } , { \"isString\" , ( int16_t ) LuaAtoms :: isString } , { \"isBoolean\" , ( int16_t ) LuaAtoms :: isBoolean } , { \"isColor\" , ( int16_t ) LuaAtoms :: isColor } , { \"hit\" , ( int16_t ) LuaAtoms :: hit } , { \"id\" , ( int16_t ) LuaAtoms :: id } , { \"position\" , ( int16_t ) LuaAtoms :: position } , { \"rotation\" , ( int16_t ) LuaAtoms :: rotation } , { \"scale\" , ( int16_t ) LuaAtoms :: scale } , { \"worldTransform\" , ( int16_t ) LuaAtoms :: worldTransform } , { \"scaleX\" , ( int16_t ) LuaAtoms :: scaleX } , { \"scaleY\" , ( int16_t ) LuaAtoms :: scaleY } , { \"decompose\" , ( int16_t ) LuaAtoms :: decompose } , { \"children\" , ( int16_t ) LuaAtoms :: children } , { \"parent\" , ( int16_t ) LuaAtoms :: parent } , { \"node\" , ( int16_t ) LuaAtoms :: node } , { \"paint\" , ( int16_t ) LuaAtoms :: paint } , { \"asPath\" , ( int16_t ) LuaAtoms :: asPath } , { \"asPaint\" , ( int16_t ) LuaAtoms :: asPaint } , { \"addToPath\" , ( int16_t ) LuaAtoms :: addToPath } , { \"positionAndTangent\" , ( int16_t ) LuaAtoms :: positionAndTangent } , { \"warp\" , ( int16_t ) LuaAtoms :: warp } , { \"extract\" , ( int16_t ) LuaAtoms :: extract } , { \"next\" , ( int16_t ) LuaAtoms :: next } , { \"isClosed\" , ( int16_t ) LuaAtoms :: isClosed } , { \"markNeedsUpdate\" , ( int16_t ) LuaAtoms :: markNeedsUpdate } , { \"viewModel\" , ( int16_t ) LuaAtoms :: viewModel } , { \"rootViewModel\" , ( int16_t ) LuaAtoms :: rootViewModel } , { \"dataContext\" , ( int16_t ) LuaAtoms :: dataContext } , { \"image\" , ( int16_t ) LuaAtoms :: image } , { \"blob\" , ( int16_t ) LuaAtoms :: blob } , { \"size\" , ( int16_t ) LuaAtoms :: size } , { \"name\" , ( int16_t ) LuaAtoms :: name } , { \"duration\" , ( int16_t ) LuaAtoms :: duration } , { \"setTime\" , ( int16_t ) LuaAtoms :: setTime } , { \"setTimeFrames\" , ( int16_t ) LuaAtoms :: setTimeFrames } , { \"setTimePercentage\" , ( int16_t ) LuaAtoms :: setTimePercentage } , { \"isPointerEvent\" , ( int16_t ) LuaAtoms :: isPointerEvent } , { \"isKeyboardEvent\" , ( int16_t ) LuaAtoms :: isKeyboardEvent } , { \"isTextInput\" , ( int16_t ) LuaAtoms :: isTextInput } , { \"previousPosition\" , ( int16_t ) LuaAtoms :: previousPosition } , { \"timeStamp\" , ( int16_t ) LuaAtoms :: timeStamp } , { \"isFocus\" , ( int16_t ) LuaAtoms :: isFocus } , { \"isReportedEvent\" , ( int16_t ) LuaAtoms :: isReportedEvent } , { \"isViewModelChange\" , ( int16_t ) LuaAtoms :: isViewModelChange } , { \"isNone\" , ( int16_t ) LuaAtoms :: isNone } , { \"isGamepadConnected\" , ( int16_t ) LuaAtoms :: isGamepadConnected } , { \"isGamepadEvent\" , ( int16_t ) LuaAtoms :: isGamepadEvent } , { \"isGamepadDisconnected\" , ( int16_t ) LuaAtoms :: isGamepadDisconnected } , { \"asPointerEvent\" , ( int16_t ) LuaAtoms :: asPointerEvent } , { \"asKeyboardEvent\" , ( int16_t ) LuaAtoms :: asKeyboardEvent } , { \"asTextInput\" , ( int16_t ) LuaAtoms :: asTextInput } , { \"asFocus\" , ( int16_t ) LuaAtoms :: asFocus } , { \"asReportedEvent\" , ( int16_t ) LuaAtoms :: asReportedEvent } , { \"asViewModelChange\" , ( int16_t ) LuaAtoms :: asViewModelChange } , { \"asGamepadConnected\" , ( int16_t ) LuaAtoms :: asGamepadConnected } , { \"asGamepadEvent\" , ( int16_t ) LuaAtoms :: asGamepadEvent } , { \"asGamepadDisconnected\" , ( int16_t ) LuaAtoms :: asGamepadDisconnected } , { \"gamepadEvent\" , ( int16_t ) LuaAtoms :: gamepadEvent } , { \"gamepadConnected\" , ( int16_t ) LuaAtoms :: gamepadConnected } , { \"gamepadDisconnected\" , ( int16_t ) LuaAtoms :: gamepadDisconnected } , { \"asNone\" , ( int16_t ) LuaAtoms :: asNone } , { \"key\" , ( int16_t ) LuaAtoms :: key } , { \"shift\" , ( int16_t ) LuaAtoms :: shift } , { \"alt\" , ( int16_t ) LuaAtoms :: alt } , { \"control\" , ( int16_t ) LuaAtoms :: control } , { \"meta\" , ( int16_t ) LuaAtoms :: meta } , { \"text\" , ( int16_t ) LuaAtoms :: text } , { \"phase\" , ( int16_t ) LuaAtoms :: phase } , { \"delaySeconds\" , ( int16_t ) LuaAtoms :: delaySeconds } , { \"deviceId\" , ( int16_t ) LuaAtoms :: deviceId } , { \"buttonMask\" , ( int16_t ) LuaAtoms :: buttonMask } , { \"remove\" , ( int16_t ) LuaAtoms :: remove } , { \"removeAt\" , ( int16_t ) LuaAtoms :: removeAt } , { \"removeAllOf\" , ( int16_t ) LuaAtoms :: removeAllOf } , { \"axes\" , ( int16_t ) LuaAtoms :: axes } , { \"gamepadMapping\" , ( int16_t ) LuaAtoms :: gamepadMapping } , { \"mapping\" , ( int16_t ) LuaAtoms :: mapping } , { \"isStandardMapping\" , ( int16_t ) LuaAtoms :: isStandardMapping } , { \"buttons\" , ( int16_t ) LuaAtoms :: buttons } , { \"buttonPressed\" , ( int16_t ) LuaAtoms :: buttonPressed } , { \"buttonValue\" , ( int16_t ) LuaAtoms :: buttonValue } , { \"axis\" , ( int16_t ) LuaAtoms :: axis } , { \"west\" , ( int16_t ) LuaAtoms :: west } , { \"south\" , ( int16_t ) LuaAtoms :: south } , { \"north\" , ( int16_t ) LuaAtoms :: north } , { \"east\" , ( int16_t ) LuaAtoms :: east } , { \"leftShoulder\" , ( int16_t ) LuaAtoms :: leftShoulder } , { \"rightShoulder\" , ( int16_t ) LuaAtoms :: rightShoulder } , { \"back\" , ( int16_t ) LuaAtoms :: gamepadBack } , { \"forward\" , ( int16_t ) LuaAtoms :: gamepadForward } , { \"leftStickButton\" , ( int16_t ) LuaAtoms :: leftStickButton } , { \"rightStickButton\" , ( int16_t ) LuaAtoms :: rightStickButton } , { \"dpadUp\" , ( int16_t ) LuaAtoms :: dpadUp } , { \"dpadDown\" , ( int16_t ) LuaAtoms :: dpadDown } , { \"dpadLeft\" , ( int16_t ) LuaAtoms :: dpadLeft } , { \"dpadRight\" , ( int16_t ) LuaAtoms :: dpadRight } , { \"start\" , ( int16_t ) LuaAtoms :: start } , { \"leftStick\" , ( int16_t ) LuaAtoms :: leftStick } , { \"rightStick\" , ( int16_t ) LuaAtoms :: rightStick } , { \"leftTrigger\" , ( int16_t ) LuaAtoms :: leftTrigger } , { \"rightTrigger\" , ( int16_t ) LuaAtoms :: rightTrigger } , { \"leftTriggerPressed\" , ( int16_t ) LuaAtoms :: leftTriggerPressed } , { \"rightTriggerPressed\" , ( int16_t ) LuaAtoms :: rightTriggerPressed } , { \"changeKind\" , ( int16_t ) LuaAtoms :: changeKind } , { \"changeIndex\" , ( int16_t ) LuaAtoms :: changeIndex } , { \"changeValue\" , ( int16_t ) LuaAtoms :: changeValue } , { \"hasStandardButtonIntent\" , ( int16_t ) LuaAtoms :: hasStandardButtonIntent } , { \"hasStandardAxisIntent\" , ( int16_t ) LuaAtoms :: hasStandardAxisIntent } , { \"intentButton\" , ( int16_t ) LuaAtoms :: intentButton } , { \"intentAxis\" , ( int16_t ) LuaAtoms :: intentAxis } , { \"audio\" , ( int16_t ) LuaAtoms :: audio } , { \"play\" , ( int16_t ) LuaAtoms :: play } , { \"playAtTime\" , ( int16_t ) LuaAtoms :: playAtTime } , { \"playInTime\" , ( int16_t ) LuaAtoms :: playInTime } , { \"playAtFrame\" , ( int16_t ) LuaAtoms :: playAtFrame } , { \"playInFrame\" , ( int16_t ) LuaAtoms :: playInFrame } , { \"stop\" , ( int16_t ) LuaAtoms :: stop } , { \"pause\" , ( int16_t ) LuaAtoms :: pause } , { \"resume\" , ( int16_t ) LuaAtoms :: resume } , { \"seek\" , ( int16_t ) LuaAtoms :: seek } , { \"seekFrame\" , ( int16_t ) LuaAtoms :: seekFrame } , { \"volume\" , ( int16_t ) LuaAtoms :: volume } , { \"completed\" , ( int16_t ) LuaAtoms :: completed } , { \"time\" , ( int16_t ) LuaAtoms :: time } , { \"timeFrame\" , ( int16_t ) LuaAtoms :: timeFrame } , { \"sampleRate\" , ( int16_t ) LuaAtoms :: sampleRate } , { \"write\" , ( int16_t ) LuaAtoms :: write } , { \"upload\" , ( int16_t ) LuaAtoms :: upload } , { \"view\" , ( int16_t ) LuaAtoms :: view } , { \"setPipeline\" , ( int16_t ) LuaAtoms :: setPipeline } , { \"setVertexBuffer\" , ( int16_t ) LuaAtoms :: setVertexBuffer } , { \"setIndexBuffer\" , ( int16_t ) LuaAtoms :: setIndexBuffer } , { \"setBindGroup\" , ( int16_t ) LuaAtoms :: setBindGroup } , { \"setViewport\" , ( int16_t ) LuaAtoms :: setViewport } , { \"setScissorRect\" , ( int16_t ) LuaAtoms :: setScissorRect } , { \"setStencilReference\" , ( int16_t ) LuaAtoms :: setStencilReference } , { \"drawIndexed\" , ( int16_t ) LuaAtoms :: drawIndexed } , { \"finish\" , ( int16_t ) LuaAtoms :: finish } , { \"beginRenderPass\" , ( int16_t ) LuaAtoms :: beginRenderPass } , { \"beginFrame\" , ( int16_t ) LuaAtoms :: beginFrame } , { \"endFrame\" , ( int16_t ) LuaAtoms :: endFrame } , { \"colorView\" , ( int16_t ) LuaAtoms :: colorView } , { \"depthView\" , ( int16_t ) LuaAtoms :: depthView } , { \"setBlendColor\" , ( int16_t ) LuaAtoms :: setBlendColor } , { \"resize\" , ( int16_t ) LuaAtoms :: resize } , { \"canvas\" , ( int16_t ) LuaAtoms :: canvas } , { \"gpuCanvas\" , ( int16_t ) LuaAtoms :: gpuCanvas } , { \"features\" , ( int16_t ) LuaAtoms :: features } , { \"drawCanvas\" , ( int16_t ) LuaAtoms :: drawCanvas } , { \"shader\" , ( int16_t ) LuaAtoms :: shader } , { \"format\" , ( int16_t ) LuaAtoms :: format } , { \"andThen\" , ( int16_t ) LuaAtoms :: andThen } , { \"catch\" , ( int16_t ) LuaAtoms :: catch_ } , { \"finally\" , ( int16_t ) LuaAtoms :: finally_ } , { \"cancel\" , ( int16_t ) LuaAtoms :: cancel } , { \"onCancel\" , ( int16_t ) LuaAtoms :: onCancel } , { \"getStatus\" , ( int16_t ) LuaAtoms :: getStatus } , { \"decodeImage\" , ( int16_t ) LuaAtoms :: decodeImage } , { \"transpose\" , ( int16_t ) LuaAtoms :: transpose } , { \"transformPoint\" , ( int16_t ) LuaAtoms :: transformPoint } , { \"transformVec4\" , ( int16_t ) LuaAtoms :: transformVec4 } , { \"writeToBuffer\" , ( int16_t ) LuaAtoms :: writeToBuffer } , { \"invertAffine\" , ( int16_t ) LuaAtoms :: invertAffine } , { \"writeVec4\" , ( int16_t ) LuaAtoms :: writeVec4 } , }",
+          "line": 42,
+          "definition_sha256": "3425bee7f1bb0246a75f96df3fa1306ba3bc6ca087bb8cf2b956d05ad0d18bb1"
+        },
+        {
+          "id": "src/lua/rive_lua_libs.cpp::4f5e731fe2bbb33f:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@316>",
+          "signature": "source-statement constexpr size_t atomCount = std :: size ( atoms )",
+          "line": 316,
+          "definition_sha256": "54fce3795d000c03f9ab510f44001aece5c22de56d7eefd87bebcee07f6fe48b"
+        },
+        {
+          "id": "src/lua/rive_lua_libs.cpp::2a07720dee97dc85:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@318>",
+          "signature": "source-statement constexpr size_t atomSlotCount = 1024",
+          "line": 318,
+          "definition_sha256": "a798d2881333685d72fe684b8cf98760d9a2733fe18aecdf5a4e18835da6dd42"
+        },
         {
           "id": "src/lua/rive_lua_libs.cpp::d38d9a2fb5434d21:1",
           "kind": "function",
@@ -24116,6 +25629,14 @@
           "definition_sha256": "3eedffbaaf0ead51f09d554a1853b17e1ace1c53c175a2d99ae5fb447fd19bec"
         },
         {
+          "id": "src/lua/rive_lua_libs.cpp::ea9dc5fa0abc2a14:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@344>",
+          "signature": "source-statement constexpr size_t maxAtomNameLength = longestAtomName ( )",
+          "line": 344,
+          "definition_sha256": "0cd49ce5d76f5d0bd55e9c0f1e3ac6864985131e4595bc37d9ff7c8cdf8420fd"
+        },
+        {
           "id": "src/lua/rive_lua_libs.cpp::e6e9d9e7105bbab2:1",
           "kind": "function",
           "symbol": "buildAtomSlots",
@@ -24124,12 +25645,28 @@
           "definition_sha256": "31183b5588f3ae2be9e86e8605923ec295b845727feadb8be382c26ba02dbdf0"
         },
         {
+          "id": "src/lua/rive_lua_libs.cpp::48b1e9010fcfa282:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@364>",
+          "signature": "source-statement constexpr std :: array < uint16_t , atomSlotCount > atomSlots = buildAtomSlots ( )",
+          "line": 364,
+          "definition_sha256": "a641eb91c94e328a430b4dacfdb94ce5eea95b0b333d45cda3e124d9e0016af3"
+        },
+        {
           "id": "src/lua/rive_lua_libs.cpp::3faad842023cc043:1",
           "kind": "function",
           "symbol": "findAtom",
           "signature": "int16_t findAtom ( const char * chars , size_t length )",
           "line": 366,
           "definition_sha256": "82f29cefaab7614051fdefe3cf1bd6e0174275b8a4dc6577c5cc9df57fc95a34"
+        },
+        {
+          "id": "src/lua/rive_lua_libs.cpp::0727040397046032:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@386>",
+          "signature": "source-statement static const luaL_Reg lualibs [ ] = { { \"\" , luaopen_base } , { LUA_TABLIBNAME , luaopen_table } , { LUA_MATHLIBNAME , luaopen_math } , { \"rive\" , luaopen_rive_base } , { LUA_OSLIBNAME , luaopen_os } , { LUA_STRLIBNAME , luaopen_string } , { LUA_UTF8LIBNAME , luaopen_utf8 } , { LUA_BUFFERLIBNAME , luaopen_buffer } , { LUA_BITLIBNAME , luaopen_bit32 } , { \"math\" , luaopen_rive_math } , { \"renderer\" , luaopen_rive_renderer_library } , { \"properties\" , luaopen_rive_properties } , { \"artboard\" , luaopen_rive_artboards } , { \"dataValue\" , luaopen_rive_data_values } , { \"input\" , luaopen_rive_input } , { \"context\" , luaopen_rive_contex } , { \"dataContext\" , luaopen_rive_data_context } , { \"audio\" , luaopen_rive_audio } , { \"promise\" , luaopen_rive_promise } , { NULL , NULL } , }",
+          "line": 386,
+          "definition_sha256": "d458096b8f02b276e63a7d7f7ec980a4d97137f8a236e06ce23515b8dd432e65"
         },
         {
           "id": "src/lua/rive_lua_libs.cpp::b012474d23aac3f6:1",
@@ -24186,6 +25723,14 @@
           "signature": "static void * l_alloc ( void * ud , void * ptr , size_t osize , size_t nsize )",
           "line": 486,
           "definition_sha256": "eeac832d715ed3c50f6000cd6ca6ca064dd6152c6312fbfdbb81e9b0c67d6db4"
+        },
+        {
+          "id": "src/lua/rive_lua_libs.cpp::6cb6c873a8fe1dd7:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@506>",
+          "signature": "source-statement static const char * registeredCacheTableKey = \"_MODULES\"",
+          "line": 506,
+          "definition_sha256": "ce7b72c5290e81d7f6e7bbbe727020c101d6d445c83173ba5f4e9c12b6f3745b"
         },
         {
           "id": "src/lua/rive_lua_libs.cpp::b1d59dc916c11757:1",
@@ -24683,7 +26228,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 11067,
       "file_sha256": "9a37e4f5ebda413c99aafb70c299262b19d1b4882619f23d93740bfc95e1e9d4",
-      "symbol_count": 6,
+      "symbol_count": 7,
       "symbols": [
         {
           "id": "src/math/bezier_utils.cpp::33892534796d2afc:1",
@@ -24724,6 +26269,14 @@
           "signature": "float measure_angle_between_vectors ( Vec2D a , Vec2D b )",
           "line": 161,
           "definition_sha256": "ac8f1366af71ff17b262b4158b796630f3accbdb90a1f1ed6e98124c671eb667"
+        },
+        {
+          "id": "src/math/bezier_utils.cpp::d5505da6544fb521:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@178>",
+          "signature": "source-statement constexpr static float TESS_EPSILON = 1.f / ( 1 << 10 )",
+          "line": 178,
+          "definition_sha256": "1fb40b959b2aaeb0175a38763262bef27869d419a930971bd3cc47a97937f9ca"
         },
         {
           "id": "src/math/bezier_utils.cpp::740f71631d8a95e6:1",
@@ -24773,7 +26326,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 17666,
       "file_sha256": "2c5d56e98e04e28a3b08ad2481654577b08e6f9e7313ac4e12e67c1b9263d7cc",
-      "symbol_count": 17,
+      "symbol_count": 18,
       "symbols": [
         {
           "id": "src/math/contour_measure.cpp::4eced035ce9803ef:1",
@@ -24864,6 +26417,14 @@
           "definition_sha256": "badaf92e527c1e7835200725cb117076ba3ee8a62f4ca990a68d4287b77abdc4"
         },
         {
+          "id": "src/math/contour_measure.cpp::a10a2a12071795b2:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@340>",
+          "signature": "source-statement constexpr auto kMaxDot30 = ContourMeasure :: kMaxDot30",
+          "line": 340,
+          "definition_sha256": "ea4a98f3424293f5a4ce2ad208dfbe7a2979ae76ab20de3c34df5a854626ac24"
+        },
+        {
           "id": "src/math/contour_measure.cpp::eb515dbd34181bfb:1",
           "kind": "function",
           "symbol": "toDot30",
@@ -24918,8 +26479,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 11078,
       "file_sha256": "ef4efde1f334bb3b8df2db631379ded13f9190dbf8e99549c311bb70cf7efaad",
-      "symbol_count": 20,
+      "symbol_count": 36,
       "symbols": [
+        {
+          "id": "src/math/hit_test.cpp::d4fd89dffe2a7fd2:1",
+          "kind": "macro-definition",
+          "symbol": "macro CULL_BOUNDS",
+          "signature": "#define CULL_BOUNDS",
+          "line": 13,
+          "definition_sha256": "56912b6e6f99561b00bb68b7808a0dd290f7064d09535ae181a9ba2be01e2f39"
+        },
         {
           "id": "src/math/hit_test.cpp::e4ee48a1d469530a:1",
           "kind": "function",
@@ -24935,6 +26504,78 @@
           "signature": "static inline int graphics_round ( float x )",
           "line": 19,
           "definition_sha256": "062c01bf9f5c3958f923c983c424ec89c78e99e68245fbe568426934d5c480c5"
+        },
+        {
+          "id": "src/math/hit_test.cpp::c1e970f3e119f77b:1",
+          "kind": "function",
+          "symbol": "Point::Point",
+          "signature": "Point ( )",
+          "line": 25,
+          "definition_sha256": "36f5f2d53ae8200066c9eddd56bb6a601234e9a18966a219738cf6733f0fd44e"
+        },
+        {
+          "id": "src/math/hit_test.cpp::8829a1c3070ba248:1",
+          "kind": "function",
+          "symbol": "Point::Point",
+          "signature": "Point ( float xx , float yy )",
+          "line": 26,
+          "definition_sha256": "5e171047c6f76eed51af918b8eaf97bb544f911d0ebb8394cc871d008cbc5011"
+        },
+        {
+          "id": "src/math/hit_test.cpp::07248873d4f7d253:1",
+          "kind": "function",
+          "symbol": "Point::Point",
+          "signature": "Point ( const Vec2D & src )",
+          "line": 27,
+          "definition_sha256": "319677093d23d63072fb9d86972cce9673076491b29e9be68ecfaa06ec1ed916"
+        },
+        {
+          "id": "src/math/hit_test.cpp::50bcfc0b0f82d79c:1",
+          "kind": "function",
+          "symbol": "Point::operator+",
+          "signature": "Point operator + ( Point v )",
+          "line": 29,
+          "definition_sha256": "8aeab74b6eba461e0340a0927c544e90df12578f87179e61beb86ea5b1804271"
+        },
+        {
+          "id": "src/math/hit_test.cpp::e48b54c54885e920:1",
+          "kind": "function",
+          "symbol": "Point::operator-",
+          "signature": "Point operator - ( Point v )",
+          "line": 30,
+          "definition_sha256": "92820edc52e690d36d3b7382be28787e8e6c12b4ac7aab529f5ac62b9354d241"
+        },
+        {
+          "id": "src/math/hit_test.cpp::1182a33c8dc40d1f:1",
+          "kind": "function",
+          "symbol": "Point::operator+=",
+          "signature": "Point & operator += ( Point v )",
+          "line": 32,
+          "definition_sha256": "b80e1a95a492043a417f17acf31e3dee8d12455340c8b472a498e0f6aae2937a"
+        },
+        {
+          "id": "src/math/hit_test.cpp::dc0375ea27149765:1",
+          "kind": "function",
+          "symbol": "Point::operator-=",
+          "signature": "Point & operator -= ( Point v )",
+          "line": 37,
+          "definition_sha256": "2aa6b1baf7f18abc60eaa2957cebca18fba69cb39b0c393ed5022c85154f5870"
+        },
+        {
+          "id": "src/math/hit_test.cpp::8c0cfeb0b8174b40:1",
+          "kind": "function",
+          "symbol": "operator*",
+          "signature": "friend Point operator * ( Point v , float s )",
+          "line": 43,
+          "definition_sha256": "f5bcf350fa6ded5fc391846381fe078fba3c9e56116a55801dc7d7c18bdb859f"
+        },
+        {
+          "id": "src/math/hit_test.cpp::192d1223d9778e8e:1",
+          "kind": "function",
+          "symbol": "operator*",
+          "signature": "friend Point operator * ( float s , Point v )",
+          "line": 44,
+          "definition_sha256": "72160e65c476f48721d298183abf4f51cb9521aa43d24eac23d940832b358d7f"
         },
         {
           "id": "src/math/hit_test.cpp::1b5e1ab06e103a27:1",
@@ -24961,12 +26602,36 @@
           "definition_sha256": "9e97f89362eb88243aa65f9a0f433c05b9b384832a3e94890276c2e33d854467"
         },
         {
+          "id": "src/math/hit_test.cpp::681831063c7a66b9:1",
+          "kind": "macro-definition",
+          "symbol": "macro MAX_CURVE_SEGMENTS",
+          "signature": "#define MAX_CURVE_SEGMENTS",
+          "line": 128,
+          "definition_sha256": "70c9340743a846ee1714a0c95124e8763939f039b83e136808ddf5da41f57f83"
+        },
+        {
           "id": "src/math/hit_test.cpp::1add00ffc0003d18:1",
           "kind": "function",
           "symbol": "compute_cubic_segments",
           "signature": "static int compute_cubic_segments ( Point a , Point b , Point c , Point d )",
           "line": 130,
           "definition_sha256": "0004db3850bed151f914f133b123c298e7733901cee342ccd0df96eff8c9a9d3"
+        },
+        {
+          "id": "src/math/hit_test.cpp::2e0aa1d5161328d3:1",
+          "kind": "function",
+          "symbol": "CubicCoeff::CubicCoeff",
+          "signature": "CubicCoeff ( Point a , Point b , Point c , Point d )",
+          "line": 160,
+          "definition_sha256": "fb1d6e7fcec825ed61001761668162b47b7ec1a0a1fe3575fa4374fc8245ebbb"
+        },
+        {
+          "id": "src/math/hit_test.cpp::12ab008689853a9d:1",
+          "kind": "function",
+          "symbol": "CubicCoeff::eval",
+          "signature": "Point eval ( float t )",
+          "line": 168,
+          "definition_sha256": "5a3d6b794a0520a9cb1f8b5164789571fe8cadb61802d1f32236ef57482933ec"
         },
         {
           "id": "src/math/hit_test.cpp::af0f029a2e4485d1:1",
@@ -25015,6 +26680,30 @@
           "signature": "static bool quickRejectCubic ( float height , Point a , Point b , Point c , Point d )",
           "line": 217,
           "definition_sha256": "e49d9035b5542a98c9b02d8039e4303e40c4bc1c56719edc0ddc53e5d0551af6"
+        },
+        {
+          "id": "src/math/hit_test.cpp::65bb18877837d1c9:1",
+          "kind": "function",
+          "symbol": "CubicChop::CubicChop",
+          "signature": "CubicChop ( Vec2D a , Vec2D b , Vec2D c , Vec2D d )",
+          "line": 228,
+          "definition_sha256": "36029e9e27fe80fde86043416f3ebe52b9a4d65da4f9f634357a83b86aae4164"
+        },
+        {
+          "id": "src/math/hit_test.cpp::11d71415d0fa67a1:1",
+          "kind": "function",
+          "symbol": "CubicChop::operator[]",
+          "signature": "Vec2D operator [ ] ( unsigned index )",
+          "line": 245,
+          "definition_sha256": "f214e5638f5ddfec9974efb73d1e144233781a8124f92e31e8f90bc165e49c4f"
+        },
+        {
+          "id": "src/math/hit_test.cpp::8d42c34b32306dcb:1",
+          "kind": "macro-definition",
+          "symbol": "macro MAX_LOCAL_SEGMENTS",
+          "signature": "#define MAX_LOCAL_SEGMENTS",
+          "line": 261,
+          "definition_sha256": "27eb5af455670c1eabb756afd1a8bd93abd713b4674bca3205be3e03c99084e2"
         },
         {
           "id": "src/math/hit_test.cpp::d5bce2a13009a3e5:1",
@@ -25323,8 +27012,25 @@
       "authority_kind": "cpp-source",
       "byte_count": 221,
       "file_sha256": "e5c38c1bd15b242339cc96aa9f12a452de4c07d1cc3b9ae47309f49cbc11cf7f",
-      "symbol_count": 0,
-      "symbols": []
+      "symbol_count": 2,
+      "symbols": [
+        {
+          "id": "src/math/random.cpp::9ad63cc400ceb064:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@11>",
+          "signature": "source-statement int RandomProvider :: m_randomCallsCount = 0",
+          "line": 11,
+          "definition_sha256": "240f587b81782fb48be94d78b553cd49d4bf2356b41c57a283d7d700f16ef9a3"
+        },
+        {
+          "id": "src/math/random.cpp::b4acb5b5143e66d9:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@12>",
+          "signature": "source-statement std :: vector < float > RandomProvider :: m_randomResults",
+          "line": 12,
+          "definition_sha256": "1787f4cb5be02b0505c6e2d960031f242378617fca947a7510582120f8d6564f"
+        }
+      ]
     },
     {
       "upstream": "src/math/raw_path.cpp",
@@ -25637,8 +27343,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 10540,
       "file_sha256": "405ab25a20ae69faccf07c2e0b648657bc202c8f0cd47a4283466b49f9ade1c4",
-      "symbol_count": 15,
+      "symbol_count": 16,
       "symbols": [
+        {
+          "id": "src/math/rectangles_to_contour.cpp::ac52d614a4c0b733:1",
+          "kind": "function",
+          "symbol": "SpanOffset::toSpan",
+          "signature": "Span < RectEvent > toSpan ( Span < RectEvent > base )",
+          "line": 14,
+          "definition_sha256": "c2c0dc92d10aa2bceb978b585dc9f6bea1ef46c061f66959fc581291615bb566"
+        },
         {
           "id": "src/math/rectangles_to_contour.cpp::f429568f843d9b91:1",
           "kind": "function",
@@ -26508,8 +28222,33 @@
       "authority_kind": "cpp-source",
       "byte_count": 409,
       "file_sha256": "b8a02c3d9b2b64e6f2094853fc1527f6bee20fcfa851920182e7b8d6834a30e8",
-      "symbol_count": 0,
-      "symbols": []
+      "symbol_count": 3,
+      "symbols": [
+        {
+          "id": "src/profiler/profiler.cpp::5a2df9aaf597d6ac:1",
+          "kind": "macro-definition",
+          "symbol": "macro MICROPROFILE_IMPL",
+          "signature": "#define MICROPROFILE_IMPL",
+          "line": 2,
+          "definition_sha256": "f7874bc519d0e978c72dffe465be449a9d17cbdcc605b19c26a97d158284a9fb"
+        },
+        {
+          "id": "src/profiler/profiler.cpp::9d77b335ee1168e6:1",
+          "kind": "macro-definition",
+          "symbol": "macro MICROPROFILE_GPU_TIMERS_D3D11",
+          "signature": "#define MICROPROFILE_GPU_TIMERS_D3D11",
+          "line": 4,
+          "definition_sha256": "44d6e9f548484b0b5b698fd2b517fff4bb56a061cf3bbe5f449c7adc770afed4"
+        },
+        {
+          "id": "src/profiler/profiler.cpp::fafef8d8da523174:1",
+          "kind": "macro-definition",
+          "symbol": "macro MICROPROFILE_GPU_TIMERS_D3D12",
+          "signature": "#define MICROPROFILE_GPU_TIMERS_D3D12",
+          "line": 5,
+          "definition_sha256": "1ab9ffee0505bd8a5ca7fd0833699859817d3ea2c6af586eba3182c11b7ebb75"
+        }
+      ]
     },
     {
       "upstream": "src/profiler/rive_profile.cpp",
@@ -28550,7 +30289,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 2017,
       "file_sha256": "72968345ab2756124d419ea6db4a78b18dbc19ca9cfc0afabd64c991247da83b",
-      "symbol_count": 6,
+      "symbol_count": 7,
       "symbols": [
         {
           "id": "src/semantic/semantic_inference_registry.cpp::08a187ca790bf61f:1",
@@ -28567,6 +30306,14 @@
           "signature": "static bool inferTextSemantics ( Component * component , ResolvedSemanticData & out )",
           "line": 35,
           "definition_sha256": "a78b3bf00ad0e3ae20cacc4b1c31dd1bf4db400cf16d0a7eb727ab8b87756984"
+        },
+        {
+          "id": "src/semantic/semantic_inference_registry.cpp::0b9e0926c1bff498:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@49>",
+          "signature": "source-statement static constexpr InferenceRule kInferenceRules [ ] = { { TextBase :: typeKey , inferTextSemantics } , }",
+          "line": 49,
+          "definition_sha256": "93eb54bcee49ae65d14b68e11bc39536fe50e651c54386800e2ee4b9d66a9a01"
         },
         {
           "id": "src/semantic/semantic_inference_registry.cpp::03c6aab4538f2afd:1",
@@ -28841,7 +30588,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 4179,
       "file_sha256": "9f063ff37664a53345eab27ec05e014d551ee27c3f4d8c2f8b9cbe74e7dc40e5",
-      "symbol_count": 11,
+      "symbol_count": 12,
       "symbols": [
         {
           "id": "src/shapes/clipping_shape.cpp::5ae97dff245a2c49:1",
@@ -28914,6 +30661,14 @@
           "signature": "void ClippingShape :: buildDependencies ( )",
           "line": 140,
           "definition_sha256": "f82ce28091981528f553ee1e550338675c5642f4ff974f8a63402d2b78508dc6"
+        },
+        {
+          "id": "src/shapes/clipping_shape.cpp::684717d2c36e63cf:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@150>",
+          "signature": "source-statement static Mat2D identity",
+          "line": 150,
+          "definition_sha256": "2813103f88eae33c9d52ede4770030acb80969e762908c478e1fdfa24535687a"
         },
         {
           "id": "src/shapes/clipping_shape.cpp::bbb888caf375c2df:1",
@@ -31095,7 +32850,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 20930,
       "file_sha256": "71c055f006ee6acb30773043ed195ac983a75d14e3c96dc93ef90c135ba7de4e",
-      "symbol_count": 22,
+      "symbol_count": 25,
       "symbols": [
         {
           "id": "src/shapes/path.cpp::8fbb96c0bdb37db6:1",
@@ -31248,6 +33003,30 @@
           "signature": "bool Path :: collapse ( bool value )",
           "line": 469,
           "definition_sha256": "5a62ca2d16da2c864d8538e369b9c35251f189ec44c1d962589750db697dd917"
+        },
+        {
+          "id": "src/shapes/path.cpp::efba4461872aafbb:1",
+          "kind": "function",
+          "symbol": "DisplayCubicVertex::DisplayCubicVertex",
+          "signature": "public : DisplayCubicVertex ( const Vec2D & in , const Vec2D & out , const Vec2D & translation )",
+          "line": 484,
+          "definition_sha256": "45973d46fe7091751a9ac04ae6b4b4473f27f211ba9ff73dc82aa60d30a88f20"
+        },
+        {
+          "id": "src/shapes/path.cpp::5488dd10df77b1f8:1",
+          "kind": "function",
+          "symbol": "DisplayCubicVertex::computeIn",
+          "signature": "void computeIn ( )",
+          "line": 498,
+          "definition_sha256": "106dd9025f23a439df0be3b93537f63a62eb1a284d017d3618a08b24201e7607"
+        },
+        {
+          "id": "src/shapes/path.cpp::64993eb80f1f3a98:1",
+          "kind": "function",
+          "symbol": "DisplayCubicVertex::computeOut",
+          "signature": "void computeOut ( )",
+          "line": 499,
+          "definition_sha256": "a6e17b4cf7e716235492d786da14891f4f33ee68e68185283996401357c0a9a6"
         },
         {
           "id": "src/shapes/path.cpp::8557c8fa804c000b:1",
@@ -31542,7 +33321,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 19121,
       "file_sha256": "1d9c0aa30949f07a1307e99b314f08a326363dbfe06a8c83cf10db23cdc9ccfc",
-      "symbol_count": 37,
+      "symbol_count": 49,
       "symbols": [
         {
           "id": "src/shapes/shape.cpp::759da83026b2dc16:1",
@@ -31721,6 +33500,102 @@
           "definition_sha256": "1bd7c8175770f90792b882534b6b10dc53939b5fe8f009e51baa843e38acabe3"
         },
         {
+          "id": "src/shapes/shape.cpp::a900f9b9b06e4ae6:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::ComputeBoundsCommandPath",
+          "signature": "public : ComputeBoundsCommandPath ( )",
+          "line": 340,
+          "definition_sha256": "56f49169a8e7464230d60182150567306f65f013e59b145d4e38d10a6abe7a90"
+        },
+        {
+          "id": "src/shapes/shape.cpp::527ac6b1ff3b69f7:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::bounds",
+          "signature": "AABB bounds ( const Mat2D & xform )",
+          "line": 343,
+          "definition_sha256": "b7f5eae6f64772663035e598e9f6d6470e627c1823e8fac66eb48be3890335f5"
+        },
+        {
+          "id": "src/shapes/shape.cpp::e1d5719c523fa7cd:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::preciseBounds",
+          "signature": "AABB preciseBounds ( const Mat2D & xform )",
+          "line": 351,
+          "definition_sha256": "fb74072e0d835390c21dcdd8554d1abba78a30c5c7701e520fb195410daee2ac"
+        },
+        {
+          "id": "src/shapes/shape.cpp::4e885833deb763ef:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::rewind",
+          "signature": "void rewind ( )",
+          "line": 357,
+          "definition_sha256": "e1a5912e8e82fc63f3967dd29838fe5816a04d3a20fdfc280a0f5c316b10e649"
+        },
+        {
+          "id": "src/shapes/shape.cpp::e49d8915138f2920:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::fillRule",
+          "signature": "void fillRule ( FillRule value )",
+          "line": 358,
+          "definition_sha256": "de724f8e7d15562766fda9d64c3f58623ff700528a1260faf70c1356b56a9a02"
+        },
+        {
+          "id": "src/shapes/shape.cpp::6cee00206ed62d92:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::addPath",
+          "signature": "void addPath ( CommandPath * path , const Mat2D & transform )",
+          "line": 359,
+          "definition_sha256": "6c1c9592ea01157af35037f0adae66490dc09a62072748291f22678e1b32358a"
+        },
+        {
+          "id": "src/shapes/shape.cpp::13188eb6b256f0a5:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::moveTo",
+          "signature": "void moveTo ( float x , float y )",
+          "line": 364,
+          "definition_sha256": "09f738005e07cf5e501f557ca3dfb54154e07ba3c3981bd567f62068807b3748"
+        },
+        {
+          "id": "src/shapes/shape.cpp::8a4121ea6e7173c1:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::lineTo",
+          "signature": "void lineTo ( float x , float y )",
+          "line": 365,
+          "definition_sha256": "75ade7c7a98a967d279c15578ef566bd3059aafef6a3c77a97bc803840e7cfe7"
+        },
+        {
+          "id": "src/shapes/shape.cpp::0bdd29063018c1e7:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::cubicTo",
+          "signature": "void cubicTo ( float ox , float oy , float ix , float iy , float x , float y )",
+          "line": 366,
+          "definition_sha256": "9dc3742a047c3b072ae2f3d873b5f9caf187215935f6ea351258c048396d3edc"
+        },
+        {
+          "id": "src/shapes/shape.cpp::09fde7497946d70b:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::close",
+          "signature": "void close ( )",
+          "line": 371,
+          "definition_sha256": "1c63fb8363602c0494868e31257b40c338a64e0c68471e4fda31466ca9c3bf42"
+        },
+        {
+          "id": "src/shapes/shape.cpp::3a39a98e22d7a22b:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::renderPath",
+          "signature": "RenderPath * renderPath ( )",
+          "line": 373,
+          "definition_sha256": "f0108735b19802f0ac72cdfa7f22cb4931230d1752c0cc1e4165eb0392f87966"
+        },
+        {
+          "id": "src/shapes/shape.cpp::827aea2f7487c522:1",
+          "kind": "function",
+          "symbol": "ComputeBoundsCommandPath::renderPath",
+          "signature": "const RenderPath * renderPath ( )",
+          "line": 379,
+          "definition_sha256": "f8213029a155f9242fffa5701fb0efb97f8544739a2184ddf6a3bc084bc4dfae"
+        },
+        {
           "id": "src/shapes/shape.cpp::48a7df66d21ae383:1",
           "kind": "function",
           "symbol": "Shape::computeWorldBounds",
@@ -31896,8 +33771,24 @@
       "authority_kind": "cpp-source",
       "byte_count": 12356,
       "file_sha256": "807414f47451f978c676a001549a5c66b29f41bc6d859f5f7e13c5f3dfb18c72",
-      "symbol_count": 9,
+      "symbol_count": 11,
       "symbols": [
+        {
+          "id": "src/shapes/slice_mesh.cpp::46c34dd3d90f300d:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@14>",
+          "signature": "source-statement const Corner SliceMesh :: patchCorners [ ] = { { 0 , 0 } , { 1 , 0 } , { 1 , 1 } , { 0 , 1 } , }",
+          "line": 14,
+          "definition_sha256": "e5d1fab5d93f5321a429c491676c4f740b1b888375bbbb13e76f6bf296f8f5c2"
+        },
+        {
+          "id": "src/shapes/slice_mesh.cpp::cb4e3d299c98185e:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@21>",
+          "signature": "source-statement const uint16_t SliceMesh :: triangulation [ ] = { 0 , 1 , 3 , 1 , 2 , 3 }",
+          "line": 21,
+          "definition_sha256": "eb4b331c34e335d755cd570a495c49edfd5d2a281cf7779294374f0b53684659"
+        },
         {
           "id": "src/shapes/slice_mesh.cpp::d3d1b3d0c0f59e29:1",
           "kind": "function",
@@ -32109,8 +34000,32 @@
       "authority_kind": "cpp-source",
       "byte_count": 306,
       "file_sha256": "ea9e0d1173da6bd69b75add05605cf7fbcb6aa28162a743de560c98c563c6a2d",
-      "symbol_count": 1,
+      "symbol_count": 4,
       "symbols": [
+        {
+          "id": "src/simple_array.cpp::2f37522666e7c566:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@7>",
+          "signature": "source-statement int mallocCount = 0",
+          "line": 7,
+          "definition_sha256": "2a9711fc943124bde1d45d151cc78c6f43b008f6a01b28273669a8a840e33181"
+        },
+        {
+          "id": "src/simple_array.cpp::ce018e604273ddb3:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@8>",
+          "signature": "source-statement int reallocCount = 0",
+          "line": 8,
+          "definition_sha256": "2e8a9b20063baa40fd5ff881001048a6934dbc9cb0c33d5d598f774b4fe82750"
+        },
+        {
+          "id": "src/simple_array.cpp::d779c141871403f4:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@9>",
+          "signature": "source-statement int freeCount = 0",
+          "line": 9,
+          "definition_sha256": "4ae26cf782b1a704bd912dcb4f8670c489580d9f7e6cc96e598ad5cd73fcad66"
+        },
         {
           "id": "src/simple_array.cpp::67dbd68411992b50:1",
           "kind": "function",
@@ -32417,8 +34332,24 @@
       "authority_kind": "cpp-source",
       "byte_count": 48136,
       "file_sha256": "47022f2420e67e730766ae745aba9122ba20e02d6170a47d8ddd27dd377aa192",
-      "symbol_count": 46,
+      "symbol_count": 56,
       "symbols": [
+        {
+          "id": "src/text/font_hb.cpp::62ffa7d7b209ff60:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@24>",
+          "signature": "source-statement rive :: Font :: FallbackProc rive :: Font :: gFallbackProc",
+          "line": 24,
+          "definition_sha256": "d3a945a3037a98d8d32ac0ae25097c8a6d4196f4ad5d08232a1b32a6092eac9b"
+        },
+        {
+          "id": "src/text/font_hb.cpp::e64799bfde443c68:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@26>",
+          "signature": "source-statement bool rive :: Font :: gFallbackProcEnabled = true",
+          "line": 26,
+          "definition_sha256": "5799d3e0bcf1eabc0525af90e8f15113f952a2c68434fdbddaa1a7d9816fd8ab"
+        },
         {
           "id": "src/text/font_hb.cpp::fd815931e1f28189:1",
           "kind": "function",
@@ -32442,6 +34373,22 @@
           "signature": "float HBFont :: GetStyle ( hb_font_t * font , uint32_t styleTag )",
           "line": 62,
           "definition_sha256": "c18d60a5a23d326aab30495387392a8cb609c51a7660c1cde187248709cd043d"
+        },
+        {
+          "id": "src/text/font_hb.cpp::ebc9adfc8d149267:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@68>",
+          "signature": "source-statement constexpr int kStdScale = 2048",
+          "line": 68,
+          "definition_sha256": "382101a098982f50af7c4f998f105ee0342d369f441fea85486742510c613fad"
+        },
+        {
+          "id": "src/text/font_hb.cpp::45fa401aa8baf8a2:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@69>",
+          "signature": "source-statement constexpr float gInvScale = 1.0f / kStdScale",
+          "line": 69,
+          "definition_sha256": "628cc60e3870655818df4cbf617609b1a5fdcab30cbe613ca386fed4abc0fab5"
         },
         {
           "id": "src/text/font_hb.cpp::cab6f8883bce02ce:1",
@@ -32490,6 +34437,54 @@
           "signature": "static rive :: ColorInt hbColorToColorInt ( hb_color_t c )",
           "line": 135,
           "definition_sha256": "6d3edcf0b5fbffb570e23e236cd20b4a56d7b2e38c609cf585d820dc9cfd48f0"
+        },
+        {
+          "id": "src/text/font_hb.cpp::acad73c445b13ead:1",
+          "kind": "function",
+          "symbol": "PaintState::pushTransform",
+          "signature": "void pushTransform ( float xx , float yx , float xy , float yy , float dx , float dy )",
+          "line": 161,
+          "definition_sha256": "16a6661b23bf3c80a45decc0ceb8499e4dbb3cacc1f3524f192d1facf58350a0"
+        },
+        {
+          "id": "src/text/font_hb.cpp::3b237cd0945dc93e:1",
+          "kind": "function",
+          "symbol": "PaintState::popTransform",
+          "signature": "void popTransform ( )",
+          "line": 185,
+          "definition_sha256": "eb5c25853e445415c2810dfd62b1bdc4afdd5b587164c57afe366c0b2d7ceeda"
+        },
+        {
+          "id": "src/text/font_hb.cpp::03c01c6d0289b443:1",
+          "kind": "function",
+          "symbol": "PaintState::mapPoint",
+          "signature": "rive :: Vec2D mapPoint ( float x , float y )",
+          "line": 193,
+          "definition_sha256": "db6c7729acb6b5ff41594052b62b5f055d5e29459eb07ecf478d7d1c77d0aa26"
+        },
+        {
+          "id": "src/text/font_hb.cpp::cba4d6b2a2fef8aa:1",
+          "kind": "function",
+          "symbol": "PaintState::mapRadius",
+          "signature": "float mapRadius ( float r )",
+          "line": 209,
+          "definition_sha256": "6e2378aea1a972ed32d02d2a77fb93f311a098174961988446379015c33a6dbe"
+        },
+        {
+          "id": "src/text/font_hb.cpp::f11823d3f4c474f3:1",
+          "kind": "function",
+          "symbol": "PaintState::extractStops",
+          "signature": "static std :: vector < rive :: Font :: GradientStop > extractStops ( hb_color_line_t * colorLine , rive :: ColorInt foreground )",
+          "line": 223,
+          "definition_sha256": "06899bbb4c000b917d5eb033d2a6ce57bf8a4104a65f0e25e2ddd370e6a52296"
+        },
+        {
+          "id": "src/text/font_hb.cpp::4c9e4e44929b2ad9:1",
+          "kind": "function",
+          "symbol": "PaintState::makeClipLayer",
+          "signature": "rive :: Font :: ColorGlyphLayer makeClipLayer ( )",
+          "line": 243,
+          "definition_sha256": "87f0cdbd544a4c444d77a053ac64ec0efbebed3a98874c6b8d7551c251234354"
         },
         {
           "id": "src/text/font_hb.cpp::43f7f7f5525da458:1",
@@ -32860,7 +34855,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 16584,
       "file_sha256": "bbf23072881a91d56a9c10e4c44a4b6665e9542c52d475e32cf178faa807bdb6",
-      "symbol_count": 5,
+      "symbol_count": 13,
       "symbols": [
         {
           "id": "src/text/line_breaker.cpp::1a0225974e356110:1",
@@ -32893,6 +34888,70 @@
           "signature": "void GlyphLine :: ComputeLineSpacing ( bool isFirstLine , Span < GlyphLine > lines , Span < const GlyphRun > runs , float width , TextAlign align )",
           "line": 44,
           "definition_sha256": "fb5ed5434a92a44ff6aef3a4206e799a1cd97ba9ee8ceedf5cb9ca6f441974ae"
+        },
+        {
+          "id": "src/text/line_breaker.cpp::97a433212ebfccdb:1",
+          "kind": "function",
+          "symbol": "WordMarker::next",
+          "signature": "bool next ( Span < const GlyphRun > runs )",
+          "line": 113,
+          "definition_sha256": "a551cc0621c5b7a80d53d200e43c1ecdad873e869b3c106bd28a624caa8936cb"
+        },
+        {
+          "id": "src/text/line_breaker.cpp::dd85dc49f97b318b:1",
+          "kind": "function",
+          "symbol": "RunIterator::RunIterator",
+          "signature": "public : RunIterator ( Span < const GlyphRun > runs , const GlyphRun * run , uint32_t index )",
+          "line": 135,
+          "definition_sha256": "3e4170527bd484200fb4db0b7b38fc82f304b56953288d45d8c5e6d917545997"
+        },
+        {
+          "id": "src/text/line_breaker.cpp::c41f80dea82ca61f:1",
+          "kind": "function",
+          "symbol": "RunIterator::back",
+          "signature": "bool back ( )",
+          "line": 142,
+          "definition_sha256": "d9c0f1ff1b4c8e4784859f9f389edda9294a9da56d9525495caa47188b5ff845"
+        },
+        {
+          "id": "src/text/line_breaker.cpp::00ca779e85a2b7b3:1",
+          "kind": "function",
+          "symbol": "RunIterator::forward",
+          "signature": "bool forward ( )",
+          "line": 235,
+          "definition_sha256": "5e51a1c6471d965e12dd0ac680507d1f779331234641cf6cb7a26e9612009cc3"
+        },
+        {
+          "id": "src/text/line_breaker.cpp::e499b733fd09b704:1",
+          "kind": "function",
+          "symbol": "RunIterator::x",
+          "signature": "float x ( )",
+          "line": 322,
+          "definition_sha256": "6448a7095655bcb9fedd0dea02faf33528c0bc6b81b7919403d808e46a370006"
+        },
+        {
+          "id": "src/text/line_breaker.cpp::cd218b1c48e8b166:1",
+          "kind": "function",
+          "symbol": "RunIterator::run",
+          "signature": "const GlyphRun * run ( )",
+          "line": 324,
+          "definition_sha256": "b8c4ce789228f1068a2248373d0e42d6b19ca89d76a6c4935c54c143d797f29f"
+        },
+        {
+          "id": "src/text/line_breaker.cpp::8cf43f8d61597108:1",
+          "kind": "function",
+          "symbol": "RunIterator::index",
+          "signature": "uint32_t index ( )",
+          "line": 325,
+          "definition_sha256": "eda402ef0d22e18c8346705797858cf9b74502835dcf1482f51d9f59d532b7cb"
+        },
+        {
+          "id": "src/text/line_breaker.cpp::e0e675c28dab70e6:1",
+          "kind": "function",
+          "symbol": "RunIterator::operator==",
+          "signature": "bool operator == ( const RunIterator & o )",
+          "line": 327,
+          "definition_sha256": "4b0b4156c0c5f1c08c7e5e3dc0086159dd41af93ee0fc734a6924cea3ceef49e"
         },
         {
           "id": "src/text/line_breaker.cpp::7e277dbb7172017c:1",
@@ -33070,8 +35129,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 28747,
       "file_sha256": "97d1489dcfaf255a02885024b1f2a9c236a5d0e64ca19e19fff2386751de5bf0",
-      "symbol_count": 50,
+      "symbol_count": 51,
       "symbols": [
+        {
+          "id": "src/text/raw_text_input.cpp::8a5e9e8d89dbfccc:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@9>",
+          "signature": "source-statement static const Unichar zeroWidthSpace = 8203",
+          "line": 9,
+          "definition_sha256": "48edda619c598a053ba8f4cf61d3f8547ffef2ca4458af0c8dd6d68efb81bdd1"
+        },
         {
           "id": "src/text/raw_text_input.cpp::99a6e9f8fac55055:1",
           "kind": "function",
@@ -34314,7 +36381,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 22898,
       "file_sha256": "cad4952755d38a6ad8b0f47cdb3bd041af7cd629af1801e19116263b1d8a1265",
-      "symbol_count": 37,
+      "symbol_count": 38,
       "symbols": [
         {
           "id": "src/text/text_input.cpp::54209051f1b99c4a:1",
@@ -34459,6 +36526,14 @@
           "signature": "static CursorBoundary cursorBoundary ( KeyModifiers modifiers )",
           "line": 294,
           "definition_sha256": "9ed4670e6be979f4da042ace9463c17e3266df0c8b75abeefc54437ea1496ae7"
+        },
+        {
+          "id": "src/text/text_input.cpp::89700ecd256401f1:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@312>",
+          "signature": "source-statement EM_JS ( bool , isWindowsBrowser , ( ) , { return Boolean ( navigator . platform . indexOf ( 'Win' ) > - 1 ) ; } )",
+          "line": 312,
+          "definition_sha256": "5a77ac9aca5185808ddd72fd852a6b18ac9752ad34d663707ca1580ac8ead4f4"
         },
         {
           "id": "src/text/text_input.cpp::c238712fc050fdfa:1",
@@ -35269,8 +37344,16 @@
       "authority_kind": "cpp-source",
       "byte_count": 5090,
       "file_sha256": "0d702cd3faf2df687f1fd467619b0b96a8ca64e44cf89bbb6153f4b0c9893850",
-      "symbol_count": 15,
+      "symbol_count": 16,
       "symbols": [
+        {
+          "id": "src/text/text_style.cpp::5b4520ba9fed2c8b:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@15>",
+          "signature": "source-statement TextStyle :: TextStyle ( ) = default",
+          "line": 15,
+          "definition_sha256": "2738bd3d42f367be85a3bf1b2a8937065b4e9b737425a9eaead964607bf39a85"
+        },
         {
           "id": "src/text/text_style.cpp::4c7909b3f889ecb1:1",
           "kind": "function",
@@ -37777,7 +39860,7 @@
       "authority_kind": "cpp-source",
       "byte_count": 6076,
       "file_sha256": "36d85abf9ef63749a80ac628f248bf15984c2867b4b666622b0a09c312743590",
-      "symbol_count": 18,
+      "symbol_count": 19,
       "symbols": [
         {
           "id": "src/viewmodel/viewmodel_instance_value.cpp::376a3be7c75234f4:1",
@@ -37858,6 +39941,14 @@
           "signature": "void ViewModelInstanceValue :: setRoot ( rcp < ViewModelInstance > viewModelInstance )",
           "line": 108,
           "definition_sha256": "0dd18ec4ecf64e595c183a3844c56f7c657d91b093669776157dc049a18a2d90"
+        },
+        {
+          "id": "src/viewmodel/viewmodel_instance_value.cpp::13673911a466315c:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@120>",
+          "signature": "source-statement std :: string ViewModelInstanceValue :: defaultName = \"\"",
+          "line": 120,
+          "definition_sha256": "61b33240fdacc1b4f86f5a114bcfd2b898f939c1e19695109e8a16860625420d"
         },
         {
           "id": "src/viewmodel/viewmodel_instance_value.cpp::f29bf62ba2f5ce6c:1",
@@ -38085,8 +40176,17 @@
       "authority_kind": "cpp-source",
       "byte_count": 140,
       "file_sha256": "a7dc5f2a1463b2591d1e8e9378981aae554bc22c90fc7107046e83e3b4b992d2",
-      "symbol_count": 0,
-      "symbols": []
+      "symbol_count": 1,
+      "symbols": [
+        {
+          "id": "src/viewmodel/viewmodel_property_enum_system.cpp::a3d89df5cfc2c2fb:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@5>",
+          "signature": "source-statement DataEnum ViewModelPropertyEnumSystem :: m_systemDataEnum",
+          "line": 5,
+          "definition_sha256": "0c499330fb87865d4466674e6aad110602c1b615eba6e6b0bc168136fe689c2f"
+        }
+      ]
     },
     {
       "upstream": "src/virtualizing_component.cpp",
@@ -38175,8 +40275,24 @@
       "authority_kind": "objective-cpp-source",
       "byte_count": 13924,
       "file_sha256": "1c27bd34a93d43eabdcc01cabdbca4d187fa16ec45535550f54e8424f7b9e298",
-      "symbol_count": 10,
+      "symbol_count": 26,
       "symbols": [
+        {
+          "id": "src/text/font_hb_apple.mm::9b8f9fcf388761d0:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@19>",
+          "signature": "source-statement constexpr int kStdScale = 2048",
+          "line": 19,
+          "definition_sha256": "382101a098982f50af7c4f998f105ee0342d369f441fea85486742510c613fad"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::403e3953322d5496:1",
+          "kind": "source-statement-authority",
+          "symbol": "<source-statement@20>",
+          "signature": "source-statement constexpr float gInvScale = 1.0f / kStdScale",
+          "line": 20,
+          "definition_sha256": "628cc60e3870655818df4cbf617609b1a5fdcab30cbe613ca386fed4abc0fab5"
+        },
         {
           "id": "src/text/font_hb_apple.mm::aa0e8b98f172e39b:1",
           "kind": "function",
@@ -38208,6 +40324,118 @@
           "signature": "rive :: rcp < rive :: Font > HBFont :: FromSystem ( void * systemFont , bool useSystemShaper , uint16_t weight , uint8_t width )",
           "line": 121,
           "definition_sha256": "381439368fe9c08adc3d4cd43b8dc715bdac2b685ad1212d603ab41a50840ab5"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::d10367fb409e2a44:1",
+          "kind": "function",
+          "symbol": "AutoSTArray::AutoSTArray",
+          "signature": "public : AutoSTArray ( size_t n )",
+          "line": 165,
+          "definition_sha256": "276f7d00e73861d277a3b70bcb934884fb9aef2b8c5a22b408159feb6af82f30"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::94276c16c25b0a4d:1",
+          "kind": "function",
+          "symbol": "AutoSTArray::~AutoSTArray",
+          "signature": "~ AutoSTArray ( )",
+          "line": 174,
+          "definition_sha256": "df3a4e2df0373466514af02a0877c68cf21f7cd1934c421af0a6ea4ff5d7bd5d"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::ae76174bb43ca288:1",
+          "kind": "function",
+          "symbol": "AutoSTArray::data",
+          "signature": "T * data ( )",
+          "line": 182,
+          "definition_sha256": "d669109d4ec54007a804843c0d9341bd6c57dbce63b919dd2fcf5804ca19870f"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::afcc91e57403c249:1",
+          "kind": "function",
+          "symbol": "AutoSTArray::operator[]",
+          "signature": "T & operator [ ] ( size_t index )",
+          "line": 184,
+          "definition_sha256": "6b0ee2ee85de8a1782079dce6c4d4269a34ff0482ef60b7d37f7d27d5c0a6dd9"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::780dcd0d95b72eff:1",
+          "kind": "function",
+          "symbol": "AutoCF::AutoCF",
+          "signature": "public : AutoCF ( T obj = nullptr )",
+          "line": 194,
+          "definition_sha256": "14837066d6065d428144303845f4461f64d310e09cd6a78b72ab36e2603b695e"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::56af964d4f171852:1",
+          "kind": "function",
+          "symbol": "AutoCF::AutoCF",
+          "signature": "AutoCF ( const AutoCF & other )",
+          "line": 196,
+          "definition_sha256": "9e9d48fa2e5e20296baa12fe841282ee1d7e1801c23a0eaae58ea2ad30779d24"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::6425a97981be9a37:1",
+          "kind": "function",
+          "symbol": "AutoCF::AutoCF",
+          "signature": "AutoCF ( AutoCF && other )",
+          "line": 204,
+          "definition_sha256": "d8735eac6eaaad3029951878d1c8011e2382c2d63ec5ff3a7d6c301e43283f61"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::796c10bdf8d01e86:1",
+          "kind": "function",
+          "symbol": "AutoCF::~AutoCF",
+          "signature": "~ AutoCF ( )",
+          "line": 209,
+          "definition_sha256": "8c05aa60b544cafa0015fa836b5df49c60100456235b3aca5d39aa9ed8a58816"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::e1929c3cff4bd604:1",
+          "kind": "function",
+          "symbol": "AutoCF::operator=",
+          "signature": "AutoCF & operator = ( const AutoCF & other )",
+          "line": 217,
+          "definition_sha256": "bcbdb03caa9fd61d54f6f6b8186af340ff51c75a88b997005a4eb2f8f1ecefdb"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::efa647e67c9689e3:1",
+          "kind": "function",
+          "symbol": "AutoCF::reset",
+          "signature": "void reset ( T obj )",
+          "line": 234,
+          "definition_sha256": "288b6e27cdb79c0df7a9520e9755bcdd51db0644fef26649e3d2a33ed13429ac"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::bf6641e2949e9d27:1",
+          "kind": "function",
+          "symbol": "AutoCF::operatorT",
+          "signature": "operator T ( )",
+          "line": 246,
+          "definition_sha256": "4356ba5598f690983b26b5ad15213474dad294fd6bb2036136618ea0a98443fb"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::3db0c5f1227c4b1d:1",
+          "kind": "function",
+          "symbol": "AutoCF::operatorbool",
+          "signature": "operator bool ( )",
+          "line": 247,
+          "definition_sha256": "d8730c1a10398958ae7ba9f0159fb507ed67d2b1970aa9e8a7f13d3ab7ac6ef1"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::67c8de5803c1555d:1",
+          "kind": "function",
+          "symbol": "AutoCF::get",
+          "signature": "T get ( )",
+          "line": 248,
+          "definition_sha256": "963c0647aaa0254a5aef67ff2d6811779b31efb122ceb19526aa668f110c78be"
+        },
+        {
+          "id": "src/text/font_hb_apple.mm::f9861a5de9df5fb6:1",
+          "kind": "function",
+          "symbol": "AutoUTF16::AutoUTF16",
+          "signature": "AutoUTF16 ( const rive :: Unichar uni [ ] , int count )",
+          "line": 255,
+          "definition_sha256": "6e2a4efad12fa03d1a04ecb021600932227f6a4b66d9713755c38a1fc1136cec"
         },
         {
           "id": "src/text/font_hb_apple.mm::2833ab8740724b32:1",
@@ -56796,68 +59024,68 @@
       "symbol_count": 15,
       "symbols": [
         {
-          "id": "include/rive/math/bezier_utils.hpp::9ee6c8be99ba71e8:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@38>",
-          "signature": "brace-authority RIVE_ALWAYS_INLINE CubicCoeffs ( const Vec2D pts [ 4 ] ) : CubicCoeffs ( simd :: load2f ( & pts [ 0 ] . x ) , simd :: load2f ( & pts [ 1 ] . x ) , simd :: load2f ( & pts [ 2 ] . x ) , simd :: load2f ( & pts [ 3 ] . x ) )",
+          "id": "include/rive/math/bezier_utils.hpp::df7a08de291dccf5:1",
+          "kind": "function",
+          "symbol": "CubicCoeffs::CubicCoeffs",
+          "signature": "RIVE_ALWAYS_INLINE CubicCoeffs ( const Vec2D pts [ 4 ] )",
           "line": 38,
           "definition_sha256": "b6dc7fbb041f22d3f2b288f860259f0a0fd23134dbbe6ca4bd5aae529c9089c0"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::1acf4dc68b503fb8:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@38>",
-          "signature": "brace-authority RIVE_ALWAYS_INLINE CubicCoeffs ( const Vec2D pts [ 4 ] ) : CubicCoeffs ( simd :: load2f ( & pts [ 0 ] . x ) , simd :: load2f ( & pts [ 1 ] . x ) , simd :: load2f ( & pts [ 2 ] . x ) , simd :: load2f ( & pts [ 3 ] . x ) ) { } RIVE_ALWAYS_INLINE CubicCoeffs ( float2 p0 , float2 p1 , float2 p2 , float2 p3 )",
-          "line": 38,
-          "definition_sha256": "fdddcabe8c95126cbff21bdce0a146371f6815a2ef758e6dd0f4d42da46d79d3"
+          "id": "include/rive/math/bezier_utils.hpp::10b6b36e50c82dd6:1",
+          "kind": "function",
+          "symbol": "CubicCoeffs::CubicCoeffs",
+          "signature": "RIVE_ALWAYS_INLINE CubicCoeffs ( float2 p0 , float2 p1 , float2 p2 , float2 p3 )",
+          "line": 45,
+          "definition_sha256": "2f829843669d2a25849e098ae93b07e4524741af856a3d496e019e09faa61388"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::b50d7dd00d52e4e3:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@60>",
-          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] )",
+          "id": "include/rive/math/bezier_utils.hpp::067a9ad6f29b7dd3:1",
+          "kind": "function",
+          "symbol": "EvalCubic::EvalCubic",
+          "signature": "public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] )",
           "line": 60,
           "definition_sha256": "e4c8d69d9c9eba83a7d2a291216452d342852d69ceeb1b94e6b83169cde4fc8f"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::d6f752292eecaa35:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@60>",
-          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) )",
-          "line": 60,
-          "definition_sha256": "f564965ad531931e107631d83ad390e41d9beacdd3ec3c2309d43211f9caaaaa"
+          "id": "include/rive/math/bezier_utils.hpp::89c8a81b61f53f9e:1",
+          "kind": "function",
+          "symbol": "EvalCubic::EvalCubic",
+          "signature": "RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 )",
+          "line": 65,
+          "definition_sha256": "2670cc88db5c627076f4d7229348aa86f8ae3999b56cdf3280c7e68824ef774a"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::e088a56774d00e7a:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@60>",
-          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 ) : A ( coeffs . A . xyxy ) , B ( ( 3.f * coeffs . B ) . xyxy ) , C ( ( 3.f * coeffs . C ) . xyxy ) , D ( p0 . xyxy )",
-          "line": 60,
-          "definition_sha256": "493537e296bf7b5308addd48fd21cb50876adfacb45dacee8a7807e735249701"
+          "id": "include/rive/math/bezier_utils.hpp::c060d6d7342d5b5f:1",
+          "kind": "function",
+          "symbol": "EvalCubic::EvalCubic",
+          "signature": "RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 )",
+          "line": 69,
+          "definition_sha256": "d48ddc7a41d47e88b4a37e169e775ce5491cfa051004e041df5cfc565778cba3"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::6754f0c9963653e1:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@60>",
-          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 ) : A ( coeffs . A . xyxy ) , B ( ( 3.f * coeffs . B ) . xyxy ) , C ( ( 3.f * coeffs . C ) . xyxy ) , D ( p0 . xyxy ) { } RIVE_ALWAYS_INLINE float2 operator ( ) ( float t ) const",
-          "line": 60,
-          "definition_sha256": "399075822cd7186272a10e29c87407bda34ce6b9ae378b90ff89590386983bdc"
+          "id": "include/rive/math/bezier_utils.hpp::4c74d4ccef0f7dc3:1",
+          "kind": "function",
+          "symbol": "EvalCubic::operator()",
+          "signature": "RIVE_ALWAYS_INLINE float2 operator ( ) ( float t )",
+          "line": 79,
+          "definition_sha256": "cd34ac10a4bc1ede7d166515f817e4c6d87e48ad2fd9c09470a4ec979df5184e"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::f10bce7dba3bd3ff:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@60>",
-          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 ) : A ( coeffs . A . xyxy ) , B ( ( 3.f * coeffs . B ) . xyxy ) , C ( ( 3.f * coeffs . C ) . xyxy ) , D ( p0 . xyxy ) { } RIVE_ALWAYS_INLINE float2 operator ( ) ( float t ) const { return ( ( A . xy * t + B . xy ) * t + C . xy ) * t + D . xy ; } RIVE_ALWAYS_INLINE float4 operator ( ) ( float4 t ) const",
-          "line": 60,
-          "definition_sha256": "82ab971fd155fd8b1e15967bccac9e73253fd6b35eca8cfb1e2fc20e73ffef49"
+          "id": "include/rive/math/bezier_utils.hpp::a88031d77a53ad57:1",
+          "kind": "function",
+          "symbol": "EvalCubic::operator()",
+          "signature": "RIVE_ALWAYS_INLINE float4 operator ( ) ( float4 t )",
+          "line": 86,
+          "definition_sha256": "d3a0dc8b6672b58838ebdce32fe13ac412be851c89948e3c8813db5feec2e174"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::054d26fa20c556b2:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@60>",
-          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 ) : A ( coeffs . A . xyxy ) , B ( ( 3.f * coeffs . B ) . xyxy ) , C ( ( 3.f * coeffs . C ) . xyxy ) , D ( p0 . xyxy ) { } RIVE_ALWAYS_INLINE float2 operator ( ) ( float t ) const { return ( ( A . xy * t + B . xy ) * t + C . xy ) * t + D . xy ; } RIVE_ALWAYS_INLINE float4 operator ( ) ( float4 t ) const { return ( ( A * t + B ) * t + C ) * t + D ; } RIVE_ALWAYS_INLINE float4 at ( float4 t ) const",
-          "line": 60,
-          "definition_sha256": "73608a10c801582c709d334186e0557304b47c84b7f3c3d4fd01e5fbf38cbb37"
+          "id": "include/rive/math/bezier_utils.hpp::60f02e60d69675c6:1",
+          "kind": "function",
+          "symbol": "EvalCubic::at",
+          "signature": "RIVE_ALWAYS_INLINE float4 at ( float4 t )",
+          "line": 92,
+          "definition_sha256": "a744b8d9af62a05d55f30b313df9cc9258a3b71ef08d6a1dd5b7a3c55946e0b7"
         },
         {
           "id": "include/rive/math/bezier_utils.hpp::aa166427c4f99d9d:1",
@@ -58451,36 +60679,36 @@
           "definition_sha256": "1f7163ef60cc5aec72d06f083f7fd30069fd5f85de032fff693217dd13cd54ac"
         },
         {
-          "id": "include/rive/math/raw_path_utils.hpp::d438157d022772fd:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@21>",
-          "signature": "brace-authority EvalQuad ( const Vec2D pts [ 3 ] ) : a ( pts [ 0 ] - two ( pts [ 1 ] ) + pts [ 2 ] ) , b ( two ( pts [ 1 ] - pts [ 0 ] ) ) , c ( pts [ 0 ] )",
+          "id": "include/rive/math/raw_path_utils.hpp::b27fee860f21c25a:1",
+          "kind": "function",
+          "symbol": "EvalQuad::EvalQuad",
+          "signature": "EvalQuad ( const Vec2D pts [ 3 ] )",
           "line": 21,
           "definition_sha256": "f6207a4370f0ec5c152a71089437b88fe421f5e6ee4e4d6a345c0e4cbe859a9a"
         },
         {
-          "id": "include/rive/math/raw_path_utils.hpp::7b36e2f7d1e20419:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@21>",
-          "signature": "brace-authority EvalQuad ( const Vec2D pts [ 3 ] ) : a ( pts [ 0 ] - two ( pts [ 1 ] ) + pts [ 2 ] ) , b ( two ( pts [ 1 ] - pts [ 0 ] ) ) , c ( pts [ 0 ] ) { } Vec2D operator ( ) ( float t ) const",
-          "line": 21,
-          "definition_sha256": "c31eea9c6308a118c6da5e2666faca48f13ac4347528c2ecb5cd84ffe4a4aae9"
+          "id": "include/rive/math/raw_path_utils.hpp::024cae7cf4452001:1",
+          "kind": "function",
+          "symbol": "EvalQuad::operator()",
+          "signature": "Vec2D operator ( ) ( float t )",
+          "line": 26,
+          "definition_sha256": "6026be3edd2335b12497436d85d5457aa35d8706e95eb1a2cfadb9496b5d9c4e"
         },
         {
-          "id": "include/rive/math/raw_path_utils.hpp::b5dc6973276780df:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@37>",
-          "signature": "brace-authority EvalCubic ( const Vec2D pts [ 4 ] ) : a ( pts [ 3 ] + 3 * ( pts [ 1 ] - pts [ 2 ] ) - pts [ 0 ] ) , b ( 3 * ( pts [ 2 ] - two ( pts [ 1 ] ) + pts [ 0 ] ) ) , c ( 3 * ( pts [ 1 ] - pts [ 0 ] ) ) , d ( pts [ 0 ] )",
+          "id": "include/rive/math/raw_path_utils.hpp::ef1ce2668ee6b725:1",
+          "kind": "function",
+          "symbol": "EvalCubic::EvalCubic",
+          "signature": "EvalCubic ( const Vec2D pts [ 4 ] )",
           "line": 37,
           "definition_sha256": "feb906dd07c3fd327a1979db442684817309a4a8f64fa8de2d499f2504783a7f"
         },
         {
-          "id": "include/rive/math/raw_path_utils.hpp::54516f366a22f76e:1",
-          "kind": "lexical-brace-authority",
-          "symbol": "<lexical-brace@37>",
-          "signature": "brace-authority EvalCubic ( const Vec2D pts [ 4 ] ) : a ( pts [ 3 ] + 3 * ( pts [ 1 ] - pts [ 2 ] ) - pts [ 0 ] ) , b ( 3 * ( pts [ 2 ] - two ( pts [ 1 ] ) + pts [ 0 ] ) ) , c ( 3 * ( pts [ 1 ] - pts [ 0 ] ) ) , d ( pts [ 0 ] ) { } Vec2D operator ( ) ( float t ) const",
-          "line": 37,
-          "definition_sha256": "629fe285fbcc73102e4240ff1e853bffbf8562c3fdc83b6d1e664c4aebf11476"
+          "id": "include/rive/math/raw_path_utils.hpp::024cae7cf4452001:2",
+          "kind": "function",
+          "symbol": "EvalCubic::operator()",
+          "signature": "Vec2D operator ( ) ( float t )",
+          "line": 44,
+          "definition_sha256": "c707008c7438f860aa60bef58b1ab93a1fa57d448af6afd654e095323e2dd0aa"
         }
       ]
     },

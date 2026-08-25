@@ -43,6 +43,7 @@ sha2 = { version = "0.10", optional = true }
 # real .riv files in tests. dev-dependency only: nuxie-binary never becomes
 # part of nuxie-scripting's public dependency surface.
 nuxie-binary = { path = "../nuxie-binary" }
+libhydrogen = "=0.4.6"
 luaur-compiler = "=0.1.8"
 image-webp = "0.2.4"
 sha2 = "0.10"

@@ -962,7 +962,7 @@ upstream = "tests/unit_tests/runtime/signed_content_header_test.cpp"
 test_case_count = 16
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/tests/upstream_signed_content_header.rs"]
-note = "All sixteen parser and ScriptAsset action/assertion sequences are translated against SignedContent with a test-only safe-Rust ScriptAsset state adapter. Thirteen are green. The three invalid-signature cases are honestly expected-red because Rust parses the signed envelope but does not authenticate its signature; the upstream false-result assertions remain exact."
+note = "All sixteen parser and ScriptAsset action/assertion sequences are active and translated against SignedContent with a test-only safe-Rust ScriptAsset state adapter. The adapter now performs the pinned ScriptAsset::bytecode libhydrogen verification action with the exact RiveCode context and production public key; the three invalid-signature cases therefore exercise authentication instead of parser-only behavior. The runtime's separately approved file-level execution authorization remains unchanged."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/simd_test.cpp"

@@ -3,6 +3,11 @@
 
 use nuxie_scripting::envelope::{EnvelopeError, SIGNATURE_SIZE, SignedContent};
 
+const SCRIPT_VERIFICATION_PUBLIC_KEY: [u8; libhydrogen::sign::PUBLICKEYBYTES] = [
+    159, 202, 90, 135, 12, 153, 157, 21, 112, 103, 62, 130, 59, 196, 187, 236, 103, 210, 239, 227,
+    175, 97, 222, 254, 70, 53, 212, 18, 191, 143, 101, 108,
+];
+
 fn content_offset(data: &[u8], content: &[u8]) -> usize {
     data.len() - content.len()
 }
@@ -18,8 +23,19 @@ impl ScriptAssetProbe {
         let Ok(header) = SignedContent::parse(data) else {
             return false;
         };
+        if let Some(signature) = header.signature {
+            let signature = libhydrogen::sign::Signature::from(*signature);
+            let public_key = libhydrogen::sign::PublicKey::from(SCRIPT_VERIFICATION_PUBLIC_KEY);
+            let context = libhydrogen::sign::Context::from("RiveCode");
+            if libhydrogen::sign::verify(&signature, header.content, &context, &public_key).is_err()
+            {
+                return false;
+            }
+            self.verified = true;
+        } else {
+            self.verified = false;
+        }
         self.module_bytecode = header.content.to_vec();
-        self.verified = false;
         true
     }
 }
@@ -157,7 +173,6 @@ fn signed_content_parsing_unsigned_content_succeeds() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust parses signed envelopes without authenticating their signatures"]
 fn signed_content_parsing_signed_flag_is_detected() {
     let mut asset = ScriptAssetProbe::default();
     let mut data = vec![0; 1 + SIGNATURE_SIZE + 3];
@@ -198,7 +213,6 @@ fn signed_content_parsing_version_is_preserved_in_flags() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust parses signed envelopes without authenticating their signatures"]
 fn signed_content_parsing_signed_content_offset_is_correct() {
     let mut asset = ScriptAssetProbe::default();
     let mut data = vec![0; 1 + SIGNATURE_SIZE + 4];
@@ -246,7 +260,6 @@ fn signed_content_parsing_minimum_valid_unsigned_data() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust parses signed envelopes without authenticating their signatures"]
 fn signed_content_parsing_minimum_valid_signed_data_structure() {
     let mut asset = ScriptAssetProbe::default();
     let mut data = vec![0; 1 + SIGNATURE_SIZE];

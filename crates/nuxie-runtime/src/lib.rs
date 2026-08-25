@@ -206,13 +206,14 @@ pub(crate) use data_bind_graph::{
 };
 pub use draw::image_asset::{RuntimeImageAssetLoader, RuntimeImageAssetOwners};
 pub use draw::{
-    RuntimeContourMeasure, RuntimeDrawableDispatch, RuntimeDrawableDispatchKind,
+    AabbScalarBounds, IntegerAabb, RuntimeContourMeasure, RuntimeDrawableDispatch,
+    RuntimeDrawableDispatchKind,
     RuntimeDrawableDispatchObjectKind, RuntimeFeatherState, RuntimeGeometryHit,
     RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment, RuntimeGradientStop,
     RuntimeImageDimensionConflict, RuntimeLayoutBounds, RuntimeLayoutBoundsReport,
     RuntimePathCommand, RuntimePathMeasure, RuntimePathSample, RuntimeRenderPaints,
     RuntimeSemanticTextHit, RuntimeShapePaintCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, preallocate_source_render_paints,
+    RuntimeShapePaintPathKind, RuntimeShapePaintState, TypedAabb, preallocate_source_render_paints,
     runtime_path_commands_from_raw_path,
 };
 #[cfg(feature = "tools")]

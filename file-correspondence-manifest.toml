@@ -3613,13 +3613,13 @@ note = "2026-08-03 LT-2 faithful candidate for the corpus-gated umbrella: instal
 upstream = "src/math/aabb.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/math/aabb.rs"
+rust_module = "crates/nuxie-runtime/src/math/aabb.rs; crates/nuxie-render-api/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0289"
 b6_verdict = "ISOMORPHIC"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Direct behavior-neutral source owner extracted from draw.rs with its private namespace and call sites unchanged."
+note = "MR-3 crate-boundary correspondence: the direct runtime owner now carries pinned typed/integer join, intersection, empty, overlap, and bound constructors; the backend-neutral render-api Aabb carries the identical strict-edge float overlap beside its existing contains/size operations."
 
 [[file]]
 upstream = "src/math/bezier_utils.cpp"

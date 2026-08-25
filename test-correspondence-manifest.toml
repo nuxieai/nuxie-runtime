@@ -23,7 +23,7 @@ upstream = "tests/unit_tests/runtime/aabb_test.cpp"
 test_case_count = 9
 status = "ported-direct"
 evidence = ["crates/nuxie-runtime/tests/upstream_aabb.rs"]
-note = "All nine literal assertion sequences are directly translated. SemanticBounds and render-api Aabb execute isEmptyOrNaN and contains. The seven missing integer, generic, join, intersection, and overlap operations are honest ignored expected-red tests whose literal vectors and assertions await primary production owners in the source-correspondence phase."
+note = "All nine literal assertion sequences execute through production owners. TypedAabb directly ports integer join/intersection/empty/overlap and generic maximal constructors; render-api Aabb executes isEmptyOrNaN-equivalent, inclusive contains, and strict-edge overlap."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/animation_state_instance_test.cpp"

@@ -51,3 +51,13 @@
 - Touched areas: compiler configuration for float or double vector constant
   precision, runtime vector push/read conversion, and feature-sensitive VM type
   tag mapping.
+
+## Translated `luaL_error` callback attribution
+
+- `Error::lua_l_runtime` gives Rust translations of C callbacks an explicit
+  `luaL_error` path through the shared callback trampoline. It prepends the Lua
+  caller's source location and raises the unwrapped message, matching the C API
+  instead of producing a location-free nested `runtime error` string.
+- Touched files: `src/error.rs`, `src/callback.rs`, and
+  `tests/error_position.rs`; workspace-patched execution is covered by
+  `tools/luaur-rt-test-harness/tests/error_position.rs`.

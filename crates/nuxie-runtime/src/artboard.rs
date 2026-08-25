@@ -143,14 +143,9 @@ mod transform_component;
 #[path = "artboard/virtualizing_component.rs"]
 mod virtualizing_component;
 
-// C++ `Artboard::sm_frameId` is global across artboards and advances at each
-// public `Artboard::draw` entry. Scripted paths use it to distinguish a second
-// rebuild in the current frame from a reusable rebuild in a later frame.
-static ARTBOARD_DRAW_FRAME_ID: AtomicU64 = AtomicU64::new(0);
-
 #[doc(hidden)]
 pub fn artboard_draw_frame_id() -> u64 {
-    ARTBOARD_DRAW_FRAME_ID.load(Ordering::Relaxed)
+    nuxie_render_api::artboard_draw_frame_id()
 }
 
 fn generated_mat2d(
@@ -6795,7 +6790,7 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn begin_draw_frame(&self) {
-        ARTBOARD_DRAW_FRAME_ID.fetch_add(1, Ordering::Relaxed);
+        nuxie_render_api::increment_artboard_draw_frame_id();
         self.frame_id.set(self.frame_id.get().wrapping_add(1));
     }
 

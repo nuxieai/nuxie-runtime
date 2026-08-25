@@ -29,7 +29,7 @@
 //! ordinary catchable Lua error, not a process abort.
 
 use std::any::TypeId;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use crate::error::{Error, Result};
 use crate::function::Function;
@@ -225,6 +225,13 @@ unsafe fn trampoline(state: *mut lua_State) -> c_int {
             }
             Ok(Err(err)) => {
                 // 5b. The closure returned Err -> raise it as a Lua error.
+                //     A translated C callback can explicitly retain
+                //     `luaL_error`'s caller attribution; this path also uses
+                //     the raw message rather than nesting Error's display
+                //     prefix inside the Lua runtime error.
+                if let Error::LuaLRuntimeError(message) = &err {
+                    return raise_lua_l_runtime_error(state, message);
+                }
                 //     Structured errors (scope destruction) travel as a userdata
                 //     error object so the caller can pattern-match on them; all
                 //     others keep the flat string path.
@@ -263,6 +270,19 @@ unsafe fn raise_lua_error(state: *mut lua_State, msg: &str) -> c_int {
     unsafe {
         lua_pushlstring(state, msg.as_ptr() as *const c_char, msg.len());
         lua_error(state) // diverges (`-> !`)
+    }
+}
+
+/// Raise `msg` with the Lua caller location, matching `luaL_error(L, "%s",
+/// msg)` from a translated C callback.
+unsafe fn raise_lua_l_runtime_error(state: *mut lua_State, msg: &str) -> c_int {
+    unsafe {
+        luaur_vm::functions::lua_l_error_l::lua_l_error_l(
+            state,
+            c"%s".as_ptr(),
+            format_args!("{msg}"),
+        );
+        0
     }
 }
 

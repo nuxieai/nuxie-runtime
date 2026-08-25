@@ -3571,7 +3571,7 @@ b6_row_id = "B6-0285"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "P1-d direct owner split at d788e8ec: the existing adapted Path, PathCommand, contour/path measurement, path-effect update, and registration behavior moved to crates/nuxie-scripting/src/vm/lua_path.rs:21-436. The B6-0285 audit found the pinned same-frame RenderPath replacement guard at lua_path.cpp:14-35 genuinely missing; it is implemented at lua_path.rs:51-76 against the global Artboard draw-frame identity mirrored in nuxie-runtime/src/artboard.rs:96-105,7024-7026. Lua ScriptedArtboard draw uses the non-advancing drawInternal-equivalent at nuxie-runtime/src/draw.rs:3890-3953 in both facade and golden-runner implementations. Regression coverage is in tests/path_render_path_lifetime.rs:8-50 and nuxie/src/lib.rs:6258-6268."
+note = "P1-d direct owner split at d788e8ec: the existing adapted Path, PathCommand, contour/path measurement, path-effect update, and registration behavior moved to crates/nuxie-scripting/src/vm/lua_path.rs:21-436. The B6-0285 audit found the pinned same-frame RenderPath replacement guard at lua_path.cpp:14-35 genuinely missing; it is implemented at lua_path.rs:51-76 against the global Artboard draw-frame identity shared by nuxie-runtime Artboard draw and nuxie-render-api SerializingFactory::add_frame. The Phase 3 animated-oval silver exposed that the Rust serializer had omitted C++ SerializingFactory::addFrame's Artboard::incFrameId action; restoring that paired action changes later-frame path rebuilds from replacement to rewind exactly. Lua ScriptedArtboard draw uses the non-advancing drawInternal-equivalent in both facade and golden-runner implementations. Regression coverage includes tests/path_render_path_lifetime.rs, the nuxie scripted-artboard draw test, and tools/silver-corpus/tests/upstream_scripting_renderer.rs."
 
 [[file]]
 upstream = "src/lua/renderer/lua_renderer.cpp"
@@ -3583,7 +3583,7 @@ b6_row_id = "B6-0286"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "P1-d direct owner split at d788e8ec: the existing adapted draw-call lifetime envelope and ScriptedRenderer save/restore/transform/path/image methods moved without behavioral rewrite to crates/nuxie-scripting/src/vm/lua_renderer.rs:17-170; its path methods delegate the pinned same-frame decision to the lua_path owner."
+note = "P1-d direct owner split at d788e8ec: the adapted draw-call lifetime envelope and ScriptedRenderer save/restore/transform/path/image methods live in crates/nuxie-scripting/src/vm/lua_renderer.rs; path methods delegate the pinned same-frame decision to the lua_path owner. Phase 3 restored ScriptedRenderer::end's boolean balance result while preserving automatic restore cleanup, and translated validate's luaL_error caller attribution and exact punctuation through an explicit luaur-rt adapter. All four pinned scripting_renderer_test.cpp cases are active, including exact retained-renderer text, unbalanced end status, per-frame balance/stack/GC assertions, and both pinned silvers."
 
 [[file]]
 upstream = "src/lua/renderer/lua_renderer_library.cpp"

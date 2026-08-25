@@ -116,6 +116,7 @@ impl SerializingFactory {
     }
 
     pub fn add_frame(&mut self) {
+        super::increment_artboard_draw_frame_id();
         self.writer.borrow_mut().varuint(FRAME);
     }
 

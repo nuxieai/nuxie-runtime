@@ -249,6 +249,8 @@ EXACT = (
     "relative_data_bind_path",
     "relative_data_binding",
     "saturation",
+    "scripted_animated_oval",
+    "scripted_oval",
     "sorted_listeners",
     "spotify_kids_app_icon",
     "stacked_path_effects",
@@ -267,6 +269,18 @@ EXACT = (
     "viewmodel_list_trigger",
     "viewmodel_based_condition",
 )
+
+SCRIPTED_EXACT_NOTES = {
+    "scripted_animated_oval": (
+        "The literal 1000-frame script loop, per-frame balance and Lua stack checks, "
+        "full GC, and renderer stream are operation-exact with the pinned C++ silver "
+        "baseline."
+    ),
+    "scripted_oval": (
+        "The literal scripted oval draw and renderer stream are operation-exact with "
+        "the pinned C++ silver baseline."
+    ),
+}
 
 
 def fl_e8_list_path_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
@@ -2384,7 +2398,10 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     else "Literal upstream producer is catalogued; shared action-DSL "
                     "translation and Rust replay remain pending."
                 )
-                if lane == "scripted":
+                if lane == "scripted" and silver_id in SCRIPTED_EXACT_NOTES:
+                    status = "exact"
+                    note = SCRIPTED_EXACT_NOTES[silver_id]
+                elif lane == "scripted":
                     note = (
                         "Scripted producer provenance is catalogued; scripted action/output "
                         "replay is explicitly deferred to the next adoption step."

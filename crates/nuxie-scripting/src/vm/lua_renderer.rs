@@ -36,6 +36,16 @@ impl RendererBindings {
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
     ) -> Result<()> {
+        self.call_draw_with_balance(table, factory, renderer)
+            .map(|_| ())
+    }
+
+    pub(super) fn call_draw_with_balance(
+        &self,
+        table: &Table,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+    ) -> Result<bool> {
         let lua = table.lua();
         self.verify_render_context(factory)?;
         let scripted_renderer = lua.create_userdata(ScriptedRenderer {
@@ -46,11 +56,11 @@ impl RendererBindings {
         })?;
         let result = table.call_function_unit("draw", (table.clone(), scripted_renderer.clone()));
 
-        {
+        let balanced = {
             let scripted_renderer = scripted_renderer.borrow::<ScriptedRenderer>()?;
-            scripted_renderer.end();
-        }
-        result.map(|_| ())
+            scripted_renderer.end()
+        };
+        result.map(|_| balanced)
     }
 }
 
@@ -69,7 +79,8 @@ pub(super) struct ScriptedRenderer {
 }
 
 impl ScriptedRenderer {
-    fn end(&self) {
+    fn end(&self) -> bool {
+        let balanced = self.save_count.get() == 0;
         while self.save_count.get() > 0 {
             let mut renderer = self.renderer.borrow_mut();
             // The renderer userdata is still valid while this cleanup runs;
@@ -79,13 +90,14 @@ impl ScriptedRenderer {
             self.save_count.set(self.save_count.get() - 1);
         }
         self.valid.set(false);
+        balanced
     }
 
     fn validate(&self) -> Result<()> {
         if self.valid.get() {
             Ok(())
         } else {
-            Err(Error::runtime("Renderer is no longer valid"))
+            Err(Error::lua_l_runtime("Renderer is no longer valid."))
         }
     }
 
@@ -306,6 +318,51 @@ mod tests {
             .unwrap();
         assert!(!valid);
         assert!(error.contains("Renderer is no longer valid"), "{error}");
+    }
+
+    #[test]
+    fn scripted_renderer_end_reports_an_unbalanced_save_stack() {
+        const SOURCE: &str = "function render(renderer:Renderer):()\n\
+  local path:Path = Path.new()\n\
+  local paint:Paint = Paint.new()\n\
+  renderer:save()\n\
+  renderer:drawPath(path, paint)\n\
+  renderer:save()\n\
+end\n";
+
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        vm.lua()
+            .load(SOURCE)
+            .set_name("test_source")
+            .exec()
+            .unwrap();
+        let table: Table = vm
+            .eval("return { draw = function(self, renderer) return render(renderer) end }")
+            .unwrap();
+        let mut renderer = factory.borrow().make_renderer();
+
+        let balanced = vm
+            .renderer_bindings
+            .call_draw_with_balance(&table, &mut factory, &mut renderer)
+            .unwrap();
+
+        assert!(!balanced);
+        let stream = factory.borrow().stream();
+        let renderer_actions: Vec<_> = stream
+            .lines()
+            .filter_map(|line| match line {
+                "save" | "restore" => Some(line),
+                line if line.starts_with("drawPath ") => Some("drawPath"),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            renderer_actions,
+            ["save", "drawPath", "save", "restore", "restore"]
+        );
     }
 
     #[test]

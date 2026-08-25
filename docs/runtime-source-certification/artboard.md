@@ -434,3 +434,67 @@ target could compile). This second acceptance is limited to the two earlier
 corrected rows. The subsequent frame-counter and fixture-test correction is
 tracked at `eba0a89b2`; its first fresh independent review is accepted above
 and its second remains pending.
+
+## Second fresh independent adversarial review of `eba0a89b2`: accepted
+
+This review was performed independently of the first acceptance at
+`998ae3e97`; that receipt was not used as authority. It re-read the pinned
+frame-counter declarations and all operative increment and read paths, traced
+the corresponding Rust production and public call chains, decoded both layout
+fixtures independently, and attempted ordering, clone-visibility, internal-draw,
+and flag-topology counterexamples. No counterexample was found. Correction
+`eba0a89b2` is **ACCEPTED by the second fresh independent review**.
+
+Pinned C++ has one process-wide owner, `Artboard::sm_frameId`. Public
+`Artboard::draw` increments it once before canvas and internal drawing, while
+`SerializingFactory::addFrame` performs its own one increment. Nested-artboard,
+component-list, and scripted drawing enter `drawInternal` directly and do not
+increment it. The corrected Rust has the same ownership boundary: one
+`ARTBOARD_DRAW_FRAME_ID` in `nuxie-render-api`; `ArtboardInstance::frame_id`,
+the runtime facade, the semantic path, and scripting all read that owner; and
+the only production increments are `ArtboardInstance::begin_draw_frame` at the
+public root-draw boundary and `SerializingFactory::add_frame`. The additional
+`begin_draw_frame` references in `draw.rs` are test-only legacy helpers. Static
+traces of live nested-artboard and component-list drawing found direct internal
+entry, and the scripting witness confirmed that its draw does not create a new
+root frame. There is no surviving occurrence-local frame field for cloning to
+copy or hide.
+
+A disposable public-API witness at exact commit `eba0a89b2` independently
+confirmed the shared owner: a public facade draw advanced the counter exactly
+once and its raw clone immediately observed the new value; one
+`SerializingFactory::add_frame` then advanced the same counter exactly once and
+both views observed that value. This also falsifies a separate serializer owner
+and a clone-local snapshot. Rust renderer synchronization occurs before the
+root increment under the already-approved factory-late adaptation seam; once
+the authored draw boundary is entered, the observable increment, canvas, and
+internal-draw order agrees with pinned C++.
+
+For `ParticipatesInLayout`, the pinned flag is bit `1 << 8` and the authored
+property is key `129`, defaulting to zero. The Rust decoder retains that key,
+integer representation, and default, and the layout-provider traversal admits
+a grouped `ArtboardComponentList` only when the bit is set. Independent
+`riv-inspect` and `graph-inspect` decoding established the fixture topology
+rather than relying on the test helper: the flagged fixture contains
+`LayoutComponent -> Node -> ArtboardComponentList`, with key `129` equal to
+`256` on the list; the unflagged fixture contains no key `129`, so its value is
+the generated zero default. The corrected helper reads the list's drawable
+flags, walks through the transparent node to the actual layout owner, and
+asserts both the flag and participation result. The unflagged fixture remains
+excluded, while the flagged fixture now exercises the intended production
+topology.
+
+Evidence run from an isolated detached worktree at exact commit `eba0a89b2`
+(ignored upstream fixture assets were mirrored only so the lib-test target
+could compile):
+
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --lib artboard::tests::public_clones_observe_the_single_process_wide_draw_frame_id -- --exact --nocapture`
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --lib draw::tests::upstream_component_list_inside_a_group_stays_out_of_layout -- --exact --nocapture`
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --lib draw::tests::upstream_flagged_component_list_joins_layout_through_a_group -- --exact --nocapture`
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie --test artboard_frame_second_review -- --nocapture` (disposable public facade/clone/serializer witness)
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie --lib --features scripting owned_instance_tests::lua_scripted_artboard_draw_uses_the_internal_frame_boundary -- --exact --nocapture`
+
+All commands passed. With the earlier accepted corrections and denominator,
+this second acceptance closes the remaining Artboard blocker: the Artboard
+family is **ACCEPTED / CERTIFIED** against pinned upstream
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`.

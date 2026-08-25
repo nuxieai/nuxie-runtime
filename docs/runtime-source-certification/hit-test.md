@@ -1,6 +1,6 @@
 # HitTester source certification
 
-> **Independent adversarial review: REJECTED.**
+> **First independent correction review: REJECTED.**
 
 ## Authority and scope
 
@@ -135,3 +135,68 @@ The production correction is made at the drawable call edge equivalent to
 around in state-machine `HitExpandable`, because pinned Image does not override
 `hitTestPoint`; listener hit testing and drawable geometry hit testing remain
 separate surfaces.
+
+## First independent correction review
+
+Verdict: **REJECTED**. Commits `42fdc4cc1` and `ccd58b627` close the two
+previously demonstrated local omissions: ordinary Rust multiply/add now follows
+the pinned non-contracted cubic-segmentation expression, and a live Image query
+does invoke `HitTester::add_rect`. The 39 local HitTester authority units survive
+this review on defined inputs, subject to the already-recorded safe handling of
+invalid topology, unusable uninitialized state, overflow, and impractically
+large negative-extent allocations. The production Image edge does not yet
+preserve the complete pinned call behavior, however.
+
+### Blocker 1: the rectangle is rasterized in the wrong coordinate space
+
+Pinned `Artboard::hitTest` leaves `HitInfo::area` in the caller's coordinate
+space and composes frame-origin, Artboard self, nested-host, Image world, and
+Image-origin transforms onto the rectangle before `addRect`. Rust instead
+inverse-transforms the query point at every Artboard boundary, constructs a new
+four-pixel `HitTestArea` in that local space, and calls `add_rect` with only the
+current Image world/origin transform. `artboard_to_root` is applied later only
+to the reported bounds.
+
+That is not equivalent for this integer-cell rasterizer: rounding and a fixed
+query radius do not commute with scale or rotation. A defined axis-aligned
+witness is a 100-by-50 Image with origin `(0.5, 0.5)`, Artboard `scaleX = 2`,
+and root query `(-103, 0)`. The pinned path rasterizes root rectangle
+`[-100, -25, 100, 25]` against root area `[-105, -2, -101, 2]` and misses.
+Rust inverse-maps the point to `-51.5`, rounds a local area
+`[-53, -2, -49, 2]`, rasterizes the unscaled local rectangle
+`[-50, -25, 50, 25]`, and hits. The production regression uses only identity
+transforms, so it cannot falsify this discrepancy.
+
+### Blocker 2: Rust adds Image opacity rejection absent upstream
+
+Pinned `Artboard::hitTest` skips `isHidden()` drawables, but
+`Image::hitTest` does not test `renderOpacity`; unlike `Image::willDraw`, it
+continues to the rectangle for opacity zero. Rust rejects an Image when
+`render_opacity` is non-finite or less than or equal to zero. A visible,
+non-mesh Image at opacity zero is therefore a defined pinned hit and a Rust
+miss. Exact parity must preserve the pinned behavior rather than silently
+repairing it.
+
+### Blocker 3: Rust applies clips that the pinned hit path explicitly does not
+
+Pinned `Artboard::hitTest` and `Image::hitTest` both contain clip TODOs and do
+not reject the Image against either the Artboard clip or active clipping-shape
+geometry. Rust rejects the query against the Artboard clip before traversal and
+guards Image dispatch with the accumulated `active_clips`. Thus an Image point
+outside an enabled Artboard/shape clip can hit upstream and miss in Rust. This
+is another independently defined behavior difference, not a safety adaptation.
+
+### Blocker 4: the public traversal returns a different result shape
+
+Pinned `Artboard::hitTest` walks front-to-back and returns immediately with one
+`Core*`. Rust's `geometry_hit_test`/`ArtboardInstance::hit_test` accumulates all
+unique front-to-back hits into a vector. Reaching `add_rect` is proven, but the
+public call edge is not an exact translation while overlapping drawables yield
+all Rust hits instead of only the first pinned hit.
+
+The correction can be accepted only after the live Image owner uses the same
+single caller-space `HitInfo::area` and full composed transform, removes the
+invented opacity and clip filters from the exact path, and exposes the pinned
+first-hit result (an additional all-hits catalogue may remain a separately
+named Rust API). Two fresh independent reviews are still required after those
+changes.

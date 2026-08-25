@@ -45,6 +45,9 @@ fn run_silver(asset: &str, artboard_name: &str, silver_name: &str, frames_per_it
         .instantiate()
         .unwrap_or_else(|error| panic!("{artboard_name} instantiates: {error:#}"));
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .unwrap_or_else(|error| panic!("{artboard_name} renderer initializes: {error:#}"));
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -73,13 +76,13 @@ fn run_silver(asset: &str, artboard_name: &str, silver_name: &str, frames_per_it
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
+#[ignore = "expected-red: script_paths first differs at frame 0 paint color value"]
 fn path_drawing_examples() {
     run_silver("script_paths_test.riv", "PathsScript", "script_paths", 1);
 }
 
 #[test]
-#[ignore = "expected-red: path updates fail and Rust serializes frameSize before makeRenderPaint"]
+#[ignore = "expected-red: path-effect update fails and emits an empty frame 0 path"]
 fn path_effects_examples() {
     run_silver(
         "script_path_effects_test.riv",
@@ -90,7 +93,7 @@ fn path_effects_examples() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
+#[ignore = "expected-red: opacity fixture initializes one fewer paint before frameSize"]
 fn paths_with_opacity_applied() {
     run_silver(
         "script_paths_opacity_test.riv",
@@ -110,6 +113,9 @@ fn access_paint_and_path_data() {
         .instantiate()
         .expect("default artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("default renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");

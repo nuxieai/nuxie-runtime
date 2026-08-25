@@ -463,6 +463,7 @@ impl RuntimeCellDirtSink {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct RuntimeCellDependent {
     bits: Weak<Cell<u8>>,
     suppressed: Weak<Cell<bool>>,
@@ -513,6 +514,42 @@ impl RuntimeCellDependent {
 
     pub(crate) fn ptr_eq(&self, other: &Self) -> bool {
         self.bits.ptr_eq(&other.bits)
+    }
+
+    fn publish_dirt(
+        &self,
+        dirt: RuntimeCellDirt,
+        invoke_delegate: bool,
+        suppress_trigger_zero: bool,
+    ) -> bool {
+        let Some(bits) = self.bits.upgrade() else {
+            return false;
+        };
+        let Some(suppressed) = self.suppressed.upgrade() else {
+            return false;
+        };
+        if suppressed.get() {
+            return true;
+        }
+        let was_dirty = bits.get() & dirt.0 == dirt.0;
+        let handled_notification = if invoke_delegate && !dirt.is_empty() && !was_dirty {
+            invoke_before_notify(&self.before_notify, dirt)
+        } else {
+            None
+        };
+        if handled_notification == Some(false) {
+            return true;
+        }
+        bits.set(bits.get() | dirt.0);
+        if let Some(notification) = &self.notification
+            && handled_notification != Some(true)
+            && (!notification.dedupe_while_dirty || !was_dirty)
+            && !(notification.suppress_trigger_zero && suppress_trigger_zero)
+            && let Some(queue) = notification.queue.upgrade()
+        {
+            queue.borrow_mut().push(notification.value);
+        }
+        true
     }
 }
 
@@ -853,46 +890,6 @@ struct RuntimeViewModelCellState {
     dependents: Vec<RuntimeCellDependent>,
 }
 
-impl RuntimeViewModelCellState {
-    fn cascade(&mut self, dirt: RuntimeCellDirt) {
-        // Prune dead sinks while cascading; C++ relies on explicit
-        // removeDependent in ~DataBind, which weak references replace.
-        self.dependents.retain(|dependent| {
-            let Some(bits) = dependent.bits.upgrade() else {
-                return false;
-            };
-            let Some(suppressed) = dependent.suppressed.upgrade() else {
-                return false;
-            };
-            if suppressed.get() {
-                return true;
-            }
-            let was_dirty = bits.get() & dirt.0 == dirt.0;
-            let handled_notification = if !dirt.is_empty() && !was_dirty {
-                invoke_before_notify(&dependent.before_notify, dirt)
-            } else {
-                None
-            };
-            if handled_notification == Some(false) {
-                return true;
-            }
-            bits.set(bits.get() | dirt.0);
-            if let Some(notification) = &dependent.notification
-                && handled_notification != Some(true)
-                && (!notification.dedupe_while_dirty || !was_dirty)
-                && !(notification.suppress_trigger_zero
-                    && matches!(self.value, RuntimeViewModelCellValue::Trigger(0)))
-                && let Some(queue) = notification.queue.upgrade()
-            {
-                // Push every mutation in dependent-registration order. C++
-                // deliberately does not dedupe listener reports.
-                queue.borrow_mut().push(notification.value);
-            }
-            true
-        });
-    }
-}
-
 /// One shared, retained, typed view-model property value.
 #[derive(Clone)]
 pub struct RuntimeViewModelCell {
@@ -1051,11 +1048,25 @@ impl RuntimeViewModelCell {
     }
 
     fn publish_value_changed(&self, dirt: RuntimeCellDirt, marks_changed: bool) {
-        let mut state = self.state.borrow_mut();
-        if marks_changed {
-            state.value_changed = true;
+        let (dependents, suppress_trigger_zero) = {
+            let mut state = self.state.borrow_mut();
+            if marks_changed {
+                state.value_changed = true;
+            }
+            (
+                state.dependents.clone(),
+                matches!(state.value, RuntimeViewModelCellValue::Trigger(0)),
+            )
+        };
+        // C++ propertyValueChanged() permits a delegate to read the value it
+        // just received. Release Rust's RefCell mutation borrow before
+        // entering the same extension point, then prune dead weak sinks.
+        for dependent in &dependents {
+            dependent.publish_dirt(dirt, marks_changed, suppress_trigger_zero);
         }
-        state.cascade(dirt);
+        self.state.borrow_mut().dependents.retain(|dependent| {
+            dependent.bits.strong_count() != 0 && dependent.suppressed.strong_count() != 0
+        });
     }
 
     /// C++ setters may report another `Bindings` cascade after an earlier

@@ -189,11 +189,14 @@ fn runtime_state_machine_data_bind_target(
                 global_id: target.id,
             }
         }
-        "BindablePropertyViewModel" if property_matches(target.type_name, "propertyValue") => {
-            RuntimeDataBindGraphTarget::ViewModel {
-                global_id: target.id,
-            }
-        }
+        // `DataBindContextValueViewModel::apply` uses the bindable's dedicated
+        // ViewModel setter and deliberately ignores the authored property key.
+        // In particular, pinned assets use
+        // `ViewModelInstanceViewModel::propertyValue` here rather than the
+        // bindable's uint storage key (`context_value_viewmodel.cpp:20-43`).
+        "BindablePropertyViewModel" => RuntimeDataBindGraphTarget::ViewModel {
+            global_id: target.id,
+        },
         "StateTransition" if property_matches(target.type_name, "duration") => {
             let occurrence_index = transition_duration_bindings
                 .iter()
@@ -410,6 +413,56 @@ mod tests {
         assert!(matches!(
             templates[2].target,
             RuntimeDataBindGraphTarget::Number { .. }
+        ));
+    }
+
+    #[test]
+    fn view_model_bindable_uses_its_dedicated_setter_for_authored_source_key() {
+        let view_model_property_key =
+            property_key_for_name("ViewModelInstanceViewModel", "propertyValue")
+                .expect("ViewModel source property key");
+        let file = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("StateMachine", Vec::new()),
+            record("BindablePropertyViewModel", Vec::new()),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        FixtureValue::Uint(u64::from(view_model_property_key)),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        FixtureValue::Bytes(vec![0, 0]),
+                    ),
+                ],
+            ),
+        ])
+        .expect("ViewModel bindable fixture imports");
+        let state_machine = file
+            .artboard_state_machine_graphs(0)
+            .into_iter()
+            .next()
+            .expect("fixture state machine");
+        let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
+        let templates = runtime_state_machine_data_bind_templates(
+            &file,
+            &state_machine,
+            None,
+            &[],
+            &mut converter_cache,
+        );
+
+        assert!(matches!(
+            templates.as_slice(),
+            [RuntimeStateMachineDataBindTemplate {
+                target: RuntimeDataBindGraphTarget::ViewModel { .. },
+                ..
+            }]
         ));
     }
 }

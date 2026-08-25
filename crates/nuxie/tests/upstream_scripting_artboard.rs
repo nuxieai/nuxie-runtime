@@ -88,7 +88,6 @@ fn script_instances_artboard_input_with_proper_origin() {
 }
 
 #[test]
-#[ignore = "expected-red: didChange lifecycle passes; frame 0 op 11 omits a retained makeRenderPaint"]
 fn script_node_advance_affects_did_change_via_dirt() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("script_affects_has_changed.riv"))
@@ -166,7 +165,6 @@ fn script_node_advance_affects_did_change_via_dirt() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 0 op 25 expects another retained paint but Rust updates color"]
 fn script_instance_linear_animations() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("scripting_linear_animation.riv"))
@@ -266,7 +264,6 @@ fn script_instances_artboard_with_opacity_applied() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 0 op 22 expects another retained paint before frameSize"]
 fn view_model_source_cache_is_cleared_when_instance_changes() {
     let file = File::import_with_unsigned_scripts(&pinned_fixture("scripted_viewmodel_cache.riv"))
         .expect("scripted_viewmodel_cache imports with trusted scripts");
@@ -278,6 +275,9 @@ fn view_model_source_cache_is_cleared_when_instance_changes() {
     artboard
         .initialize_renderer(&mut silver)
         .expect("default renderer initializes at the import boundary");
+    artboard
+        .mount_scripted_drawables(&mut silver)
+        .expect("default scripts mount at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");

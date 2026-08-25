@@ -674,7 +674,14 @@ struct ScriptedPropertyWatch {
 
 fn property_watch(model: &ScriptViewModel, name: &str) -> Rc<ScriptedPropertyWatch> {
     let listeners = Rc::new(RefCell::new(Vec::new()));
-    let sink = model.property_dirt_sink(name).unwrap_or_default();
+    let weak_listeners = Rc::downgrade(&listeners);
+    let sink = model
+        .property_listener_sink(name, move || {
+            if let Some(listeners) = weak_listeners.upgrade() {
+                call_property_listeners(&listeners);
+            }
+        })
+        .unwrap_or_default();
     let watch = Rc::new(ScriptedPropertyWatch {
         sink,
         listeners,
@@ -1813,7 +1820,7 @@ pub(super) fn install_data_global(
 
 struct ScriptedTriggerWatch {
     sink: RuntimeCellDirtSink,
-    listeners: RefCell<Vec<ScriptedListener>>,
+    listeners: Rc<RefCell<Vec<ScriptedListener>>>,
     _change_registration: RefCell<Option<ScriptViewModelChangeRegistration>>,
 }
 
@@ -1825,10 +1832,18 @@ struct ScriptedPropertyTrigger {
 
 impl ScriptedPropertyTrigger {
     fn new(model: ScriptViewModel, name: String) -> Self {
-        let sink = model.property_dirt_sink(&name).unwrap_or_default();
+        let listeners = Rc::new(RefCell::new(Vec::new()));
+        let weak_listeners = Rc::downgrade(&listeners);
+        let sink = model
+            .property_listener_sink(&name, move || {
+                if let Some(listeners) = weak_listeners.upgrade() {
+                    call_property_listeners(&listeners);
+                }
+            })
+            .unwrap_or_default();
         let watch = Rc::new(ScriptedTriggerWatch {
             sink,
-            listeners: RefCell::new(Vec::new()),
+            listeners,
             _change_registration: RefCell::new(None),
         });
         let weak_watch = Rc::downgrade(&watch);
@@ -2184,7 +2199,9 @@ mod tests {
         let lua = Lua::new();
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         lua.globals().set("model", table).unwrap();
-        lua.globals().set("propertyName", property_name.clone()).unwrap();
+        lua.globals()
+            .set("propertyName", property_name.clone())
+            .unwrap();
         lua.load(
             "calls = 0\n\
                  observed = 0\n\
@@ -2663,11 +2680,17 @@ mod tests {
         );
         assert!(model.set_color("colorProp", 0xff10_1567));
         vm.advance_detached_view_models();
-        assert_eq!(vm.lua.globals().get::<i64>("upstreamDisposeCalls").unwrap(), 2);
+        assert_eq!(
+            vm.lua.globals().get::<i64>("upstreamDisposeCalls").unwrap(),
+            2
+        );
         drop(instance);
         assert!(model.set_color("colorProp", 0xff10_1568));
         vm.advance_detached_view_models();
-        assert_eq!(vm.lua.globals().get::<i64>("upstreamDisposeCalls").unwrap(), 2);
+        assert_eq!(
+            vm.lua.globals().get::<i64>("upstreamDisposeCalls").unwrap(),
+            2
+        );
     }
 
     #[test]
@@ -2777,7 +2800,9 @@ mod tests {
         }
 
         assert!(model.remove_list_item_at(list, 1));
-        let point = model.list_item(list, 1).expect("point x=2 moves to index 1");
+        let point = model
+            .list_item(list, 1)
+            .expect("point x=2 moves to index 1");
         assert_eq!(point.number("x"), Some(2.0));
         assert!(point.set_number("y", 22.0));
         let after: Table = lua
@@ -2821,7 +2846,10 @@ mod tests {
         assert_eq!(model.list_len(list), Some(initial_count - 1));
         for index in 0..initial_count - 1 {
             let item = model.list_item(list, index).expect("retained point");
-            assert!(!Rc::ptr_eq(&item.owned_instance(), &shared.owned_instance()));
+            assert!(!Rc::ptr_eq(
+                &item.owned_instance(),
+                &shared.owned_instance()
+            ));
         }
     }
 
@@ -2896,6 +2924,20 @@ mod tests {
         assert_eq!(model.trigger(&trigger), Some(0));
         assert!(!context.advance_detached());
         assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
+    }
+
+    #[test]
+    fn host_trigger_fire_wraps_the_cpp_uint32_counter() {
+        let (model, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
+        assert!(
+            model
+                .owned_instance()
+                .borrow_mut()
+                .set_trigger_by_property_name(&trigger, u64::from(u32::MAX))
+        );
+
+        assert!(model.fire_trigger(&trigger));
+        assert_eq!(model.trigger(&trigger), Some(0));
     }
 
     #[test]

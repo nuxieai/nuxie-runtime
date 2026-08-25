@@ -838,6 +838,8 @@
             empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
             state_machines: Arc::new(Vec::new()),
             script_instances_by_global: RuntimeScriptState::default(),
+            resolved_script_primitive_inputs: RuntimeScriptState::default(),
+            resolved_script_artboard_inputs: RuntimeScriptState::default(),
             script_attachment_generation: 0,
             scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
             has_scripted_drawables: false,

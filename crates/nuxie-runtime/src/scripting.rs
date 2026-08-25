@@ -17,7 +17,10 @@ use crate::data_bind_graph::{
 };
 use crate::properties::property_key_for_name;
 use crate::state_machine::ScriptListenerInvocation;
-use crate::view_model_cell::{RuntimeBlobAsset, RuntimeCellDirtSink, RuntimeViewModelCellValue};
+use crate::view_model_cell::{
+    RuntimeBlobAsset, RuntimeCellDirtSink, RuntimeHostMutationNotifications,
+    RuntimeViewModelCellValue,
+};
 use crate::{
     ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelContextHandle,
     RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeViewModelImage,
@@ -942,6 +945,28 @@ impl ScriptViewModel {
         Some(sink)
     }
 
+    /// Retain the C++ `ScriptedProperty` delegate edge. Host-side mutations
+    /// can invoke the listener immediately; mutations made through the Lua
+    /// userdata are deferred until that userdata borrow has been released.
+    #[doc(hidden)]
+    pub fn property_listener_sink(
+        &self,
+        name: &str,
+        callback: impl Fn() + 'static,
+    ) -> Option<RuntimeCellDirtSink> {
+        let sink = self.property_dirt_sink(name)?;
+        let suppressed = Rc::clone(&self.change_callbacks.suppressed);
+        sink.set_before_notify(Some(Rc::new(move |_| {
+            if suppressed.get() == 0 {
+                callback();
+                false
+            } else {
+                true
+            }
+        })));
+        Some(sink)
+    }
+
     /// Register a scripting callback that is invoked after a mutation through
     /// this facade has released the mutable runtime borrow.
     #[doc(hidden)]
@@ -1056,11 +1081,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .set_number_by_property_path(&path, value);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .set_number_by_property_path(&path, value)
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1076,11 +1102,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .set_color_by_property_path(&path, value);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .set_color_by_property_path(&path, value)
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1097,11 +1124,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .set_string_by_property_path(&path, value.as_bytes());
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .set_string_by_property_path(&path, value.as_bytes())
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1178,11 +1206,12 @@ impl ScriptViewModel {
         else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .set_enum_by_property_path(&path, value_index as u64);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .set_enum_by_property_path(&path, value_index as u64)
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1234,11 +1263,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .set_live_font_bytes_by_property_path(&path, font_bytes);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .set_live_font_bytes_by_property_path(&path, font_bytes)
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1282,11 +1312,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .set_asset_by_property_path(&path, file_asset_index);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .set_asset_by_property_path(&path, file_asset_index)
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1301,14 +1332,15 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .set_runtime_image_by_property_path(
-                &path,
-                image.map(RuntimeViewModelImage::from_render_image),
-            );
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .set_runtime_image_by_property_path(
+                    &path,
+                    image.map(RuntimeViewModelImage::from_render_image),
+                )
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1368,7 +1400,7 @@ impl ScriptViewModel {
         else {
             return false;
         };
-        let changed = cell.set_live_blob_bytes(bytes);
+        let changed = self.with_released_listener_callbacks(|| cell.set_live_blob_bytes(bytes));
         self.finish_property_change(&path, changed)
     }
 
@@ -1387,7 +1419,7 @@ impl ScriptViewModel {
         else {
             return false;
         };
-        let changed = cell.set_live_blob_asset(asset);
+        let changed = self.with_released_listener_callbacks(|| cell.set_live_blob_asset(asset));
         self.finish_property_change(&path, changed)
     }
 
@@ -1402,11 +1434,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .set_boolean_by_property_path(&path, value);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .set_boolean_by_property_path(&path, value)
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1428,11 +1461,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .set_trigger_by_property_path(&path, value.wrapping_add(1));
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .set_trigger_by_property_path(&path, u64::from((value as u32).wrapping_add(1)))
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1513,11 +1547,12 @@ impl ScriptViewModel {
         }) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .link_view_model_by_property_path(&property_path, &value)
-            .unwrap_or(false);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .link_view_model_by_property_path(&property_path, &value)
+                .unwrap_or(false)
+        });
         self.finish_property_change(&property_path, changed)
     }
 
@@ -1559,8 +1594,9 @@ impl ScriptViewModel {
             return false;
         }
         let root = self.context.root_handle();
-        let changed =
-            root.push_list_item_by_property_path(&path, item_context.root_handle().shared());
+        let changed = self.with_released_listener_callbacks(|| {
+            root.push_list_item_by_property_path(&path, item_context.root_handle().shared())
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1573,21 +1609,24 @@ impl ScriptViewModel {
             return false;
         }
         let root = self.context.root_handle();
-        let changed = root.insert_list_item_by_property_path(
-            &path,
-            index,
-            item_context.root_handle().shared(),
-        );
+        let changed = self.with_released_listener_callbacks(|| {
+            root.insert_list_item_by_property_path(
+                &path,
+                index,
+                item_context.root_handle().shared(),
+            )
+        });
         self.finish_property_change(&path, changed)
     }
 
     pub fn pop_list_item(&self, name: &str) -> Option<Self> {
         let path = self.scoped_property_path(name)?;
-        let item = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .pop_list_item_by_property_path(&path)?;
+        let item = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .pop_list_item_by_property_path(&path)
+        })?;
         self.notify_property_change(&path);
         let view_model_index = item.borrow().view_model_index();
         build_script_view_model_shared_with_blob_assets_and_callbacks(
@@ -1602,11 +1641,12 @@ impl ScriptViewModel {
 
     pub fn shift_list_item(&self, name: &str) -> Option<Self> {
         let path = self.scoped_property_path(name)?;
-        let item = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .shift_list_item_by_property_path(&path)?;
+        let item = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .shift_list_item_by_property_path(&path)
+        })?;
         self.notify_property_change(&path);
         let view_model_index = item.borrow().view_model_index();
         build_script_view_model_shared_with_blob_assets_and_callbacks(
@@ -1623,11 +1663,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .swap_list_items_by_property_path(&path, first, second);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .swap_list_items_by_property_path(&path, first, second)
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1635,11 +1676,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .clear_list_items_by_property_path(&path);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .clear_list_items_by_property_path(&path)
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1647,11 +1689,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .remove_list_item_at_by_property_path(&path, index);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .remove_list_item_at_by_property_path(&path, index)
+        });
         self.finish_property_change(&path, changed)
     }
 
@@ -1664,12 +1707,22 @@ impl ScriptViewModel {
             return false;
         }
         let item = item_context.root_handle().shared();
-        let changed = self
-            .context
-            .root_handle()
-            .borrow_mut()
-            .remove_list_items_by_identity_at_property_path(&path, &item, remove_all);
+        let changed = self.with_released_listener_callbacks(|| {
+            self.context
+                .root_handle()
+                .borrow_mut()
+                .remove_list_items_by_identity_at_property_path(&path, &item, remove_all)
+        });
         self.finish_property_change(&path, changed)
+    }
+
+    fn with_released_listener_callbacks<R>(&self, mutation: impl FnOnce() -> R) -> R {
+        let notifications = RuntimeHostMutationNotifications::begin();
+        let result = mutation();
+        if let Some(notifications) = notifications {
+            notifications.commit();
+        }
+        result
     }
 
     fn scoped_property_path(&self, name: &str) -> Option<Vec<usize>> {

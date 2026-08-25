@@ -1139,6 +1139,27 @@ impl RuntimeOwnedDataContext {
             .is_some_and(|main| main.scope_path.is_empty() && main.context.ptr_eq(root))
     }
 
+    /// Return the concrete main ViewModel occurrence held by this DataContext
+    /// node.
+    ///
+    /// C++ `DataContext::mainViewModelInstance()` does not fall through to a
+    /// parent DataContext. A scoped Rust occurrence stores the outer retained
+    /// root plus its property path, so project that path to the same concrete
+    /// child instance before returning it.
+    pub(crate) fn main_view_model_handle(&self) -> Option<RuntimeOwnedViewModelHandle> {
+        let main = self
+            .state
+            .instances
+            .iter()
+            .find(|instance| instance.is_main)?;
+        if main.scope_path.is_empty() {
+            Some(main.context.clone())
+        } else {
+            main.context
+                .linked_view_model_by_property_path(&main.scope_path)
+        }
+    }
+
     fn resolve<R>(
         &self,
         resolve: &mut impl FnMut(

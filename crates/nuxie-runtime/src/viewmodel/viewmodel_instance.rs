@@ -420,8 +420,8 @@ impl RuntimeOwnedViewModelHandle {
                 return Some((self.clone(), child.property_index));
             }
             if let Some(linked) = child.endpoint.linked_instance()
-                && let Some(found) = (Self { instance: linked })
-                    .change_owner_for_cell(cell_identity, visited)
+                && let Some(found) =
+                    (Self { instance: linked }).change_owner_for_cell(cell_identity, visited)
             {
                 return Some(found);
             }
@@ -843,7 +843,8 @@ impl RuntimeOwnedViewModelUndoLog {
 
     fn record_cell(&mut self, cell: RuntimeViewModelCell) {
         let value = cell.value();
-        self.entries.push(RuntimeOwnedViewModelUndo::Cell(cell, value));
+        self.entries
+            .push(RuntimeOwnedViewModelUndo::Cell(cell, value));
     }
 
     fn record_view_model(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
@@ -887,10 +888,8 @@ impl RuntimeOwnedViewModelUndoLog {
             return false;
         };
         let items = list.transaction_snapshot_items();
-        self.entries.push(RuntimeOwnedViewModelUndo::List(
-            list,
-            items,
-        ));
+        self.entries
+            .push(RuntimeOwnedViewModelUndo::List(list, items));
         true
     }
 
@@ -1083,8 +1082,7 @@ impl RuntimeOwnedViewModelTransaction {
             return false;
         };
         self.capture_cell(cell);
-        let _ = instance.set_string_by_source_handle(&source, value);
-        true
+        instance.set_string_by_source_handle(&source, value)
     }
 
     pub fn set_number(
@@ -1103,8 +1101,7 @@ impl RuntimeOwnedViewModelTransaction {
             return false;
         };
         self.capture_cell(cell);
-        let _ = instance.set_number_by_source_handle(&source, value);
-        true
+        instance.set_number_by_source_handle(&source, value)
     }
 
     pub fn set_boolean(
@@ -1123,8 +1120,7 @@ impl RuntimeOwnedViewModelTransaction {
             return false;
         };
         self.capture_cell(cell);
-        let _ = instance.set_boolean_by_source_handle(&source, value);
-        true
+        instance.set_boolean_by_source_handle(&source, value)
     }
 
     pub fn set_color(
@@ -1143,8 +1139,7 @@ impl RuntimeOwnedViewModelTransaction {
             return false;
         };
         self.capture_cell(cell);
-        let _ = instance.set_color_by_source_handle(&source, value);
-        true
+        instance.set_color_by_source_handle(&source, value)
     }
 
     pub fn set_enum(
@@ -1163,8 +1158,7 @@ impl RuntimeOwnedViewModelTransaction {
             return false;
         };
         self.capture_cell(cell);
-        let _ = instance.set_enum_by_source_handle(&source, value);
-        true
+        instance.set_enum_by_source_handle(&source, value)
     }
 
     pub fn fire_trigger(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
@@ -1180,12 +1174,9 @@ impl RuntimeOwnedViewModelTransaction {
         let Some(value) = instance.trigger_value_by_property_name_path(path) else {
             return false;
         };
-        let Some(next) = value.checked_add(1) else {
-            return false;
-        };
+        let next = u64::from((value as u32).wrapping_add(1));
         self.capture_cell(cell);
-        let _ = instance.set_trigger_by_source_handle(&source, next);
-        true
+        instance.set_trigger_by_source_handle(&source, next)
     }
 
     pub fn set_list_index(
@@ -1205,8 +1196,7 @@ impl RuntimeOwnedViewModelTransaction {
             return false;
         };
         self.capture_cell(cell);
-        let _ = instance.set_symbol_list_index_by_source_handle(&source, value);
-        true
+        instance.set_symbol_list_index_by_source_handle(&source, value)
     }
 
     pub fn set_asset(
@@ -1225,8 +1215,7 @@ impl RuntimeOwnedViewModelTransaction {
             return false;
         };
         self.capture_cell(cell);
-        let _ = instance.set_asset_by_source_handle(&source, value);
-        true
+        instance.set_asset_by_source_handle(&source, value)
     }
 
     pub fn link_view_model(
@@ -1262,8 +1251,7 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         index: usize,
     ) -> bool {
-        self.capture_list(owner, path)
-            && owner.remove_list_item_by_property_name_path(path, index)
+        self.capture_list(owner, path) && owner.remove_list_item_by_property_name_path(path, index)
     }
 
     pub fn list_swap(
@@ -1290,8 +1278,7 @@ impl RuntimeOwnedViewModelTransaction {
         if from == to {
             return true;
         }
-        self.capture_list(owner, path)
-            && owner.move_list_item_by_property_name_path(path, from, to)
+        self.capture_list(owner, path) && owner.move_list_item_by_property_name_path(path, from, to)
     }
 
     pub fn list_set(
@@ -1518,6 +1505,24 @@ mod upstream_viewmodel_instance_contract_tests {
     use nuxie_schema::definition_by_name;
 
     #[test]
+    fn scalar_transaction_reports_the_underlying_setter_change_status() {
+        let file = two_number_instance_file();
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("root"),
+        );
+        let mut transaction = RuntimeOwnedViewModelTransaction::begin().expect("transaction");
+
+        assert!(!transaction.set_number(&root, "first", 0.0));
+        assert!(transaction.set_number(&root, "first", 4.0));
+        assert!(!transaction.set_number(&root, "first", 4.0));
+        transaction.commit();
+        assert_eq!(
+            root.borrow().number_value_by_property_name("first"),
+            Some(4.0)
+        );
+    }
+
+    #[test]
     fn operation_change_capture_preserves_repeated_scalar_writes() {
         let file = two_number_instance_file();
         let root = RuntimeOwnedViewModelHandle::new(
@@ -1525,18 +1530,17 @@ mod upstream_viewmodel_instance_contract_tests {
         );
         let capture = RuntimeViewModelChangeCapture::begin().expect("one active capture");
 
-        assert!(root
-            .borrow_mut()
-            .set_number_by_property_name("first", 10.0));
-        assert!(root
-            .borrow_mut()
-            .set_number_by_property_name("first", 20.0));
+        assert!(root.borrow_mut().set_number_by_property_name("first", 10.0));
+        assert!(root.borrow_mut().set_number_by_property_name("first", 20.0));
 
         let changes = root
             .resolve_change_capture(capture)
             .expect("every changed cell belongs to the retained graph");
         assert_eq!(changes.len(), 2);
-        assert_eq!(changes[0].owner_instance_identity, changes[1].owner_instance_identity);
+        assert_eq!(
+            changes[0].owner_instance_identity,
+            changes[1].owner_instance_identity
+        );
         assert_eq!(changes[0].property_index, changes[1].property_index);
         assert_eq!(changes[0].value, RuntimeViewModelChangeValue::Number(10.0));
         assert_eq!(changes[1].value, RuntimeViewModelChangeValue::Number(20.0));
@@ -2132,9 +2136,11 @@ mod upstream_viewmodel_instance_contract_tests {
             .reachable_change_owner_snapshot()
             .expect("snapshot every pre-mutation owner");
         let capture = RuntimeViewModelChangeCapture::begin().expect("one active capture");
-        assert!(shared_child
-            .borrow_mut()
-            .set_number_by_property_name("value", 7.0));
+        assert!(
+            shared_child
+                .borrow_mut()
+                .set_number_by_property_name("value", 7.0)
+        );
         assert_eq!(
             first_root.link_view_model_by_property_name_path("child", &replacement),
             Ok(true)
@@ -2149,7 +2155,7 @@ mod upstream_viewmodel_instance_contract_tests {
             .find_map(|(owner, change)| {
                 (owner.ptr_eq(&shared_child)
                     && change.value == RuntimeViewModelChangeValue::Number(7.0))
-                    .then_some(owner)
+                .then_some(owner)
             })
             .expect("shared child write");
         changed_child.mark_observable_mutation(41);

@@ -78,11 +78,26 @@ impl ArtboardInstance {
         depth: usize,
         visitor: &mut impl FnMut(usize, u32, &mut ArtboardInstance) -> Result<(), E>,
     ) -> Result<(), E> {
+        let mut parent_change_requested = false;
+        let mut first_error = None;
         for nested in self.nested_artboards.values_mut() {
-            visitor(depth, nested.child.graph_global_id, nested.child.as_mut())?;
-            nested
-                .child
-                .try_visit_nested_artboard_instances_mut_at_depth(depth + 1, visitor)?;
+            let result = visitor(depth, nested.child.graph_global_id, nested.child.as_mut())
+                .and_then(|()| {
+                    nested
+                        .child
+                        .try_visit_nested_artboard_instances_mut_at_depth(depth + 1, visitor)
+                });
+            parent_change_requested |= nested.child.take_parent_change_request();
+            if let Err(error) = result {
+                first_error = Some(error);
+                break;
+            }
+        }
+        if parent_change_requested {
+            self.mark_render_paint_changed();
+        }
+        if let Some(error) = first_error {
+            return Err(error);
         }
         Ok(())
     }

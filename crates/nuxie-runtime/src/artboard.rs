@@ -11,7 +11,7 @@ use nuxie_binary::RuntimeFile;
 #[cfg(test)]
 use nuxie_graph::ResettingComponentKind;
 use nuxie_graph::{AdvancingComponentKind, ArtboardGraph, DependencyNode, DependencyNodeKind};
-use nuxie_render_api::Factory as RenderFactory;
+use nuxie_render_api::{Factory as RenderFactory, Vec2D};
 use nuxie_schema::definition_by_name;
 
 use crate::animation::{
@@ -565,6 +565,15 @@ pub struct ArtboardInstance {
     /// cache; `RuntimeMeshList::clone` implements C++ Mesh/NSlicer clone rules.
     pub(crate) runtime_meshes: crate::draw::RuntimeMeshList,
     pub(crate) did_change: Cell<bool>,
+    /// Rust owns mounted artboards by value, so it cannot retain C++'s raw
+    /// `ArtboardHost*`. Keep the exact host-space matrix most recently
+    /// supplied by the owning NestedArtboard/ArtboardComponentList instead;
+    /// `root_transform` combines it with the child's live self transform.
+    mounted_host_transform: Cell<Option<Mat2D>>,
+    /// Deferred Rust ownership twin of `Artboard::changed()` walking the live
+    /// host pointer. The owning parent consumes this before the nested advance
+    /// returns, preserving the same false-to-true propagation guard.
+    pub(crate) parent_change_requested: Cell<bool>,
     /// Component occurrences that consumed C++ semantic-bounds dirt since the
     /// last semantic-tree synchronization. `SemanticData` is a dependent of
     /// its geometry owner, so either local can appear here
@@ -722,6 +731,8 @@ impl Clone for ArtboardInstance {
             runtime_clipping_shapes: self.runtime_clipping_shapes.clone(),
             runtime_meshes: self.runtime_meshes.clone(),
             did_change: self.did_change.clone(),
+            mounted_host_transform: Cell::new(None),
+            parent_change_requested: Cell::new(false),
             semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_node_owned_by_host: self.layout_node_owned_by_host,
             suppress_mounted_component_list_layout_updates: self
@@ -2709,6 +2720,8 @@ impl ArtboardInstance {
             runtime_clipping_shapes: RuntimeClippingShapeList::from_graph(graph),
             runtime_meshes: crate::draw::RuntimeMeshList::from_graph(graph),
             did_change: Cell::new(true),
+            mounted_host_transform: Cell::new(None),
+            parent_change_requested: Cell::new(false),
             semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_node_owned_by_host: false,
             suppress_mounted_component_list_layout_updates: false,
@@ -5148,7 +5161,7 @@ impl ArtboardInstance {
         {
             // See `SolidColor::renderOpacityChanged`: the renderer-visible
             // paint changes in place without invalidating prepared paths.
-            self.did_change.set(true);
+            self.mark_render_paint_changed();
         } else {
             self.mark_changed_unless_view_model_instance(local_id);
         }
@@ -6877,6 +6890,16 @@ impl ArtboardInstance {
             .nested_artboards
             .get(&host_local)
             .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS));
+        let child_requested_parent_change = self
+            .nested_artboards
+            .get(&host_local)
+            .is_some_and(|nested| nested.child.take_parent_change_request());
+        if child_requested_parent_change {
+            // C++ `Artboard::changed()` immediately walks `parentArtboard()`.
+            // Rust's value-owned child publishes the same false-to-true edge
+            // at the enclosing owner seam before this advance returns.
+            self.mark_render_paint_changed();
+        }
         if child_dirty {
             self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
         }
@@ -6909,6 +6932,23 @@ impl ArtboardInstance {
         self.did_change.get()
     }
 
+    /// Mirrors pinned C++ `Artboard::rootTransform(const Vec2D&)`.
+    /// Top-level artboards define root space and therefore return `point`
+    /// unchanged. Mounted occurrences apply their live rotation/scale before
+    /// the host transform, matching `host()->hostTransformPoint(...)`.
+    pub fn root_transform(&self, point: Vec2D) -> Vec2D {
+        let Some(host_transform) = self.mounted_host_transform.get() else {
+            return point;
+        };
+        let local = if self.has_self_transform() {
+            self.self_transform().transform_point(point.x, point.y)
+        } else {
+            (point.x, point.y)
+        };
+        let transformed = host_transform.transform_point(local.0, local.1);
+        Vec2D::new(transformed.0, transformed.1)
+    }
+
     pub fn frame_origin(&self) -> bool {
         self.frame_origin.get()
     }
@@ -6930,7 +6970,18 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn mounted_root_transform(&self, host_transform: Mat2D) -> Mat2D {
+        self.mounted_host_transform.set(Some(host_transform));
         host_transform.multiply(self.self_transform())
+    }
+
+    fn mark_render_paint_changed(&self) {
+        if !self.did_change.replace(true) {
+            self.parent_change_requested.set(true);
+        }
+    }
+
+    fn take_parent_change_request(&self) -> bool {
+        self.parent_change_requested.replace(false)
     }
 
     pub(crate) fn child_opacity(&self) -> f32 {

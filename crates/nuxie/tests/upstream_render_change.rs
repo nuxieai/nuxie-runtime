@@ -15,7 +15,6 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 }
 
 #[test]
-#[ignore = "expected-red: the first repeated 0.1-second state-machine advance leaves Artboard::did_change false instead of true"]
 fn file_with_only_solid_color_animating_triggers_change_on_artboard() {
     let file =
         File::import(&pinned_fixture("solid_affects_has_changed.riv")).expect("import fixture");

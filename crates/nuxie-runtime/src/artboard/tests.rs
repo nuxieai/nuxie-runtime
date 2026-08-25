@@ -917,6 +917,8 @@
             runtime_clipping_shapes: RuntimeClippingShapeList::default(),
             runtime_meshes: crate::draw::RuntimeMeshList::default(),
             did_change: Cell::new(true),
+            mounted_host_transform: Cell::new(None),
+            parent_change_requested: Cell::new(false),
             semantic_bounds_dirty_locals: BTreeSet::new(),
             layout_node_owned_by_host: false,
             suppress_mounted_component_list_layout_updates: false,
@@ -7193,6 +7195,49 @@
             instance.solid_color_paint_revision(0),
             settled_paint_revision
         );
+    }
+
+    #[test]
+    fn nested_solid_color_changed_edge_propagates_when_mutable_visit_returns() {
+        let mut solid = synthetic_component(0, 0);
+        solid.type_name = "SolidColor";
+        let mut child = synthetic_instance(vec![solid], vec![0]);
+        let color_key =
+            property_key_for_name("SolidColor", "colorValue").expect("SolidColor.colorValue");
+        child.objects =
+            InstanceObjectArena::from_runtime_objects(vec![Some(synthetic_runtime_object(
+                0,
+                "SolidColor",
+                vec![RuntimeProperty {
+                    key: color_key,
+                    name: "colorValue",
+                    owner: "SolidColor",
+                    value: FieldValue::Color(0xffff_ffff),
+                }],
+            ))]);
+        child.did_change.set(false);
+
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent.did_change.set(false);
+        let mut nested = synthetic_nested_artboard_instance(1);
+        nested.child = Box::new(child);
+        parent.nested_artboards.insert(0, nested);
+
+        parent
+            .try_visit_nested_artboard_instances_mut(
+                &mut |_depth, _graph_id, child| -> std::result::Result<(), ()> {
+                    assert!(child.set_keyed_solid_color_property(
+                        0,
+                        color_key,
+                        false,
+                        0xff00_ff00,
+                    ));
+                    Ok(())
+                },
+            )
+            .expect("nested visit");
+
+        assert!(parent.did_change());
     }
 
     #[test]

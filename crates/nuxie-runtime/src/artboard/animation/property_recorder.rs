@@ -48,7 +48,7 @@ impl ArtboardInstance {
         // `SolidColor::renderOpacityChanged()` mutates the retained
         // RenderPaint and calls only `Artboard::changed()`; it does not dirty
         // component/path preparation (`solid_color.cpp:23-54`).
-        self.did_change.set(true);
+        self.mark_render_paint_changed();
         // Pinned C++ `SolidColor::colorValueChanged` immediately calls
         // `renderOpacityChanged` and mutates the ShapePaint-owned paint
         // (`solid_color.cpp:23-54`). It does not dirty or reconstruct the

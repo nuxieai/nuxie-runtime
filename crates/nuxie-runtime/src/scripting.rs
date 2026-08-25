@@ -2380,6 +2380,15 @@ pub trait ScriptArtboard {
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
     ) -> Result<(), ScriptError>;
+
+    /// Invoke the projected artboard's scripted-canvas traversal.
+    ///
+    /// Pinned `Artboard:drawCanvas()` calls `internalDrawCanvases()` directly
+    /// and is intentionally callable both inside and outside an outer canvas
+    /// drawing phase.
+    fn draw_canvas(&mut self, _factory: &mut dyn RenderFactory) -> Result<(), ScriptError> {
+        Ok(())
+    }
 }
 
 /// Opaque retained parent context passed into one projected ScriptArtboard.
@@ -2790,6 +2799,13 @@ pub trait ScriptInstance {
         Err(ScriptError::new(
             "script draw requires a backend renderer binding",
         ))
+    }
+
+    /// Invoke this occurrence's authored `drawCanvas(self)` callback.
+    /// Missing/non-function callbacks are a no-op, matching
+    /// `ScriptedObject::scriptDrawCanvas`.
+    fn call_draw_canvas(&mut self, _factory: &mut dyn RenderFactory) -> Result<(), ScriptError> {
+        Ok(())
     }
 
     fn call_data_converter(

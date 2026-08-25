@@ -1178,13 +1178,13 @@ note = "Direct filename correspondence and the pinned C++ comparison matrix are 
 upstream = "src/artboard.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie/src/lib.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie/src/lib.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0094"
 b6_verdict = "DIVERGENT"
 b6_cluster = "artboard"
 audit_record = "docs/b6-audit/results/artboard.md"
-note = "FL-D7 closes the whole-file Artboard owner: updatePass polls live DataBinds before each late joystick and final component pass, root advance owns advanceInternal/updatePass/Components-dirt settlement, and defaultStateMachine/defaultScene follow pinned selection semantics. X1 records the additive, observational, fail-closed SemanticGeometryRevision cache authority; X2 records the additive tree-wide global-id host broadcast, whose changed occurrences delegate to the faithful per-object setter. Neither extension replaces or skips baseline Artboard behavior. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie/src/lib.rs`; these are the final live owners after same-boundary aggregate fragments were regrouped; consolidating further would cross a crate or tool boundary or move public integration API."
+note = "FL-D7 closes the whole-file Artboard owner: updatePass polls live DataBinds before each late joystick and final component pass, root advance owns advanceInternal/updatePass/Components-dirt settlement, and defaultStateMachine/defaultScene follow pinned selection semantics. The paired-source canvas audit restores drawCanvases before drawInternal, honors the serialized drawsCanvas bit, and recursively walks nested/component-list ArtboardHost occurrences; Lua ScriptedArtboard.drawCanvas calls the ungated internal traversal. X1 records the additive, observational, fail-closed SemanticGeometryRevision cache authority; X2 records the additive tree-wide global-id host broadcast, whose changed occurrences delegate to the faithful per-object setter. Neither extension replaces or skips baseline Artboard behavior. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/draw.rs`; `crates/nuxie/src/lib.rs`; these are the final live owners after same-boundary aggregate fragments were regrouped; consolidating further would cross a crate or tool boundary or move public integration API."
 
 [[file]]
 upstream = "src/artboard_component_list.cpp"
@@ -3283,7 +3283,7 @@ b6_row_id = "B6-0261"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "P1-d direct owner split at d788e8ec: the existing adapted ScriptedArtboard, ScriptedAnimation, and ScriptedNode bindings moved without behavioral rewrite to crates/nuxie-scripting/src/vm/lua_artboards.rs:24-241; the existing artboard owner-lifetime tests moved with them at lines 243-360. Public host integration and Luau VM binding intentionally remain split across crate boundaries. C17 exception: retained modules are `crates/nuxie-scripting/src/vm/lua_artboards.rs`; `crates/nuxie/src/lib.rs`; these are the final live owners after same-boundary aggregate fragments were regrouped; consolidating further would cross a crate or tool boundary or move public integration API."
+note = "P1-d direct owner split at d788e8ec: ScriptedArtboard, ScriptedAnimation, and ScriptedNode bindings live in the direct Rust owner. The paired-source canvas audit restores the missing ungated ScriptedArtboard.drawCanvas binding and delegates it to the projected Artboard's internal scripted-canvas traversal. Public host integration and Luau VM binding intentionally remain split across crate boundaries. C17 exception: retained modules are `crates/nuxie-scripting/src/vm/lua_artboards.rs`; `crates/nuxie/src/lib.rs`; these are the final live owners after same-boundary aggregate fragments were regrouped; consolidating further would cross a crate or tool boundary or move public integration API."
 
 [[file]]
 upstream = "src/lua/lua_audio.cpp"
@@ -3511,7 +3511,7 @@ b6_row_id = "B6-0280"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/post-b6-port-reviews.md"
-note = "GPUCEIL implementation at pinned 4ac7b327 under registered D18: authored fixtures prove distinct pipeline/resource snapshots in one submission, explicit empty finish plus orphan rejection, and stable external texture identity from attachment store to a later sampled submission. The runtime owns backend-neutral GPU scripting contracts while the exact Metal product adaptation owns native execution; editor-side shader translation is tracked separately. X3 records the additive direct-bytecode scalar input projection, whose conversions match ScriptedObject setters without inventing component dirt for a non-Component program. Mixed-file Canvas 2D/Image:view members remain open under RF-33. MR exception (crate boundary): the Lua GPU surface spans the scripting binding, render-api contract, and exact product adaptation."
+note = "GPUCEIL implementation at pinned 4ac7b327 under registered D18: authored fixtures prove distinct pipeline/resource snapshots in one submission, explicit empty finish plus orphan rejection, and stable external texture identity from attachment store to a later sampled submission. The paired-source canvas audit restores the pinned GPUCanvas:beginRenderPass drawing-phase gate and exact diagnostic; both imported and direct-bytecode draw entry points establish the VM-owned scoped phase. The runtime owns backend-neutral GPU scripting contracts while the exact Metal product adaptation owns native execution; editor-side shader translation is tracked separately. X3 records the additive direct-bytecode scalar input projection, whose conversions match ScriptedObject setters without inventing component dirt for a non-Component program. Mixed-file Canvas 2D/Image:view members remain open under RF-33. MR exception (crate boundary): the Lua GPU surface spans the scripting binding, render-api contract, and exact product adaptation."
 
 [[file]]
 upstream = "src/lua/renderer/lua_gradient.cpp"
@@ -3601,13 +3601,13 @@ note = "P1-d direct owner split at d788e8ec: RendererBindings and the existing a
 upstream = "src/lua/rive_lua_libs.cpp"
 status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+rust_module = "crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/canvas_drawing_phase.rs; crates/nuxie-scripting/src/vm/view_model.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0288"
 b6_verdict = "DIVERGENT"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "2026-08-03 LT-2 faithful candidate for the corpus-gated umbrella: install_rive_globals registers the pinned standard/Rive binding equivalents before sandboxing, is idempotent, and now includes the completed DataValue, property/state, and Gradient semantics. crates/nuxie-scripting/tests/vm_boot.rs::rive_globals_are_installed_before_sandboxing and installing_rive_globals_is_idempotent_after_sandboxing cover ordering/lifecycle; view_model.rs::unported_context_binding_reports_the_script_and_binding_names proves an out-of-corpus Context:animation access fails with both the script and binding names. MR-2/C08 exception remains justified across vm.rs and view_model.rs."
+note = "2026-08-03 LT-2 faithful candidate for the corpus-gated umbrella: install_rive_globals registers the pinned standard/Rive binding equivalents before sandboxing, is idempotent, and now includes the completed DataValue, property/state, and Gradient semantics. The paired-source canvas audit adds the direct safe-Rust owner for ScriptingContext::canvasDrawingPhase and ScopedCanvasDrawingPhase, preserving nullable construction and nested restoration. crates/nuxie-scripting/tests/vm_boot.rs covers ordering/lifecycle; the active upstream canvas-phase test covers the new state owner. MR-2/C08 exception remains justified across vm.rs, canvas_drawing_phase.rs, and view_model.rs."
 
 [[file]]
 upstream = "src/math/aabb.cpp"
@@ -4035,13 +4035,13 @@ note = "F7 closure via P2C: ScriptedLayout's direct parent-layout lookup, post-h
 upstream = "src/scripted/scripted_object.cpp"
 status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/scripted_object.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie/src/lib.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/script_asset.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-runtime/src/scripted_object.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0325"
 b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/results/post-b6-port-reviews.md"
-note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. The paired-source audit restores ScriptedContext::markNeedsUpdate forwarding through the safe-Rust VM callback boundary, preserving the C++ ScriptedContext-to-ScriptedObject ownership path without exposing raw pointers or the Lua self table. Active upstream_scripting_update_phase_guard tests exercise the exact typed Luau update body. Failed protected calls still park the owner exactly like C++ false, while Rust's typed ScriptError remains only an additive host signal and performs no automatic rearm. C17 exception: retained modules are `crates/nuxie-runtime/src/scripted_object.rs`; `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie-scripting/src/vm/view_model.rs`; `crates/nuxie/src/lib.rs`; Core occurrence state, safe Lua adapter state, Context userdata, and the public facade necessarily cross crate boundaries."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. The paired-source audit restores ScriptedContext::markNeedsUpdate forwarding through the safe-Rust VM callback boundary and restores ScriptedObject::scriptDrawCanvas as a distinct callback selected by the serialized drawsCanvas bit before ordinary draw. Active upstream update-phase and canvas-phase tests exercise the exact typed Luau bodies. Failed protected calls still park the owner exactly like C++ false, while Rust's typed ScriptError remains only an additive host signal and performs no automatic rearm. C17 exception: retained modules cross runtime occurrence state, serialized ScriptAsset method metadata, safe Lua adapter state, Context userdata, and the public facade; consolidating them would cross crate/ownership boundaries."
 
 [[file]]
 upstream = "src/scripted/scripted_path_effect.cpp"

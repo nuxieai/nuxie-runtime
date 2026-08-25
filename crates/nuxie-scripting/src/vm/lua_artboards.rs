@@ -203,6 +203,15 @@ impl UserData for ScriptedArtboard {
                     .map_err(|error| Error::runtime(error.to_string()))
             })
         });
+        methods.add_method_mut("drawCanvas", |_, this, ()| {
+            this.bindings.with_factory(|factory| {
+                this.owner
+                    .artboard
+                    .borrow_mut()
+                    .draw_canvas(factory)
+                    .map_err(|error| Error::runtime(error.to_string()))
+            })
+        });
     }
 }
 

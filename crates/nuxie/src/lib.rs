@@ -3562,6 +3562,13 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
             )
             .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))
     }
+
+    fn draw_canvas(
+        &mut self,
+        factory: &mut dyn Factory,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        self.instance.draw_script_canvases(factory)
+    }
 }
 
 #[cfg(feature = "scripting")]

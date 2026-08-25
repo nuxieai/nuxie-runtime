@@ -1,29 +1,18 @@
-//! One-for-one expected-red ports of pinned
+//! One-for-one ports of pinned
 //! `tests/unit_tests/runtime/scripting/scripting_canvas_drawing_phase_test.cpp`.
 
 use std::path::PathBuf;
 
-#[derive(Debug, Default)]
-struct ScriptingContext;
+use luaur_rt::Table;
+use nuxie_render_api::{Factory, PersistentFactory, RecordingFactory, Renderer};
+use nuxie_runtime::{
+    NoopScriptHost, ScriptArtboard, ScriptError, ScriptInstance, ScriptMethod, ScriptValue,
+    ScriptViewModel,
+};
+use nuxie_scripting::vm::{CanvasDrawingPhase, ScopedCanvasDrawingPhase, ScriptVm};
 
-fn canvas_drawing_phase(_: &ScriptingContext) -> bool {
-    missing_canvas_drawing_phase_owner()
-}
-
-fn with_scoped_canvas_drawing_phase<F>(_: Option<&mut ScriptingContext>, _: F)
-where
-    F: FnOnce(&mut ScriptingContext),
-{
-    missing_canvas_drawing_phase_owner()
-}
-
-fn call_draw_canvas(_: &str, _: &[u8], _: bool) -> bool {
-    missing_canvas_drawing_phase_owner()
-}
-
-fn missing_canvas_drawing_phase_owner() -> ! {
-    panic!("Rust scripting has no canvasDrawingPhase state/scoped-guard owner")
-}
+mod support;
+use support::compile_source;
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -35,38 +24,106 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", fixture.display()))
 }
 
+#[derive(Debug, Default)]
+struct EmptyScriptArtboard;
+
+impl ScriptArtboard for EmptyScriptArtboard {
+    fn width(&self) -> f32 {
+        0.0
+    }
+
+    fn height(&self) -> f32 {
+        0.0
+    }
+
+    fn frame_origin(&self) -> bool {
+        false
+    }
+
+    fn set_width(&mut self, _width: f32) {}
+
+    fn set_height(&mut self, _height: f32) {}
+
+    fn set_frame_origin(&mut self, _frame_origin: bool) {}
+
+    fn instance(
+        &self,
+        _view_model: Option<ScriptViewModel>,
+    ) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
+        Ok(Box::new(Self))
+    }
+
+    fn draw(
+        &mut self,
+        _factory: &mut dyn Factory,
+        _renderer: &mut dyn Renderer,
+    ) -> Result<(), ScriptError> {
+        Ok(())
+    }
+}
+
 #[test]
-#[ignore = "expected-red: Rust scripting has no canvasDrawingPhase/scoped-guard owner"]
 fn scoped_canvas_drawing_phase_toggles_the_flag_and_restores_it() {
-    let mut context = ScriptingContext;
-    assert!(!canvas_drawing_phase(&context));
-    with_scoped_canvas_drawing_phase(Some(&mut context), |context| {
-        assert!(canvas_drawing_phase(context));
-        with_scoped_canvas_drawing_phase(Some(context), |context| {
-            assert!(canvas_drawing_phase(context));
-        });
-        assert!(canvas_drawing_phase(context));
-    });
-    assert!(!canvas_drawing_phase(&context));
+    let context = CanvasDrawingPhase::default();
+    assert!(!context.is_active());
+    {
+        let _phase = ScopedCanvasDrawingPhase::new(Some(&context));
+        assert!(context.is_active());
+        {
+            let _nested = ScopedCanvasDrawingPhase::new(Some(&context));
+            assert!(context.is_active());
+        }
+        assert!(context.is_active());
+    }
+    assert!(!context.is_active());
 }
 
 #[test]
-#[ignore = "expected-red: Rust scripting has no nullable scoped canvas-drawing guard owner"]
 fn scoped_canvas_drawing_phase_tolerates_a_null_context() {
-    with_scoped_canvas_drawing_phase(None, |_| {});
+    let _phase = ScopedCanvasDrawingPhase::new(None);
 }
 
 #[test]
-#[ignore = "expected-red: Rust scripting has no canvasDrawingPhase/drawCanvas binding owner"]
 fn artboard_draw_canvas_is_callable_regardless_of_drawing_phase() {
     let script = "function callDrawCanvas(artboard:Artboard):()\n  artboard:drawCanvas()\nend\n";
     let coin = pinned_fixture("coin.riv");
-    let mut context = ScriptingContext;
-    assert!(!canvas_drawing_phase(&context));
-    assert!(call_draw_canvas(script, &coin, false));
-    with_scoped_canvas_drawing_phase(Some(&mut context), |context| {
-        assert!(canvas_drawing_phase(context));
-        assert!(call_draw_canvas(script, &coin, true));
-    });
-    assert!(!canvas_drawing_phase(&context));
+    let file = nuxie_binary::read_runtime_file(&coin).expect("coin.riv parses");
+    assert!(file.artboard(0).is_some());
+
+    let vm = ScriptVm::new();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    vm.install_render_factory(&mut factory).unwrap();
+    vm.install_rive_globals().unwrap();
+    vm.eval_bytecode::<()>("test_source", &compile_source(script).unwrap())
+        .unwrap();
+    let table: Table = vm
+        .eval_bytecode(
+            "test_instance",
+            &compile_source("return { update = function(self) callDrawCanvas(self.artboard) end }")
+                .unwrap(),
+        )
+        .unwrap();
+    let mut instance = vm.script_instance_from_table(table);
+    instance
+        .set_artboard_input("artboard", Box::new(EmptyScriptArtboard))
+        .unwrap();
+
+    assert!(!vm.canvas_drawing_phase().is_active());
+    assert_eq!(
+        instance
+            .call_method(ScriptMethod::Update, &[], &mut NoopScriptHost)
+            .unwrap(),
+        ScriptValue::Nil
+    );
+    {
+        let _phase = vm.canvas_drawing_phase().scoped();
+        assert!(vm.canvas_drawing_phase().is_active());
+        assert_eq!(
+            instance
+                .call_method(ScriptMethod::Update, &[], &mut NoopScriptHost)
+                .unwrap(),
+            ScriptValue::Nil
+        );
+    }
+    assert!(!vm.canvas_drawing_phase().is_active());
 }

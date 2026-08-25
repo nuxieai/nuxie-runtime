@@ -323,7 +323,10 @@ class PortManifestCliTest(unittest.TestCase):
             "src/audio_event.cpp": ("ported", "P2F2"),
             "src/text/cursor.cpp": ("ported", "FL-E6"),
             "src/command_queue.cpp": ("ported", "P3F"),
-            "src/constraints/scrolling/elastic_scroll_physics.cpp": ("absent", "F4"),
+            "src/constraints/scrolling/elastic_scroll_physics.cpp": (
+                "ported",
+                "Phase 3",
+            ),
             "src/animation/keyboard_listener_group.cpp": ("absent", "F5"),
             "src/semantic/semantic_manager.cpp": ("ported", "FTAIL"),
             "src/lua/lua_promise.cpp": ("ported", "P1-i"),
@@ -508,13 +511,34 @@ class PortManifestCliTest(unittest.TestCase):
             "src/text/text_selection_path.cpp": ("ported", "FL-E6"),
             "src/command_queue.cpp": ("ported", "P3F"),
             "src/command_server.cpp": ("ported", "P3F"),
-            "src/constraints/scrolling/clamped_scroll_physics.cpp": ("partial", "F4"),
-            "src/constraints/scrolling/elastic_scroll_physics.cpp": ("absent", "F4"),
-            "src/constraints/scrolling/scroll_bar_constraint.cpp": ("absent", "F4"),
-            "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp": ("absent", "F4"),
-            "src/constraints/scrolling/scroll_constraint.cpp": ("partial", "F4"),
-            "src/constraints/scrolling/scroll_constraint_proxy.cpp": ("partial", "F4"),
-            "src/constraints/scrolling/scroll_physics.cpp": ("partial", "F4"),
+            "src/constraints/scrolling/clamped_scroll_physics.cpp": (
+                "partial",
+                "Phase 3",
+            ),
+            "src/constraints/scrolling/elastic_scroll_physics.cpp": (
+                "ported",
+                "Phase 3",
+            ),
+            "src/constraints/scrolling/scroll_bar_constraint.cpp": (
+                "ported",
+                "Phase 3",
+            ),
+            "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp": (
+                "ported",
+                "Phase 3",
+            ),
+            "src/constraints/scrolling/scroll_constraint.cpp": (
+                "ported",
+                "Phase 3",
+            ),
+            "src/constraints/scrolling/scroll_constraint_proxy.cpp": (
+                "ported",
+                "Phase 3",
+            ),
+            "src/constraints/scrolling/scroll_physics.cpp": (
+                "ported",
+                "Phase 3",
+            ),
             "src/animation/gamepad_listener_group.cpp": ("absent", "F5"),
             "src/animation/keyboard_listener_group.cpp": ("absent", "F5"),
             "src/animation/semantic_listener_group.cpp": ("absent", "F5"),

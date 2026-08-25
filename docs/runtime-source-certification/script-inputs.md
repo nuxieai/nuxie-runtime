@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **correction implemented; independent re-review pending**
+Adversarial review: **REJECTED**
 
 This receipt deliberately includes executable methods defined inline in the
 handwritten `include/rive/script_input_*.hpp` headers. Those methods exposed
@@ -101,17 +101,17 @@ every nonzero changed Core value invokes the named table callback.
 |---|---|---|---|
 | `ScriptInputArtboard::~ScriptInputArtboard` | owning occurrence drop; `RuntimeScriptInputArtboardOccurrence` drop | adapted | occurrence replacement/disposal tests |
 | `ScriptInputArtboard::import` | binary Backboard + scripted-object context validation; runtime definition builders | exact | `runtime_import_status_tracks_scripted_object_input_contexts`; C++/Rust import comparison |
-| `ScriptInputArtboard::initScriptedValue` | artboard branch of `prepare_script_listener_hydration`; `ScriptListenerActionHydration::apply_inputs` | exact | authored artboard hydration tests |
+| `ScriptInputArtboard::initScriptedValue` | artboard branch of `prepare_script_listener_hydration`; `ScriptListenerActionHydration::apply_inputs` | missing | same-File authored hydration passes, but a valid live cross-File source fails in the facade |
 | `ScriptInputArtboard::validateForScriptInit` (inline) | resolved-reference preflight | exact | typed-artboard validation failure tests |
 | `ScriptInputArtboard::validateForColdScriptInit` | cold phase accepts the unresolved live context | exact | cold/live hydration lifecycle tests |
 | `ScriptInputArtboard::validateHydrationPrerequisites` | snapshot/reference preflight before any writes | exact | `scripted_hydration_validation_failure_applies_no_inputs_or_init` |
-| `ScriptInputArtboard::hydrateScriptInput` | authored phase-two artboard resolution and projection | exact | authored artboard hydration tests |
-| `ScriptInputArtboard::syncReferencedArtboard` | `set_artboard_input_core`; live `apply_scripted_input_update` | exact | artboard projection tests |
+| `ScriptInputArtboard::hydrateScriptInput` | authored phase-two artboard resolution and projection | missing | same-File authored hydration passes, but a valid live cross-File source fails in the facade |
+| `ScriptInputArtboard::syncReferencedArtboard` | `set_artboard_input_core`; live `apply_scripted_input_update` | missing | converter-owned live replacement retains the source internally but does not update an existing script table |
 | `ScriptInputArtboard::onAddedClean` | ordered input/binding-definition construction | exact | imported input order/count comparison |
-| `ScriptInputArtboard::clone` | `RuntimeScriptInputArtboardOccurrence::clone_for_scripted_object` | corrected; pending review | `fresh_clone_preserves_the_exact_live_bindable_identity` |
+| `ScriptInputArtboard::clone` | `RuntimeScriptInputArtboardOccurrence::clone_for_scripted_object` | exact | `fresh_clone_preserves_the_exact_live_bindable_identity` |
 | `ScriptInputArtboard::file` (inline) | `RuntimeScriptInputArtboardOccurrence::file_attached` | exact | resolved/unresolved clone authority test |
 | `ScriptInputArtboard::artboardIdChanged` | `RuntimeScriptInputProperties::apply_target`; `apply_artboard_id_changed` | exact | missing-id clear and generated-id separation tests |
-| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | corrected; pending review | `live_asset_is_preferred_and_preserves_generated_artboard_id`; `ancestor_live_asset_is_rejected_then_absent_asset_uses_file_index` |
+| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | missing | direct-owner tests pass, but converter-owned occurrences have no owner-ancestor authority and live replacement does not reach the hydrated table |
 | `ScriptInputArtboard::referencedArtboardId` | generated value in `RuntimeScriptInputProperties::value`; binary `cpp_artboard_referencer_index` | exact | import resolver and generated-id tests |
 
 The generated `artboardId` and retained referenced Artboard remain separate.
@@ -143,7 +143,10 @@ passes preflight, performs no table write, continues to later inputs, and may
 run user `init`. The path and its resolved-name buffer are independently
 cloned for every scripted-object occurrence.
 
-## Adversarial correction
+## Implementing correction claims
+
+This section records the implementing lane's correction rationale and evidence.
+The independent review below supersedes the claims that it falsifies.
 
 The header-aware denominator is correct. The seven `.cpp` files contain 42
 out-of-line definitions. The handwritten headers add exactly 11 executable
@@ -210,15 +213,119 @@ Focused correction evidence with `CARGO_INCREMENTAL=0`:
   `RIVE_CPP_PROBE_SCRIPTED` was not configured in this checkout;
 - `cargo fmt --all -- --check`: passed.
 
+## Independent adversarial review
+
+The re-review read all seven pinned `.cpp` owners and all seven handwritten
+headers completely, then traced both upstream ownership sites through the Rust
+bind, rebind, DataContext, clone, hydration, and facade paths. The v2 census is
+arithmetically sound: the owners contain 42 out-of-line functions and 11
+executable header functions. The other seven v2 units are include-guard macro
+definitions; they are non-behavioral `not-applicable` units under the governing
+decision in this campaign's README, not part of the 53 behavioral rows.
+This review is based on the accepted 1,105-owner/7,818-unit denominator in
+`4144a92c5`; comparison with the prior v2 snapshot found no newly recovered or
+replaced units in these 14 owners or in the directly coupled ScriptedObject,
+ScriptedListenerAction, ScriptedDataConverter, ArtboardReferencer,
+DataBindContextValueArtboard, ViewModelInstanceArtboard, BindableArtboard, and
+Lua Artboard facade owners.
+
+The scalar, Trigger, and ViewModel-property rows were not falsified. Neither
+were Artboard import, validation, generated-id separation, file-id change,
+clone identity, or the direct `ScriptedListenerAction` bind/rebind paths. In
+particular, both root and DataContext resolution retain a live
+`ViewModelInstanceArtboard` state handle and reread it after dirt, so replacing
+the live source without changing the generated `propertyValue` sentinel is
+represented. The direct listener owner also receives the containing
+Artboard's ancestor-source chain.
+
+The correction is nevertheless rejected because three end-to-end gaps remain.
+
+### Converter-owned live changes do not update the hydrated script table
+
+Pinned `DataBindContextValueArtboard::apply` calls
+`ScriptInputArtboard::updateArtboard`; every accepted reference then calls
+`syncReferencedArtboard`, which calls `setArtboardInput` even when the generated
+`artboardId` is unchanged.
+
+Rust's converter path does retain the new live source in
+`update_one_input_binding`, but table projection then calls
+`RuntimeScriptInputProperties::projection_value`. For an Artboard that helper
+asks `referenced_artboard_id`; a retained `ScriptArtboardSource::Live` has no
+file id, so it returns `None` and the function exits without invoking the
+hydrated owner's `apply` callback. The direct-listener path has a separate
+Artboard special case and does not have this defect.
+
+The focused converter test cannot observe the missing side effect: it passes
+`owner_instance = None` and expressly expects that no table callback runs. It
+proves internal source retention and generated-id separation, but not pinned
+`syncReferencedArtboard` behavior after hydration or dynamic replacement.
+
+### Converter-owned occurrences do not reject the owner or its ancestors
+
+Pinned `ArtboardReferencer::findArtboard` always compares a live asset against
+the `ScriptInputArtboard`'s parent Artboard, irrespective of whether the cloned
+input is owned by a listener action or by `ScriptedDataConverter::m_dataBinds`.
+
+Rust installs `artboard_referencer_ancestor_sources()` only on
+`scripted_object_bindings` during `StateMachineInstance` initialization.
+`RuntimeScriptedDataConverterState` has no ancestor-source field or setter, so
+its cloned Artboard inputs retain `ancestor_sources = None`. An owner Artboard
+or ancestor supplied through a converter custom input is consequently accepted
+where pinned C++ returns null and preserves the old reference. The existing
+ancestor test constructs a standalone occurrence with an explicitly installed
+chain and does not exercise a converter owner.
+
+### The live facade is not cross-File faithful
+
+Pinned `BindableArtboard` retains both its source `File` and its concrete
+`ArtboardInstance`. `ScriptedObject::setArtboardInput` clones that exact
+Artboard, and `ScriptReffedArtboard` obtains the default state machine from the
+cloned instance itself.
+
+Rust's `RuntimeBindableArtboard` retains only the `ArtboardInstance`.
+`FileScriptArtboard::new_from_live` searches the scripted owner's resolver
+`File` for a graph with the live instance's numeric `global_id`, constructs
+from that unrelated file-local entry, and only then overwrites the instance.
+The command-server API permits assigning any instantiated Artboard handle to
+any ViewModel Artboard property without requiring matching File handles, so
+this is reachable rather than a theoretical representation difference. A
+valid cross-File source is rejected when its id is absent; if the two files
+reuse the same global id, Rust can instead select the wrong file's default
+state-machine metadata. All current live-Artboard tests use one File.
+
+Because live resolution is deferred to `ScriptListenerActionHydration::apply_inputs`,
+the cross-File facade error can also occur after earlier scalar inputs have
+already been written. Pinned preflight accepts the non-null reference and the
+corresponding C++ projection does not introduce that error, so the existing
+whole-batch no-partial-write evidence does not cover this failure.
+
+Focused independent evidence with `CARGO_INCREMENTAL=0` and an isolated target
+directory:
+
+- `script_input_artboard::tests`: 4 passed;
+- `converter_owned_artboard_input_retains_the_live_view_model_source`: passed;
+- `script_input_bindings`: 11 passed;
+- ignored expected-red
+  `converter_owned_live_artboard_projects_to_the_hydrated_table_expected_red`
+  fails with zero table projections where pinned behavior requires one;
+- ignored expected-red
+  `converter_owned_artboard_input_rejects_its_owner_source_expected_red`
+  fails because the owner source is accepted rather than preserving the old
+  reference.
+
+These green tests confirm the supported same-File paths but do not contradict
+the code-path counterexamples above.
+
 ## Result
 
-The seven files contribute 42 out-of-line definitions and 11 executable inline
-methods. All 53 have identified Rust owners. Seven destructor rows use the
-approved Rust ownership adaptation and 44 rows retain their prior accepted
-verdict. The two formerly rejected Artboard rows are corrected in this change
-with focused behavioral evidence, but remain explicitly pending an independent
-adversarial acceptance pass across every ScriptedObject owner path; this
-implementing lane does not self-certify them.
+The seven source/header pairs contribute 42 out-of-line definitions and 11
+executable inline methods. All 53 have identified Rust owners. The independent
+review accepts 49 rows, including the seven approved destructor adaptations,
+and rejects four Artboard rows as `missing`: `initScriptedValue`,
+`hydrateScriptInput`, `syncReferencedArtboard`, and `updateArtboard`. The
+receipt is **not certified** until converter-owned ancestry and live table
+projection are restored and the facade carries valid live cross-File authority
+without reconstructing it from a file-local numeric id.
 
 The historical scalar RB4 gap is stale: scalar Core values,
 occurrence-local scalar cloning, converter ownership, callback projection, and

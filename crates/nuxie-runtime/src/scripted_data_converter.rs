@@ -1781,6 +1781,103 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "expected red: converter-owned live Artboard updates do not project to a hydrated script table"]
+    fn converter_owned_live_artboard_projects_to_the_hydrated_table_expected_red() {
+        let file = artboard_input_fixture();
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let source = crate::ArtboardInstance::from_graph(&file, &graphs.artboards[0])
+            .expect("live source artboard builds");
+        let live = crate::RuntimeBindableArtboard::new_with_artboard_instance("live", &source);
+        let mut context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("fixture view model instance builds");
+        assert!(context.set_runtime_artboard_by_property_name("child", Some(live.clone())));
+
+        let mut definitions = vec![artboard_input_definition()];
+        let definition = RuntimeScriptedDataConverterDefinition::with_grouped_test_bind_order(
+            definitions.clone(),
+        );
+        let mut state = RuntimeScriptedDataConverterState::from_definition(&definition);
+        state.bind_sources(&mut definitions, &file, &context, true);
+        let owner = probe_handle(
+            Rc::new(Cell::new(false)),
+            true,
+            ScriptValue::Bool(false),
+            Rc::new(RefCell::new(Vec::new())),
+        );
+        let projected = Rc::new(Cell::new(0));
+        let projected_for_apply = Rc::clone(&projected);
+        let mut apply = |_: &RuntimeScriptInstanceHandle,
+                         _: &ScriptCoreString,
+                         value: RuntimeScriptedListenerBoundValue|
+         -> Result<(), ScriptError> {
+            let RuntimeScriptedListenerBoundValue::Artboard(
+                crate::script_input_artboard::ScriptArtboardSource::Live(projected_live),
+            ) = value
+            else {
+                panic!("pinned syncReferencedArtboard projects the retained live source")
+            };
+            assert!(projected_live.ptr_eq(&live));
+            projected_for_apply.set(projected_for_apply.get() + 1);
+            Ok(())
+        };
+
+        assert!(
+            state
+                .update_input(
+                    &mut definitions,
+                    0,
+                    0,
+                    Some(&owner),
+                    &file,
+                    &context,
+                    &mut apply,
+                )
+                .unwrap()
+        );
+        assert_eq!(
+            projected.get(),
+            1,
+            "an accepted updateArtboard must immediately run syncReferencedArtboard on the hydrated owner",
+        );
+    }
+
+    #[test]
+    #[ignore = "expected red: converter-owned ScriptInputArtboard occurrences lack owner-ancestor authority"]
+    fn converter_owned_artboard_input_rejects_its_owner_source_expected_red() {
+        let file = artboard_input_fixture();
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let owner = crate::ArtboardInstance::from_graph(&file, &graphs.artboards[0])
+            .expect("owner artboard builds");
+        let owner_source =
+            crate::RuntimeBindableArtboard::new_with_artboard_instance("owner", &owner);
+        let mut context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("fixture view model instance builds");
+        assert!(context.set_runtime_artboard_by_property_name("child", Some(owner_source.clone())));
+
+        let mut definitions = vec![artboard_input_definition()];
+        let definition = RuntimeScriptedDataConverterDefinition::with_grouped_test_bind_order(
+            definitions.clone(),
+        );
+        let mut state = RuntimeScriptedDataConverterState::from_definition(&definition);
+        state.bind_sources(&mut definitions, &file, &context, true);
+        let mut no_apply = |_: &RuntimeScriptInstanceHandle,
+                            _: &ScriptCoreString,
+                            _: RuntimeScriptedListenerBoundValue|
+         -> Result<(), ScriptError> { Ok(()) };
+
+        assert!(
+            !state
+                .update_input(&mut definitions, 0, 0, None, &file, &context, &mut no_apply,)
+                .unwrap(),
+            "pinned findArtboard rejects the ScriptInputArtboard owner and preserves the old reference",
+        );
+        assert!(
+            state.input_snapshots()[0].value.is_none(),
+            "a rejected owner source must not become the retained live reference",
+        );
+    }
+
+    #[test]
     fn conversion_mask_missing_method_and_occurrence_cache_match_cpp() {
         let fail = Rc::new(Cell::new(true));
         let calls = Rc::new(RefCell::new(Vec::new()));

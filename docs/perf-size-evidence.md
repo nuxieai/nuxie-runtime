@@ -194,7 +194,8 @@ decoded font shaping tables and imported Text topology on their concrete
 owners, transfers the already-computed parent layout frame, and stops a parent
 Yoga result from re-dirtying the same host until the 100-pass convergence cap.
 The deterministic regression fell from 505 Taffy solves to one bounded
-decomposed-layout wave (9 entries), while an unchanged transferred tree
+decomposed-layout settlement (9 outer waves and 35 total entries, including
+nested component-list hug measurements), while an unchanged transferred tree
 performs zero solves and the animated child retains its exact settled width.
 
 Three fixed release sessions used the pinned C++ runtime at `4ac7b327`, 100

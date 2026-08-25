@@ -8,6 +8,8 @@ collection in `text_modifier_group.rs` and graph validation in `text.rs`.
 
 Verdict: adapted and behaviorally equivalent.
 
+row_id: "B6-0395"; upstream: "src/text/text_modifier.cpp"; verdict: ADAPTED;
+
 The pinned C++ file owns one behavior: `onAddedDirty` requires a direct
 `TextModifierGroup` parent and registers the modifier with that group. Rust
 validates the same parent relationship before constructing a static text

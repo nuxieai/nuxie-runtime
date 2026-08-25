@@ -9,6 +9,8 @@ Verdict: behaviorally equivalent. The concrete clamped variant shares the
 retained `ScrollPhysics` lifecycle in both implementations; a shared Rust file
 does not make this C++ owner partial.
 
+row_id: "B6-0134"; upstream: "src/constraints/scrolling/clamped_scroll_physics.cpp"; verdict: ADAPTED;
+
 The scrolling paired audit verified `advance`, `run`, range limiting, stop
 state, and the pinned `fminf`/`fmaxf` clamp edge behavior for NaN and reversed
 bounds. The deterministic host timestamp is the approved Rust host-clock

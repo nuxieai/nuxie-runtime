@@ -22,7 +22,7 @@ Rust owners:
 Verdict: ported and structurally adapted under D18/X3, with behavior pending
 the campaign-wide verification phase.
 
-row_id: "B6-0280"; upstream: "src/lua/renderer/lua_gpu.cpp"; verdict: ADAPTED.
+row_id: "B6-0280"; upstream: "src/lua/renderer/lua_gpu.cpp"; verdict: ADAPTED;
 
 The earlier audit examined only the GPU-prefixed class block. That was a
 source-correspondence failure: the same C++ file also owns the 2D

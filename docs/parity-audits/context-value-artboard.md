@@ -10,6 +10,8 @@ with mounted-occurrence lifecycle in `data_bind/data_bind_context.rs` and
 Verdict: adapted and behaviorally equivalent under Rust's retained-cell and
 arena ownership rules.
 
+row_id: "B6-0160"; upstream: "src/data_bind/context/context_value_artboard.cpp"; verdict: ADAPTED;
+
 - Source synchronization is push-driven through the retained view-model cell;
   there is no generation poll or reconstructed candidate in this owner.
 - Integer-backed source compatibility is retained by `matching`.

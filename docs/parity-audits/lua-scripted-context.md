@@ -20,6 +20,8 @@ Rust owners:
 Verdict: adapted and behaviorally equivalent under the fixed Rust-native
 renderer and scripting boundary.
 
+row_id: "B6-0271"; upstream: "src/lua/lua_scripted_context.cpp"; verdict: ADAPTED;
+
 The paired audit covered `viewModel`, `rootViewModel`, `dataContext`,
 `markNeedsUpdate`, `image`, `blob`, `decodeImage`, `audio`, `canvas`,
 `gpuCanvas`, `features`, and `shader`; disposed-context errors; Context

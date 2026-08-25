@@ -16,6 +16,8 @@ Rust owners:
 
 Verdict: adapted and behaviorally equivalent under Rust ownership.
 
+row_id: "B6-0339"; upstream: "src/shapes/list_path.cpp"; verdict: ADAPTED;
+
 The paired audit verified the 12 pinned symbol mappings; degrees-to-radians
 conversion; single, multi, and point listeners; initial writes; dependent
 registration/removal; positional reuse and remap; null-instance row skipping;

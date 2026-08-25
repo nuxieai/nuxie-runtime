@@ -3,24 +3,18 @@
 ## C++ → Rust correspondence inputs (non-authoritative)
 
 Files: 456
-Raw classification counts: `divergent-by-decision`: 4; `faithful`: 447; `partial`: 2; `pending`: 3
-Named pending files: 3
-
-### unavailable
-
-- `src/constraints/scrolling/elastic_scroll_physics.cpp`
-- `src/constraints/scrolling/scroll_bar_constraint.cpp`
-- `src/constraints/scrolling/scroll_bar_constraint_proxy.cpp`
+Raw classification counts: `divergent-by-decision`: 4; `faithful`: 452
+Named pending files: 0
 
 ## C++ → Rust owner proof
 
 Owners: 456
-Effective proof states: `known-divergent`: 3; `stale`: 446; `unverified`: 7
-Mapping states: `mapped`: 451; `partial`: 2; `pending`: 3
-Structural states: `adapted`: 211; `divergent`: 156; `isomorphic`: 22; `not-applicable`: 37; `tracked-gap`: 30
+Effective proof states: `known-divergent`: 3; `stale`: 449; `unverified`: 4
+Mapping states: `mapped`: 456
+Structural states: `adapted`: 216; `divergent`: 154; `isomorphic`: 22; `not-applicable`: 37; `tracked-gap`: 27
 Behavioral states: `unverified`: 456
-Verification states: `orchestrator-verified`: 367; `pending-verification`: 89
-Freshness states: `current`: 10; `stale`: 446
+Verification states: `orchestrator-verified`: 369; `pending-verification`: 87
+Freshness states: `current`: 7; `stale`: 449
 Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none`: 450
 
 ### behaviorally-unverified owners (456)
@@ -160,10 +154,10 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/constraints/list_follow_path_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/rotation_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scale_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/constraints/scrolling/clamped_scroll_physics.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/constraints/scrolling/elastic_scroll_physics.cpp` — mapping=pending; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/constraints/scrolling/scroll_bar_constraint.cpp` — mapping=pending; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/constraints/scrolling/scroll_bar_constraint_proxy.cpp` — mapping=pending; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/constraints/scrolling/clamped_scroll_physics.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
+- `src/constraints/scrolling/elastic_scroll_physics.cpp` — mapping=mapped; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/constraints/scrolling/scroll_bar_constraint.cpp` — mapping=mapped; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/constraints/scrolling/scroll_bar_constraint_proxy.cpp` — mapping=mapped; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/constraints/scrolling/scroll_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scrolling/scroll_constraint_proxy.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scrolling/scroll_physics.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -187,8 +181,8 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/data_bind/context/context_target_value.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_any.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/data_bind/context/context_value_artboard.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/data_bind/context/context_value_asset_blob.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=current
+- `src/data_bind/context/context_value_artboard.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
+- `src/data_bind/context/context_value_asset_blob.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_asset_font.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_asset_image.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_boolean.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -285,7 +279,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/layout/layout_component_style.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/layout/layout_node_provider.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/layout/layout_participant.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=current; exceptions=D3
-- `src/layout/layout_sizing_style.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=current; exceptions=D3
+- `src/layout/layout_sizing_style.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale; exceptions=D3
 - `src/layout/n_sliced_node.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/layout/n_slicer.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/layout/n_slicer_details.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -303,7 +297,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/lua/lua_promise.cpp` — mapping=mapped; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/lua_properties.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/lua_rive_base.cpp` — mapping=mapped; structural=isomorphic; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/lua/lua_scripted_context.cpp` — mapping=partial; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/lua/lua_scripted_context.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/lua/lua_state.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/math/lua_color.cpp` — mapping=mapped; structural=isomorphic; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/math/lua_input.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=pending-verification; freshness=stale
@@ -335,7 +329,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/math/raw_path_utils.cpp` — mapping=mapped; structural=isomorphic; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/math/rectangles_to_contour.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/math/vec2d.cpp` — mapping=mapped; structural=isomorphic; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/nested_artboard.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
+- `src/nested_artboard.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/nested_artboard_layout.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/nested_artboard_leaf.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/node.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -354,7 +348,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/script_input_viewmodel_property.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/scripted/scripted_data_converter.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/scripted/scripted_drawable.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/scripted/scripted_interpolator.cpp` — mapping=partial; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/scripted/scripted_interpolator.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/scripted/scripted_layout.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/scripted/scripted_object.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/scripted/scripted_path_effect.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=pending-verification; freshness=stale
@@ -462,7 +456,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/viewmodel/viewmodel_instance.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_artboard.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_asset.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/viewmodel/viewmodel_instance_asset_blob.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=current
+- `src/viewmodel/viewmodel_instance_asset_blob.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_asset_font.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_asset_image.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_boolean.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -482,15 +476,10 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/virtualizing_component.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/world_transform_component.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 
-### incomplete-mapping owners (5)
+### incomplete-mapping owners (0)
 
-- `src/constraints/scrolling/elastic_scroll_physics.cpp` — mapping=pending; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/constraints/scrolling/scroll_bar_constraint.cpp` — mapping=pending; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/constraints/scrolling/scroll_bar_constraint_proxy.cpp` — mapping=pending; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/lua/lua_scripted_context.cpp` — mapping=partial; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/scripted/scripted_interpolator.cpp` — mapping=partial; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 
-### known-divergent owners (186)
+### known-divergent owners (181)
 
 - `src/animation/blend_state_1d_viewmodel.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/animation/focus_listener_group.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -531,7 +520,6 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/constraints/list_follow_path_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/rotation_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scale_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/constraints/scrolling/clamped_scroll_physics.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scrolling/scroll_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scrolling/scroll_constraint_proxy.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scrolling/scroll_physics.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -541,7 +529,6 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/data_bind/context/context_target_value.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_any.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/data_bind/context/context_value_artboard.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_asset_font.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_asset_image.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_boolean.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -575,12 +562,10 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/layout_component.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/lua/lua_data_value.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/lua_properties.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/lua/lua_scripted_context.cpp` — mapping=partial; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/lua_state.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/renderer/lua_gradient.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/rive_lua_libs.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/math/rectangles_to_contour.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/nested_artboard.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/nested_artboard_layout.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/script_input_artboard.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/script_input_boolean.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -589,7 +574,6 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/script_input_string.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/script_input_trigger.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/script_input_viewmodel_property.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/scripted/scripted_interpolator.cpp` — mapping=partial; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/scripted/scripted_layout.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/shapes/clipping_shape.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/shapes/cubic_asymmetric_vertex.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -679,7 +663,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/viewmodel/viewmodel_instance_trigger.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_viewmodel.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 
-### stale owners (446)
+### stale owners (449)
 
 - `src/advancing_component.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/animation/animation_reset.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -814,10 +798,10 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/constraints/list_follow_path_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/rotation_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scale_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/constraints/scrolling/clamped_scroll_physics.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/constraints/scrolling/elastic_scroll_physics.cpp` — mapping=pending; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/constraints/scrolling/scroll_bar_constraint.cpp` — mapping=pending; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/constraints/scrolling/scroll_bar_constraint_proxy.cpp` — mapping=pending; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/constraints/scrolling/clamped_scroll_physics.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
+- `src/constraints/scrolling/elastic_scroll_physics.cpp` — mapping=mapped; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/constraints/scrolling/scroll_bar_constraint.cpp` — mapping=mapped; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/constraints/scrolling/scroll_bar_constraint_proxy.cpp` — mapping=mapped; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/constraints/scrolling/scroll_constraint.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scrolling/scroll_constraint_proxy.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/constraints/scrolling/scroll_physics.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -840,7 +824,8 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/data_bind/context/context_target_value.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_any.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/data_bind/context/context_value_artboard.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
+- `src/data_bind/context/context_value_artboard.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
+- `src/data_bind/context/context_value_asset_blob.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_asset_font.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_asset_image.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/data_bind/context/context_value_boolean.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -934,6 +919,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/layout/axis_y.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/layout/layout_component_style.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/layout/layout_node_provider.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
+- `src/layout/layout_sizing_style.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale; exceptions=D3
 - `src/layout/n_sliced_node.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/layout/n_slicer.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/layout/n_slicer_details.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -951,7 +937,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/lua/lua_promise.cpp` — mapping=mapped; structural=not-applicable; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/lua_properties.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/lua_rive_base.cpp` — mapping=mapped; structural=isomorphic; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/lua/lua_scripted_context.cpp` — mapping=partial; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/lua/lua_scripted_context.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/lua/lua_state.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/math/lua_color.cpp` — mapping=mapped; structural=isomorphic; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/lua/math/lua_input.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=pending-verification; freshness=stale
@@ -983,7 +969,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/math/raw_path_utils.cpp` — mapping=mapped; structural=isomorphic; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/math/rectangles_to_contour.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/math/vec2d.cpp` — mapping=mapped; structural=isomorphic; behavioral=unverified; verification=orchestrator-verified; freshness=stale
-- `src/nested_artboard.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
+- `src/nested_artboard.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/nested_artboard_layout.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/nested_artboard_leaf.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/node.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -1002,7 +988,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/script_input_viewmodel_property.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/scripted/scripted_data_converter.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/scripted/scripted_drawable.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=pending-verification; freshness=stale
-- `src/scripted/scripted_interpolator.cpp` — mapping=partial; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
+- `src/scripted/scripted_interpolator.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/scripted/scripted_layout.cpp` — mapping=mapped; structural=tracked-gap; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/scripted/scripted_object.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=pending-verification; freshness=stale
 - `src/scripted/scripted_path_effect.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=pending-verification; freshness=stale
@@ -1109,6 +1095,7 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 - `src/viewmodel/viewmodel_instance.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_artboard.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_asset.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
+- `src/viewmodel/viewmodel_instance_asset_blob.cpp` — mapping=mapped; structural=adapted; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_asset_font.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_asset_image.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
 - `src/viewmodel/viewmodel_instance_boolean.cpp` — mapping=mapped; structural=divergent; behavioral=unverified; verification=orchestrator-verified; freshness=stale
@@ -1130,22 +1117,22 @@ Exception states: `intentional-divergence`: 4; `intentional-extension`: 2; `none
 
 ## Rust → C++ attribution
 
-Ledger coverage: 487 Rust files (457 attributed by manifest inversion; 30 classified additions)
+Ledger coverage: 499 Rust files (469 attributed by manifest inversion; 30 classified additions)
 Addition categories: `baseline-adaptation`: 8; `codegen`: 17; `product-data`: 1; `retained-render`: 1; `test-infra`: 3
 
 ## Test correspondence
 
 Files: 157
 Test cases: 1404
-Covered test cases: 655/1404
-Uncovered test cases: 749
-Status counts: `n-a`: 2; `partial`: 29; `pending`: 78; `ported-differential`: 5; `ported-direct`: 43
+Covered test cases: 1404/1404
+Uncovered test cases: 0
+Status counts: `n-a`: 2; `ported-differential`: 6; `ported-direct`: 149
 
 ## Silver corpus
 
 Entries: 252
-Status counts: `divergent`: 92; `exact`: 87; `pending-scripted`: 41; `provenance-unknown`: 3; `unsupported`: 29
-Exact ratchet: 87/87 (met)
+Status counts: `divergent`: 93; `exact`: 90; `pending-scripted`: 38; `provenance-unknown`: 3; `unsupported`: 28
+Exact ratchet: 90/89 (met)
 
 ## Golden corpus
 

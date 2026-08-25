@@ -280,10 +280,9 @@ note = "Both cases are covered; only the fixture-loading case is differential, s
 [[file]]
 upstream = "tests/unit_tests/runtime/enums_test.cpp"
 test_case_count = 17
-status = "n-a"
-evidence = []
-adaptation = "cxx-language-only"
-note = "Explicit Rust-language adaptation disposition under docs/runtime-exact-parity-plan.md: all 17 cases test C++-only enum-class detection, overloaded bitwise/compound operators, underlying-type templates, and enum increment/decrement helpers. Rust deliberately does not reproduce those C++ language mechanics; no renderer/runtime observable is omitted, and this row is not counted as literal behavior coverage."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/upstream_enums.rs"]
+note = "All 17 active TEST_CASEs are ported against Rust's native integer bitmask owner. The C++-only enum-class detection static_asserts stay under the approved language adaptation, and the pinned upstream Flags64 any_flag_set test's accidental decr call is preserved rather than corrected."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/file_test.cpp"

@@ -20,6 +20,8 @@ Rust owners:
 Verdict: adapted and behaviorally equivalent under the fixed Rust scripting
 boundary.
 
+row_id: "B6-0323"; upstream: "src/scripted/scripted_interpolator.cpp"; verdict: ADAPTED;
+
 The audit verified identity and linear fallbacks for `transform`; linear
 fallback for `transformValue`; protected-call failure behavior; asset retention
 across clones; one table per `(LinearAnimationInstance, keyframe)`; authored

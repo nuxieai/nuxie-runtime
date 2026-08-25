@@ -999,7 +999,7 @@ note = "Consolidated Rust port for data_bind."
 upstream = "src/data_bind/context/context_value_list.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
-note = "Consolidated Rust port for data_bind."
+note = "Phase 3 paired-owner correction: retained Text list delivery now follows DataBindContextValueList::apply -> Text::updateList as one observable operation. Rust no longer pre-remaps the source during context retention, and a changed remap marks the target Text shape dirty before publishing path/prepared/layout dirt. Exact script_create_text_runs silver is green across all seven authored list mutations."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_number.cpp"
@@ -1617,7 +1617,7 @@ note = "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass ex
 upstream = "src/lua/lua_properties.cpp"
 status = "ported"
 rust_module = "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs"
-note = "LT-2: cached property identity, authored enum values, synchronous post-borrow listeners, list operations, and asset/view-model values are ported across the binary/runtime/scripting crate boundary."
+note = "LT-2 plus Phase 3 paired-owner audit: cached property identity, authored enum values, synchronous post-borrow listeners, list operations, and asset/view-model values are ported across the binary/runtime/scripting crate boundary. ScriptedViewModel.new now aliases instance with pinned argument-count/string coercion, and empty list pop/shift return zero Lua values. Classified adaptation residue, not silently counted as literal structure: Rust uses eager Lua tables instead of lazy userdata wrappers, direct table fields can collide with authored names, null nested view models use safe-Rust handling, and Luaur owns diagnostics/coercion details."
 
 [[file]]
 upstream = "src/lua/lua_rive_base.cpp"
@@ -2307,7 +2307,7 @@ note = "FL-E6: direct editable-buffer, cluster navigation, selection, and undo/r
 upstream = "src/text/text.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "Consolidated Rust port for text."
+note = "Consolidated Rust port for text. Phase 3 paired-owner correction restores the list-update edge: every changed retained list remap reaches the Text owner and marks shape dirty, matching Text::updateList listener remapping and invalidation."
 
 [[file]]
 upstream = "src/text/text_engine.cpp"
@@ -2607,13 +2607,13 @@ note = "Consolidated Rust port for viewmodel."
 upstream = "src/viewmodel/viewmodel_instance_list.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/view_model.rs"
-note = "Consolidated Rust port for viewmodel."
+note = "Phase 3 complete paired-owner audit: list insertion, removal, swap, parent linkage, dirt publication, and stable item identity match the pinned owner. The pinned asymmetry is intentional and retained: shift/removeItem detach the removed parent, while pop does not."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_list_item.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/view_model.rs"
-note = "Consolidated Rust port for viewmodel."
+note = "Phase 3 complete paired-owner audit: list-item retained identity and parent ownership behavior match the pinned owner; no independent correction was required."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_number.cpp"

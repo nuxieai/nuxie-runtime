@@ -4030,12 +4030,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 actions = "cpp-test-body"
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_text_runs.cpp"
 provenance_test = "script creates view models that map to text runs"
 producer_line = 153
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "The pinned C++ action sequence is active and operation-exact across authored initialization plus push, swap, remove, insert, pop, and shift list mutations. The paired-owner correction restores ScriptedViewModel.new construction and DataBindContextValueList::apply -> Text::updateList shape invalidation."
 
 [[case]]
 id = "script_create_viewmodel_instance"

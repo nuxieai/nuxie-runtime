@@ -20,10 +20,11 @@ them operation by operation with the upstream baseline.
 Every runtime row must be classified. Replayable differences are retained as
 `diverges` findings with their first divergent operation in the note. Bodies
 that cannot yet be represented or require an unported subsystem are
-`unsupported-feature` with the blocker named. The 41 scripted cases remain
-separately `pending-scripted`, and three baselines remain
-`provenance-unknown`. The exact-ID ledger and `min_cpp_rust_exact` ratchet
-prevent exact cases from being silently downgraded.
+`unsupported-feature` with the blocker named. Scripted cases are adopted
+independently as their literal C++ action/output replays land; the remainder
+stay `pending-scripted`, and three baselines remain `provenance-unknown`. The
+exact-ID ledger and `min_cpp_rust_exact` ratchet prevent exact cases from being
+silently downgraded.
 
 Run:
 

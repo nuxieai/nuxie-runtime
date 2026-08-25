@@ -64,7 +64,77 @@ fn scripted_text_run_view_model_inputs_hydrate_before_user_init() {
 }
 
 #[test]
-#[ignore = "expected-red: after exact ViewModel-input hydration, frame 1 op 251 reuses a render path where C++ allocates makeRenderPath"]
+fn scripted_text_run_new_button_pushes_one_list_item() {
+    let file = File::import_with_unsigned_scripts(&pinned_fixture("script_create_text_runs.riv"))
+        .expect("script_create_text_runs.riv imports with trusted scripts");
+    let artboard = file.artboard_named("main").expect("main artboard");
+    let mut instance = artboard.instantiate().expect("main artboard instantiates");
+    let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
+    let mut view_model = if instance.view_model_index().is_none() {
+        instance.instantiate_view_model()
+    } else {
+        instance.instantiate_view_model_instance(0)
+    }
+    .expect("main view-model instance");
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    instance
+        .initialize_renderer(&mut factory)
+        .expect("main renderer initializes at the import boundary");
+    instance
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut state_machine),
+            0.1,
+            &mut view_model,
+            &mut factory,
+        )
+        .expect("initial scripted advance");
+
+    assert_eq!(
+        view_model
+            .raw()
+            .list_item_count_by_property_name_path("settings/lis"),
+        Some(1),
+        "authored list starts with one item",
+    );
+    fire_button(&mut view_model, "newButton", 1);
+    instance
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut state_machine),
+            0.1,
+            &mut view_model,
+            &mut factory,
+        )
+        .expect("push scripted advance");
+    assert_eq!(
+        view_model
+            .raw()
+            .list_item_count_by_property_name_path("settings/lis"),
+        Some(2),
+        "ScriptedViewModel.new feeds ScriptedPropertyList.push",
+    );
+    let items = view_model
+        .handle()
+        .list_items_by_property_name_path("settings/lis")
+        .expect("scripted list remains addressable");
+    assert_eq!(
+        items[1]
+            .borrow()
+            .string_value_by_property_name_path("textContent")
+            .as_deref(),
+        Some(b"label for 2".as_slice()),
+        "the pushed instance retains the authored TextValueRun schema and script write",
+    );
+    assert_eq!(
+        items[1]
+            .borrow()
+            .string_value_by_property_name_path("textStyle")
+            .as_deref(),
+        Some(b"style2".as_slice()),
+        "the pushed instance retains the authored style selection",
+    );
+}
+
+#[test]
 fn script_creates_view_models_that_map_to_text_runs() {
     let file = File::import_with_unsigned_scripts(&pinned_fixture("script_create_text_runs.riv"))
         .expect("script_create_text_runs.riv imports with trusted scripts");

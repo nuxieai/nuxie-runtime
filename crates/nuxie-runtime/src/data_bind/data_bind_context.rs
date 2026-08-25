@@ -6063,9 +6063,13 @@ impl ArtboardInstance {
                 binding.artboard_value_applied = false;
             }
         }
-        for binding in &mut self.artboard_text_list_bindings {
-            binding.remap_source(None);
-        }
+        // Do not pre-clear Text list bindings here. Pinned
+        // `DataBindContextValueList::apply` delivers the resolved list
+        // directly to `Text::updateList`, and that owner remaps listeners and
+        // calls `markShapeDirty` as one operation. Clearing the retained Rust
+        // source first consumed the structural difference before the target
+        // callback could observe it (`context_value_list.cpp:12-30`,
+        // `text.cpp:1504-1546`).
         true
     }
 
@@ -6296,7 +6300,7 @@ impl ArtboardInstance {
         for update in component_list_updates {
             changed |= self.apply_runtime_artboard_list_update(file, update);
         }
-        let mut text_lists_changed = false;
+        let mut dirty_text = Vec::new();
         for binding in &mut self.artboard_text_list_bindings {
             let source = context_chain.iter().find_map(|context_path| {
                 let property_path = context
@@ -6309,9 +6313,14 @@ impl ArtboardInstance {
                     )?;
                 context.list_handle_by_property_path(&property_path)
             });
-            text_lists_changed |= binding.remap_source(source);
+            if binding.remap_source(source) {
+                dirty_text.push(binding.target_local_id());
+            }
         }
-        if text_lists_changed {
+        if !dirty_text.is_empty() {
+            for text_local_id in dirty_text {
+                crate::text_owner::mark_shape_dirty(self, text_local_id);
+            }
             self.mark_path_changed();
             self.mark_prepared_changed();
             self.mark_layout_changed();
@@ -6582,7 +6591,7 @@ impl ArtboardInstance {
             changed |= self.apply_runtime_artboard_list_update(file, update);
         }
 
-        let mut text_lists_changed = false;
+        let mut dirty_text = Vec::new();
         for binding in &mut self.artboard_text_list_bindings {
             let source = data_context
                 .resolved_property_path_with_manifest(
@@ -6596,9 +6605,14 @@ impl ArtboardInstance {
                         .borrow()
                         .list_handle_by_property_path(&property_path)
                 });
-            text_lists_changed |= binding.remap_source(source);
+            if binding.remap_source(source) {
+                dirty_text.push(binding.target_local_id());
+            }
         }
-        if text_lists_changed {
+        if !dirty_text.is_empty() {
+            for text_local_id in dirty_text {
+                crate::text_owner::mark_shape_dirty(self, text_local_id);
+            }
             self.mark_path_changed();
             self.mark_prepared_changed();
             self.mark_layout_changed();

@@ -158,6 +158,7 @@ enum RuntimeScriptedDataConverterDataBindOccurrence {
         flags: u64,
         converter_id: u32,
         retained_bind: RuntimeRetainedDataBind,
+        artboard_source: Option<crate::view_model::RuntimeOwnedViewModelArtboardBindingSource>,
         last_target: Option<RuntimeDataBindGraphValue>,
     },
 }
@@ -222,6 +223,7 @@ impl RuntimeScriptedDataConverterState {
                                     *flags,
                                     *flags & DATA_BIND_FLAG_ONCE != 0,
                                 ),
+                                artboard_source: None,
                                 last_target: None,
                             },
                         })
@@ -494,6 +496,7 @@ impl RuntimeScriptedDataConverterState {
                 source_path,
                 name_based,
                 retained_bind,
+                artboard_source,
                 ..
             } = binding
             else {
@@ -505,7 +508,7 @@ impl RuntimeScriptedDataConverterState {
             ) {
                 continue;
             }
-            let source_cell = source_path.as_deref().and_then(|source_path| {
+            let resolved_source = source_path.as_deref().and_then(|source_path| {
                 context
                     .property_path_for_context_source_path_with_persistent_resolver(
                         file,
@@ -513,9 +516,17 @@ impl RuntimeScriptedDataConverterState {
                         source_path,
                         *name_based,
                     )
-                    .and_then(|property_path| context.cell_by_property_path(&property_path))
+                    .map(|property_path| {
+                        (
+                            context.cell_by_property_path(&property_path),
+                            context
+                                .runtime_artboard_binding_source_by_property_path(&property_path),
+                        )
+                    })
             });
+            let (source_cell, resolved_artboard_source) = resolved_source.unwrap_or_default();
             bind_resolved_source(retained_bind, source_cell, explicit_rebind);
+            *artboard_source = resolved_artboard_source;
         }
     }
 
@@ -543,6 +554,7 @@ impl RuntimeScriptedDataConverterState {
                 source_path,
                 name_based,
                 retained_bind,
+                artboard_source,
                 ..
             } = binding
             else {
@@ -554,7 +566,7 @@ impl RuntimeScriptedDataConverterState {
             ) {
                 continue;
             }
-            let source_cell = source_path.as_deref().and_then(|source_path| {
+            let resolved_source = source_path.as_deref().and_then(|source_path| {
                 data_context.resolve_instance(&mut |_, context, scope_path| {
                     let property_path = context
                         .property_path_for_context_source_path_with_persistent_resolver(
@@ -563,10 +575,17 @@ impl RuntimeScriptedDataConverterState {
                             source_path,
                             *name_based,
                         )?;
-                    context.cell_by_property_path(&property_path)
+                    Some((
+                        context.cell_by_property_path(&property_path)?,
+                        context.runtime_artboard_binding_source_by_property_path(&property_path),
+                    ))
                 })
             });
+            let (source_cell, resolved_artboard_source) = resolved_source
+                .map(|(cell, source)| (Some(cell), source))
+                .unwrap_or_default();
             bind_resolved_source(retained_bind, source_cell, explicit_rebind);
+            *artboard_source = resolved_artboard_source;
         }
     }
 
@@ -594,6 +613,7 @@ impl RuntimeScriptedDataConverterState {
             source_path,
             name_based,
             retained_bind,
+            artboard_source,
             ..
         } = binding
         else {
@@ -605,7 +625,7 @@ impl RuntimeScriptedDataConverterState {
         ) {
             return false;
         }
-        let source_cell = source_path.as_deref().and_then(|source_path| {
+        let resolved_source = source_path.as_deref().and_then(|source_path| {
             context
                 .property_path_for_context_source_path_with_persistent_resolver(
                     file,
@@ -613,9 +633,16 @@ impl RuntimeScriptedDataConverterState {
                     source_path,
                     *name_based,
                 )
-                .and_then(|property_path| context.cell_by_property_path(&property_path))
+                .map(|property_path| {
+                    (
+                        context.cell_by_property_path(&property_path),
+                        context.runtime_artboard_binding_source_by_property_path(&property_path),
+                    )
+                })
         });
+        let (source_cell, resolved_artboard_source) = resolved_source.unwrap_or_default();
         bind_resolved_source(retained_bind, source_cell, true);
+        *artboard_source = resolved_artboard_source;
         true
     }
 
@@ -643,6 +670,7 @@ impl RuntimeScriptedDataConverterState {
             source_path,
             name_based,
             retained_bind,
+            artboard_source,
             ..
         } = binding
         else {
@@ -654,7 +682,7 @@ impl RuntimeScriptedDataConverterState {
         ) {
             return false;
         }
-        let source_cell = source_path.as_deref().and_then(|source_path| {
+        let resolved_source = source_path.as_deref().and_then(|source_path| {
             data_context.resolve_instance(&mut |_, context, scope_path| {
                 let property_path = context
                     .property_path_for_context_source_path_with_persistent_resolver(
@@ -663,10 +691,17 @@ impl RuntimeScriptedDataConverterState {
                         source_path,
                         *name_based,
                     )?;
-                context.cell_by_property_path(&property_path)
+                Some((
+                    context.cell_by_property_path(&property_path)?,
+                    context.runtime_artboard_binding_source_by_property_path(&property_path),
+                ))
             })
         });
+        let (source_cell, resolved_artboard_source) = resolved_source
+            .map(|(cell, source)| (Some(cell), source))
+            .unwrap_or_default();
         bind_resolved_source(retained_bind, source_cell, true);
+        *artboard_source = resolved_artboard_source;
         true
     }
 
@@ -706,6 +741,7 @@ impl RuntimeScriptedDataConverterState {
             target_property,
             flags,
             retained_bind,
+            artboard_source,
             last_target,
             ..
         } = binding
@@ -735,6 +771,7 @@ impl RuntimeScriptedDataConverterState {
             retained_bind,
             last_target,
             source,
+            artboard_source.as_ref(),
             owner_instance,
             file,
             apply,
@@ -778,6 +815,7 @@ impl RuntimeScriptedDataConverterState {
             target_property,
             flags,
             retained_bind,
+            artboard_source,
             last_target,
             ..
         } = binding
@@ -804,6 +842,7 @@ impl RuntimeScriptedDataConverterState {
             retained_bind,
             last_target,
             source,
+            artboard_source.as_ref(),
             owner_instance,
             file,
             apply,
@@ -854,6 +893,7 @@ impl RuntimeScriptedDataConverterState {
             target_property,
             flags,
             retained_bind,
+            artboard_source,
             last_target,
             ..
         } = binding
@@ -899,6 +939,7 @@ impl RuntimeScriptedDataConverterState {
                 retained_bind,
                 last_target,
                 source,
+                artboard_source.as_ref(),
                 owner_instance,
                 file,
                 apply,
@@ -1110,6 +1151,7 @@ fn update_one_input_binding<F>(
     retained_bind: &mut RuntimeRetainedDataBind,
     last_target: &mut Option<RuntimeDataBindGraphValue>,
     source: RuntimeDataBindGraphValue,
+    artboard_source: Option<&crate::view_model::RuntimeOwnedViewModelArtboardBindingSource>,
     owner_instance: Option<&RuntimeScriptInstanceHandle>,
     file: &nuxie_binary::RuntimeFile,
     apply: &mut F,
@@ -1140,7 +1182,11 @@ where
     let target_apply = if kind == ScriptListenerInputKind::Artboard
         && let RuntimeDataBindGraphValue::Artboard(artboard_id) = &source
     {
-        properties.apply_artboard_source(file, *artboard_id, None)
+        properties.apply_artboard_source(
+            file,
+            *artboard_id,
+            artboard_source.and_then(|source| source.runtime_artboard()),
+        )
     } else {
         properties.apply_target(file, kind, target_property, source)
     };
@@ -1260,6 +1306,8 @@ mod tests {
     use super::*;
     use crate::ScriptMethod;
     use crate::data_bind_graph::DATA_BIND_FLAG_DIRECTION_TO_SOURCE;
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
+    use nuxie_graph::GraphFile;
     use std::{
         cell::{Cell, RefCell},
         rc::Rc,
@@ -1547,6 +1595,189 @@ mod tests {
                 converter_id: u32::MAX,
             }],
         }
+    }
+
+    fn fixture_property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
+            key: crate::properties::property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing {type_name}.{name}")),
+            value,
+        }
+    }
+
+    fn fixture_record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
+            type_key: nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing type {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn artboard_input_fixture() -> nuxie_binary::RuntimeFile {
+        nuxie_binary::RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "ViewModel",
+                vec![fixture_property(
+                    "ViewModel",
+                    "name",
+                    FixtureValue::String("Model".to_owned()),
+                )],
+            ),
+            fixture_record(
+                "ViewModelPropertyArtboard",
+                vec![fixture_property(
+                    "ViewModelPropertyArtboard",
+                    "name",
+                    FixtureValue::String("child".to_owned()),
+                )],
+            ),
+            fixture_record(
+                "ViewModelInstance",
+                vec![fixture_property(
+                    "ViewModelInstance",
+                    "viewModelId",
+                    FixtureValue::Uint(0),
+                )],
+            ),
+            fixture_record(
+                "ViewModelInstanceArtboard",
+                vec![
+                    fixture_property(
+                        "ViewModelInstanceArtboard",
+                        "parentId",
+                        FixtureValue::Uint(0),
+                    ),
+                    fixture_property(
+                        "ViewModelInstanceArtboard",
+                        "viewModelPropertyId",
+                        FixtureValue::Uint(0),
+                    ),
+                    fixture_property(
+                        "ViewModelInstanceArtboard",
+                        "propertyValue",
+                        FixtureValue::Uint(u64::from(u32::MAX)),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "Artboard",
+                vec![
+                    fixture_property("Artboard", "width", FixtureValue::Double(100.0)),
+                    fixture_property("Artboard", "height", FixtureValue::Double(100.0)),
+                ],
+            ),
+        ])
+        .expect("artboard-valued converter input fixture imports")
+    }
+
+    fn artboard_input_definition() -> RuntimeScriptedDataConverterInputDefinition {
+        RuntimeScriptedDataConverterInputDefinition {
+            input_global_id: 10,
+            kind: ScriptListenerInputKind::Artboard,
+            properties: RuntimeScriptInputProperties::for_test_artboard(
+                "value",
+                u32::MAX,
+                u64::from(u32::MAX),
+                None,
+                true,
+            ),
+            data_binds: vec![RuntimeScriptedDataConverterDataBindDefinition::Context {
+                authored_order: 20,
+                source_path: Some(vec![0, 0]),
+                name_based: false,
+                property_key: crate::properties::property_key_for_name(
+                    "ScriptInputArtboard",
+                    "artboardId",
+                )
+                .map(u32::from)
+                .expect("ScriptInputArtboard.artboardId"),
+                target_property: RuntimeScriptInputTargetProperty::Value,
+                flags: 0,
+                converter_id: u32::MAX,
+            }],
+        }
+    }
+
+    #[test]
+    fn converter_owned_artboard_input_retains_the_live_view_model_source() {
+        let file = artboard_input_fixture();
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let source = crate::ArtboardInstance::from_graph(&file, &graphs.artboards[0])
+            .expect("live source artboard builds");
+        let first = crate::RuntimeBindableArtboard::new_with_artboard_instance("first", &source);
+        let second = crate::RuntimeBindableArtboard::new_with_artboard_instance("second", &source);
+        let mut context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("fixture view model instance builds");
+        assert!(context.set_runtime_artboard_by_property_name("child", Some(first.clone())));
+
+        let mut definitions = vec![artboard_input_definition()];
+        let definition = RuntimeScriptedDataConverterDefinition::with_grouped_test_bind_order(
+            definitions.clone(),
+        );
+        let mut state = RuntimeScriptedDataConverterState::from_definition(&definition);
+        state.bind_sources(&mut definitions, &file, &context, true);
+        let mut unexpected_apply = |_: &RuntimeScriptInstanceHandle,
+                                    _: &ScriptCoreString,
+                                    _: RuntimeScriptedListenerBoundValue|
+         -> Result<(), ScriptError> {
+            panic!("a converter input without a hydrated script owner cannot project a table")
+        };
+        assert!(
+            state
+                .update_input(
+                    &mut definitions,
+                    0,
+                    0,
+                    None,
+                    &file,
+                    &context,
+                    &mut unexpected_apply,
+                )
+                .unwrap()
+        );
+        let ScriptListenerInputSnapshotValue::Artboard(
+            crate::script_input_artboard::ScriptArtboardSource::Live(retained),
+        ) = state.input_snapshots()[0]
+            .value
+            .clone()
+            .expect("live source was projected")
+        else {
+            panic!("converter-owned input collapsed its live source to a file id")
+        };
+        assert!(retained.ptr_eq(&first));
+        assert_eq!(
+            state.inputs[0].properties.value(),
+            Some(&RuntimeDataBindGraphValue::Artboard(u64::from(u32::MAX))),
+            "DataBindContextValueArtboard updates the referencer without mutating artboardId",
+        );
+
+        assert!(context.set_runtime_artboard_by_property_name("child", Some(second.clone())));
+        assert!(
+            state
+                .update_input(
+                    &mut definitions,
+                    0,
+                    0,
+                    None,
+                    &file,
+                    &context,
+                    &mut unexpected_apply,
+                )
+                .unwrap()
+        );
+        let ScriptListenerInputSnapshotValue::Artboard(
+            crate::script_input_artboard::ScriptArtboardSource::Live(retained),
+        ) = state.input_snapshots()[0]
+            .value
+            .clone()
+            .expect("replacement source was projected")
+        else {
+            panic!("replacement live source collapsed to a file id")
+        };
+        assert!(retained.ptr_eq(&second));
     }
 
     #[test]

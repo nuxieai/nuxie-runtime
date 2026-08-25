@@ -169,6 +169,14 @@ identity and copies File authority whenever that pointer exists. The generated
 `artboardId` remains unchanged and continues to own
 `referencedArtboardId()`.
 
+The retained source identity is carried through both C++ ownership sites:
+direct `ScriptedListenerAction` input bindings and the cloned DataBinds owned
+by `ScriptedDataConverter::m_dataBinds`. Each bind/rebind stores the resolved
+ViewModel Artboard state handle; source application reads the handle's current
+live `RuntimeBindableArtboard` before calling the shared Artboard-referencer
+owner. It therefore does not collapse converter-owned inputs to the numeric
+`propertyValue` sentinel.
+
 The nullable ViewModel verdict was checked and is sound. C++ preflight tests
 the resolved `ViewModelInstanceValue`'s schema property, while
 `setViewModelInput` separately observes a null
@@ -185,6 +193,9 @@ Focused correction evidence with `CARGO_INCREMENTAL=0`:
 - `script_input_artboard::tests`: 4 passed, including live asset precedence,
   generated-id separation, ancestor rejection, numeric fallback only when the
   live asset is absent, and live identity preservation through clone;
+- `converter_owned_artboard_input_retains_the_live_view_model_source`: passed,
+  including live-source replacement with an unchanged numeric sentinel and
+  preservation of the authored generated `artboardId`;
 - `cargo check -p nuxie --features scripting`: passed;
 - `cargo test -p nuxie-runtime --no-run`: passed;
 

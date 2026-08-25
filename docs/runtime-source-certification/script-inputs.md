@@ -787,8 +787,9 @@ new two-review cycle.
 
 ## Phase-two timing and live-ViewModel correction candidate
 
-Status: **PENDING two fresh independent reviews.** Neither review may inherit
-an acceptance from the rejected `6b3f7c320` cycle.
+Status: **REJECTED by the first fresh independent review.** Neither later
+review may inherit an acceptance from the rejected `6b3f7c320` cycle or this
+rejected correction cycle.
 
 The correction keeps the non-bypassable prepared hydration type, but changes
 what it is allowed to retain. `prepare_script_artboard` now validates and
@@ -859,3 +860,135 @@ With `CARGO_INCREMENTAL=0`:
 
 These results justify restarting the two-review cycle. They do not certify the
 rows themselves.
+
+## First fresh independent review of correction `124bc7598`
+
+Verdict: **REJECTED.** The correction does restore the outer authored input
+position and reads a refreshed live occurrence's mutable `viewModelId` at that
+position. It also preserves primary-converter ancestor authority across the
+audited fresh-clone path. The complete construction call chain is still not
+the pinned `ScriptedObject::setArtboardInput` / `ScriptReffedArtboard` chain.
+
+### Construction is evaluated outside the pinned live-table guard
+
+Pinned `ScriptedObject::hydrateScriptInputs` returns before validation when
+`state() == nullptr || m_self == 0` (`src/scripted/scripted_object.cpp:399-405`).
+Even after entering the authored loop, `setArtboardInput` checks both `state()`
+and `scriptAsset()` before it calls `artboard->instance()`
+(`src/scripted/scripted_object.cpp:43-58`). An inert occurrence therefore does
+not clone an Artboard, select a ViewModel, create a state machine, or bind a
+DataContext.
+
+Rust evaluates `recipe.construct()?` as the argument to
+`set_artboard_input_core` (`crates/nuxie-runtime/src/scripting.rs:447-459`).
+The production backend's missing-table guard is inside
+`set_artboard_input_core` (`crates/nuxie-scripting/src/vm.rs:2811-2829`), after
+that evaluation. The public prepared API can consequently construct and bind
+a child, or surface a construction error, for an instance on which the pinned
+setter is inert. The ordinary live-update path has a separate
+`script_lifetime_valid` guard, but the shared hydration type does not own this
+invariant. Golden and silver use the same eager argument boundary.
+
+Correction must put deferred construction behind the `ScriptInstance`
+live-table/script-asset guard, for example by giving the backend a prepared
+recipe/closure rather than a preconstructed `Box<dyn ScriptArtboard>`.
+
+### The production `ScriptReffedArtboard` sequence is reversed and duplicated
+
+Pinned order is mechanical:
+
+1. `Artboard::instance()` copies the concrete source occurrence, including its
+   current `m_DataContext` (`include/rive/artboard.hpp:548-564`).
+2. `frameOrigin(false)` is set.
+3. `ScriptReffedArtboard` constructs `m_stateMachine` from
+   `m_artboard->defaultStateMachine()` in its member initializer
+   (`src/lua/lua_artboards.cpp:21-38`). If the cloned live Artboard already has
+   a DataContext, `ArtboardInstance::stateMachineAt` inherits it
+   (`src/artboard.cpp:2906-2919`).
+4. The consumer File creates the ViewModel from the cloned Artboard's current
+   `viewModelId`, then the new consumer/parent DataContext is bound once
+   (`src/lua/lua_artboards.cpp:40-60`).
+5. The ViewModel is tracked for host frame-tail advancement; the constructor
+   does not call `advancedDataContext` (`src/lua/lua_artboards.cpp:61-67`;
+   `src/lua/rive_lua_libs.cpp:1234-1269`).
+
+`FileScriptArtboard::from_concrete` instead selects the consumer ViewModel,
+binds the Artboard DataContext, constructs the default state machine after
+that bind, binds the same context to the state machine again, and immediately
+calls `advance_data_context` (`crates/nuxie/src/lib.rs:3795-3844`). The first
+bind causes `state_machine_instance` to inherit the already-installed context
+(`crates/nuxie-runtime/src/artboard.rs:5792-5810`); the explicit second bind is
+therefore not the single pinned replacement bind. Immediate advance consumes
+trigger state during construction, while pinned tracking defers that consume
+to the host frame tail. A live source already carrying a different context
+also loses the pinned source-context inheritance phase before consumer rebind.
+
+The golden runner repeats the same shape: it prebinds the Artboard before
+state-machine construction, binds again afterward, and calls
+`advance_data_context` (`tools/rust-golden-runner/src/main.rs:3668-3761`). Its
+green output cannot certify this production ordering.
+
+Correction must reproduce the constructor sequence directly: clone with its
+live source context, create the default state machine, select the consumer
+ViewModel, bind the replacement consumer/parent context exactly once, retain
+the ViewModel for frame-tail advancement, and perform no construction-time
+`advance_data_context`.
+
+### Cross-File DataBind resolution uses the consumer catalog
+
+The consumer File is correctly retained as `ScriptReffedArtboard::m_file` and
+correctly owns auto-ViewModel creation. It is not the source Artboard's
+DataBindPath resolver. In pinned C++, every child DataBindPath was imported by
+the source File; relative paths consult `dataBindPath->file()->dataResolver()`
+(`src/data_bind/data_context.cpp:458-475`).
+
+Rust retains `source_runtime` and `source_artboards`, but passes
+`file.runtime` (the consumer) into
+`instance.bind_script_artboard_data_context` (`crates/nuxie/src/lib.rs:
+3827-3835`). That File parameter drives relative/name-based path resolution
+inside the source Artboard graph. The existing cross-File witnesses use
+matching File schemas and cannot distinguish the two catalogs. A source File
+and consumer File with incompatible manifests or same-index/different-name
+models can therefore bind a different property than pinned, or bind one where
+pinned remains unresolved.
+
+Correction must keep the authorities split: consumer File for facade and
+ViewModel creation; source RuntimeFile for the cloned Artboard/default state
+machine's imported DataBind and relative-path resolution.
+
+### Live preflight accepts an absent concrete occurrence
+
+Pinned `ScriptInputArtboard::validateHydrationPrerequisites` is exactly
+`m_referencedArtboard != nullptr` (`src/script_input_artboard.cpp:56-64`). The
+public Rust source type can represent
+`ScriptArtboardSource::Live(RuntimeBindableArtboard::new(...))`, whose retained
+concrete occurrence is `None`. `FileScriptArtboardResolver::prepare_script_artboard`
+accepts every `Live` value without checking that prerequisite
+(`crates/nuxie/src/lib.rs:3646-3678`), then `construct` fails after any earlier
+authored scalar. That is the opposite of pinned no-partial-write validation.
+Production DataBind projection rejects this shape when it is created, but the
+public hydration boundary claims the invariant and does not enforce it.
+
+Correction must validate live occurrence presence without constructing the
+facade, retain the stable bindable authority, and still take the fresh clone at
+the authored phase-two position.
+
+### Accepted portions and evidence
+
+- A refreshed `RuntimeBindableArtboard` is retained through preparation and
+  snapshotted by `construct`, not during validation.
+- The current concrete root's mutable `viewModelId` is read and the consumer
+  File creates that generated model; immutable source Artboard metadata is no
+  longer used for this selection.
+- `RuntimeScriptedListenerActionBindingOccurrence::fresh_clone` carries the
+  primary converter's ancestor sources into its fresh converter state.
+- File-source prerequisite validation remains write-free and the authored
+  scalar/artboard/ViewModel iteration order is retained.
+
+At `124bc7598`, with `CARGO_INCREMENTAL=0`, the focused correction tests all
+passed: `scripted_hydration_`, the prepared semantic-failure witness, the live
+replacement snapshot witness, the mutated-live-`viewModelId` witness, and
+`fresh_clone_preserves_primary_converter_artboard_ancestor_authority`. Those
+tests accept the listed portions but do not exercise the rejected live-table
+guard, source-context/default-state-machine order, construction-time trigger
+consume, incompatible cross-File resolver, or empty-live preflight cases.

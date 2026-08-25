@@ -1072,3 +1072,65 @@ owners, scalar/bulk/bounding-box routing, N-slicer, listener, Lua, winding,
 transformed-area, and threshold portions.** Restore the five source owners
 above, add direct witnesses at their live consumers, and obtain two fresh
 complete reviews.
+
+## Correction after the first fresh review of `1510a6263`
+
+The five rejected owners were restored from pinned source rather than repaired
+with algebraic substitutes:
+
+- Runtime `Mat2D::find_max_scale` and live renderer `max_matrix_scale` now
+  spell the axis fast path as the left-biased comparison authored by
+  `std::max`. The frozen left-NaN payload remains NaN and reaches the live
+  feather-atlas branch. The finite `sdot` and discriminant contractions remain
+  unchanged. The independently enumerated `rive_renderer_cpp::max_scale`
+  already used the same left-biased branch and was not rewritten.
+- Both operative Wang cubic owners now preserve the authored SIMD operation
+  boundaries: each second difference contracts `-2*p1+p0` before adding
+  `p2`, `VectorXform` contracts scale times its lane with the skew product,
+  and the squared lanes are reduced with the pinned contraction. The frozen
+  finite fixture returns Wang value `0x41100000` and nine segments in both
+  `draw.rs` subdivision and `draw_cpp.rs` source PathDraw tessellation.
+- The live renderer Vec2D census found two shared operative substitutes,
+  `draw.rs::dot` and `draw.rs::vector_cross`, plus direct length/dot call sites
+  in angle, cusp, and round-join calculation. They now route through pinned
+  first-product contraction. Existing `coarse_area_cross`,
+  `rive_render_path_cpp::cross`, and `gpu_cpp` transformed-area cross were
+  already exact; test-only triangulation helpers and native-Metal diagnostic
+  geometry do not claim the pinned Vec2D owner. The cancellation fixture now
+  remains negative `0xa7eec560` through the live cubic-turn path instead of
+  taking its zero fallback, and the sign-swapped dot witness retains the same
+  residue.
+- `TextModifierGroup` no longer precomputes an algebraically equivalent pivot
+  translation. It receives the incoming glyph CTM and performs the three
+  pinned statements in order: add origin to CTM translation, exact matrix
+  multiply, subtract origin from the result. The finite actual-owner witness
+  now returns x translation `0x3ea5bcf1`.
+- Graph `invert_mat2d_or_identity`, the public
+  `SkeletalTendonNode.inverse_bind` construction owner, now uses the same
+  contracted determinant, reciprocal, and coefficient order as pinned
+  `Mat2D::invert`. The cancellation matrix retains determinant
+  `0xa7eec560`, produces a non-identity inverse, and is exercised through the
+  public skeletal graph projection. The separate runtime hydration owner was
+  already exact and remains unchanged.
+
+The complete hand-written census was repeated for same-authority duplicates:
+the shared runtime and render-API Mat2D owners, renderer draw, GPU,
+RiveRenderer, RiveRenderPath and source PathDraw owners, scripting and
+listener routing, N-slicer capture, text CTM composition, graph tendon
+projection, and their live threshold/winding/feather/subdivision consumers.
+No newly found duplicate was excluded from this correction.
+
+Focused correction gates passed with `CARGO_INCREMENTAL=0`: the debug
+actual-owner and downstream-consumer witnesses passed for runtime max scale,
+text origin composition, private and public graph tendon inversion, both live
+Wang subdivision paths, live Vec2D dot/cross, and feather left-NaN selection.
+With fat test LTO and one codegen unit, the runtime pinned suite passed 9 tests,
+the private and public graph witnesses passed one test each, and renderer-metal
+passed its 7-test pinned suite plus the separately selected live Vec2D and
+feather witnesses. `cargo check` passed for renderer-metal, renderer-vulkan,
+renderer-webgpu, and renderer-webgl2. File correspondence passed all 456
+applicable rows; symbol correspondence replayed 7,818 authority units across
+1,105 owners; and the correspondence checker passed all 33 unit tests.
+
+This implementing lane does not certify its own correction. Verdict:
+**PENDING TWO FRESH INDEPENDENT COMPLETE REVIEWS.**

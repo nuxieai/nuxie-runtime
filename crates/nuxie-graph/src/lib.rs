@@ -2639,7 +2639,7 @@ fn mat2d_property_array(object: &RuntimeObject) -> [f32; 6] {
 
 fn invert_mat2d_or_identity(matrix: [f32; 6]) -> [f32; 6] {
     let [a, b, c, d, e, f] = matrix;
-    let determinant = a * d - c * b;
+    let determinant = a.mul_add(d, -(b * c));
     if determinant == 0.0 {
         return [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
     }
@@ -2656,6 +2656,29 @@ fn invert_mat2d_or_identity(matrix: [f32; 6]) -> [f32; 6] {
         c.mul_add(f, -(d * e)) * determinant,
         b.mul_add(e, -(a * f)) * determinant,
     ]
+}
+
+#[cfg(test)]
+mod mat2d_parity_tests {
+    use super::invert_mat2d_or_identity;
+
+    #[test]
+    fn tendon_inverse_bind_preserves_pinned_cancellation_determinant() {
+        let matrix = [
+            f32::from_bits(0x26cd_29b3),
+            f32::from_bits(0x2533_fdc2),
+            f32::from_bits(0xd01a_d4bb),
+            f32::from_bits(0xce87_d5a9),
+            0.0,
+            0.0,
+        ];
+        let determinant = matrix[0].mul_add(matrix[3], -(matrix[1] * matrix[2]));
+        assert_eq!(determinant.to_bits(), 0xa7ee_c560);
+        assert_ne!(
+            invert_mat2d_or_identity(matrix),
+            [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+        );
+    }
 }
 
 fn parametric_path(path: &RuntimeObject) -> Option<ParametricPathNode> {

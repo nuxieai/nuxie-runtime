@@ -5297,8 +5297,6 @@ fn graph_projects_skeletal_registration_facts() {
     let parent_bone_count_key = property_key_for_name("IKConstraint", "parentBoneCount");
     let mesh_vertex_parent_id_key = property_key_for_name("MeshVertex", "parentId");
     let skin_parent_id_key = property_key_for_name("Skin", "parentId");
-    let tendon_parent_id_key = property_key_for_name("Tendon", "parentId");
-    let bone_id_key = property_key_for_name("Tendon", "boneId");
     let points_path_parent_id_key = property_key_for_name("PointsPath", "parentId");
 
     let bytes = synthetic_runtime_file(7146, |bytes| {
@@ -5346,11 +5344,14 @@ fn graph_projects_skeletal_registration_facts() {
         });
         push_object(bytes, "PointsPath", &[(points_path_parent_id_key, 0)]);
         push_object(bytes, "Skin", &[(skin_parent_id_key, 12)]);
-        push_object(
-            bytes,
-            "Tendon",
-            &[(tendon_parent_id_key, 13), (bone_id_key, 2)],
-        );
+        push_object_with_properties(bytes, "Tendon", |bytes| {
+            push_uint_property(bytes, "Tendon", "parentId", 13);
+            push_uint_property(bytes, "Tendon", "boneId", 2);
+            push_f32_property(bytes, "Tendon", "xx", f32::from_bits(0x26cd_29b3));
+            push_f32_property(bytes, "Tendon", "xy", f32::from_bits(0x2533_fdc2));
+            push_f32_property(bytes, "Tendon", "yx", f32::from_bits(0xd01a_d4bb));
+            push_f32_property(bytes, "Tendon", "yy", f32::from_bits(0xce87_d5a9));
+        });
     });
 
     let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/skeletal_graph.riv");
@@ -5419,7 +5420,19 @@ fn graph_projects_skeletal_registration_facts() {
                 [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
                 Some(12),
                 Some("PointsPath"),
-                vec![(14, Some(2), Some("Bone"), [1.0, 0.0, 0.0, 1.0, 0.0, 0.0])]
+                vec![(
+                    14,
+                    Some(2),
+                    Some("Bone"),
+                    [
+                        f32::from_bits(0x6611_a2d3),
+                        f32::from_bits(0x3cc0_fa97),
+                        f32::from_bits(0xe7a6_00cd),
+                        f32::from_bits(0xbe5b_f782),
+                        -0.0,
+                        -0.0,
+                    ]
+                )]
             )
         ],
         "Skin::onAddedDirty caches exact skinnables and matrices, and Tendon::onAddedClean registers valid inverse-bind tendons in Skin order"

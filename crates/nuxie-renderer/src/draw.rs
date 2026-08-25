@@ -1112,7 +1112,7 @@ fn append_cubic_at_uniform_rotation(
 }
 
 fn angle_between(a: Vec2D, b: Vec2D) -> f32 {
-    let denominator = ((a.x * a.x + a.y * a.y) * (b.x * b.x + b.y * b.y)).sqrt();
+    let denominator = (dot(a, a) * dot(b, b)).sqrt();
     let cosine = (dot(a, b) / denominator).clamp(-1.0, 1.0);
     if cosine.is_nan() {
         0.0
@@ -1375,7 +1375,7 @@ fn chop_cubic_around_cusps(
         chopped[offset + 2][0] = cusp;
         let neighboring_midpoint = lerp(chopped[offset][2], chopped[offset + 2][1], 0.5);
         let direction = subtract(cusp, neighboring_midpoint);
-        let length = (direction.x * direction.x + direction.y * direction.y).sqrt();
+        let length = dot(direction, direction).sqrt();
         let pivot = if length > 0.0 && matrix_scale > 0.0 {
             let amount = 1.0 / (length * matrix_scale * POLAR_PRECISION as f32 * 2.0);
             Vec2D::new(cusp.x + direction.x * amount, cusp.y + direction.y * amount)
@@ -1402,7 +1402,9 @@ fn max_matrix_scale(transform: Mat2D) -> f32 {
     const MATH_EPSILON: f32 = 1.0 / 4096.0;
     let [xx, yx, xy, yy, _, _] = transform.0;
     if xy == 0.0 && yx == 0.0 {
-        return xx.abs().max(yy.abs());
+        let x = xx.abs();
+        let y = yy.abs();
+        return if x < y { y } else { x };
     }
     let a = xx.mul_add(xx, xy * xy);
     let b = xx.mul_add(yx, yy * xy);
@@ -1444,11 +1446,8 @@ fn fast_acos(x: f32) -> f32 {
 }
 
 fn round_join_segment_count(incoming: Vec2D, outgoing: Vec2D, per_radian: f32) -> u32 {
-    let denominator = ((incoming.x * incoming.x + incoming.y * incoming.y)
-        * (outgoing.x * outgoing.x + outgoing.y * outgoing.y))
-        .sqrt();
-    let cosine =
-        ((incoming.x * outgoing.x + incoming.y * outgoing.y) / denominator).clamp(-1.0, 1.0);
+    let denominator = (dot(incoming, incoming) * dot(outgoing, outgoing)).sqrt();
+    let cosine = (dot(incoming, outgoing) / denominator).clamp(-1.0, 1.0);
     (fast_acos(cosine) * per_radian)
         .ceil()
         .clamp(1.0, crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32
@@ -1501,11 +1500,11 @@ fn scale(vector: Vec2D, amount: f32) -> Vec2D {
 }
 
 fn dot(a: Vec2D, b: Vec2D) -> f32 {
-    a.x * b.x + a.y * b.y
+    a.x.mul_add(b.x, a.y * b.y)
 }
 
 fn vector_cross(a: Vec2D, b: Vec2D) -> f32 {
-    a.x * b.y - a.y * b.x
+    a.x.mul_add(b.y, -(a.y * b.x))
 }
 
 pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D) -> bool {
@@ -2699,15 +2698,15 @@ fn cubic_segment_count_with_precision_and_transform(
 fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D) -> f32 {
     let [xx, yx, xy, yy, _, _] = transform.0;
     let transformed_second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
-        let x = -2.0 * b.x + a.x + c.x;
-        let y = -2.0 * b.y + a.y + c.y;
-        let transformed_x = xx * x + xy * y;
-        let transformed_y = yx * x + yy * y;
-        transformed_x * transformed_x + transformed_y * transformed_y
+        let x = (-2.0f32).mul_add(b.x, a.x) + c.x;
+        let y = (-2.0f32).mul_add(b.y, a.y) + c.y;
+        let transformed_x = xx.mul_add(x, xy * y);
+        let transformed_y = yy.mul_add(y, yx * x);
+        transformed_x.mul_add(transformed_x, transformed_y * transformed_y)
     };
-    transformed_second_difference(points[0], points[1], points[2]).max(
-        transformed_second_difference(points[1], points[2], points[3]),
-    )
+    let first = transformed_second_difference(points[0], points[1], points[2]);
+    let second = transformed_second_difference(points[1], points[2], points[3]);
+    if first < second { second } else { first }
 }
 
 #[cfg(test)]
@@ -2853,6 +2852,14 @@ mod tests {
             feather_atlas_scale(100.0, transform),
             16.0 / (100.0 * 1.5 * f32::from_bits(0x4392_8724)),
         );
+    }
+
+    #[test]
+    fn feather_consumers_preserve_pinned_find_max_scale_left_nan_control() {
+        let payload = f32::from_bits(0x7fc0_1234);
+        let transform = Mat2D([payload, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(max_matrix_scale(transform).to_bits(), payload.to_bits());
+        assert!(!feather_requires_atlas(100.0, transform, false));
     }
 
     fn assert_stroke_tessellation_bytes_eq(
@@ -3121,6 +3128,53 @@ mod tests {
                 4
             );
         }
+    }
+
+    #[test]
+    fn wang_vector_xform_preserves_pinned_finite_segment_boundary() {
+        let points = [
+            Vec2D::new(f32::from_bits(0xbe60_4e00), f32::from_bits(0xbdaf_2ef0)),
+            Vec2D::new(f32::from_bits(0x401d_9080), f32::from_bits(0x40b1_82c0)),
+            Vec2D::new(f32::from_bits(0x4155_e0d0), f32::from_bits(0xba6d_d000)),
+            Vec2D::new(f32::from_bits(0x3e16_a200), f32::from_bits(0x4004_56c0)),
+        ];
+        let transform = Mat2D([
+            f32::from_bits(0xbe05_c750),
+            f32::from_bits(0x3d57_05f0),
+            f32::from_bits(0xbec1_8200),
+            f32::from_bits(0x401b_f700),
+            0.0,
+            0.0,
+        ]);
+
+        let max_length_squared = max_transformed_cubic_second_difference(points, transform);
+        let length_term_squared =
+            (9.0 / 16.0) * (PARAMETRIC_PRECISION as f32).powi(2);
+        let wang = (max_length_squared * length_term_squared).sqrt().sqrt();
+        assert_eq!(wang.to_bits(), 0x4110_0000);
+        assert_eq!(
+            cubic_segment_count_with_precision_and_transform(
+                points,
+                PARAMETRIC_PRECISION as f32,
+                transform,
+            ),
+            9
+        );
+    }
+
+    #[test]
+    fn live_vec2d_dot_and_cross_preserve_pinned_cancellation_sign() {
+        let a = Vec2D::new(f32::from_bits(0x26cd_29b3), f32::from_bits(0xd01a_d4bb));
+        let b = Vec2D::new(f32::from_bits(0x2533_fdc2), f32::from_bits(0xce87_d5a9));
+        assert_eq!(vector_cross(a, b).to_bits(), 0xa7ee_c560);
+
+        let dot_a = Vec2D::new(a.x, -a.y);
+        let dot_b = Vec2D::new(b.y, b.x);
+        assert_eq!(dot(dot_a, dot_b).to_bits(), 0xa7ee_c560);
+
+        let cubic = [Vec2D::new(0.0, 0.0), Vec2D::new(0.0, 0.0), a, b];
+        let turn = vector_cross(subtract(cubic[2], cubic[0]), subtract(cubic[3], cubic[1]));
+        assert!(turn < 0.0, "the live cubic turn must not take the zero fallback");
     }
 
     #[test]

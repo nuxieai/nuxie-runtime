@@ -2466,9 +2466,13 @@ impl StaticTextSlice {
                 for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
                     let amount = glyph_coverage(coverage, glyph.char_index, glyph.char_len);
                     if amount != 0.0 {
-                        positioned.modifier_transform = modifier
-                            .transform(runtime, instance, amount, &glyph_context)?
-                            .multiply(positioned.modifier_transform);
+                        positioned.modifier_transform = modifier.transform(
+                            runtime,
+                            instance,
+                            amount,
+                            positioned.modifier_transform,
+                            &glyph_context,
+                        )?;
                     }
                     if modifier.modifies_opacity(runtime, instance)? {
                         positioned.modifier_opacity = modifier.opacity(
@@ -6258,9 +6262,26 @@ mod tests {
             paragraph_baselines: &[],
             text_world_inverse: Mat2D::IDENTITY,
         };
-        let transform = group.transform(&runtime, &instance, 1.0, &glyph).unwrap();
+        let transform = group
+            .transform(&runtime, &instance, 1.0, Mat2D::IDENTITY, &glyph)
+            .unwrap();
         assert!((transform.0[4] - 0.05).abs() < 1e-6);
         assert!((transform.0[5] + 0.15).abs() < 1e-6);
+    }
+
+    #[test]
+    fn text_modifier_origin_preserves_pinned_three_step_ctm_composition_bits() {
+        let transform = Mat2D([
+            f32::from_bits(0x3729_f1aa),
+            0.0,
+            f32::from_bits(0x3d73_f501),
+            1.0,
+            f32::from_bits(0x3ea5_9a7e),
+            0.0,
+        ]);
+        let origin = (f32::from_bits(0xb989_ca6c), f32::from_bits(0xb2a1_42db));
+        let actual = apply_text_modifier_transform(transform, Mat2D::IDENTITY, Some(origin));
+        assert_eq!(actual.0[4].to_bits(), 0x3ea5_bcf1);
     }
 
     #[test]

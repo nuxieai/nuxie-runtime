@@ -461,14 +461,15 @@ fn source_line_cubic(start: Vec2D, end: Vec2D) -> [Vec2D; 4] {
 fn transformed_cubic_segment_count(points: [Vec2D; 4], matrix: Mat2D) -> u32 {
     let [xx, yx, xy, yy, _, _] = matrix.0;
     let second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
-        let x = -2.0 * b.x + a.x + c.x;
-        let y = -2.0 * b.y + a.y + c.y;
-        let mapped_x = xx * x + xy * y;
-        let mapped_y = yx * x + yy * y;
-        mapped_x * mapped_x + mapped_y * mapped_y
+        let x = (-2.0f32).mul_add(b.x, a.x) + c.x;
+        let y = (-2.0f32).mul_add(b.y, a.y) + c.y;
+        let mapped_x = xx.mul_add(x, xy * y);
+        let mapped_y = yy.mul_add(y, yx * x);
+        mapped_x.mul_add(mapped_x, mapped_y * mapped_y)
     };
-    let max_length_squared = second_difference(points[0], points[1], points[2])
-        .max(second_difference(points[1], points[2], points[3]));
+    let first = second_difference(points[0], points[1], points[2]);
+    let second = second_difference(points[1], points[2], points[3]);
+    let max_length_squared = if first < second { second } else { first };
     let length_term_squared = (9.0 / 16.0) * (crate::gpu::PARAMETRIC_PRECISION as f32).powi(2);
     (max_length_squared * length_term_squared)
         .sqrt()
@@ -1731,8 +1732,28 @@ fn should_use_interior_tessellation(path: &RawPath, matrix: Mat2D) -> bool {
 mod transformed_area_consumer_tests {
     use super::{
         FillRule, Mat2D, PathCoverageType, RawPath, contour_directions_for_path, gpu,
-        should_use_interior_tessellation,
+        should_use_interior_tessellation, transformed_cubic_segment_count,
     };
+    use nuxie_render_api::Vec2D;
+
+    #[test]
+    fn source_path_draw_wang_vector_xform_preserves_pinned_segment_boundary() {
+        let points = [
+            Vec2D::new(f32::from_bits(0xbe60_4e00), f32::from_bits(0xbdaf_2ef0)),
+            Vec2D::new(f32::from_bits(0x401d_9080), f32::from_bits(0x40b1_82c0)),
+            Vec2D::new(f32::from_bits(0x4155_e0d0), f32::from_bits(0xba6d_d000)),
+            Vec2D::new(f32::from_bits(0x3e16_a200), f32::from_bits(0x4004_56c0)),
+        ];
+        let transform = Mat2D([
+            f32::from_bits(0xbe05_c750),
+            f32::from_bits(0x3d57_05f0),
+            f32::from_bits(0xbec1_8200),
+            f32::from_bits(0x401b_f700),
+            0.0,
+            0.0,
+        ]);
+        assert_eq!(transformed_cubic_segment_count(points, transform), 9);
+    }
 
     #[test]
     fn path_draw_contour_direction_uses_pinned_contracted_determinant() {

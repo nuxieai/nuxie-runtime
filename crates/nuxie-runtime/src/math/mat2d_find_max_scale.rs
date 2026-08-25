@@ -11,7 +11,9 @@ impl Mat2D {
     pub fn find_max_scale(self) -> f32 {
         let [xx, xy, yx, yy, _, _] = self.0;
         if xy == 0.0 && yx == 0.0 {
-            return xx.abs().max(yy.abs());
+            let x = xx.abs();
+            let y = yy.abs();
+            return if x < y { y } else { x };
         }
 
         let a = xx.mul_add(xx, xy * xy);
@@ -102,6 +104,13 @@ mod tests {
             0.0,
         ]);
         assert_eq!(matrix.find_max_scale().to_bits(), 0x4392_8724);
+    }
+
+    #[test]
+    fn find_max_scale_preserves_pinned_axis_aligned_left_nan_selection() {
+        let payload = f32::from_bits(0x7fc0_1234);
+        let scale = Mat2D([payload, 0.0, 0.0, 1.0, 0.0, 0.0]).find_max_scale();
+        assert_eq!(scale.to_bits(), payload.to_bits());
     }
 
     #[test]

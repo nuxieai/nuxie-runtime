@@ -7,6 +7,24 @@ struct StaticTextModifierGroup {
     shape_modifier_indices: Vec<usize>,
     follow_path_modifiers: Vec<StaticTextFollowPathModifier>,
 }
+
+fn apply_text_modifier_transform(
+    transform: Mat2D,
+    mut ctm: Mat2D,
+    origin: Option<(f32, f32)>,
+) -> Mat2D {
+    if let Some((origin_x, origin_y)) = origin {
+        ctm.0[4] += origin_x;
+        ctm.0[5] += origin_y;
+    }
+    ctm = transform.multiply(ctm);
+    if let Some((origin_x, origin_y)) = origin {
+        ctm.0[4] -= origin_x;
+        ctm.0[5] -= origin_y;
+    }
+    ctm
+}
+
 impl StaticTextModifierGroup {
     fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
         let global_id = global_for_local(graph, local_id)?;
@@ -90,6 +108,7 @@ impl StaticTextModifierGroup {
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         amount: f32,
+        ctm: Mat2D,
         glyph: &StaticTextGlyphContext<'_>,
     ) -> Result<Mat2D> {
         let flags = runtime_uint_property(
@@ -107,7 +126,7 @@ impl StaticTextModifierGroup {
         const MODIFY_ORIGIN: u64 = 1 << 0;
         let follows_path = !self.follow_path_modifiers.is_empty();
         if amount == 0.0 && !follows_path {
-            return Ok(Mat2D::IDENTITY);
+            return Ok(ctm);
         }
 
         let mut x = 0.0;
@@ -213,31 +232,31 @@ impl StaticTextModifierGroup {
         transform.0[4] = x;
         transform.0[5] = y;
         transform.scale_by_values(scale_x, scale_y);
-        if flags & MODIFY_ORIGIN != 0 {
-            let origin_x = runtime_double_property(
-                runtime,
-                instance,
-                "TextModifierGroup",
-                self.local_id,
-                self.global_id,
-                "originX",
-                0.0,
-            )?;
-            let origin_y = runtime_double_property(
-                runtime,
-                instance,
-                "TextModifierGroup",
-                self.local_id,
-                self.global_id,
-                "originY",
-                0.0,
-            )?;
-            // C++ adds the pivot to the incoming CTM, pre-multiplies the
-            // modifier transform, then subtracts it from the result.
-            transform.0[4] += transform.0[0] * origin_x + transform.0[2] * origin_y - origin_x;
-            transform.0[5] += transform.0[1] * origin_x + transform.0[3] * origin_y - origin_y;
-        }
-        Ok(transform)
+        let origin = if flags & MODIFY_ORIGIN != 0 {
+            Some((
+                runtime_double_property(
+                    runtime,
+                    instance,
+                    "TextModifierGroup",
+                    self.local_id,
+                    self.global_id,
+                    "originX",
+                    0.0,
+                )?,
+                runtime_double_property(
+                    runtime,
+                    instance,
+                    "TextModifierGroup",
+                    self.local_id,
+                    self.global_id,
+                    "originY",
+                    0.0,
+                )?,
+            ))
+        } else {
+            None
+        };
+        Ok(apply_text_modifier_transform(transform, ctm, origin))
     }
 
     fn modifies_opacity(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<bool> {

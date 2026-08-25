@@ -173,12 +173,15 @@ impl ScriptedPaint {
 
     fn set_gradient_value(&mut self, value: Value) -> Result<()> {
         match value {
-            Value::Nil => self.set_gradient(None),
             Value::UserData(gradient) => {
-                let gradient = Rc::clone(&gradient.borrow::<ScriptedGradient>()?.0);
-                self.set_gradient(Some(gradient));
+                if gradient.is::<ScriptedGradient>() {
+                    let gradient = Rc::clone(&gradient.borrow::<ScriptedGradient>()?.0);
+                    self.set_gradient(Some(gradient));
+                } else {
+                    self.set_gradient(None);
+                }
             }
-            _ => return Err(Error::runtime("expected Gradient userdata or nil")),
+            _ => self.set_gradient(None),
         }
         Ok(())
     }

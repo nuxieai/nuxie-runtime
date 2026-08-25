@@ -134,7 +134,6 @@ return paint:copy().gradient
 }
 
 #[test]
-#[ignore = "expected red: Paint.copy({gradient=false}) does not yet clear the gradient"]
 fn paint_gradients_can_be_cleared() {
     let copied_gradient = eval_value(
         r#"local paint = Paint.new()

@@ -3053,6 +3053,43 @@ impl ArtboardInstance {
         self.script_instances_by_global.contains_key(&global_id)
     }
 
+    /// Walk authored scripted-canvas callbacks before ordinary drawable
+    /// rendering, then recurse through mounted artboard hosts.
+    ///
+    /// This is the direct Rust owner for pinned
+    /// `Artboard::internalDrawCanvases()`. The component dependency order is
+    /// the clone-owned counterpart of C++ `m_ScriptedObjects` insertion order;
+    /// component-list rows and nested artboards are the concrete Rust
+    /// `ArtboardHost` occurrences.
+    pub fn draw_script_canvases(
+        &self,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<(), ScriptError> {
+        for component in self.objects.dependency_order() {
+            let Some(owner) = self.objects.component(*component) else {
+                continue;
+            };
+            let Some(occurrence) = self.script_instances_by_global.get(&owner.global_id) else {
+                continue;
+            };
+            if occurrence.implemented_methods().draws_canvas() {
+                occurrence.borrow_mut().call_draw_canvas(factory)?;
+            }
+        }
+        for nested in self.nested_artboards.values() {
+            nested.child.draw_script_canvases(factory)?;
+        }
+        for list_local in self.component_list_locals() {
+            let Some(items) = self.component_list_items(list_local) else {
+                continue;
+            };
+            for item in items {
+                item.child.draw_script_canvases(factory)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Rearm a scripted drawable's `advance` callback after an input event.
     ///
     /// This is the Rust lifecycle seam for C++ `ScriptedDrawable::wakeAdvance`:

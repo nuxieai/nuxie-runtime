@@ -3858,11 +3858,12 @@ impl ArtboardInstance {
                 max_retained_decoded_image_bytes,
             )?;
         }
-        let mut resources = self.render_resources.borrow_mut();
-
         if begin_draw_frame {
             self.begin_draw_frame();
+            self.draw_script_canvases(factory)
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
         }
+        let mut resources = self.render_resources.borrow_mut();
         let nested_ancestors = [graph.global_id];
         let RuntimeOccurrenceRenderResources {
             paints,
@@ -32680,6 +32681,7 @@ mod tests {
         );
     }
     use crate::{ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue};
+    use crate::script_asset::RuntimeScriptImplementedMethods;
     use nuxie_binary::read_runtime_file;
     use nuxie_graph::GraphFile;
     use nuxie_render_api::ColorInt;
@@ -32887,6 +32889,14 @@ mod tests {
             } else {
                 Ok(())
             }
+        }
+
+        fn call_draw_canvas(
+            &mut self,
+            _factory: &mut dyn RenderFactory,
+        ) -> Result<(), ScriptError> {
+            self.ops.borrow_mut().push("script_draw_canvas".to_owned());
+            Ok(())
         }
 
         fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
@@ -33630,6 +33640,48 @@ mod tests {
                 "restore",
             ]
         );
+    }
+
+    #[test]
+    fn scripted_canvas_traversal_honors_the_serialized_draws_canvas_bit() {
+        let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+        let global_id = instance.component(0).expect("root component").global_id;
+        let ops = Rc::new(RefCell::new(Vec::new()));
+        instance.set_script_instance_for_global_with_implemented_methods(
+            global_id,
+            Box::new(FakeScriptInstance {
+                ops: Rc::clone(&ops),
+                fails: false,
+            }),
+            RuntimeScriptImplementedMethods::DRAWS_CANVAS,
+        );
+        let mut factory = CountingFactory {
+            stats: Rc::new(CountingStats::default()),
+            next_path_id: 0,
+        };
+
+        instance
+            .draw_script_canvases(&mut factory)
+            .expect("drawCanvas traversal succeeds");
+        assert_eq!(ops.borrow().as_slice(), ["script_draw_canvas"]);
+
+        ops.borrow_mut().clear();
+        instance.set_script_instance_for_global_with_implemented_methods(
+            global_id,
+            Box::new(FakeScriptInstance {
+                ops: Rc::clone(&ops),
+                fails: false,
+            }),
+            0,
+        );
+        instance
+            .draw_script_canvases(&mut factory)
+            .expect("non-canvas occurrence is skipped");
+        assert!(ops.borrow().is_empty());
     }
 
     #[test]

@@ -26,6 +26,7 @@ impl RuntimeScriptImplementedMethods {
     pub(crate) const RESIZE: u32 = 1 << 12;
     pub(crate) const LISTENER_PERFORM: u32 = 1 << 13;
     pub(crate) const LISTENER_PERFORM_ACTION: u32 = 1 << 14;
+    pub(crate) const DRAWS_CANVAS: u32 = 1 << 15;
     pub(crate) const KEYBOARD: u32 = 1 << 16;
     pub(crate) const TEXT: u32 = 1 << 17;
     pub(crate) const GAMEPAD_CONNECT: u32 = 1 << 18;
@@ -38,6 +39,10 @@ impl RuntimeScriptImplementedMethods {
 
     pub(crate) fn wants_keyboard(self) -> bool {
         self.0 & Self::KEYBOARD != 0
+    }
+
+    pub(crate) fn draws_canvas(self) -> bool {
+        self.0 & Self::DRAWS_CANVAS != 0
     }
 
     pub(crate) fn advances(self) -> bool {
@@ -174,6 +179,7 @@ mod tests {
         assert!(legacy.data_converts());
         assert!(legacy.data_reverse_converts());
         assert!(legacy.wants_keyboard());
+        assert!(legacy.draws_canvas());
         assert!(legacy.wants_text());
         assert!(legacy.wants_gamepad_connect());
         assert!(legacy.wants_gamepad_disconnect());

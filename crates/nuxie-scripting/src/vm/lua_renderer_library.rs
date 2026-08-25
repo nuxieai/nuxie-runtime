@@ -3,12 +3,14 @@
 use luaur_rt::{Lua, Result};
 use nuxie_render_api::Factory as RenderFactory;
 
+use super::CanvasDrawingPhase;
 use super::command_server::PersistentRenderContext;
 use super::view_model::ScriptViewModelFrameContext;
 
 #[derive(Clone, Default)]
 pub(crate) struct RendererBindings {
     render_context: PersistentRenderContext,
+    canvas_drawing_phase: CanvasDrawingPhase,
     pub(super) view_model_frame_context: ScriptViewModelFrameContext,
 }
 
@@ -16,6 +18,7 @@ impl RendererBindings {
     pub(crate) fn new(view_model_frame_context: ScriptViewModelFrameContext) -> Self {
         Self {
             render_context: PersistentRenderContext::default(),
+            canvas_drawing_phase: CanvasDrawingPhase::default(),
             view_model_frame_context,
         }
     }
@@ -44,5 +47,9 @@ impl RendererBindings {
         f: impl FnOnce(&mut dyn RenderFactory) -> Result<R>,
     ) -> Result<R> {
         self.render_context.with_factory(f)
+    }
+
+    pub(crate) fn canvas_drawing_phase(&self) -> &CanvasDrawingPhase {
+        &self.canvas_drawing_phase
     }
 }

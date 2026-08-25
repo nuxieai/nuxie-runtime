@@ -12,6 +12,7 @@
 
 mod buffer_ext;
 mod bytecode;
+mod canvas_drawing_phase;
 mod command_server;
 mod listener_invocation;
 mod logging_scripting_context;
@@ -71,6 +72,7 @@ use crate::gpu_canvas::{
     RegisteredGpuCanvasShaderAsset,
 };
 
+pub use canvas_drawing_phase::{CanvasDrawingPhase, ScopedCanvasDrawingPhase};
 pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub use luaur_rt::{Error, Result};
 pub use resource_limits::{ScriptResourceGuard, ScriptResourceLimit};
@@ -1943,6 +1945,12 @@ impl ScriptVm {
         ScriptResourceGuard::new(self.resource_limits.clone())
     }
 
+    /// VM-owned counterpart of pinned
+    /// `ScriptingContext::canvasDrawingPhase()`.
+    pub fn canvas_drawing_phase(&self) -> &CanvasDrawingPhase {
+        self.renderer_bindings.canvas_drawing_phase()
+    }
+
     /// Register an embedding-host module for lookup through Rive `require`.
     pub fn register_host_module(&self, name: &str, module: Table) -> Result<()> {
         self.ensure_initialized()?;
@@ -2580,15 +2588,26 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(());
         }
         let table = self.live_table()?;
-        if let Some(gpu_canvas) = self.gpu_canvas.as_ref() {
-            self.reset_execution_budget();
-            gpu_canvas
-                .execute_draw_canvas(&table, factory)
-                .map_err(|error| self.script_error(error))?;
-        }
         self.reset_execution_budget();
         self.renderer_bindings
             .call_draw(&table, factory, renderer)
+            .map_err(|error| self.script_error(error))
+    }
+
+    fn call_draw_canvas(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<(), ScriptError> {
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        self.reset_execution_budget();
+        let Some(gpu_canvas) = self.gpu_canvas.as_ref() else {
+            return Ok(());
+        };
+        gpu_canvas
+            .execute_draw_canvas(&table, factory)
             .map_err(|error| self.script_error(error))
     }
 

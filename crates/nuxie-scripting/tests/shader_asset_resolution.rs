@@ -893,10 +893,7 @@ fn first_shader_lookup_inside_draw_canvas_uses_active_factory_and_combined_handl
         "generator construction must not resolve the shader"
     );
 
-    let mut renderer = factory.borrow().inner.make_renderer();
-    instance
-        .call_draw(&mut factory, &mut renderer, &mut host)
-        .unwrap();
+    instance.call_draw_canvas(&mut factory).unwrap();
 
     assert_eq!(factory.borrow().module_sources.len(), 1);
     assert_eq!(factory.borrow().image_calls, vec![(1, 1, true)]);
@@ -917,14 +914,8 @@ fn one_occurrence_keeps_one_identity_across_two_pipeline_keys() {
             &mut factory,
         )
         .unwrap();
-    let mut renderer = factory.borrow().inner.make_renderer();
-
-    instance
-        .call_draw(&mut factory, &mut renderer, &mut host)
-        .unwrap();
-    instance
-        .call_draw(&mut factory, &mut renderer, &mut host)
-        .unwrap();
+    instance.call_draw_canvas(&mut factory).unwrap();
+    instance.call_draw_canvas(&mut factory).unwrap();
 
     assert_eq!(factory.borrow().module_sources.len(), 1);
     assert_eq!(
@@ -950,10 +941,7 @@ fn two_same_name_lookups_create_distinct_module_identities() {
             &mut factory,
         )
         .unwrap();
-    let mut renderer = factory.borrow().inner.make_renderer();
-    instance
-        .call_draw(&mut factory, &mut renderer, &mut host)
-        .unwrap();
+    instance.call_draw_canvas(&mut factory).unwrap();
 
     assert_eq!(factory.borrow().module_sources.len(), 2);
     assert_eq!(
@@ -986,10 +974,7 @@ fn explicit_different_name_stages_and_combined_fallback_keep_exact_handles() {
             &mut factory,
         )
         .unwrap();
-    let mut renderer = factory.borrow().inner.make_renderer();
-    instance
-        .call_draw(&mut factory, &mut renderer, &mut host)
-        .unwrap();
+    instance.call_draw_canvas(&mut factory).unwrap();
 
     assert_eq!(
         factory.borrow().module_sources,
@@ -1010,10 +995,7 @@ fn explicit_different_name_stages_and_combined_fallback_keep_exact_handles() {
             &mut combined_factory,
         )
         .unwrap();
-    let mut combined_renderer = combined_factory.borrow().inner.make_renderer();
-    combined
-        .call_draw(&mut combined_factory, &mut combined_renderer, &mut host)
-        .unwrap();
+    combined.call_draw_canvas(&mut combined_factory).unwrap();
 
     assert_eq!(combined_factory.borrow().module_sources.len(), 1);
     assert_eq!(combined_factory.borrow().image_calls, vec![(1, 1, true)]);

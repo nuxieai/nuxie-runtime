@@ -661,7 +661,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_canvas_drawing_phase_te
 test_case_count = 3
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/tests/upstream_scripting_canvas_drawing_phase.rs"]
-note = "All three cases retain the exact default/true/nested/restored phase checks, nullable guard construction, typed Luau drawCanvas body, pinned coin.riv fixture, and outside/inside-phase calls. They remain honestly expected-red because the Rust-native scripting backend has no canvasDrawingPhase state, scoped guard, or drawCanvas binding owner; Phase 1 does not add them."
+note = "All three cases are active direct ports. They retain the exact default/true/nested/restored phase checks, nullable guard construction, typed Luau drawCanvas body, pinned coin.riv fixture parse, and outside/inside-phase calls. The safe-Rust ScriptArtboard fixture represents coin.riv's empty internalDrawCanvases walk without changing the authored Luau action."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_color_test.cpp"

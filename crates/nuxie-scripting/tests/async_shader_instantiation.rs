@@ -426,13 +426,11 @@ fn awaited_shader_closure_keeps_captured_canvas_after_coroutine_completes() {
             .expect("generator completes across the pending shader load");
     assert_eq!(factory.borrow().load_calls, 1);
 
-    let mut renderer = factory.borrow().inner.make_renderer();
-    let mut host = NoopScriptHost;
     // The captured canvas/pipeline upvalues must still be the live userdata
     // once the coroutine is dead; UNIV-1764's browser abort surfaced here as
     // a Luau index error inside drawCanvas.
     instance
-        .call_draw(&mut factory, &mut renderer, &mut host)
+        .call_draw_canvas(&mut factory)
         .expect("drawCanvas method-indexes the captured canvas after the await");
 }
 
@@ -454,10 +452,8 @@ fn prepared_shader_is_available_to_lazy_draw_canvas_lookup() {
             .expect("shader catalog preparation succeeds before a lazy lookup");
     assert_eq!(factory.borrow().load_calls, 1);
 
-    let mut renderer = factory.borrow().inner.make_renderer();
-    let mut host = NoopScriptHost;
     instance
-        .call_draw(&mut factory, &mut renderer, &mut host)
+        .call_draw_canvas(&mut factory)
         .expect("drawCanvas reuses the prepared physical module");
     assert_eq!(factory.borrow().load_calls, 1);
 }
@@ -482,10 +478,8 @@ fn prepared_same_name_lookups_publish_distinct_shader_occurrences() {
     assert_eq!(factory.borrow().load_calls, 1);
     assert_eq!(factory.borrow().occurrence_calls, 2);
 
-    let mut renderer = factory.borrow().inner.make_renderer();
-    let mut host = NoopScriptHost;
     instance
-        .call_draw(&mut factory, &mut renderer, &mut host)
+        .call_draw_canvas(&mut factory)
         .expect("distinct occurrences can be used in one pipeline");
     let image_occurrences = factory.borrow().image_occurrences.clone();
     assert_eq!(image_occurrences.len(), 1);

@@ -658,6 +658,7 @@ impl std::fmt::Debug for GpuCanvasState {
 #[derive(Debug, Clone)]
 struct GpuCanvas {
     state: Rc<RefCell<GpuCanvasState>>,
+    canvas_drawing_phase: crate::vm::CanvasDrawingPhase,
 }
 
 impl UserData for GpuCanvas {
@@ -710,6 +711,11 @@ impl UserData for GpuCanvas {
             })
         });
         methods.add_method("beginRenderPass", |lua, this, descriptor: Table| {
+            if !this.canvas_drawing_phase.is_active() {
+                return Err(Error::runtime(
+                    "GPUCanvas:beginRenderPass() called outside drawing phase",
+                ));
+            }
             reject_unknown_fields(
                 &descriptor,
                 &["color", "depthStencil", "label"],
@@ -1023,6 +1029,7 @@ pub(crate) struct GpuCanvasContextBindings {
     canvases: Rc<RefCell<Vec<Rc<RefCell<GpuCanvasState>>>>>,
     shaders: GpuCanvasShaderCatalog,
     renderer_bindings: Option<RendererBindings>,
+    canvas_drawing_phase: crate::vm::CanvasDrawingPhase,
 }
 
 impl GpuCanvasContextBindings {
@@ -1081,7 +1088,10 @@ impl GpuCanvasContextBindings {
             ..GpuCanvasState::default()
         }));
         self.canvases.borrow_mut().push(Rc::clone(&state));
-        lua.create_userdata(GpuCanvas { state })
+        lua.create_userdata(GpuCanvas {
+            state,
+            canvas_drawing_phase: self.canvas_drawing_phase.clone(),
+        })
     }
 
     #[cfg(test)]
@@ -1090,6 +1100,7 @@ impl GpuCanvasContextBindings {
             canvases: Rc::new(RefCell::new(Vec::new())),
             shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::new())),
             renderer_bindings: None,
+            canvas_drawing_phase: crate::vm::CanvasDrawingPhase::default(),
         }
     }
 
@@ -1132,6 +1143,7 @@ impl ImportedGpuCanvasInstance {
             canvases: Rc::clone(&canvases),
             shaders: GpuCanvasShaderCatalog::Imported(Rc::clone(&shaders)),
             renderer_bindings: Some(renderer_bindings.clone()),
+            canvas_drawing_phase: renderer_bindings.canvas_drawing_phase().clone(),
         };
         (
             Self {
@@ -1151,6 +1163,7 @@ impl ImportedGpuCanvasInstance {
         let Value::Function(function) = value else {
             return Ok(());
         };
+        let _drawing_phase = self.renderer_bindings.canvas_drawing_phase().scoped();
         let canvases = self.canvases.borrow().clone();
         for canvas in &canvases {
             let mut state = canvas.borrow_mut();
@@ -1943,6 +1956,7 @@ pub struct GpuCanvasBytecodeProgram {
     instance: Table,
     state: Rc<RefCell<GpuCanvasState>>,
     execution_budget: Rc<Cell<u32>>,
+    canvas_drawing_phase: crate::vm::CanvasDrawingPhase,
 }
 
 impl std::fmt::Debug for GpuCanvasBytecodeProgram {
@@ -1974,6 +1988,7 @@ impl GpuCanvasBytecodeProgram {
         let resource_budget = Rc::new(RefCell::new(GpuCanvasResourceBudget::default()));
         install_gpu_canvas_globals_with_budget(&vm, resource_budget)?;
         let canvases = Rc::new(RefCell::new(Vec::new()));
+        let canvas_drawing_phase = crate::vm::CanvasDrawingPhase::default();
         let bindings = GpuCanvasContextBindings {
             canvases: Rc::clone(&canvases),
             shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::from([(
@@ -1992,6 +2007,7 @@ impl GpuCanvasBytecodeProgram {
                 ],
             )]))),
             renderer_bindings: None,
+            canvas_drawing_phase: canvas_drawing_phase.clone(),
         };
         let context = vm.lua().create_userdata(bindings)?;
         let chunk = vm.load_bytecode("gpu-canvas", bytecode)?;
@@ -2013,6 +2029,7 @@ impl GpuCanvasBytecodeProgram {
             instance,
             state,
             execution_budget,
+            canvas_drawing_phase,
         })
     }
 
@@ -2074,6 +2091,7 @@ impl GpuCanvasBytecodeProgram {
             ));
         };
         self.execution_budget.set(MAX_LUAU_INTERRUPTS_PER_CALL);
+        let _drawing_phase = self.canvas_drawing_phase.scoped();
         method.call::<()>((self.instance.clone(),))?;
         if self.state.borrow().unfinished_passes != 0 {
             self.state.borrow_mut().completed = None;
@@ -3041,9 +3059,55 @@ fn decode_vertex_layouts(descriptor: &Table) -> Result<Vec<GpuCanvasVertexLayout
 #[cfg(test)]
 mod tests {
     use super::{
-        GpuCanvasShaderEntry, GpuCanvasShaderStage, GpuShader, checked_gpu_buffer_write_range,
-        resolve_shader_entry,
+        GpuCanvasContextBindings, GpuCanvasShaderEntry, GpuCanvasShaderStage, GpuShader,
+        checked_gpu_buffer_write_range, resolve_shader_entry,
     };
+    use crate::vm::ScriptVm;
+
+    fn compile_source(source: &str) -> Vec<u8> {
+        use luaur_compiler::functions::luau_compile::luau_compile;
+
+        luaur_common::set_all_flags(true);
+        let mut output_size = 0;
+        let output = luau_compile(
+            source.as_ptr().cast(),
+            source.len(),
+            std::ptr::null_mut(),
+            &mut output_size,
+        );
+        assert!(!output.is_null());
+        assert_ne!(output_size, 0);
+        // SAFETY: luau_compile returns a malloc allocation of output_size bytes.
+        let bytecode =
+            unsafe { std::slice::from_raw_parts(output.cast::<u8>(), output_size) }.to_vec();
+        unsafe extern "C" {
+            fn free(pointer: *mut std::ffi::c_void);
+        }
+        // SAFETY: output is the allocation returned by luau_compile above.
+        unsafe { free(output.cast()) };
+        bytecode
+    }
+
+    #[test]
+    fn begin_render_pass_rejects_calls_outside_the_canvas_drawing_phase() {
+        let vm = ScriptVm::new();
+        let bindings = GpuCanvasContextBindings::for_test();
+        let canvas = bindings.canvas_userdata(vm.lua()).unwrap();
+        vm.lua().globals().set("canvas", canvas).unwrap();
+
+        let error = vm
+            .eval_bytecode::<()>(
+                "outside_canvas_drawing_phase",
+                &compile_source("canvas:beginRenderPass({})"),
+            )
+            .expect_err("beginRenderPass must be gated by ScopedCanvasDrawingPhase");
+        assert!(
+            error
+                .to_string()
+                .contains("GPUCanvas:beginRenderPass() called outside drawing phase"),
+            "{error}",
+        );
+    }
 
     #[test]
     fn gpu_buffer_write_range_is_validated_before_source_copy() {

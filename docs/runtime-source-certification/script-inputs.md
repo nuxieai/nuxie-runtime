@@ -1180,3 +1180,102 @@ The source/live authority split, refreshed live snapshot, mutable
 and no-construction-time-advance corrections from `dd0f5ca7f` were not changed.
 Certification now requires two new independent audits of the combined call
 chain.
+
+## First fresh independent review of correction `a32a53a58`
+
+Status: **REJECTED.** The correction fixes the two literal bypasses named by
+`933abebaa`: construction is now deferred behind the backend setter, and the
+golden rehydration owner binds after creating the default state machine. Those
+focused witnesses are green. The combined ScriptInputArtboard authority is
+still not certifiable because the live-update guard is one operation too late,
+the golden rehydration owner still bypasses the pinned all-input validation
+transaction, and the corrected sibling refresh discards the owning parent
+DataContext.
+
+### Live updates prepare before the pinned ScriptAsset/table guard
+
+Pinned `ScriptedObject::setArtboardInput` obtains `state()` and returns when
+either the state or `scriptAsset()` is absent before it performs any Artboard
+lookup, cloning, or other setter work (`src/scripted/scripted_object.cpp:
+43-59`). The setter also adds `ScriptUpdate` dirt only after a live table has
+accepted the new userdata.
+
+`apply_scripted_input_update` checks only the broader
+`script_lifetime_valid`, then invokes
+`ScriptArtboardResolver::prepare_script_artboard` before borrowing the backend
+for `set_prepared_artboard_input_core`
+(`crates/nuxie-runtime/src/state_machine/state_machine_instance/
+state_machine_instance.rs:2003-2044`). The new witness proves only that
+`construct` remains behind the guard; its resolver preparation is deliberately
+unobserved and successful. A resolver preparation with a typed resource error
+still escapes an occurrence whose Luau table or ScriptAsset is absent, and a
+successful inert setter still returns `Ok(true)` even though pinned C++ adds no
+script dirt.
+
+The backend-owned Artboard context guard must precede resolver preparation on
+this operative update path, and the inert result must not report a successful
+table projection. A counter/failing resolver witness needs to observe both
+preparation and construction, not construction alone.
+
+### Golden rehydration is not an atomic two-loop transaction
+
+Pinned `hydrateScriptInputs` first checks every custom property's
+`validateHydrationPrerequisites`; a single unresolved Artboard or ViewModel
+returns before any earlier scalar, Artboard, or ViewModel is published. Only a
+fully successful first loop enters the authored hydration loop
+(`src/scripted/scripted_object.cpp:399-426`).
+
+Golden `rehydrate_script_inputs` has only the authored application loop
+(`tools/rust-golden-runner/src/main.rs:6130-6202`). It can publish earlier
+inputs and construct an Artboard before discovering a later invalid Artboard.
+More directly, an unresolved `ScriptInputViewModelProperty` takes `continue`
+at lines 6171-6176, after which later inputs and caller-owned `init` handling
+continue. Pinned `ScriptInputViewModelProperty::validateHydrationPrerequisites`
+returns false for that same missing context/path/property
+(`src/script_input_viewmodel_property.cpp:62-84`). This is the exact
+partial-hydration failure covered by upstream
+`hydration preflight fails atomically when VM input cannot resolve`.
+
+The golden owner needs a separate allocation-free validation pass for every
+input before construction or table writes, with unresolved ViewModel inputs
+failing the whole occurrence rather than being treated as absent optional
+values. The new rehydrated-Artboard test contains only one Artboard input and
+cannot falsify cross-input atomicity.
+
+### Golden bound-Artboard refresh drops the parent DataContext
+
+Pinned `setArtboardInput` always passes the owning ScriptedObject's current
+`dataContext()` to `ScriptReffedArtboard`; when a child ViewModel and default
+state machine exist, that context becomes the child's parent
+(`src/scripted/scripted_object.cpp:51-58`; `src/lua/lua_artboards.cpp:40-59`).
+
+The adjacent golden refresh owner now calls `bind_view_model`, but constructs
+with `RunnerScriptArtboard::new`, whose parent context is unconditionally
+`None`, even though `refresh_bound_script_artboard_inputs` already holds the
+live owner context (`tools/rust-golden-runner/src/main.rs:1191-1242`). The
+child therefore receives a root local context rather than the pinned
+local-plus-parent chain. This breaks parent/global DataBind paths during a
+bound Artboard replacement and makes the receipt's claim that the sibling
+refresh uses the same recovered sequence incomplete.
+
+The refresh must create a `ScriptArtboardParentContext` from its retained owner
+handle and use the same `new_with_parent_context`/default-state-machine/bind
+sequence as rehydration. Its witness must resolve a property that exists only
+through the parent chain; checking only `_data_context.is_some()` cannot
+distinguish the incorrect root context.
+
+### Accepted portions and review evidence
+
+Independent source inspection accepts the production `FileScriptArtboard`
+authority split: the consumer File creates the ViewModel, while the source
+RuntimeFile resolves the cloned child's imported DataBinds. It also accepts
+the refreshed live snapshot, mutable concrete `viewModelId`, default-state-
+machine-before-replacement-bind order, no construction-time
+`advance_data_context`, and the public empty-Live preflight on the prepared
+hydration path.
+
+At the reviewed tree, with `CARGO_INCREMENTAL=0`, the focused live-update
+constructor guard, scalar/trigger/Artboard projection policy, concrete Luau
+ScriptAsset guard, and golden rehydration/default-state-machine/frame-tail
+witnesses all passed. They establish the accepted local properties but do not
+enter any of the three rejected paths above.

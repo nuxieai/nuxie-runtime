@@ -6717,6 +6717,7 @@ impl StateMachineInstance {
                                 &data_context,
                                 data_bind_index,
                                 &value,
+                                owned_context.as_deref_mut(),
                             )
                         } else if let Some(context) = owned_context.as_deref_mut() {
                             self.perform_listener_view_model_change(

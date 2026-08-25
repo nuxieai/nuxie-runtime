@@ -108,11 +108,22 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
         else {
             return false;
         };
-        let Some((context_handle, property_path)) = self
-            .owned_data_context
-            .as_ref()
-            .and_then(|context| context.resolved_property_path(&source_path))
-        else {
+        let Some(data_context) = self.owned_data_context.clone() else {
+            return false;
+        };
+        let resolved = if let Some(context) = self.owned_view_model_context.as_deref() {
+            data_context.resolved_property_path_for_borrowed_root(&source_path, context)
+        } else {
+            data_context
+                .resolved_property_path(&source_path)
+                .map(|(context, property_path)| {
+                    (
+                        RuntimeOwnedDataContextPropertyOwner::Retained(context),
+                        property_path,
+                    )
+                })
+        };
+        let Some((context, property_path)) = resolved else {
             return false;
         };
 
@@ -126,20 +137,34 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
             };
             bindable_trigger.set_value(*value);
             let notifications = RuntimeHostMutationNotifications::begin();
-            let changed = {
-                let mut context = context_handle.borrow_mut();
-                self.data_bind_graph
-                    .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
-                        &mut context,
-                        data_bind_index,
-                        *value,
-                        &property_path,
-                    )
+            let changed = match context {
+                RuntimeOwnedDataContextPropertyOwner::Retained(context) => {
+                    let mut context = context.borrow_mut();
+                    self.data_bind_graph
+                        .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+                            &mut context,
+                            data_bind_index,
+                            *value,
+                            &property_path,
+                        )
+                }
+                RuntimeOwnedDataContextPropertyOwner::Borrowed(_) => {
+                    let Some(context) = self.owned_view_model_context.as_deref_mut() else {
+                        return false;
+                    };
+                    self.data_bind_graph
+                        .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+                            context,
+                            data_bind_index,
+                            *value,
+                            &property_path,
+                        )
+                }
             };
             if let Some(notifications) = notifications {
                 // C++ listeners may synchronously read the value that was
                 // just written. Publish only after Rust releases the owning
-                // ViewModel's mutable RefCell borrow.
+                // ViewModel mutation borrow.
                 notifications.commit();
             }
             if !changed {
@@ -199,31 +224,56 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
             RuntimeListenerViewModelChangeValue::ViewModel(
                 RuntimeViewModelPointer::DataContextRoot,
             ) => {
-                let Some(value) = self
-                    .owned_data_context
-                    .as_ref()
-                    .and_then(RuntimeOwnedDataContext::main_view_model_handle)
-                else {
+                let value = if let Some(context) = self.owned_view_model_context.as_deref() {
+                    data_context.main_view_model_handle_for_borrowed_root(context)
+                } else {
+                    data_context.main_view_model_handle()
+                };
+                let Some(value) = value else {
                     return false;
                 };
-                let Ok(changed) =
-                    context_handle.link_view_model_by_property_path(&property_path, &value)
-                else {
-                    return false;
-                };
-                changed
+                match context {
+                    RuntimeOwnedDataContextPropertyOwner::Retained(context) => context
+                        .link_view_model_by_property_path(&property_path, &value)
+                        .unwrap_or(false),
+                    RuntimeOwnedDataContextPropertyOwner::Borrowed(context) => {
+                        let Some(root) = self.owned_view_model_context.as_deref_mut() else {
+                            return false;
+                        };
+                        context
+                            .link_view_model_by_property_path_with_borrowed_root(
+                                root,
+                                &property_path,
+                                &value,
+                            )
+                            .unwrap_or(false)
+                    }
+                }
             }
             RuntimeListenerViewModelChangeValue::ViewModel(_) => return false,
             _ => {
                 let notifications = RuntimeHostMutationNotifications::begin();
-                let changed = {
-                    let mut context = context_handle.borrow_mut();
-                    StateMachineInstance::apply_listener_view_model_change_at_property_path(
-                        &mut context,
-                        &property_path,
-                        value,
-                        asset_value.as_ref(),
-                    )
+                let changed = match context {
+                    RuntimeOwnedDataContextPropertyOwner::Retained(context) => {
+                        let mut context = context.borrow_mut();
+                        StateMachineInstance::apply_listener_view_model_change_at_property_path(
+                            &mut context,
+                            &property_path,
+                            value,
+                            asset_value.as_ref(),
+                        )
+                    }
+                    RuntimeOwnedDataContextPropertyOwner::Borrowed(_) => {
+                        let Some(context) = self.owned_view_model_context.as_deref_mut() else {
+                            return false;
+                        };
+                        StateMachineInstance::apply_listener_view_model_change_at_property_path(
+                            context,
+                            &property_path,
+                            value,
+                            asset_value.as_ref(),
+                        )
+                    }
                 };
                 if let Some(notifications) = notifications {
                     // Match C++'s readable-during-callback ownership without

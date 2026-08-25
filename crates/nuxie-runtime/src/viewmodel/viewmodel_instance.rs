@@ -277,6 +277,10 @@ impl RuntimeOwnedViewModelHandle {
         Rc::ptr_eq(&self.instance, &other.instance)
     }
 
+    pub(crate) fn ptr_eq_instance(&self, other: &RuntimeOwnedViewModelInstance) -> bool {
+        std::ptr::eq(self.instance.as_ptr(), other)
+    }
+
     /// Retain every exact owner reachable before a runtime-authored mutation.
     ///
     /// A script can replace or unlink a child after mutating one of its cells.
@@ -503,22 +507,21 @@ impl RuntimeOwnedViewModelHandle {
         &self,
         property_path: &[usize],
     ) -> Option<RuntimeOwnedViewModelHandle> {
-        let (property_index, rest) = property_path.split_first()?;
-        let linked = {
-            let instance = self.instance.try_borrow().ok()?;
-            instance
-                .view_models
-                .iter()
-                .find(|view_model| view_model.property_index == *property_index)?
-                .endpoint
-                .linked_instance()?
-        };
-        let linked = Self::from_shared(linked);
-        if rest.is_empty() {
-            Some(linked)
-        } else {
-            linked.linked_view_model_by_property_path(rest)
+        self.instance
+            .try_borrow()
+            .ok()?
+            .linked_view_model_handle_by_property_path(property_path)
+    }
+
+    pub(crate) fn linked_view_model_by_property_path_with_borrowed_root(
+        &self,
+        root: &RuntimeOwnedViewModelInstance,
+        property_path: &[usize],
+    ) -> Option<RuntimeOwnedViewModelHandle> {
+        if !self.ptr_eq_instance(root) {
+            return self.linked_view_model_by_property_path(property_path);
         }
+        root.linked_view_model_handle_by_property_path(property_path)
     }
 
     /// Assigns one existing retained instance to an outer view-model property
@@ -638,6 +641,87 @@ impl RuntimeOwnedViewModelHandle {
         RuntimeOwnedViewModelParentRelay::add_parent(&value_relay, &parent_relay);
         instance.mark_structurally_mutated();
         drop(instance);
+        drop(value_instance);
+        Ok(true)
+    }
+
+    pub(crate) fn link_view_model_by_property_path_with_borrowed_root(
+        &self,
+        root: &mut RuntimeOwnedViewModelInstance,
+        property_path: &[usize],
+        value: &RuntimeOwnedViewModelHandle,
+    ) -> Result<bool, RuntimeViewModelLinkError> {
+        if !self.ptr_eq_instance(root) {
+            return self.link_view_model_by_property_path(property_path, value);
+        }
+        let (property_index, parent_path) = property_path
+            .split_last()
+            .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+        if !parent_path.is_empty() {
+            let parent = root
+                .linked_view_model_handle_by_property_path(parent_path)
+                .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+            return parent.link_view_model_by_property_path(&[*property_index], value);
+        }
+
+        let property = root
+            .view_models
+            .iter()
+            .find(|view_model| view_model.property_index == *property_index)
+            .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+        let expected_schema = property
+            .referenced_view_model_index
+            .ok_or(RuntimeViewModelLinkError::SchemaMismatch)?;
+        let previous = property.endpoint.linked_instance();
+        let value_schema = if value.ptr_eq(self) {
+            root.view_model_index
+        } else {
+            value
+                .instance
+                .try_borrow()
+                .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?
+                .view_model_index
+        };
+        if value_schema != expected_schema {
+            return Err(RuntimeViewModelLinkError::SchemaMismatch);
+        }
+        let previous_relay = previous
+            .as_ref()
+            .map(|previous| {
+                previous
+                    .try_borrow()
+                    .map(|previous| Rc::clone(&previous.parent_relay))
+                    .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)
+            })
+            .transpose()?;
+        if !value.ptr_eq(self) {
+            drop(
+                value
+                    .instance
+                    .try_borrow_mut()
+                    .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?,
+            );
+        }
+        if owned_view_model_graph_reaches_or_cycles(&value.instance, &self.instance) {
+            return Err(RuntimeViewModelLinkError::Cycle);
+        }
+        let value_instance = value
+            .instance
+            .try_borrow()
+            .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?;
+        let value_relay = Rc::clone(&value_instance.parent_relay);
+        let parent_relay = Rc::clone(&root.parent_relay);
+        let property = root
+            .view_models
+            .iter_mut()
+            .find(|view_model| view_model.property_index == *property_index)
+            .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+        if let Some(previous_relay) = previous_relay {
+            RuntimeOwnedViewModelParentRelay::remove_parent(&previous_relay, &parent_relay);
+        }
+        property.endpoint.link_instance(value.shared());
+        RuntimeOwnedViewModelParentRelay::add_parent(&value_relay, &parent_relay);
+        root.mark_structurally_mutated();
         drop(value_instance);
         Ok(true)
     }
@@ -2109,6 +2193,38 @@ mod upstream_viewmodel_instance_contract_tests {
     }
 
     #[test]
+    fn replacing_view_model_reuses_an_explicitly_borrowed_root() {
+        let file = replace_child_file();
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("root"),
+        );
+        let first = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("first child"),
+        );
+        let second = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("second child"),
+        );
+        assert_eq!(
+            root.link_view_model_by_property_name_path("child", &first),
+            Ok(true)
+        );
+
+        let mut borrowed_root = root.borrow_mut();
+        assert_eq!(
+            root.link_view_model_by_property_path_with_borrowed_root(
+                &mut borrowed_root,
+                &[0],
+                &second,
+            ),
+            Ok(true)
+        );
+        let linked = borrowed_root
+            .linked_view_model_handle_by_property_path(&[0])
+            .expect("replacement child");
+        assert!(linked.ptr_eq(&second));
+    }
+
+    #[test]
     fn pre_mutation_owner_snapshot_resolves_a_changed_child_after_detach() {
         let file = replace_child_file();
         let first_root = RuntimeOwnedViewModelHandle::new(
@@ -2376,6 +2492,25 @@ macro_rules! define_active_view_model_path_reader {
 impl RuntimeOwnedViewModelInstance {
     pub fn view_model_index(&self) -> usize {
         self.view_model_index
+    }
+
+    fn linked_view_model_handle_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeOwnedViewModelHandle> {
+        let (property_index, rest) = property_path.split_first()?;
+        let linked = self
+            .view_models
+            .iter()
+            .find(|view_model| view_model.property_index == *property_index)?
+            .endpoint
+            .linked_instance()?;
+        let linked = RuntimeOwnedViewModelHandle::from_shared(linked);
+        if rest.is_empty() {
+            Some(linked)
+        } else {
+            linked.linked_view_model_by_property_path(rest)
+        }
     }
 
     pub(crate) fn property_value_count(&self) -> usize {

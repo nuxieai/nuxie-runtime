@@ -1005,6 +1005,7 @@ impl StateMachineInstance {
         data_context: &RuntimeOwnedDataContext,
         data_bind_index: usize,
         value: &RuntimeListenerViewModelChangeValue,
+        mut borrowed_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         let Some(source_path) = self
             .data_bind_graph
@@ -1021,8 +1022,19 @@ impl StateMachineInstance {
                     .clone()
             });
 
-        let Some((context, property_path)) = data_context.resolved_property_path(&source_path)
-        else {
+        let resolved = if let Some(context) = borrowed_context.as_deref() {
+            data_context.resolved_property_path_for_borrowed_root(&source_path, context)
+        } else {
+            data_context
+                .resolved_property_path(&source_path)
+                .map(|(context, property_path)| {
+                    (
+                        RuntimeOwnedDataContextPropertyOwner::Retained(context),
+                        property_path,
+                    )
+                })
+        };
+        let Some((context, property_path)) = resolved else {
             return false;
         };
         if matches!(
@@ -1031,29 +1043,73 @@ impl StateMachineInstance {
                 RuntimeViewModelPointer::DataContextRoot
             )
         ) {
-            let Some(value) = data_context.main_view_model_handle() else {
+            let value = if let Some(context) = borrowed_context.as_deref() {
+                data_context.main_view_model_handle_for_borrowed_root(context)
+            } else {
+                data_context.main_view_model_handle()
+            };
+            let Some(value) = value else {
                 return false;
             };
-            return context
-                .link_view_model_by_property_path(&property_path, &value)
-                .unwrap_or(false);
+            return match context {
+                RuntimeOwnedDataContextPropertyOwner::Retained(context) => context
+                    .link_view_model_by_property_path(&property_path, &value)
+                    .unwrap_or(false),
+                RuntimeOwnedDataContextPropertyOwner::Borrowed(context) => {
+                    let Some(root) = borrowed_context.as_deref_mut() else {
+                        return false;
+                    };
+                    context
+                        .link_view_model_by_property_path_with_borrowed_root(
+                            root,
+                            &property_path,
+                            &value,
+                        )
+                        .unwrap_or(false)
+                }
+            };
         }
-        let mut context = context.borrow_mut();
-        let changed = match value {
-            RuntimeListenerViewModelChangeValue::Trigger(value) => Some(
-                self.fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
-                    &mut context,
-                    data_bind_index,
-                    *value,
-                    &property_path,
-                ),
-            ),
-            _ => Self::apply_listener_view_model_change_at_property_path(
-                &mut context,
-                &property_path,
-                value,
-                asset_value.as_ref(),
-            ),
+        let changed = match context {
+            RuntimeOwnedDataContextPropertyOwner::Retained(context) => {
+                let mut context = context.borrow_mut();
+                match value {
+                    RuntimeListenerViewModelChangeValue::Trigger(value) => Some(
+                        self.fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+                            &mut context,
+                            data_bind_index,
+                            *value,
+                            &property_path,
+                        ),
+                    ),
+                    _ => Self::apply_listener_view_model_change_at_property_path(
+                        &mut context,
+                        &property_path,
+                        value,
+                        asset_value.as_ref(),
+                    ),
+                }
+            }
+            RuntimeOwnedDataContextPropertyOwner::Borrowed(_) => {
+                let Some(context) = borrowed_context.as_deref_mut() else {
+                    return false;
+                };
+                match value {
+                    RuntimeListenerViewModelChangeValue::Trigger(value) => Some(
+                        self.fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+                            context,
+                            data_bind_index,
+                            *value,
+                            &property_path,
+                        ),
+                    ),
+                    _ => Self::apply_listener_view_model_change_at_property_path(
+                        context,
+                        &property_path,
+                        value,
+                        asset_value.as_ref(),
+                    ),
+                }
+            }
         };
         changed.unwrap_or(false)
     }
@@ -1103,6 +1159,7 @@ impl StateMachineInstance {
                             data_context,
                             data_bind_index,
                             &value,
+                            None,
                         )
                     });
                 let target_dirtied = self

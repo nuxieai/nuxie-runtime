@@ -14,9 +14,9 @@ impl Mat2D {
             return xx.abs().max(yy.abs());
         }
 
-        let a = xx * xx + xy * xy;
-        let b = xx * yx + yy * xy;
-        let c = yx * yx + yy * yy;
+        let a = xx.mul_add(xx, xy * xy);
+        let b = xx.mul_add(yx, yy * xy);
+        let c = yx.mul_add(yx, yy * yy);
         let b_squared = b * b;
         const CPP_EPSILON: f32 = 1.0 / 4096.0;
         let mut result = if b_squared <= CPP_EPSILON * CPP_EPSILON {
@@ -24,7 +24,10 @@ impl Mat2D {
         } else {
             let a_minus_c = a - c;
             let a_plus_c_over_two = (a + c) * 0.5;
-            let x = (a_minus_c * a_minus_c + 4.0 * b_squared).sqrt() * 0.5;
+            let x = a_minus_c
+                .mul_add(a_minus_c, 4.0 * b_squared)
+                .sqrt()
+                * 0.5;
             a_plus_c_over_two + x
         };
         if !result.is_finite() {
@@ -86,6 +89,19 @@ mod tests {
             .find_max_scale(),
             0.0
         );
+    }
+
+    #[test]
+    fn find_max_scale_preserves_pinned_contracted_finite_bits() {
+        let matrix = Mat2D([
+            f32::from_bits(0xc32d_8148),
+            f32::from_bits(0xc2d1_a0c5),
+            f32::from_bits(0x42d9_3be7),
+            f32::from_bits(0x4345_c7ae),
+            0.0,
+            0.0,
+        ]);
+        assert_eq!(matrix.find_max_scale().to_bits(), 0x4392_8724);
     }
 
     #[test]

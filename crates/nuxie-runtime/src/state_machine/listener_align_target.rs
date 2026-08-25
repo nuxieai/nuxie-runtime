@@ -105,27 +105,9 @@ impl RuntimeListenerAlignTarget {
     }
 }
 
-/// Exact arithmetic from pinned `Mat2D::invert`, as called by
-/// `ListenerAlignTarget::perform`.
-///
-/// The shared Rust matrix helper uses `mul_add` in its determinant and
-/// translation terms. C++ at the pin uses distinct `*` and `-` float
-/// operations, so this owner must not silently inherit fused rounding.
 fn invert_parent_world_like_cpp(matrix: Mat2D) -> Option<Mat2D> {
-    let [aa, ab, ac, ad, atx, aty] = matrix.0;
-    let mut determinant = aa * ad - ab * ac;
-    if determinant == 0.0 {
-        return None;
-    }
-    determinant = 1.0 / determinant;
-    Some(Mat2D([
-        ad * determinant,
-        -ab * determinant,
-        -ac * determinant,
-        aa * determinant,
-        (ac * aty - ad * atx) * determinant,
-        (ab * atx - aa * aty) * determinant,
-    ]))
+    // Pinned `ListenerAlignTarget::perform` calls the shared Mat2D owner.
+    matrix.invert()
 }
 
 #[cfg(test)]
@@ -226,26 +208,28 @@ mod tests {
     }
 
     #[test]
-    fn align_target_inverse_uses_cpp_nonfused_float_rounding() {
-        let matrix = Mat2D([9050.804_7, -1436.746, -1482.837, -9626.756, 123.25, -44.5]);
+    fn align_target_inverse_reaches_pinned_shared_mat2d_owner() {
+        let matrix = Mat2D([
+            f32::from_bits(0x26cd_29b3),
+            f32::from_bits(0x2533_fdc2),
+            f32::from_bits(0xd01a_d4bb),
+            f32::from_bits(0xce87_d5a9),
+            0.0,
+            0.0,
+        ]);
         let inverse = invert_parent_world_like_cpp(matrix).expect("matrix is invertible");
 
         assert_eq!(
             inverse.0.map(f32::to_bits),
             [
-                0x38e2_2db1,
-                0xb787_062b,
-                0xb78b_5b0f,
-                0xb8d4_a58a,
-                0xbc65_e5a8,
-                0xbb25_b2c3,
+                0x6611_a2d3,
+                0x3cc0_fa97,
+                0xe7a6_00cd,
+                0xbe5b_f782,
+                0x8000_0000,
+                0x8000_0000,
             ],
-            "pinned Mat2D::invert rounds each multiply before subtraction",
-        );
-        assert_ne!(
-            matrix.determinant().to_bits(),
-            (matrix.0[0] * matrix.0[3] - matrix.0[1] * matrix.0[2]).to_bits(),
-            "the fixture must distinguish the shared fused helper from pinned C++ arithmetic",
+            "ListenerAlignTarget must not retain an algebraic inverse substitute",
         );
     }
 

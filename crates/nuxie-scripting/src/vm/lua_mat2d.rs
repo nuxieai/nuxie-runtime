@@ -36,7 +36,7 @@ impl UserData for ScriptedMat2D {
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("invert", |lua, this, ()| {
-            invert_mat2d(this.0)
+            this.0.invert()
                 .map(|matrix| lua.create_userdata(ScriptedMat2D(matrix)))
                 .transpose()
         });
@@ -62,23 +62,6 @@ impl UserData for ScriptedMat2D {
             Ok(this.0 == rhs.borrow::<ScriptedMat2D>()?.0)
         });
     }
-}
-
-fn invert_mat2d(matrix: Mat2D) -> Option<Mat2D> {
-    let [aa, ab, ac, ad, atx, aty] = matrix.0;
-    let determinant = aa * ad - ab * ac;
-    if determinant == 0.0 {
-        return None;
-    }
-    let inverse_determinant = 1.0 / determinant;
-    Some(Mat2D([
-        ad * inverse_determinant,
-        -ab * inverse_determinant,
-        -ac * inverse_determinant,
-        aa * inverse_determinant,
-        (ac * aty - ad * atx) * inverse_determinant,
-        (ab * atx - aa * aty) * inverse_determinant,
-    ]))
 }
 
 fn multiply_mat2d(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
@@ -112,7 +95,7 @@ pub(super) fn install_mat2d_global(lua: &Lua) -> Result<()> {
         "invert",
         lua.create_function(|_, (output, input): (AnyUserData, AnyUserData)| {
             let input = input.borrow::<ScriptedMat2D>()?.0;
-            let Some(inverse) = invert_mat2d(input) else {
+            let Some(inverse) = input.invert() else {
                 return Ok(false);
             };
             output.borrow_mut::<ScriptedMat2D>()?.0 = inverse;
@@ -218,6 +201,30 @@ mod matrix_tests {
                 0x4198_feae,
                 0x4198_feae,
             ]
+        );
+    }
+
+    #[test]
+    fn matrix_inverse_reaches_pinned_render_mat2d_owner() {
+        let matrix = Mat2D([
+            f32::from_bits(0x26cd_29b3),
+            f32::from_bits(0x2533_fdc2),
+            f32::from_bits(0xd01a_d4bb),
+            f32::from_bits(0xce87_d5a9),
+            0.0,
+            0.0,
+        ]);
+        assert_eq!(matrix.determinant().to_bits(), 0xa7ee_c560);
+        assert_eq!(
+            matrix.invert().expect("pinned determinant is nonzero").0.map(f32::to_bits),
+            [
+                0x6611_a2d3,
+                0x3cc0_fa97,
+                0xe7a6_00cd,
+                0xbe5b_f782,
+                0x8000_0000,
+                0x8000_0000,
+            ],
         );
     }
 }

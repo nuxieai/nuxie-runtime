@@ -2686,18 +2686,18 @@ fn multiply_mat2d(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
     let a = lhs.0;
     let b = rhs.0;
     Mat2D([
-        a[0] * b[0] + a[2] * b[1],
-        a[1] * b[0] + a[3] * b[1],
-        a[0] * b[2] + a[2] * b[3],
-        a[1] * b[2] + a[3] * b[3],
-        a[0] * b[4] + a[2] * b[5] + a[4],
-        a[1] * b[4] + a[3] * b[5] + a[5],
+        a[0].mul_add(b[0], a[2] * b[1]),
+        a[1].mul_add(b[0], a[3] * b[1]),
+        a[0].mul_add(b[2], a[2] * b[3]),
+        a[1].mul_add(b[2], a[3] * b[3]),
+        a[0].mul_add(b[4], a[2] * b[5]) + a[4],
+        a[1].mul_add(b[4], a[3] * b[5]) + a[5],
     ])
 }
 
 fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
     let [a, b, c, d, tx, ty] = m.0;
-    let det = a * d - b * c;
+    let det = a.mul_add(d, -(c * b));
     if det == 0.0 {
         return None;
     }
@@ -2707,9 +2707,85 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
         -b * inv,
         -c * inv,
         a * inv,
-        (c * ty - d * tx) * inv,
-        (b * tx - a * ty) * inv,
+        c.mul_add(ty, -(d * tx)) * inv,
+        b.mul_add(tx, -(a * ty)) * inv,
     ]))
+}
+
+#[cfg(test)]
+mod mat2d_owner_tests {
+    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
+
+    fn from_bits(bits: [u32; 6]) -> Mat2D {
+        Mat2D(bits.map(f32::from_bits))
+    }
+
+    #[test]
+    fn gpu_mat2d_owners_preserve_pinned_finite_contractions() {
+        let lhs = from_bits([
+            0x9422_bf8a,
+            0x9788_280a,
+            0xd2ec_7e6e,
+            0x4d52_6674,
+            0xe887_c79b,
+            0x4bce_95e3,
+        ]);
+        let rhs = from_bits([
+            0xb12b_6d28,
+            0x2f8c_b036,
+            0xdeb1_8044,
+            0x4f30_2db7,
+            0x155f_c859,
+            0x4858_db48,
+        ]);
+        assert_eq!(
+            multiply_mat2d(lhs, rhs).0.map(f32::to_bits),
+            [
+                0xc301_f7ed,
+                0x3d67_41b5,
+                0xe2a2_c127,
+                0x5d10_cc02,
+                0xe887_c79b,
+                0x5632_3ab1,
+            ],
+        );
+
+        let cancellation = from_bits([
+            0x26cd_29b3,
+            0x2533_fdc2,
+            0xd01a_d4bb,
+            0xce87_d5a9,
+            0,
+            0,
+        ]);
+        let expected = [
+            0x6611_a2d3,
+            0x3cc0_fa97,
+            0xe7a6_00cd,
+            0xbe5b_f782,
+            0x8000_0000,
+            0x8000_0000,
+        ];
+        assert_eq!(
+            inverse_mat2d(cancellation)
+                .expect("pinned determinant is nonzero")
+                .0
+                .map(f32::to_bits),
+            expected,
+        );
+
+        // A centered 2x2 clip rect composes with identity, proving the live
+        // ClipRectInverseMatrix reset reaches the corrected inverse owner.
+        assert_eq!(
+            clip_rect_inverse_matrix_reset(
+                cancellation,
+                AABB::new(-1.0, -1.0, 1.0, 1.0),
+            )
+            .0
+            .map(f32::to_bits),
+            expected,
+        );
+    }
 }
 
 pub fn clip_rect_inverse_matrix_reset(clipMatrix: Mat2D, clipRect: AABB) -> Mat2D {

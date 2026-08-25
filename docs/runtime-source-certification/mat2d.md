@@ -900,3 +900,79 @@ owner, scalar N-slicer routing, batch, bounding-box, transformed-area, and
 threshold portions.** Restore exact ownership in the remaining GPU, draw,
 triangulator, N-slicer inverse, and max-scale paths, add direct finite/control
 witnesses at their live consumers, and obtain two fresh complete reviews.
+
+## Complete concrete-owner correction after `dec84a56d` — PENDING TWO FRESH INDEPENDENT REVIEWS
+
+The complete residue census from the first post-`f4707d9e6` review is now
+mechanically corrected. No witness was patched independently: each failure
+was traced back to the shared or local source owner that the pinned C++ caller
+actually uses.
+
+`gpu_cpp.rs` now preserves pinned `Mat2D::multiply`, determinant, and inverse
+arithmetic. All six multiply lanes retain the source contraction, with the
+translation add kept outside the contraction. Inverse uses the contracted
+`a*d-c*b` determinant and contracted translation numerators, tests only
+`det == 0`, and therefore retains the source's infinite/NaN determinant
+behavior. The operative `ClipRectInverseMatrix::reset` and every
+`PaintAuxData::set` image, gradient, framebuffer-flip, and clip-matrix branch
+continue to route through these corrected owners. The finite cancellation
+matrix from the rejecting review now produces determinant `0xa7eec560`, and a
+centered 2x2 clip reset reaches the owner and emits the frozen six inverse
+lanes. A separate six-lane finite multiply witness matches pinned clang.
+
+Every renderer determinant/winding substitute now reaches one contracted
+renderer determinant owner. This includes feather-atlas fill direction,
+`draw_cpp` contour selection, both `PathDraw::Make` triangulator flags,
+interior tessellation and clockwise-atomic winding, the mapped
+`RiveRenderPath::isClockwiseDominant` owner, and
+`InnerFanTriangulator::new`. The review matrix is negative (`0xa7eec560`) in
+pinned source but rounded to positive zero in the removed expressions. Tests
+exercise the corrected sign through the live contour, feather, atomic,
+render-path, and InnerFan consumers rather than accepting a helper-only bit
+assertion.
+
+The N-slicer scalar/operator routing accepted by the previous review remains
+unchanged. Its captured inverse now contracts both translation numerators in
+`draw::runtime_mat2d_invert`. With finite matrix bits
+`[494a16e6, b6c7c10d, f5c3ef08, 206746c7, f14fd57a, 25756691]`, translated x
+is the pinned `0x2e1d3fdc` instead of the removed one-ULP substitute
+`0x2e1d3fdd`; the actual `RuntimeNSlicedNodeContext::deform_world_point`
+consumer observes the same frozen lane.
+
+All three operative `findMaxScale` spellings were included in the census:
+the shared runtime Mat2D owner, renderer tessellation/feather
+`draw::max_matrix_scale`, and `RiveRenderer`'s feather-softening owner. Each
+now contracts the three source `sdot` calls and the discriminant candidate.
+The finite review matrix
+`[c32d8148, c2d1a0c5, 42d93be7, 4345c7ae]` returns pinned `0x43928724` in all
+three owners instead of `0x43928723`; renderer evidence reaches feather atlas
+scale and the draw-path softening decision.
+
+The two non-renderer inverse duplicates identified by the review were audited
+against their pinned callers rather than silently excluded. Pinned
+`ListenerAlignTarget::perform` calls `Mat2D::invert` directly, so its obsolete
+nonfused substitute was removed and the listener now reaches the exact shared
+runtime owner. Pinned Lua `mat2d_invert` likewise calls the same Rive Mat2D
+owner; the approved Lua backend adaptation does not authorize changing its
+matrix arithmetic, so the binding now reaches an exact shared render-API
+determinant/inverse owner. Both retain finite cancellation witnesses.
+
+Focused evidence with `CARGO_INCREMENTAL=0`:
+
+- debug runtime Mat2D: 15 passed, including the exact `findMaxScale` bits;
+- debug N-slicer inverse consumer and ListenerAlignTarget inverse consumer:
+  one passed each;
+- debug scripting Mat2D inverse: one passed;
+- debug renderer finite GPU owner, winding consumers, InnerFan, PathDraw
+  contour, mapped render-path, and both feather/max-scale consumers: all
+  passed;
+- Metal, Vulkan, WebGPU, and WebGL2 renderer feature checks passed;
+- source correspondence passed with 456 applicable owners and no pending
+  absent rows;
+- source-symbol correspondence passed with 7,818 authority units across
+  1,105 owners and generated authority replayed;
+- source-symbol checker unit tests passed, 33 tests.
+
+The workspace fat-LTO/single-codegen-unit run covers the same finite and
+control witnesses. This implementing lane does not self-certify any corrected
+owner. Verdict: **PENDING TWO FRESH INDEPENDENT COMPLETE REVIEWS.**

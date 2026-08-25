@@ -893,7 +893,7 @@ fn invert(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod renderer_mat2d_owner_tests {
-    use super::{Mat2D, RendererContract, RiveRenderer, determinant, invert, mul};
+    use super::{Mat2D, RendererContract, RiveRenderer, determinant, invert, max_scale, mul};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -979,6 +979,21 @@ mod renderer_mat2d_owner_tests {
         RendererContract::transform(&mut renderer, &next);
         assert_eq!(bits(renderer.current_state().matrix), expected);
     }
+
+    #[test]
+    fn feather_path_uses_pinned_find_max_scale_bits() {
+        let matrix = from_bits([
+            0xc32d_8148,
+            0xc2d1_a0c5,
+            0x42d9_3be7,
+            0x4345_c7ae,
+            0,
+            0,
+        ]);
+        let matrix_max_scale = max_scale(matrix);
+        assert_eq!(matrix_max_scale.to_bits(), 0x4392_8724);
+        assert!(100.0 * matrix_max_scale > 1.0);
+    }
 }
 fn max_scale(m: Mat2D) -> f32 {
     let [xx, xy, yx, yy, _, _] = m.0;
@@ -987,15 +1002,19 @@ fn max_scale(m: Mat2D) -> f32 {
         let y = yy.abs();
         return if x < y { y } else { x };
     }
-    let a = xx * xx + xy * xy;
-    let b = xx * yx + yy * xy;
-    let c = yx * yx + yy * yy;
+    let a = xx.mul_add(xx, xy * xy);
+    let b = xx.mul_add(yx, yy * xy);
+    let c = yx.mul_add(yx, yy * yy);
     let b_squared = b * b;
     let mut result = if b_squared <= MATH_EPSILON * MATH_EPSILON {
         a.max(c)
     } else {
         let a_minus_c = a - c;
-        (a + c) * 0.5 + (a_minus_c * a_minus_c + 4.0 * b_squared).sqrt() * 0.5
+        (a + c) * 0.5
+            + a_minus_c
+                .mul_add(a_minus_c, 4.0 * b_squared)
+                .sqrt()
+                * 0.5
     };
     if !result.is_finite() {
         result = 0.0;

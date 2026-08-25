@@ -333,7 +333,48 @@ pub(super) fn runtime_deform_local_gradient_point_with_nsliced_node(
 
 #[cfg(test)]
 mod mat2d_caller_tests {
-    use super::{Mat2D, RuntimeNSlicedNodeContext, RuntimeNSlicerScaleInfo};
+    use super::{
+        Mat2D, RuntimeNSlicedNodeContext, RuntimeNSlicerScaleInfo, runtime_mat2d_invert,
+    };
+
+    #[test]
+    fn context_uses_pinned_inverse_translation_numerators() {
+        let world = Mat2D([
+            f32::from_bits(0x494a_16e6),
+            f32::from_bits(0xb6c7_c10d),
+            f32::from_bits(0xf5c3_ef08),
+            f32::from_bits(0x2067_46c7),
+            f32::from_bits(0xf14f_d57a),
+            f32::from_bits(0x2575_6691),
+        ]);
+        let inverse_world = runtime_mat2d_invert(world).expect("pinned matrix is invertible");
+        assert_eq!(inverse_world.0[4].to_bits(), 0x2e1d_3fdc);
+
+        // Empty stop arrays make the source mapping identity, so this reaches
+        // the operative context's captured inverse without obscuring its
+        // translated x lane behind slice interpolation.
+        let context = RuntimeNSlicedNodeContext {
+            world: Mat2D::IDENTITY,
+            inverse_world,
+            width: 2.0,
+            height: 2.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            x_px_stops: Vec::new(),
+            y_px_stops: Vec::new(),
+            x_scale_info: RuntimeNSlicerScaleInfo {
+                use_scale: true,
+                scale_factor: 1.0,
+                fallback_size: 0.0,
+            },
+            y_scale_info: RuntimeNSlicerScaleInfo {
+                use_scale: true,
+                scale_factor: 1.0,
+                fallback_size: 0.0,
+            },
+        };
+        assert_eq!(context.deform_world_point(0.0, 0.0).0.to_bits(), 0x2e1d_3fdc);
+    }
 
     #[test]
     fn deform_world_point_uses_pinned_scalar_matrix_vector_grouping() {

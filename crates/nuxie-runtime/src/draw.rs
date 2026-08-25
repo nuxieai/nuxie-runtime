@@ -25257,8 +25257,8 @@ fn runtime_mat2d_invert(mat: Mat2D) -> Option<Mat2D> {
         -b * determinant,
         -c * determinant,
         a * determinant,
-        (c * f - d * e) * determinant,
-        (b * e - a * f) * determinant,
+        c.mul_add(f, -(d * e)) * determinant,
+        b.mul_add(e, -(a * f)) * determinant,
     ]))
 }
 

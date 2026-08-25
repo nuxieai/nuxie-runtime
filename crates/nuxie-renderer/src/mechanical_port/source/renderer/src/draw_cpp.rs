@@ -1470,8 +1470,7 @@ fn contour_directions_for_path(
     if is_stroke {
         return gpu::ContourDirections::forward;
     }
-    let [xx, yx, xy, yy, _, _] = matrix.0;
-    let determinant = xx * yy - yx * xy;
+    let determinant = crate::draw::mat2d_determinant(matrix);
     if initial_fill_rule == FillRule::Clockwise {
         if determinant < 0.0 {
             if matches!(
@@ -1715,8 +1714,7 @@ pub unsafe fn make_path_draw_from_source(
     } else {
         FillRule::NonZero
     };
-    let [xx, yx, xy, yy, _, _] = matrix.0;
-    owner.triangulator_reverse_triangles = xx * yy - yx * xy < 0.0;
+    owner.triangulator_reverse_triangles = crate::draw::mat2d_determinant(matrix) < 0.0;
     owner.triangulator_negate_winding = owner.triangulator_reverse_triangles
         != (directions == gpu::ContourDirections::forwardThenReverse);
     Some(owner)
@@ -1731,7 +1729,33 @@ fn should_use_interior_tessellation(path: &RawPath, matrix: Mat2D) -> bool {
 
 #[cfg(test)]
 mod transformed_area_consumer_tests {
-    use super::{Mat2D, RawPath, should_use_interior_tessellation};
+    use super::{
+        FillRule, Mat2D, PathCoverageType, RawPath, contour_directions_for_path, gpu,
+        should_use_interior_tessellation,
+    };
+
+    #[test]
+    fn path_draw_contour_direction_uses_pinned_contracted_determinant() {
+        let matrix = Mat2D([
+            f32::from_bits(0x26cd_29b3),
+            f32::from_bits(0x2533_fdc2),
+            f32::from_bits(0xd01a_d4bb),
+            f32::from_bits(0xce87_d5a9),
+            0.0,
+            0.0,
+        ]);
+        assert_eq!(
+            contour_directions_for_path(
+                &RawPath::new(),
+                matrix,
+                FillRule::Clockwise,
+                false,
+                PathCoverageType::msaa,
+                false,
+            ),
+            gpu::ContourDirections::reverse,
+        );
+    }
 
     fn threshold_path() -> RawPath {
         let mut path = RawPath::new();

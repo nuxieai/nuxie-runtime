@@ -98,6 +98,32 @@ impl Mat2D {
         }
     }
 
+    /// Exact scalar owner for pinned `Mat2D::determinant`.
+    #[doc(hidden)]
+    pub fn determinant(self) -> f32 {
+        let [xx, yx, xy, yy, _, _] = self.0;
+        xx.mul_add(yy, -(xy * yx))
+    }
+
+    /// Safe-Rust form of pinned `Mat2D::invert(Mat2D*)`.
+    #[doc(hidden)]
+    pub fn invert(self) -> Option<Self> {
+        let [xx, yx, xy, yy, tx, ty] = self.0;
+        let determinant = self.determinant();
+        if determinant == 0.0 {
+            return None;
+        }
+        let inverse_determinant = 1.0 / determinant;
+        Some(Self([
+            yy * inverse_determinant,
+            -yx * inverse_determinant,
+            -xy * inverse_determinant,
+            xx * inverse_determinant,
+            xy.mul_add(ty, -(yy * tx)) * inverse_determinant,
+            yx.mul_add(tx, -(xx * ty)) * inverse_determinant,
+        ]))
+    }
+
     /// Exact out-of-line owner for pinned `Mat2D::mapPoints`.
     ///
     /// This is public only because the renderer's mechanically translated

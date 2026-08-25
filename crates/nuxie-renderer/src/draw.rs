@@ -111,13 +111,21 @@ pub(crate) enum FeatherFillDirection {
     ForwardThenReverse,
 }
 
+#[inline]
+pub(crate) fn mat2d_determinant(matrix: Mat2D) -> f32 {
+    let [xx, yx, xy, yy, _, _] = matrix.0;
+    xx.mul_add(yy, -(xy * yx))
+}
+
 pub(crate) fn feather_atlas_fill_direction(
     transform: Mat2D,
     fill_rule: FillRule,
     is_stroke: bool,
 ) -> FeatherFillDirection {
-    let [xx, yx, xy, yy, _, _] = transform.0;
-    if !is_stroke && fill_rule == FillRule::Clockwise && xx * yy - xy * yx < 0.0 {
+    if !is_stroke
+        && fill_rule == FillRule::Clockwise
+        && mat2d_determinant(transform) < 0.0
+    {
         FeatherFillDirection::Reverse
     } else {
         FeatherFillDirection::Forward
@@ -1396,13 +1404,19 @@ fn max_matrix_scale(transform: Mat2D) -> f32 {
     if xy == 0.0 && yx == 0.0 {
         return xx.abs().max(yy.abs());
     }
-    let a = xx * xx + xy * xy;
-    let b = xx * yx + yy * xy;
-    let c = yx * yx + yy * yy;
-    let result = if b * b <= MATH_EPSILON * MATH_EPSILON {
+    let a = xx.mul_add(xx, xy * xy);
+    let b = xx.mul_add(yx, yy * xy);
+    let c = yx.mul_add(yx, yy * yy);
+    let b_squared = b * b;
+    let result = if b_squared <= MATH_EPSILON * MATH_EPSILON {
         a.max(c)
     } else {
-        (a + c) * 0.5 + ((a - c) * (a - c) + 4.0 * b * b).sqrt() * 0.5
+        let a_minus_c = a - c;
+        (a + c) * 0.5
+            + a_minus_c
+                .mul_add(a_minus_c, 4.0 * b_squared)
+                .sqrt()
+                * 0.5
     };
     if result.is_finite() {
         result.max(0.0).sqrt()
@@ -1506,8 +1520,8 @@ pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D)
         max.x = max.x.max(point.x);
         max.y = max.y.max(point.y);
     }
-    let [xx, yx, xy, yy, _, _] = transform.0;
-    let transformed_area = (xx * yy - xy * yx).abs() * (max.x - min.x) * (max.y - min.y);
+    let transformed_area =
+        mat2d_determinant(transform).abs() * (max.x - min.x) * (max.y - min.y);
     transformed_area > 512.0 * 512.0
 }
 
@@ -1707,7 +1721,7 @@ pub(crate) fn build_interior_tessellation(
     } else {
         SweepDirection::Vertical
     };
-    let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
+    let determinant = mat2d_determinant(transform);
     let coarse_area = path_coarse_area(path);
     let negate_coverage = clockwise_atomic_negate_coverage_from_area(
         coarse_area,
@@ -1977,7 +1991,7 @@ pub(crate) fn clockwise_atomic_negate_coverage(
     fill_rule: FillRule,
     clockwise_override: bool,
 ) -> bool {
-    let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
+    let determinant = mat2d_determinant(transform);
     let coarse_area = path_coarse_area(path);
     clockwise_atomic_negate_coverage_from_area(
         coarse_area,
@@ -2002,7 +2016,7 @@ pub(crate) fn msaa_fill_requires_reverse_from_area(
     transform: Mat2D,
     fill_rule: FillRule,
 ) -> bool {
-    let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
+    let determinant = mat2d_determinant(transform);
     match fill_rule {
         FillRule::EvenOdd => false,
         FillRule::Clockwise => determinant < 0.0,
@@ -2790,6 +2804,56 @@ fn lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn determinant_cancellation_matrix() -> Mat2D {
+        Mat2D([
+            f32::from_bits(0x26cd_29b3),
+            f32::from_bits(0x2533_fdc2),
+            f32::from_bits(0xd01a_d4bb),
+            f32::from_bits(0xce87_d5a9),
+            0.0,
+            0.0,
+        ])
+    }
+
+    #[test]
+    fn winding_consumers_preserve_pinned_contracted_determinant_control() {
+        let transform = determinant_cancellation_matrix();
+        assert_eq!(mat2d_determinant(transform).to_bits(), 0xa7ee_c560);
+        assert_eq!(
+            feather_atlas_fill_direction(transform, FillRule::Clockwise, false),
+            FeatherFillDirection::Reverse,
+        );
+
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(1.0, 0.0);
+        path.line_to(1.0, 1.0);
+        path.close();
+        assert!(clockwise_atomic_negate_coverage(
+            &path,
+            transform,
+            FillRule::Clockwise,
+            false,
+        ));
+    }
+
+    #[test]
+    fn feather_consumers_use_pinned_find_max_scale_bits() {
+        let transform = Mat2D([
+            f32::from_bits(0xc32d_8148),
+            f32::from_bits(0xc2d1_a0c5),
+            f32::from_bits(0x42d9_3be7),
+            f32::from_bits(0x4345_c7ae),
+            0.0,
+            0.0,
+        ]);
+        assert_eq!(max_matrix_scale(transform).to_bits(), 0x4392_8724);
+        assert_eq!(
+            feather_atlas_scale(100.0, transform),
+            16.0 / (100.0 * 1.5 * f32::from_bits(0x4392_8724)),
+        );
+    }
 
     fn assert_stroke_tessellation_bytes_eq(
         actual: &StrokeTessellation,

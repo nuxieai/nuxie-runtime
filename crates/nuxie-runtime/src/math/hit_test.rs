@@ -1,4 +1,4 @@
-use nuxie_render_api::FillRule;
+use nuxie_render_api::{Aabb, FillRule, PathDirection};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HitTestArea {
@@ -100,6 +100,12 @@ impl HitTester {
         self.expects_move = true;
     }
 
+    /// Pinned no-argument `HitTester::reset` clears only the accumulated
+    /// winding storage.
+    pub(crate) fn clear_windings(&mut self) {
+        self.delta_windings.clear();
+    }
+
     pub(crate) fn move_to(&mut self, point: (f32, f32)) {
         if !self.expects_move {
             self.close();
@@ -129,6 +135,18 @@ impl HitTester {
             self.width_i32,
         );
         self.previous = point;
+    }
+
+    /// Literal owner for pinned `HitTester::quad`.
+    ///
+    /// The upstream implementation intentionally does not rasterize the
+    /// quadratic; it only advances `m_Prev` to the un-offset endpoint. Keep
+    /// that unusual behavior instead of replacing it with a curve flattener.
+    pub(crate) fn quad_to(&mut self, _control: (f32, f32), end: (f32, f32)) {
+        if self.expects_move {
+            return;
+        }
+        self.previous = Point { x: end.0, y: end.1 };
     }
 
     pub(crate) fn cubic_to(&mut self, control1: (f32, f32), control2: (f32, f32), end: (f32, f32)) {
@@ -204,6 +222,31 @@ impl HitTester {
         self.expects_move = true;
     }
 
+    pub(crate) fn add_rect(
+        &mut self,
+        bounds: Aabb,
+        transform: crate::Mat2D,
+        direction: PathDirection,
+    ) {
+        let points = [
+            transform.transform_point(bounds.min_x, bounds.min_y),
+            transform.transform_point(bounds.max_x, bounds.min_y),
+            transform.transform_point(bounds.max_x, bounds.max_y),
+            transform.transform_point(bounds.min_x, bounds.max_y),
+        ];
+        self.move_to(points[0]);
+        if direction == PathDirection::Clockwise {
+            self.line_to(points[1]);
+            self.line_to(points[2]);
+            self.line_to(points[3]);
+        } else {
+            self.line_to(points[3]);
+            self.line_to(points[2]);
+            self.line_to(points[1]);
+        }
+        self.close();
+    }
+
     pub(crate) fn test(&mut self, fill_rule: FillRule) -> bool {
         if !self.expects_move {
             self.close();
@@ -225,6 +268,136 @@ impl HitTester {
             y: point.1 - self.offset.y,
         }
     }
+
+    pub(crate) fn test_mesh_point(
+        point: (f32, f32),
+        vertices: &[(f32, f32)],
+        indices: &[u16],
+    ) -> bool {
+        if vertices.len() < 3 {
+            return false;
+        }
+        let Some((left, top, right, bottom)) = mesh_bounds(vertices) else {
+            return false;
+        };
+        if bottom < point.1 || point.1 < top || right < point.0 || point.0 < left {
+            return false;
+        }
+
+        for triangle in indices.chunks_exact(3) {
+            let Some(&a) = vertices.get(usize::from(triangle[0])) else {
+                return false;
+            };
+            let Some(&b) = vertices.get(usize::from(triangle[1])) else {
+                return false;
+            };
+            let Some(&c) = vertices.get(usize::from(triangle[2])) else {
+                return false;
+            };
+            let pa = (a.0 - point.0, a.1 - point.1);
+            let pb = (b.0 - point.0, b.1 - point.1);
+            let pc = (c.0 - point.0, c.1 - point.1);
+            let ab = cross_lt(pa, pb);
+            let bc = cross_lt(pb, pc);
+            let ca = cross_lt(pc, pa);
+            if ab == bc && ab == ca {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub(crate) fn test_mesh_area(
+        area: HitTestArea,
+        vertices: &[(f32, f32)],
+        indices: &[u16],
+    ) -> bool {
+        if area.width().wrapping_mul(area.height()) == 1 {
+            return Self::test_mesh_point((area.left as f32, area.top as f32), vertices, indices);
+        }
+        if vertices.len() < 3 {
+            return false;
+        }
+        let Some((left, top, right, bottom)) = mesh_bounds(vertices) else {
+            return false;
+        };
+        if bottom <= area.top as f32
+            || area.bottom as f32 <= top
+            || right <= area.left as f32
+            || area.right as f32 <= left
+        {
+            return false;
+        }
+
+        let length = usize::try_from(area.width())
+            .ok()
+            .zip(usize::try_from(area.height()).ok())
+            .and_then(|(width, height)| width.checked_mul(height))
+            .unwrap_or(0);
+        let mut windings = vec![0_i32; length];
+        let offset = (area.left as f32, area.top as f32);
+        for triangle in indices.chunks_exact(3) {
+            let Some(&a) = vertices.get(usize::from(triangle[0])) else {
+                return false;
+            };
+            let Some(&b) = vertices.get(usize::from(triangle[1])) else {
+                return false;
+            };
+            let Some(&c) = vertices.get(usize::from(triangle[2])) else {
+                return false;
+            };
+            let a = Point {
+                x: a.0 - offset.0,
+                y: a.1 - offset.1,
+            };
+            let b = Point {
+                x: b.0 - offset.0,
+                y: b.1 - offset.1,
+            };
+            let c = Point {
+                x: c.0 - offset.0,
+                y: c.1 - offset.1,
+            };
+            clip_line(area.height() as f32, a, b, &mut windings, area.width());
+            clip_line(area.height() as f32, b, c, &mut windings, area.width());
+            clip_line(area.height() as f32, c, a, &mut windings, area.width());
+            if windings
+                .iter()
+                .fold(0_i32, |value, winding| value | winding)
+                != 0
+            {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+fn cross_lt(a: (f32, f32), b: (f32, f32)) -> bool {
+    a.0 * b.1 < a.1 * b.0
+}
+
+fn mesh_bounds(vertices: &[(f32, f32)]) -> Option<(f32, f32, f32, f32)> {
+    let &(mut left, mut top) = vertices.first()?;
+    let mut right = left;
+    let mut bottom = top;
+    for &(x, y) in &vertices[1..] {
+        // `AABB(Span<Vec2D>)` uses `std::min/std::max`, whose first-operand
+        // NaN behavior differs from Rust's `f32::{min,max}`.
+        left = cpp_min(left, x);
+        top = cpp_min(top, y);
+        right = cpp_max(right, x);
+        bottom = cpp_max(bottom, y);
+    }
+    Some((left, top, right, bottom))
+}
+
+fn cpp_min(first: f32, second: f32) -> f32 {
+    if second < first { second } else { first }
+}
+
+fn cpp_max(first: f32, second: f32) -> f32 {
+    if first < second { second } else { first }
 }
 
 fn graphics_round(value: f32) -> i32 {
@@ -335,5 +508,90 @@ impl CubicCoefficient {
             x: ((self.a.x * t + self.b.x) * t + self.c.x) * t + self.d.x,
             y: ((self.a.y * t + self.b.y) * t + self.c.y) * t + self.d.y,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Mat2D;
+
+    #[test]
+    fn pinned_add_rect_uses_authored_direction_and_transform() {
+        for direction in [PathDirection::Clockwise, PathDirection::Counterclockwise] {
+            let mut tester = HitTester::new(HitTestArea::new(10, 20, 14, 24));
+            tester.add_rect(
+                Aabb::new(0.0, 0.0, 4.0, 4.0),
+                Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 20.0]),
+                direction,
+            );
+            assert!(tester.test(FillRule::NonZero), "direction {direction:?}");
+        }
+    }
+
+    #[test]
+    fn pinned_quad_only_advances_the_unoffset_endpoint() {
+        let mut tester = HitTester::new(HitTestArea::new(10, 10, 12, 12));
+        tester.move_to((10.0, 10.0));
+        tester.quad_to((10.5, 11.0), (1.0, 1.0));
+        assert_eq!((tester.previous.x, tester.previous.y), (1.0, 1.0));
+    }
+
+    #[test]
+    fn pinned_mesh_point_and_area_overloads_cover_both_windings() {
+        let vertices = [(0.0, 0.0), (4.0, 0.0), (0.0, 4.0)];
+        assert!(HitTester::test_mesh_point(
+            (1.0, 1.0),
+            &vertices,
+            &[0, 1, 2]
+        ));
+        assert!(HitTester::test_mesh_point(
+            (1.0, 1.0),
+            &vertices,
+            &[2, 1, 0]
+        ));
+        assert!(!HitTester::test_mesh_point(
+            (5.0, 5.0),
+            &vertices,
+            &[0, 1, 2]
+        ));
+
+        assert!(HitTester::test_mesh_area(
+            HitTestArea::new(0, 0, 2, 2),
+            &vertices,
+            &[0, 1, 2]
+        ));
+        assert!(!HitTester::test_mesh_area(
+            HitTestArea::new(5, 5, 7, 7),
+            &vertices,
+            &[0, 1, 2]
+        ));
+    }
+
+    #[test]
+    fn safe_mesh_owner_fails_closed_for_invalid_cpp_topology() {
+        let vertices = [(0.0, 0.0), (4.0, 0.0), (0.0, 4.0)];
+        assert!(!HitTester::test_mesh_point(
+            (1.0, 1.0),
+            &vertices,
+            &[0, 1, 9]
+        ));
+        assert!(!HitTester::test_mesh_area(
+            HitTestArea::new(0, 0, 2, 2),
+            &vertices,
+            &[0, 1, 9]
+        ));
+    }
+
+    #[test]
+    fn no_argument_reset_only_clears_windings() {
+        let mut tester = HitTester::new(HitTestArea::new(0, 0, 2, 2));
+        tester.move_to((0.0, 0.0));
+        tester.line_to((2.0, 0.0));
+        tester.clear_windings();
+        assert!(tester.delta_windings.is_empty());
+        assert!(!tester.expects_move);
+        assert_eq!(tester.width_i32, 2);
+        assert_eq!(tester.height_i32, 2);
     }
 }

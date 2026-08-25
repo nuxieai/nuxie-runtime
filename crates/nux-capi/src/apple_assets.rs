@@ -9,8 +9,8 @@ use nuxie::{
     ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan,
     GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderLoad, GpuCanvasShaderProfile,
     ImageDecodeError, PersistentFactory, PersistentFactoryContext, RawPath, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
-    RenderPath, RenderShader,
+    RenderBufferFlags, RenderBufferType, RenderCanvas, RenderCanvasError, RenderGpuCanvasShader,
+    RenderImage, RenderPaint, RenderPath, RenderShader,
 };
 use nuxie::{File, FileAssetKind};
 use nuxie_renderer::NativeMetalFactory;
@@ -241,6 +241,21 @@ impl Factory for AppleAssetFactory<'_> {
             .borrow_mut()
             .upload_rgba8_premul_srgb(image.width, image.height, image.row_bytes, &image.pixels)
             .map_err(|_| ImageDecodeError)
+    }
+
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.inner.make_render_canvas(width, height)
+    }
+
+    fn make_gpu_canvas_image_view(
+        &mut self,
+        image: std::rc::Rc<dyn RenderImage>,
+    ) -> Result<std::rc::Rc<dyn RenderImage>, GpuCanvasError> {
+        self.inner.make_gpu_canvas_image_view(image)
     }
 
     fn make_gpu_canvas_shader(

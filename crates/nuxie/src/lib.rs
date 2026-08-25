@@ -61,9 +61,9 @@ pub use nuxie_render_api::{
     GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, GpuCanvasStencilFace,
     GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError, ImageFilter, ImageSampler,
     ImageWrap, Mat2D, PathVerb, PersistentFactory, PersistentFactoryContext, RawPath,
-    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
-    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
-    StrokeJoin, Vec2D,
+    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderCanvas,
+    RenderCanvasError, RenderCanvasFrame, RenderGpuCanvasShader, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 #[cfg(all(
     feature = "renderer-metal",

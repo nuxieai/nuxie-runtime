@@ -742,7 +742,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "current"
       },
       "cluster_id": "cluster:layout:ownership",
@@ -776,7 +776,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -3594,7 +3594,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -3625,7 +3625,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
@@ -3656,7 +3656,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -3687,7 +3687,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -3718,7 +3718,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
@@ -3749,7 +3749,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:lifecycle",
@@ -3780,7 +3780,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:float-behavior",
@@ -3811,7 +3811,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -3842,7 +3842,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:lifecycle",
@@ -3853,7 +3853,7 @@
         "docs/parity-gap-register.md:99"
       ],
       "evidence_state": "tracked-gap",
-      "first_signal": "**Unported Lua bindings** \u2014 `lua_gpu` 3,734, `lua_promise` 1,323, `lua_scripted_context` 583, `lua_buffer_ext` 538, `lua_audio` 507, `lua_data_value` 503, `lua_image_decode` 467, + mesh/color/image/blob/state/data_context/gradient/input | ~9,800 | PARTIAL (by design) | FTAIL partially promotes `lua_scripted_context.cpp`: the full Context method-name surface, headless `features`, and sized/deferred `gpuCanvas` descriptors are present. Canvas 2D has the named `scripted-context-canvas` runtime diagnostic, but its unsupported corpus fixture remains open because no pinned/importable fixture invokes it; component-derived owner-specific `markNeedsUpdate` also remains named residue. The GPU-prefixed `lua_gpu.cpp` candidate still retains its own Canvas 2D and `Image:view` residue. Other named Lua families retain their correspondence status and corpus gates.",
+      "first_signal": "**Unported Lua bindings** \u2014 `lua_promise` 1,323, `lua_scripted_context` 583, `lua_buffer_ext` 538, `lua_audio` 507, `lua_data_value` 503, `lua_image_decode` 467, + mesh/color/image/blob/state/data_context/gradient/input | ~6,000 | PARTIAL (by design) | The paired `lua_gpu.cpp` owner audit closes its mixed Canvas 2D and `Image:view` residue through the exact renderer seam. `lua_scripted_context.cpp` has the full Context method-name surface, including the now-backed sized/deferred `canvas` and `gpuCanvas` descriptors; component-derived owner-specific `markNeedsUpdate` remains named residue. Other named Lua families retain their correspondence status and corpus gates.",
       "id": "gap:F7",
       "missing_proofs": [],
       "owner_family": "unresolved",
@@ -3873,7 +3873,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -3904,7 +3904,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -3935,7 +3935,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -3966,7 +3966,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
@@ -3997,7 +3997,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4028,7 +4028,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4059,7 +4059,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4090,7 +4090,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4121,7 +4121,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4152,7 +4152,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:lifecycle",
@@ -4183,7 +4183,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4214,7 +4214,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4245,7 +4245,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4276,7 +4276,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
@@ -4307,7 +4307,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:invalidation",
@@ -4338,7 +4338,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4369,7 +4369,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:float-behavior",
@@ -4400,7 +4400,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -4431,7 +4431,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
@@ -4462,7 +4462,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -4493,7 +4493,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -6478,7 +6478,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -6509,7 +6509,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -6540,7 +6540,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -6571,7 +6571,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -6602,7 +6602,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -6633,7 +6633,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -6664,7 +6664,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -6695,7 +6695,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -6726,7 +6726,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -6789,7 +6789,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:animation:ownership",
@@ -6823,7 +6823,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:animation:ownership",
@@ -6857,7 +6857,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:animation:ownership",
@@ -6891,7 +6891,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:animation:ownership",
@@ -6925,7 +6925,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:animation:ownership",
@@ -6959,7 +6959,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 16,
+        "recent_touch_count": 21,
         "state": "stale"
       },
       "cluster_id": "cluster:animation:ownership",
@@ -6994,7 +6994,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 20,
+        "recent_touch_count": 25,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7029,7 +7029,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 17,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7064,7 +7064,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 10,
         "state": "stale"
       },
       "cluster_id": "cluster:data_bind:ownership",
@@ -7099,7 +7099,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:data_bind:ownership",
@@ -7134,7 +7134,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7168,7 +7168,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7202,7 +7202,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7305,7 +7305,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7340,7 +7340,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -7375,7 +7375,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 10,
+        "recent_touch_count": 12,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -7410,7 +7410,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 9,
+        "recent_touch_count": 12,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -7444,7 +7444,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 38,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -7481,7 +7481,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 18,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7516,7 +7516,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7551,7 +7551,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7585,7 +7585,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7620,7 +7620,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7655,7 +7655,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 24,
+        "recent_touch_count": 30,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -7690,7 +7690,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -7726,7 +7726,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7761,7 +7761,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7796,7 +7796,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7831,7 +7831,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7901,7 +7901,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7936,7 +7936,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -7971,7 +7971,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -8006,7 +8006,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:shapes:ownership",
@@ -8041,7 +8041,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -8076,7 +8076,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 14,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -8146,7 +8146,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -8216,7 +8216,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -8251,7 +8251,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -8286,7 +8286,7 @@
         "basis": "owner proof audit pin",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
+        "recent_touch_count": 3,
         "state": "stale"
       },
       "cluster_id": "cluster:data_bind:ownership",
@@ -8387,7 +8387,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -8418,7 +8418,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:lifecycle",
@@ -8449,7 +8449,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -8480,7 +8480,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:lifecycle",
@@ -8511,7 +8511,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -8542,7 +8542,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -10694,7 +10694,7 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "stale"
       },
       "cluster_id": "cluster:animation:ownership",
@@ -11616,7 +11616,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:assets:ownership",
@@ -11650,7 +11650,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -11823,7 +11823,7 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "stale"
       },
       "cluster_id": "cluster:data_bind:ownership",
@@ -14168,7 +14168,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14203,7 +14203,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 15,
+        "recent_touch_count": 19,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14239,7 +14239,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14310,7 +14310,42 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 20,
+        "recent_touch_count": 10,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:lua:ownership",
+      "confidence": "low",
+      "discovery_value": 80,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/post-b6-port-reviews.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "behavioral proof is unverified; verification is pending-verification; freshness is stale",
+      "id": "owner:src/lua/renderer/lua_gpu.cpp",
+      "missing_proofs": [
+        "behavioral proof is unverified",
+        "verification is pending-verification",
+        "freshness is stale"
+      ],
+      "owner_family": "lua",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/lua/renderer/lua_gpu.cpp",
+      "subsystem": "lua_gpu",
+      "upstream_owner": "src/lua/renderer/lua_gpu.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 26,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14344,7 +14379,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 13,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14555,7 +14590,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -14589,7 +14624,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 12,
+        "recent_touch_count": 17,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -14626,7 +14661,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 28,
+        "recent_touch_count": 37,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -14661,7 +14696,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 12,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -16400,7 +16435,7 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -16434,7 +16469,7 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "stale"
       },
       "cluster_id": "cluster:text:ownership",
@@ -17390,7 +17425,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:unsupported-observable",
@@ -17421,7 +17456,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:unsupported-observable",
@@ -17452,7 +17487,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:unsupported-observable",
@@ -17463,7 +17498,7 @@
         "docs/parity-gap-register.md:100"
       ],
       "evidence_state": "unsupported-feature",
-      "first_signal": "**ORE scripted GPU host** (GPUBuffer/GPUCanvas contexts) | \u2014 | DEFERRED (`deferred-2026-07-19-ore-gpu`) | GPU-prefixed userdata reaches wgpu under the approved D18 adapter ceiling. Native ORE remains deferred; Canvas 2D/`Image:view` are outside the adapter.",
+      "first_signal": "**ORE scripted GPU host** (GPUBuffer/GPUCanvas contexts) | \u2014 | DEFERRED (`deferred-2026-07-19-ore-gpu`) | GPU-prefixed userdata reaches the product renderer under the approved D18 adapter ceiling. The mixed Canvas 2D path now uses the exact mechanically ported RenderCanvas lifecycle, and `Image:view` retains an exact renderer image in the adapter's sampled-texture occurrence. A separate native-ORE product API is still not claimed.",
       "id": "gap:F8",
       "missing_proofs": [],
       "owner_family": "unresolved",
@@ -17477,76 +17512,6 @@
       "source_row": "F8",
       "subsystem": "F8",
       "upstream_owner": null
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:assets:ownership",
-      "confidence": "low",
-      "discovery_value": 75,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/assets-importers.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "behavioral proof is unverified; verification is pending-verification; freshness is stale",
-      "id": "owner:src/assets/shader_asset.cpp",
-      "missing_proofs": [
-        "behavioral proof is unverified",
-        "verification is pending-verification",
-        "freshness is stale"
-      ],
-      "owner_family": "assets",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/assets/shader_asset.cpp",
-      "subsystem": "shader_asset",
-      "upstream_owner": "src/assets/shader_asset.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:lua:ownership",
-      "confidence": "low",
-      "discovery_value": 75,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/post-b6-port-reviews.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "behavioral proof is unverified; verification is pending-verification; freshness is stale",
-      "id": "owner:src/lua/renderer/lua_gpu.cpp",
-      "missing_proofs": [
-        "behavioral proof is unverified",
-        "verification is pending-verification",
-        "freshness is stale"
-      ],
-      "owner_family": "lua",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/lua/renderer/lua_gpu.cpp",
-      "subsystem": "lua_gpu",
-      "upstream_owner": "src/lua/renderer/lua_gpu.cpp"
     },
     {
       "churn_freshness": {
@@ -17588,7 +17553,77 @@
         "basis": "owner proof audit pin",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 3,
+        "recent_touch_count": 2,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:lua:ownership",
+      "confidence": "low",
+      "discovery_value": 75,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/lua-scripting.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "behavioral proof is unverified; verification is pending-verification; freshness is stale",
+      "id": "owner:src/lua/renderer/lua_renderer.cpp",
+      "missing_proofs": [
+        "behavioral proof is unverified",
+        "verification is pending-verification",
+        "freshness is stale"
+      ],
+      "owner_family": "lua",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/lua/renderer/lua_renderer.cpp",
+      "subsystem": "lua_renderer",
+      "upstream_owner": "src/lua/renderer/lua_renderer.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 2,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:lua:ownership",
+      "confidence": "low",
+      "discovery_value": 75,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/lua-scripting.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "behavioral proof is unverified; verification is pending-verification; freshness is stale",
+      "id": "owner:src/lua/renderer/lua_renderer_library.cpp",
+      "missing_proofs": [
+        "behavioral proof is unverified",
+        "verification is pending-verification",
+        "freshness is stale"
+      ],
+      "owner_family": "lua",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/lua/renderer/lua_renderer_library.cpp",
+      "subsystem": "lua_renderer_library",
+      "upstream_owner": "src/lua/renderer/lua_renderer_library.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 4,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -17623,7 +17658,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 98,
+        "recent_touch_count": 85,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -17654,7 +17689,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 11,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -17972,6 +18007,41 @@
         "recent_touch_count": 0,
         "state": "stale"
       },
+      "cluster_id": "cluster:assets:ownership",
+      "confidence": "low",
+      "discovery_value": 70,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/assets-importers.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "behavioral proof is unverified; verification is pending-verification; freshness is stale",
+      "id": "owner:src/assets/shader_asset.cpp",
+      "missing_proofs": [
+        "behavioral proof is unverified",
+        "verification is pending-verification",
+        "freshness is stale"
+      ],
+      "owner_family": "assets",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "medium"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/assets/shader_asset.cpp",
+      "subsystem": "shader_asset",
+      "upstream_owner": "src/assets/shader_asset.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "low",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 0,
+        "state": "stale"
+      },
       "cluster_id": "cluster:audio:ownership",
       "confidence": "low",
       "discovery_value": 70,
@@ -18109,7 +18179,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:bones:ownership",
@@ -18144,7 +18214,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:bones:ownership",
@@ -18179,7 +18249,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -18214,7 +18284,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 9,
         "state": "stale"
       },
       "cluster_id": "cluster:constraints:ownership",
@@ -18249,7 +18319,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:constraints:ownership",
@@ -18284,7 +18354,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:constraints:ownership",
@@ -18319,7 +18389,78 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 7,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:constraints:ownership",
+      "confidence": "low",
+      "discovery_value": 70,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/unavailable.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "mapping is pending; behavioral proof is unverified; verification is pending-verification; freshness is stale",
+      "id": "owner:src/constraints/scrolling/scroll_bar_constraint.cpp",
+      "missing_proofs": [
+        "mapping is pending",
+        "behavioral proof is unverified",
+        "verification is pending-verification",
+        "freshness is stale"
+      ],
+      "owner_family": "constraints",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/constraints/scrolling/scroll_bar_constraint.cpp",
+      "subsystem": "scroll_bar_constraint",
+      "upstream_owner": "src/constraints/scrolling/scroll_bar_constraint.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
         "recent_touch_count": 5,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:constraints:ownership",
+      "confidence": "low",
+      "discovery_value": 70,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/constraints.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "structural proof is divergent; behavioral proof is unverified; freshness is stale",
+      "id": "owner:src/constraints/scrolling/scroll_constraint.cpp",
+      "missing_proofs": [
+        "structural proof is divergent",
+        "behavioral proof is unverified",
+        "freshness is stale"
+      ],
+      "owner_family": "constraints",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/constraints/scrolling/scroll_constraint.cpp",
+      "subsystem": "scroll_constraint",
+      "upstream_owner": "src/constraints/scrolling/scroll_constraint.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:constraints:ownership",
@@ -18353,7 +18494,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 11,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -18387,7 +18528,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 11,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -18421,7 +18562,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 12,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -18455,7 +18596,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 8,
+        "recent_touch_count": 10,
         "state": "stale"
       },
       "cluster_id": "cluster:importers:ownership",
@@ -19084,79 +19225,9 @@
     {
       "churn_freshness": {
         "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 1,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:lua:ownership",
-      "confidence": "low",
-      "discovery_value": 70,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/lua-scripting.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "behavioral proof is unverified; verification is pending-verification; freshness is stale",
-      "id": "owner:src/lua/renderer/lua_renderer.cpp",
-      "missing_proofs": [
-        "behavioral proof is unverified",
-        "verification is pending-verification",
-        "freshness is stale"
-      ],
-      "owner_family": "lua",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/lua/renderer/lua_renderer.cpp",
-      "subsystem": "lua_renderer",
-      "upstream_owner": "src/lua/renderer/lua_renderer.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 1,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:lua:ownership",
-      "confidence": "low",
-      "discovery_value": 70,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/lua-scripting.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "behavioral proof is unverified; verification is pending-verification; freshness is stale",
-      "id": "owner:src/lua/renderer/lua_renderer_library.cpp",
-      "missing_proofs": [
-        "behavioral proof is unverified",
-        "verification is pending-verification",
-        "freshness is stale"
-      ],
-      "owner_family": "lua",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "medium"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/lua/renderer/lua_renderer_library.cpp",
-      "subsystem": "lua_renderer_library",
-      "upstream_owner": "src/lua/renderer/lua_renderer_library.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 5,
+        "recent_touch_count": 6,
         "state": "stale"
       },
       "cluster_id": "cluster:math:ownership",
@@ -19184,6 +19255,40 @@
       "source_row": "src/math/aabb.cpp",
       "subsystem": "aabb",
       "upstream_owner": "src/math/aabb.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "high",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 5,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:math:ownership",
+      "confidence": "low",
+      "discovery_value": 70,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/bones-math-components.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "behavioral proof is unverified; freshness is stale",
+      "id": "owner:src/math/raw_path.cpp",
+      "missing_proofs": [
+        "behavioral proof is unverified",
+        "freshness is stale"
+      ],
+      "owner_family": "math",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/math/raw_path.cpp",
+      "subsystem": "raw_path",
+      "upstream_owner": "src/math/raw_path.cpp"
     },
     {
       "churn_freshness": {
@@ -19399,6 +19504,147 @@
         "recent_touch_count": 3,
         "state": "stale"
       },
+      "cluster_id": "cluster:constraints:ownership",
+      "confidence": "low",
+      "discovery_value": 65,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/unavailable.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "mapping is pending; behavioral proof is unverified; verification is pending-verification; freshness is stale",
+      "id": "owner:src/constraints/scrolling/elastic_scroll_physics.cpp",
+      "missing_proofs": [
+        "mapping is pending",
+        "behavioral proof is unverified",
+        "verification is pending-verification",
+        "freshness is stale"
+      ],
+      "owner_family": "constraints",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/constraints/scrolling/elastic_scroll_physics.cpp",
+      "subsystem": "elastic_scroll_physics",
+      "upstream_owner": "src/constraints/scrolling/elastic_scroll_physics.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 3,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:constraints:ownership",
+      "confidence": "low",
+      "discovery_value": 65,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/unavailable.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "mapping is pending; behavioral proof is unverified; verification is pending-verification; freshness is stale",
+      "id": "owner:src/constraints/scrolling/scroll_bar_constraint_proxy.cpp",
+      "missing_proofs": [
+        "mapping is pending",
+        "behavioral proof is unverified",
+        "verification is pending-verification",
+        "freshness is stale"
+      ],
+      "owner_family": "constraints",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp",
+      "subsystem": "scroll_bar_constraint_proxy",
+      "upstream_owner": "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 2,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:constraints:ownership",
+      "confidence": "low",
+      "discovery_value": 65,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/SECOND_PASS.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "structural proof is tracked-gap; behavioral proof is unverified; freshness is stale",
+      "id": "owner:src/constraints/scrolling/scroll_constraint_proxy.cpp",
+      "missing_proofs": [
+        "structural proof is tracked-gap",
+        "behavioral proof is unverified",
+        "freshness is stale"
+      ],
+      "owner_family": "constraints",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/constraints/scrolling/scroll_constraint_proxy.cpp",
+      "subsystem": "scroll_constraint_proxy",
+      "upstream_owner": "src/constraints/scrolling/scroll_constraint_proxy.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 3,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:runtime-core:ownership",
+      "confidence": "low",
+      "discovery_value": 65,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/misc-core.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "behavioral proof is unverified; freshness is stale",
+      "id": "owner:src/container_component.cpp",
+      "missing_proofs": [
+        "behavioral proof is unverified",
+        "freshness is stale"
+      ],
+      "owner_family": "runtime-core",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/container_component.cpp",
+      "subsystem": "container_component",
+      "upstream_owner": "src/container_component.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 4,
+        "state": "stale"
+      },
       "cluster_id": "cluster:runtime-core:ownership",
       "confidence": "low",
       "discovery_value": 65,
@@ -19477,40 +19723,6 @@
       ],
       "evidence_state": "stale",
       "first_signal": "behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/math/mat2d.cpp",
-      "missing_proofs": [
-        "behavioral proof is unverified",
-        "freshness is stale"
-      ],
-      "owner_family": "math",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/math/mat2d.cpp",
-      "subsystem": "mat2d",
-      "upstream_owner": "src/math/mat2d.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "medium",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 2,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:math:ownership",
-      "confidence": "low",
-      "discovery_value": 65,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/bones-math-components.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "behavioral proof is unverified; freshness is stale",
       "id": "owner:src/math/path_measure.cpp",
       "missing_proofs": [
         "behavioral proof is unverified",
@@ -19533,24 +19745,24 @@
         "basis": "owner proof audit pin",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 4,
+        "recent_touch_count": 3,
         "state": "stale"
       },
-      "cluster_id": "cluster:math:ownership",
+      "cluster_id": "cluster:runtime-core:ownership",
       "confidence": "low",
       "discovery_value": 65,
       "disposition": "stale-proof",
       "evidence_links": [
-        "docs/b6-audit/results/bones-math-components.md"
+        "docs/b6-audit/SECOND_PASS.md"
       ],
       "evidence_state": "stale",
       "first_signal": "behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/math/raw_path.cpp",
+      "id": "owner:src/simple_array.cpp",
       "missing_proofs": [
         "behavioral proof is unverified",
         "freshness is stale"
       ],
-      "owner_family": "math",
+      "owner_family": "runtime-core",
       "owner_state": "resolved",
       "product_reach": {
         "basis": "deterministic subsystem keyword policy",
@@ -19558,9 +19770,43 @@
       },
       "semantic_boundary": "ownership",
       "source_kind": "owner-proof",
-      "source_row": "src/math/raw_path.cpp",
-      "subsystem": "raw_path",
-      "upstream_owner": "src/math/raw_path.cpp"
+      "source_row": "src/simple_array.cpp",
+      "subsystem": "simple_array",
+      "upstream_owner": "src/simple_array.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 3,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:runtime-core:ownership",
+      "confidence": "low",
+      "discovery_value": 65,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/misc-core.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "behavioral proof is unverified; freshness is stale",
+      "id": "owner:src/transform_component.cpp",
+      "missing_proofs": [
+        "behavioral proof is unverified",
+        "freshness is stale"
+      ],
+      "owner_family": "runtime-core",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/transform_component.cpp",
+      "subsystem": "transform_component",
+      "upstream_owner": "src/transform_component.cpp"
     },
     {
       "churn_freshness": {
@@ -19599,10 +19845,44 @@
     },
     {
       "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "medium",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 3,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:runtime-core:ownership",
+      "confidence": "low",
+      "discovery_value": 65,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/misc-core.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "behavioral proof is unverified; freshness is stale",
+      "id": "owner:src/world_transform_component.cpp",
+      "missing_proofs": [
+        "behavioral proof is unverified",
+        "freshness is stale"
+      ],
+      "owner_family": "runtime-core",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/world_transform_component.cpp",
+      "subsystem": "world_transform_component",
+      "upstream_owner": "src/world_transform_component.cpp"
+    },
+    {
+      "churn_freshness": {
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 98,
+        "recent_touch_count": 85,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -19633,7 +19913,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 98,
+        "recent_touch_count": 85,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -19976,7 +20256,7 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "stale"
       },
       "cluster_id": "cluster:constraints:ownership",
@@ -20150,7 +20430,7 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "stale"
       },
       "cluster_id": "cluster:constraints:ownership",
@@ -20185,185 +20465,7 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:constraints:ownership",
-      "confidence": "low",
-      "discovery_value": 60,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/unavailable.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "mapping is pending; behavioral proof is unverified; verification is pending-verification; freshness is stale",
-      "id": "owner:src/constraints/scrolling/elastic_scroll_physics.cpp",
-      "missing_proofs": [
-        "mapping is pending",
-        "behavioral proof is unverified",
-        "verification is pending-verification",
-        "freshness is stale"
-      ],
-      "owner_family": "constraints",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/constraints/scrolling/elastic_scroll_physics.cpp",
-      "subsystem": "elastic_scroll_physics",
-      "upstream_owner": "src/constraints/scrolling/elastic_scroll_physics.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:constraints:ownership",
-      "confidence": "low",
-      "discovery_value": 60,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/unavailable.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "mapping is pending; behavioral proof is unverified; verification is pending-verification; freshness is stale",
-      "id": "owner:src/constraints/scrolling/scroll_bar_constraint.cpp",
-      "missing_proofs": [
-        "mapping is pending",
-        "behavioral proof is unverified",
-        "verification is pending-verification",
-        "freshness is stale"
-      ],
-      "owner_family": "constraints",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/constraints/scrolling/scroll_bar_constraint.cpp",
-      "subsystem": "scroll_bar_constraint",
-      "upstream_owner": "src/constraints/scrolling/scroll_bar_constraint.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:constraints:ownership",
-      "confidence": "low",
-      "discovery_value": 60,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/unavailable.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "mapping is pending; behavioral proof is unverified; verification is pending-verification; freshness is stale",
-      "id": "owner:src/constraints/scrolling/scroll_bar_constraint_proxy.cpp",
-      "missing_proofs": [
-        "mapping is pending",
-        "behavioral proof is unverified",
-        "verification is pending-verification",
-        "freshness is stale"
-      ],
-      "owner_family": "constraints",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp",
-      "subsystem": "scroll_bar_constraint_proxy",
-      "upstream_owner": "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
         "recent_touch_count": 1,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:constraints:ownership",
-      "confidence": "low",
-      "discovery_value": 60,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/constraints.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "structural proof is divergent; behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/constraints/scrolling/scroll_constraint.cpp",
-      "missing_proofs": [
-        "structural proof is divergent",
-        "behavioral proof is unverified",
-        "freshness is stale"
-      ],
-      "owner_family": "constraints",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/constraints/scrolling/scroll_constraint.cpp",
-      "subsystem": "scroll_constraint",
-      "upstream_owner": "src/constraints/scrolling/scroll_constraint.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:constraints:ownership",
-      "confidence": "low",
-      "discovery_value": 60,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/SECOND_PASS.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "structural proof is tracked-gap; behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/constraints/scrolling/scroll_constraint_proxy.cpp",
-      "missing_proofs": [
-        "structural proof is tracked-gap",
-        "behavioral proof is unverified",
-        "freshness is stale"
-      ],
-      "owner_family": "constraints",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/constraints/scrolling/scroll_constraint_proxy.cpp",
-      "subsystem": "scroll_constraint_proxy",
-      "upstream_owner": "src/constraints/scrolling/scroll_constraint_proxy.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
         "state": "stale"
       },
       "cluster_id": "cluster:constraints:ownership",
@@ -20398,7 +20500,7 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "stale"
       },
       "cluster_id": "cluster:constraints:ownership",
@@ -20497,40 +20599,6 @@
       "source_row": "src/constraints/translation_constraint.cpp",
       "subsystem": "translation_constraint",
       "upstream_owner": "src/constraints/translation_constraint.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 1,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:runtime-core:ownership",
-      "confidence": "low",
-      "discovery_value": 60,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/misc-core.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/container_component.cpp",
-      "missing_proofs": [
-        "behavioral proof is unverified",
-        "freshness is stale"
-      ],
-      "owner_family": "runtime-core",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/container_component.cpp",
-      "subsystem": "container_component",
-      "upstream_owner": "src/container_component.cpp"
     },
     {
       "churn_freshness": {
@@ -21578,7 +21646,41 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 1,
+        "recent_touch_count": 0,
+        "state": "stale"
+      },
+      "cluster_id": "cluster:math:ownership",
+      "confidence": "low",
+      "discovery_value": 60,
+      "disposition": "stale-proof",
+      "evidence_links": [
+        "docs/b6-audit/results/bones-math-components.md"
+      ],
+      "evidence_state": "stale",
+      "first_signal": "behavioral proof is unverified; freshness is stale",
+      "id": "owner:src/math/mat2d.cpp",
+      "missing_proofs": [
+        "behavioral proof is unverified",
+        "freshness is stale"
+      ],
+      "owner_family": "math",
+      "owner_state": "resolved",
+      "product_reach": {
+        "basis": "deterministic subsystem keyword policy",
+        "level": "low"
+      },
+      "semantic_boundary": "ownership",
+      "source_kind": "owner-proof",
+      "source_row": "src/math/mat2d.cpp",
+      "subsystem": "mat2d",
+      "upstream_owner": "src/math/mat2d.cpp"
+    },
+    {
+      "churn_freshness": {
+        "basis": "owner proof audit pin",
+        "churn": "low",
+        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
+        "recent_touch_count": 0,
         "state": "stale"
       },
       "cluster_id": "cluster:math:ownership",
@@ -22129,40 +22231,6 @@
         "basis": "owner proof audit pin",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 1,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:runtime-core:ownership",
-      "confidence": "low",
-      "discovery_value": 60,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/SECOND_PASS.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/simple_array.cpp",
-      "missing_proofs": [
-        "behavioral proof is unverified",
-        "freshness is stale"
-      ],
-      "owner_family": "runtime-core",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/simple_array.cpp",
-      "subsystem": "simple_array",
-      "upstream_owner": "src/simple_array.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
         "recent_touch_count": 0,
         "state": "stale"
       },
@@ -22226,40 +22294,6 @@
       "source_row": "src/static_scene.cpp",
       "subsystem": "static_scene",
       "upstream_owner": "src/static_scene.cpp"
-    },
-    {
-      "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 1,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:runtime-core:ownership",
-      "confidence": "low",
-      "discovery_value": 60,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/misc-core.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/transform_component.cpp",
-      "missing_proofs": [
-        "behavioral proof is unverified",
-        "freshness is stale"
-      ],
-      "owner_family": "runtime-core",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/transform_component.cpp",
-      "subsystem": "transform_component",
-      "upstream_owner": "src/transform_component.cpp"
     },
     {
       "churn_freshness": {
@@ -23303,40 +23337,6 @@
     },
     {
       "churn_freshness": {
-        "basis": "owner proof audit pin",
-        "churn": "low",
-        "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 1,
-        "state": "stale"
-      },
-      "cluster_id": "cluster:runtime-core:ownership",
-      "confidence": "low",
-      "discovery_value": 60,
-      "disposition": "stale-proof",
-      "evidence_links": [
-        "docs/b6-audit/results/misc-core.md"
-      ],
-      "evidence_state": "stale",
-      "first_signal": "behavioral proof is unverified; freshness is stale",
-      "id": "owner:src/world_transform_component.cpp",
-      "missing_proofs": [
-        "behavioral proof is unverified",
-        "freshness is stale"
-      ],
-      "owner_family": "runtime-core",
-      "owner_state": "resolved",
-      "product_reach": {
-        "basis": "deterministic subsystem keyword policy",
-        "level": "low"
-      },
-      "semantic_boundary": "ownership",
-      "source_kind": "owner-proof",
-      "source_row": "src/world_transform_component.cpp",
-      "subsystem": "world_transform_component",
-      "upstream_owner": "src/world_transform_component.cpp"
-    },
-    {
-      "churn_freshness": {
         "basis": "checked-in ledger",
         "churn": "medium",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
@@ -23596,7 +23596,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ordering",
@@ -23628,7 +23628,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:invalidation",
@@ -23660,7 +23660,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23692,7 +23692,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:unsupported-observable",
@@ -23723,7 +23723,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
@@ -23755,7 +23755,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:mutation",
@@ -23787,7 +23787,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23819,7 +23819,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23851,7 +23851,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23883,7 +23883,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23915,7 +23915,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23947,7 +23947,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -23979,7 +23979,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -24011,7 +24011,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:float-behavior",
@@ -24043,7 +24043,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -24075,7 +24075,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -24107,7 +24107,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:ownership",
@@ -24139,7 +24139,7 @@
         "basis": "checked-in ledger",
         "churn": "low",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 0,
+        "recent_touch_count": 1,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:unresolved:invalidation",

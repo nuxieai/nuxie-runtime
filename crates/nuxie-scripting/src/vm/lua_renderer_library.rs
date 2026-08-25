@@ -32,6 +32,7 @@ impl RendererBindings {
     }
 
     pub(crate) fn install(&self, lua: &Lua) -> Result<()> {
+        lua.set_app_data(self.clone());
         super::lua_color::install_color_global(lua)?;
         super::lua_mat2d::install_mat2d_global(lua)?;
         super::lua_path::install_path_global(lua)?;
@@ -40,6 +41,10 @@ impl RendererBindings {
         self.install_gradient_global(lua)?;
         self.install_paint_global(lua)?;
         Ok(())
+    }
+
+    pub(crate) fn for_lua(lua: &Lua) -> Option<Self> {
+        lua.app_data_ref::<Self>().map(|bindings| bindings.clone())
     }
 
     pub(crate) fn with_factory<R>(

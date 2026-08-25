@@ -17,6 +17,7 @@ mod command_server;
 mod listener_invocation;
 mod logging_scripting_context;
 pub(crate) mod lua_blob;
+mod lua_canvas;
 mod lua_color;
 mod lua_data_value;
 mod lua_font;

@@ -4491,6 +4491,14 @@ impl RenderContextHelperBackendContract for RenderContextWebGPUImpl {
         )
     }
 
+    fn makeRenderCanvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas> {
+        makeRenderCanvas(self, width, height)
+    }
+
     #[cfg(any(
         feature = "native-ore-metal-experimental",
         feature = "native-ore-vulkan-experimental",

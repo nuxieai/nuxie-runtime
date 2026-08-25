@@ -1,5 +1,6 @@
 //! Direct owner for pinned `src/lua/renderer/lua_image.cpp`.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -35,13 +36,17 @@ impl ScriptedImageAssetOwners {
 ///
 pub(super) struct ScriptedImage {
     image: Rc<dyn RenderImage>,
+    cached_gpu_view: RefCell<Option<crate::gpu_canvas::GpuImageView>>,
 }
 
 impl ScriptedImage {
     pub(super) fn from_asset(lua: &Lua, identity: ScriptImage) -> Option<Self> {
         let asset_owners = ScriptedImageAssetOwners::for_lua(lua)?;
         let image = asset_owners.get(identity.asset_global_id())?;
-        Some(Self { image })
+        Some(Self {
+            image,
+            cached_gpu_view: RefCell::new(None),
+        })
     }
 
     /// Construction seam used by factory-backed image producers. It does not
@@ -51,7 +56,10 @@ impl ScriptedImage {
     }
 
     pub(super) fn from_render_image_rc(image: Rc<dyn RenderImage>) -> Self {
-        Self { image }
+        Self {
+            image,
+            cached_gpu_view: RefCell::new(None),
+        }
     }
 
     pub(super) fn render_image(&self) -> Result<Rc<dyn RenderImage>> {
@@ -74,6 +82,23 @@ impl UserData for ScriptedImage {
         });
         fields.add_field_method_get("height", |_, this| {
             this.with_render_image(RenderImage::height)
+        });
+        fields.add_field_method_get("view", |lua, this| {
+            let mut cached = this.cached_gpu_view.borrow_mut();
+            if cached.is_none() {
+                let bindings = super::lua_renderer_library::RendererBindings::for_lua(lua)
+                    .ok_or_else(|| Error::runtime("GPU context not available for Image:view()"))?;
+                let image = bindings.with_factory(|factory| {
+                    factory
+                        .make_gpu_canvas_image_view(this.render_image()?)
+                        .map_err(|error| Error::runtime(error.to_string()))
+                })?;
+                *cached = Some(crate::gpu_canvas::GpuImageView::new(image));
+            }
+            cached
+                .as_ref()
+                .expect("Image:view cache was initialized")
+                .create_userdata(lua)
         });
     }
 }
@@ -140,7 +165,13 @@ pub(super) fn create_asset_image(lua: &Lua, image: ScriptImage) -> Result<Option
 #[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
-    use nuxie_render_api::Mat2D;
+    use nuxie_render_api::{
+        ColorInt, Factory, FillRule, GpuCanvasError, Mat2D, PersistentFactory, RawPath,
+        RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderPaint,
+        RenderPath, RenderShader,
+    };
+
+    use crate::vm::ScriptVm;
 
     struct TestImage;
 
@@ -162,9 +193,75 @@ mod tests {
         }
     }
 
+    struct ImageViewFactory(RecordingFactory);
+
+    impl Factory for ImageViewFactory {
+        fn make_render_buffer(
+            &mut self,
+            buffer_type: RenderBufferType,
+            flags: RenderBufferFlags,
+            size_in_bytes: usize,
+        ) -> Box<dyn RenderBuffer> {
+            self.0.make_render_buffer(buffer_type, flags, size_in_bytes)
+        }
+
+        fn make_linear_gradient(
+            &mut self,
+            sx: f32,
+            sy: f32,
+            ex: f32,
+            ey: f32,
+            colors: &[ColorInt],
+            stops: &[f32],
+        ) -> Box<dyn RenderShader> {
+            self.0.make_linear_gradient(sx, sy, ex, ey, colors, stops)
+        }
+
+        fn make_radial_gradient(
+            &mut self,
+            cx: f32,
+            cy: f32,
+            radius: f32,
+            colors: &[ColorInt],
+            stops: &[f32],
+        ) -> Box<dyn RenderShader> {
+            self.0.make_radial_gradient(cx, cy, radius, colors, stops)
+        }
+
+        fn make_render_path(&mut self, path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
+            self.0.make_render_path(path, fill_rule)
+        }
+
+        fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+            self.0.make_empty_render_path()
+        }
+
+        fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+            self.0.make_render_paint()
+        }
+
+        fn decode_image(
+            &mut self,
+            data: &[u8],
+        ) -> std::result::Result<Box<dyn RenderImage>, nuxie_render_api::ImageDecodeError> {
+            self.0.decode_image(data)
+        }
+
+        fn make_gpu_canvas_image_view(
+            &mut self,
+            image: Rc<dyn RenderImage>,
+        ) -> std::result::Result<Rc<dyn RenderImage>, GpuCanvasError> {
+            Ok(image)
+        }
+    }
+
     #[test]
-    fn image_width_and_height_are_read_only_numeric_members() {
-        let lua = Lua::new();
+    fn image_members_include_a_cached_renderer_backed_gpu_view() {
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(ImageViewFactory(RecordingFactory::new()));
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let lua = vm.lua();
         let image = lua
             .create_userdata(ScriptedImage::from_render_image(Box::new(TestImage)))
             .unwrap();
@@ -174,6 +271,44 @@ mod tests {
         assert_eq!(lua.load("return image.height").eval::<u32>().unwrap(), 11);
         assert!(lua.load("image.width = 3").exec().is_err());
         assert!(lua.load("image.height = 5").exec().is_err());
-        assert!(lua.load("return image.view == nil").eval::<bool>().unwrap());
+        let format: String = lua
+            .load(
+                "local first = image.view\n\
+                 local second = image.view\n\
+                 return first.format",
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(format, "rgba8unorm");
+
+        let image = lua.globals().get::<AnyUserData>("image").unwrap();
+        let image = image.borrow::<ScriptedImage>().unwrap();
+        let binding = image
+            .cached_gpu_view
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .binding_for_test();
+        assert_eq!(binding.width, 7);
+        assert_eq!(binding.height, 11);
+        assert!(binding.external_image.is_some());
+
+        let lua = Lua::new();
+        lua.globals()
+            .set(
+                "image",
+                lua.create_userdata(ScriptedImage::from_render_image(Box::new(TestImage)))
+                    .unwrap(),
+            )
+            .unwrap();
+        let error = lua
+            .load("return image.view")
+            .eval::<AnyUserData>()
+            .expect_err("Image:view requires the active renderer context");
+        assert!(
+            error
+                .to_string()
+                .contains("GPU context not available for Image:view()")
+        );
     }
 }

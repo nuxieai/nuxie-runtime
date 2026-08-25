@@ -18,7 +18,6 @@ use super::vkutil_decl::{
 };
 use super::vulkan_context_decl::{VulkanContext, VulkanFeatures};
 use super::vulkan_shaders_decl as spirv;
-#[cfg(feature = "native-ore-vulkan-experimental")]
 use crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp, RefCntTarget};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
@@ -28,7 +27,6 @@ use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
     LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::*;
-#[cfg(feature = "native-ore-vulkan-experimental")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, RenderContext, RenderContextContract,
@@ -39,9 +37,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::{
     RenderTarget, IAABB as TargetIAABB,
 };
-#[cfg(feature = "native-ore-vulkan-experimental")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
-#[cfg(feature = "native-ore-vulkan-experimental")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
 use ash::vk;
 use ash::vk::Handle;
@@ -534,7 +530,6 @@ impl Drop for RenderTargetVulkanTexture {
     }
 }
 
-#[cfg(feature = "native-ore-vulkan-experimental")]
 pub(crate) fn makeRenderCanvas(
     implementation: &mut RenderContextVulkanImpl,
     width: u32,
@@ -4298,7 +4293,6 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
             crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(texture)
         }
     }
-    #[cfg(feature = "native-ore-vulkan-experimental")]
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
         makeRenderCanvas(self, width, height)
     }

@@ -2479,7 +2479,6 @@ pub trait RenderContextContract: RiveRenderFactoryContract {
     fn tangentPairsAllocator(&mut self) -> &mut TrivialArrayAllocator<[Vec2D; 2]>;
     fn polarSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16>;
     fn parametricSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16>;
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas>;
     #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
     fn getOreContext(&mut self) -> *mut OreContext;

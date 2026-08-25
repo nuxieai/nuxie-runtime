@@ -40,7 +40,6 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::{
     RenderContextImpl, RenderContextImplContract,
 };
-#[cfg(feature = "native-ore-metal-experimental")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 #[cfg(feature = "native-ore-metal-experimental")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::OreContext;
@@ -169,7 +168,6 @@ fn target_pixel_format(format: MTLPixelFormat) -> Option<PixelFormat> {
     }
 }
 
-#[cfg(feature = "native-ore-metal-experimental")]
 pub(super) fn retained_canvas_target_texture(
     canvas: &RenderCanvas,
 ) -> Option<Retained<ProtocolObject<dyn MTLTexture>>> {
@@ -389,7 +387,6 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
         unsafe { rcp::from_ptr(Box::into_raw(Box::new(native)).cast::<Texture>()) }
     }
 
-    #[cfg(feature = "native-ore-metal-experimental")]
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
         let Some((texture_metal, target_metal, texture_descriptor)) = self
             .metal

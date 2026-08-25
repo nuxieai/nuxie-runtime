@@ -350,6 +350,10 @@ impl RiveRenderImageHandle {
         self.belongs_to(resource_domain)
             .then(|| &self.source().base)
     }
+
+    pub(crate) fn has_source_texture(&self) -> bool {
+        !self.source().refTexture().get().is_null()
+    }
 }
 
 impl Clone for RiveRenderImageHandle {

@@ -13124,6 +13124,7 @@
             &graph.artboards,
         )
         .expect("parent artboard instance");
+        parent.attach_script_source_file_authority(Rc::new(9702_u32));
 
         let list_local_id = graph.artboards[0].component_lists[0].local_id;
         let row_context = RuntimeOwnedViewModelHandle::new(
@@ -13136,6 +13137,15 @@
             .and_then(|items| items.first())
             .expect("mounted component-list row");
         assert!(mounted.context.ptr_eq(&row_context));
+        assert_eq!(
+            mounted
+                .child
+                .script_source_file_authority::<u32>()
+                .as_deref()
+                .copied(),
+            Some(9702),
+            "a late-created un-scripted row inherits its parent File authority"
+        );
         assert!(
             mounted
                 .child
@@ -13192,10 +13202,131 @@
         );
         assert!(remounted.context.ptr_eq(&row_context));
         assert_eq!(
+            remounted
+                .child
+                .script_source_file_authority::<u32>()
+                .as_deref()
+                .copied(),
+            Some(9702),
+            "pool restoration retains the exact parent File authority"
+        );
+        assert_eq!(
             parent
                 .component_list_resource_pools
                 .count(list_local_id, source_global_id),
             0
+        );
+
+        let refreshed_context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("refreshed component-list row context"),
+        );
+        assert!(parent.sync_component_list_items(
+            &file,
+            list_local_id,
+            vec![refreshed_context],
+        ));
+        assert_eq!(
+            parent.component_list_items(list_local_id).unwrap()[0]
+                .child
+                .script_source_file_authority::<u32>()
+                .as_deref()
+                .copied(),
+            Some(9702),
+            "row refresh retains authority across cold reconstruction"
+        );
+    }
+
+    #[test]
+    fn scripted_component_list_row_retains_source_authority_through_refresh_and_pool_reuse() {
+        let bytes = synthetic_riv(97022, |bytes| {
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyList", &[]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceList",
+                &[("viewModelPropertyId", 0)],
+            );
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 1)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceListItem",
+                &[("viewModelId", 1), ("viewModelInstanceId", 0)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object(bytes, "ArtboardComponentList", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
+            push_synthetic_object(bytes, "ScriptedDrawable", &[("parentId", 0)]);
+        });
+        let file = read_runtime_file(&bytes).expect("scripted component-list fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("scripted component-list graphs");
+        let mut parent = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graph.artboards[0],
+            &graph.artboards,
+        )
+        .expect("scripted component-list parent");
+        parent.attach_script_source_file_authority(Rc::new(97022_u32));
+        let list_local_id = graph.artboards[0].component_lists[0].local_id;
+        let first_context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("first scripted row context"),
+        );
+        assert!(parent.sync_component_list_items(
+            &file,
+            list_local_id,
+            vec![first_context],
+        ));
+        let row = &parent.component_list_items(list_local_id).unwrap()[0];
+        assert!(row.child.requires_script_source_file_authority());
+        assert_eq!(
+            row.child
+                .script_source_file_authority::<u32>()
+                .as_deref()
+                .copied(),
+            Some(97022)
+        );
+
+        let second_context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("refreshed scripted row context"),
+        );
+        assert!(parent.sync_component_list_items(
+            &file,
+            list_local_id,
+            vec![second_context],
+        ));
+        let source_global_id = parent.component_list_items(list_local_id).unwrap()[0]
+            .child
+            .graph_global_id;
+        assert_eq!(
+            parent.component_list_items(list_local_id).unwrap()[0]
+                .child
+                .script_source_file_authority::<u32>()
+                .as_deref()
+                .copied(),
+            Some(97022),
+            "scripted row refresh retains its source File"
+        );
+        assert!(parent.remove_component_list_virtualizable(list_local_id, 0));
+        assert_eq!(
+            parent
+                .component_list_resource_pools
+                .count(list_local_id, source_global_id),
+            1
+        );
+        assert!(parent.add_component_list_virtualizable(&file, list_local_id, 0));
+        assert_eq!(
+            parent.component_list_items(list_local_id).unwrap()[0]
+                .child
+                .script_source_file_authority::<u32>()
+                .as_deref()
+                .copied(),
+            Some(97022),
+            "pooled scripted row retains its exact source File"
         );
     }
 

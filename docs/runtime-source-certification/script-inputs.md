@@ -1879,3 +1879,89 @@ rehydration edges. Complete ScriptInput certification remains rejected until
 mount preparation is source-File-complete and every late-created component-list
 child inherits its exact File authority, with operative cold-mount and dynamic
 row witnesses, followed by two fresh independent reviews.
+
+## Correction after review `5b8f4276a`
+
+Status: **PENDING — TWO FRESH INDEPENDENT REVIEWS REQUIRED.** This correction
+addresses only the two mount-tree blockers found by the first post-`4c8daea99`
+review and does not self-certify the ScriptInput owners.
+
+### Cold mount preparation is complete for every source File
+
+Mount collection no longer gates the complete occurrence tree on the root
+File's script authentication or asset catalogue. Each group is adjudicated by
+its own retained source File. Before the first generator runs, the mount
+transaction discovers every distinct target-bearing File in occurrence order,
+validates its renderer-factory domain, and either pins its existing runtime or
+builds a cold candidate from that File's own modules, protocols, assets, and
+runtime catalogue. Only after every participating runtime is ready does table
+generation, ScriptInput hydration, and authored init begin.
+
+Cold candidates remain owned by the transaction while all groups instantiate.
+They are published to their respective Files only after topology validation;
+then the already-prepared tables are attached in original tree order. A later
+File's registration/generator/hydration failure therefore cannot attach an
+earlier group or leave only part of the tree mounted. The detached async owner
+uses the same multi-File preparation set and commit boundary.
+
+`cold_cross_file_child_mount_prepares_its_source_runtime` is an operative
+public-facade witness. It places a cold authenticated
+`script_artboard_test.riv` Artboard beneath a scriptless consumer File, calls
+the real mount transaction, and proves the source runtime moves cold-to-ready,
+the unrelated consumer remains cold, and every nested scripted target receives
+its generated and hydrated table. This failed at the root-File early return
+before the correction.
+
+### Late component-list rows retain occurrence authority
+
+`ArtboardComponentList::create_component_list_item_instance` now copies the
+parent occurrence's exact type-erased File authority into the child immediately
+after `from_graph_inner`, before DataContext binding or publication. The
+identity-reuse path repairs a missing authority before rebinding; pool reuse
+otherwise retains the child-owned pin. The existing recursive facade attach
+continues to cover rows that already exist when a root File is installed.
+
+The mount and rehydrate walkers now distinguish an authority-requiring child
+from a genuinely un-scripted child before reporting a missing File. A child
+with ScriptedDrawable, scripted converter, scripted interpolator, or mounted
+script state still fails closed without authority. A genuinely un-scripted
+child contributes an empty topology group (mount) or is skipped (rehydrate),
+so traversal does not invent a File lookup merely to prove that no scripted
+work exists.
+
+The dynamic-row witnesses exercise both sides of that boundary:
+
+- `component_list_mount_settles_context_without_advancing_the_row_state_machine`
+  now proves a late-created un-scripted row inherits authority, retains it
+  through context refresh, and keeps it through removal/pool remount;
+- `scripted_component_list_row_retains_source_authority_through_refresh_and_pool_reuse`
+  creates an authored ScriptedDrawable row and proves the authority-required
+  classification plus cold creation, refresh reconstruction, and pool reuse.
+
+The ordinary nested replacement and clone owners were re-audited: replacement
+still preserves a concrete child's non-null source authority and only inherits
+the parent authority for a source-less same-File child; clone and recursive
+facade attachment continue to preserve already-materialized rows.
+
+### Correction evidence
+
+All Cargo commands used `CARGO_INCREMENTAL=0`:
+
+- cold cross-File source-runtime mount: 1 passed;
+- un-scripted and scripted component-list creation/refresh/pool witnesses:
+  2 passed;
+- same-File authored Artboard-input mount, ordinary cross-File nested
+  rehydrate, existing File runtime/domain preparation, and two detached async
+  mount-preparation witnesses: 5 passed;
+- combined checks for `nuxie-runtime`, `nuxie-scripting`, scripting-enabled
+  `nuxie`, `silver-corpus`, and scripting-enabled `rust-golden-runner`: passed;
+- the complete scripting-enabled `nuxie` lib suite reached 61 passed / 1
+  ignored; its sole failure is the pre-existing host-log wording assertion
+  expecting `bytecode version mismatch` while the VM now reports the more
+  precise supported-range diagnostic, outside this correction;
+- source correspondence remains 456 applicable rows with zero pending;
+- symbol correspondence remains 1,105 owners / 7,818 authority units with
+  generated authority replayed, and all 33 checker tests passed.
+
+The receipt remains pending until two fresh independent auditors inspect this
+correction commit and independently accept both rejected mount-tree edges.

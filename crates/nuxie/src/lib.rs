@@ -994,121 +994,38 @@ impl FileScriptRuntime {
     fn prepare_mounts(
         &mut self,
         file: &Arc<File>,
-        file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
+        _file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
         default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
         root_view_model: Option<&RuntimeOwnedViewModelHandle>,
     ) -> std::result::Result<Option<PreparedFileScriptMounts>, nuxie_runtime::ScriptError> {
-        let runtime = &file.runtime;
-        let domain = render_factory_domain(factory);
-        if let Some(ready) = self.ready.as_mut() {
-            if ready.factory_domain != domain {
-                return Err(nuxie_runtime::ScriptError::new(
-                    "scripted File was used with a different renderer Factory domain",
-                ));
-            }
-            let initialize_default_context = !ready.default_context_initialized.get();
-            if initialize_default_context {
-                Rc::get_mut(ready)
-                    .ok_or_else(|| {
-                        nuxie_runtime::ScriptError::new(
-                            "script runtime is shared with detached preparation",
-                        )
-                    })?
-                    .vm
-                    .set_default_context_view_model(default_context_view_model);
-            }
-            let Some(groups) =
-                instantiate_script_mounts(ready, file, groups, factory, root_view_model)?
-            else {
-                return Ok(None);
-            };
-            if initialize_default_context {
-                ready.default_context_initialized.set(true);
-            }
-            return Ok(Some(PreparedFileScriptMounts {
-                groups,
-                candidate: None,
-            }));
-        }
-
-        // Keep the candidate cold until every concrete occurrence has a
-        // generated table and successful init. Any error drops all tables and
-        // the candidate VM, leaving this File retryable with zero attachments.
-        let mut candidate = self.build_candidate(runtime, factory)?;
-        candidate
-            .vm
-            .set_default_context_view_model(default_context_view_model);
-        candidate.default_context_initialized.set(true);
-        Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
-        let Some(groups) =
-            instantiate_script_mounts(&candidate, file, groups, factory, root_view_model)?
+        let runtimes =
+            prepare_script_mount_runtimes(self, file, groups, factory, default_context_view_model)?;
+        let Some(groups) = instantiate_script_mounts(&runtimes, groups, factory, root_view_model)?
         else {
             return Ok(None);
         };
-        Ok(Some(PreparedFileScriptMounts {
-            // Drop table handles before their candidate VM on a failed
-            // topology validation.
-            groups,
-            candidate: Some(candidate),
-        }))
+        Ok(Some(PreparedFileScriptMounts { groups, runtimes }))
     }
 
     async fn prepare_mounts_async(
         &mut self,
         file: &Arc<File>,
-        file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
+        _file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
         default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
         root_view_model: Option<&RuntimeOwnedViewModelHandle>,
     ) -> std::result::Result<Option<PreparedFileScriptMounts>, nuxie_runtime::ScriptError> {
-        let runtime = &file.runtime;
-        let domain = render_factory_domain(factory);
-        if let Some(ready) = self.ready.as_ref() {
-            if ready.factory_domain != domain {
-                return Err(nuxie_runtime::ScriptError::new(
-                    "scripted File was used with a different renderer Factory domain",
-                ));
-            }
-            let initialize_default_context = !ready.default_context_initialized.get();
-            if initialize_default_context {
-                return Err(nuxie_runtime::ScriptError::new(
-                    "detached script preparation requires an initialized default context",
-                ));
-            }
-            let Some(groups) =
-                instantiate_script_mounts_async(ready, file, groups, factory, root_view_model)
-                    .await?
-            else {
-                return Ok(None);
-            };
-            if initialize_default_context {
-                ready.default_context_initialized.set(true);
-            }
-            return Ok(Some(PreparedFileScriptMounts {
-                groups,
-                candidate: None,
-            }));
-        }
-
-        let mut candidate = self.build_candidate(runtime, factory)?;
-        candidate
-            .vm
-            .set_default_context_view_model(default_context_view_model);
-        candidate.default_context_initialized.set(true);
-        Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
+        let runtimes =
+            prepare_script_mount_runtimes(self, file, groups, factory, default_context_view_model)?;
         let Some(groups) =
-            instantiate_script_mounts_async(&candidate, file, groups, factory, root_view_model)
-                .await?
+            instantiate_script_mounts_async(&runtimes, groups, factory, root_view_model).await?
         else {
             return Ok(None);
         };
-        Ok(Some(PreparedFileScriptMounts {
-            groups,
-            candidate: Some(candidate),
-        }))
+        Ok(Some(PreparedFileScriptMounts { groups, runtimes }))
     }
 
     fn begin_cycle(&self) -> Option<Box<dyn Any>> {
@@ -1323,9 +1240,31 @@ impl ScriptInstance for DataBoundScriptedInterpolatorInstance {
 
 #[cfg(feature = "scripting")]
 struct PreparedFileScriptMounts {
-    // Field order is intentional: Lua table handles drop before the cold VM.
+    // Field order is intentional: Lua table handles drop before cold VMs.
     groups: Vec<PreparedScriptMountGroup>,
-    candidate: Option<ReadyFileScripts>,
+    runtimes: Vec<PreparedScriptMountRuntime>,
+}
+
+#[cfg(feature = "scripting")]
+struct PreparedScriptMountRuntime {
+    file: Arc<File>,
+    ready: PreparedScriptMountRuntimeOwner,
+}
+
+#[cfg(feature = "scripting")]
+enum PreparedScriptMountRuntimeOwner {
+    Existing(Rc<ReadyFileScripts>),
+    Candidate(ReadyFileScripts),
+}
+
+#[cfg(feature = "scripting")]
+impl PreparedScriptMountRuntime {
+    fn ready(&self) -> &ReadyFileScripts {
+        match &self.ready {
+            PreparedScriptMountRuntimeOwner::Existing(ready) => ready,
+            PreparedScriptMountRuntimeOwner::Candidate(ready) => ready,
+        }
+    }
 }
 
 /// An owned snapshot of the scripted occurrences that need renderer-backed
@@ -1420,29 +1359,132 @@ fn render_factory_domain(factory: &mut dyn Factory) -> usize {
 }
 
 #[cfg(feature = "scripting")]
-fn instantiate_script_mounts(
-    ready: &ReadyFileScripts,
+fn prepare_one_script_mount_runtime(
+    scripts: &mut FileScriptRuntime,
     file: &Arc<File>,
+    factory: &mut dyn Factory,
+    default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
+) -> std::result::Result<PreparedScriptMountRuntime, nuxie_runtime::ScriptError> {
+    if !scripts.scripts_are_authenticated() {
+        return Err(nuxie_runtime::ScriptError::new(
+            "scripted source File has no authenticated script authority",
+        ));
+    }
+    let domain = render_factory_domain(factory);
+    if let Some(ready) = scripts.ready.as_mut() {
+        if ready.factory_domain != domain {
+            return Err(nuxie_runtime::ScriptError::new(
+                "scripted File was used with a different renderer Factory domain",
+            ));
+        }
+        if !ready.default_context_initialized.get() {
+            Rc::get_mut(ready)
+                .ok_or_else(|| {
+                    nuxie_runtime::ScriptError::new(
+                        "script runtime is shared with detached preparation",
+                    )
+                })?
+                .vm
+                .set_default_context_view_model(default_context_view_model);
+            ready.default_context_initialized.set(true);
+        }
+        return Ok(PreparedScriptMountRuntime {
+            file: Arc::clone(file),
+            ready: PreparedScriptMountRuntimeOwner::Existing(Rc::clone(ready)),
+        });
+    }
+
+    let mut candidate = scripts.build_candidate(&file.runtime, factory)?;
+    candidate
+        .vm
+        .set_default_context_view_model(default_context_view_model);
+    candidate.default_context_initialized.set(true);
+    FileScriptRuntime::configure_candidate_assets(
+        &mut candidate,
+        &file.runtime,
+        &file.file_asset_owners,
+    );
+    Ok(PreparedScriptMountRuntime {
+        file: Arc::clone(file),
+        ready: PreparedScriptMountRuntimeOwner::Candidate(candidate),
+    })
+}
+
+#[cfg(feature = "scripting")]
+fn prepare_script_mount_runtimes(
+    root_scripts: &mut FileScriptRuntime,
+    root_file: &Arc<File>,
+    groups: &[ScriptMountGroup],
+    factory: &mut dyn Factory,
+    default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
+) -> std::result::Result<Vec<PreparedScriptMountRuntime>, nuxie_runtime::ScriptError> {
+    let mut runtimes = Vec::new();
+    for group in groups.iter().filter(|group| !group.targets.is_empty()) {
+        if runtimes
+            .iter()
+            .any(|runtime: &PreparedScriptMountRuntime| Arc::ptr_eq(&runtime.file, &group.file))
+        {
+            continue;
+        }
+        let runtime = if Arc::ptr_eq(&group.file, root_file) {
+            prepare_one_script_mount_runtime(
+                root_scripts,
+                &group.file,
+                factory,
+                default_context_view_model.clone(),
+            )?
+        } else {
+            let mut scripts = group.file.scripts.borrow_mut();
+            prepare_one_script_mount_runtime(
+                &mut scripts,
+                &group.file,
+                factory,
+                default_context_view_model.clone(),
+            )?
+        };
+        runtimes.push(runtime);
+    }
+    Ok(runtimes)
+}
+
+#[cfg(feature = "scripting")]
+fn publish_script_mount_runtimes(runtimes: Vec<PreparedScriptMountRuntime>) {
+    for runtime in runtimes {
+        if let PreparedScriptMountRuntimeOwner::Candidate(candidate) = runtime.ready {
+            runtime.file.scripts.borrow_mut().ready = Some(Rc::new(candidate));
+        }
+    }
+}
+
+#[cfg(feature = "scripting")]
+fn instantiate_script_mounts(
+    runtimes: &[PreparedScriptMountRuntime],
     groups: &[ScriptMountGroup],
     factory: &mut dyn Factory,
     root_view_model: Option<&RuntimeOwnedViewModelHandle>,
 ) -> std::result::Result<Option<Vec<PreparedScriptMountGroup>>, nuxie_runtime::ScriptError> {
     let mut prepared = Vec::with_capacity(groups.len());
     for group in groups {
-        let group_ready_pin = if Arc::ptr_eq(&group.file, file) {
+        let ready = if group.targets.is_empty() {
             None
         } else {
-            Some(group.file.scripts.borrow().ready.clone().ok_or_else(|| {
-                nuxie_runtime::ScriptError::new(format!(
-                    "{} source File has no prepared scripting runtime",
-                    group.path
-                ))
-            })?)
+            Some(
+                runtimes
+                    .iter()
+                    .find(|runtime| Arc::ptr_eq(&runtime.file, &group.file))
+                    .ok_or_else(|| {
+                        nuxie_runtime::ScriptError::new(format!(
+                            "{} source File has no prepared scripting runtime",
+                            group.path
+                        ))
+                    })?
+                    .ready(),
+            )
         };
-        let ready = group_ready_pin.as_deref().unwrap_or(ready);
         let mut scripts = Vec::with_capacity(group.targets.len());
         let mut interpolators = Vec::new();
         for target in &group.targets {
+            let ready = ready.expect("a group with targets has a prepared source runtime");
             let target_label = target.kind.label();
             let program = ready.programs.get(&target.asset_ordinal).ok_or_else(|| {
                 nuxie_runtime::ScriptError::new(format!(
@@ -1531,28 +1573,33 @@ fn instantiate_script_mounts(
 
 #[cfg(feature = "scripting")]
 async fn instantiate_script_mounts_async(
-    ready: &ReadyFileScripts,
-    file: &Arc<File>,
+    runtimes: &[PreparedScriptMountRuntime],
     groups: &[ScriptMountGroup],
     factory: &mut dyn Factory,
     root_view_model: Option<&RuntimeOwnedViewModelHandle>,
 ) -> std::result::Result<Option<Vec<PreparedScriptMountGroup>>, nuxie_runtime::ScriptError> {
     let mut prepared = Vec::with_capacity(groups.len());
     for group in groups {
-        let group_ready_pin = if Arc::ptr_eq(&group.file, file) {
+        let ready = if group.targets.is_empty() {
             None
         } else {
-            Some(group.file.scripts.borrow().ready.clone().ok_or_else(|| {
-                nuxie_runtime::ScriptError::new(format!(
-                    "{} source File has no prepared scripting runtime",
-                    group.path
-                ))
-            })?)
+            Some(
+                runtimes
+                    .iter()
+                    .find(|runtime| Arc::ptr_eq(&runtime.file, &group.file))
+                    .ok_or_else(|| {
+                        nuxie_runtime::ScriptError::new(format!(
+                            "{} source File has no prepared scripting runtime",
+                            group.path
+                        ))
+                    })?
+                    .ready(),
+            )
         };
-        let ready = group_ready_pin.as_deref().unwrap_or(ready);
         let mut scripts = Vec::with_capacity(group.targets.len());
         let mut interpolators = Vec::new();
         for target in &group.targets {
+            let ready = ready.expect("a group with targets has a prepared source runtime");
             let target_label = target.kind.label();
             let program = ready.programs.get(&target.asset_ordinal).ok_or_else(|| {
                 nuxie_runtime::ScriptError::new(format!(
@@ -4190,6 +4237,17 @@ fn script_mount_group(
 ) -> std::result::Result<(bool, ScriptMountGroup), nuxie_runtime::ScriptError> {
     let runtime = &file.runtime;
     let scripts = file.scripts.borrow();
+    if !scripts.scripts_are_authenticated() || !scripts.has_executable_script_assets() {
+        return Ok((
+            false,
+            ScriptMountGroup {
+                file: Arc::clone(file),
+                path,
+                graph_global_id: graph.global_id,
+                targets: Vec::new(),
+            },
+        ));
+    }
     let mut has_script_target = false;
     let mut targets = Vec::new();
     for component in &graph.components {
@@ -4290,9 +4348,6 @@ fn collect_script_mount_groups(
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
 ) -> std::result::Result<(bool, Vec<ScriptMountGroup>), nuxie_runtime::ScriptError> {
-    if !file.scripts.borrow().scripts_are_authenticated() {
-        return Ok((false, Vec::new()));
-    }
     let (mut has_script_target, root) = script_mount_group(
         file,
         root_graph,
@@ -4301,15 +4356,27 @@ fn collect_script_mount_groups(
     )?;
     let mut groups = vec![root];
     let mut visitor = |depth: usize, graph_global_id: u32, nested: &mut RuntimeArtboardInstance| {
-        let source_file = nested
+        let Some(source_file) = nested
             .script_source_file_authority::<Arc<File>>()
             .map(|authority| Arc::clone(authority.as_ref()))
-            .ok_or_else(|| {
-                nuxie_runtime::ScriptError::new(format!(
+        else {
+            if nested.requires_script_source_file_authority() {
+                return Err(nuxie_runtime::ScriptError::new(format!(
                     "occurrence {} depth {depth} graph {graph_global_id} has no retained source File",
                     groups.len()
-                ))
-            })?;
+                )));
+            }
+            groups.push(ScriptMountGroup {
+                file: Arc::clone(file),
+                path: format!(
+                    "occurrence {} depth {depth} graph {graph_global_id}",
+                    groups.len()
+                ),
+                graph_global_id,
+                targets: Vec::new(),
+            });
+            return Ok(());
+        };
         let graph = source_file
             .graph
             .artboards
@@ -4690,28 +4757,9 @@ fn mount_scripted_artboard_tree(
     factory: &mut dyn Factory,
     root_view_model: Option<&ViewModelInstance>,
 ) -> std::result::Result<ScriptMountResult, nuxie_runtime::ScriptError> {
-    {
-        let scripts = file.scripts.borrow();
-        // Project data converters travel as `ScriptAsset` carriers but are
-        // evaluated by the pure-Rust converter runtime, never the Luau VM.
-        // A converter-only File must not construct a scripting VM — doing so
-        // demands a `PersistentFactory` renderer context that plain draw
-        // factories (for example the browser product surface) do not provide.
-        if !scripts.scripts_are_authenticated()
-            || !scripts
-                .assets
-                .iter()
-                .any(|asset| asset.type_name == "ScriptAsset" && !asset.is_external_data_converter)
-        {
-            return Ok(ScriptMountResult {
-                has_script_target: false,
-                mounted: false,
-            });
-        }
-    }
     let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
     let mounted = groups.iter().any(|group| !group.targets.is_empty());
-    let Some(mut prepared) = file.scripts.borrow_mut().prepare_mounts(
+    let Some(prepared) = file.scripts.borrow_mut().prepare_mounts(
         file,
         &file.file_asset_owners,
         &groups,
@@ -4732,10 +4780,9 @@ fn mount_scripted_artboard_tree(
     // Validation is the final fallible step. Publish a cold candidate before
     // attaching its tables so every mounted handle always has a live owner;
     // attachment itself is now an infallible commit over the validated tree.
-    if let Some(candidate) = prepared.candidate.take() {
-        file.scripts.borrow_mut().ready = Some(Rc::new(candidate));
-    }
-    attach_prepared_script_mounts(instance, prepared.groups);
+    let PreparedFileScriptMounts { groups, runtimes } = prepared;
+    publish_script_mount_runtimes(runtimes);
+    attach_prepared_script_mounts(instance, groups);
 
     // Facade execution fails closed: every concrete scripted target must
     // have an attached table before entering the lower runtime draw path.
@@ -4760,20 +4807,6 @@ async fn mount_scripted_artboard_tree_async(
     factory: &mut dyn Factory,
     root_view_model: Option<&ViewModelInstance>,
 ) -> std::result::Result<ScriptMountResult, nuxie_runtime::ScriptError> {
-    {
-        let scripts = file.scripts.borrow();
-        if !scripts.scripts_are_authenticated()
-            || !scripts
-                .assets
-                .iter()
-                .any(|asset| asset.type_name == "ScriptAsset" && !asset.is_external_data_converter)
-        {
-            return Ok(ScriptMountResult {
-                has_script_target: false,
-                mounted: false,
-            });
-        }
-    }
     let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
     let mounted = groups.iter().any(|group| !group.targets.is_empty());
     let mut scripts = file.scripts.borrow().clone();
@@ -4789,17 +4822,16 @@ async fn mount_scripted_artboard_tree_async(
             root_view_model.map(ViewModelInstance::handle),
         )
         .await?;
-    let Some(mut prepared) = prepared else {
+    let Some(prepared) = prepared else {
         return Ok(ScriptMountResult {
             has_script_target,
             mounted: false,
         });
     };
     validate_prepared_script_mount_topology(instance, &prepared.groups)?;
-    if let Some(candidate) = prepared.candidate.take() {
-        file.scripts.borrow_mut().ready = Some(Rc::new(candidate));
-    }
-    attach_prepared_script_mounts(instance, prepared.groups);
+    let PreparedFileScriptMounts { groups, runtimes } = prepared;
+    publish_script_mount_runtimes(runtimes);
+    attach_prepared_script_mounts(instance, groups);
     let (_, verified) = collect_script_mount_groups(file, root_graph, instance)?;
     if let Some(group) = verified.iter().find(|group| !group.targets.is_empty()) {
         return Err(nuxie_runtime::ScriptError::new(format!(
@@ -5006,14 +5038,17 @@ fn rehydrate_bound_script_input_tree(
     let mut changed =
         rehydrate_bound_script_inputs(file, root_graph, instance, root_view_model, factory, phase)?;
     let mut visitor = |_: usize, graph_global_id: u32, nested: &mut RuntimeArtboardInstance| {
-        let source_file = nested
+        let Some(source_file) = nested
             .script_source_file_authority::<Arc<File>>()
             .map(|authority| Arc::clone(authority.as_ref()))
-            .ok_or_else(|| {
-                nuxie_runtime::ScriptError::new(format!(
+        else {
+            if nested.requires_script_source_file_authority() {
+                return Err(nuxie_runtime::ScriptError::new(format!(
                     "nested scripted graph {graph_global_id} has no retained source File"
-                ))
-            })?;
+                )));
+            }
+            return Ok(());
+        };
         let graph = source_file
             .graph
             .artboards
@@ -8741,16 +8776,6 @@ impl OwnedArtboardInstance {
     #[cfg(feature = "scripting")]
     #[doc(hidden)]
     pub fn plan_scripted_drawable_mounts(&mut self) -> Result<Option<ScriptedDrawableMountPlan>> {
-        {
-            let scripts = self.file.scripts.borrow();
-            if !scripts.scripts_are_authenticated()
-                || !scripts.assets.iter().any(|asset| {
-                    asset.type_name == "ScriptAsset" && !asset.is_external_data_converter
-                })
-            {
-                return Ok(None);
-            }
-        }
         let artboard = self
             .file
             .graph
@@ -8807,18 +8832,12 @@ impl OwnedArtboardInstance {
         {
             return Ok(false);
         }
-        let Some(PreparedFileScriptMounts {
-            groups,
-            mut candidate,
-        }) = prepared.mounts
-        else {
+        let Some(PreparedFileScriptMounts { groups, runtimes }) = prepared.mounts else {
             return Ok(true);
         };
         validate_prepared_script_mount_topology(&mut self.raw, &groups)
             .context("prepared scripted drawable topology is stale")?;
-        if let Some(candidate) = candidate.take() {
-            self.file.scripts.borrow_mut().ready = Some(Rc::new(candidate));
-        }
+        publish_script_mount_runtimes(runtimes);
         attach_prepared_script_mounts(&mut self.raw, groups);
         verify_scripted_artboard_tree_attached(
             &self.file,
@@ -10843,6 +10862,114 @@ mod owned_instance_tests {
             ],
             "the nested source File and its local-plus-parent context must win over the consumer's colliding numeric graph/model authority"
         );
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn cold_cross_file_child_mount_prepares_its_source_runtime() {
+        let source_file = Arc::new(
+            File::import_with_unsigned_scripts(&external_fixture("script_artboard_test.riv"))
+                .expect("trusted cross-File script source imports"),
+        );
+        let source_artboard = source_file
+            .artboard_named("Artboard")
+            .expect("script source Artboard");
+        let source_artboard_index = source_artboard.index;
+        let mut source = source_artboard
+            .instantiate()
+            .expect("cold scripted source occurrence");
+        source
+            .raw_mut()
+            .attach_script_source_file_authority(Rc::new(Arc::clone(&source_file)));
+        assert!(!source_file.scripting_runtime_is_ready());
+        let retained_source = source
+            .raw()
+            .script_source_file_authority::<Arc<File>>()
+            .expect("source occurrence retains its exact File");
+        assert!(
+            retained_source
+                .graph
+                .artboards
+                .iter()
+                .any(|graph| graph.global_id == source.raw().graph_global_id())
+        );
+
+        let consumer_runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record(
+                "NestedArtboard",
+                vec![
+                    ("parentId", FixtureValue::Uint(0)),
+                    ("artboardId", FixtureValue::Uint(1)),
+                ],
+            ),
+            fixture_record("Artboard", Vec::new()),
+        ])
+        .expect("scriptless consumer fixture imports");
+        let consumer_file = Arc::new(
+            File::from_runtime(consumer_runtime).expect("scriptless consumer facade graph"),
+        );
+        assert!(!consumer_file.has_script_assets());
+        let consumer_graph = &consumer_file.graph.artboards[0];
+        let host_local = consumer_graph.nested_artboards[0].local_id;
+        let mut consumer = OwnedArtboardInstance::instantiate_default(Arc::clone(&consumer_file))
+            .expect("scriptless consumer occurrence");
+        assert!(
+            consumer
+                .raw_mut()
+                .replace_nested_artboard_artboard_instance(host_local, source.raw().clone(),)
+        );
+        consumer
+            .raw_mut()
+            .try_visit_artboard_tree_instances_mut(&mut |_, graph_global_id, nested| {
+                let retained = nested
+                    .script_source_file_authority::<Arc<File>>()
+                    .expect("replacement keeps its source File");
+                assert!(
+                    retained
+                        .graph
+                        .artboards
+                        .iter()
+                        .any(|graph| graph.global_id == graph_global_id)
+                );
+                Ok::<(), ScriptError>(())
+            })
+            .expect("replacement source authority is internally consistent");
+
+        let scripted_globals = source_file.graph.artboards[source_artboard_index]
+            .components
+            .iter()
+            .filter(|component| {
+                nuxie_schema::definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("ScriptedDrawable"))
+            })
+            .map(|component| component.global_id)
+            .collect::<Vec<_>>();
+        assert!(!scripted_globals.is_empty());
+
+        let mut factory = script_factory();
+        let mounted = mount_scripted_artboard_tree(
+            &consumer_file,
+            consumer_graph,
+            consumer.raw_mut(),
+            &mut factory,
+            None,
+        )
+        .expect("cold child source runtime generates, hydrates, and mounts");
+        assert!(mounted.has_script_target);
+        assert!(mounted.mounted);
+        assert!(source_file.scripting_runtime_is_ready());
+        assert!(!consumer_file.scripting_runtime_is_ready());
+        consumer
+            .raw_mut()
+            .try_visit_artboard_tree_instances_mut(&mut |_, _, nested| {
+                for global_id in &scripted_globals {
+                    assert!(nested.has_script_instance_for_global(*global_id));
+                }
+                Ok::<(), ScriptError>(())
+            })
+            .expect("mounted cross-File child remains traversable");
     }
 
     fn assert_extended_view_model_facade(mut view_model: ViewModelInstance) {

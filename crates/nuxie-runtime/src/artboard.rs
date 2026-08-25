@@ -4553,6 +4553,20 @@ impl ArtboardInstance {
             .ok()
     }
 
+    /// Whether this concrete occurrence contains authored or already-mounted
+    /// scripting state whose owning File must be retained by facade walkers.
+    #[doc(hidden)]
+    pub fn requires_script_source_file_authority(&self) -> bool {
+        self.has_scripted_drawables
+            || !self.scripted_data_converter_global_ids().is_empty()
+            || self
+                .linear_animations()
+                .iter()
+                .any(|animation| !animation.scripted_interpolator_global_ids().is_empty())
+            || !self.script_instances_by_global.is_empty()
+            || !self.scripted_data_converter_instances_by_global.is_empty()
+    }
+
     pub(crate) fn runtime_file_view_model_instances(
         &self,
     ) -> Option<RuntimeFileViewModelInstanceCatalog> {

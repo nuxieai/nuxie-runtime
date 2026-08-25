@@ -184,6 +184,12 @@ impl ArtboardInstance {
                 let mut item = reusable_items[existing_index]
                     .take()
                     .expect("component-list identity match must retain an item");
+                if item.child.script_source_file_authority.is_none()
+                    && let Some(authority) = self.script_source_file_authority.as_ref()
+                {
+                    item.child
+                        .attach_script_source_file_authority_inner(authority);
+                }
                 if !item.context_is_current(&context) {
                     item.context = context.clone();
                     item.context_rebind_sink = crate::view_model_cell::RuntimeCellDirtSink::new();
@@ -304,6 +310,9 @@ impl ArtboardInstance {
             profile_path,
         )
         .ok()?;
+        if let Some(authority) = self.script_source_file_authority.as_ref() {
+            child.attach_script_source_file_authority_inner(authority);
+        }
         // `Artboard::onAddedClean` clears the authored canvas placement from
         // every mounted instance before list bindings and state machines run.
         // Later animation/data-bind writes remain live and are consumed by

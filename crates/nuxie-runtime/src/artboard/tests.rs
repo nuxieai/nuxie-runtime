@@ -3880,7 +3880,7 @@
     }
 
     #[test]
-    fn scripted_advances_stop_on_false_and_reactivate_on_input_change() {
+    fn scripted_advances_stop_on_false_and_reactivate_after_input_update() {
         let mut instance = synthetic_instance(
             vec![synthetic_component_for_type(0, "ScriptedDrawable")],
             vec![0],
@@ -3910,9 +3910,20 @@
         );
         assert_eq!(advances.get(), 2);
 
+        instance.clear_component_dirt(0);
+        instance.did_change.set(false);
         instance
             .set_script_input_for_global(0, "value", ScriptValue::Number(2.0))
             .expect("input update");
+        assert!(instance.did_change());
+        assert!(
+            !instance
+                .advance_script_instances(0.1)
+                .expect("input dirt waits for the Component update")
+        );
+        instance
+            .update_pass_with_script_errors()
+            .expect("ScriptUpdate rearms the owner");
         assert!(
             instance
                 .advance_script_instances(0.1)

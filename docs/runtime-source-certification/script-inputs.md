@@ -1965,3 +1965,112 @@ All Cargo commands used `CARGO_INCREMENTAL=0`:
 
 The receipt remains pending until two fresh independent auditors inspect this
 correction commit and independently accept both rejected mount-tree edges.
+
+## First fresh independent review after `b6fdd88ea`
+
+Status: **REJECTED.** The multi-File runtime preparation correction and the
+late component-list File-authority correction close the two blockers recorded
+by review `5b8f4276a`. A complete mount/hydration census found one remaining
+operative ownership failure: mount planning preserves each occurrence's source
+File, but erases that occurrence's DataContext before ScriptInput hydration.
+
+### Accepted correction edges
+
+The synchronous, asynchronous, and detached mount owners now collect the
+complete occurrence tree even when the root File is scriptless. Each distinct
+target-bearing source File is authenticated and prepared from its own runtime,
+ScriptAsset catalogue, modules, protocols, assets, and renderer-factory domain
+before the first generator is run. Cold candidates remain transaction-owned
+through generator, two-pass ScriptInput hydration, authored init, and topology
+validation; they are published only immediately before the infallible table
+attachment pass. The operative cold cross-File witness enters the real public
+mount transaction and proves that a scriptless consumer remains cold while the
+retained child source File becomes ready and its concrete targets are mounted.
+
+Late-created component-list rows now inherit their parent's exact type-erased
+File authority before DataContext binding or publication. Identity refresh
+repairs a missing authority, and refresh reconstruction plus pool removal/reuse
+retain it. Un-scripted children without authority are still skipped, while a
+ScriptedDrawable, scripted converter/interpolator, or existing table fails
+closed without its File. Ordinary nested replacement continues to preserve a
+concrete cross-File child's non-null source authority.
+
+The wider ScriptInput ownership remains intact on the audited siblings. All
+five retry owners still recreate the generator/table and pass the concrete
+lifetime guard before fallible prerequisite preparation. Cold, live,
+rehydrate, and refresh paths retain their whole-object validation pass,
+authored apply order, consumer/source split, default-state-machine-before-bind,
+exactly-once binding, host-owned frame-tail advance, dirt, completion, and
+error behavior. In particular, the already-corrected live rehydrate walker
+uses each nested occurrence's local-then-parent context.
+
+### Mount groups discard occurrence-owned DataContext
+
+Pinned `Artboard::internalDataContext` installs the concrete Artboard's
+DataContext on every scripted object and immediately calls
+`initScriptedObjects`; `ScriptedObject::hydrateScriptInputs` therefore resolves
+both prerequisite and authored hydration against that exact occurrence. A
+component-list row first binds its row ViewModel with the containing Artboard's
+DataContext as parent, then the child's scripted objects hydrate from that
+local-plus-parent chain (`artboard.cpp:2581-2603`,
+`artboard_component_list.cpp:1528-1543`, and
+`scripted_object.cpp:399-435`).
+
+The Rust mount walker does retain the concrete `nested` while collecting each
+group, but `ScriptMountGroup` stores only `file`, path, graph id, and targets.
+Both `instantiate_script_mounts` and its async twin consequently pass the one
+outer `root_view_model` to every group's
+`hydrate_prepared_scripted_object_inputs`. That helper builds a root-only
+parent context and resolves primitive, Artboard, and ViewModel inputs directly
+from the outer handle. It never consults the nested occurrence's
+`owned_data_context` or its selected local ViewModel.
+
+This is reachable in both corrected creation owners:
+
+- a cold same-File or cross-File nested ScriptedDrawable whose relative input
+  should read its own local ViewModel instead reads the root; an absent local
+  value cannot fall back through the retained parent chain, while a colliding
+  root value silently hydrates the wrong value;
+- a dynamically created component-list ScriptedDrawable row correctly retains
+  its File after this correction, but its first real mount still hydrates from
+  the outer Artboard's root instead of the row-local ViewModel plus parent;
+- a nested `ScriptInputArtboard` receives a root-only parent context, so the
+  constructed facade's relative parent traversal also differs from the pinned
+  concrete occurrence.
+
+The cold cross-File witness has no bound ScriptInputs, so it proves source VM
+preparation and table attachment but cannot observe this loss. The existing
+local-then-parent and distinct-manifest witnesses enter the separate live
+rehydrate path, not the cold mount path. The two dynamic-row witnesses prove
+authority identity and pool retention but never mount a real scripted row.
+
+Exact correction requires each collected group to retain the concrete
+occurrence's selected ViewModel and complete local-plus-parent DataContext
+snapshot and to use that authority for both validation and authored hydration
+in the synchronous and asynchronous mount transactions. The source runtime and
+ScriptInput catalogue must remain `group.file`; the occurrence context must
+not be reconstructed from the outer root. Operative witnesses must enter real
+sync and detached-async mounts for nested and component-list scripted children,
+with local/root collisions and parent fallback, rather than attaching a probe
+table or calling the hydration helper directly.
+
+### Independent evidence
+
+All Cargo commands used `CARGO_INCREMENTAL=0`:
+
+- the complete 102-test scripted-listener/ScriptInput suite passed;
+- the complete 19-test scripting-enabled golden-runner unit suite passed;
+- the five-owner retry trace, ordinary nested distinct-manifest rehydrate,
+  local-then-parent rehydrate, consumer/source split, cold cross-File mount,
+  and both component-list authority/pool witnesses passed;
+- combined checks for `nuxie-runtime`, `nuxie-scripting`, scripting-enabled
+  `nuxie`, `silver-corpus`, and scripting-enabled `rust-golden-runner` passed;
+- source correspondence remained 456 applicable rows with zero pending;
+- symbol correspondence remained 1,105 owners / 7,818 authority units with
+  generated authority replayed, and all 33 checker tests passed.
+
+Those green results accept the scoped File/runtime/authority correction but
+contain no real mount witness with occurrence-local ScriptInputs. Complete
+ScriptInput authority remains rejected until cold nested and dynamic-row mount
+hydration carries the exact occurrence DataContext, followed by two fresh
+independent reviews.

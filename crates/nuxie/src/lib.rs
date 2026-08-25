@@ -1513,7 +1513,13 @@ fn instantiate_script_mounts(
             let mut host = NoopScriptHost;
             let mut script = ready
                 .vm
-                .instantiate_registered_script_with_factory(program, &mut host, factory)
+                .instantiate_registered_script_with_factory_and_context(
+                    program,
+                    &mut host,
+                    factory,
+                    group.context_view_model.clone(),
+                    group.context_parents.clone(),
+                )
                 .map_err(|error| {
                     error.with_context(format!(
                         "{} {target_label} global {} asset ordinal {} name '{}' phase generator failed",
@@ -1523,10 +1529,6 @@ fn instantiate_script_mounts(
                         target.asset_name
                     ))
                 })?;
-            script.set_context_view_model_chain(
-                group.context_view_model.clone(),
-                group.context_parents.clone(),
-            )?;
             if target.kind.hydrates_script_inputs() {
                 if !hydrate_prepared_scripted_object_inputs(
                     &group.file,
@@ -1626,7 +1628,12 @@ async fn instantiate_script_mounts_async(
             }
             let mut script = ready
                 .vm
-                .instantiate_registered_script_with_factory_async(program, factory)
+                .instantiate_registered_script_with_factory_and_context_async(
+                    program,
+                    factory,
+                    group.context_view_model.clone(),
+                    group.context_parents.clone(),
+                )
                 .await
                 .map_err(|error| {
                     error.with_context(format!(
@@ -1634,10 +1641,6 @@ async fn instantiate_script_mounts_async(
                         group.path, target.global_id, target.asset_ordinal, target.asset_name
                     ))
                 })?;
-            script.set_context_view_model_chain(
-                group.context_view_model.clone(),
-                group.context_parents.clone(),
-            )?;
             if target.kind.hydrates_script_inputs() {
                 if !hydrate_prepared_scripted_object_inputs(
                     &group.file,
@@ -4960,9 +4963,18 @@ fn prepare_scripted_artboard_tree(
         false
     };
 
-    // Script update refreshes component-list occurrences. A newly materialized
-    // child is mounted on the next preparation call, but must not slip through
-    // this draw without a table in the meantime.
+    // A component-list bind performed by the flush installs the row's
+    // DataContext and initializes that row's ScriptedObjects in the same C++
+    // lifecycle. Collect the enlarged tree after the flush and perform that
+    // mount before attachment verification.
+    let late_root_view_model = retained_artboard_root_view_model(instance);
+    mount_scripted_artboard_tree(
+        file,
+        root_graph,
+        instance,
+        factory,
+        late_root_view_model.as_ref(),
+    )?;
     verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
     Ok(changed)
 }
@@ -4988,6 +5000,15 @@ async fn prepare_scripted_artboard_tree_async(
     } else {
         false
     };
+    let late_root_view_model = retained_artboard_root_view_model(instance);
+    mount_scripted_artboard_tree_async(
+        file,
+        root_graph,
+        instance,
+        factory,
+        late_root_view_model.as_ref(),
+    )
+    .await?;
     verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
     Ok(changed)
 }
@@ -5066,6 +5087,29 @@ fn advance_scripted_artboard_frame_with_factory(
             || file.advance_detached_view_models(),
         )?
     };
+    // State-machine/DataBind work may have constructed, reconstructed, or
+    // restored a pooled component-list occurrence. Pinned bindArtboard enters
+    // the child's internalDataContext immediately, before frame-tail
+    // verification, so mount every newly-visible concrete occurrence now.
+    let late_mount = mount_scripted_artboard_tree(
+        file,
+        root_graph,
+        instance,
+        factory,
+        root_view_model,
+    )?;
+    if late_mount.mounted
+        && let Some(root_view_model) = root_view_model
+    {
+        input_changed |= rehydrate_bound_script_input_tree(
+            file,
+            root_graph,
+            instance,
+            root_view_model.handle(),
+            factory,
+            ScriptInputHydrationPhase::ArtboardMountedLive,
+        )?;
+    }
     if let Some(root_view_model) = root_view_model {
         input_changed |= rehydrate_bound_script_input_tree(
             file,
@@ -5076,6 +5120,16 @@ fn advance_scripted_artboard_frame_with_factory(
             ScriptInputHydrationPhase::PrimitiveAfterAdvance,
         )?;
     }
+    // Primitive phase-two writes can themselves reconstruct a scripted row.
+    // Preserve their authored position, then mount the resulting occurrence
+    // before the transaction's attachment fence.
+    mount_scripted_artboard_tree(
+        file,
+        root_graph,
+        instance,
+        factory,
+        root_view_model,
+    )?;
     changed |= input_changed;
     verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
     Ok(changed)
@@ -10770,6 +10824,14 @@ mod owned_instance_tests {
                 "ViewModelPropertyNumber",
                 vec![("name", FixtureValue::String("parentValue".to_owned()))],
             ),
+            fixture_record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Projected".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelPropertyNumber",
+                vec![("name", FixtureValue::String("childValue".to_owned()))],
+            ),
             fixture_record("Artboard", Vec::new()),
             fixture_record(
                 "ScriptedDrawable",
@@ -10808,6 +10870,22 @@ mod owned_instance_tests {
                     ("sourcePathIds", FixtureValue::Bytes(vec![1, 0])),
                 ],
             ),
+            fixture_record(
+                "ScriptInputArtboard",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("panel".to_owned())),
+                    ("artboardId", FixtureValue::Uint(1)),
+                ],
+            ),
+            fixture_record(
+                "Artboard",
+                vec![
+                    ("viewModelId", FixtureValue::Uint(2)),
+                    ("defaultStateMachineId", FixtureValue::Uint(0)),
+                ],
+            ),
+            fixture_record("StateMachine", Vec::new()),
         ])
         .expect("cold occurrence-context fixture imports");
         let script_global_id = runtime
@@ -10819,12 +10897,26 @@ mod owned_instance_tests {
             .id;
         let mut payload = vec![0];
         payload.extend(compile_luau_probe(
-            "return function(_context)\n\
+            "return function(context)\n\
+             local localProperty = context:viewModel():getNumber('localValue')\n\
+             local parentProperty = context:dataContext():parent():viewModel():getNumber('parentValue')\n\
+             local generatorLocal = localProperty.value\n\
+             local generatorParent = parentProperty.value\n\
              return {\n\
-               localValue = -1, parentValue = -2,\n\
+               localValue = -1, parentValue = -2, panel = nil,\n\
                init = function(self)\n\
+                 if generatorLocal ~= 11 or generatorParent ~= 22 then\n\
+                   error('wrong generator context ' .. tostring(generatorLocal) .. ' ' .. tostring(generatorParent))\n\
+                 end\n\
                  if self.localValue ~= 11 or self.parentValue ~= 22 then\n\
                    error('wrong occurrence context ' .. tostring(self.localValue) .. ' ' .. tostring(self.parentValue))\n\
+                 end\n\
+                 if self.panel == nil or self.panel.data == nil then\n\
+                   error('missing projected ScriptInputArtboard facade')\n\
+                 end\n\
+                 local child = self.panel.data:getNumber('childValue')\n\
+                 if child == nil or child.value ~= 0 then\n\
+                   error('wrong projected ScriptInputArtboard data context')\n\
                  end\n\
                  return true\n\
                end,\n\
@@ -10843,6 +10935,169 @@ mod owned_instance_tests {
                 is_module: false,
                 serialized_implemented_methods: 1 << 9,
                 payload: Some(payload),
+                shader_provenance: None,
+                is_external_data_converter: false,
+            }]
+            .into(),
+            decoded_test_script_capability(),
+            Some(ScriptExecutionLimits::new()),
+            None,
+        );
+        file
+    }
+
+    #[cfg(feature = "scripting")]
+    fn dynamic_scripted_component_list_file() -> File {
+        let number_key = fixture_property(
+            "ScriptInputNumber",
+            "propertyValue",
+            FixtureValue::Double(0.0),
+        )
+        .key;
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "ScriptAsset",
+                vec![
+                    ("assetId", FixtureValue::Uint(0)),
+                    ("name", FixtureValue::String("dynamic-root".to_owned())),
+                    ("serializedImplementedMethods", FixtureValue::Uint(1 << 9)),
+                ],
+            ),
+            fixture_record(
+                "ScriptAsset",
+                vec![
+                    ("assetId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("dynamic-row".to_owned())),
+                    ("serializedImplementedMethods", FixtureValue::Uint(1 << 9)),
+                ],
+            ),
+            fixture_record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Root".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelPropertyList",
+                vec![("name", FixtureValue::String("items".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Row".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelPropertyNumber",
+                vec![("name", FixtureValue::String("rowValue".to_owned()))],
+            ),
+            fixture_record("ViewModelInstance", vec![("viewModelId", FixtureValue::Uint(0))]),
+            fixture_record(
+                "ViewModelInstanceList",
+                vec![("viewModelPropertyId", FixtureValue::Uint(0))],
+            ),
+            fixture_record("ViewModelInstance", vec![("viewModelId", FixtureValue::Uint(1))]),
+            fixture_record(
+                "ViewModelInstanceNumber",
+                vec![
+                    ("viewModelPropertyId", FixtureValue::Uint(0)),
+                    ("propertyValue", FixtureValue::Double(33.0)),
+                ],
+            ),
+            fixture_record(
+                "ViewModelInstanceListItem",
+                vec![
+                    ("viewModelId", FixtureValue::Uint(1)),
+                    ("viewModelInstanceId", FixtureValue::Uint(0)),
+                ],
+            ),
+            fixture_record("Artboard", vec![("viewModelId", FixtureValue::Uint(0))]),
+            fixture_record("ArtboardComponentList", vec![("parentId", FixtureValue::Uint(0))]),
+            fixture_record(
+                "ScriptedDrawable",
+                vec![
+                    ("parentId", FixtureValue::Uint(0)),
+                    ("scriptAssetId", FixtureValue::Uint(0)),
+                ],
+            ),
+            fixture_record("Artboard", vec![("viewModelId", FixtureValue::Uint(1))]),
+            fixture_record(
+                "ScriptedDrawable",
+                vec![
+                    ("parentId", FixtureValue::Uint(0)),
+                    ("scriptAssetId", FixtureValue::Uint(1)),
+                ],
+            ),
+            fixture_record(
+                "ScriptInputNumber",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("rowValue".to_owned())),
+                    ("propertyValue", FixtureValue::Double(-1.0)),
+                ],
+            ),
+            fixture_record(
+                "DataBindContext",
+                vec![
+                    ("propertyKey", FixtureValue::Uint(u64::from(number_key))),
+                    ("sourcePathIds", FixtureValue::Bytes(vec![0, 0])),
+                ],
+            ),
+        ])
+        .expect("dynamic scripted component-list fixture imports");
+        let script_global_id = |name: &str| runtime
+            .objects
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|object| {
+                object.type_name == "ScriptAsset"
+                    && object.string_property("name") == Some(name)
+            })
+            .expect("fixture ScriptAsset")
+            .id;
+        let root_script_global_id = script_global_id("dynamic-root");
+        let row_script_global_id = script_global_id("dynamic-row");
+        let mut root_payload = vec![0];
+        root_payload.extend(compile_luau_probe(
+            "return function(_context)\n\
+             return { draw = function(_self, _renderer) end }\n\
+             end",
+        ));
+        let mut row_payload = vec![0];
+        row_payload.extend(compile_luau_probe(
+            "return function(context)\n\
+             local generatorValue = context:viewModel():getNumber('rowValue').value\n\
+             return {\n\
+               rowValue = -1,\n\
+               init = function(self)\n\
+                 if generatorValue ~= 33 or self.rowValue ~= 33 then\n\
+                   error('wrong dynamic row lifecycle ' .. tostring(generatorValue) .. ' ' .. tostring(self.rowValue))\n\
+                 end\n\
+                 return true\n\
+               end,\n\
+               draw = function(_self, _renderer) end\n\
+             }\n\
+             end",
+        ));
+        let file = File::from_runtime(runtime).expect("dynamic scripted component-list graph");
+        *file.scripts.borrow_mut() = FileScriptRuntime::new(
+            vec![FileScriptAsset {
+                ordinal: 0,
+                global_id: root_script_global_id,
+                type_name: "ScriptAsset",
+                bare_name: "dynamic-root".to_owned(),
+                name: "dynamic-root".to_owned(),
+                is_module: false,
+                serialized_implemented_methods: 1 << 9,
+                payload: Some(root_payload),
+                shader_provenance: None,
+                is_external_data_converter: false,
+            }, FileScriptAsset {
+                ordinal: 1,
+                global_id: row_script_global_id,
+                type_name: "ScriptAsset",
+                bare_name: "dynamic-row".to_owned(),
+                name: "dynamic-row".to_owned(),
+                is_module: false,
+                serialized_implemented_methods: 1 << 9,
+                payload: Some(row_payload),
                 shader_provenance: None,
                 is_external_data_converter: false,
             }]
@@ -11029,6 +11284,96 @@ mod owned_instance_tests {
             .install_prepared_scripted_drawable_mounts(prepared)
             .expect("prepared detached mount attaches"));
         assert!(source_file.scripting_runtime_is_ready());
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn public_frame_mounts_dynamic_scripted_component_list_rows_in_the_creation_lifecycle() {
+        let file = Arc::new(dynamic_scripted_component_list_file());
+        let mut artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+            .expect("dynamic-list root occurrence");
+        let mut root = artboard
+            .instantiate_view_model()
+            .expect("dynamic-list root view model");
+        artboard.bind_view_model(&root);
+        assert!(root
+            .raw_mut()
+            .set_list_item_count_by_property_name("items", 1));
+        let mut factory = script_factory();
+        artboard
+            .try_advance_with_state_machines_and_view_model_and_factory(
+                &mut [],
+                0.0,
+                &mut root,
+                &mut factory,
+            )
+            .expect("the row generator, hydration, and init finish in its creation frame");
+        let (_, pending) = collect_script_mount_groups(
+            &file,
+            &file.graph.artboards[0],
+            artboard.raw_mut(),
+            Some(root.handle()),
+        )
+        .expect("mounted dynamic row remains collectable");
+        assert!(pending.iter().all(|group| group.targets.is_empty()));
+
+        assert!(root
+            .raw_mut()
+            .set_list_item_count_by_property_name("items", 0));
+        artboard
+            .try_advance_with_state_machines_and_view_model_and_factory(
+                &mut [],
+                0.0,
+                &mut root,
+                &mut factory,
+            )
+            .expect("dynamic row removal settles");
+        assert!(root
+            .raw_mut()
+            .set_list_item_count_by_property_name("items", 1));
+        artboard
+            .try_advance_with_state_machines_and_view_model_and_factory(
+                &mut [],
+                0.0,
+                &mut root,
+                &mut factory,
+            )
+            .expect("reconstructed or restored row mounts in the same frame");
+        let (_, pending) = collect_script_mount_groups(
+            &file,
+            &file.graph.artboards[0],
+            artboard.raw_mut(),
+            Some(root.handle()),
+        )
+        .expect("remounted dynamic row remains collectable");
+        assert!(pending.iter().all(|group| group.targets.is_empty()));
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn public_async_draw_mounts_a_dynamic_scripted_row_after_its_flush() {
+        let file = Arc::new(dynamic_scripted_component_list_file());
+        let mut artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+            .expect("async dynamic-list root occurrence");
+        let root = artboard
+            .instantiate_view_model()
+            .expect("async dynamic-list root view model");
+        artboard.bind_view_model(&root);
+        assert!(root
+            .raw_mut()
+            .set_list_item_count_by_property_name("items", 1));
+        let mut factory = script_factory();
+        let mut renderer = factory.borrow().make_renderer();
+        block_on_mount(artboard.draw_async(&mut factory, &mut renderer))
+            .expect("async draw flush creates and mounts the scripted row");
+        let (_, pending) = collect_script_mount_groups(
+            &file,
+            &file.graph.artboards[0],
+            artboard.raw_mut(),
+            Some(root.handle()),
+        )
+        .expect("async-mounted dynamic row remains collectable");
+        assert!(pending.iter().all(|group| group.targets.is_empty()));
     }
 
     #[cfg(feature = "scripting")]

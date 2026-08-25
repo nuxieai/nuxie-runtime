@@ -2251,3 +2251,61 @@ transactions, integrate late row creation/reconstruction/pool reuse with a
 same-lifecycle real mount, and add concrete nested and dynamic-row
 ScriptInputArtboard facade witnesses through generator, hydration, and
 authored `init`. Two fresh independent reviews are required afterward.
+
+## Generator-order and same-lifecycle row correction after `ae8e1e40d`
+
+Status: **PENDING TWO FRESH INDEPENDENT REVIEWS.** This correction does not
+self-certify and no earlier acceptance carries across it.
+
+The synchronous mount owner now invokes each registered generator through the
+existing occurrence-context constructor. The asynchronous renderer owner has
+the corresponding explicit-context constructor and installs the captured
+local-plus-parent chain when it creates `ScriptedContext`, before calling the
+generator. Neither path repairs the table's context after construction. This
+matches pinned `internalDataContext` -> `initScriptedObjects` ordering and
+makes generator-time `viewModel()` and `dataContext():parent()` reads use the
+same concrete occurrence later used by phase-two hydration and authored
+`init`.
+
+Draw preparation now recollects and mounts the tree after its zero-time
+script/update flush. Frame advance recollects after state-machine/component
+work and again after primitive phase-two writes. A component-list child
+created, reconstructed, or restored by either authored lifecycle position is
+therefore prepared and mounted before the attachment fence, while already
+attached targets are excluded by the ordinary mount census. The correction
+does not add a parallel row scheduler or move the update that creates the row.
+
+The cold cross-File nested witness now makes its real generator read local
+value 11 and retained-parent value 22 before returning a table, while the
+consumer root has the colliding value 99. Authored `init` then verifies those
+generator observations, the two hydrated ScriptInputNumber fields, and a real
+`ScriptInputArtboard` facade whose projected child ViewModel is live. The same
+payload passes the synchronous owner and detached asynchronous
+plan/prepare/install owner.
+
+A second public witness uses an `Arc<File>`, an authored ViewModel list, a
+row-local ViewModel value, a real ScriptAsset payload, generator-time context
+read, phase-two ScriptInputNumber hydration, and authored `init`. Growing the
+list during public frame advance mounts the new row before that frame returns;
+shrinking and regrowing it exercises reconstruction/restoration and again
+leaves no unattached target. It does not substitute a type-erased authority or
+probe script instance for the File VM.
+
+The same fixture also enters public asynchronous draw. An already-mounted root
+script makes the authored zero-time flush materialize the row after the first
+tree census; the asynchronous late-mount owner constructs the row generator,
+hydrates it, and runs `init` before draw verification.
+
+All commands used `CARGO_INCREMENTAL=0`. The two sync/detached nested
+generator/primitive/Artboard witnesses and the public dynamic-row frame and
+asynchronous-draw witnesses passed. The complete scripting-enabled `nuxie` lib
+suite reached 65 passed / 1 ignored with only the already-recorded host-log wording
+failure. The complete `nuxie-scripting` lib suite reached 224 passed / 8
+ignored with the independently existing shader pair-count expectation
+failure. Scripting-enabled `nuxie` check passed. Source and symbol
+correspondence plus checker tests were rerun for the corrected tree.
+
+Two fresh reviewers must independently inspect generator-time context
+installation, detached snapshot lifetime, dynamic creation/reconstruction/
+pool restoration timing, ScriptInputArtboard source/consumer authority, and
+frame-tail failure/rollback behavior before changing this status.

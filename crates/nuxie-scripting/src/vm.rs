@@ -1151,18 +1151,34 @@ impl ScriptVm {
         program: &ScriptProgram,
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        self.instantiate_registered_script_with_factory_and_context_async(
+            program,
+            factory,
+            self.default_context_view_model.clone(),
+            self.default_context_parent_view_models.clone(),
+        )
+        .await
+    }
+
+    /// Asynchronous renderer preparation followed by generator invocation
+    /// with the concrete occurrence DataContext already installed.
+    pub async fn instantiate_registered_script_with_factory_and_context_async(
+        &self,
+        program: &ScriptProgram,
+        factory: &mut dyn RenderFactory,
+        context_view_model_value: Option<ScriptViewModel>,
+        context_parent_view_models: Vec<Option<ScriptViewModel>>,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         bindings
             .verify_render_context(factory)
             .map_err(|error| self.script_error(error))?;
         let context_alive = Rc::new(Cell::new(true));
         let context_present = Rc::new(Cell::new(
-            self.default_context_view_model.is_some()
-                || !self.default_context_parent_view_models.is_empty(),
+            context_view_model_value.is_some() || !context_parent_view_models.is_empty(),
         ));
-        let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+        let context_view_model = Rc::new(RefCell::new(context_view_model_value));
         let context_missing_requested_data = Rc::new(Cell::new(false));
-        let context_parent_view_models = self.default_context_parent_view_models.clone();
         let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
             Rc::clone(&self.gpu_canvas_shaders),
             self.renderer_bindings.clone(),

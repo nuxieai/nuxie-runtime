@@ -7412,6 +7412,24 @@ impl OwnedArtboardInstance {
         })
     }
 
+    /// Fork a cold owning occurrence from this already imported occurrence.
+    ///
+    /// The new occurrence shares immutable file data but receives a fresh
+    /// runtime identity, occurrence-local objects, data-bind state, geometry,
+    /// and renderer resources. Script handles and lifecycle queues follow the
+    /// runtime's public occurrence-clone rules rather than aliasing the source
+    /// occurrence. This avoids rebuilding the runtime graph from the imported
+    /// file when a host needs many independent instances of one artboard.
+    pub fn fork_occurrence(&self) -> Self {
+        Self {
+            raw: self.raw.clone(),
+            file: Arc::clone(&self.file),
+            artboard_index: self.artboard_index,
+            #[cfg(any(test, feature = "test-support"))]
+            fail_next_fallible_state_machine_advance: false,
+        }
+    }
+
     /// Instantiate the file's default artboard as an owning instance.
     pub fn instantiate_default(file: Arc<File>) -> Result<Self> {
         let artboard_index = file

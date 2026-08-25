@@ -334,7 +334,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/joystick.cpp": ("ported", "FL-E4"),
             "src/shapes/list_path.cpp": ("partial", "F10"),
             "src/async/work_pool.cpp": ("absent", "F12"),
-            "src/listener_group.cpp": ("partial", "F13"),
+            "src/listener_group.cpp": ("ported", "Phase 3"),
             "src/core/binary_writer.cpp": ("ported", "F14"),
         }
         self.write_upstream(*expected)
@@ -574,7 +574,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/async/work_pool.cpp": ("absent", "F12"),
             "src/profiler/profiler.cpp": ("ported", "P1-m/F12"),
             "src/profiler/rive_profile.cpp": ("ported", "P1-m/F12"),
-            "src/listener_group.cpp": ("partial", "F13"),
+            "src/listener_group.cpp": ("ported", "Phase 3"),
             "src/nested_artboard.cpp": ("partial", "F13"),
             "src/data_bind/context/context_value_artboard.cpp": (
                 "ported",

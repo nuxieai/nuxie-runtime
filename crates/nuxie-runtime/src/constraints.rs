@@ -1290,7 +1290,11 @@ fn scroll_bar_hit_track(
             artboard,
             scroll_constraint,
             RuntimeScrollAxis::X,
-            (local_position.0 / track_range * max_offset).clamp(max_offset, 0.0),
+            rive_math_clamp(
+                local_position.0 / track_range * max_offset,
+                max_offset,
+                0.0,
+            ),
         );
     }
     if matches!(direction, 1 | 2) {
@@ -1303,7 +1307,11 @@ fn scroll_bar_hit_track(
             artboard,
             scroll_constraint,
             RuntimeScrollAxis::Y,
-            (local_position.1 / track_range * max_offset).clamp(max_offset, 0.0),
+            rive_math_clamp(
+                local_position.1 / track_range * max_offset,
+                max_offset,
+                0.0,
+            ),
         );
     }
 }
@@ -1368,7 +1376,7 @@ fn scroll_bar_drag_thumb(
             artboard,
             scroll_constraint,
             RuntimeScrollAxis::X,
-            (thumb_offset / track_range * max_offset).clamp(max_offset, 0.0),
+            rive_math_clamp(thumb_offset / track_range * max_offset, max_offset, 0.0),
         );
     }
     if matches!(direction, 1 | 2) {
@@ -1382,7 +1390,7 @@ fn scroll_bar_drag_thumb(
             artboard,
             scroll_constraint,
             RuntimeScrollAxis::Y,
-            (thumb_offset / track_range * max_offset).clamp(max_offset, 0.0),
+            rive_math_clamp(thumb_offset / track_range * max_offset, max_offset, 0.0),
         );
     }
     if let Some(scroll) = artboard
@@ -2330,6 +2338,13 @@ fn scroll_viewport_axis_size(viewport_size: f32, content_origin: f32) -> f32 {
     (viewport_size - content_origin).max(0.0)
 }
 
+// Pinned `math::clamp` is `fminf(fmaxf(lo, value), hi)`: NaN resolves to
+// `lo`, and `hi <= lo` resolves to `hi`. Rust's `f32::clamp` has a different
+// NaN contract and panics for reversed bounds.
+fn rive_math_clamp(value: f32, lo: f32, hi: f32) -> f32 {
+    lo.max(value).min(hi)
+}
+
 fn target_transform_for_transform_constraint(
     artboard: &ArtboardInstance,
     target_index: ComponentHandle,
@@ -2739,7 +2754,8 @@ mod tests {
         advance_scroll_constraint, clamped_scroll_offset, constrain_component_list_world_transform,
         interpolated_rotation, interpolated_rotation_from_modded_base, nearest_snap_offset,
         point_length, runtime_draggable_proxy_drag, runtime_draggable_proxy_end,
-        runtime_draggable_proxy_start, runtime_scroll_intent_axes, scroll_viewport_axis_size,
+        runtime_draggable_proxy_start, runtime_scroll_intent_axes, rive_math_clamp,
+        scroll_viewport_axis_size,
     };
 
     #[test]
@@ -3259,6 +3275,28 @@ mod tests {
         assert!(cold.active_pointers.is_empty());
         assert!(!cold.has_scrolled);
         assert!(!cold.viewport_is_dragging);
+    }
+
+    #[test]
+    fn scroll_bar_proxies_require_layout_thumb_and_track_like_cpp() {
+        let (mut instance, _, scroll_bar_local) = scroll_bar_proxy_fixture();
+        let scroll_bar = instance.component_handle(scroll_bar_local).unwrap();
+        let thumb = instance.objects.component(scroll_bar).unwrap().parent.unwrap();
+        instance
+            .objects
+            .component_mut(thumb)
+            .unwrap()
+            .concrete
+            .layout = None;
+
+        assert!(
+            runtime_draggable_proxies(&instance)
+                .iter()
+                .all(|proxy| !matches!(
+                    proxy.kind,
+                    RuntimeDraggableProxyKind::Thumb | RuntimeDraggableProxyKind::Track
+                ))
+        );
     }
 
     #[test]
@@ -4289,5 +4327,18 @@ mod tests {
             helper.run(acceleration, range_min, 0.0, 0.0, &snaps, 300.0, 100.0);
             assert!((settle(&mut helper) - expected).abs() <= 0.5);
         }
+    }
+
+    #[test]
+    fn elastic_run_and_scroll_bar_clamp_keep_cpp_float_edges() {
+        let mut helper =
+            crate::components::RuntimeElasticScrollPhysicsHelper::new(8.0, 1.0, 0.66);
+        helper.run(0.0, 1.0, 0.0, 0.5, &[], 1.0, 1.0);
+        assert_eq!(helper.target, 1.0, "reversed bounds do not panic");
+
+        helper.run(0.0, -1.0, 0.0, f32::NAN, &[], 1.0, 1.0);
+        assert!(helper.target.is_nan());
+        assert_eq!(rive_math_clamp(f32::NAN, -10.0, 0.0), -10.0);
+        assert_eq!(rive_math_clamp(5.0, 10.0, 0.0), 0.0);
     }
 }

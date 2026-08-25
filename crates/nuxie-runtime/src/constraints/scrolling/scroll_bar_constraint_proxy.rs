@@ -11,6 +11,12 @@ pub(in crate::constraints) fn append_proxies(
         .objects
         .component(constraint)
         .and_then(|item| item.parent)
+        .filter(|thumb| {
+            artboard
+                .objects
+                .component(*thumb)
+                .is_some_and(|item| item.concrete.layout.is_some())
+        })
     else {
         return;
     };
@@ -18,6 +24,12 @@ pub(in crate::constraints) fn append_proxies(
         .objects
         .component(thumb)
         .and_then(|item| item.parent)
+        .filter(|track| {
+            artboard
+                .objects
+                .component(*track)
+                .is_some_and(|item| item.concrete.layout.is_some())
+        })
     else {
         return;
     };

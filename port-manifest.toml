@@ -813,19 +813,19 @@ note = "F4/F10: clamped scrolling is partial and still needs its parity fixture.
 upstream = "src/constraints/scrolling/elastic_scroll_physics.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/constraints/scrolling/elastic_scroll_physics.rs; crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"
-note = "Phase 2 follow-up: direct ElasticScrollPhysics owner plus shared ScrollPhysics variant lifecycle; existing exact helper and interaction coverage is retained."
+note = "Phase 2 direct owner and Phase 3 paired audit: exact helper/variant lifecycle is retained; run uses pinned comparison semantics for NaN and reversed bounds rather than f32::clamp."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_bar_constraint.rs; crates/nuxie-runtime/src/constraints.rs; crates/nuxie-runtime/src/components.rs"
-note = "Phase 2 follow-up: direct ScrollBarConstraint constrain owner with retained occurrence state and shared scroll metrics/drag helpers."
+note = "Phase 2 direct owner and Phase 3 paired audit: constrain, track-hit, and thumb-drag behavior matches the pin, including fminf/fmaxf clamp semantics; safe nullable-owner handling is explicit."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_bar_constraint_proxy.rs; crates/nuxie-runtime/src/constraints/draggable_constraint.rs"
-note = "Phase 2 follow-up: direct Thumb/Track proxy construction and lifecycle owner."
+note = "Phase 2 direct owner and Phase 3 paired audit: Thumb/Track lifecycle matches the pin and proxy construction now enforces the pinned LayoutComponent owner checks."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"

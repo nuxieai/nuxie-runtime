@@ -84,7 +84,16 @@ impl crate::components::RuntimeElasticScrollPhysicsHelper {
         } else {
             0.0
         };
-        self.target = value.clamp(range_min, range_max);
+        // Pinned C++ uses comparisons rather than `std::clamp`. Besides
+        // preserving NaN, this remains defined when malformed bounds arrive
+        // reversed; Rust's `f32::clamp` would panic in that case.
+        self.target = if value < range_min {
+            range_min
+        } else if value > range_max {
+            range_max
+        } else {
+            value
+        };
         self.current = value;
         if snapping_points.is_empty() {
             self.snap_target = f32::NAN;

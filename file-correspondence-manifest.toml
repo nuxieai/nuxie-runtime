@@ -1693,7 +1693,7 @@ b6_row_id = "B6-0135"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "Phase 2 follow-up direct owner: the previously packed ElasticScrollPhysicsHelper implementation now lives in constraints/scrolling/elastic_scroll_physics.rs, while variant dispatch remains in the shared ScrollPhysics lifecycle. Existing trailing-padding snap and drag/fling tests are unchanged; behavioral adjudication remains pending Phase 3 paired audit."
+note = "Phase 2 follow-up direct owner plus Phase 3 paired audit: the previously packed ElasticScrollPhysicsHelper implementation lives in constraints/scrolling/elastic_scroll_physics.rs, while variant dispatch remains in the shared ScrollPhysics lifecycle. Advance, clamp, run, prepare/reset, snapping, and scrollToPosition were compared with the pin. The audit corrected one literal Rust translation error: helper run now uses the pinned comparison branches, preserving NaN and remaining defined for reversed bounds instead of calling panic-capable f32::clamp. Safe Option ownership replaces nullable unique_ptr without changing supported behavior."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint.cpp"
@@ -1705,7 +1705,7 @@ b6_row_id = "B6-0136"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "Phase 2 follow-up direct owner: constrain/transform dispatch now lives in constraints/scrolling/scroll_bar_constraint.rs; retained occurrence state remains in components.rs and shared scroll metrics/drag helpers remain in constraints.rs. The move is behavior-neutral and behavioral adjudication remains pending the paired audit."
+note = "Phase 2 follow-up direct owner plus Phase 3 paired audit: constrain/transform dispatch lives in constraints/scrolling/scroll_bar_constraint.rs; retained occurrence state remains in components.rs and shared scroll metrics/drag helpers remain in constraints.rs. Computed thumb size, overscroll resizing, world constraint, target resolution, track hit, thumb drag, physics accumulation, and validation were compared with the pin. Track/drag offset clamping now uses pinned fminf/fmaxf NaN and reversed-bound semantics instead of f32::clamp. Safe missing-parent/target handling is the approved Rust ownership adaptation."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
@@ -1717,7 +1717,7 @@ b6_row_id = "B6-0137"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "Phase 2 follow-up direct owner: Thumb and Track proxy construction plus start/drag/end dispatch now live in constraints/scrolling/scroll_bar_constraint_proxy.rs; the shared DraggableProxy occurrence type and authored ordering remain in draggable_constraint.rs. The move is behavior-neutral and behavioral adjudication remains pending the paired audit."
+note = "Phase 2 follow-up direct owner plus Phase 3 paired audit: Thumb and Track proxy construction plus start/drag/end dispatch live in constraints/scrolling/scroll_bar_constraint_proxy.rs; the shared DraggableProxy occurrence type and authored ordering remain in draggable_constraint.rs. The audit corrected proxy construction to require LayoutComponent thumb and track owners exactly like C++ draggables(). Drag state, intent clearing through isScrollBarDragging, velocity accumulation/clear, opacity, and last-position updates match the pin; owned Rust proxy values replace raw new/delete as a safety adaptation."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"

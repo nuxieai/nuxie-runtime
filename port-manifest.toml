@@ -1627,9 +1627,9 @@ note = "P1G: direct host-routed _G.print binding is ported."
 
 [[file]]
 upstream = "src/lua/lua_scripted_context.cpp"
-status = "partial"
-rust_module = "crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-scripting/src/gpu_canvas.rs"
-note = "FTAIL partial promotion against pinned lua_scripted_context.cpp:28-123,188-567: ScriptedContext now exposes the complete method-name surface, including a readonly 19-field conservative headless features table and independent optional gpuCanvas {width,height} occurrences; the existing viewModel/rootViewModel/dataContext, image/blob/audio, shader, decodeImage, lifetime, and base markNeedsUpdate behavior remain covered. The unavailable Canvas 2D backing surface fails with the exact named diagnostic `unsupported: scripted-context-canvas binding is unavailable`, spot-checked by context_canvas_names_the_missing_binding. Honest remainders: no pinned/importable fixture currently reaches canvas(), so its requested unsupported corpus gate remains open; component-derived ScriptedObject Context owners still need owner-specific markNeedsUpdate overrides. The base ScriptedObject no-op is faithful at lua_scripted_context.cpp:206-210. F7 retains this residue."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-scripting/src/vm/lua_image.rs; crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie/src/lib.rs"
+note = "Owner audit at pinned 4ac7b327: the complete Context surface, lifetime, data-context projection, update request, file-scoped image lookup, blob/audio/decode registries, conservative features, gpuCanvas, and shader behavior are ported. The audit corrected the hand-port ownership error that tied image() to an optional ViewModel instead of ScriptAsset::file(), and all 17 private upstream Context cases are active and green. Canvas 2D remains the explicit fixed Rust-renderer adaptation behind the named unsupported diagnostic; it is not claimed as a literal C++ Canvas implementation. See docs/parity-audits/lua-scripted-context.md."
 
 [[file]]
 upstream = "src/lua/lua_state.cpp"

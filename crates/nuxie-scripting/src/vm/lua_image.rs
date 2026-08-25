@@ -5,10 +5,13 @@ use std::sync::Arc;
 
 use luaur_rt::{AnyUserData, Error, Lua, Result, UserData, UserDataFields};
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap, RenderImage};
-use nuxie_runtime::{RuntimeImageAssetOwners, ScriptImage};
+use nuxie_runtime::{RuntimeImageAssetOwners, ScriptImage, ScriptImageAssets};
 
 #[derive(Clone, Default)]
 struct ScriptedImageAssetOwners(Option<Arc<RuntimeImageAssetOwners>>);
+
+#[derive(Clone, Default)]
+struct ScriptedImageAssets(ScriptImageAssets);
 
 impl ScriptedImageAssetOwners {
     fn install(lua: &Lua) {
@@ -82,6 +85,9 @@ impl UserData for ScriptedImageSampler {}
 
 pub(super) fn install_image_globals(lua: &Lua) -> Result<()> {
     ScriptedImageAssetOwners::install(lua);
+    if lua.app_data_ref::<ScriptedImageAssets>().is_none() {
+        lua.set_app_data(ScriptedImageAssets::default());
+    }
     lua.globals().set(
         "ImageSampler",
         lua.create_function(|lua, (wrap_x, wrap_y, filter): (String, String, String)| {
@@ -114,6 +120,15 @@ pub(super) fn install_image_globals(lua: &Lua) -> Result<()> {
 
 pub(super) fn set_image_asset_owners(lua: &Lua, owners: Arc<RuntimeImageAssetOwners>) {
     ScriptedImageAssetOwners::set(lua, owners);
+}
+
+pub(super) fn set_script_image_assets(lua: &Lua, assets: ScriptImageAssets) {
+    lua.set_app_data(ScriptedImageAssets(assets));
+}
+
+pub(super) fn script_image_asset_named(lua: &Lua, name: &str) -> Option<ScriptImage> {
+    lua.app_data_ref::<ScriptedImageAssets>()
+        .and_then(|assets| assets.0.named(name))
 }
 
 pub(super) fn create_asset_image(lua: &Lua, image: ScriptImage) -> Result<Option<AnyUserData>> {

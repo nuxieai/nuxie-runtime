@@ -285,9 +285,9 @@ for _path in {
     FEATURE_ROWS[_path] = ("absent", "", "F7: this Lua binding is absent.")
 
 FEATURE_ROWS["src/lua/lua_scripted_context.cpp"] = (
-    "partial",
-    "crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-scripting/src/gpu_canvas.rs",
-    "FTAIL partial promotion at pinned 4ac7b327: ScriptedContext exposes the complete method-name surface, a readonly conservative headless features table, and independent optional gpuCanvas descriptors, alongside the retained viewModel/dataContext, image/blob/audio, shader, decodeImage, and lifetime behavior. F7 retains the residue: Canvas 2D is deliberately out of scope behind the named `unsupported: scripted-context-canvas binding is unavailable` diagnostic with no importable fixture reaching canvas(), and component-derived ScriptedObject owners still need owner-specific markNeedsUpdate overrides.",
+    "ported",
+    "crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-scripting/src/vm/lua_image.rs; crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie/src/lib.rs",
+    "Owner audit at pinned 4ac7b327: the complete Context surface and lifetime are ported, file-scoped image ownership and component markNeedsUpdate routing are verified, and all 17 private upstream Context cases are active and green. Canvas 2D is the explicit fixed Rust-renderer adaptation behind its exact named unsupported diagnostic; see docs/parity-audits/lua-scripted-context.md.",
 )
 
 FEATURE_ROWS.update(

@@ -857,6 +857,42 @@ pub struct ScriptImage {
     asset_global_id: u32,
 }
 
+/// File-scoped image identities exposed through `ScriptedContext:image()`.
+///
+/// Pinned C++ resolves this lookup through `scriptAsset()->file()->assets()`;
+/// keeping the catalog separate from a DataContext preserves that ownership
+/// when the script has no ViewModel.
+#[derive(Debug, Clone, Default)]
+pub struct ScriptImageAssets {
+    by_name: BTreeMap<String, ScriptImage>,
+}
+
+impl ScriptImageAssets {
+    pub fn named(&self, name: &str) -> Option<ScriptImage> {
+        self.by_name.get(name).copied()
+    }
+}
+
+pub fn script_image_assets(file: &RuntimeFile) -> ScriptImageAssets {
+    let mut by_name = BTreeMap::new();
+    for (file_asset_index, asset) in file.file_assets().into_iter().enumerate() {
+        if asset.type_name != "ImageAsset" {
+            continue;
+        }
+        let Some(name) = asset.string_property("name") else {
+            continue;
+        };
+        let Ok(file_asset_index) = u64::try_from(file_asset_index) else {
+            continue;
+        };
+        by_name.entry(name.to_owned()).or_insert(ScriptImage {
+            file_asset_index,
+            asset_global_id: asset.id,
+        });
+    }
+    ScriptImageAssets { by_name }
+}
+
 /// A retained font selected from a view-model property.
 ///
 /// File-backed values preserve their asset identity until the scripting VM
@@ -1285,21 +1321,7 @@ impl ScriptViewModel {
     }
 
     pub fn image_asset_named(&self, name: &str) -> Option<ScriptImage> {
-        self.file
-            .file_assets()
-            .into_iter()
-            .enumerate()
-            .find(|(_, asset)| {
-                asset.type_name == "ImageAsset" && asset.string_property("name") == Some(name)
-            })
-            .and_then(|(file_asset_index, asset)| {
-                u64::try_from(file_asset_index)
-                    .ok()
-                    .map(|file_asset_index| ScriptImage {
-                        file_asset_index,
-                        asset_global_id: asset.id,
-                    })
-            })
+        script_image_assets(self.file.as_ref()).named(name)
     }
 
     pub fn set_image(&self, name: &str, image: Option<ScriptImage>) -> bool {

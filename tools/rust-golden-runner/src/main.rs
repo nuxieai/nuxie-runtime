@@ -5735,6 +5735,7 @@ fn prepare_script_vm(
 ) -> Result<ScriptVm> {
     let mut vm = ScriptVm::new();
     vm.install_render_factory(factory)?;
+    vm.set_image_assets(nuxie_runtime::script_image_assets(runtime));
     vm.set_view_models(nuxie_runtime::script_view_models(runtime));
 
     // C++ retries module registration until the dependency graph converges.

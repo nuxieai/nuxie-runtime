@@ -1600,6 +1600,12 @@ impl ScriptVm {
         }
     }
 
+    /// Attach the importing file's image identities independently from its
+    /// optional DataContext, matching `ScriptAsset::file()` ownership in C++.
+    pub fn set_image_assets(&self, assets: nuxie_runtime::ScriptImageAssets) {
+        lua_image::set_script_image_assets(&self.lua, assets);
+    }
+
     pub fn set_default_context_view_model(&mut self, view_model: Option<ScriptViewModel>) {
         self.default_context_view_model = view_model;
         self.default_context_parent_view_models.clear();

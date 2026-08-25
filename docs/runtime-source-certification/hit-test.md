@@ -1,6 +1,6 @@
 # HitTester source certification
 
-> **Correction implemented; independent adversarial review pending.**
+> **Independent adversarial review: REJECTED.**
 
 ## Authority and scope
 
@@ -8,9 +8,10 @@ This receipt reads the complete pinned owners
 `src/math/hit_test.cpp` and `include/rive/math/hit_test.hpp` at
 `4ac7b32798da0482e441ef09304dc3b480ed3ee5` against
 `crates/nuxie-runtime/src/math/hit_test.rs`. The corrected v2 denominator assigns
-36 units to the source and three to the header. All 39 are inventoried below;
-none is accepted until a separate reviewer has tried to falsify the mapping and
-the focused evidence.
+36 units to the source and three to the header. All 39 were independently
+reviewed against their complete bodies, the corrected denominator, focused
+evidence, and pinned call sites. Commit `fdfa71e28` restores the missing Rust
+surface, but it does not yet establish literal source certification.
 
 | Pinned authority units | Count | Rust ownership / disposition |
 | --- | ---: | --- |
@@ -18,13 +19,13 @@ the focused evidence.
 | `graphics_roundf`, `graphics_round` | 2 | `graphics_round`; the private float helper is inlined into the Rust expression. |
 | Three `Point` constructors, `operator+`, `operator-`, `operator+=`, `operator-=`, and both `operator*` overloads | 9 | Private `Point` construction and field arithmetic in `midpoint`, cubic coefficient construction, clipping, and subdivision. C++ overload syntax is not reproduced. |
 | `ave`, `append_line`, `clip_line` | 3 | `Point::midpoint`, `append_line`, and `clip_line`, preserving half-pixel rounding, vertical clipping, winding sign, row order, and x clamping. |
-| `compute_cubic_segments` | 1 | `compute_cubic_segments`, retaining the pinned distance formula and 1..256 bound. |
+| `compute_cubic_segments` | 1 | `compute_cubic_segments`; **rejected** because Rust fuses the squared-distance addition with `mul_add`, changing a finite pinned segment count. |
 | `CubicCoeff::CubicCoeff`, `CubicCoeff::eval` | 2 | `CubicCoefficient::{new,evaluate}` with the same polynomial grouping. |
 | Both `HitTester::reset` overloads | 2 | `clear_windings` preserves the no-argument clear-only behavior; `reset` restores offset, dimensions, zeroed winding storage, and move state. |
 | `HitTester::move`, `line`, `quad`, `cubic`, `recurse_cubic`, `close` | 6 | `move_to`, `line_to`, `quad_to`, `cubic_to`, `recurse_cubic`, and `close`. The unusual pinned `quad` behavior is literal: it only assigns the un-offset endpoint. |
 | `quickRejectCubic` | 1 | `quick_reject_cubic`, with inclusive top/bottom comparisons. |
 | `CubicChop::CubicChop`, `CubicChop::operator[]` | 2 | The seven subdivision points are local values in `recurse_cubic`; checked Rust indexing replaces the source-local wrapper. |
-| `HitTester::addRect`, `HitTester::test` | 2 | `add_rect` and `test`, preserving transformed corner order, authored direction, implicit close, and nonzero/even-odd masks. |
+| `HitTester::addRect`, `HitTester::test` | 2 | `add_rect` and `test` preserve the local bodies, but `add_rect` is not connected to the pinned production `Image::hitTest` caller. |
 | `cross_lt`, both `HitTester::testMesh` overloads | 3 | `cross_lt`, `test_mesh_point`, and `test_mesh_area`, preserving whole-mesh culling, triangle order, point sign comparison, 1x1 delegation, and the area winding accumulation after every triangle. |
 | Header `HitTester()`, `HitTester(const IAABB&)` | 2 | The area constructor is `HitTester::new`. The uninitialized C++ default has no safe callable Rust equivalent; Rust constructs initialized state and exposes the pinned no-argument reset separately. |
 | Header include guard | 1 | Not applicable: nonbehavioral C++ preprocessing guard. |
@@ -32,16 +33,71 @@ the focused evidence.
 The private `mesh_bounds` uses comparison-shaped `cpp_min`/`cpp_max`, not
 Rust's NaN-skipping `f32::min`/`max`, because the pinned `AABB(Span<Vec2D>)`
 constructor uses `std::min`/`std::max`. Invalid command order, malformed index
-triples, out-of-range indices, negative dimensions, and allocation overflow are
-outside defined C++ behavior; the Rust owner fails closed instead of
-reproducing unchecked reads, uninitialized state, or signed overflow.
+triples, out-of-range indices, and signed overflow are outside defined C++
+behavior; the Rust owner reasonably fails closed instead of reproducing
+unchecked reads or uninitialized state. Negative, non-overflowing dimensions
+are not categorically undefined, however, so they require a separate domain
+decision rather than the blanket exclusion in the original receipt.
+
+## Independent falsification
+
+### 1. Finite cubic segmentation differs under the pinned FP profile
+
+Pinned `compute_cubic_segments` evaluates `dx * dx + dy * dy`. The upstream
+unit-test build selects `--no_ffp_contract` in `tests/unit_tests/test.sh`, so
+the two products and addition are separately rounded. Rust instead evaluates
+`dx.mul_add(dx, dy * dy)`, requiring a fused multiply-add.
+
+A finite witness is `a = (f32::from_bits(0x43d7ffe2),
+f32::from_bits(0x3f69e89d))` with `b = c = d = (0, 0)`. Compiling the complete
+pinned owner with Clang `-O2 -ffp-contract=off` produces squared-distance bits
+`0x48364002`, an exact raw count of `36.0` (`0x42100000`), and segment count
+36. The Rust expression produces squared-distance bits `0x48364003`, raw count
+`36.000004` (`0x42100001`), and segment count 37. Both inputs and all
+intermediate conversions are finite and defined. Because both counts exceed
+`MAX_LOCAL_SEGMENTS`, the discrepancy also changes recursive subdivision and
+sampling density. This falsifies the claim that the distance formula is
+literal.
+
+### 2. The required production `addRect` call edge is still absent
+
+Pinned `src/shapes/image.cpp::Image::hitTest` constructs `HitTester` with the
+query area, calls `addRect` using the image bounds and composed transform, then
+calls `test`. Rust `HitTester::add_rect` is referenced only by its focused unit
+test. The production listener path in
+`StateMachineInstance::hit_expandable` sends every non-`Shape` owner,
+including `Image`, through `component_hit_test_point`; it never invokes the
+restored rectangle raster. Thus the method body exists but the pinned image
+hit-test behavior remains unreachable. The mesh overloads have only pinned GM
+callers, and `quad`/clear-only reset likewise have no required runtime caller;
+their lack of production calls is not independently a mismatch.
+
+### 3. The invalid-area exclusion was too broad
+
+For an `IAABB` whose modest dimensions are negative, `width()` and `height()`
+are defined signed subtraction. With one negative axis, the pinned area-mesh
+overload converts the negative product to `size_t` for `std::vector`, producing
+an allocation failure/exception rather than a boolean miss. Rust converts the
+negative axis to no allocation and returns `false`. This may be an intentional
+Rust safety adaptation, but it is not undefined C++ behavior and must be
+explicitly adjudicated instead of silently certified as literal parity.
+
+The remaining authority rows survived review: half-pixel rounding and
+in-range float-to-int conversion, midpoint and polynomial grouping, clipping
+and winding order, quick rejection, transform/corner direction, fill masks,
+point-mesh sign tests, NaN-preserving `AABB` min/max ordering, persistent area
+windings, 1x1 delegation to `(left, top)`, reset state, and the safe initialized
+replacement for the otherwise unusable uninitialized default constructor all
+match their defined pinned observations.
 
 ## Demonstrated source-port omission and correction
 
 The prior `faithful` file row was incomplete. Rust had no owners for the
 no-argument reset, `quad`, `addRect`, `cross_lt`, or either `testMesh` overload.
-The correction translates those exact bodies without introducing a new curve
-algorithm or mesh hit-test policy.
+The correction restores those bodies without introducing a new curve algorithm
+or mesh hit-test policy. The independent review nevertheless rejects complete
+certification because cubic segmentation is numerically different and the
+required image caller does not reach `add_rect`.
 
 Focused evidence in `math::hit_test::tests` now observes:
 
@@ -53,7 +109,10 @@ Focused evidence in `math::hit_test::tests` now observes:
 - the clear-only no-argument reset state transition.
 
 `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --lib
-math::hit_test::tests -- --nocapture` passes all five focused tests. This proves
-the new Rust observations, not independent source equivalence. A separate
-reviewer must still inspect all 39 rows, adversarial float/NaN/edge cases, and
-production call-site reachability before changing this receipt to accepted.
+math::hit_test::tests -- --nocapture` passes all five focused tests, and
+`make --no-print-directory runtime-source-symbol-check` confirms the corrected
+7,818-unit/1,105-owner denominator. Those tests prove the restored surface but
+do not cover the finite FP witness or the absent image call edge. Verdict:
+**REJECTED** pending an exact pinned segmentation correction, production image
+integration, explicit negative-area adjudication, and a fresh independent
+re-review.

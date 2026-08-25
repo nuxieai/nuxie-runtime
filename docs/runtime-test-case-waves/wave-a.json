@@ -1252,7 +1252,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/src/lib.rs",
-          "line": 10220,
+          "line": 10274,
           "symbol": "hosted_image_cdn_descriptor_matches_pinned_cpp"
         }
       ]
@@ -1270,7 +1270,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/src/lib.rs",
-          "line": 10243,
+          "line": 10297,
           "symbol": "hosted_font_cdn_descriptor_matches_pinned_cpp"
         }
       ]
@@ -4230,7 +4230,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/draw.rs",
-          "line": 25511,
+          "line": 25526,
           "symbol": "zero_length_dashes_do_not_cause_a_crash"
         }
       ]

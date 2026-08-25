@@ -81,6 +81,11 @@ impl Fit {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Mat2D(pub [f32; 6]);
 
+#[inline(always)]
+fn map_points_fma(point_lane: f32, matrix_lane: f32, addend_lane: f32) -> f32 {
+    point_lane.mul_add(matrix_lane, addend_lane)
+}
+
 impl Mat2D {
     pub const IDENTITY: Self = Self([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 
@@ -90,6 +95,68 @@ impl Mat2D {
         Vec2D {
             x: tx + xx.mul_add(point.x, xy * point.y),
             y: ty + yx.mul_add(point.x, yy * point.y),
+        }
+    }
+
+    /// Exact out-of-line owner for pinned `Mat2D::mapPoints`.
+    ///
+    /// This is public only because the renderer's mechanically translated
+    /// source owners call the same C++ method across the crate boundary.
+    #[doc(hidden)]
+    #[inline(never)]
+    pub fn map_points(self, destination: &mut [Vec2D], source: &[Vec2D]) {
+        assert_eq!(destination.len(), source.len());
+        // SAFETY: both slices have the asserted common length and cannot
+        // overlap through safe references.
+        unsafe {
+            self.map_points_raw(destination.as_mut_ptr(), source.as_ptr(), source.len());
+        }
+    }
+
+    /// Exact in-place form used by pinned `RawPath::addPathBackwards`.
+    #[doc(hidden)]
+    #[inline(never)]
+    pub fn map_points_in_place(self, points: &mut [Vec2D]) {
+        // SAFETY: the raw owner loads each odd or pair batch before writing it.
+        unsafe { self.map_points_raw(points.as_mut_ptr(), points.as_ptr(), points.len()) };
+    }
+
+    #[inline(never)]
+    unsafe fn map_points_raw(self, destination: *mut Vec2D, source: *const Vec2D, count: usize) {
+        let [scale_x, skew_y, skew_x, scale_y, translate_x, translate_y] = self.0;
+        let no_skew = skew_y == 0.0 && skew_x == 0.0;
+        let map = |point: Vec2D| {
+            if no_skew {
+                Vec2D::new(
+                    map_points_fma(point.x, scale_x, translate_x),
+                    map_points_fma(point.y, scale_y, translate_y),
+                )
+            } else {
+                let skewed_x = map_points_fma(point.y, skew_x, translate_x);
+                let skewed_y = map_points_fma(point.x, skew_y, translate_y);
+                Vec2D::new(
+                    map_points_fma(point.x, scale_x, skewed_x),
+                    map_points_fma(point.y, scale_y, skewed_y),
+                )
+            }
+        };
+
+        let mut index = 0;
+        if count & 1 != 0 {
+            let point = unsafe { *source };
+            unsafe { *destination = map(point) };
+            index = 1;
+        }
+        while index < count {
+            let first = unsafe { *source.add(index) };
+            let second = unsafe { *source.add(index + 1) };
+            let mapped_first = map(first);
+            let mapped_second = map(second);
+            unsafe {
+                *destination.add(index) = mapped_first;
+                *destination.add(index + 1) = mapped_second;
+            }
+            index += 2;
         }
     }
 
@@ -744,12 +811,12 @@ impl RawPath {
             // avoiding needless affine work, this preserves signed zero.
             self.points.extend_from_slice(&path.points);
         } else {
-            self.points.extend(
-                path.points
-                    .iter()
-                    .copied()
-                    .map(|point| map_raw_path_point(transform, point)),
+            let initial_point_count = self.points.len();
+            self.points.resize(
+                initial_point_count + path.points.len(),
+                Vec2D::new(0.0, 0.0),
             );
+            transform.map_points(&mut self.points[initial_point_count..], &path.points);
         }
     }
 
@@ -762,16 +829,9 @@ impl RawPath {
         let initial_verb_count = self.verbs.len();
         let initial_point_count = self.points.len();
         self.points.reserve(path.points.len());
-        if transform == Mat2D::IDENTITY {
-            self.points.extend(path.points.iter().rev().copied());
-        } else {
-            self.points.extend(
-                path.points
-                    .iter()
-                    .rev()
-                    .copied()
-                    .map(|point| map_raw_path_point(transform, point)),
-            );
+        self.points.extend(path.points.iter().rev().copied());
+        if transform != Mat2D::IDENTITY {
+            transform.map_points_in_place(&mut self.points[initial_point_count..]);
         }
 
         // Reverse the verbs while moving each close from the end of its
@@ -955,17 +1015,6 @@ fn raw_path_cubic_value(start: f32, outer: f32, inner: f32, end: f32, t: f32) ->
         + 3.0 * one_minus_t * one_minus_t * t * outer
         + 3.0 * one_minus_t * t * t * inner
         + t * t * t * end
-}
-
-fn map_raw_path_point(transform: Mat2D, point: Vec2D) -> Vec2D {
-    let [xx, yx, xy, yy, tx, ty] = transform.0;
-    // C++ RawPath::addPath maps in batches through Mat2D::mapPoints. Its SIMD
-    // affine branch groups skew with translation before adding scale and uses
-    // fused multiply-adds on supported targets.
-    Vec2D {
-        x: xx.mul_add(point.x, xy.mul_add(point.y, tx)),
-        y: yy.mul_add(point.y, yx.mul_add(point.x, ty)),
-    }
 }
 
 impl Default for RawPath {
@@ -4944,6 +4993,37 @@ mod tests {
 
         assert_eq!(transformed.points()[0].x.to_bits(), 0x42e9_56cc);
         assert_eq!(transformed.points()[0].y.to_bits(), 0xc044_f68f);
+
+        #[cfg(target_arch = "aarch64")]
+        let zero_skew_matrix = std::hint::black_box(Mat2D([
+            f32::from_bits(0x007f_ffff),
+            f32::from_bits(0x8000_0000),
+            f32::from_bits(0x8000_0000),
+            f32::from_bits(0x007f_ffff),
+            f32::from_bits(0x7fa0_1234),
+            f32::from_bits(0x7f80_0000),
+        ]));
+        #[cfg(target_arch = "aarch64")]
+        let mut exceptional = RawPath::new();
+        #[cfg(target_arch = "aarch64")]
+        exceptional.move_to(f32::from_bits(0x7f80_0000), f32::from_bits(0x8000_0000));
+        #[cfg(target_arch = "aarch64")]
+        let mut forward = RawPath::new();
+        #[cfg(target_arch = "aarch64")]
+        forward.add_path(&exceptional, zero_skew_matrix);
+        #[cfg(target_arch = "aarch64")]
+        assert!(forward.points()[0].x.is_nan());
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(forward.points()[0].y.to_bits(), 0x7f80_0000);
+
+        #[cfg(target_arch = "aarch64")]
+        let mut backwards = RawPath::new();
+        #[cfg(target_arch = "aarch64")]
+        backwards.add_path_backwards(&exceptional, zero_skew_matrix);
+        #[cfg(target_arch = "aarch64")]
+        assert!(backwards.points()[0].x.is_nan());
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(backwards.points()[0].y.to_bits(), 0x7f80_0000);
     }
 
     fn assert_backwards_round_trip(path: &RawPath) {

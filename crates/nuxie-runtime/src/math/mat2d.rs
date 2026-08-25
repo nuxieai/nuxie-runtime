@@ -1,5 +1,10 @@
 use crate::components::TransformComponents;
 
+#[inline(always)]
+fn map_points_fma(point_lane: f32, matrix_lane: f32, addend_lane: f32) -> f32 {
+    point_lane.mul_add(matrix_lane, addend_lane)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Mat2D(pub [f32; 6]);
 
@@ -189,48 +194,81 @@ impl Mat2D {
     }
 
     pub fn map_point(self, x: f32, y: f32) -> (f32, f32) {
-        let [a, b, c, d, e, f] = self.0;
-        // Ported from src/math/mat2d.cpp Mat2D::mapPoints. The grouping matters
-        // for cancellation-heavy local path composition.
-        if b == 0.0 && c == 0.0 {
-            (a.mul_add(x, e), d.mul_add(y, f))
-        } else {
-            (a.mul_add(x, c.mul_add(y, e)), d.mul_add(y, b.mul_add(x, f)))
-        }
+        let source = [(x, y)];
+        let mut destination = [(0.0, 0.0)];
+        self.map_points(&mut destination, &source);
+        destination[0]
     }
 
-    /// Maps a contiguous point buffer using the same affine specialization as
-    /// [`Self::map_point`]. The slice boundary gives the optimizer the bulk
-    /// operation shape used by Rive's `Mat2D::mapPoints`.
+    /// Exact out-of-line owner for pinned `Mat2D::mapPoints`.
+    ///
+    /// The odd point is mapped first, then the remaining points are loaded and
+    /// stored in pairs. NaN payload selection remains native Rust/compiler
+    /// behavior; it is not a portable semantic contract of either source.
+    #[inline(never)]
     pub fn map_points(self, destination: &mut [(f32, f32)], source: &[(f32, f32)]) {
         assert_eq!(destination.len(), source.len());
-        let [a, b, c, d, e, f] = self.0;
-        if b == 0.0 && c == 0.0 {
-            for (destination, &(x, y)) in destination.iter_mut().zip(source) {
-                *destination = (a.mul_add(x, e), d.mul_add(y, f));
-            }
-        } else {
-            for (destination, &(x, y)) in destination.iter_mut().zip(source) {
-                *destination = (a.mul_add(x, c.mul_add(y, e)), d.mul_add(y, b.mul_add(x, f)));
-            }
+        // SAFETY: both slices have the asserted common length and safe Rust
+        // guarantees they do not overlap.
+        unsafe {
+            self.map_points_raw(destination.as_mut_ptr(), source.as_ptr(), source.len());
         }
     }
 
-    /// In-place form of [`Self::map_points`], equivalent to C++ `mapPoints`
-    /// with the same source and destination pointer.
+    /// In-place form of the same pinned out-of-line owner.
+    #[inline(never)]
     pub fn map_points_in_place(self, points: &mut [(f32, f32)]) {
-        let [a, b, c, d, e, f] = self.0;
-        if b == 0.0 && c == 0.0 {
-            for (x, y) in points {
-                (*x, *y) = (a.mul_add(*x, e), d.mul_add(*y, f));
+        // SAFETY: source and destination are the same valid slice. The raw
+        // owner loads each one- or two-point batch before writing either lane.
+        unsafe {
+            self.map_points_raw(points.as_mut_ptr(), points.as_ptr(), points.len());
+        }
+    }
+
+    #[inline(never)]
+    unsafe fn map_points_raw(
+        self,
+        destination: *mut (f32, f32),
+        source: *const (f32, f32),
+        count: usize,
+    ) {
+        let [scale_x, skew_y, skew_x, scale_y, translate_x, translate_y] = self.0;
+        let no_skew = skew_y == 0.0 && skew_x == 0.0;
+        let map = |(x, y): (f32, f32)| {
+            if no_skew {
+                (
+                    map_points_fma(x, scale_x, translate_x),
+                    map_points_fma(y, scale_y, translate_y),
+                )
+            } else {
+                let skewed_x = map_points_fma(y, skew_x, translate_x);
+                let skewed_y = map_points_fma(x, skew_y, translate_y);
+                (
+                    map_points_fma(x, scale_x, skewed_x),
+                    map_points_fma(y, scale_y, skewed_y),
+                )
             }
-        } else {
-            for (x, y) in points {
-                (*x, *y) = (
-                    a.mul_add(*x, c.mul_add(*y, e)),
-                    d.mul_add(*y, b.mul_add(*x, f)),
-                );
+        };
+
+        let mut index = 0;
+        if count & 1 != 0 {
+            // SAFETY: count is nonzero and both pointers cover `count` values.
+            let point = unsafe { *source };
+            unsafe { *destination = map(point) };
+            index = 1;
+        }
+        while index < count {
+            // Load both source lanes before either store so exact in-place
+            // mapping has the same alias behavior as the source float4 load.
+            let first = unsafe { *source.add(index) };
+            let second = unsafe { *source.add(index + 1) };
+            let mapped_first = map(first);
+            let mapped_second = map(second);
+            unsafe {
+                *destination.add(index) = mapped_first;
+                *destination.add(index + 1) = mapped_second;
             }
+            index += 2;
         }
     }
 
@@ -336,7 +374,7 @@ impl std::ops::Mul<(f32, f32)> for Mat2D {
 
 #[cfg(test)]
 mod tests {
-    use super::Mat2D;
+    use super::{Mat2D, map_points_fma};
     use crate::components::TransformComponents;
 
     struct UpstreamRand(u64);
@@ -755,6 +793,48 @@ mod tests {
 
         matrix.map_points_in_place(&mut destination);
         assert_eq!(destination, expected.map(|(x, y)| matrix.map_point(x, y)));
+    }
+
+    #[test]
+    fn map_points_preserves_exceptional_classification_across_all_forms() {
+        let matrix = std::hint::black_box(Mat2D([
+            f32::from_bits(0xffc0_1234),
+            f32::from_bits(0xffc0_1234),
+            f32::from_bits(0x7fc0_bbbb),
+            f32::from_bits(0x8000_0000),
+            f32::from_bits(0x0080_0000),
+            f32::from_bits(0xbf80_0000),
+        ]));
+        let point =
+            std::hint::black_box((f32::from_bits(0xffff_ffff), f32::from_bits(0x3f80_0000)));
+        let mapped = matrix.map_point(point.0, point.1);
+        assert!(mapped.0.is_nan());
+        assert!(mapped.1.is_nan());
+
+        let source = [point, (2.0, 3.0), point];
+        let mut distinct = [(0.0, 0.0); 3];
+        matrix.map_points(&mut distinct, &source);
+        assert!(distinct[0].0.is_nan());
+        assert!(distinct[0].1.is_nan());
+        assert!(distinct[2].0.is_nan());
+        assert!(distinct[2].1.is_nan());
+
+        let mut in_place = source;
+        matrix.map_points_in_place(&mut in_place);
+        for (actual, expected) in in_place.into_iter().zip(distinct) {
+            assert_eq!(
+                [actual.0.to_bits(), actual.1.to_bits()],
+                [expected.0.to_bits(), expected.1.to_bits()]
+            );
+        }
+    }
+
+    #[test]
+    fn map_points_preserves_fused_numeric_evaluation() {
+        let point = f32::from_bits(0x3f80_0001);
+        let matrix = f32::from_bits(0x3f7f_ffff);
+        assert_eq!(map_points_fma(point, matrix, -1.0).to_bits(), 0x337f_fffe);
+        assert_eq!((point * matrix - 1.0).to_bits(), 0x0000_0000);
     }
 
     #[test]

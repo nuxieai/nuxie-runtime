@@ -418,3 +418,65 @@ Verdict: **REJECTED for Mat2D certification while accepting the
 `d85dc97a1` scalar-point correction itself.** Restore the complete pinned
 `mapPoints` owner in both runtime and render-API paths, add non-circular
 exceptional-value witnesses, and obtain fresh independent re-reviews.
+
+## Full `mapPoints` correction after `a1f4809db` — PENDING
+
+The runtime and render-API ports now restore the complete structural owner
+from pinned `Mat2D::mapPoints`: the two skew lanes are tested once, the odd
+point is processed first, and all remaining points are loaded and stored in
+pairs. Both the zero-skew scale/translation specialization and the two-stage
+affine path are present. Runtime `map_point`, `map_points`, and
+`map_points_in_place` all reach this owner. Render-API `RawPath::add_path`
+maps the entire appended source batch, while `add_path_backwards` first copies
+the reversed points and then maps that appended slice in place. The previous
+point-at-a-time `map_raw_path_point` substitute has been removed.
+
+The live renderer audit found two additional point-at-a-time substitutes.
+`gpu.cpp::find_transformed_area` now sends all four corners through the public,
+documentation-hidden render-API batch owner. `rive_renderer.cpp`'s inverse-
+clockwise-path owner now maps its four bounds vertices through the in-place
+batch form. The remaining pinned renderer `mapPoints` call in
+`transform_rect_to_new_space` is represented by its previously corrected
+shared `map_bounds` owner rather than individual point transforms. Thus no
+live pinned `mapPoints` caller remains translated as repeated scalar
+`transform_point` calls.
+
+NaN payload selection is recorded as a Rust/compiler lowering ceiling, not
+made into runtime math policy. Pinned clang on the validated macOS AArch64
+host and Rust/LLVM release fat LTO may choose different payloads while
+preserving NaN classification; neither C++ source nor Rust specifies a
+portable signaling/quiet payload order for these expressions. The owners
+therefore retain ordinary Rust `mul_add` and test exact finite bits plus
+exceptional classification. No ARM-specific payload-selection adapter is
+present, and other architectures are not claimed by this receipt to share a
+particular payload choice.
+
+The rejected runtime multiple-NaN witness is NaN in both coordinates through
+the single-point, distinct-buffer odd/pair, and in-place odd/pair forms. The
+rejected zero-skew render witness is stronger: both forward and backward
+actual RawPath callers produce NaN x but preserve positive-infinity y; the
+removed affine substitute produced NaN y by multiplying signed-zero skew by
+infinity. Optimized finite/cancellation witnesses prove fused evaluation, the
+renderer transformed-area four-point batch, and the inverse-path in-place
+four-point batch. A debug source-order transformed-area probe retains pinned
+payload `0x7fc0bbbb`; fat LTO may select `0x7fffffff` while retaining NaN
+classification, as covered by the approved ceiling.
+
+The caller audit also exposed a separate finite downstream gap that this
+Mat2D correction does not absorb. For matrix bits
+`[f905d99f, 34100a4d, 4ad09610, 171199a5, 3c480a80, 85c51df6]` and bounds bits
+`[9503e6e0, 0b21de72, 1df23437, b7848489]`, pinned clang/AArch64
+`gpu.cpp::find_transformed_area` returns `0x27152238`; the corrected Rust batch
+caller returns `0x27152232`. The former point-at-a-time substitute returned
+`0x27152277`. This is finite cross-product/contraction behavior after mapping,
+not NaN payload freedom and not Mat2D ownership. Pinned `PathDraw::Make`
+compares this area with `512 * 512`, while the current Rust live path uses a
+separate determinant-area substitute in `draw.rs`; a near-threshold difference
+can therefore change the interior-triangulation control decision. This remains
+an explicit renderer `gpu.cpp`/`draw.cpp` campaign blocker for a separate
+correction lane.
+
+The accepted scalar `transform_point` correction in `d85dc97a1`, the distinct
+`mapBoundingBox` owner, and the separately tracked IK skew writes are
+unchanged. This implementing lane does not self-certify the correction.
+Verdict: **PENDING two fresh independent re-reviews.**

@@ -3023,7 +3023,7 @@ pub fn StorageTextureBufferSize(
 }
 
 pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
-    let pts = [
+    let source = [
         Vec2D {
             x: bounds.min_x,
             y: bounds.min_y,
@@ -3040,8 +3040,9 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
             x: bounds.min_x,
             y: bounds.max_y,
         },
-    ]
-    .map(|p| matrix.transform_point(p));
+    ];
+    let mut pts = [Vec2D::new(0.0, 0.0); 4];
+    matrix.map_points(&mut pts, &source);
     let cross = |a: Vec2D, b: Vec2D| a.x * b.y - a.y * b.x;
     let v0 = Vec2D {
         x: pts[1].x - pts[0].x,
@@ -3056,6 +3057,36 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
         y: pts[3].y - pts[0].y,
     };
     (cross(v0, v1).abs() + cross(v1, v2).abs()) * 0.5
+}
+
+#[cfg(all(test, target_arch = "aarch64"))]
+mod map_points_caller_tests {
+    use super::{AABB, Mat2D, find_transformed_area};
+
+    #[test]
+    fn transformed_area_preserves_pinned_batch_exceptional_classification() {
+        let matrix = std::hint::black_box(Mat2D([
+            f32::from_bits(0x0080_0000),
+            f32::from_bits(0x0080_0000),
+            f32::from_bits(0xffff_ffff),
+            f32::from_bits(0x0000_0000),
+            f32::from_bits(0x7f7f_ffff),
+            f32::from_bits(0x3f80_0000),
+        ]));
+        let bounds = std::hint::black_box(AABB::new(
+            f32::from_bits(0xff80_0000),
+            f32::from_bits(0x7fc0_bbbb),
+            f32::from_bits(0xff7f_ffff),
+            f32::from_bits(0x0000_0000),
+        ));
+
+        let area = find_transformed_area(bounds, matrix);
+        assert!(area.is_nan());
+        // Without LTO, source-order lowering retains the same payload as pinned
+        // clang. Optimized payload selection is outside Rust's float contract.
+        #[cfg(debug_assertions)]
+        assert_eq!(area.to_bits(), 0x7fc0_bbbb);
+    }
 }
 
 impl ClipRectInverseMatrix {

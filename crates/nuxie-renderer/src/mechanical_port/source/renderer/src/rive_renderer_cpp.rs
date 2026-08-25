@@ -945,13 +945,13 @@ fn invert_clockwise_path(
     let owner = unsafe { &mut *inverse.get() };
     owner.m_fillRule = FillRule::Clockwise;
     if let Some(inv) = inverse_matrix(matrix) {
-        let corners = [
+        let mut corners = [
             Vec2D::new(bounds.left as f32, bounds.top as f32),
             Vec2D::new(bounds.right as f32, bounds.top as f32),
             Vec2D::new(bounds.right as f32, bounds.bottom as f32),
             Vec2D::new(bounds.left as f32, bounds.bottom as f32),
-        ]
-        .map(|p| inv.transform_point(p));
+        ];
+        inv.map_points_in_place(&mut corners);
         owner.move_to(corners[0].x, corners[0].y);
         let det = matrix.0[0] * matrix.0[3] - matrix.0[2] * matrix.0[1];
         let order = if det >= 0.0 { [1, 2, 3] } else { [3, 2, 1] };
@@ -966,6 +966,37 @@ fn invert_clockwise_path(
     }
     inverse
 }
+
+#[cfg(test)]
+mod map_points_caller_tests {
+    use super::{FillRule, Mat2D, RiveRenderPath, gpu, invert_clockwise_path};
+
+    #[test]
+    fn inverse_clockwise_path_uses_pinned_four_point_in_place_batch() {
+        let view_matrix = std::hint::black_box(Mat2D([
+            f32::from_bits(0xbf80_0000),
+            f32::from_bits(0x8000_0000),
+            f32::from_bits(0x0000_0000),
+            f32::from_bits(0x337f_fffe),
+            f32::from_bits(0x3f00_0000),
+            f32::from_bits(0x3f80_0001),
+        ]));
+        let path = RiveRenderPath::default();
+        let inverse = invert_clockwise_path(
+            &path,
+            FillRule::Clockwise,
+            view_matrix,
+            gpu::IAABB::new(-1, 1, 16_777_217, 16_777_215),
+        );
+        let points = unsafe { (&*inverse.get()).getRawPath().points() };
+
+        // The negative determinant orders corner 2 at path point 2. Pinned
+        // mapPoints' scale/translation FMLA rounds its y lane to 0x57800000;
+        // the former scalar transform_point substitute produced 0x577fffff.
+        assert_eq!(points[2].y.to_bits(), 0x5780_0000);
+    }
+}
+
 fn inverse_matrix(m: Mat2D) -> Option<Mat2D> {
     inverse(m)
 }

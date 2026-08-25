@@ -465,7 +465,9 @@ fn transformed_cubic_segment_count(points: [Vec2D; 4], matrix: Mat2D) -> u32 {
         let y = (-2.0f32).mul_add(b.y, a.y) + c.y;
         let mapped_x = xx.mul_add(x, xy * y);
         let mapped_y = yy.mul_add(y, yx * x);
-        mapped_x.mul_add(mapped_x, mapped_y * mapped_y)
+        let squared_x = mapped_x * mapped_x;
+        let squared_y = mapped_y * mapped_y;
+        squared_x + squared_y
     };
     let first = second_difference(points[0], points[1], points[2]);
     let second = second_difference(points[1], points[2], points[3]);
@@ -1753,6 +1755,26 @@ mod transformed_area_consumer_tests {
             0.0,
         ]);
         assert_eq!(transformed_cubic_segment_count(points, transform), 9);
+    }
+
+    #[test]
+    fn source_path_draw_wang_square_reduction_preserves_pinned_34_segment_boundary() {
+        let points = [
+            Vec2D::new(f32::from_bits(0x412b_7e28), f32::from_bits(0x4086_c8b4)),
+            Vec2D::new(f32::from_bits(0xc1e7_82aa), f32::from_bits(0x4138_be77)),
+            Vec2D::new(f32::from_bits(0x4215_f15b), f32::from_bits(0xc1c1_edc6)),
+            Vec2D::new(f32::from_bits(0xc1c1_a33a), f32::from_bits(0xc0e8_d4fe)),
+        ];
+        let transform = Mat2D([
+            f32::from_bits(0x3fce_0aa6),
+            f32::from_bits(0xbcef_34d7),
+            f32::from_bits(0xc03d_4af5),
+            f32::from_bits(0xbf03_18fc),
+            0.0,
+            0.0,
+        ]);
+
+        assert_eq!(transformed_cubic_segment_count(points, transform), 34);
     }
 
     #[test]

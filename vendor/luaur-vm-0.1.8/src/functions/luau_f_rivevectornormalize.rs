@@ -18,9 +18,11 @@ pub unsafe fn luau_f_rivevectornormalize(
 ) -> core::ffi::c_int {
     if nparams >= 1 && nresults <= 1 && ttisvector!(arg0) {
         let v = vvalue!(arg0).as_ptr();
-        let len_sq = v.add(0).read() * v.add(0).read()
-            + v.add(1).read() * v.add(1).read()
-            + v.add(2).read() * v.add(2).read();
+        let xy = v
+            .add(0)
+            .read()
+            .mul_add(v.add(0).read(), v.add(1).read() * v.add(1).read());
+        let len_sq = v.add(2).read().mul_add(v.add(2).read(), xy);
         let inv_len = if len_sq > 0.0 as LuaVectorType {
             1.0 as LuaVectorType / len_sq.sqrt()
         } else {

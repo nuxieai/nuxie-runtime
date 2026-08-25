@@ -25,6 +25,14 @@ fn apply_text_modifier_transform(
     ctm
 }
 
+fn text_modifier_group_modifies_transform(flags: u64) -> bool {
+    const MODIFY_ORIGIN: u64 = 1 << 0;
+    const MODIFY_TRANSLATION: u64 = 1 << 2;
+    const MODIFY_ROTATION: u64 = 1 << 3;
+    const MODIFY_SCALE: u64 = 1 << 4;
+    flags & (MODIFY_ORIGIN | MODIFY_TRANSLATION | MODIFY_ROTATION | MODIFY_SCALE) != 0
+}
+
 impl StaticTextModifierGroup {
     fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
         let global_id = global_for_local(graph, local_id)?;
@@ -125,7 +133,7 @@ impl StaticTextModifierGroup {
         const MODIFY_SCALE: u64 = 1 << 4;
         const MODIFY_ORIGIN: u64 = 1 << 0;
         let follows_path = !self.follow_path_modifiers.is_empty();
-        if amount == 0.0 && !follows_path {
+        if amount == 0.0 || (!text_modifier_group_modifies_transform(flags) && !follows_path) {
             return Ok(ctm);
         }
 

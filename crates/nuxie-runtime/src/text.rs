@@ -6285,6 +6285,32 @@ mod tests {
     }
 
     #[test]
+    fn opacity_only_text_modifier_returns_incoming_ctm_without_identity_multiply() {
+        let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let graph = graphs.artboards.first().unwrap();
+        let mut slice = StaticTextSlice::from_graph(&runtime, graph, 1).unwrap();
+        let group = slice.modifiers.remove(0);
+        let modifier_flags = property_key_for_name("TextModifierGroup", "modifierFlags").unwrap();
+        assert!(instance.set_uint_property(group.local_id, modifier_flags, 1 << 5));
+
+        let incoming = Mat2D([f32::INFINITY, 1.0, 0.0, 1.0, 2.0, 3.0]);
+        let glyph = StaticTextGlyphContext {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            line_index_in_paragraph: 0,
+            paragraph_baselines: &[],
+            text_world_inverse: Mat2D::IDENTITY,
+        };
+        let actual = group
+            .transform(&runtime, &instance, 0.5, incoming, &glyph)
+            .unwrap();
+        assert_eq!(actual, incoming);
+        assert!(!text_modifier_group_modifies_transform(1 << 5));
+    }
+
+    #[test]
     fn d_st_font_live_swap_invalidates_the_retained_text_owner() {
         let (runtime, graphs) = baseline_origin_text_runtime();
         let graph = graphs.artboards.first().unwrap();

@@ -27,9 +27,9 @@ pub unsafe fn luau_f_vectorscaleandsub(
         let a = vvalue!(arg0).as_ptr();
         let b = vvalue!(args).as_ptr();
         let scale = nvalue!(args.add(1)) as LuaVectorType;
-        let x = a.add(0).read() - b.add(0).read() * scale;
-        let y = a.add(1).read() - b.add(1).read() * scale;
-        let z = a.add(2).read() - b.add(2).read() * scale;
+        let x = b.add(0).read().mul_add(-scale, a.add(0).read());
+        let y = b.add(1).read().mul_add(-scale, a.add(1).read());
+        let z = b.add(2).read().mul_add(-scale, a.add(2).read());
         setvvalue!(l, res, x, y, z, 0.0 as LuaVectorType);
         return 1;
     }

@@ -1222,3 +1222,63 @@ fixture at both actual consumers, adjudicate and correct every live Vec2D and
 text no-transform residue above, then repeat the complete census and obtain
 two fresh independent complete reviews. No production source was changed by
 this review.
+
+## Correction after rejected review `8291c887e`
+
+This correction addresses every concrete blocker in the rejected review
+against pinned upstream `4ac7b32798da0482e441ef09304dc3b480ed3ee5`. It does
+not broaden the arithmetic policy into blanket contraction: each operation
+boundary was re-derived from the pinned source and checked against the
+corresponding Clang lowering.
+
+- Both operative transformed-Wang owners retain the accepted contracted
+  second-difference and `VectorXform` groupings, then compute `x * x` and
+  `y * y` separately before adding the lanes, matching pinned
+  `wangs_formula.hpp::cubic_pow4`. The rejected finite fixture now returns
+  Wang value `0x42040001` and 34 segments, rather than the extra-contracted
+  value `0x42040000` and 33 segments, through both live renderer subdivision
+  consumers in debug and release fat LTO.
+- Runtime rounded-path `dot_point` and `cross_point` now preserve pinned
+  `Vec2D` first-product contraction. Their finite cancellation witness reaches
+  the actual ideal-control-distance consumer and retains `0xa7eec560` instead
+  of taking the ordinary-arithmetic zero fallback. The same cross grouping is
+  restored in `rectangles_to_contour`; its witness reaches
+  `RuntimeRectangleContour::is_clockwise`, the winding decision consumed by
+  text selection.
+- Runtime contour interpolation now follows the two distinct pinned owners:
+  `Vec2D::lerp` contracts `(to - from) * t + from`, while the raw-path generic
+  weighted lerp preserves the source grouping `from * (1 - t) + to * t`.
+  Finite witnesses distinguish both operation boundaries.
+- The complete public scripting route was audited beyond
+  `vm/lua_vec2d.rs`. Source-authored closures now preserve pinned dot, cross,
+  three-component dot/cross, scale-and-add/subtract, distance, length,
+  normalization, and lerp arithmetic. The census also found that compiled
+  `Vector.*` calls bypass those closures through Rive Luau fastcall slots;
+  every operative two- or three-component fastcall duplicate was corrected
+  with the same source-derived grouping. The four-component generic branches
+  remain unchanged because the pinned Vec2D/three-component authorities do
+  not authorize a blanket rewrite. One public script exercises direct
+  fastcalls and indirect function-table calls, proving both routing paths.
+- `StaticTextModifierGroup::transform` now returns the incoming CTM directly
+  for an opacity-only, non-path group. When a transform is present it retains
+  the already accepted three-statement origin composition. The actual group
+  witness uses a non-finite incoming CTM to distinguish the direct return from
+  an identity multiplication.
+
+The duplicate census was repeated across the two live renderer Wang owners,
+runtime rounded-path and contour winding consumers, runtime contour and raw
+path interpolation, scripting closures and compiler fastcalls, and text
+modifier-group transform routing. No named operative residue from the rejected
+review remains uncensused.
+
+Focused gates passed with `CARGO_INCREMENTAL=0`. Debug and release fat-LTO
+witnesses passed for rounded-path dot/cross, rectangle winding, both runtime
+lerp groupings, opacity-only text CTM routing, the public scripting fastcall
+and indirect routes, and both 34-segment renderer Wang consumers. `cargo
+check` passed for renderer-metal, renderer-vulkan, renderer-webgpu, and
+renderer-webgl2. File correspondence passed all 456 applicable rows; symbol
+correspondence replayed 7,818 authority units across 1,105 owners; and all 33
+correspondence checker tests passed.
+
+This implementing lane does not certify its own correction. Verdict:
+**PENDING TWO FRESH INDEPENDENT COMPLETE REVIEWS.**

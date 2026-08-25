@@ -20,7 +20,9 @@ pub unsafe fn luau_f_vector2cross(
         let b = vvalue!(args).as_ptr();
         setnvalue!(
             res,
-            (a.add(0).read() * b.add(1).read() - a.add(1).read() * b.add(0).read()) as f64
+            a.add(0)
+                .read()
+                .mul_add(b.add(1).read(), -(a.add(1).read() * b.add(0).read())) as f64
         );
         return 1;
     }

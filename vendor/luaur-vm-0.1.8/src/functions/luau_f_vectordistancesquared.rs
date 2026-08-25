@@ -18,10 +18,11 @@ pub unsafe fn luau_f_vectordistancesquared(
     if nparams >= 2 && nresults <= 1 && ttisvector!(arg0) && ttisvector!(args) {
         let a = vvalue!(arg0).as_ptr();
         let b = vvalue!(args).as_ptr();
-        let dx = a.add(0).read() - b.add(0).read();
-        let dy = a.add(1).read() - b.add(1).read();
-        let dz = a.add(2).read() - b.add(2).read();
-        setnvalue!(res, (dx * dx + dy * dy + dz * dz) as f64);
+        let dx = b.add(0).read() - a.add(0).read();
+        let dy = b.add(1).read() - a.add(1).read();
+        let dz = b.add(2).read() - a.add(2).read();
+        let xy = dx.mul_add(dx, dy * dy);
+        setnvalue!(res, dz.mul_add(dz, xy) as f64);
         return 1;
     }
 

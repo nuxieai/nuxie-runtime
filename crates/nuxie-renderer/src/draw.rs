@@ -2702,7 +2702,9 @@ fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D)
         let y = (-2.0f32).mul_add(b.y, a.y) + c.y;
         let transformed_x = xx.mul_add(x, xy * y);
         let transformed_y = yy.mul_add(y, yx * x);
-        transformed_x.mul_add(transformed_x, transformed_y * transformed_y)
+        let squared_x = transformed_x * transformed_x;
+        let squared_y = transformed_y * transformed_y;
+        squared_x + squared_y
     };
     let first = transformed_second_difference(points[0], points[1], points[2]);
     let second = transformed_second_difference(points[1], points[2], points[3]);
@@ -3159,6 +3161,33 @@ mod tests {
                 transform,
             ),
             9
+        );
+    }
+
+    #[test]
+    fn wang_square_reduction_preserves_pinned_34_segment_boundary() {
+        let points = [
+            Vec2D::new(f32::from_bits(0x412b_7e28), f32::from_bits(0x4086_c8b4)),
+            Vec2D::new(f32::from_bits(0xc1e7_82aa), f32::from_bits(0x4138_be77)),
+            Vec2D::new(f32::from_bits(0x4215_f15b), f32::from_bits(0xc1c1_edc6)),
+            Vec2D::new(f32::from_bits(0xc1c1_a33a), f32::from_bits(0xc0e8_d4fe)),
+        ];
+        let transform = Mat2D([
+            f32::from_bits(0x3fce_0aa6),
+            f32::from_bits(0xbcef_34d7),
+            f32::from_bits(0xc03d_4af5),
+            f32::from_bits(0xbf03_18fc),
+            0.0,
+            0.0,
+        ]);
+
+        let max_length_squared = max_transformed_cubic_second_difference(points, transform);
+        let length_term_squared = (9.0 / 16.0) * 4.0f32.powi(2);
+        let wang = (max_length_squared * length_term_squared).sqrt().sqrt();
+        assert_eq!(wang.to_bits(), 0x4204_0001);
+        assert_eq!(
+            cubic_segment_count_with_precision_and_transform(points, 4.0, transform),
+            34
         );
     }
 

@@ -377,7 +377,7 @@ fn compare_float(left: f32, right: f32) -> Ordering {
 }
 
 fn cross(left: Vec2D, right: Vec2D) -> f32 {
-    left.x * right.y - left.y * right.x
+    left.x.mul_add(right.y, -(left.y * right.x))
 }
 
 #[cfg(test)]
@@ -425,6 +425,29 @@ mod tests {
         assert!(!contour.is_clockwise());
         assert_eq!(contour.point_reversed(0), contour.point(3));
         assert_eq!(contour.points().count(), 4);
+    }
+
+    #[test]
+    fn contour_winding_preserves_pinned_vec2d_cross_cancellation_sign() {
+        let a = Vec2D::new(f32::from_bits(0x26cd_29b3), f32::from_bits(0xd01a_d4bb));
+        let b = Vec2D::new(f32::from_bits(0x2533_fdc2), f32::from_bits(0xce87_d5a9));
+        assert_eq!(cross(a, b).to_bits(), 0xa7ee_c560);
+
+        let points = [
+            ContourPoint {
+                point: Vec2D::new(0.0, 0.0),
+                direction: 0,
+            },
+            ContourPoint {
+                point: a,
+                direction: 0,
+            },
+            ContourPoint {
+                point: b,
+                direction: 0,
+            },
+        ];
+        assert!(!RuntimeRectangleContour { points: &points }.is_clockwise());
     }
 
     fn assert_contour(contour: RuntimeRectangleContour<'_>, expected: &[(f32, f32)]) {

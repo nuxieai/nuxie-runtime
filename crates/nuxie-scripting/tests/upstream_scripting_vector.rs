@@ -111,6 +111,96 @@ fn vector_static_cross_scale_and_add_scale_and_sub_work() {
 }
 
 #[test]
+fn vector_arithmetic_preserves_pinned_finite_operation_boundaries() {
+    let result: (f64, f64, f64, f64, f64, f64) = rive_vm()
+        .eval(
+            r#"
+            local function f32(bits)
+                local bytes = buffer.create(4)
+                buffer.writeu32(bytes, 0, bits)
+                return buffer.readf32(bytes, 0)
+            end
+            local a = Vector.xy(f32(0x26cd29b3), f32(0xd01ad4bb))
+            local b = Vector.xy(f32(0x2533fdc2), f32(0xce87d5a9))
+            local dotA = Vector.xy(a.x, -a.y)
+            local dotB = Vector.xy(b.y, b.x)
+            local add = Vector.scaleAndAdd(
+                Vector.xy(f32(0x3c3a6d8a), 0),
+                Vector.xy(f32(0x657c889f), 0),
+                f32(0x1b04ab9a))
+            local sub = Vector.scaleAndSub(
+                Vector.xy(f32(0xe57cdbac), 0),
+                Vector.xy(f32(0x274eb337), 0),
+                f32(0xfeb9d18b))
+            local dot3 = Vector.dot(
+                Vector.xyz(f32(0x9df19f7b), f32(0x798a0a05), f32(0x6f23eac1)),
+                Vector.xyz(f32(0xce8f7739), f32(0x83afb59e), f32(0x0e2d7815)))
+            local cross3 = Vector.cross3(
+                Vector.xyz(0, a.x, a.y),
+                Vector.xyz(0, b.x, b.y))
+            return Vector.cross(a, b), Vector.dot(dotA, dotB), add.x, sub.x, dot3, cross3.x
+            "#,
+        )
+        .unwrap();
+
+    assert_eq!((result.0 as f32).to_bits(), 0xa7ee_c560);
+    assert_eq!((result.1 as f32).to_bits(), 0xa7ee_c560);
+    assert_eq!((result.2 as f32).to_bits(), 0x4103_0e55);
+    assert_eq!((result.3 as f32).to_bits(), 0x666c_da7c);
+    assert_eq!((result.4 as f32).to_bits(), 0x3c82_9e03);
+    assert_eq!((result.5 as f32).to_bits(), 0xa7ee_c560);
+
+    let indirect: (f64, f64, f64, f64) = rive_vm()
+        .eval(
+            r#"
+            local function f32(bits)
+                local bytes = buffer.create(4)
+                buffer.writeu32(bytes, 0, bits)
+                return buffer.readf32(bytes, 0)
+            end
+            local functions = {
+                Vector.cross,
+                Vector.dot,
+                Vector.scaleAndAdd,
+                Vector.scaleAndSub,
+            }
+            local a = Vector.xy(f32(0x26cd29b3), f32(0xd01ad4bb))
+            local b = Vector.xy(f32(0x2533fdc2), f32(0xce87d5a9))
+            local dotA = Vector.xy(a.x, -a.y)
+            local dotB = Vector.xy(b.y, b.x)
+            local add = functions[3](
+                Vector.xy(f32(0x3c3a6d8a), 0),
+                Vector.xy(f32(0x657c889f), 0),
+                f32(0x1b04ab9a))
+            local sub = functions[4](
+                Vector.xy(f32(0xe57cdbac), 0),
+                Vector.xy(f32(0x274eb337), 0),
+                f32(0xfeb9d18b))
+            return functions[1](a, b), functions[2](dotA, dotB), add.x, sub.x
+            "#,
+        )
+        .unwrap();
+    assert_eq!((indirect.0 as f32).to_bits(), 0xa7ee_c560);
+    assert_eq!((indirect.1 as f32).to_bits(), 0xa7ee_c560);
+    assert_eq!((indirect.2 as f32).to_bits(), 0x4103_0e55);
+    assert_eq!((indirect.3 as f32).to_bits(), 0x666c_da7c);
+
+    let lerp = eval_number(
+        r#"
+        local bytes = buffer.create(12)
+        buffer.writeu32(bytes, 0, 0x3c3a6d8a)
+        buffer.writeu32(bytes, 4, 0x657c889f)
+        buffer.writeu32(bytes, 8, 0x1b04ab9a)
+        return Vector.lerp(
+            Vector.xy(buffer.readf32(bytes, 0), 0),
+            Vector.xy(buffer.readf32(bytes, 4), 0),
+            buffer.readf32(bytes, 8)).x
+        "#,
+    );
+    assert_eq!((lerp as f32).to_bits(), 0x4103_0e55);
+}
+
+#[test]
 fn vector_static_length_length_squared_normalized_work() {
     assert_eq!(eval_number("return Vector.length(Vector.xy(3,4))"), 5.0);
     assert_eq!(

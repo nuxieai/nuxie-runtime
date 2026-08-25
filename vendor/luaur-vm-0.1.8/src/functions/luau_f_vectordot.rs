@@ -31,11 +31,10 @@ pub unsafe fn luau_f_vectordot(
                     + (*a.offset(3)) * (*b.offset(3))) as f64
             );
         } else {
+            let xy = (*a.offset(0)).mul_add(*b.offset(0), (*a.offset(1)) * (*b.offset(1)));
             setnvalue!(
                 res,
-                ((*a.offset(0)) * (*b.offset(0))
-                    + (*a.offset(1)) * (*b.offset(1))
-                    + (*a.offset(2)) * (*b.offset(2))) as f64
+                (*a.offset(2)).mul_add(*b.offset(2), xy) as f64
             );
         }
 

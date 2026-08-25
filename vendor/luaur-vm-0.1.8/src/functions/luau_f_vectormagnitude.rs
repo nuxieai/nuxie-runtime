@@ -26,9 +26,8 @@ pub unsafe fn luau_f_vectormagnitude(
                 + (*v.offset(3)) * (*v.offset(3));
             setnvalue!(res, (m2.sqrt() as f64));
         } else {
-            let m2 = (*v.offset(0)) * (*v.offset(0))
-                + (*v.offset(1)) * (*v.offset(1))
-                + (*v.offset(2)) * (*v.offset(2));
+            let xy = (*v.offset(0)).mul_add(*v.offset(0), (*v.offset(1)) * (*v.offset(1)));
+            let m2 = (*v.offset(2)).mul_add(*v.offset(2), xy);
             setnvalue!(res, (m2.sqrt() as f64));
         }
 

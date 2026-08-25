@@ -25414,11 +25414,11 @@ fn rotate_point_around(point: (f32, f32), origin: (f32, f32), angle: f32) -> (f3
 }
 
 fn dot_point(left: (f32, f32), right: (f32, f32)) -> f32 {
-    left.0 * right.0 + left.1 * right.1
+    left.0.mul_add(right.0, left.1 * right.1)
 }
 
 fn cross_point(left: (f32, f32), right: (f32, f32)) -> f32 {
-    left.0 * right.1 - left.1 * right.0
+    left.0.mul_add(right.1, -(left.1 * right.0))
 }
 
 fn push_move(commands: &mut Vec<RuntimePathCommand>, transform: Mat2D, point: (f32, f32)) {
@@ -25474,6 +25474,21 @@ fn runtime_drawable_dispatch_is_nested_artboard(command: &RuntimeDrawableDispatc
 mod tests {
     use super::*;
     use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
+
+    #[test]
+    fn rounded_path_vec2d_consumers_preserve_pinned_cancellation_sign() {
+        let a = (f32::from_bits(0x26cd_29b3), f32::from_bits(0xd01a_d4bb));
+        let b = (f32::from_bits(0x2533_fdc2), f32::from_bits(0xce87_d5a9));
+        assert_eq!(cross_point(a, b).to_bits(), 0xa7ee_c560);
+
+        let dot_a = (a.0, -a.1);
+        let dot_b = (b.1, b.0);
+        assert_eq!(dot_point(dot_a, dot_b).to_bits(), 0xa7ee_c560);
+
+        // This is the rounded-path control consumer. The ordinary cross
+        // rounded to +0 and collapsed its ideal distance to zero.
+        assert!(compute_ideal_control_point_distance(a, b, 1.0) > 0.0);
+    }
 
     #[test]
     fn inner_feather_uses_raw_path_simd_bounds_for_first_nan_points() {

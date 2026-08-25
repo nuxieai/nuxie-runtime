@@ -728,7 +728,10 @@ impl Clone for ArtboardInstance {
             runtime_shapes: self.runtime_shapes.clone(),
             runtime_clipping_shapes: self.runtime_clipping_shapes.clone(),
             runtime_meshes: self.runtime_meshes.clone(),
-            did_change: self.did_change.clone(),
+            // Pinned `Artboard::instance<T>` constructs a fresh `T`, whose
+            // in-class `m_didChange` initializer is `true`; this runtime bit
+            // is not copied from the source occurrence.
+            did_change: Cell::new(true),
             mounted_host_transform: Cell::new(None),
             parent_change_requested: Cell::new(false),
             semantic_bounds_dirty_locals: BTreeSet::new(),
@@ -1229,10 +1232,10 @@ impl ArtboardInstance {
     }
 
     fn restore_transient_layout_transfer_state_from(&mut self, source: &Self) {
-        // Transient draw/layout clones view the same mounted occurrence. Copy
-        // whether layout ownership already transferred, but never copy its
-        // pending one-shot paint frame: only the authoritative instance may
-        // consume that renderer event.
+        // Transient draw/layout clones view the same mounted occurrence, so
+        // preserve its current change bit and whether layout ownership has
+        // already transferred.
+        self.did_change.set(source.did_change.get());
         self.layout_constraint_bounds_enabled = source.layout_constraint_bounds_enabled;
         self.layout_constraint_bounds = source.layout_constraint_bounds.clone();
         self.solved_layout_bounds = source.solved_layout_bounds.clone();
@@ -6457,8 +6460,10 @@ impl ArtboardInstance {
                     continue;
                 }
                 if nested.initial_layout_paint_frame.borrow().is_none() {
-                    initial_layout_paint_evaluations
-                        .insert(host_local, nested.child.as_ref().clone());
+                    initial_layout_paint_evaluations.insert(
+                        host_local,
+                        nested.child.as_ref().clone_for_transient_layout(),
+                    );
                 }
             }
         }

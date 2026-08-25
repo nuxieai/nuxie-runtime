@@ -34598,7 +34598,7 @@ mod tests {
 
     #[test]
     fn ordinary_nested_artboard_contributes_its_mounted_intrinsic_size() {
-        let bytes = synthetic_intrinsic_nested_artboard_riv();
+        let bytes = synthetic_intrinsic_nested_artboard_riv(None);
         let runtime = read_runtime_file(&bytes).expect("nested intrinsic fixture imports");
         let graphs =
             GraphFile::from_runtime_file(&runtime).expect("nested intrinsic fixture graphs");
@@ -34611,46 +34611,27 @@ mod tests {
                 .expect("host instance builds");
 
         let unconstrained = TaffyRuntimeLayoutEngine
-            .measure_layout_component(
-                &runtime,
-                &instance,
-                graph,
-                1,
-                Size::NONE,
-                Size {
-                    width: AvailableSpace::MaxContent,
-                    height: AvailableSpace::MaxContent,
-                },
-            )
-            .expect("layout component measures");
-        assert_eq!(
-            unconstrained,
-            Size {
-                width: 80.0,
-                height: 60.0
-            }
-        );
+            .compute_bounds(&instance, graph, Some(&runtime))
+            .and_then(|bounds| bounds.get(&1).copied())
+            .expect("production layout registration measures the nested host");
+        assert_eq!((unconstrained.width, unconstrained.height), (80.0, 60.0));
 
+        let bytes = synthetic_intrinsic_nested_artboard_riv(Some((50.0, 40.0)));
+        let runtime = read_runtime_file(&bytes).expect("bounded nested intrinsic fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .expect("bounded nested intrinsic fixture graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("bounded fixture has a host artboard");
+        let instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("bounded host instance builds");
         let constrained = TaffyRuntimeLayoutEngine
-            .measure_layout_component(
-                &runtime,
-                &instance,
-                graph,
-                1,
-                Size::NONE,
-                Size {
-                    width: AvailableSpace::Definite(50.0),
-                    height: AvailableSpace::Definite(40.0),
-                },
-            )
-            .expect("layout component measures under at-most constraints");
-        assert_eq!(
-            constrained,
-            Size {
-                width: 50.0,
-                height: 40.0
-            }
-        );
+            .compute_bounds(&instance, graph, Some(&runtime))
+            .and_then(|bounds| bounds.get(&1).copied())
+            .expect("production layout solve constrains the nested host");
+        assert_eq!((constrained.width, constrained.height), (50.0, 40.0));
     }
 
     fn assert_mat2d_near(actual: [f32; 6], expected: [f32; 6]) {
@@ -34676,9 +34657,9 @@ mod tests {
         }
     }
 
-    // Two fixed-size layout children fill a row artboard. The queried shape is
-    // authored under the second child at x=10, so its settled world x is 110.
-    fn synthetic_intrinsic_nested_artboard_riv() -> Vec<u8> {
+    // An intrinsically sized hug host mounts one ordinary 80 x 60 Artboard;
+    // optional authored maximums exercise the production constraint path.
+    fn synthetic_intrinsic_nested_artboard_riv(max_size: Option<(f32, f32)>) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"RIVE");
         push_var_uint(&mut bytes, 7);
@@ -34686,14 +34667,36 @@ mod tests {
         push_var_uint(&mut bytes, 9_651);
         push_var_uint(&mut bytes, 0);
         push_object(&mut bytes, "Backboard", |_| {});
-        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 4);
+        });
         push_object(&mut bytes, "LayoutComponent", |bytes| {
             push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+            push_bool(
+                bytes,
+                "LayoutComponentStyle",
+                "intrinsicallySizedValue",
+                true,
+            );
+            push_uint(bytes, "LayoutComponentStyle", "layoutWidthScaleType", 2);
+            push_uint(bytes, "LayoutComponentStyle", "layoutHeightScaleType", 2);
+            if let Some((max_width, max_height)) = max_size {
+                push_f32(bytes, "LayoutComponentStyle", "maxWidth", max_width);
+                push_f32(bytes, "LayoutComponentStyle", "maxHeight", max_height);
+            }
         });
         push_object(&mut bytes, "NestedArtboard", |bytes| {
             push_uint(bytes, "Node", "parentId", 1);
             push_uint(bytes, "NestedArtboard", "artboardId", 1);
         });
+        // Give the root authored alignment instead of Taffy's default
+        // cross-axis stretch, so the host's hug size remains observable.
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
         push_object(&mut bytes, "Artboard", |bytes| {
             push_f32(bytes, "LayoutComponent", "width", 80.0);
             push_f32(bytes, "LayoutComponent", "height", 60.0);

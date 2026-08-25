@@ -9185,6 +9185,25 @@
     }
 
     #[test]
+    fn public_clone_starts_changed_while_transient_clone_preserves_source_state() {
+        let source = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+        source.did_change.set(false);
+
+        let public_clone = source.clone();
+        assert!(!source.did_change(), "the clean source remains unchanged");
+        assert!(
+            public_clone.did_change(),
+            "pinned Artboard::instance<T> constructs a fresh changed occurrence"
+        );
+
+        let transient_clone = source.clone_for_transient_layout();
+        assert!(
+            !transient_clone.did_change(),
+            "a transient layout view preserves the same occurrence's clean state"
+        );
+    }
+
+    #[test]
     fn transform_property_mutation_rejects_missing_dense_local() {
         let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
         let mut instance = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);

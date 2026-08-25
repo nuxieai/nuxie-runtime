@@ -16,36 +16,49 @@ headers; it does not inherit the verdicts in the B6 or phase-3 audit records:
 Commit `eb4b0c23d` is **not accepted as a complete literal certification**.
 The mounted-size arithmetic added by that commit matches the pinned
 `NestedArtboard::measureLayout` body, and the nested/list destruction order and
-reset traversal survived review. The receipt nevertheless has an incomplete
-source denominator, its focused measurement test bypasses the production
-registration path, and a fresh-clone default differs observably from pinned
-C++.
+reset traversal survived review. The rejected receipt nevertheless had an
+incomplete source denominator, its focused measurement test bypassed the
+production registration path, and a fresh-clone default differed observably
+from pinned C++. The denominator defect has since been corrected campaign-wide;
+the two behavioral findings are corrected below and await independent
+re-review.
+
+## Adjudicated corrections: independent re-review pending
+
+The two rejected behavioral-evidence rows have now been corrected by literal
+pinned translation. This is not a self-certification: an independent reviewer
+must still accept the corrections and resolve the remaining
+static-frame-counter and cross-owner decoder findings below.
 
 ### Exact denominator
 
-The complete handwritten denominator is 300 translation-unit definitions and
-88 executable inline header definitions, for 388 definitions total. Counts
-include overloads, constructors/destructors, anonymous-namespace helpers, and
-one active definition from mutually exclusive feature branches; compiler-
-generated implicit special members and lambda call operators are excluded.
+The corrected campaign denominator (`4144a92c5`) contains 1,105 authority
+owners and 7,818 authority units. This Artboard-family slice contains 395
+units: 301 translation-unit units and 94 handwritten-header units. Those are
+389 function definitions, the `Artboard::sm_frameId` static source statement,
+and five header-guard macro definitions. Counts include overloads,
+constructors/destructors, anonymous-namespace helpers, and both mutually
+exclusive `incFrameId` bodies; compiler-generated implicit special members and
+lambda call operators are excluded.
 
 | Owner | `.cpp` | handwritten header | total |
 | --- | ---: | ---: | ---: |
-| `Artboard` / `ArtboardInstance` | 133 | 57 | 190 |
-| `NestedArtboard` | **51** | 14 | 65 |
-| `ArtboardComponentList` | 93 | 13 | 106 |
-| `NestedArtboardLayout` | 21 | 3 | 24 |
-| `NestedArtboardLeaf` | 2 | 1 | 3 |
-| **Total** | **300** | **88** | **388** |
+| `Artboard` / `ArtboardInstance` | 134 | 59 | 193 |
+| `NestedArtboard` | 51 | 15 | 66 |
+| `ArtboardComponentList` | 93 | 14 | 107 |
+| `NestedArtboardLayout` | 21 | 4 | 25 |
+| `NestedArtboardLeaf` | 2 | 2 | 4 |
+| **Total** | **301** | **94** | **395** |
 
-The earlier `NestedArtboard` count of 50 is off by one: there are 49 class
-definitions plus both `buildVMIList` and `makeTranslate`. More importantly,
-the original denominator said that headers were read but did not enumerate the
-88 executable definitions as a header census. Some were incidentally grouped
-into `.cpp` ownership rows, but only `NestedArtboardLeaf::fitChanged` was
-identified explicitly as an inline definition.
+The earlier `NestedArtboard` count of 50 was off by one: there are 49 class
+definitions plus both `buildVMIList` and `makeTranslate`. The previous count
+also omitted the static `sm_frameId` statement, counted only one of the two
+conditional inline `incFrameId` definitions, and excluded the five header
+guards. The corrected denominator deliberately retains all of those authority
+units.
 
-The 57 `artboard.hpp` definitions are `frameId`, `incFrameId`, `addedToHost`,
+The 58 `artboard.hpp` function definitions are `frameId`, both conditional
+`incFrameId` bodies, `addedToHost`,
 `setActiveFocusManager`, `focusManager`, `setActiveSemanticManager`,
 `semanticManager`, `semanticBoundaryNode`, `shapeWorldTransform`,
 `virtualizableComponent`, `updatesOwnLayout`, the testing constructor,
@@ -58,45 +71,50 @@ The 57 `artboard.hpp` definitions are `frameId`, `incFrameId`, `addedToHost`,
 `objectIndex`, `animationCount`, `stateMachineCount`, `firstAnimation`,
 `firstStateMachine`, `instance<T>`, `isInstance`, the `frameOrigin` getter,
 `deserialize`, `hostOpacity`, `childOpacity`, `hasSelfTransform`,
-`selfTransform`, and the six tools callbacks.
+`selfTransform`, and the six tools callbacks. Its 59th authority unit is the
+header guard.
 
 The remaining header definitions are:
 
-- `nested_artboard.hpp` (14): `isArtboardDataBound`, `artboardCount`, `type`,
+- `nested_artboard.hpp` (14 functions plus header guard):
+  `isArtboardDataBound`, `artboardCount`, `type`,
   `artboardInstance`, `sourceArtboard`, `parentArtboard`,
   `markHostTransformDirty`, `hostComponent`, `keyInput`, `textInput`,
   `gamepadDispatch`, `focused`, `blurred`, and `focusableArtboard`.
-- `artboard_component_list.hpp` (13): `artboardCount`, `transformComponent`,
+- `artboard_component_list.hpp` (13 functions plus header guard):
+  `artboardCount`, `transformComponent`,
   `parentArtboard`, `markHostTransformDirty`, `hostComponent`,
   `isLayoutProvider`, `numLayoutNodes`, `setVisibleIndices`,
   `shouldResetInstances`, `itemCount`, `item`, `type`, and
   `listScopeFocusNode`.
-- `nested_artboard_layout.hpp` (3): `numLayoutNodes`, `isLayoutProvider`, and
+- `nested_artboard_layout.hpp` (3 functions plus header guard): `numLayoutNodes`,
+  `isLayoutProvider`, and
   `transformComponent`.
-- `nested_artboard_leaf.hpp` (1): `fitChanged`.
+- `nested_artboard_leaf.hpp` (1 function plus header guard): `fitChanged`.
 
 ### Falsifying findings
 
-1. **Fresh clone change-state default differs.** Pinned
+1. **Fresh clone change-state default differed; corrected pending review.** Pinned
    `Artboard::instance<T>` constructs `new T`; `m_didChange` has an in-class
    default of `true`, and `instance<T>` never copies that runtime bit. This is
    observable after the source has drawn because `drawInternal` first clears
-   the source bit. Rust `impl Clone for ArtboardInstance` instead assigns
-   `did_change: self.did_change.clone()`. Cloning a drawn/clean occurrence
-   therefore produces `false`, while pinned C++ produces `true`. Exact clone
-   parity is rejected until the Rust owner restores the pinned fresh default
-   and a focused regression covers clone-after-draw.
+   the source bit. Rust `impl Clone for ArtboardInstance` now initializes the
+   fresh occurrence to `true`, while
+   `restore_transient_layout_transfer_state_from` explicitly restores the
+   source bit for same-occurrence transient layout clones. The focused
+   regression starts with a clean source and proves source `false`, public
+   clone `true`, and transient clone `false`. The initial nested-layout paint
+   evaluation now also calls that explicit transient path instead of silently
+   relying on the former public-clone behavior.
 
-2. **The new measurement test does not exercise production registration.**
-   `ordinary_nested_artboard_contributes_its_mounted_intrinsic_size` calls
-   `measure_layout_component` directly. Its synthetic file has no
-   `LayoutComponentStyle` and never sets `intrinsicallySizedValue`; production
-   `build_node` registers `LayoutComponentMeasure` only when that authored flag
-   is true and the provider is a leaf. The test proves the new arithmetic but
-   not that an ordinary nested host contributes `80 x 60` through a real Taffy
-   solve. The arithmetic itself is accepted; certification still requires a
-   styled fixture that enters through `compute_bounds`/`build_node` and covers
-   unconstrained and per-axis constrained layout.
+2. **Production measurement registration lacked evidence; corrected pending
+   review.** `ordinary_nested_artboard_contributes_its_mounted_intrinsic_size`
+   now imports a synthetic host `LayoutComponent` with an authored
+   `LayoutComponentStyle` that is intrinsically sized and hugs both axes. A
+   real `NestedArtboard` mounts an `80 x 60` child, and the test enters through
+   `TaffyRuntimeLayoutEngine::compute_bounds`/`build_node`. It proves the
+   unconstrained host is `80 x 60`; a second authored fixture with `50 x 40`
+   maximums proves the production solve clamps the measured host to `50 x 40`.
 
 3. **The inline frame counter remains unadjudicated.** Pinned `frameId()` is a
    static process-wide counter incremented by root `Artboard::draw`. Rust has
@@ -143,17 +161,19 @@ The Rust dispatcher now maps both host types to the mounted occurrence's
 `artboard_dimensions()` with the same per-axis clamp. A
 `NestedArtboardLayout` remains separate because it transfers the mounted
 Artboard's layout node into the parent tree. The focused regression
-`ordinary_nested_artboard_contributes_its_mounted_intrinsic_size` proves both
-the unconstrained `80 x 60` result and the independently constrained `50 x 40`
-result.
+`ordinary_nested_artboard_contributes_its_mounted_intrinsic_size` now proves
+both the unconstrained `80 x 60` result and the constrained `50 x 40` result
+through the production Taffy registration and solve path.
 
 ## `src/artboard.cpp`
 
-The 133 out-of-line definitions (counting overloads and conditional audio/tools
-definitions) map as follows.
+The 133 out-of-line function definitions (counting overloads and conditional
+audio/tools definitions) plus the `sm_frameId` static source statement map as
+follows.
 
 | C++ symbols, exhaustively enumerated | Exact Rust owner symbols | Disposition |
 | --- | --- | --- |
+| `Artboard::sm_frameId` | process-wide `artboard_draw_frame_id`; instance-local `ArtboardInstance::frame_id` remains separately exposed | **Pending:** static/instance ownership is the unresolved finding below |
 | `Artboard::Artboard`, `Artboard::~Artboard`, `ArtboardInstance::ArtboardInstance`, `ArtboardInstance::~ArtboardInstance`, `canContinue`, `Artboard::validateObjects`, `Artboard::initialize` | `ArtboardInstance::from_graph_inner`, `ArtboardInstance::build_component_occurrence_relations`, `Drop for ArtboardInstance`, Rust field drop order | Owner-safe equivalent; rejected objects become import errors rather than dangling nullable slots |
 | `Artboard::addObject`, `addAnimation`, `addStateMachine`, `addScriptedObject`, `sortDependencies`, `cloneObjectDataBinds` | `from_graph_inner`, `build_component_interface_schedules`, retained `objects`, `linear_animations`, `state_machines`, script-owner tables, `RuntimeRetainedDataBind::clone` | Owner-safe equivalent |
 | `Artboard::sortDrawOrder`, `clearRedundantOperations` | `RuntimeDrawableList::from_graph`, `sort_draw_order`, `clear_redundant_operations`, retained clipping/draw-rule ordering in `draw.rs` | Equivalent retained draw list |
@@ -181,7 +201,7 @@ definitions) map as follows.
 
 ## `src/nested_artboard.cpp`
 
-All 50 out-of-line definitions map as follows.
+All 51 out-of-line definitions map as follows.
 
 | C++ symbols, exhaustively enumerated | Exact Rust owner symbols | Disposition |
 | --- | --- | --- |
@@ -255,18 +275,21 @@ dirt exactly when the `fit` property changes.
 
 ## Evidence
 
-- `cargo test -p nuxie-runtime ordinary_nested_artboard_contributes_its_mounted_intrinsic_size --lib`
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime ordinary_nested_artboard_contributes_its_mounted_intrinsic_size --lib`
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime public_clone_starts_changed_while_transient_clone_preserves_source_state --lib`
+- `make --no-print-directory runtime-source-symbol-check`
 - `cargo test -p nuxie-runtime layout_fit_leaf_resizes_its_mounted_artboard_from_the_parent_layout_frame --lib`
 - `cargo test -p nuxie-runtime artboard_size_change_uses_artboard_propagate_size_override --lib`
 - `cargo test -p nuxie-runtime nested_layout_host_follows_its_interpolating_parent_frame --lib`
 - `cargo test -p nuxie-runtime component_list --lib`
-- `cargo fmt --all -- --check`
 
 Result of the original audit: one hidden source omission was found and
-corrected. Result of the independent adversarial review: **REJECTED**. The
-measurement arithmetic remains accepted, but this family is not source-owner
-complete until the 88 executable header definitions are individually
-adjudicated, fresh-clone `didChange` behavior matches pinned C++, the static
-frame counter ownership is resolved, and the ordinary nested measurement is
-proved through the production layout-registration path. The cross-owner
-`ParticipatesInLayout` decoder red also remains open and explicit.
+corrected. Result of the independent adversarial review: **REJECTED, WITH TWO
+CORRECTIONS PENDING INDEPENDENT RE-REVIEW**. Fresh-clone `didChange` now follows
+pinned C++ while same-occurrence transient clones preserve the source bit, and
+ordinary nested measurement now has production registration/solve evidence.
+This family remains uncertified until an independent reviewer accepts those
+corrections and the static frame-counter owner is resolved. The corrected
+1,105-owner/7,818-unit campaign denominator is accepted; it is no longer an
+open Artboard finding. The cross-owner `ParticipatesInLayout` decoder red also
+remains open and explicit.

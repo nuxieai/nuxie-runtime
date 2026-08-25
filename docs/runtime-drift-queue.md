@@ -3,7 +3,7 @@
 Generated from the checked-in parity ledgers. JSON is authoritative; this view highlights clusters and the highest-discovery candidates.
 
 - Upstream ref: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
-- Candidates: 694
+- Candidates: 692
 - Clusters: 32
 
 ## Dispositions
@@ -13,7 +13,7 @@ Generated from the checked-in parity ledgers. JSON is authoritative; this view h
 | extension | 3 |
 | intentional-decision | 14 |
 | known-divergence | 102 |
-| pending-proof | 88 |
+| pending-proof | 86 |
 | stale-proof | 449 |
 | unknown | 4 |
 | unsupported | 34 |
@@ -27,11 +27,11 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 | cluster | boundary | owner family | candidates | max discovery value |
 |---|---|---|---:|---:|
 | `cluster:layout:ownership` | ownership | layout | 14 | 128 |
-| `cluster:unresolved:ownership` | ownership | unresolved | 41 | 125 |
+| `cluster:unresolved:ownership` | ownership | unresolved | 40 | 125 |
 | `cluster:runtime-tests:lifecycle` | lifecycle | runtime-tests | 73 | 120 |
 | `cluster:runtime-tests:ordering` | ordering | runtime-tests | 20 | 120 |
 | `cluster:runtime-tests:ownership` | ownership | runtime-tests | 38 | 105 |
-| `cluster:unresolved:float-behavior` | float-behavior | unresolved | 3 | 105 |
+| `cluster:unresolved:float-behavior` | float-behavior | unresolved | 2 | 105 |
 | `cluster:unresolved:invalidation` | invalidation | unresolved | 3 | 105 |
 | `cluster:unresolved:lifecycle` | lifecycle | unresolved | 5 | 105 |
 | `cluster:unresolved:mutation` | mutation | unresolved | 6 | 105 |
@@ -157,9 +157,9 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 | 105 | `gap:V3` | pending-proof | `unresolved-owner` | **Differential fuzzing was planned (V2 map, "Long-Tail Strategy" §2) but never built.** `fuzz/` targets are panic-only — no C++ comparison, no randomized times/inputs. The long-ta… |
 | 105 | `gap:V30` | pending-proof | `unresolved-owner` | **Feather invalidation is wired, but its upstream effect path remains divergent.** V25's `ScriptUpdate` reaches `ShapePaint` before feather preparation; fresh dense capture still … |
 | 105 | `gap:V31` | pending-proof | `unresolved-owner` | **PARTIAL 2026-08-04 — retained-gradient rematerialization and root-gradient construction order are closed; a weighted rounded-path gap remains.** Gradient 51 is not recreated at … |
-| 105 | `gap:V41` | pending-proof | `unresolved-owner` | **`paused_nested_artboard_opacity`: nested opacity differs after enrollment.** Rust emits alpha `0xf7` where C++ emits `0xff` for the same `0x6e0000` color payload. \| `corpus.tom… |
 | 105 | `gap:V43` | pending-proof | `unresolved-owner` | **`data_bind_blob_test`: data-bound blob geometry differs.** At the first differing draw, Rust's rectangle height is 2098.35938 while C++ uses 926.574219. \| `corpus.toml` milesto… |
 | 105 | `gap:V9` | pending-proof | `unresolved-owner` | **Rust-only diagnostics never differentially compared**: `--layout-bounds` Taffy report has no C++ counterpart. \| rust-golden-runner \| Optional: C++ layout-bounds flag; else not… |
 | 105 | `gap:W3` | pending-proof | `unresolved-owner` | **Upstream semantic UAF on nested-artboard swap** — `NestedArtboard::nest()` destroys the outgoing `ArtboardInstance` without evicting its `SemanticManager` nodes; next `drainDiff… |
 | 105 | `golden:data_bind_blob_test` | pending-proof | `unresolved-owner` | fixture has no passing Rust/C++ differential proof |
-| 105 | `golden:paused_nested_artboard_opacity` | pending-proof | `unresolved-owner` | fixture has no passing Rust/C++ differential proof |
+| 105 | `silver:interpolator` | unknown | `unresolved-owner` | No producer/reference exists in the pinned upstream runtime tests. |
+| 105 | `silver:listener_action_inputs` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_listener_action_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |

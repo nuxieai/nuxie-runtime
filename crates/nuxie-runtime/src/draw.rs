@@ -3961,9 +3961,8 @@ impl ArtboardInstance {
                     owner_ref.shape_local,
                 )
             });
-            if let Some(render_opacity) = self
-                .component(opacity_local)
-                .map(|component| component.transform.render_opacity)
+            if let Some(render_opacity) =
+                runtime_shape_paint_effective_render_opacity(self, opacity_local)
             {
                 owner.render_opacity.set(render_opacity);
             }
@@ -6984,7 +6983,7 @@ impl ArtboardInstance {
                         text_input.raw.borrow_mut().mark_geometry_dirty();
                     }
                     self.runtime_drawables
-                        .mark_text_shape_paths_retained_for_local(text_local);
+                        .mark_text_render_styles_dirty_for_local(text_local);
                     self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
                 }
                 let has_layout_draw_owner = self
@@ -18674,9 +18673,8 @@ fn runtime_realize_owned_shape_paints(
                     owner_ref.shape_local,
                 )
             });
-        if let Some(render_opacity) = instance
-            .component(opacity_local)
-            .map(|component| component.transform.render_opacity)
+        if let Some(render_opacity) =
+            runtime_shape_paint_effective_render_opacity(instance, opacity_local)
         {
             owner.render_opacity.set(render_opacity);
         }
@@ -21237,6 +21235,25 @@ fn runtime_shape_paint_space_transform(
     shape_world: Mat2D,
 ) -> Option<Mat2D> {
     (path_kind == RuntimeShapePaintPathKind::World).then_some(shape_world)
+}
+
+/// The value already delivered by pinned C++
+/// `ShapePaintMutator::renderOpacity`. An Artboard's paint descendants inherit
+/// both its authored/render opacity and the separate opacity imposed by its
+/// `NestedArtboard` host (`artboard.hpp:641-650`,
+/// `transform_component.cpp:105-119`).
+fn runtime_shape_paint_effective_render_opacity(
+    artboard: &ArtboardInstance,
+    opacity_local: usize,
+) -> Option<f32> {
+    artboard.component(opacity_local).map(|component| {
+        let render_opacity = component.transform.render_opacity;
+        if component.type_name == "Artboard" {
+            render_opacity * artboard.host_opacity
+        } else {
+            render_opacity
+        }
+    })
 }
 
 fn runtime_shape_paint_state(
@@ -27025,6 +27042,27 @@ mod tests {
                 component.local_id,
             );
         }
+    }
+
+    #[test]
+    fn late_artboard_paint_attachment_includes_nested_host_opacity() {
+        let bytes = synthetic_even_odd_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic paint fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic paint graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let opacity_key =
+            property_key_for_name("Artboard", "opacity").expect("Artboard.opacity key");
+
+        assert!(instance.set_double_property(0, opacity_key, 0.4));
+        instance.update_components();
+        assert!(instance.set_host_opacity(0.5));
+
+        assert_eq!(
+            runtime_shape_paint_effective_render_opacity(&instance, 0),
+            Some(0.2),
+            "late ShapePaint attachment must receive the same authored-times-host opacity as pinned C++"
+        );
     }
 
     #[test]

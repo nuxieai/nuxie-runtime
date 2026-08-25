@@ -4767,14 +4767,13 @@ impl ArtboardInstance {
             })
             .collect::<Vec<_>>();
         for text_local in controlled_text {
-            // A hosting-layout resize dirties TextShape but does not run
-            // `Text::clearRenderStyles`; TextStylePaint keeps and rewinds its
-            // existing opacity paths. Classify the pending rebuild before
-            // publishing Path dirt so pooled component-list rows reuse those
-            // concrete RenderPath owners (`layout_component.cpp:1116-1124`,
-            // `text.cpp:1209-1230`).
+            // A hosting-layout resize publishes Path dirt. Pinned
+            // `Text::update(Path)` calls `buildRenderStyles()`, whose
+            // `clearRenderStyles()` step clears TextStylePaint opacity-path
+            // owners before rebuilding (`layout_component.cpp:1116-1124`,
+            // `text.cpp:208-219,558-566,1154-1234`).
             self.runtime_drawables
-                .mark_text_shape_paths_retained_for_local(text_local);
+                .mark_text_render_styles_dirty_for_local(text_local);
             crate::text_owner::mark_shape_dirty_without_layout(self, text_local);
         }
         self.mark_changed();
@@ -6669,7 +6668,7 @@ impl ArtboardInstance {
             text_input.raw.borrow_mut().mark_geometry_dirty();
         }
         self.runtime_drawables
-            .mark_text_shape_paths_retained_for_local(host_local);
+            .mark_text_render_styles_dirty_for_local(host_local);
         self.add_dirt(host_local, ComponentDirt::TEXT_SHAPE, false);
     }
 

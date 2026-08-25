@@ -480,3 +480,37 @@ The accepted scalar `transform_point` correction in `d85dc97a1`, the distinct
 `mapBoundingBox` owner, and the separately tracked IK skew writes are
 unchanged. This implementing lane does not self-certify the correction.
 Verdict: **PENDING two fresh independent re-reviews.**
+
+## Renderer transformed-area correction after `166a3105f` — PENDING
+
+The finite downstream blocker discovered during the full `mapPoints` audit is
+now corrected at its pinned `gpu.cpp::findTransformedArea` owner. The missing
+behavior was the contraction and operand order of `Vec2D::cross`: pinned clang
+on the validated macOS AArch64 host separately rounds the negated second
+product and contracts the first product into it. The Rust owner now expresses
+that exact order as `a.x.mul_add(b.y, -(a.y * b.x))`; it does not add or alter
+any NaN-payload policy.
+
+For matrix bits
+`[f905d99f, 34100a4d, 4ad09610, 171199a5, 3c480a80, 85c51df6]` and bounds bits
+`[9503e6e0, 0b21de72, 1df23437, b7848489]`, direct pinned clang/AArch64,
+debug Rust, and release fat-LTO Rust all return `0x27152238`. The removed
+uncontracted cross returned `0x27152232`; the earlier point-at-a-time mapping
+substitute returned `0x27152277`. The existing exceptional-value witness
+continues to assert classification rather than compiler-selected NaN payload.
+
+The complete pinned-consumer audit found one production caller:
+`PathDraw::Make`. That path now calls the shared `gpu.cpp` owner with its four
+mapped points instead of using the determinant-times-local-bounds shortcut in
+`draw.rs`. The distinction is observable at the authored control threshold.
+For bounds `[0, 0, 512, 512]` and matrix
+`[0x3f800001, 0, 0, 1, 0x4e800000, 0]`, direct pinned clang and both Rust test
+profiles return exactly `0x48800000`, so the strict `> 512 * 512` comparison is
+false. With zero translation they return `0x48800001`, so it is true. The
+removed determinant shortcut ignores mapped-point cancellation and returns
+`0x48800001` in both cases, selecting interior triangulation incorrectly for
+the translated case. The old helper remains only as non-production legacy
+surface; no live `PathDraw::Make` path calls it.
+
+This implementing lane does not self-certify the correction. Verdict:
+**PENDING two fresh independent re-reviews.**

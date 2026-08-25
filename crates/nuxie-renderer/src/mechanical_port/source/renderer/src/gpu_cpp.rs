@@ -3043,7 +3043,9 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
     ];
     let mut pts = [Vec2D::new(0.0, 0.0); 4];
     matrix.map_points(&mut pts, &source);
-    let cross = |a: Vec2D, b: Vec2D| a.x * b.y - a.y * b.x;
+    // Pinned clang contracts the first cross product into the negated,
+    // separately rounded second product. Keep that authored SIMD lane order.
+    let cross = |a: Vec2D, b: Vec2D| a.x.mul_add(b.y, -(a.y * b.x));
     let v0 = Vec2D {
         x: pts[1].x - pts[0].x,
         y: pts[1].y - pts[0].y,
@@ -3086,6 +3088,55 @@ mod map_points_caller_tests {
         // clang. Optimized payload selection is outside Rust's float contract.
         #[cfg(debug_assertions)]
         assert_eq!(area.to_bits(), 0x7fc0_bbbb);
+    }
+
+    #[test]
+    fn transformed_area_preserves_pinned_finite_cross_contraction_bits() {
+        let matrix = std::hint::black_box(Mat2D([
+            f32::from_bits(0xf905_d99f),
+            f32::from_bits(0x3410_0a4d),
+            f32::from_bits(0x4ad0_9610),
+            f32::from_bits(0x1711_99a5),
+            f32::from_bits(0x3c48_0a80),
+            f32::from_bits(0x85c5_1df6),
+        ]));
+        let bounds = std::hint::black_box(AABB::new(
+            f32::from_bits(0x9503_e6e0),
+            f32::from_bits(0x0b21_de72),
+            f32::from_bits(0x1df2_3437),
+            f32::from_bits(0xb784_8489),
+        ));
+
+        // Direct pinned clang/AArch64 oracle. The uncontracted Rust cross
+        // returned 0x27152232; the former scalar-map substitute 0x27152277.
+        assert_eq!(find_transformed_area(bounds, matrix).to_bits(), 0x2715_2238);
+    }
+
+    #[test]
+    fn transformed_area_preserves_pinned_threshold_control_result() {
+        let bounds = AABB::new(0.0, 0.0, 512.0, 512.0);
+        let without_translation = Mat2D([f32::from_bits(0x3f80_0001), 0.0, 0.0, 1.0, 0.0, 0.0]);
+        let with_large_translation = Mat2D([
+            f32::from_bits(0x3f80_0001),
+            0.0,
+            0.0,
+            1.0,
+            f32::from_bits(0x4e80_0000),
+            0.0,
+        ]);
+
+        let above = find_transformed_area(bounds, without_translation);
+        let at = find_transformed_area(bounds, with_large_translation);
+        assert_eq!(above.to_bits(), 0x4880_0001);
+        assert_eq!(at.to_bits(), 0x4880_0000);
+        assert!(above > 512.0 * 512.0);
+        assert!(!(at > 512.0 * 512.0));
+
+        // The removed determinant shortcut ignores mapped-point cancellation
+        // and incorrectly selects interior triangulation for the translated case.
+        let determinant_shortcut = f32::from_bits(0x3f80_0001) * 512.0 * 512.0;
+        assert_eq!(determinant_shortcut.to_bits(), 0x4880_0001);
+        assert!(determinant_shortcut > 512.0 * 512.0);
     }
 }
 

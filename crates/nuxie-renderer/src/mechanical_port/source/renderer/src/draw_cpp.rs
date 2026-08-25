@@ -20,6 +20,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp a
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     AABBu16, LogicalFlush, RenderContext, IAABB,
 };
+use crate::mechanical_port::source::renderer::src::gpu_cpp;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPath;
 use nuxie_render_api::{
     BlendMode, FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D,
@@ -1567,7 +1568,7 @@ pub unsafe fn make_path_draw_from_source(
     let do_interior = !paint.getIsStroked()
         && paint.getFeather() == 0.0
         && context.frameInterlockMode() != gpu::InterlockMode::msaa
-        && crate::draw::should_use_interior_tessellation(path, matrix);
+        && should_use_interior_tessellation(path, matrix);
     let mut geometry = if do_interior {
         PreparedPathGeometry::Interior(crate::draw::build_interior_tessellation(
             path,
@@ -1719,6 +1720,37 @@ pub unsafe fn make_path_draw_from_source(
     owner.triangulator_negate_winding = owner.triangulator_reverse_triangles
         != (directions == gpu::ContourDirections::forwardThenReverse);
     Some(owner)
+}
+
+fn should_use_interior_tessellation(path: &RawPath, matrix: Mat2D) -> bool {
+    path.verbs().len() < 1000
+        && path
+            .bounds()
+            .is_some_and(|bounds| gpu_cpp::find_transformed_area(bounds, matrix) > 512.0 * 512.0)
+}
+
+#[cfg(test)]
+mod transformed_area_consumer_tests {
+    use super::{Mat2D, RawPath, should_use_interior_tessellation};
+
+    fn threshold_path() -> RawPath {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(512.0, 0.0);
+        path.line_to(512.0, 512.0);
+        path.line_to(0.0, 512.0);
+        path
+    }
+
+    #[test]
+    fn path_draw_uses_mapped_area_for_the_pinned_threshold_decision() {
+        let path = threshold_path();
+        let mut matrix = Mat2D([f32::from_bits(0x3f80_0001), 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert!(should_use_interior_tessellation(&path, matrix));
+
+        matrix.0[4] = f32::from_bits(0x4e80_0000);
+        assert!(!should_use_interior_tessellation(&path, matrix));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

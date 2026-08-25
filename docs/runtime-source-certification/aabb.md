@@ -637,3 +637,70 @@ changing release geometry:
 
 Implementation status: **CORRECTED CANDIDATE**. Certification status:
 **PENDING TWO FRESH INDEPENDENT REVIEWS**.
+
+## First fresh independent review of correction `d2605b4de`
+
+Verdict: **ACCEPTED** at correction commit
+`d2605b4ded833e276d857717e953ef7e6503c582` and reviewed HEAD
+`a48e0ac75570168cbdfbd0addb61848bea326f52`.
+
+This review independently re-read the pinned AABB, Mat2D, PathDraw, and
+RenderContext authority at
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`, then followed the operative
+Vulkan, WebGPU, WebGL2, and Metal call graph. The two blockers reported by the
+post-`42ea58166` reviews are corrected with the pinned ordering and build-mode
+semantics:
+
+1. Pinned `Mat2D::mapBoundingBox` normalizes invalid pre-translation extents,
+   adds translation only on the valid branch, bit-casts the final lanes to an
+   `AABB`, and then asserts both final extents. The shared render-API owner now
+   performs its `width() >= 0` and `height() >= 0` `debug_assert!` calls on the
+   final translated `Aabb`, after the same normalization branch. The positive-
+   infinity translation witness therefore panics in debug builds, while the
+   assertions compile away in release builds like pinned `assert` under
+   `NDEBUG`.
+
+2. Pinned `PathDraw::Make` repeats those width and height assertions
+   immediately after `matrix.mapBoundingBox(...)`, before stroke/Feather
+   outset and before `roundOut`. Rust preserves that authored duplication in
+   both operative helper routes: `path_pixel_bounds` checks the mapped box
+   before rounding, and `feather_pixel_bounds_impl` checks it before computing
+   or applying the mapped outset. `resolve_path_pixel_bounds` recomputes these
+   bounds even when a precomputed value is supplied in debug builds and takes
+   the precomputed early return only in release builds, matching the source's
+   `#ifdef NDEBUG` boundary.
+
+3. Pinned `allocateFeatherAtlasDraw` performs its scalar coordinate and extent
+   assertions, writes `x` and `y`, constructs `paddedRegion`, applies the
+   enclosing `AABBu16::contains` assertion, and only then updates the atlas
+   maxima and pending draw list. The Rust executable retains that exact order
+   and reaches the shared `TypedAabb<u16>::contains` owner for the final
+   assertion. The preceding scalar assertions have not been substituted for
+   the typed-AABB call.
+
+The broader live-caller sweep found no surviving alternate bounds owner for
+these renderer paths. Ordinary and stroked/Feather PathDraw bounds reach the
+shared pair-lane `Mat2D::map_bounding_box`; the mapped outset reaches its
+four-corner `map_bounds` overload; clip-rectangle, clip-path, and unit-image
+bounds in `RiveRenderer` reach those same owners; and renderer containment,
+intersection, and emptiness sites continue to reach shared `TypedAabb`
+methods. `isOutsideCurrentFrameExecutable` remains a faithful translation of
+the pinned SIMD compound comparison, not an expansion of a source `empty()`
+member call. The downstream transformed-area correction at reviewed HEAD does
+not alter these AABB contracts.
+
+Focused evidence, all with `CARGO_INCREMENTAL=0` where Cargo was used:
+
+- render-API `map_bounding_box` tests: 2/2 passed, including the required
+  post-translation debug panic;
+- renderer `path_pixel_bounds_` and `feather_pixel_bounds` filters: passed;
+- translated upstream AABB suite: 12/12 passed;
+- individual renderer checks passed for `renderer-vulkan`, `renderer-webgpu`,
+  `renderer-webgl2`, and `renderer-metal`;
+- file correspondence passed with 456 applicable rows and zero pending rows;
+- symbol correspondence passed with 7,818 authority units across 1,105
+  owners, including generated-authority replay.
+
+Implementation status: **CORRECTED CANDIDATE ACCEPTED BY FIRST FRESH
+INDEPENDENT REVIEW**. Certification status: **PENDING SECOND FRESH INDEPENDENT
+REVIEW**.

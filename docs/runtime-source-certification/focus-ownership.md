@@ -1,5 +1,9 @@
 # Focus ownership source certification
 
+> **Independent adversarial review: rejected.** Commit `d4c083f22` does not
+> preserve the pinned `FocusData::focused` occurrence sequence, and this
+> receipt does not cover the complete v2 focus authority described below.
+
 ## Scope and evidence
 
 This is a fresh literal audit against pinned upstream commit
@@ -20,6 +24,28 @@ The corresponding upstream headers were also read completely:
 `include/rive/animation/focus_listener_group.hpp`. `src/input/focus_node.cpp`
 and Rust `input/focus_node.rs` were inspected as ownership dependencies, but
 their independent B6-0239 certification is outside this shard.
+
+That four-translation-unit boundary is too narrow for the certification claim.
+The v2 denominator contains 20 directly coupled focus owners and 156 executable
+units across `FocusData`, `FocusManager`, `FocusNode`, `Focusable`,
+`FocusListener`, the focus listener group, the three focus actions, and the
+transition focus condition. They are:
+
+- 89 units in nine source owners: the 30/43/6/2 units in
+  `focus_data.cpp`, `focus_manager.cpp`, `focus_node.cpp`, and
+  `focusable.cpp`; the four listener-group units; and one unit in each of the
+  three focus-action sources and `transition_focus_condition.cpp`;
+- 67 units in eleven handwritten headers: the FocusData, FocusManager,
+  FocusNode, Focusable, FocusListener, listener-group, focus-action, and
+  transition-condition headers.
+
+The inventory below dispositions only the 79 out-of-line units in four source
+owners. Saying that five headers were read does not disposition their 61
+executable units, and the other 16 directly coupled source/header units are not
+inventoried. Therefore 77 of the 156 v2 units have no symbol-level disposition
+or accepted evidence in this receipt. In particular, excluding FocusNode while
+claiming exact focus-chain callbacks removes the inline `focused()`/`blurred()`
+delegation that makes the disputed behavior observable.
 
 ## Literal symbol inventory
 
@@ -99,7 +125,7 @@ contract.
 | `onFocused` | Queues the listener only when the snapshotted focus flag is set. | `queue_focus` gates on the snapshotted focus flag. |
 | `onBlurred` | Queues the listener only when the snapshotted blur flag is set. | `queue_blur` gates on the snapshotted blur flag. |
 
-## Demonstrated mistranslation and correction
+## Demonstrated mistranslation and attempted correction
 
 Pinned `FocusData::focused` calls `scrollIntoView()` before any focus-listener
 notification. Rust already contained the translated scroll algorithm in
@@ -107,22 +133,87 @@ notification. Rust already contained the translated scroll algorithm in
 semantic-focus request path. Ordinary direct, sequential, and directional
 focus transitions therefore omitted a pinned side effect.
 
-The correction is ownership-preserving rather than a new algorithm:
+The attempted correction is an ownership adaptation rather than a new scroll
+algorithm:
 
-1. A successful `RuntimeFocusTree` focus transition retains the exact
-   `(owner_identity, target_local)` occurrence selected by the pinned manager
-   logic.
+1. A successful `RuntimeFocusTree` focus transition retains one
+   `(owner_identity, target_local)` pair.
 2. The first `advance_on_artboard_with_script_host` consumes that occurrence
    and calls the existing translated scroll implementation.
-3. This handoff occurs before focus listener events are processed, preserving
-   the pinned `scrollIntoView -> listener notification` order.
+3. When that handoff survives until the next advance, it occurs before the
+   queued focus-listener batch in that advance.
 4. The semantic-focus path no longer separately schedules the same scroll, so
    one successful focus transition produces one scroll request.
 
-Focused regression evidence verifies that a successful focus occurrence
-retains the exact route until the Artboard handoff and that the route is
-consumed once. Existing retained-tree integration tests continue to verify
-focus-node hierarchy/reparenting behavior.
+The focused regression evidence verifies only a flat, single-node transition:
+one requested pair is stored and `take_pending_focus_scroll` consumes it once.
+It does not invoke `ArtboardInstance::scroll_focus_target_into_view`, observe a
+scroll mutation, observe callback ordering, or cover nested scopes, multiple
+transitions, semantic focus, cloning, manager replacement, or cleanup.
+
+## Independent adversarial findings
+
+### The retained pair is not the pinned focused-occurrence sequence
+
+Pinned `FocusManager::setFocus` first descends an eligible requested scope to
+its first eligible leaf. `notifyFocusChange` then walks from that selected leaf
+through every newly focused ancestor, calling `FocusNode::focused()` for each
+node. Each backed node delegates to `FocusData::focused()`, which performs its
+own `scrollIntoView()` before its listener, semantic, and text-input effects.
+
+`set_focus_target_for_owner` instead stores the *requested* owner/target after
+`FocusManager::set_focus` returns. Thus a direct request for a scope stores the
+scope even when the manager selected a descendant leaf. More generally, direct,
+sequential, directional, and semantic routes all store at most one pair while
+the pinned transition can produce a leaf-to-ancestor sequence of multiple
+backed focus occurrences. The pair is therefore neither necessarily the
+selected occurrence nor a complete representation of the pinned callbacks.
+
+### The one-slot handoff drops valid transitions
+
+`pending_focus_scroll` is an `Option`, so every successful transition before
+the next Artboard-bearing advance overwrites the previous transition. Pinned
+C++ scrolls synchronously for every transition. For example, focusing A and
+then B before the next advance scrolls A and then B upstream, but Rust scrolls
+only B. Clearing focus does not clear the retained pair, so focus A followed by
+clear can later scroll a stale, no-longer-focused A after intervening geometry
+changes. Cleanup of a mounted owner likewise removes its topology without
+invalidating a pair that names that owner.
+
+### Deferred execution does not preserve the complete pinned order
+
+For one surviving pair, the next advance consumes the pair before processing
+that advance's queued focus-listener batch. That limited order is real, but it
+does not establish pinned synchronous ordering. Code between the focus change
+and the next advance observes the pre-scroll state. A focus action executed
+during an advance creates the pair only after the advance-start consumption,
+so later actions in the same listener occurrence run before the scroll even
+though pinned `FocusData::focused()` scrolls during the focus action.
+
+The semantic route is a concrete reversal: Rust `request_semantic_focus`
+updates semantic focused state immediately after storing the pair, while the
+scroll waits for a later advance. Pinned `FocusData::focused()` scrolls first,
+then notifies focus listeners, then synchronizes the sibling SemanticData.
+Removing the semantic tree's prior scroll request does not make this new order
+equivalent.
+
+### Clone and manager-lifecycle evidence does not close the adaptation
+
+`RuntimeFocusTree::clone` deep-clones the whole domain, including the deferred
+pair. A snapshot made after focus but before advance can therefore replay the
+same delayed scroll in both independent occurrences; pinned C++ had already
+completed the synchronous scroll before any later snapshot boundary. Conversely,
+`replace_with_owner_occurrence_from` builds a default domain and resets every
+node's `has_focus`, pending callbacks, and pending scroll. Those choices may be
+valid Rust lifecycle adaptations, but this receipt supplies no occurrence test
+against the complete external-manager/nested-artboard call chain.
+
+The retained listener-group representation has useful focused tests for flag
+gating, duplicate order, and category construction. The receipt still provides
+no direct registration/unregistration evidence for focus-data destruction,
+nested swaps, manager cleanup, or replacement. Those claims cannot be promoted
+from plausible ownership design to accepted source parity by the flat pending
+pair test.
 
 ## Adaptations and remaining certification boundaries
 
@@ -149,10 +240,14 @@ focus-node hierarchy/reparenting behavior.
 
 ## Verdict
 
-The four mapped owners have complete symbol coverage under the ownership
-adaptations above, and the demonstrated missing ordinary-focus scroll side
-effect is corrected from pinned source. The focus manager's topology,
-sequential and directional traversal, focus-chain ordering, input bubbling,
-and listener flag gating are fresh-literal matches. Final end-to-end focus
-certification remains open only at the explicitly named SemanticData/TextInput
-cross-owner boundary and the separately owned FocusNode translation unit.
+**Rejected.** The four out-of-line source inventories are useful partial audit
+notes, and the retained manager has substantial focused evidence for traversal,
+topology, input bubbling, and listener flag gating. They do not establish a
+complete v2 certification, and commit `d4c083f22` does not correct ordinary
+focus scrolling with exact occurrence parity. Acceptance requires a lossless
+leaf-to-ancestor occurrence queue (including the manager's actual selected
+leaf), Artboard-level evidence for every direct/sequential/directional/semantic
+route and synchronous ordering seam, lifecycle/clone/nested-manager evidence,
+and symbol-level dispositions for all 156 directly coupled v2 units. Semantic
+and TextInput coupling remains an additional joint-audit boundary, not the only
+remaining boundary.

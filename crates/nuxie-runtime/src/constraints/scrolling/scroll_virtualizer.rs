@@ -59,7 +59,7 @@ pub(crate) fn constrain_scroll_virtualizer(
     };
     // Pinned `ScrollVirtualizer::constrain` returns true but leaves every
     // retained field untouched when content size is non-positive.
-    if content_size <= 0.0 {
+    if !(content_size > 0.0) {
         return true;
     }
     let provider_item_sizes = {
@@ -126,12 +126,12 @@ pub(crate) fn constrain_scroll_virtualizer(
         return true;
     }
     let actual_start = if infinite {
-        range.visible_start.rem_euclid(total_item_count as i32)
+        range.visible_start % total_item_count as i32
     } else {
         range.visible_start
     };
     let actual_end = if infinite {
-        range.visible_end.rem_euclid(total_item_count as i32)
+        range.visible_end % total_item_count as i32
     } else {
         range.visible_end
     };
@@ -143,12 +143,12 @@ pub(crate) fn constrain_scroll_virtualizer(
         used_indices.extend(0..=actual_end);
     }
     let last_start = if infinite {
-        last_visible_start.rem_euclid(total_item_count as i32)
+        last_visible_start % total_item_count as i32
     } else {
         last_visible_start
     };
     let last_end = if infinite {
-        last_visible_end.rem_euclid(total_item_count as i32)
+        last_visible_end % total_item_count as i32
     } else {
         last_visible_end
     };
@@ -220,12 +220,23 @@ pub(crate) fn constrain_scroll_virtualizer(
             visible.0 = logical_index as i32;
         }
         visible.1 = logical_index as i32;
-        if !artboard.virtualizing_component_has_item(provider_local, logical_index)
-            && artboard.add_component_list_virtualizable(&file, provider_local, logical_index)
-        {
+        if !artboard.virtualizing_component_has_item(provider_local, logical_index) {
+            let _ = artboard.add_component_list_virtualizable(&file, provider_local, logical_index);
+            // C++ records the VirtualizingComponent for its callback after
+            // every missing-item add attempt, even when the concrete list
+            // cannot map that logical item to an Artboard.
             changed_providers.insert(provider_local);
         }
         if artboard.virtualizing_component_has_item(provider_local, logical_index) {
+            let parent_world_invertible = providers
+                .get(provider_index)
+                .and_then(|provider| artboard.objects.component(*provider))
+                .is_some_and(|component| component.transform.world_transform.determinant() != 0.0);
+            if !parent_world_invertible {
+                // Pinned code computes an otherwise-unused inverse and
+                // continues the global visible loop when it is singular.
+                continue;
+            }
             let layout_position = artboard
                 .component_list_virtualizable_layout_position(provider_local, logical_index);
             // The pinned virtualizer replaces only the main-axis coordinate.
@@ -356,14 +367,7 @@ pub(in crate::constraints) fn virtualized_provider_content_size(
         .map(|items| {
             let item_extent = items
                 .iter()
-                .map(|size| {
-                    let value = if is_horizontal { size.0 } else { size.1 };
-                    if value.is_finite() {
-                        value.max(0.0)
-                    } else {
-                        0.0
-                    }
-                })
+                .map(|size| if is_horizontal { size.0 } else { size.1 })
                 .sum::<f32>();
             item_extent + gap * items.len().saturating_sub(1) as f32
         })

@@ -1,9 +1,5 @@
-//! One-for-one expected-red ports of pinned
+//! One-for-one ports of pinned
 //! `tests/unit_tests/runtime/scroll_velocity_test.cpp`.
-//!
-//! Scroll physics and pointer routing are present, but Rust's public retained
-//! owner does not expose the exact C++ `velocityX`, `velocityY`, or
-//! `scrollActive` observables. The complete four bodies remain explicit.
 
 use std::path::PathBuf;
 
@@ -79,24 +75,30 @@ fn fixture(name: &str, with_state_machine: bool) -> Fixture {
     }
 }
 
-fn velocity_x(_: &ArtboardInstance, _: usize) -> f32 {
-    missing_scroll_velocity_owner()
+fn velocity_x(artboard: &ArtboardInstance, scroll_local: usize) -> f32 {
+    scroll_snapshot(artboard, scroll_local).velocity.0
 }
 
-fn velocity_y(_: &ArtboardInstance, _: usize) -> f32 {
-    missing_scroll_velocity_owner()
+fn velocity_y(artboard: &ArtboardInstance, scroll_local: usize) -> f32 {
+    scroll_snapshot(artboard, scroll_local).velocity.1
 }
 
-fn scroll_active(_: &ArtboardInstance, _: usize) -> bool {
-    missing_scroll_velocity_owner()
+fn scroll_active(artboard: &ArtboardInstance, scroll_local: usize) -> bool {
+    scroll_snapshot(artboard, scroll_local).scroll_active
 }
 
-fn missing_scroll_velocity_owner() -> ! {
-    panic!("Rust does not expose the retained ScrollConstraint velocity/scrollActive owner")
+fn scroll_snapshot(
+    artboard: &ArtboardInstance,
+    scroll_local: usize,
+) -> nuxie_runtime::RuntimeScrollConstraintSnapshot {
+    artboard
+        .scroll_constraint_occurrences()
+        .into_iter()
+        .find(|snapshot| snapshot.constraint_local_id == scroll_local)
+        .expect("retained ScrollConstraint snapshot")
 }
 
 #[test]
-#[ignore = "expected-red: Rust does not expose ScrollConstraint velocity/scrollActive"]
 fn scroll_constraint_velocity_and_scroll_active_during_drag() {
     let mut fixture = fixture("layout/layout_scroll_vertical.riv", true);
     let state_machine = fixture.state_machine.as_mut().expect("state machine");
@@ -114,7 +116,9 @@ fn scroll_constraint_velocity_and_scroll_active_during_drag() {
     assert!(scroll_active(&fixture.artboard, fixture.scroll_local));
     assert_eq!(velocity_y(&fixture.artboard, fixture.scroll_local), 0.0);
 
-    state_machine.pointer_move(&mut fixture.artboard, 50.0, 50.0, 0.0, 0);
+    // Rust's approved deterministic host-clock adaptation makes the implicit
+    // C++ high-resolution-clock tick explicit on pointer input.
+    state_machine.pointer_move(&mut fixture.artboard, 50.0, 50.0, 1.0, 0);
     state_machine
         .advance_and_apply(&mut fixture.artboard, 0.0)
         .expect("drag-move advance");
@@ -133,7 +137,6 @@ fn scroll_constraint_velocity_and_scroll_active_during_drag() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust does not expose ScrollConstraint velocity/scrollActive"]
 fn scroll_constraint_velocity_resets_after_physics_settles() {
     let mut fixture = fixture("layout/layout_scroll_vertical.riv", true);
     let state_machine = fixture.state_machine.as_mut().expect("state machine");
@@ -143,7 +146,7 @@ fn scroll_constraint_velocity_resets_after_physics_settles() {
     state_machine
         .advance_and_apply(&mut fixture.artboard, 0.1)
         .expect("drag-start advance");
-    state_machine.pointer_move(&mut fixture.artboard, 50.0, 50.0, 0.0, 0);
+    state_machine.pointer_move(&mut fixture.artboard, 50.0, 50.0, 1.0, 0);
     state_machine
         .advance_and_apply(&mut fixture.artboard, 0.0)
         .expect("drag-move advance");
@@ -168,7 +171,6 @@ fn scroll_constraint_velocity_resets_after_physics_settles() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust does not expose ScrollConstraint velocity/scrollActive"]
 fn scroll_constraint_horizontal_velocity() {
     let mut fixture = fixture("layout/layout_scroll_horizontal.riv", true);
     let state_machine = fixture.state_machine.as_mut().expect("state machine");
@@ -178,7 +180,7 @@ fn scroll_constraint_horizontal_velocity() {
     state_machine
         .advance_and_apply(&mut fixture.artboard, 0.1)
         .expect("drag-start advance");
-    state_machine.pointer_move(&mut fixture.artboard, 50.0, 50.0, 0.0, 0);
+    state_machine.pointer_move(&mut fixture.artboard, 50.0, 50.0, 1.0, 0);
     state_machine
         .advance_and_apply(&mut fixture.artboard, 0.0)
         .expect("drag-move advance");
@@ -190,10 +192,9 @@ fn scroll_constraint_horizontal_velocity() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust does not expose ScrollConstraint velocity/scrollActive"]
 fn scroll_constraint_scroll_active_false_when_idle() {
     let mut fixture = fixture("layout/layout_scroll_vertical.riv", false);
-    let percent_y = property_key("ScrollConstraint", "percentY");
+    let percent_y = property_key("ScrollConstraint", "scrollPercentY");
     assert!(
         fixture
             .artboard

@@ -49,7 +49,8 @@ use crate::components::{
 };
 use crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization;
 use crate::constraints::{
-    apply_scroll_offset_changed, retain_runtime_scroll_constraints, runtime_scroll_double_property,
+    apply_scroll_offset_changed, retain_runtime_scroll_constraints, runtime_scroll_bool_property,
+    runtime_scroll_double_property, set_runtime_scroll_bool_property,
     set_runtime_scroll_double_property,
 };
 use crate::custom_property_container::{
@@ -5116,7 +5117,8 @@ impl ArtboardInstance {
             // (`src/animation/nested_bool.cpp:36-48`).
             return Some(self.nested_bool_value(local_id).unwrap_or(false));
         }
-        self.objects.bool_property(local_id, property_key)
+        runtime_scroll_bool_property(self, local_id, property_key)
+            .or_else(|| self.objects.bool_property(local_id, property_key))
     }
 
     pub(crate) fn shape_paint_is_visible(&self, local_id: usize) -> Option<bool> {
@@ -5153,11 +5155,20 @@ impl ArtboardInstance {
             == Some(property_key))
         .then(|| self.shape_paint_is_visible(local_id))
         .flatten();
-        if !self
-            .objects
-            .set_bool_property(local_id, property_key, value)
-        {
-            return false;
+        match set_runtime_scroll_bool_property(self, local_id, property_key, value) {
+            Some(false) => return false,
+            Some(true) => {
+                // Pinned `setScrollActive` is a computed no-op setter. The
+                // generated wrapper still runs its changed/notification tail.
+            }
+            None => {
+                if !self
+                    .objects
+                    .set_bool_property(local_id, property_key, value)
+                {
+                    return false;
+                }
+            }
         }
         let mut owner_callback_handled = false;
         self.apply_bool_property_changed(

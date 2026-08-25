@@ -89,6 +89,10 @@ pub struct RuntimeScrollConstraintSnapshot {
     pub physics_present: bool,
     /// The owned physics occurrence's `isRunning()` value.
     pub physics_running: bool,
+    /// The owned physics occurrence's live X/Y speed, or zero without physics.
+    pub velocity: (f32, f32),
+    /// Whether viewport drag, scrollbar drag, or owned physics is active.
+    pub scroll_active: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +100,7 @@ enum RuntimeScrollProperty {
     Offset(RuntimeScrollAxis),
     Percent(RuntimeScrollAxis),
     Index,
+    Velocity(RuntimeScrollAxis),
     ContentExtent(RuntimeScrollAxis),
 }
 
@@ -106,6 +111,8 @@ fn runtime_scroll_property(property_key: u16) -> Option<RuntimeScrollProperty> {
         percent_x,
         percent_y,
         index,
+        velocity_x,
+        velocity_y,
         content_width,
         content_height,
     ] = *runtime_scroll_property_keys();
@@ -119,6 +126,10 @@ fn runtime_scroll_property(property_key: u16) -> Option<RuntimeScrollProperty> {
         Some(RuntimeScrollProperty::Percent(RuntimeScrollAxis::Y))
     } else if index == Some(property_key) {
         Some(RuntimeScrollProperty::Index)
+    } else if velocity_x == Some(property_key) {
+        Some(RuntimeScrollProperty::Velocity(RuntimeScrollAxis::X))
+    } else if velocity_y == Some(property_key) {
+        Some(RuntimeScrollProperty::Velocity(RuntimeScrollAxis::Y))
     } else if content_width == Some(property_key) {
         Some(RuntimeScrollProperty::ContentExtent(RuntimeScrollAxis::X))
     } else if content_height == Some(property_key) {
@@ -128,8 +139,8 @@ fn runtime_scroll_property(property_key: u16) -> Option<RuntimeScrollProperty> {
     }
 }
 
-fn runtime_scroll_property_keys() -> &'static [Option<u16>; 7] {
-    static KEYS: OnceLock<[Option<u16>; 7]> = OnceLock::new();
+fn runtime_scroll_property_keys() -> &'static [Option<u16>; 9] {
+    static KEYS: OnceLock<[Option<u16>; 9]> = OnceLock::new();
     KEYS.get_or_init(|| {
         [
             property_key_for_name("ScrollConstraint", "scrollOffsetX"),
@@ -137,6 +148,8 @@ fn runtime_scroll_property_keys() -> &'static [Option<u16>; 7] {
             property_key_for_name("ScrollConstraint", "scrollPercentX"),
             property_key_for_name("ScrollConstraint", "scrollPercentY"),
             property_key_for_name("ScrollConstraint", "scrollIndex"),
+            property_key_for_name("ScrollConstraint", "velocityX"),
+            property_key_for_name("ScrollConstraint", "velocityY"),
             property_key_for_name("ScrollConstraint", "computedContentWidth"),
             property_key_for_name("ScrollConstraint", "computedContentHeight"),
         ]
@@ -159,7 +172,9 @@ fn runtime_scroll_intent_axes(
             }
             axes
         }
-        RuntimeScrollProperty::Offset(_) | RuntimeScrollProperty::ContentExtent(_) => Vec::new(),
+        RuntimeScrollProperty::Offset(_)
+        | RuntimeScrollProperty::Velocity(_)
+        | RuntimeScrollProperty::ContentExtent(_) => Vec::new(),
     }
 }
 
@@ -259,7 +274,18 @@ impl RuntimeScrollLayoutMetrics {
         if self.infinite && self.main_axis() == axis {
             return f32::NEG_INFINITY;
         }
-        (self.viewport_size(axis) - self.content_size(axis) - self.trailing_padding(axis)).min(0.0)
+        cpp_std_min(
+            0.0,
+            self.viewport_size(axis) - self.content_size(axis) - self.trailing_padding(axis),
+        )
+    }
+
+    fn min_offset(&self, axis: RuntimeScrollAxis) -> f32 {
+        if self.infinite && self.main_axis() == axis {
+            f32::INFINITY
+        } else {
+            0.0
+        }
     }
 
     fn max_offset_for_percent(&self, axis: RuntimeScrollAxis) -> f32 {
@@ -274,7 +300,7 @@ impl RuntimeScrollLayoutMetrics {
         if self.infinite {
             value
         } else {
-            value.clamp(self.max_offset(axis), 0.0)
+            rive_math_clamp(value, self.max_offset(axis), 0.0)
         }
     }
 
@@ -472,7 +498,26 @@ fn clamped_scroll_constraint_offsets(
     if let Some(physics) = scroll.physics.as_ref().filter(|physics| physics.enabled()) {
         return physics.clamp(range_min, (0.0, 0.0), raw);
     }
-    (raw.0.clamp(range_min.0, 0.0), raw.1.clamp(range_min.1, 0.0))
+    (
+        rive_math_clamp(raw.0, range_min.0, 0.0),
+        rive_math_clamp(raw.1, range_min.1, 0.0),
+    )
+}
+
+fn runtime_scroll_velocity(scroll: &RuntimeScrollConstraintState, axis: RuntimeScrollAxis) -> f32 {
+    scroll.physics.as_ref().map_or(0.0, |physics| match axis {
+        RuntimeScrollAxis::X => physics.speed.0,
+        RuntimeScrollAxis::Y => physics.speed.1,
+    })
+}
+
+fn runtime_scroll_active(scroll: &RuntimeScrollConstraintState) -> bool {
+    scroll.is_dragging
+        || scroll.is_scroll_bar_dragging
+        || scroll
+            .physics
+            .as_ref()
+            .is_some_and(RuntimeScrollPhysicsState::is_running)
 }
 
 impl ArtboardInstance {
@@ -556,14 +601,10 @@ impl ArtboardInstance {
             metrics.max_offset(RuntimeScrollAxis::X),
             metrics.max_offset(RuntimeScrollAxis::Y),
         );
-        let upper_bound = if metrics.infinite {
-            match metrics.main_axis() {
-                RuntimeScrollAxis::X => (f32::INFINITY, 0.0),
-                RuntimeScrollAxis::Y => (0.0, f32::INFINITY),
-            }
-        } else {
-            (0.0, 0.0)
-        };
+        let upper_bound = (
+            metrics.min_offset(RuntimeScrollAxis::X),
+            metrics.min_offset(RuntimeScrollAxis::Y),
+        );
         let physics = constraint.physics.as_ref();
         Some(RuntimeScrollConstraintSnapshot {
             constraint_local_id,
@@ -576,6 +617,11 @@ impl ArtboardInstance {
             clamped_offset: clamped_scroll_constraint_offsets(self, constraint_handle, &metrics),
             physics_present: physics.is_some(),
             physics_running: physics.is_some_and(RuntimeScrollPhysicsState::is_running),
+            velocity: (
+                runtime_scroll_velocity(constraint, RuntimeScrollAxis::X),
+                runtime_scroll_velocity(constraint, RuntimeScrollAxis::Y),
+            ),
+            scroll_active: runtime_scroll_active(constraint),
         })
     }
 }
@@ -735,14 +781,23 @@ pub(crate) fn scroll_constraint_to_show_bounds(
         .component(constraint)
         .and_then(|component| component.concrete.scroll.as_ref())
         .is_some_and(|scroll| scroll.physics.is_some());
+    {
+        let scroll = artboard
+            .objects
+            .component_mut(constraint)
+            .and_then(|component| component.concrete.scroll.as_mut())
+            .expect("retained ScrollConstraint remains live");
+        // Pinned `scrollToPosition` clears held intents before either the
+        // direct-offset or owned-physics branch.
+        scroll.intent_x = None;
+        scroll.intent_y = None;
+    }
     if has_physics {
         let scroll = artboard
             .objects
             .component_mut(constraint)
             .and_then(|component| component.concrete.scroll.as_mut())
             .expect("retained ScrollConstraint remains live");
-        scroll.intent_x = None;
-        scroll.intent_y = None;
         scroll
             .physics
             .as_mut()
@@ -765,22 +820,30 @@ fn nearest_snap_offset(
         return target;
     }
     let scrolling_negative = target < current;
-    points
-        .iter()
-        .map(|bounds| -(if use_x { bounds.x } else { bounds.y }))
-        .filter(|candidate| {
-            if scrolling_negative {
-                *candidate <= target
-            } else {
-                *candidate >= target
-            }
-        })
-        .min_by(|left, right| {
-            let left_distance = (left - target).abs();
-            let right_distance = (right - target).abs();
-            left_distance.total_cmp(&right_distance)
-        })
-        .unwrap_or(target)
+    let mut best = target;
+    let mut found = false;
+    let mut best_distance = 0.0;
+    for bounds in points {
+        let candidate = -(if use_x { bounds.x } else { bounds.y });
+        if if scrolling_negative {
+            candidate > target
+        } else {
+            candidate < target
+        } {
+            continue;
+        }
+        let distance = if scrolling_negative {
+            target - candidate
+        } else {
+            candidate - target
+        };
+        if !found || distance < best_distance {
+            best_distance = distance;
+            best = candidate;
+            found = true;
+        }
+    }
+    if found { best } else { target }
 }
 
 pub(crate) fn follow_path_orient_property_key() -> u16 {
@@ -1486,12 +1549,44 @@ pub(crate) fn runtime_scroll_double_property(
                     .unwrap_or(0.0),
             )
         }
-        RuntimeScrollProperty::ContentExtent(axis) => Some(
-            runtime_scroll_layout_metrics(artboard, constraint_handle, constraint, false)
-                .map(|metrics| metrics.content_size(axis))
-                .unwrap_or(0.0),
-        ),
+        RuntimeScrollProperty::Velocity(axis) => Some(runtime_scroll_velocity(constraint, axis)),
+        RuntimeScrollProperty::ContentExtent(axis) => {
+            let has_layout_parent = constraint.content.is_some_and(|content| {
+                artboard
+                    .objects
+                    .component(content)
+                    .is_some_and(|component| component.concrete.layout.is_some())
+            });
+            Some(if has_layout_parent {
+                runtime_scroll_layout_metrics(artboard, constraint_handle, constraint, false)
+                    .map(|metrics| metrics.content_size(axis))
+                    .unwrap_or(0.0)
+            } else {
+                0.0
+            })
+        }
     }
+}
+
+pub(crate) fn runtime_scroll_bool_property(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    property_key: u16,
+) -> Option<bool> {
+    if property_key_for_name("ScrollConstraint", "scrollActive") != Some(property_key) {
+        return None;
+    }
+    let (_, scroll) = runtime_scroll_constraint(artboard, local_id)?;
+    Some(runtime_scroll_active(scroll))
+}
+
+pub(crate) fn set_runtime_scroll_bool_property(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    property_key: u16,
+    value: bool,
+) -> Option<bool> {
+    runtime_scroll_bool_property(artboard, local_id, property_key).map(|current| current != value)
 }
 
 pub(crate) fn set_runtime_scroll_double_property(
@@ -1504,8 +1599,11 @@ pub(crate) fn set_runtime_scroll_double_property(
     if matches!(property, RuntimeScrollProperty::Offset(_)) {
         return None;
     }
-    if matches!(property, RuntimeScrollProperty::ContentExtent(_)) {
-        // S4-47 passthrough setters intentionally retain no value. The
+    if matches!(
+        property,
+        RuntimeScrollProperty::Velocity(_) | RuntimeScrollProperty::ContentExtent(_)
+    ) {
+        // Computed passthrough setters intentionally retain no value. The
         // generated wrapper still publishes a changed notification when its
         // live getter differs from the attempted write.
         return Some(
@@ -1605,8 +1703,10 @@ pub(crate) fn set_runtime_scroll_double_property(
                 )?;
             }
         }
-        RuntimeScrollProperty::Offset(_) | RuntimeScrollProperty::ContentExtent(_) => {
-            unreachable!("offsets and content extents do not create scroll intents")
+        RuntimeScrollProperty::Offset(_)
+        | RuntimeScrollProperty::Velocity(_)
+        | RuntimeScrollProperty::ContentExtent(_) => {
+            unreachable!("offsets and computed properties do not create scroll intents")
         }
     }
     Some(true)
@@ -2255,14 +2355,12 @@ fn layout_component_axis_size(
                 bounds.height
             }
         })
-        .filter(|size| size.is_finite() && *size > 0.0)
     {
         return size;
     }
     let property_name = if horizontal { "width" } else { "height" };
     let authored_size = property_key_for_name("LayoutComponent", property_name)
-        .and_then(|key| artboard.double_property(layout_local, key))
-        .filter(|size| size.is_finite() && *size > 0.0);
+        .and_then(|key| artboard.double_property(layout_local, key));
     if let Some(size) = authored_size {
         return size;
     }
@@ -2296,7 +2394,6 @@ fn layout_style_axis_trailing_padding(
             property_key_for_name("LayoutComponentStyle", property)
                 .and_then(|key| artboard.double_property(style_local, key))
         })
-        .filter(|padding| padding.is_finite())
         .unwrap_or(0.0)
 }
 
@@ -2315,7 +2412,6 @@ fn layout_style_axis_leading_padding(
             property_key_for_name("LayoutComponentStyle", property)
                 .and_then(|key| artboard.double_property(style_local, key))
         })
-        .filter(|padding| padding.is_finite())
         .unwrap_or(0.0)
 }
 
@@ -2327,15 +2423,25 @@ fn clamped_scroll_offset(
     trailing_padding: f32,
     infinite: bool,
 ) -> f32 {
-    if infinite || !raw_offset.is_finite() {
+    if infinite {
         return raw_offset;
     }
-    let max_offset = (viewport_size - content_size - trailing_padding).min(0.0);
-    raw_offset.clamp(max_offset, 0.0)
+    let max_offset = cpp_std_min(0.0, viewport_size - content_size - trailing_padding);
+    rive_math_clamp(raw_offset, max_offset, 0.0)
 }
 
 fn scroll_viewport_axis_size(viewport_size: f32, content_origin: f32) -> f32 {
-    (viewport_size - content_origin).max(0.0)
+    cpp_std_max(0.0, viewport_size - content_origin)
+}
+
+// Literal two-argument `std::min`/`std::max` comparison order. Besides NaN,
+// this preserves the pinned choice of the left operand for equal signed zero.
+fn cpp_std_min(left: f32, right: f32) -> f32 {
+    if right < left { right } else { left }
+}
+
+fn cpp_std_max(left: f32, right: f32) -> f32 {
+    if left < right { right } else { left }
 }
 
 // Pinned `math::clamp` is `fminf(fmaxf(lo, value), hi)`: NaN resolves to
@@ -2752,10 +2858,10 @@ mod tests {
         RuntimeScrollAxisIntent, RuntimeScrollConstraintState, RuntimeScrollLayoutMetrics,
         RuntimeScrollProperty, RuntimeScrollSpace, TestVirtualizerPlacement,
         advance_scroll_constraint, clamped_scroll_offset, constrain_component_list_world_transform,
-        interpolated_rotation, interpolated_rotation_from_modded_base, nearest_snap_offset,
-        point_length, runtime_draggable_proxy_drag, runtime_draggable_proxy_end,
-        runtime_draggable_proxy_start, runtime_scroll_intent_axes, rive_math_clamp,
-        scroll_viewport_axis_size,
+        cpp_std_min, interpolated_rotation, interpolated_rotation_from_modded_base,
+        nearest_snap_offset, point_length, rive_math_clamp, runtime_draggable_proxy_drag,
+        runtime_draggable_proxy_end, runtime_draggable_proxy_start, runtime_scroll_intent_axes,
+        scroll_constraint_to_show_bounds, scroll_viewport_axis_size,
     };
 
     #[test]
@@ -3316,6 +3422,48 @@ mod tests {
     }
 
     #[test]
+    fn scroll_computed_properties_read_the_live_cpp_owner() {
+        let (mut instance, scroll_local, _) = scroll_bar_proxy_fixture();
+        let constraint = instance.component_handle(scroll_local).unwrap();
+        let velocity_x = property_key_for_name("ScrollConstraint", "velocityX").unwrap();
+        let velocity_y = property_key_for_name("ScrollConstraint", "velocityY").unwrap();
+        let scroll_active = property_key_for_name("ScrollConstraint", "scrollActive").unwrap();
+        {
+            let scroll = instance
+                .objects
+                .component_mut(constraint)
+                .and_then(|component| component.concrete.scroll.as_mut())
+                .unwrap();
+            scroll.physics.as_mut().unwrap().speed = (12.0, -34.0);
+            scroll.is_dragging = true;
+        }
+
+        assert_eq!(
+            instance.double_property(scroll_local, velocity_x),
+            Some(12.0)
+        );
+        assert_eq!(
+            instance.double_property(scroll_local, velocity_y),
+            Some(-34.0)
+        );
+        assert_eq!(
+            instance.bool_property(scroll_local, scroll_active),
+            Some(true)
+        );
+
+        assert!(instance.set_double_property(scroll_local, velocity_x, 99.0));
+        assert!(instance.set_bool_property(scroll_local, scroll_active, false));
+        assert_eq!(
+            instance.double_property(scroll_local, velocity_x),
+            Some(12.0)
+        );
+        assert_eq!(
+            instance.bool_property(scroll_local, scroll_active),
+            Some(true)
+        );
+    }
+
+    #[test]
     fn finite_drag_without_physics_clamps_stored_overscroll_before_the_next_delta() {
         let (mut instance, scroll_local, _) = scroll_bar_proxy_fixture();
         let constraint = instance
@@ -3542,6 +3690,36 @@ mod tests {
         assert_eq!(
             instance.double_property(constraint_local, percent_y_key),
             Some(0.5)
+        );
+    }
+
+    #[test]
+    fn focus_scroll_direct_offsets_clear_held_intents_without_physics() {
+        let (mut instance, constraint_local) = scroll_intent_fixture();
+        instance.update_pass();
+        let constraint = instance.component_handle(constraint_local).unwrap();
+        instance
+            .objects
+            .component_mut(constraint)
+            .and_then(|component| component.concrete.scroll.as_mut())
+            .unwrap()
+            .intent_y = Some(RuntimeScrollAxisIntent {
+            space: RuntimeScrollSpace::Percent,
+            value: 0.5,
+        });
+
+        assert!(scroll_constraint_to_show_bounds(
+            &mut instance,
+            constraint,
+            (0.0, 600.0, 50.0, 650.0),
+        ));
+        assert_eq!(
+            instance
+                .objects
+                .component(constraint)
+                .and_then(|component| component.concrete.scroll.as_ref())
+                .and_then(|scroll| scroll.intent_y),
+            None
         );
     }
 
@@ -4366,5 +4544,68 @@ mod tests {
                 value: (0.0, -10.0)
             }
         ));
+    }
+
+    #[test]
+    fn scroll_constraint_and_virtualizer_keep_cpp_float_edges() {
+        let metrics = RuntimeScrollLayoutMetrics::vertical_for_test(
+            100.0,
+            300.0,
+            0.0,
+            vec![RuntimeLayoutBounds {
+                x: 0.0,
+                y: 10.0,
+                width: 100.0,
+                height: 50.0,
+            }],
+        );
+        let percent_nan = RuntimeScrollAxisIntent {
+            space: RuntimeScrollSpace::Percent,
+            value: f32::NAN,
+        };
+        assert_eq!(
+            percent_nan.resolve(RuntimeScrollAxis::Y, Some(&metrics)),
+            Some(-200.0),
+            "pinned math::clamp resolves a NaN percent to the lower bound"
+        );
+        assert_eq!(
+            nearest_snap_offset(0.0, f32::NAN, &metrics.item_bounds, false),
+            -10.0,
+            "pinned directional scan retains its first candidate for a NaN target"
+        );
+        assert_eq!(cpp_std_min(0.0, -0.0).to_bits(), 0.0_f32.to_bits());
+        let mut infinite_metrics = metrics.clone();
+        infinite_metrics.infinite = true;
+        assert_eq!(
+            infinite_metrics.min_offset(RuntimeScrollAxis::Y),
+            f32::INFINITY
+        );
+        let mut infinite_clamped = crate::components::RuntimeScrollPhysicsState::clamped();
+        infinite_clamped.run(
+            (0.0, f32::NEG_INFINITY),
+            (0.0, f32::INFINITY),
+            (0.0, 25.0),
+            &[],
+            1.0,
+            1.0,
+        );
+        assert!(matches!(
+            infinite_clamped.kind,
+            crate::components::RuntimeScrollPhysicsKind::Clamped {
+                value: (0.0, 25.0)
+            }
+        ));
+        assert!(
+            virtualized_provider_content_size(
+                &[vec![(f32::NAN, 10.0)]],
+                true,
+                0.0,
+                false,
+                0.0,
+                0.0,
+            )
+            .is_nan(),
+            "item extents are not silently sanitized before the source content-size branch"
+        );
     }
 }

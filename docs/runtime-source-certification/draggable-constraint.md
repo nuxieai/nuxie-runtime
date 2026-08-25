@@ -190,13 +190,52 @@ hit owner with an authored scripted listener and a non-no-op atomic host; the
 source review, rather than that test alone, supplies the context and ordering
 verdict.
 
+## Second independent correction review
+
+**REJECTED at correction commit `56fb3bcf0`.** This review independently read
+the complete pinned Draggable pair, the base listener-group owner, pinned
+`StateMachineInstance::updateListeners`/`dragStart`/`dragEnd`, and the live
+Rust hit-component and scripting/context routes before attempting to falsify
+the first review. The top-level `HitDrawable` path is corrected, but the claim
+that the active script execution environment survives the complete recursive
+traversal is false for two production hit-component owners.
+
+`HitNestedArtboard::process_event` ignores its `owned_context`,
+`event_context`, and `host` arguments and calls the infallible
+`process_nested_artboard_event`. That owner routes child Down/Up/Move/Exit
+with `None`, `None`, and `NoopScriptHost`; routes child DragStart/DragEnd
+through the no-context compatibility facades; and converts child errors to
+`HitResult::None`. `HitComponentList::process_event` and
+`process_component_list_event` repeat the same substitution for virtualized
+child state machines. Consequently, a component-provided DragStart or
+DragEnd can enter one of these hit owners after the corrected top-level
+reentry and still lose the caller's script-update marks, atomic error policy,
+owned view-model context, and rendered event context before reaching a nested
+authored scripted listener. Pinned C++ performs these nested state-machine
+calls synchronously inside the same `updateListeners` traversal; it does not
+introduce an equivalent execution-environment replacement at that boundary.
+
+The focused production fixture still passed in an isolated worktree under
+`CARGO_INCREMENTAL=0`, but it attaches its scripted listener to the top-level
+scroll proxy's own hit owner. It therefore proves the corrected top-level
+branch while never crossing either falsifying owner.
+
+Closeout requires fallible contextual nested-artboard and component-list
+routing: both hit owners must forward the active host and applicable contexts
+to child state-machine pointer and drag traversal, preserve DragEnd's final
+Move ordering, and return a terminal child error to the outer fallible pointer
+entry. Regression evidence must exercise a real nested-artboard or component-
+list scripted listener with a non-no-op atomic host. This is a continuation of
+the invocation-owner correction, not a proxy-local workaround.
+
 ## Certification boundary and verdict
 
-**First independent adversarial correction review accepted; second independent
-review pending.** The phase, group-global scroll, provider-order, draggable
-no-op enable/disable, recursion-position, scroll-result, final-Move, and active
-script-context corrections remain intact. This first review does not satisfy
-the campaign's two-review closeout rule by itself.
+**Second independent adversarial correction review rejected.** The phase,
+group-global scroll, provider-order, draggable no-op enable/disable,
+recursion-position, scroll-result, and top-level final-Move corrections remain
+intact. Active script context is not yet preserved through nested-artboard and
+component-list hit owners, so the first accepted review does not satisfy the
+campaign's two-review closeout rule.
 
 Concrete proxy algorithms owned by `ScrollConstraint` and
 `ScrollBarConstraint` remain dependencies and are not silently certified by

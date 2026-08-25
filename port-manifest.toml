@@ -1933,9 +1933,9 @@ note = "Consolidated Rust port for scripted."
 
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-runtime/src/scripted_interpolator.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie/src/lib.rs"
-note = "FTAIL partial promotion against scripted_interpolator.cpp:108-150 and linear_animation_instance.cpp:109-183: per-keyframe tables clone ordinary ScriptInput DataBinds/converters, resolve through the complete Artboard DataContext chain, refresh retained sources, and advance stateful converter occurrences in authored clone order after lazy apply. Existing fixture-shaped tests cover hydration, source refresh, teardown/replacement, and per-keyframe identity; focused runtime tests cover per-clone advancement. Honest remainders: cloneProperties-created ScriptedDataConverter operands still lack attachment of their cloned Lua converter tables, and no imported fixture yet exercises parent-scope fallback with a real stateful scripted converter. Crate-boundary facade and VM seams are retained intentionally."
+note = "Phase 3 current-pin paired audit: per-keyframe tables preserve transform/transformValue fallbacks, asset identity, clone-local ScriptInputs/DataBinds/converters, complete parent-scoped DataContext resolution, live refresh, stateful advancement, and teardown. The audit corrected the omitted clone-specific ScriptedDataConverter Luau table lifecycle by reusing the source-derived ordered ScriptedObject binding walk; an imported two-protocol fixture proves generator/init/convert ordering and converted-value delivery. Crate-boundary facade and VM seams are retained intentionally."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"

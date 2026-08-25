@@ -2,14 +2,16 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::artboard_data_bind::RuntimeOwnedDataContext;
+use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::state_machine::{
     RuntimeScriptedListenerActionBindingDefinition, RuntimeScriptedListenerActionBindingOccurrence,
-    RuntimeScriptedListenerBoundValue, runtime_scripted_object_binding_definition,
+    RuntimeScriptedListenerBoundValue, RuntimeScriptedListenerDataConverterBindStep,
+    runtime_scripted_object_binding_definition,
 };
 use crate::{
     ArtboardInstance, NoopScriptHost, RuntimeOwnedViewModelHandle, ScriptError, ScriptHost,
-    ScriptInstance, ScriptInterpolatorMethod, ScriptListenerInputSnapshotValue,
-    ScriptOptionalNumberResult,
+    ScriptInstance, ScriptInterpolatorMethod, ScriptListenerActionHydration,
+    ScriptListenerInputSnapshot, ScriptListenerInputSnapshotValue, ScriptOptionalNumberResult,
 };
 use nuxie_binary::RuntimeFile;
 
@@ -77,7 +79,269 @@ pub struct RuntimeScriptedInterpolatorBindingOccurrence {
     data_context: RuntimeOwnedDataContext,
 }
 
+/// C++-ordered binding work for the DataBinds cloned with one lazy
+/// `ScriptedInterpolator` occurrence.
+///
+/// The sequence is intentionally occurrence-local. In pinned C++, adding the
+/// clone's DataBind to the live Artboard interleaves outer-source binding,
+/// nested converter binding/reinitialization, and final-input rebinding before
+/// the interpolator table is hydrated.
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeScriptedInterpolatorDataConverterBindStep {
+    BindInput {
+        input_global_id: u32,
+    },
+    BindConverter {
+        input_global_id: u32,
+        converter_path: Vec<usize>,
+    },
+    Rehydrate {
+        input_global_id: u32,
+        converter_path: Vec<usize>,
+        converter_global_id: u32,
+        inits: bool,
+    },
+    RebindFinalInput {
+        input_global_id: u32,
+        converter_path: Vec<usize>,
+        converter_input_index: usize,
+        data_bind_index: usize,
+    },
+    FinalizeInput {
+        input_global_id: u32,
+    },
+}
+
 impl RuntimeScriptedInterpolatorBindingOccurrence {
+    /// Install the concrete Artboard DataContext before walking cloned binds.
+    #[doc(hidden)]
+    pub fn install_data_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        fallback_root: Option<&RuntimeOwnedViewModelHandle>,
+    ) {
+        self.data_context = artboard.scripted_interpolator_owned_data_context(fallback_root);
+    }
+
+    #[doc(hidden)]
+    pub fn scripted_data_converter_bind_steps(
+        &self,
+    ) -> Vec<RuntimeScriptedInterpolatorDataConverterBindStep> {
+        self.inner
+            .scripted_converter_bind_steps()
+            .into_iter()
+            .map(|step| match step {
+                RuntimeScriptedListenerDataConverterBindStep::BindListenerInput {
+                    listener_input_global_id,
+                    ..
+                } => RuntimeScriptedInterpolatorDataConverterBindStep::BindInput {
+                    input_global_id: listener_input_global_id,
+                },
+                RuntimeScriptedListenerDataConverterBindStep::BindConverter {
+                    listener_input_global_id,
+                    converter_path,
+                    ..
+                } => RuntimeScriptedInterpolatorDataConverterBindStep::BindConverter {
+                    input_global_id: listener_input_global_id,
+                    converter_path,
+                },
+                RuntimeScriptedListenerDataConverterBindStep::Rehydrate {
+                    listener_input_global_id,
+                    converter_path,
+                    converter_global_id,
+                    inits,
+                    ..
+                } => RuntimeScriptedInterpolatorDataConverterBindStep::Rehydrate {
+                    input_global_id: listener_input_global_id,
+                    converter_path,
+                    converter_global_id,
+                    inits,
+                },
+                RuntimeScriptedListenerDataConverterBindStep::RebindFinalInput {
+                    listener_input_global_id,
+                    converter_path,
+                    converter_input_index,
+                    data_bind_index,
+                    ..
+                } => RuntimeScriptedInterpolatorDataConverterBindStep::RebindFinalInput {
+                    input_global_id: listener_input_global_id,
+                    converter_path,
+                    converter_input_index,
+                    data_bind_index,
+                },
+                RuntimeScriptedListenerDataConverterBindStep::FinalizeListenerInput {
+                    listener_input_global_id,
+                    ..
+                } => RuntimeScriptedInterpolatorDataConverterBindStep::FinalizeInput {
+                    input_global_id: listener_input_global_id,
+                },
+            })
+            .collect()
+    }
+
+    #[doc(hidden)]
+    pub fn bind_input_source(&mut self, file: &RuntimeFile, input_global_id: u32) -> bool {
+        self.inner.bind_listener_input_source_from_data_context(
+            file,
+            &self.data_context,
+            input_global_id,
+            false,
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn bind_converter_own_sources(
+        &mut self,
+        file: &RuntimeFile,
+        input_global_id: u32,
+        converter_path: &[usize],
+    ) -> bool {
+        self.inner
+            .bind_converter_own_sources_from_data_context_at_path(
+                file,
+                &self.data_context,
+                input_global_id,
+                converter_path,
+                false,
+            )
+    }
+
+    #[doc(hidden)]
+    pub fn rebind_scripted_converter_final_input(
+        &mut self,
+        file: &RuntimeFile,
+        input_global_id: u32,
+        converter_path: &[usize],
+        converter_input_index: usize,
+        data_bind_index: usize,
+    ) -> bool {
+        self.inner.rebind_scripted_converter_final_input(
+            file,
+            None,
+            Some(&self.data_context),
+            input_global_id,
+            converter_path,
+            converter_input_index,
+            data_bind_index,
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn finalize_input_sources(&mut self, input_global_id: u32) -> bool {
+        self.inner.finalize_listener_input_sources(input_global_id)
+    }
+
+    #[doc(hidden)]
+    pub fn has_scripted_data_converter_instance(
+        &self,
+        input_global_id: u32,
+        converter_path: &[usize],
+    ) -> bool {
+        self.inner
+            .has_scripted_converter_instance_at_path(input_global_id, converter_path)
+    }
+
+    #[doc(hidden)]
+    pub fn scripted_data_converter_input_snapshots(
+        &self,
+        input_global_id: u32,
+        converter_path: &[usize],
+    ) -> Option<Vec<ScriptListenerInputSnapshot>> {
+        self.inner
+            .scripted_converter_input_snapshots(input_global_id, converter_path)
+    }
+
+    #[doc(hidden)]
+    pub fn set_scripted_data_converter_instance(
+        &mut self,
+        input_global_id: u32,
+        converter_path: &[usize],
+        converter_global_id: u32,
+        instance: Box<dyn ScriptInstance>,
+    ) -> Result<(), ScriptError> {
+        let handle = RuntimeScriptInstanceHandle::new(instance);
+        if !self.inner.attach_scripted_converter_instance_at_path(
+            input_global_id,
+            converter_path,
+            &handle,
+        ) {
+            return Err(ScriptError::new(format!(
+                "ScriptedInterpolator input global {input_global_id} has no ScriptedDataConverter occurrence {converter_path:?} (global {converter_global_id})",
+            )));
+        }
+        Ok(())
+    }
+
+    /// Hydrate and initialize one retained converter table at the exact point
+    /// where C++ `ScriptedDataConverter::bindFromContext` calls `reinit`.
+    #[doc(hidden)]
+    pub fn hydrate_and_initialize_scripted_data_converter_instance<F>(
+        &mut self,
+        input_global_id: u32,
+        converter_path: &[usize],
+        context: ScriptListenerActionHydration,
+        inits: bool,
+        prepare_hydration: F,
+    ) -> Result<bool, ScriptError>
+    where
+        F: FnOnce(&Self) -> Result<ScriptListenerActionHydration, ScriptError>,
+    {
+        let handle = self
+            .inner
+            .scripted_converter_instance_at_path(input_global_id, converter_path)
+            .ok_or_else(|| {
+                ScriptError::new(format!(
+                    "ScriptedInterpolator input global {input_global_id} has no attached ScriptedDataConverter occurrence {converter_path:?}",
+                ))
+            })?;
+        {
+            let mut instance = handle.borrow_mut();
+            context.install_context(&mut **instance)?;
+            instance.prepare_init_retry()?;
+        }
+        let hydration = prepare_hydration(self)?;
+        let mut instance = handle.borrow_mut();
+        hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;
+        let hydrated = if !inits || !instance.user_init_pending()? {
+            true
+        } else {
+            instance.call_init(&mut NoopScriptHost)?
+        };
+        drop(instance);
+        if hydrated {
+            let marked = self
+                .inner
+                .mark_scripted_converter_hydrated(input_global_id, converter_path);
+            debug_assert!(
+                marked,
+                "the hydrated ScriptedDataConverter must retain its interpolator DataBind"
+            );
+        }
+        Ok(hydrated)
+    }
+
+    #[doc(hidden)]
+    pub fn input_snapshots(&self) -> Vec<ScriptListenerInputSnapshot> {
+        self.inner.input_snapshots()
+    }
+
+    /// Hydrate an occurrence whose DataContext sources were already bound by
+    /// the ordered converter walk above.
+    #[doc(hidden)]
+    pub fn hydrate_bound_inputs(
+        &mut self,
+        file: &RuntimeFile,
+        script: &mut dyn ScriptInstance,
+    ) -> Result<(), ScriptError> {
+        for input in self.inner.input_snapshots() {
+            if let Some(ScriptListenerInputSnapshotValue::Value(value)) = input.value {
+                script.set_input_core(&input.name, value)?;
+            }
+        }
+        self.refresh_inputs(file, script)
+    }
+
     /// Clone authored properties, bind their occurrence-local DataBinds, and
     /// synchronously project source values through cloned converters. C++
     /// performs the same synchronous update when `cloneProperties` adds a bind
@@ -94,7 +358,7 @@ impl RuntimeScriptedInterpolatorBindingOccurrence {
                 script.set_input_core(&input.name, value)?;
             }
         }
-        self.data_context = artboard.scripted_interpolator_owned_data_context(fallback_root);
+        self.install_data_context(artboard, fallback_root);
         self.inner
             .bind_sources_from_data_context(file, &self.data_context, false);
         self.refresh_inputs(file, script)

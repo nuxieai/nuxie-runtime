@@ -455,6 +455,38 @@ fn public_api_exposes_the_explicit_metal_renderer() {
     );
 }
 
+#[cfg(all(feature = "renderer-metal", target_os = "macos"))]
+#[test]
+fn imported_artboard_renders_pixels_with_the_explicit_metal_renderer() {
+    let file = File::import(&external_fixture("in_band_asset.riv"))
+        .expect("import embedded image fixture");
+    let mut instance = file
+        .default_artboard()
+        .expect("default artboard")
+        .instantiate()
+        .expect("instantiate artboard");
+    let mut factory =
+        nuxie::NativeMetalFactory::new(4, 3).expect("construct the explicit native Metal renderer");
+    let mut frame = factory
+        .begin_frame(0xff_12_34_56)
+        .expect("begin native Metal frame");
+    instance
+        .draw(&mut factory, &mut frame)
+        .expect("draw imported Rive artboard");
+
+    let output = frame
+        .finish_for_benchmark()
+        .expect("finish imported Rive artboard frame");
+    assert!(output.execution_inventory.draw_calls > 0);
+    assert_eq!(
+        &output.pixels[..4],
+        &[49, 49, 49, 255],
+        "the exact-source paint lifecycle must preserve the imported background color (draw_calls={}, logical_flushes={})",
+        output.execution_inventory.draw_calls,
+        output.execution_inventory.logical_flushes,
+    );
+}
+
 #[test]
 fn public_api_drives_default_state_machine_and_inputs() {
     let bytes = repo_fixture("fixtures/animation/smi_test.riv");

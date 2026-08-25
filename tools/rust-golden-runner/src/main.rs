@@ -1043,12 +1043,8 @@ fn run() -> Result<String> {
                             emit_input_mutation(&mut *factory, event)?;
                         }
                         ScriptEventKind::Input(event) => {
-                            let hit_result = apply_input_event(
-                                event,
-                                &mut instance,
-                                state_machine.as_mut(),
-                                owned_view_model_context.as_mut(),
-                            );
+                            let hit_result =
+                                apply_input_event(event, &mut instance, state_machine.as_mut());
                             factory.add_input_event(
                                 event.kind.name(),
                                 event.seconds,
@@ -1616,12 +1612,7 @@ fn write_layout_bounds_report(
                     instance.set_artboard_dimensions(event.width, event.height);
                 }
                 ScriptEventKind::Input(event) => {
-                    apply_input_event(
-                        event,
-                        instance,
-                        state_machine.as_mut(),
-                        owned_view_model_context.as_mut(),
-                    );
+                    apply_input_event(event, instance, state_machine.as_mut());
                 }
                 ScriptEventKind::ViewModel(event) => {
                     apply_view_model_event(owned_view_model_context.as_mut(), event)?;
@@ -2611,23 +2602,26 @@ fn emit_view_model_mutation(factory: &mut dyn RunnerBackend, event: &ViewModelEv
 /// Applies one scripted pointer input and returns the tri-state
 /// `HitResult` C++ `Scene::pointerDown/Move/Up/Exit` return
 /// (`scene.hpp:55-60`; base `Scene` returns `none`, `scene.cpp:18-24`).
+/// Pinned `applyInput(Scene*, event)` passes no separate ViewModel owner: the
+/// Scene resolves listener mutations through its already-bound DataContext.
+/// Holding the same Rust root mutably across this call would make that legal
+/// C++ re-entry fail a `RefCell` borrow instead (`tools/golden-runner/main.cpp:
+/// 1316-1330`).
 fn apply_input_event(
     event: &InputEvent,
     instance: &mut ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
-    owned_view_model_context: Option<&mut RuntimeOwnedViewModelContext>,
 ) -> RuntimeHitResult {
     let Some(state_machine) = state_machine else {
         return RuntimeHitResult::None;
     };
-    let mut context = owned_view_model_context.and_then(|context| context.main_mut());
     match event.kind {
         InputKind::PointerDown => state_machine.pointer_down_hit_result(
             instance,
             event.x,
             event.y,
             event.pointer_id,
-            context.as_deref_mut(),
+            None,
         ),
         InputKind::PointerMove => state_machine.pointer_move_hit_result(
             instance,
@@ -2635,21 +2629,17 @@ fn apply_input_event(
             event.y,
             event.seconds,
             event.pointer_id,
-            context.as_deref_mut(),
+            None,
         ),
-        InputKind::PointerUp => state_machine.pointer_up_hit_result(
-            instance,
-            event.x,
-            event.y,
-            event.pointer_id,
-            context.as_deref_mut(),
-        ),
+        InputKind::PointerUp => {
+            state_machine.pointer_up_hit_result(instance, event.x, event.y, event.pointer_id, None)
+        }
         InputKind::PointerExit => state_machine.pointer_exit_hit_result(
             instance,
             event.x,
             event.y,
             event.pointer_id,
-            context.as_deref_mut(),
+            None,
         ),
         InputKind::SemanticAction
         | InputKind::SemanticFocus

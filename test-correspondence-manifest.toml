@@ -689,7 +689,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 test_case_count = 5
 status = "ported-direct"
 evidence = ["crates/nuxie/tests/upstream_scripting_dependency.rs"]
-note = "All five pinned fixtures execute through the Rust-native scripting stack with the original named artboard/default view-model selection, initial 0.1 advance/draw, exact 30-number or five-string mutation loops, 0.016 advances, frame/draw order, and pinned SRIV comparisons. They are honestly expected-red at the first frozen-stream difference: Rust records the upstream frameSize setup call as op 0 while every pinned C++ silver starts with makeRenderPaint. The port retains frameSize and does not filter that discrepancy away."
+note = "All five pinned fixtures execute through the Rust-native scripting stack with the original named artboard/default view-model selection, initial 0.1 advance/draw, exact 30-number or five-string mutation loops, 0.016 advances, frame/draw order, and pinned SRIV comparisons. Phase 3 restored C++ ReadRiveFile's renderer-construction order through the facade's factory-late Artboard initialization boundary: retained makeRenderPaint operations now precede frameSize naturally, and all five frozen streams compare exact without filtering."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_detached_viewmodel_advance_test.cpp"

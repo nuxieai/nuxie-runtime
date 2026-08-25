@@ -5739,6 +5739,28 @@ impl<'a> ArtboardInstance<'a> {
         self.raw.artboard_bounds()
     }
 
+    /// Attach a late-supplied renderer factory at the C++ Artboard
+    /// construction boundary. Normal draw calls do this lazily; exact upstream
+    /// harnesses call it before recording operations that follow file import.
+    #[doc(hidden)]
+    pub fn initialize_renderer(&self, factory: &mut dyn Factory) -> Result<()> {
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("artboard instance graph is unavailable")?;
+        self.raw.initialize_artboard_renderer(
+            &self.file.runtime,
+            artboard,
+            &self.file.graph.artboards,
+            &self.file.external_image_assets,
+            factory,
+            self.file.max_retained_decoded_image_bytes,
+        )?;
+        Ok(())
+    }
+
     pub fn has_audio(&self) -> bool {
         self.raw.has_audio()
     }
@@ -6772,6 +6794,26 @@ impl OwnedArtboardInstance {
 
     pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
         self.raw.artboard_bounds()
+    }
+
+    /// Owning mirror of [`ArtboardInstance::initialize_renderer`].
+    #[doc(hidden)]
+    pub fn initialize_renderer(&self, factory: &mut dyn Factory) -> Result<()> {
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("owned artboard instance graph is unavailable")?;
+        self.raw.initialize_artboard_renderer(
+            &self.file.runtime,
+            artboard,
+            &self.file.graph.artboards,
+            &self.file.external_image_assets,
+            factory,
+            self.file.max_retained_decoded_image_bytes,
+        )?;
+        Ok(())
     }
 
     pub fn has_audio(&self) -> bool {

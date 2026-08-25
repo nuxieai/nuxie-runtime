@@ -157,11 +157,16 @@ struct InputProjectionScript {
     trigger_failure: ProjectionFailure,
     artboard_widths: Rc<RefCell<Vec<f32>>>,
     lifetime_valid: bool,
+    artboard_context_live: bool,
 }
 
 impl ScriptInstance for InputProjectionScript {
     fn script_lifetime_valid(&self) -> bool {
         self.lifetime_valid
+    }
+
+    fn script_artboard_input_context_live(&self) -> bool {
+        self.artboard_context_live
     }
 
     fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
@@ -861,6 +866,7 @@ fn scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp() {
         trigger_failure: ProjectionFailure::Ordinary,
         artboard_widths: Rc::clone(&artboard_widths),
         lifetime_valid: true,
+        artboard_context_live: true,
     }));
     let resolver = ProjectionArtboardResolver;
     let mut host = NoopScriptHost;
@@ -964,6 +970,7 @@ fn scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp() {
         trigger_failure: ProjectionFailure::Resource,
         artboard_widths: Rc::new(RefCell::new(Vec::new())),
         lifetime_valid: true,
+        artboard_context_live: true,
     }));
     let trigger_error = apply_scripted_input_update(
         &terminal,
@@ -998,6 +1005,7 @@ fn scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp() {
         trigger_failure: ProjectionFailure::Ordinary,
         artboard_widths: Rc::clone(&invalid_artboard_widths),
         lifetime_valid: false,
+        artboard_context_live: false,
     }));
     for value in [
         crate::state_machine::RuntimeScriptedListenerBoundValue::Value(ScriptValue::Bool(true)),
@@ -1022,6 +1030,42 @@ fn scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp() {
     assert!(invalid_scalar_values.borrow().is_empty());
     assert_eq!(invalid_trigger_calls.get(), 0);
     assert!(invalid_artboard_widths.borrow().is_empty());
+}
+
+#[test]
+fn live_artboard_update_checks_script_asset_before_deferred_construction() {
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let instance = RuntimeScriptInstanceHandle::new(Box::new(InputProjectionScript {
+        scalar_values: Rc::new(RefCell::new(Vec::new())),
+        trigger_calls: Rc::new(Cell::new(0)),
+        trigger_failure: ProjectionFailure::Ordinary,
+        artboard_widths: Rc::new(RefCell::new(Vec::new())),
+        lifetime_valid: true,
+        artboard_context_live: false,
+    }));
+    let resolver = HydrationArtboardResolver {
+        trace: Rc::clone(&trace),
+    };
+    let mut host = NoopScriptHost;
+
+    assert!(
+        apply_scripted_input_update(
+            &instance,
+            &ScriptCoreString::from("panel"),
+            crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(
+                crate::ScriptArtboardSource::File(7),
+            ),
+            Some(&resolver),
+            None,
+            &mut host,
+        )
+        .unwrap(),
+        "the pinned setter is an accepted inert update after prerequisite preparation"
+    );
+    assert!(
+        trace.borrow().is_empty(),
+        "the backend ScriptAsset/live-table guard must run before Artboard construction"
+    );
 }
 
 #[test]

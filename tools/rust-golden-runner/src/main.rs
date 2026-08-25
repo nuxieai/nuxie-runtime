@@ -1236,8 +1236,9 @@ fn refresh_bound_script_artboard_inputs(
         }
         let artboard_index = usize::try_from(bound_artboard_id)
             .context("bound script artboard id does not fit usize")?;
-        let script_artboard =
+        let mut script_artboard =
             RunnerScriptArtboard::new(runtime, artboards, artboard_index, Rc::clone(render_state))?;
+        script_artboard.bind_view_model();
         let name = input.string_property("name").unwrap_or_default();
         instance
             .set_script_artboard_input_for_global(
@@ -3042,6 +3043,105 @@ mod tests {
 
     #[cfg(feature = "scripting")]
     #[test]
+    fn rehydrated_script_artboard_binds_after_default_machine_and_keeps_host_frame_tail() {
+        use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
+
+        fn property(type_name: &str, property_name: &str, value: FixtureValue) -> FixtureProperty {
+            let definition = nuxie_schema::definition_by_name(type_name)
+                .expect("golden rehydration fixture type exists");
+            let key = std::iter::once(definition)
+                .chain(
+                    definition
+                        .ancestors
+                        .iter()
+                        .filter_map(|ancestor| nuxie_schema::definition_by_name(ancestor)),
+                )
+                .flat_map(|owner| owner.properties)
+                .find(|property| property.name == property_name)
+                .expect("golden rehydration fixture property exists")
+                .key
+                .int;
+            FixtureProperty { key, value }
+        }
+
+        fn record(type_name: &str, properties: Vec<(&str, FixtureValue)>) -> FixtureRecord {
+            FixtureRecord {
+                type_key: nuxie_schema::definition_by_name(type_name)
+                    .expect("golden rehydration fixture type exists")
+                    .type_key
+                    .int,
+                properties: properties
+                    .into_iter()
+                    .map(|(name, value)| property(type_name, name, value))
+                    .collect(),
+            }
+        }
+
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Child".to_owned()))],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![
+                    ("name", FixtureValue::String("Child defaults".to_owned())),
+                    ("viewModelId", FixtureValue::Uint(0)),
+                ],
+            ),
+            record(
+                "Artboard",
+                vec![
+                    ("viewModelId", FixtureValue::Uint(0)),
+                    ("defaultStateMachineId", FixtureValue::Uint(0)),
+                ],
+            ),
+            record("StateMachine", Vec::new()),
+        ])
+        .expect("golden rehydration fixture imports");
+        let graph = GraphFile::from_runtime_file(&runtime)
+            .expect("golden rehydration fixture graph builds");
+        let render_state = Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default()));
+        let registered = RegisteredScriptFile {
+            vm: Rc::new(ScriptVm::new()),
+            script_programs: Rc::new(BTreeMap::new()),
+            frame_identity: Rc::new(()),
+        };
+        render_state
+            .borrow_mut()
+            .retain_registered_view_model_frame(&registered);
+
+        let artboard = new_rehydrated_runner_script_artboard(
+            &runtime,
+            &graph.artboards,
+            0,
+            Rc::clone(&render_state),
+            None,
+        )
+        .expect("rehydrated ScriptInputArtboard constructs");
+
+        assert!(
+            artboard.state_machine.is_some(),
+            "the authored default state machine exists before publication"
+        );
+        assert!(
+            artboard._data_context.is_some(),
+            "rehydration binds the selected child ViewModel to the Artboard and default machine"
+        );
+        assert_eq!(
+            render_state.borrow().detached_view_model_frames.len(),
+            1,
+            "rehydration reuses the registered File's single host frame-tail owner"
+        );
+        assert!(
+            !render_state.borrow().advance_detached_view_models(),
+            "construction did not eagerly consume or dirty the registered frame tail"
+        );
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
     fn nested_script_initialization_gate_closes_after_interpolators_are_registered() {
         let bytes = include_bytes!("../../../fixtures/p2d/scripted_interpolator.riv");
         let runtime = read_runtime_file(bytes).expect("scripted interpolator fixture imports");
@@ -3774,6 +3874,31 @@ impl RunnerScriptArtboard {
             Some(registered_file),
         )
     }
+}
+
+#[cfg(feature = "scripting")]
+fn new_rehydrated_runner_script_artboard(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    artboard_index: usize,
+    render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
+) -> Result<RunnerScriptArtboard> {
+    let mut artboard = RunnerScriptArtboard::new_with_parent_context(
+        runtime,
+        artboards,
+        artboard_index,
+        render_state,
+        parent_context,
+        None,
+        None,
+    )?;
+    // Rehydration repeats the same ScriptReffedArtboard sequence as cold
+    // publication: the constructor has already created the default state
+    // machine, and the selected consumer/parent context is then bound once.
+    // DataContext advancement remains owned by the registered File host tail.
+    artboard.bind_view_model();
+    Ok(artboard)
 }
 
 #[cfg(feature = "scripting")]
@@ -6031,14 +6156,12 @@ fn rehydrate_script_inputs(
             };
             let parent_context =
                 owned_view_model_context.map(nuxie_runtime::ScriptArtboardParentContext::root);
-            let artboard = RunnerScriptArtboard::new_with_parent_context(
+            let artboard = new_rehydrated_runner_script_artboard(
                 runtime,
                 artboards,
                 artboard_index as usize,
                 Rc::clone(&render_state),
                 parent_context.as_ref(),
-                None,
-                None,
             )?;
             instance
                 .set_script_artboard_input_for_global(scripted_global_id, name, Box::new(artboard))

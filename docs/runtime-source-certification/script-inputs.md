@@ -1129,3 +1129,54 @@ constructor tests, the concrete Luau ScriptAsset constructor guard, the
 incompatible cross-File manifest witness, and the default-state-machine/
 frame-tail trigger witness all passed. Those results accept the corrected
 prepared listener path but are non-probative for the two bypasses above.
+
+## Operative-path correction after fresh review `933abebaa`
+
+Status: **PENDING TWO FRESH INDEPENDENT REVIEWS.** This correction addresses
+the two operative bypasses found by `933abebaa`; it does not self-certify the
+ScriptInputArtboard rows or inherit an acceptance from an earlier review.
+
+The live bound-input owner no longer calls the eager
+`resolve_script_artboard` convenience path. It performs only resolver
+preparation, retains the deferred recipe, and hands that recipe to
+`ScriptInstance::set_prepared_artboard_input_core`. The concrete backend's
+state/live-table/ScriptAsset guard therefore runs before the recipe can clone,
+bind, or fail an Artboard, matching the same guarded setter used by cold and
+prepared hydration. `live_artboard_update_checks_script_asset_before_deferred_construction`
+keeps the outer scripted lifetime live while making the Artboard setter
+context inert; preparation succeeds, the update is accepted as inert, and the
+constructor trace remains empty.
+
+The golden DataContext rehydration owner now repeats the cold/prepared
+`ScriptReffedArtboard` sequence: `RunnerScriptArtboard` creates its authored
+default state machine first, then `bind_view_model` installs the selected
+consumer/parent context once across the Artboard and machine, and publication
+follows. The frame owner is neither duplicated nor advanced during this
+construction. The adjacent bound-Artboard refresh owner had the same unbound
+publication shape and now performs the same post-construction bind. The cold
+golden path and `PreparedRunnerScriptArtboard::construct` already used this
+order and remain unchanged.
+
+Focused correction evidence with `CARGO_INCREMENTAL=0`:
+
+- `live_artboard_update_checks_script_asset_before_deferred_construction`:
+  passed;
+- `scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp`:
+  passed, retaining ordinary and typed-resource failure policy;
+- `artboard_setter_checks_script_asset_before_running_prepared_constructor` in
+  the concrete Luau backend: passed;
+- `rehydrated_script_artboard_binds_after_default_machine_and_keeps_host_frame_tail`:
+  passed with a synthetic imported Artboard/ViewModel/default-state-machine
+  graph, a concrete bound DataContext, and one unchanged registered File frame
+  owner;
+- complete `scripted_listener_action_tests`: 101 passed;
+- complete golden-runner scripting unit suite: 15 passed;
+- `cargo check -p rust-golden-runner --features scripting`: passed;
+- combined `nuxie-runtime`, `nuxie-scripting`, `nuxie`, and `silver-corpus`
+  scripting check: passed.
+
+The source/live authority split, refreshed live snapshot, mutable
+`viewModelId`, first-loop empty-Live validation, primary-converter ancestry,
+and no-construction-time-advance corrections from `dd0f5ca7f` were not changed.
+Certification now requires two new independent audits of the combined call
+chain.

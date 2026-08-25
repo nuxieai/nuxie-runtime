@@ -2024,9 +2024,9 @@ pub(super) fn apply_scripted_input_update(
             let Some(artboard_resolver) = artboard_resolver else {
                 return Ok(false);
             };
-            let artboard =
-                match artboard_resolver.resolve_script_artboard(&source, artboard_parent_context) {
-                    Ok(artboard) => artboard,
+            let recipe =
+                match artboard_resolver.prepare_script_artboard(&source, artboard_parent_context) {
+                    Ok(recipe) => recipe,
                     Err(error)
                         if error.resource_code().is_some()
                             || host.requires_atomic_script_callbacks() =>
@@ -2037,7 +2037,7 @@ pub(super) fn apply_scripted_input_update(
                 };
             instance
                 .borrow_mut()
-                .set_artboard_input_core(input_name, artboard)
+                .set_prepared_artboard_input_core(input_name, recipe)
         }
     };
     match result {

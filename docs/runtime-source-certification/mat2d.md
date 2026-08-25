@@ -4,8 +4,8 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **first fresh independent matrix-vector correction
-re-review rejects certification on final-add qNaN payload order**
+Adversarial review: **final-add qNaN operand-order correction implemented;
+fresh independent re-reviews pending**
 
 ## `src/math/mat2d.cpp`
 
@@ -53,7 +53,7 @@ The v2 denominator contains 33 header authority rows:
 | `translation` | `Mat2D::translation` | adapted: tuple-vector representation |
 | six overloaded scalar setters | `set_xx`, `set_xy`, `set_yx`, `set_yy`, `set_tx`, `set_ty` | adapted: Rust cannot overload getter/setter names |
 | `determinant` | `Mat2D::determinant` | exact |
-| matrix-vector `operator*` | `Mul<(f32, f32)>`; `transform_point`; render-API `Mat2D::transform_point` | corrected contraction, but rejected by the first fresh independent re-review: the final add has reversed qNaN payload precedence; tuple-vector representation is the approved adaptation |
+| matrix-vector `operator*` | `Mul<(f32, f32)>`; `transform_point`; render-API `Mat2D::transform_point` | corrected contraction and final-add operand order; pending fresh independent re-reviews; tuple-vector representation is the approved adaptation |
 | matrix-matrix `operator*` | `Mul<Mat2D>` | exact |
 | `operator==` and `operator!=` | derived `PartialEq` | exact |
 
@@ -321,3 +321,22 @@ The separately identified inline IK skew writes remain an explicit dependency
 of the IK-constraint receipt and are outside this verdict, as required.
 Verdict: **REJECTED.** Correct final-add qNaN payload precedence in both scalar
 point owners and obtain a fresh independent re-review.
+
+## Final-add operand-order correction after first fresh re-review — PENDING
+
+Both scalar point owners now preserve the accepted two-product contraction but
+spell the separate final add in pinned ARM64 operand order:
+`translation + linear.mul_add(x, skew * y)`. This produces the pinned
+`fmul`/`fmla`/translation-first-`fadd` sequence and restores the source's qNaN
+payload precedence without changing finite arithmetic.
+
+Literal raw-bit witnesses now cover both runtime and render-API owners. With a
+contracted linear qNaN payload of `0x7fc0aaaa` and a translation qNaN payload
+of `0x7fc0bbbb`, both coordinates return the pinned ARM64 result
+`0x7fc0bbbb`. The accepted `transform_direction` contraction remains
+unchanged because it has no translation add. The distinct runtime and
+render-API `mapPoints` grouping also remains unchanged.
+
+This correction does not touch the separately tracked IK skew writes and does
+not self-certify its production changes. Verdict: **PENDING two fresh
+independent re-reviews.**

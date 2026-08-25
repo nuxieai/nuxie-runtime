@@ -185,7 +185,7 @@ impl Mat2D {
     pub fn transform_point(self, x: f32, y: f32) -> (f32, f32) {
         let [xx, yx, xy, yy, tx, ty] = self.0;
         // Pinned C++ contracts the two linear products, then adds translation.
-        (xx.mul_add(x, xy * y) + tx, yx.mul_add(x, yy * y) + ty)
+        (tx + xx.mul_add(x, xy * y), ty + yx.mul_add(x, yy * y))
     }
 
     pub fn map_point(self, x: f32, y: f32) -> (f32, f32) {
@@ -933,6 +933,25 @@ mod tests {
             [translated.0.to_bits(), translated.1.to_bits()],
             [0x3fd5_90f7, 0x3fd5_90f7],
             "expected bits captured from pinned C++ matrix-vector operator"
+        );
+
+        // ARM64's final fadd preserves its left operand's qNaN payload. The
+        // pinned operator places translation on that side of the final add.
+        let linear_nan = f32::from_bits(0x7fc0_aaaa);
+        let translation_nan = f32::from_bits(0x7fc0_bbbb);
+        let nan_payload = Mat2D([
+            linear_nan,
+            linear_nan,
+            0.0,
+            0.0,
+            translation_nan,
+            translation_nan,
+        ])
+        .transform_point(1.0, 1.0);
+        assert_eq!(
+            [nan_payload.0.to_bits(), nan_payload.1.to_bits()],
+            [0x7fc0_bbbb, 0x7fc0_bbbb],
+            "expected qNaN payload bits captured from pinned ARM64 C++"
         );
     }
 

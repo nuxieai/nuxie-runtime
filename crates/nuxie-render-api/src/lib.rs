@@ -90,8 +90,8 @@ impl Mat2D {
         let [xx, yx, xy, yy, tx, ty] = self.0;
         // Pinned C++ contracts the two linear products, then adds translation.
         Vec2D {
-            x: xx.mul_add(point.x, xy * point.y) + tx,
-            y: yx.mul_add(point.x, yy * point.y) + ty,
+            x: tx + xx.mul_add(point.x, xy * point.y),
+            y: ty + yx.mul_add(point.x, yy * point.y),
         }
     }
 }
@@ -4519,6 +4519,25 @@ mod tests {
         assert_eq!(
             [transformed.x.to_bits(), transformed.y.to_bits()],
             [0x3fd5_90f7, 0x3fd5_90f7]
+        );
+
+        // ARM64's final fadd preserves its left operand's qNaN payload. The
+        // pinned operator places translation on that side of the final add.
+        let linear_nan = f32::from_bits(0x7fc0_aaaa);
+        let translation_nan = f32::from_bits(0x7fc0_bbbb);
+        let transformed = Mat2D([
+            linear_nan,
+            linear_nan,
+            0.0,
+            0.0,
+            translation_nan,
+            translation_nan,
+        ])
+        .transform_point(Vec2D::new(1.0, 1.0));
+        assert_eq!(
+            [transformed.x.to_bits(), transformed.y.to_bits()],
+            [0x7fc0_bbbb, 0x7fc0_bbbb],
+            "expected qNaN payload bits captured from pinned ARM64 C++"
         );
     }
 

@@ -16941,11 +16941,7 @@ fn preallocate_source_artboard_render_paints_into(
         // `shape_paint.cpp:50-57`, `fill.cpp:13-17`,
         // `stroke.cpp:12-19`, `solid_color.cpp:9-21`).
         let mut render_paint = factory.make_render_paint();
-        initialize_authored_shape_render_paint(
-            render_paint.as_mut(),
-            paint_object,
-            Some(object),
-        );
+        initialize_authored_shape_render_paint(render_paint.as_mut(), paint_object, Some(object));
         paints.insert(paint_object.id, render_paint);
     }
 }
@@ -31706,9 +31702,10 @@ mod tests {
 
     #[test]
     fn upstream_cubic_participant_retargets_while_smoothing() {
-        let runtime =
-            read_runtime_file(&cpp_runtime_fixture("layout/animated_cubic_participant.riv"))
-                .expect("animated cubic participant imports");
+        let runtime = read_runtime_file(&cpp_runtime_fixture(
+            "layout/animated_cubic_participant.riv",
+        ))
+        .expect("animated cubic participant imports");
         let graphs =
             GraphFile::from_runtime_file(&runtime).expect("animated cubic participant graphs");
         let graph = graphs.artboards.first().expect("fixture has an artboard");
@@ -31775,9 +31772,9 @@ mod tests {
             let full = shapes
                 .iter()
                 .filter(|shape| {
-                    instance.layout_bounds(shape.local_id).is_some_and(|bounds| {
-                        bounds.width == 200.0 && bounds.height == 200.0
-                    })
+                    instance
+                        .layout_bounds(shape.local_id)
+                        .is_some_and(|bounds| bounds.width == 200.0 && bounds.height == 200.0)
                 })
                 .count();
             assert_eq!(
@@ -31841,9 +31838,7 @@ mod tests {
         let graph = graphs
             .artboards
             .iter()
-            .find(|artboard| {
-                artboard.name.as_deref() == Some("GridWithLayoutParticipants")
-            })
+            .find(|artboard| artboard.name.as_deref() == Some("GridWithLayoutParticipants"))
             .expect("GridWithLayoutParticipants");
         let mut instance =
             ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
@@ -31858,12 +31853,7 @@ mod tests {
         let mut custom_paths = 0;
         for shape in &shapes {
             let bounds = instance
-                .geometry_world_bounds_with_context(
-                    &runtime,
-                    graph,
-                    shape.local_id,
-                    &mut cache,
-                )
+                .geometry_world_bounds_with_context(&runtime, graph, shape.local_id, &mut cache)
                 .expect("shape intrinsic geometry is never inverted or absent");
             assert!(bounds.width() >= 0.0);
             assert!(bounds.height() >= 0.0);
@@ -31889,9 +31879,7 @@ mod tests {
         let graph = graphs
             .artboards
             .iter()
-            .find(|artboard| {
-                artboard.name.as_deref() == Some("GridWithLayoutParticipants")
-            })
+            .find(|artboard| artboard.name.as_deref() == Some("GridWithLayoutParticipants"))
             .expect("GridWithLayoutParticipants");
         let mut instance =
             ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
@@ -32751,8 +32739,8 @@ mod tests {
             ]
         );
     }
-    use crate::{ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue};
     use crate::script_asset::RuntimeScriptImplementedMethods;
+    use crate::{ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue};
     use nuxie_binary::read_runtime_file;
     use nuxie_graph::GraphFile;
     use nuxie_render_api::ColorInt;
@@ -36340,8 +36328,7 @@ mod tests {
         let commands = rectangle_path_commands(&path, ShapePaintPathKind::Local, Mat2D::IDENTITY);
         assert_eq!(commands.len(), 10);
         for (index, expected) in [
-            "move", "cubic", "line", "cubic", "line", "cubic", "line", "cubic", "line",
-            "close",
+            "move", "cubic", "line", "cubic", "line", "cubic", "line", "cubic", "line", "close",
         ]
         .into_iter()
         .enumerate()

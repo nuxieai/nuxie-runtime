@@ -19,17 +19,16 @@ impl UserData for ScriptedMat2D {
             ("tx", 4),
             ("ty", 5),
         ] {
-            fields.add_field_method_get(name, move |_, this| Ok(this.0 .0[index]));
+            fields.add_field_method_get(name, move |_, this| Ok(this.0.0[index]));
             fields.add_field_method_set(name, move |_, this, value: f32| {
-                this.0 .0[index] = value;
+                this.0.0[index] = value;
                 Ok(())
             });
         }
         for (lua_index, matrix_index) in (1i64..=6).zip(0usize..6) {
-            fields
-                .add_field_index_method_get(lua_index, move |_, this| Ok(this.0 .0[matrix_index]));
+            fields.add_field_index_method_get(lua_index, move |_, this| Ok(this.0.0[matrix_index]));
             fields.add_field_index_method_set(lua_index, move |_, this, value: f32| {
-                this.0 .0[matrix_index] = value;
+                this.0.0[matrix_index] = value;
                 Ok(())
             });
         }
@@ -326,25 +325,29 @@ mod upstream_tests {
                 .expect("invert identity"),
             1.0
         );
-        assert!(lua
-            .load("return Mat2D.values(0,0,0,0,0,0):invert()")
-            .eval::<Value>()
-            .expect("invert singular")
-            .is_nil());
-        assert!(!lua
-            .load("return Mat2D.values(0,0,0,0,0,0):isIdentity()")
-            .eval::<bool>()
-            .expect("zero identity query"));
-        assert!(lua
-            .load("return Mat2D.values(1,0,0,1,0,0):isIdentity()")
-            .eval::<bool>()
-            .expect("literal identity query"));
-        assert!(lua
-            .load("return Mat2D.identity():isIdentity()")
-            .eval::<bool>()
-            .expect("identity query"));
-        assert!(lua
-            .load(
+        assert!(
+            lua.load("return Mat2D.values(0,0,0,0,0,0):invert()")
+                .eval::<Value>()
+                .expect("invert singular")
+                .is_nil()
+        );
+        assert!(
+            !lua.load("return Mat2D.values(0,0,0,0,0,0):isIdentity()")
+                .eval::<bool>()
+                .expect("zero identity query")
+        );
+        assert!(
+            lua.load("return Mat2D.values(1,0,0,1,0,0):isIdentity()")
+                .eval::<bool>()
+                .expect("literal identity query")
+        );
+        assert!(
+            lua.load("return Mat2D.identity():isIdentity()")
+                .eval::<bool>()
+                .expect("identity query")
+        );
+        assert!(
+            lua.load(
                 r#"
                 local mat = Mat2D.identity()
                 mat.tx = 23
@@ -354,7 +357,8 @@ mod upstream_tests {
                 "#,
             )
             .eval::<bool>()
-            .expect("static invert"));
+            .expect("static invert")
+        );
     }
 
     #[test]

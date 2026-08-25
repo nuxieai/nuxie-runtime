@@ -1336,7 +1336,7 @@ status = "faithful"
 upstream = "src/artboard.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie/src/lib.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -1547,7 +1547,7 @@ status = "faithful"
 upstream = "src/constraints/scrolling/elastic_scroll_physics.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/scrolling/elastic_scroll_physics.rs", "crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -1555,7 +1555,7 @@ status = "pending"
 upstream = "src/constraints/scrolling/scroll_bar_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/components.rs", "crates/nuxie-runtime/src/constraints.rs", "crates/nuxie-runtime/src/constraints/scrolling/scroll_bar_constraint.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -1563,7 +1563,7 @@ status = "pending"
 upstream = "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/draggable_constraint.rs", "crates/nuxie-runtime/src/constraints/scrolling/scroll_bar_constraint_proxy.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -2165,7 +2165,7 @@ status = "faithful"
 upstream = "src/layout/layout_sizing_style.cpp"
 source_set = "s4-pin-advance-extensions"
 wave = "S4"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/layout/layout_sizing_style.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2229,7 +2229,7 @@ status = "faithful"
 upstream = "src/math/aabb.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-render-api/src/lib.rs", "crates/nuxie-runtime/src/math/aabb.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -2237,7 +2237,7 @@ status = "faithful"
 upstream = "src/math/bezier_utils.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/math/bezier_utils.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -2253,7 +2253,7 @@ status = "faithful"
 upstream = "src/math/contour_measure.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/math/contour_measure.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2293,7 +2293,7 @@ status = "faithful"
 upstream = "src/math/path_measure.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/math/path_measure.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2313,7 +2313,7 @@ status = "faithful"
 upstream = "src/math/raw_path.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/math/raw_path.rs"]
+rust_modules = ["crates/nuxie-render-api/src/lib.rs", "crates/nuxie-runtime/src/math/raw_path.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2321,7 +2321,7 @@ status = "faithful"
 upstream = "src/math/raw_path_utils.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/math/raw_path_utils.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2337,7 +2337,7 @@ status = "faithful"
 upstream = "src/math/vec2d.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/math/vec2d.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2345,7 +2345,7 @@ status = "faithful"
 upstream = "src/nested_artboard.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/nested_artboard.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/artboard/nested_artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/artboard/nested_artboard.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/nested_artboard.rs", "crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"]
 dynamically_reached = true
 status = "faithful"
 

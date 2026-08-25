@@ -25,7 +25,7 @@ promotion_rule = "Only an orchestrator-verified gate run may finally promote a r
 decision_rule = "divergent-by-decision requires a cited parity-gap-register D-row bound to a named docs/PORTING.md ceiling rule."
 
 [scatter_ratchet]
-max_multi_module_rows = 158
+max_multi_module_rows = 163
 
 [source_correspondence_ratchet]
 applicable_rows = 456
@@ -1693,7 +1693,7 @@ b6_row_id = "B6-0135"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "Phase 2 follow-up direct owner plus Phase 3 paired audit: the previously packed ElasticScrollPhysicsHelper implementation lives in constraints/scrolling/elastic_scroll_physics.rs, while variant dispatch remains in the shared ScrollPhysics lifecycle. Advance, clamp, run, prepare/reset, snapping, and scrollToPosition were compared with the pin. The audit corrected one literal Rust translation error: helper run now uses the pinned comparison branches, preserving NaN and remaining defined for reversed bounds instead of calling panic-capable f32::clamp. Safe Option ownership replaces nullable unique_ptr without changing supported behavior."
+note = "Phase 2 follow-up direct owner plus Phase 3 paired audit: the previously packed ElasticScrollPhysicsHelper implementation lives in constraints/scrolling/elastic_scroll_physics.rs, while variant dispatch remains in the shared ScrollPhysics lifecycle. Advance, clamp, run, prepare/reset, snapping, and scrollToPosition were compared with the pin. The audit corrected one literal Rust translation error: helper run now uses the pinned comparison branches, preserving NaN and remaining defined for reversed bounds instead of calling panic-capable f32::clamp. Safe Option ownership replaces nullable unique_ptr without changing supported behavior. MR-2b justified shared-owner exception: the filename-corresponding helper and common ScrollPhysics lifecycle remain separate to avoid duplicating variant dispatch."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint.cpp"
@@ -1705,7 +1705,7 @@ b6_row_id = "B6-0136"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "Phase 2 follow-up direct owner plus Phase 3 paired audit: constrain/transform dispatch lives in constraints/scrolling/scroll_bar_constraint.rs; retained occurrence state remains in components.rs and shared scroll metrics/drag helpers remain in constraints.rs. Computed thumb size, overscroll resizing, world constraint, target resolution, track hit, thumb drag, physics accumulation, and validation were compared with the pin. Track/drag offset clamping now uses pinned fminf/fmaxf NaN and reversed-bound semantics instead of f32::clamp. Safe missing-parent/target handling is the approved Rust ownership adaptation."
+note = "Phase 2 follow-up direct owner plus Phase 3 paired audit: constrain/transform dispatch lives in constraints/scrolling/scroll_bar_constraint.rs; retained occurrence state remains in components.rs and shared scroll metrics/drag helpers remain in constraints.rs. Computed thumb size, overscroll resizing, world constraint, target resolution, track hit, thumb drag, physics accumulation, and validation were compared with the pin. Track/drag offset clamping now uses pinned fminf/fmaxf NaN and reversed-bound semantics instead of f32::clamp. Safe missing-parent/target handling is the approved Rust ownership adaptation. MR-2b justified shared-owner exception: row-exclusive dispatch, retained component storage, and common scrolling helpers stay in their established owners."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
@@ -1717,7 +1717,7 @@ b6_row_id = "B6-0137"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "Phase 2 follow-up direct owner plus Phase 3 paired audit: Thumb and Track proxy construction plus start/drag/end dispatch live in constraints/scrolling/scroll_bar_constraint_proxy.rs; the shared DraggableProxy occurrence type and authored ordering remain in draggable_constraint.rs. The audit corrected proxy construction to require LayoutComponent thumb and track owners exactly like C++ draggables(). Drag state, intent clearing through isScrollBarDragging, velocity accumulation/clear, opacity, and last-position updates match the pin; owned Rust proxy values replace raw new/delete as a safety adaptation."
+note = "Phase 2 follow-up direct owner plus Phase 3 paired audit: Thumb and Track proxy construction plus start/drag/end dispatch live in constraints/scrolling/scroll_bar_constraint_proxy.rs; the shared DraggableProxy occurrence type and authored ordering remain in draggable_constraint.rs. The audit corrected proxy construction to require LayoutComponent thumb and track owners exactly like C++ draggables(). Drag state, intent clearing through isScrollBarDragging, velocity accumulation/clear, opacity, and last-position updates match the pin; owned Rust proxy values replace raw new/delete as a safety adaptation. MR-2b justified shared-owner exception: proxy behavior remains filename-corresponding while the reusable DraggableProxy type stays with the draggable-constraint owner."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"
@@ -1729,7 +1729,7 @@ b6_row_id = "B6-0138"
 b6_verdict = "DIVERGENT"
 b6_cluster = "constraints"
 audit_record = "docs/b6-audit/results/constraints.md"
-note = "Phase 3 paired audit: the row-exclusive constrain owner lives in scrolling/scroll_constraint.rs; retained metrics, intents, property dispatch, focus scrolling, and child rendezvous helpers remain in constraints.rs. The audit restored generated velocityX/velocityY/scrollActive getters and no-op computed setters, converted clamped offsets and resolved intents to pinned math::clamp semantics, preserved std::min signed-zero order, restored the literal directional snap scan including NaN behavior, passed +infinity as the physics range maximum on an infinite main axis, and made no-physics focus scrolling clear held intents before direct writes. The four pinned scroll_velocity tests are green using the approved explicit event-timestamp host-clock adaptation. Taffy layout readiness/cache access replaces Yoga callbacks within the fixed layout-backend ceiling; invalid generated topology fails closed instead of dereferencing raw pointers."
+note = "Phase 3 paired audit: the row-exclusive constrain owner lives in scrolling/scroll_constraint.rs; retained metrics, intents, property dispatch, focus scrolling, and child rendezvous helpers remain in constraints.rs. The audit restored generated velocityX/velocityY/scrollActive getters and no-op computed setters, converted clamped offsets and resolved intents to pinned math::clamp semantics, preserved std::min signed-zero order, restored the literal directional snap scan including NaN behavior, passed +infinity as the physics range maximum on an infinite main axis, and made no-physics focus scrolling clear held intents before direct writes. The four pinned scroll_velocity tests are green using the approved explicit event-timestamp host-clock adaptation. Taffy layout readiness/cache access replaces Yoga callbacks within the fixed layout-backend ceiling; invalid generated topology fails closed instead of dereferencing raw pointers. MR-2b justified shared-owner exception: row-exclusive constraint behavior is separated from the common retained scrolling state and rendezvous helpers."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint_proxy.cpp"
@@ -3787,7 +3787,7 @@ b6_row_id = "B6-0303"
 b6_verdict = "ADAPTED"
 b6_cluster = "artboard"
 audit_record = "docs/parity-audits/nested-artboard.md"
-note = "Phase 3 current-pin paired audit supersedes B6-0303/F13: direct mounted-occurrence ownership plus shared Artboard/draw/state-machine seams preserve construction, replacement, stateful binding, focus, draw/hit routing, timing, animation-before-child advance, collapse, reset, and teardown. The one apparent hit failure was a converted upstream-test action mismatch, corrected without runtime changes."
+note = "Phase 3 current-pin paired audit supersedes B6-0303/F13: direct mounted-occurrence ownership plus shared Artboard/draw/state-machine seams preserve construction, replacement, stateful binding, focus, draw/hit routing, timing, animation-before-child advance, collapse, reset, and teardown. The one apparent hit failure was a converted upstream-test action mismatch, corrected without runtime changes. MR-2b justified shared-owner exception: retained occurrence, Artboard lifecycle, draw recursion, and state-machine dispatch are distinct deep-module seams and cannot be consolidated without widening their contracts."
 
 [[file]]
 upstream = "src/nested_artboard_layout.cpp"

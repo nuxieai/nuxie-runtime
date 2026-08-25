@@ -1497,7 +1497,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_event_listener_trigger_zero_guard_required"
 globs = ["crates/nuxie-runtime/src/view_model_cell.rs"]
-pattern = "notification\\.suppress_trigger_zero[\\s\\S]{0,120}matches!\\(self\\.value,\\s*RuntimeViewModelCellValue::Trigger\\(0\\)\\)"
+pattern = "let\\s+\\(dependents,\\s*suppress_trigger_zero\\)\\s*=\\s*\\{[\\s\\S]{0,300}matches!\\(state\\.value,\\s*RuntimeViewModelCellValue::Trigger\\(0\\)\\)[\\s\\S]{0,900}dependent\\.publish_dirt\\(dirt,\\s*marks_changed,\\s*suppress_trigger_zero\\)"
 min_occurrences = 1
 max_occurrences = 1
 

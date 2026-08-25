@@ -3897,14 +3897,28 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "crates/nuxie-runtime/src/view_model_cell.rs",
             textwrap.dedent(
                 """
-                notification.suppress_trigger_zero
-                    && matches!(self.value, RuntimeViewModelCellValue::Trigger(0))
+                let (dependents, suppress_trigger_zero) = {
+                    (
+                        state.dependents.clone(),
+                        matches!(state.value, RuntimeViewModelCellValue::Trigger(0)),
+                    )
+                };
+                for dependent in &dependents {
+                    dependent.publish_dirt(dirt, marks_changed, suppress_trigger_zero);
+                }
                 """
             ),
             textwrap.dedent(
                 """
-                notification.suppress_trigger_zero
-                    && matches!(self.value, RuntimeViewModelCellValue::Trigger(1))
+                let (dependents, suppress_trigger_zero) = {
+                    (
+                        state.dependents.clone(),
+                        matches!(state.value, RuntimeViewModelCellValue::Trigger(1)),
+                    )
+                };
+                for dependent in &dependents {
+                    dependent.publish_dirt(dirt, marks_changed, suppress_trigger_zero);
+                }
                 """
             ),
         )

@@ -1,7 +1,7 @@
 # AABB source certification
 
-> **Rejected findings corrected. Certification is PENDING two fresh,
-> independent accepted adversarial reviews from the corrected commit.**
+> **First fresh independent correction review: REJECTED. Certification remains
+> blocked until the call-chain and single-owner findings below are corrected.**
 
 ## Authority and scope
 
@@ -191,5 +191,89 @@ Correction gates:
 ## Provisional result
 
 Implementation status: **CORRECTED CANDIDATE**. Certification status:
-**PENDING TWO FRESH INDEPENDENT REVIEWS**. The rejected review remains recorded
-above as process evidence, but cannot certify or reject this newer candidate.
+**REJECTED BY FIRST FRESH INDEPENDENT REVIEW**. The earlier rejected review
+remains recorded above as process evidence. Both independent correction reviews
+must restart from the next corrected commit.
+
+## First fresh independent review after renderer consolidation
+
+Verdict: **REJECTED** at candidate commits `51636f6bc`, `64f147bb0`, and
+`c6c1ae4fe`.
+
+The direct integer and float bodies in `nuxie-render-api/src/aabb.rs` remain
+substantially faithful over their defined source domains. Cross-signed clamp,
+intersection, equality, containment, and overlap use a lossless `i128`
+comparison domain; unsigned arithmetic wraps as the source unsigned aliases do;
+empty intersections normalize to four zeroes; float span and `join` extrema
+retain the pinned `std::min`/`std::max` first-operand NaN and signed-zero order;
+and all four backend feature configurations compile independently. The
+candidate nevertheless cannot be certified because the operative call graph
+still contains incorrect or duplicate authority:
+
+1. The corrected Feather caller now has the right source spelling but still
+   reaches the wrong bounds algorithm. Pinned `Feather::rebuildInnerPath` calls
+   `RawPath::bounds().pad(...)`, and pinned `RawPath::bounds` uses pairwise
+   `simd::min`/`simd::max`, which selects the non-NaN operand. Rust
+   `RawPath::bounds` instead delegates to `Aabb::from_points`, whose intentionally
+   different `std::min`/`std::max` contract preserves a first-point NaN. A
+   two-point raw path `[(NaN, NaN), (2, 3)]` therefore bounds to
+   `{2, 3, 2, 3}` upstream but to four NaNs in Rust. The existing test
+   `raw_path_bounds_use_the_shared_pinned_aabb_extrema_contracts` asserts the
+   divergent Rust result, so its green status is negative evidence rather than
+   parity evidence. Feather consequently trips `Aabb::inset`'s debug assertion
+   while padding (and emits a NaN rectangle when debug assertions are disabled)
+   where the pinned call chain emits the finite padded rectangle. This must be
+   corrected in the `RawPath::bounds` owner, not patched inside Feather.
+
+2. The receipt classifies renderer `map_bounds` and `map_path_bounds` as harmless
+   coordinate conversion, but these helpers are incomplete substitutes for
+   pinned `Mat2D::mapBoundingBox`. The source computes extrema before adding
+   translation and then collapses any result failing
+   `bbox.zw - bbox.xy >= 0` to the all-zero AABB. The renderer helpers transform
+   each point with translation already applied, fold extrema, and never perform
+   the source nonfinite normalization. For example, a finite unit rectangle
+   mapped by an X scale of positive infinity collapses to `{0,0,0,0}` upstream;
+   renderer `map_bounds` produces `{+inf,0,+inf,1}`, which `round_out` turns into
+   an `i32::MAX`-origin degenerate rectangle. `map_path_bounds` has the same
+   defect for all-infinite transformed axes. These are genuine coordinate
+   conversion callers, but they still need to reach one exact
+   `Mat2D::mapBoundingBox` owner before the shared AABB can certify the result.
+
+3. Typed-AABB ownership is still duplicated in live shared renderer code.
+   Pinned `needsScissor` calls `containingBounds.contains(...)`, while
+   `render_context_cpp.rs:6787-6790` expands the four comparisons manually.
+   Pinned flush closeout calls `renderTargetUpdateBounds.empty()`, while
+   `render_context_cpp.rs:7363-7366` expands that policy manually. The same
+   source `.empty()` calls remain expanded repeatedly in
+   `rive_renderer_cpp.rs` (including clip-path, draw-path, image, and image-mesh
+   gates). Their present scalar results match for integer aliases, but they
+   preserve independent geometry authority after a correction whose purpose
+   was to establish one owner. True backend scissor coordinate/extent assembly
+   remains a valid API conversion; these `contains`/`empty` expansions are not.
+
+4. The source float `AABB` is a four-float standard-layout value and its pinned
+   implementation loads and stores it as four contiguous floats. Rust
+   `TypedAabb<T>` explicitly has `#[repr(C)]`, but the public float `Aabb` does
+   not. Its current compiler layout happens to be usable through field access,
+   but default Rust representation does not certify source field order or ABI.
+   Exact layout should be made explicit and covered by size/alignment/offset
+   evidence, or the receipt must narrow its claim and prove that no ABI or raw
+   layout consumer exists.
+
+Independent evidence run from this candidate remained green and therefore does
+not discharge the findings:
+
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-render-api`: 40/40 package tests
+  passed.
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --test upstream_aabb`: 12/12
+  passed.
+- `CARGO_INCREMENTAL=0 cargo check -p nuxie-renderer --features
+  renderer-vulkan`, `renderer-webgpu`, `renderer-webgl2`, and `renderer-metal`:
+  all four independent configurations passed.
+
+Required correction: implement pinned SIMD `RawPath::bounds` extrema in its own
+owner; route renderer bounding-box transforms through one exact
+`Mat2D::mapBoundingBox` owner; replace live source `.contains()`/`.empty()`
+expansions with shared typed-AABB calls while leaving true platform rectangle
+conversion local; and settle float-AABB representation with explicit evidence.
+Then restart both independent AABB reviews from the corrected commit.

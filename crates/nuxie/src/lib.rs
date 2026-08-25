@@ -984,13 +984,14 @@ impl FileScriptRuntime {
 
     fn prepare_mounts(
         &mut self,
-        runtime: &RuntimeFile,
+        file: &Arc<File>,
         file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
         default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
         root_view_model: Option<&RuntimeOwnedViewModelHandle>,
     ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
+        let runtime = &file.runtime;
         let domain = render_factory_domain(factory);
         if let Some(ready) = self.ready.as_mut() {
             if ready.factory_domain != domain {
@@ -1004,8 +1005,7 @@ impl FileScriptRuntime {
                     .vm
                     .set_default_context_view_model(default_context_view_model);
             }
-            let groups =
-                instantiate_script_mounts(ready, runtime, groups, factory, root_view_model)?;
+            let groups = instantiate_script_mounts(ready, file, groups, factory, root_view_model)?;
             if initialize_default_context {
                 ready.default_context_initialized = true;
             }
@@ -1024,8 +1024,7 @@ impl FileScriptRuntime {
             .set_default_context_view_model(default_context_view_model);
         candidate.default_context_initialized = true;
         Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
-        let groups =
-            instantiate_script_mounts(&candidate, runtime, groups, factory, root_view_model)?;
+        let groups = instantiate_script_mounts(&candidate, file, groups, factory, root_view_model)?;
         Ok(PreparedFileScriptMounts {
             // Drop table handles before their candidate VM on a failed
             // topology validation.
@@ -1036,13 +1035,14 @@ impl FileScriptRuntime {
 
     async fn prepare_mounts_async(
         &mut self,
-        runtime: &RuntimeFile,
+        file: &Arc<File>,
         file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
         default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
         root_view_model: Option<&RuntimeOwnedViewModelHandle>,
     ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
+        let runtime = &file.runtime;
         let domain = render_factory_domain(factory);
         if let Some(ready) = self.ready.as_mut() {
             if ready.factory_domain != domain {
@@ -1057,7 +1057,7 @@ impl FileScriptRuntime {
                     .set_default_context_view_model(default_context_view_model);
             }
             let groups =
-                instantiate_script_mounts_async(ready, runtime, groups, factory, root_view_model)
+                instantiate_script_mounts_async(ready, file, groups, factory, root_view_model)
                     .await?;
             if initialize_default_context {
                 ready.default_context_initialized = true;
@@ -1075,7 +1075,7 @@ impl FileScriptRuntime {
         candidate.default_context_initialized = true;
         Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
         let groups =
-            instantiate_script_mounts_async(&candidate, runtime, groups, factory, root_view_model)
+            instantiate_script_mounts_async(&candidate, file, groups, factory, root_view_model)
                 .await?;
         Ok(PreparedFileScriptMounts {
             groups,
@@ -1328,7 +1328,7 @@ fn render_factory_domain(factory: &mut dyn Factory) -> usize {
 #[cfg(feature = "scripting")]
 fn instantiate_script_mounts(
     ready: &ReadyFileScripts,
-    runtime: &RuntimeFile,
+    file: &Arc<File>,
     groups: &[ScriptMountGroup],
     factory: &mut dyn Factory,
     root_view_model: Option<&RuntimeOwnedViewModelHandle>,
@@ -1376,11 +1376,12 @@ fn instantiate_script_mounts(
                 })?;
             if target.kind.hydrates_script_inputs() {
                 hydrate_prepared_scripted_object_inputs(
-                    runtime,
+                    file,
                     group.graph_global_id,
                     target,
                     script.as_mut(),
                     root_view_model,
+                    factory,
                 )?;
             }
             if nuxie_runtime::scripted_object_inits(target.serialized_implemented_methods) {
@@ -1426,7 +1427,7 @@ fn instantiate_script_mounts(
 #[cfg(feature = "scripting")]
 async fn instantiate_script_mounts_async(
     ready: &ReadyFileScripts,
-    runtime: &RuntimeFile,
+    file: &Arc<File>,
     groups: &[ScriptMountGroup],
     factory: &mut dyn Factory,
     root_view_model: Option<&RuntimeOwnedViewModelHandle>,
@@ -1467,11 +1468,12 @@ async fn instantiate_script_mounts_async(
                 })?;
             if target.kind.hydrates_script_inputs() {
                 hydrate_prepared_scripted_object_inputs(
-                    runtime,
+                    file,
                     group.graph_global_id,
                     target,
                     script.as_mut(),
                     root_view_model,
+                    factory,
                 )?;
             }
             if nuxie_runtime::scripted_object_inits(target.serialized_implemented_methods) {
@@ -1508,16 +1510,64 @@ async fn instantiate_script_mounts_async(
 
 #[cfg(feature = "scripting")]
 fn hydrate_prepared_scripted_object_inputs(
-    runtime: &RuntimeFile,
+    file: &Arc<File>,
     graph_global_id: u32,
     target: &ScriptMountTarget,
     script: &mut dyn ScriptInstance,
     root_view_model: Option<&RuntimeOwnedViewModelHandle>,
+    factory: &mut dyn Factory,
 ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+    let runtime = &file.runtime;
     for (name, value) in
         resolved_layout_inputs(runtime, graph_global_id, target.local_id, root_view_model)?
     {
         script.set_input(&name, value)?;
+    }
+
+    let start = graph_global_id as usize;
+    let end = ((start + 1)..runtime.object_count())
+        .find(|global_id| {
+            runtime
+                .object(*global_id)
+                .is_some_and(|object| object.type_name == "Artboard")
+        })
+        .unwrap_or_else(|| runtime.object_count());
+    let parent_context = root_view_model.map(|root| {
+        let context =
+            nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(runtime, root.clone());
+        nuxie_runtime::ScriptArtboardParentContext::root(&context)
+    });
+    for global_id in start..end {
+        let Some(input) = runtime.object(global_id) else {
+            continue;
+        };
+        if input.type_name != "ScriptInputArtboard"
+            || input.uint_property("parentId") != Some(target.local_id as u64)
+        {
+            continue;
+        }
+        let artboard_id = root_view_model
+            .map(|root| nuxie_runtime::bound_script_artboard_input(runtime, &root.borrow(), input))
+            .transpose()?
+            .flatten()
+            .or_else(|| input.uint_property("artboardId"))
+            .filter(|artboard_id| *artboard_id != u64::from(u32::MAX))
+            .and_then(|artboard_id| usize::try_from(artboard_id).ok())
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "{} {} global {} ScriptInputArtboard global {} has no resolved artboard",
+                    target.kind.label(),
+                    target.asset_name,
+                    target.global_id,
+                    input.id,
+                ))
+            })?;
+        let name =
+            ScriptCoreString::from_bytes(input.string_property_bytes("name").unwrap_or_default());
+        let artboard =
+            FileScriptArtboard::new(Arc::clone(file), artboard_id, parent_context.as_ref())?;
+        artboard.initialize_renderer(factory)?;
+        script.set_artboard_input_core(&name, Box::new(artboard))?;
     }
     Ok(())
 }
@@ -3381,7 +3431,7 @@ impl FileScriptArtboard {
             state_machine.advance_data_context();
         }
         let (width, height) = instance.artboard_dimensions();
-        let mut scripted = Self {
+        let scripted = Self {
             file,
             artboard_index,
             instance,
@@ -3393,27 +3443,34 @@ impl FileScriptArtboard {
             height,
             frame_origin: false,
         };
-        scripted.prepare_state_machine_once()?;
         Ok(scripted)
     }
 
-    fn prepare_state_machine_once(
-        &mut self,
+    fn initialize_renderer(
+        &self,
+        factory: &mut dyn Factory,
     ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
-        let Some(state_machine) = self.state_machine.as_mut() else {
-            return Ok(());
-        };
-        let result = initialize_state_machine_scripted_objects_impl(
-            &self.file,
-            &self.instance,
-            state_machine,
-            None,
-            None,
-        );
-        if let Err(error) = result.as_ref() {
-            state_machine.retain_scripted_object_data_context_error(error.clone());
-        }
-        result
+        let graph = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "missing scripted artboard index {}",
+                    self.artboard_index
+                ))
+            })?;
+        self.instance
+            .initialize_scripted_artboard_renderer_after_source_resources(
+                &self.file.runtime,
+                graph,
+                &self.file.graph.artboards,
+                &self.file.external_image_assets,
+                factory,
+                self.file.max_retained_decoded_image_bytes,
+            )
+            .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))
     }
 }
 
@@ -3462,6 +3519,22 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
             view_model,
         )
         .map(|instance| Box::new(instance) as Box<dyn nuxie_runtime::ScriptArtboard>)
+    }
+
+    fn instance_with_factory(
+        &self,
+        view_model: Option<nuxie_runtime::ScriptViewModel>,
+        factory: &mut dyn Factory,
+    ) -> std::result::Result<Box<dyn nuxie_runtime::ScriptArtboard>, nuxie_runtime::ScriptError>
+    {
+        let instance = Self::new_with_view_model(
+            Arc::clone(&self.file),
+            self.artboard_index,
+            self.parent_context.as_ref(),
+            view_model,
+        )?;
+        instance.initialize_renderer(factory)?;
+        Ok(Box::new(instance))
     }
 
     fn advance(&mut self, seconds: f32) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
@@ -4008,7 +4081,7 @@ fn flush_scripted_artboard_tree(
 
 #[cfg(feature = "scripting")]
 fn mount_scripted_artboard_tree(
-    file: &File,
+    file: &Arc<File>,
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
@@ -4032,7 +4105,7 @@ fn mount_scripted_artboard_tree(
     }
     let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
     let mut prepared = file.scripts.borrow_mut().prepare_mounts(
-        &file.runtime,
+        file,
         &file.file_asset_owners,
         &groups,
         factory,
@@ -4065,7 +4138,7 @@ fn mount_scripted_artboard_tree(
 
 #[cfg(feature = "scripting")]
 async fn mount_scripted_artboard_tree_async(
-    file: &File,
+    file: &Arc<File>,
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
@@ -4087,7 +4160,7 @@ async fn mount_scripted_artboard_tree_async(
         let mut scripts = file.scripts.borrow_mut();
         scripts
             .prepare_mounts_async(
-                &file.runtime,
+                file,
                 &file.file_asset_owners,
                 &groups,
                 factory,
@@ -4145,7 +4218,7 @@ fn verify_scripted_artboard_tree_attached(
 
 #[cfg(feature = "scripting")]
 fn prepare_scripted_artboard_tree(
-    file: &File,
+    file: &Arc<File>,
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
@@ -4173,7 +4246,7 @@ fn prepare_scripted_artboard_tree(
 
 #[cfg(feature = "scripting")]
 async fn prepare_scripted_artboard_tree_async(
-    file: &File,
+    file: &Arc<File>,
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
@@ -6405,7 +6478,7 @@ impl<'a> ArtboardInstance<'a> {
             .get(self.artboard_index)
             .context("artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
-        prepare_scripted_artboard_tree(self.file, artboard, &mut self.raw, factory)
+        prepare_scripted_artboard_tree(&self.script_file, artboard, &mut self.raw, factory)
             .context("failed to prepare scripted drawables")?;
         self.raw.update_pass();
         self.raw
@@ -6424,10 +6497,31 @@ impl<'a> ArtboardInstance<'a> {
         Ok(())
     }
 
-    /// Await renderer-backed script construction without consuming the
+    /// Perform renderer-backed script construction without consuming the
     /// scripted component update scheduled for the next factory-bearing
     /// advance. Browser editor hosts use this before their ordinary retained
     /// frame traversal; native hosts keep the synchronous lazy lifecycle.
+    #[cfg(feature = "scripting")]
+    #[doc(hidden)]
+    pub fn mount_scripted_drawables(&mut self, factory: &mut dyn Factory) -> Result<bool> {
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("artboard instance graph is unavailable")?;
+        let root_view_model = retained_artboard_root_view_model(&self.raw);
+        mount_scripted_artboard_tree(
+            &self.script_file,
+            artboard,
+            &mut self.raw,
+            factory,
+            root_view_model.as_ref(),
+        )
+        .context("failed to mount scripted drawables")
+    }
+
+    /// Async mirror of [`Self::mount_scripted_drawables`].
     #[doc(hidden)]
     pub async fn mount_scripted_drawables_async(
         &mut self,
@@ -6443,7 +6537,7 @@ impl<'a> ArtboardInstance<'a> {
                 .context("artboard instance graph is unavailable")?;
             let root_view_model = retained_artboard_root_view_model(&self.raw);
             return mount_scripted_artboard_tree_async(
-                self.file,
+                &self.script_file,
                 artboard,
                 &mut self.raw,
                 factory,
@@ -6476,9 +6570,14 @@ impl<'a> ArtboardInstance<'a> {
                 .artboards
                 .get(self.artboard_index)
                 .context("artboard instance graph is unavailable")?;
-            prepare_scripted_artboard_tree_async(self.file, artboard, &mut self.raw, factory)
-                .await
-                .context("failed to prepare scripted drawables")?;
+            prepare_scripted_artboard_tree_async(
+                &self.script_file,
+                artboard,
+                &mut self.raw,
+                factory,
+            )
+            .await
+            .context("failed to prepare scripted drawables")?;
         }
         self.draw(factory, renderer)
     }
@@ -10057,6 +10156,26 @@ mod owned_instance_tests {
             .run_bytecode("data-constructor-probe", &probe)
             .expect("Data constructor probe runs");
         assert!(has_constructor);
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn scripted_drawable_artboard_input_is_projected_before_init() {
+        let file =
+            File::import_with_unsigned_scripts(&external_fixture("script_artboard_test.riv"))
+                .expect("script_artboard_test imports with trusted scripts");
+        let artboard = file.artboard_named("Artboard").expect("Artboard artboard");
+        let mut artboard = artboard.instantiate().expect("Artboard instantiates");
+        let mut factory = script_factory();
+
+        artboard
+            .initialize_renderer(&mut factory)
+            .expect("renderer initializes before scripted construction");
+        assert!(
+            artboard
+                .mount_scripted_drawables(&mut factory)
+                .expect("ArtboardGrid receives its authored Artboard input before init")
+        );
     }
 }
 

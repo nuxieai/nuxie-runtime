@@ -44,6 +44,9 @@ fn sixty_frame_artboard_silver(fixture: &str, silver_name: &str) {
     artboard
         .initialize_renderer(&mut silver)
         .expect("Artboard renderer initializes at the import boundary");
+    artboard
+        .mount_scripted_drawables(&mut silver)
+        .expect("Artboard scripts mount at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -75,19 +78,17 @@ fn sixty_frame_artboard_silver(fixture: &str, silver_name: &str) {
 }
 
 #[test]
-#[ignore = "expected-red: ArtboardGrid init indexes nil Artboard input instance at line 43"]
 fn script_instances_artboard_input() {
     sixty_frame_artboard_silver("script_artboard_test.riv", "script_artboards");
 }
 
 #[test]
-#[ignore = "expected-red: CircleOfArtboards init indexes nil Artboard input instance at line 15"]
 fn script_instances_artboard_input_with_proper_origin() {
     sixty_frame_artboard_silver("script_artboard_origin_test.riv", "script_artboards_origin");
 }
 
 #[test]
-#[ignore = "expected-red: MainScript init indexes nil Artboard input instance at line 11"]
+#[ignore = "expected-red: toLeft mutation does not restore didChange on the third frame"]
 fn script_node_advance_affects_did_change_via_dirt() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("script_affects_has_changed.riv"))
@@ -98,6 +99,9 @@ fn script_node_advance_affects_did_change_via_dirt() {
     artboard
         .initialize_renderer(&mut silver)
         .expect("Main renderer initializes at the import boundary");
+    artboard
+        .mount_scripted_drawables(&mut silver)
+        .expect("Main scripts mount at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -162,7 +166,7 @@ fn script_node_advance_affects_did_change_via_dirt() {
 }
 
 #[test]
-#[ignore = "expected-red: JumpToAnimations init indexes nil Artboard input instance at line 12"]
+#[ignore = "expected-red: frame 0 op 25 expects another retained paint but Rust updates color"]
 fn script_instance_linear_animations() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("scripting_linear_animation.riv"))
@@ -173,6 +177,9 @@ fn script_instance_linear_animations() {
     artboard
         .initialize_renderer(&mut silver)
         .expect("Main renderer initializes at the import boundary");
+    artboard
+        .mount_scripted_drawables(&mut silver)
+        .expect("Main scripts mount at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -251,7 +258,6 @@ fn double_advance(
 }
 
 #[test]
-#[ignore = "expected-red: CircleOfArtboards init indexes nil Artboard input instance at line 15"]
 fn script_instances_artboard_with_opacity_applied() {
     sixty_frame_artboard_silver(
         "script_artboard_opacity_test.riv",

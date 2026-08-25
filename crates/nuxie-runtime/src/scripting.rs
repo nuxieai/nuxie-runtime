@@ -2346,6 +2346,17 @@ pub trait ScriptArtboard {
         view_model: Option<ScriptViewModel>,
     ) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
 
+    /// Construct an instance while preserving C++'s File-owned renderer
+    /// factory boundary. Backends without retained renderer members may use
+    /// the ordinary factory-free construction path.
+    fn instance_with_factory(
+        &self,
+        view_model: Option<ScriptViewModel>,
+        _factory: &mut dyn RenderFactory,
+    ) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
+        self.instance(view_model)
+    }
+
     fn advance(&mut self, _seconds: f32) -> Result<bool, ScriptError> {
         Ok(false)
     }

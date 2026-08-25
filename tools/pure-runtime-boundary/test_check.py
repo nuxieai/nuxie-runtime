@@ -1786,6 +1786,47 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_allows_exact_apple_authored_msl_feature_forwarding(self) -> None:
+        self.create_portable_abi_facade()
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            apple-authored-msl = ["nuxie/ore-metal-authored-msl"]
+
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_apple_authored_msl_forwarding_under_an_alias(self) -> None:
+        self.create_portable_abi_facade()
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            helper = ["nuxie/ore-metal-authored-msl"]
+
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "feature 'helper' forwards forbidden portable ABI facade feature "
+            "'ore-metal-authored-msl'",
+            result.stderr,
+        )
+
     def test_rejects_indirect_product_feature_forwarding(self) -> None:
         self.create_package(
             "crates/nux-capi",
@@ -1987,6 +2028,40 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         result = self.run_check()
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_allows_exact_authored_msl_apple_extension_symbols(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/apple_metal.rs").write_text(
+            "use nuxie::ore_metal_gpu_canvas::{"
+            "OreMetalGpuCanvas, OreMetalGpuCanvasImage};\n"
+        )
+        (package / "src/lib.rs").write_text(
+            "use nuxie::File;\n"
+            "fn import() {\n"
+            "    let _ = File::import_trusted_native_shader_artifact_with_host_commands;\n"
+            "}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_authored_msl_extension_symbols_outside_exact_files(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/not_apple_metal.rs").write_text(
+            "use nuxie::ore_metal_gpu_canvas::{"
+            "OreMetalGpuCanvas, OreMetalGpuCanvasImage};\n"
+            "use nuxie::File;\n"
+            "fn import() {\n"
+            "    let _ = File::import_trusted_native_shader_artifact_with_host_commands;\n"
+            "}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("portable ABI facade use tree", result.stderr)
+        self.assertIn("approved baseline facade surface", result.stderr)
 
     def test_allows_product_neutral_default_scene_symbols_in_portable_abi_facade(
         self,

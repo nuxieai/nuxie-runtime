@@ -333,3 +333,86 @@ Correction gates:
 
 Implementation status: **CORRECTED CANDIDATE**. Certification status:
 **PENDING TWO FRESH INDEPENDENT REVIEWS**.
+
+## First fresh independent review of correction `ed8692bed`
+
+Verdict: **REJECTED**.
+
+The correction repairs the direct `RawPath`, `Mat2D`, float-layout, Feather,
+and named `RiveRenderer` witnesses, but it does not repair the full live
+renderer call graph. Two source-authority bypasses remain:
+
+1. Pinned `renderer/src/draw.cpp:452` computes every non-precomputed
+   `PathDraw::Make` bound with
+   `matrix.mapBoundingBox(path->getRawPath().points())`; stroked and feathered
+   paths also compute the device outset with the four-corner overload at line
+   481. Rust instead routes all four renderer product roots through
+   `draw_cpp.rs::resolve_path_pixel_bounds` and then
+   `crates/nuxie-renderer/src/draw.rs:445-504`. That helper still calls
+   `transformed_control_bounds`, transforms points one at a time with
+   translation already applied, folds scalar `f32::min`/`f32::max`, rejects
+   every surviving nonfinite result as `None`, and computes the stroke/feather
+   outset from absolute matrix coefficients. It never reaches the new
+   pair-lane `Mat2D::map_bounding_box` owner. This retains precisely the
+   translation-timing, lane-order, and nonfinite-normalization substitute that
+   the previous review required removing, now on the operative path-draw
+   route shared by Vulkan, WebGPU, WebGL2, and Metal. A positive-infinity
+   scale over finite points is a direct witness: pinned `mapBoundingBox`
+   performs the XY/ZW reduction and normalizes an invalid extent to the
+   all-zero AABB before rounding, while `transformed_control_bounds` rejects
+   the nonfinite extrema and returns `None` before the source-owned AABB
+   operation can occur.
+
+2. Pinned `RenderContext::pushDraws` spells its live admission assertion as
+   `!draws[i]->pixelBounds().empty()` at `renderer/src/render_context.cpp:509`.
+   Rust still expands that exact `TAABB` policy manually at
+   `render_context_cpp.rs:5982` as
+   `bounds.left < bounds.right && bounds.top < bounds.bottom`. The corrected
+   `needsScissor`, flush-closeout, tightened-clip, clip/path/image/image-mesh
+   sites now use shared typed-AABB methods, but this surviving production
+   assertion means the claimed removal of member-call expansions is not
+   complete. The SIMD-shaped `isOutsideCurrentFrame` comparison remains a
+   valid separate source spelling and is not this finding.
+
+The corrected owners themselves survived adversarial re-reading:
+
+- `RawPath::bounds` preserves the pinned odd/even initialization, source
+  operand order in every pair fold, and final XY/ZW reduction. Optimized
+  probes compiled directly against pinned `simd.hpp` with both Apple clang and
+  Homebrew clang confirmed numeric-over-NaN selection, negative-zero `min`,
+  positive-zero `max`, and second-payload selection for dual quiet NaNs; the
+  Rust scalar owner matches those optimized results.
+- `Mat2D::map_bounding_box` preserves the zero-skew multiplication branch,
+  affine fused multiply-add grouping, translation after extrema and
+  normalization, and the four-corner order. For an odd count it initializes
+  only XY from the first point and deliberately leaves ZW at positive/negative
+  infinity until the final reduction; the implementation does not contain the
+  suspected odd-count ZW overwrite.
+- Float `Aabb` has `#[repr(C)]` plus compile-time size, alignment, and field
+  offset evidence. The live inner-Feather path now reaches
+  `RawPath::bounds().pad(...)` and no longer owns a duplicate path-bounds
+  implementation.
+
+Independent evidence was run from a detached worktree at exact commit
+`ed8692bed`:
+
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-render-api`: 42/42 passed (29 unit,
+  three canonical-recording, three side-channel, seven upstream RawPath).
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --test upstream_aabb`:
+  12/12 passed.
+- Individual `CARGO_INCREMENTAL=0 cargo check -p nuxie-renderer --features`
+  runs passed for `renderer-vulkan`, `renderer-webgpu`, `renderer-webgl2`, and
+  `renderer-metal`.
+- The focused runtime lib-test binary could not be rebuilt in the detached
+  worktree because several intentionally untracked `.riv` fixtures are absent
+  there; this is an evidence-environment limitation, not the rejection basis.
+
+Required correction: route `PathDraw::Make`'s mapped path bounds and
+stroke/feather outset through the shared exact `Mat2D::map_bounding_box` and
+four-corner `map_bounds` owners while preserving the already-authored path
+preparation phase, and replace the surviving `pushDraws` expansion with
+`!bounds.empty()`. Then restart both fresh independent AABB reviews from the
+corrected commit.
+
+Implementation status: **CORRECTED CANDIDATE REJECTED**. Certification status:
+**REJECTED BY FIRST FRESH INDEPENDENT REVIEW**.

@@ -26,3 +26,6 @@ pub use shader_asset::decode_browser_shader_asset;
 
 #[cfg(feature = "luau")]
 pub mod vm;
+
+#[cfg(feature = "luau")]
+pub use vm::{BytecodeValidationError, validate_executable_luau_bytecode};

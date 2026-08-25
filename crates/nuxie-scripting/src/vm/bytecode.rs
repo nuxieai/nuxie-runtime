@@ -57,13 +57,17 @@ pub fn validate_luau_bytecode(bytecode: &[u8]) -> Result<(), BytecodeValidationE
     let version = cursor.read_u8("bytecode version")?;
 
     if version == 0 {
-        return Ok(());
+        return Err(BytecodeValidationError::new(
+            "bytecode version 0 contains compiler diagnostics, not executable bytecode",
+        ));
     }
 
     let min_version = LBC_VERSION_MIN.0 as u8;
     let max_version = LBC_VERSION_MAX.0 as u8;
     if !(min_version..=max_version).contains(&version) {
-        return Ok(());
+        return Err(BytecodeValidationError::new(format!(
+            "bytecode version {version} is outside supported range {min_version}..={max_version}"
+        )));
     }
 
     let mut types_version = 0;
@@ -72,7 +76,9 @@ pub fn validate_luau_bytecode(bytecode: &[u8]) -> Result<(), BytecodeValidationE
         let min_type_version = LBC_TYPE_VERSION_MIN.0 as u8;
         let max_type_version = LBC_TYPE_VERSION_MAX.0 as u8;
         if !(min_type_version..=max_type_version).contains(&types_version) {
-            return Ok(());
+            return Err(BytecodeValidationError::new(format!(
+                "bytecode type version {types_version} is outside supported range {min_type_version}..={max_type_version}"
+            )));
         }
     }
 
@@ -598,5 +604,58 @@ impl<'a> Cursor<'a> {
         let bytes = self.peek(len, what)?;
         self.offset += len;
         Ok(bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use luaur_common::{FFlag, ScopedAllFlags};
+
+    #[test]
+    fn accepts_build_pinned_executable_bytecode() {
+        let _flags = ScopedAllFlags::enter(true);
+        let bytecode = include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode"));
+        validate_luau_bytecode(bytecode).expect("build-pinned Luau bytecode validates");
+    }
+
+    #[test]
+    fn executable_validator_scopes_runtime_flags_without_perturbing_the_caller() {
+        let _compiler_flags = ScopedAllFlags::enter(false);
+        let bytecode = include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode"));
+
+        assert!(!FFlag::LuauCallFeedback.get());
+        super::super::validate_executable_luau_bytecode(bytecode)
+            .expect("the runtime validator applies its executable flag profile");
+        assert!(!FFlag::LuauCallFeedback.get());
+    }
+
+    #[test]
+    fn rejects_compiler_diagnostics_and_source_text_as_bytecode() {
+        let diagnostic = validate_luau_bytecode(&[0, b'e', b'r', b'r'])
+            .expect_err("Luau compiler diagnostics are not executable bytecode");
+        assert!(diagnostic.to_string().contains("compiler diagnostics"));
+
+        let source = validate_luau_bytecode(b"return function() end")
+            .expect_err("Luau source text cannot masquerade as bytecode");
+        assert!(source.to_string().contains("outside supported range"));
+    }
+
+    #[test]
+    fn rejects_unsupported_bytecode_and_type_versions() {
+        let unsupported_version = (LBC_VERSION_MAX.0 as u8)
+            .checked_add(1)
+            .expect("the pinned maximum leaves an unsupported test version");
+        let version = validate_luau_bytecode(&[unsupported_version])
+            .expect_err("unsupported bytecode versions reject before VM loading");
+        assert!(version.to_string().contains("outside supported range"));
+
+        let version = LBC_VERSION_MIN.0.max(4) as u8;
+        let unsupported_type_version = (LBC_TYPE_VERSION_MAX.0 as u8)
+            .checked_add(1)
+            .expect("the pinned maximum leaves an unsupported test type version");
+        let type_version = validate_luau_bytecode(&[version, unsupported_type_version])
+            .expect_err("unsupported bytecode type versions reject before VM loading");
+        assert!(type_version.to_string().contains("type version"));
     }
 }

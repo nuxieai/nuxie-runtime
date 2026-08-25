@@ -46,6 +46,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::rc::Rc;
 
+pub use bytecode::BytecodeValidationError;
 use bytecode::validate_luau_bytecode;
 use logging_scripting_context::LoggingScriptingContext;
 use lua_math::install_math_globals;
@@ -2072,6 +2073,17 @@ impl ScriptVm {
             None => Ok(()),
         }
     }
+}
+
+/// Validate executable Luau bytecode without booting a VM or executing the
+/// payload. The scoped flag profile matches [`ScriptVm`] and remains local to
+/// this thread, so trusted resource admission does not perturb concurrent
+/// compiler compatibility profiles.
+pub fn validate_executable_luau_bytecode(
+    bytecode: &[u8],
+) -> std::result::Result<(), BytecodeValidationError> {
+    let _flags = luaur_common::ScopedAllFlags::enter(true);
+    validate_luau_bytecode(bytecode)
 }
 
 impl RuntimeScriptingVm for ScriptVm {

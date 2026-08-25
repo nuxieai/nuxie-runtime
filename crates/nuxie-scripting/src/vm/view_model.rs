@@ -1552,6 +1552,7 @@ pub(super) struct ScriptedContext {
     missing_requested_data: Rc<Cell<bool>>,
     gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     alive: Rc<Cell<bool>>,
+    mark_needs_update_requested: Rc<Cell<bool>>,
 }
 
 impl ScriptedContext {
@@ -1587,7 +1588,12 @@ impl ScriptedContext {
             missing_requested_data,
             gpu_canvas,
             alive,
+            mark_needs_update_requested: Rc::new(Cell::new(false)),
         }
+    }
+
+    pub(super) fn mark_needs_update_requested(&self) -> Rc<Cell<bool>> {
+        Rc::clone(&self.mark_needs_update_requested)
     }
 
     pub(super) fn set_parents(&mut self, parents: Vec<Option<ScriptViewModel>>) {
@@ -1646,11 +1652,10 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("markNeedsUpdate", |_, this, ()| {
             this.require_live("markNeedsUpdate")?;
-            // Base ScriptedObject deliberately owns no component dirt target.
-            // Listener actions and data converters therefore accept this API
-            // as a live no-op; component-derived scripted owners override it
-            // on the C++ side (`lua_scripted_context.cpp:188-210`;
-            // `scripted_object.cpp:556`).
+            // The instance forwards this request to its current ScriptHost.
+            // A base ScriptedObject receives NoopScriptHost; component-derived
+            // owners supply their dirt target, matching the virtual C++ call.
+            this.mark_needs_update_requested.set(true);
             Ok(())
         });
         methods.add_method("image", |lua, this, name: String| {
@@ -1993,25 +1998,28 @@ mod tests {
     }
 
     #[test]
-    fn mark_needs_update_is_a_live_noop_and_rejects_a_disposed_context() {
+    fn mark_needs_update_records_a_live_request_and_rejects_a_disposed_context() {
         let lua = Lua::new();
         let alive = Rc::new(Cell::new(true));
+        let context_state = ScriptedContext::new_with_lifetime(
+            Rc::new(RefCell::new(None)),
+            Rc::new(Cell::new(true)),
+            Vec::new(),
+            Rc::new(Cell::new(false)),
+            None,
+            Rc::clone(&alive),
+        );
+        let requested = context_state.mark_needs_update_requested();
         let context = lua
-            .create_userdata(ScriptedContext::new_with_lifetime(
-                Rc::new(RefCell::new(None)),
-                Rc::new(Cell::new(true)),
-                Vec::new(),
-                Rc::new(Cell::new(false)),
-                None,
-                Rc::clone(&alive),
-            ))
+            .create_userdata(context_state)
             .expect("scripted context");
         lua.globals()
             .set("context", context)
             .expect("context global");
         lua.load("context:markNeedsUpdate()")
             .exec()
-            .expect("base C++ ScriptedObject accepts the live no-op");
+            .expect("live Context forwards the update request");
+        assert!(requested.get());
         alive.set(false);
         let error = lua
             .load("context:markNeedsUpdate()")
@@ -2176,9 +2184,7 @@ mod tests {
         let lua = Lua::new();
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         lua.globals().set("model", table).unwrap();
-        lua.globals()
-            .set("propertyName", property_name.clone())
-            .unwrap();
+        lua.globals().set("propertyName", property_name.clone()).unwrap();
         lua.load(
             "calls = 0\n\
                  observed = 0\n\
@@ -2604,7 +2610,9 @@ mod tests {
         let lua = Lua::new();
         let owner_table = create_scripted_view_model(&lua, owner.clone()).expect("scripted owner");
         lua.globals().set("owner", owner_table).unwrap();
-        lua.globals().set("propertyName", property_name.clone()).unwrap();
+        lua.globals()
+            .set("propertyName", property_name.clone())
+            .unwrap();
         lua.load(
             "function getProp(owner) return owner:getViewModel(propertyName) end\n\
              function getValue(prop) return prop.value end\n\

@@ -955,6 +955,7 @@ pub(crate) struct RuntimeLayoutAdvance {
 pub(crate) struct RuntimeScriptedComponentState {
     pub(crate) advance_active: bool,
     pub(crate) update_pending: bool,
+    pub(crate) in_update_phase: bool,
 }
 
 /// Runtime-only fields owned by one C++ `TextInput` occurrence.

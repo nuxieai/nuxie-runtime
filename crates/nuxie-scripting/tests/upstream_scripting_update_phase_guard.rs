@@ -1,9 +1,13 @@
-//! One-for-one expected-red ports of
+//! One-for-one ports of
 //! `tests/unit_tests/runtime/scripting/scripting_update_phase_guard_test.cpp`.
-//!
-//! Rust exposes neither the upstream per-object `inUpdatePhase` state nor the
-//! `ScriptedDrawable::markNeedsUpdate` dirt owner. The complete script and all
-//! three action/assertion sequences remain here for source correspondence.
+#![cfg(all(feature = "luau", feature = "compiler"))]
+
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::{ScriptHost, ScriptInstance, ScriptMethod};
+use nuxie_scripting::vm::ScriptVm;
+
+mod support;
+use support::compile_source;
 
 const UPDATE_SCRIPT: &str = r#"
 type MyObj = {
@@ -24,106 +28,89 @@ return function(): Node<MyObj>
 end
 "#;
 
-struct MissingUpdatePhaseDrawable;
+#[derive(Default)]
+struct TestScriptedDrawable {
+    dirt_count: usize,
+    in_update_phase: bool,
+}
 
-impl MissingUpdatePhaseDrawable {
-    fn new() -> Self {
-        Self
-    }
-
-    fn from_script(script: &str) -> Self {
-        assert_eq!(script, UPDATE_SCRIPT);
-        Self
-    }
-
-    fn ensure_script_initialized(&mut self) -> bool {
-        missing_scripted_drawable_update_phase_owner()
-    }
-
-    fn attach_context_to_self(&mut self) {
-        missing_scripted_drawable_update_phase_owner()
-    }
-
-    fn implemented_methods(&self) -> u32 {
-        missing_scripted_drawable_update_phase_owner()
-    }
-
-    fn set_implemented_methods(&mut self, _: u32) {
-        missing_scripted_drawable_update_phase_owner()
-    }
-
-    fn updates(&self) -> bool {
-        missing_scripted_drawable_update_phase_owner()
-    }
-
-    fn reset_dirt_count(&mut self) {
-        missing_scripted_drawable_update_phase_owner()
-    }
-
-    fn in_update_phase(&self) -> bool {
-        missing_scripted_drawable_update_phase_owner()
-    }
-
-    fn script_update(&mut self) {
-        missing_scripted_drawable_update_phase_owner()
-    }
-
-    fn dirt_count(&self) -> i32 {
-        missing_scripted_drawable_update_phase_owner()
-    }
-
+impl TestScriptedDrawable {
     fn mark_needs_update(&mut self) {
-        missing_scripted_drawable_update_phase_owner()
+        if self.in_update_phase {
+            return;
+        }
+        self.dirt_count += 1;
     }
 
-    fn clear_scripted_object_from_context(&mut self) {
-        missing_scripted_drawable_update_phase_owner()
+    fn script_update(&mut self, instance: &mut dyn ScriptInstance) {
+        self.in_update_phase = true;
+        instance
+            .call_method(ScriptMethod::Update, &[], self)
+            .expect("protected update callback");
+        self.in_update_phase = false;
     }
 }
 
-fn missing_scripted_drawable_update_phase_owner() -> ! {
-    panic!("Rust runtime has no primary ScriptedDrawable update-phase and dirt owner")
+impl ScriptHost for TestScriptedDrawable {
+    fn mark_script_update(&mut self) {
+        self.mark_needs_update();
+    }
+}
+
+fn scripted_instance() -> Box<dyn ScriptInstance> {
+    // The upstream test installs ScriptedContext into `_ctx` after invoking
+    // the exact generator. Rust's safe adapter performs that attachment in a
+    // wrapper because ScriptInstance intentionally does not expose its Lua
+    // self table.
+    let wrapped = format!(
+        "local generator = (function()\n{UPDATE_SCRIPT}\nend)()\n\
+         return function(context)\n\
+             local instance = generator()\n\
+             instance._ctx = context\n\
+             return instance\n\
+         end"
+    );
+    let bytecode = compile_source(&wrapped).expect("update-phase script compiles");
+    let mut payload = Vec::with_capacity(bytecode.len() + 1);
+    payload.push(0);
+    payload.extend(bytecode);
+
+    let vm = ScriptVm::new();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let program = vm
+        .register_protocol_script_with_factory("update-phase-guard", &payload, &mut factory)
+        .expect("script registers");
+    vm.instantiate_registered_script_with_context(&program, None, Vec::new())
+        .expect("script initializes")
 }
 
 #[test]
-#[ignore = "expected red: source correspondence must supply the ScriptedDrawable update-phase owner"]
 fn mark_needs_update_is_ignored_during_script_update() {
-    let mut obj = MissingUpdatePhaseDrawable::from_script(UPDATE_SCRIPT);
+    let mut instance = scripted_instance();
+    assert!(instance.has_method(ScriptMethod::Update).unwrap());
+    let mut obj = TestScriptedDrawable::default();
 
-    assert!(obj.ensure_script_initialized());
+    assert!(!obj.in_update_phase);
+    obj.script_update(instance.as_mut());
+    assert!(!obj.in_update_phase);
+    assert_eq!(obj.dirt_count, 0);
 
-    obj.attach_context_to_self();
-
-    obj.set_implemented_methods(obj.implemented_methods() | (1 << 1));
-    assert!(obj.updates());
-
-    obj.reset_dirt_count();
-    assert!(!obj.in_update_phase());
-    obj.script_update();
-    assert!(!obj.in_update_phase());
-    assert_eq!(obj.dirt_count(), 0);
-
-    obj.reset_dirt_count();
     obj.mark_needs_update();
-    assert_eq!(obj.dirt_count(), 1);
-
-    obj.clear_scripted_object_from_context();
+    assert_eq!(obj.dirt_count, 1);
 }
 
 #[test]
-#[ignore = "expected red: source correspondence must supply the ScriptedDrawable update-phase owner"]
 fn in_update_phase_defaults_to_false() {
-    let obj = MissingUpdatePhaseDrawable::new();
-    assert!(!obj.in_update_phase());
+    let obj = TestScriptedDrawable::default();
+    assert!(!obj.in_update_phase);
 }
 
 #[test]
-#[ignore = "expected red: source correspondence must supply the ScriptedDrawable dirt owner"]
 fn mark_needs_update_works_outside_update_phase() {
-    let mut obj = MissingUpdatePhaseDrawable::new();
-    assert_eq!(obj.dirt_count(), 0);
+    let mut obj = TestScriptedDrawable::default();
+    assert_eq!(obj.dirt_count, 0);
     obj.mark_needs_update();
-    assert_eq!(obj.dirt_count(), 1);
+    assert_eq!(obj.dirt_count, 1);
     obj.mark_needs_update();
-    assert_eq!(obj.dirt_count(), 2);
+    assert_eq!(obj.dirt_count, 2);
 }

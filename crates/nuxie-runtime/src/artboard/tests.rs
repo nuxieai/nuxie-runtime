@@ -206,6 +206,8 @@
         updates: Rc<Cell<usize>>,
     }
 
+    struct MarkNeedsUpdateScriptInstance;
+
     struct RetainedInputScriptInstance {
         value: Rc<RefCell<ScriptValue>>,
     }
@@ -621,6 +623,31 @@
                 ScriptMethod::Update => self.updates.set(self.updates.get() + 1),
                 _ => {}
             }
+            Ok(ScriptValue::Nil)
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for MarkNeedsUpdateScriptInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Update)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            _args: &[ScriptValue],
+            host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            assert_eq!(method, ScriptMethod::Update);
+            host.mark_script_update();
             Ok(ScriptValue::Nil)
         }
 
@@ -3411,6 +3438,52 @@
                 .expect("post-init update")
         );
         assert_eq!(updates.get(), 3);
+    }
+
+    #[test]
+    fn scripted_drawable_update_phase_suppresses_context_redirt() {
+        let mut instance = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
+            vec![0],
+        );
+        instance.set_script_instance_for_global(0, Box::new(MarkNeedsUpdateScriptInstance));
+        let component = instance
+            .script_component_handle_for_global(0)
+            .expect("scripted drawable owner");
+        assert!(
+            !instance
+                .objects
+                .component(component)
+                .and_then(|owner| owner.concrete.scripted.as_ref())
+                .expect("scripted drawable state")
+                .in_update_phase,
+            "the per-owner update phase defaults false"
+        );
+        instance.clear_component_dirt(0);
+
+        assert!(instance.update_script_instances().expect("initial update"));
+        let scripted = instance
+            .objects
+            .component(component)
+            .and_then(|owner| owner.concrete.scripted.as_ref())
+            .expect("scripted drawable state");
+        assert!(!scripted.in_update_phase, "the callback phase is restored");
+        assert!(!scripted.update_pending);
+        assert!(
+            !instance
+                .debug_component_dirt(0)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
+            "Context.markNeedsUpdate is ignored while update runs"
+        );
+
+        assert!(instance.mark_script_update_for_global(0));
+        assert!(
+            instance
+                .debug_component_dirt(0)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
+            "the same request adds ScriptUpdate outside the callback phase"
+        );
+        assert!(instance.mark_script_update_for_global(0));
     }
 
     #[test]

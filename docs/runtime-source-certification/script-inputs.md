@@ -677,3 +677,110 @@ intersects the focused ScriptInput owners above; they are recorded rather than
 silently treated as a green workspace gate.
 
 These tests justify returning the three rows to review, not self-acceptance.
+
+## First fresh independent review of correction `6b3f7c320`
+
+Verdict: **REJECTED.** The correction closes the consumer-File promotion bug,
+the listener primary-converter fresh-clone ancestry gap, the public bypass of
+fallible Artboard preparation, and the stale silver/golden API adapters. It
+does not preserve the pinned successful phase-two construction boundary, and
+the production facade still chooses an auto-created ViewModel from immutable
+source metadata instead of the concrete live Artboard occurrence.
+
+### Production preparation performs the construction it claims to defer
+
+Pinned `ScriptedObject::hydrateScriptInputs` first calls only
+`validateHydrationPrerequisites()` for every input. For
+`ScriptInputArtboard`, that validation is exactly
+`m_referencedArtboard != nullptr`. During the second authored loop,
+`hydrateScriptInput()` calls `syncReferencedArtboard()`, and only then does
+`ScriptedObject::setArtboardInput` call `artboard->instance()`, set
+`frameOrigin(false)`, construct `ScriptedArtboard`/`ScriptReffedArtboard`,
+create or retain its ViewModel, construct its default state machine, and bind
+the child DataContext.
+
+The corrected File resolver does those semantic operations inside
+`prepare_script_artboard`, before the authored input loop:
+
+- `FileScriptArtboard::prepare_with_view_model` constructs the complete
+  `RuntimeArtboardInstance`;
+- `prepare_from_live` calls `RuntimeBindableArtboard::artboard_instance`,
+  which cold-clones the concrete live occurrence at that same preflight
+  boundary;
+- `prepare_from_concrete` sets frame origin, creates the ViewModel, binds the
+  Artboard DataContext, constructs the default `StateMachineInstance`, calls
+  `bind_script_artboard_data_context`, and immediately calls
+  `advance_data_context`;
+- `PreparedFileScriptArtboard::construct` then only moves that already-built
+  state into `FileScriptArtboard` and allocates the box.
+
+Consequently an earlier authored scalar still precedes table *publication*,
+but it no longer precedes Artboard cloning, ViewModel creation, DataContext
+binding, state-machine construction, or the initial context advance. Those
+are precisely the operations performed by the pinned phase-two
+`setArtboardInput` call chain. The successful-order test does not exercise
+this production behavior: its test resolver builds `ProjectionArtboard`
+during `prepare_script_artboard`, while its `construct` trace is labeled
+`resolve-artboard`. The trace therefore proves box publication order, not
+Artboard construction order.
+
+This is also observable through the public prepared facade. A caller can
+preflight a `ScriptArtboardSource::Live`, refresh the retained
+`RuntimeBindableArtboard` to a different concrete occurrence, and then apply
+the public `PreparedScriptListenerActionHydration`; the prepared recipe
+publishes the earlier clone. The pinned method has no externally suspendable
+validation/construction split and reads the retained Artboard at its authored
+phase-two position.
+
+The type-state fence is accepted as a non-bypassable discharge of Rust-only
+semantic `Result` branches. Exact translation still requires the prepared
+value to retain immutable constructor authority rather than the constructed
+occurrence. The phase-two `construct` boundary must perform the infallible
+equivalents of `Artboard::instance`, ViewModel/DataContext setup, and default
+state-machine ownership in authored order.
+
+### Live Artboard ViewModel selection reads the wrong source
+
+Pinned `ScriptReffedArtboard` receives the concrete clone first and then calls
+the consumer `File::createViewModelInstance(m_artboard.get())`. That overload
+reads `m_artboard->viewModelId()` from the cloned live Artboard occurrence.
+`ArtboardBase::viewModelId` is a generated mutable property, and
+`Artboard::instance()` copies its current value.
+
+`FileScriptArtboard::prepare_from_concrete` instead reads
+`source_runtime.artboard(artboard_index).uint_property("viewModelId")`. For a
+live bindable whose concrete Artboard occurrence has changed `viewModelId`,
+the Rust facade ignores the copied live value and chooses the consumer File's
+ViewModel using the immutable authored source catalog. The current cross-File
+test changes File identity and collides graph ids, but leaves `viewModelId`
+equal to its authored value, so it cannot detect this discrepancy. The
+default state-machine selection does correctly read the concrete `instance`;
+ViewModel selection must use the same live-occurrence authority.
+
+### Adjudication
+
+| Pinned boundary | First fresh-review result |
+| --- | --- |
+| `ScriptInputArtboard::initScriptedValue` / `hydrateScriptInput` | **Rejected.** Fallible prerequisites are structurally fenced, but production Artboard/ViewModel/DataContext/default-state-machine construction runs during preflight rather than at this input's authored phase-two position. |
+| `ScriptInputArtboard::syncReferencedArtboard` | **Accepted locally.** It forwards the retained File/live source and performs the table projection, but the downstream File facade remains rejected for the construction-phase and live-`viewModelId` discrepancies above. |
+| `ScriptInputArtboard::updateArtboard` | **Accepted.** Live-first source selection, failed-lookup preservation, owner/ancestor rejection, and fresh-clone primary-converter ancestry now follow the pinned call chain. |
+| Cross-File `ScriptReffedArtboard` ownership | **Accepted in part.** The consumer File remains operative and the source File is only a lifetime/resource pin; exact auto-ViewModel selection still fails when the concrete live occurrence's `viewModelId` differs from immutable source metadata. |
+
+### First fresh-review evidence
+
+At correction commit `6b3f7c320`, with `CARGO_INCREMENTAL=0`:
+
+- `public_hydration_apply_and_apply_inputs_cannot_bypass_artboard_preparation`:
+  1 passed;
+- `scripted_hydration_`: 4 passed;
+- `fresh_clone_preserves_primary_converter_artboard_ancestor_authority`:
+  1 passed;
+- `live_scripted_artboard_uses_consumer_file_and_retains_concrete_cross_file_source`:
+  1 passed;
+- `cargo check -p nuxie-runtime -p nuxie -p silver-corpus --features
+  nuxie/scripting`: passed.
+
+Those results accept the structural fence, adapter migration, cross-File pin,
+and ancestry correction. They do not cover either rejected production
+counterexample. Certification remains rejected pending a correction and a
+new two-review cycle.

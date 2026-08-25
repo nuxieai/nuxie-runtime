@@ -5145,7 +5145,9 @@ pub unsafe extern "C" fn nux_view_model_instance_set_number(
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         view_model_set(view_model, name_path, |transaction, view_model, name| {
-            transaction.set_number(view_model, name, value)
+            transaction
+                .try_set_number(view_model, name, value)
+                .is_some()
         })
     })
 }
@@ -5161,7 +5163,9 @@ pub unsafe extern "C" fn nux_view_model_instance_set_bool(
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         view_model_set(view_model, name_path, |transaction, view_model, name| {
-            transaction.set_boolean(view_model, name, value)
+            transaction
+                .try_set_boolean(view_model, name, value)
+                .is_some()
         })
     })
 }
@@ -5183,7 +5187,9 @@ pub unsafe extern "C" fn nux_view_model_instance_set_string(
             return NuxStatus::InvalidArgument;
         };
         view_model_set(view_model, name_path, |transaction, view_model, name| {
-            transaction.set_string(view_model, name, value.as_bytes())
+            transaction
+                .try_set_string(view_model, name, value.as_bytes())
+                .is_some()
         })
     })
 }

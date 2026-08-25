@@ -1156,17 +1156,28 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: &[u8],
     ) -> bool {
+        self.try_set_string(owner, path, value).unwrap_or(false)
+    }
+
+    /// Returns `None` when the typed path cannot be mutated and otherwise
+    /// reports whether the value changed.
+    pub fn try_set_string(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: &[u8],
+    ) -> Option<bool> {
         let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-            return false;
+            return None;
         };
         let Some(source) = instance.string_source_handle_by_property_name_path(path) else {
-            return false;
+            return None;
         };
         let Some(cell) = instance.cell_by_property_path(source.path()) else {
-            return false;
+            return None;
         };
         self.capture_cell(cell);
-        instance.set_string_by_source_handle(&source, value)
+        Some(instance.set_string_by_source_handle(&source, value))
     }
 
     pub fn set_number(
@@ -1175,17 +1186,26 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: f32,
     ) -> bool {
+        self.try_set_number(owner, path, value).unwrap_or(false)
+    }
+
+    pub fn try_set_number(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: f32,
+    ) -> Option<bool> {
         let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-            return false;
+            return None;
         };
         let Some(source) = instance.number_source_handle_by_property_name_path(path) else {
-            return false;
+            return None;
         };
         let Some(cell) = instance.cell_by_property_path(source.path()) else {
-            return false;
+            return None;
         };
         self.capture_cell(cell);
-        instance.set_number_by_source_handle(&source, value)
+        Some(instance.set_number_by_source_handle(&source, value))
     }
 
     pub fn set_boolean(
@@ -1194,17 +1214,26 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: bool,
     ) -> bool {
+        self.try_set_boolean(owner, path, value).unwrap_or(false)
+    }
+
+    pub fn try_set_boolean(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: bool,
+    ) -> Option<bool> {
         let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-            return false;
+            return None;
         };
         let Some(source) = instance.boolean_source_handle_by_property_name_path(path) else {
-            return false;
+            return None;
         };
         let Some(cell) = instance.cell_by_property_path(source.path()) else {
-            return false;
+            return None;
         };
         self.capture_cell(cell);
-        instance.set_boolean_by_source_handle(&source, value)
+        Some(instance.set_boolean_by_source_handle(&source, value))
     }
 
     pub fn set_color(
@@ -1213,17 +1242,26 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: u32,
     ) -> bool {
+        self.try_set_color(owner, path, value).unwrap_or(false)
+    }
+
+    pub fn try_set_color(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u32,
+    ) -> Option<bool> {
         let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-            return false;
+            return None;
         };
         let Some(source) = instance.color_source_handle_by_property_name_path(path) else {
-            return false;
+            return None;
         };
         let Some(cell) = instance.cell_by_property_path(source.path()) else {
-            return false;
+            return None;
         };
         self.capture_cell(cell);
-        instance.set_color_by_source_handle(&source, value)
+        Some(instance.set_color_by_source_handle(&source, value))
     }
 
     pub fn set_enum(
@@ -1232,35 +1270,52 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: u64,
     ) -> bool {
+        self.try_set_enum(owner, path, value).unwrap_or(false)
+    }
+
+    pub fn try_set_enum(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u64,
+    ) -> Option<bool> {
         let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-            return false;
+            return None;
         };
         let Some(source) = instance.enum_source_handle_by_property_name_path(path) else {
-            return false;
+            return None;
         };
         let Some(cell) = instance.cell_by_property_path(source.path()) else {
-            return false;
+            return None;
         };
         self.capture_cell(cell);
-        instance.set_enum_by_source_handle(&source, value)
+        Some(instance.set_enum_by_source_handle(&source, value))
     }
 
     pub fn fire_trigger(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
+        self.try_fire_trigger(owner, path).unwrap_or(false)
+    }
+
+    pub fn try_fire_trigger(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+    ) -> Option<bool> {
         let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-            return false;
+            return None;
         };
         let Some(source) = instance.trigger_source_handle_by_property_name_path(path) else {
-            return false;
+            return None;
         };
         let Some(cell) = instance.cell_by_property_path(source.path()) else {
-            return false;
+            return None;
         };
         let Some(value) = instance.trigger_value_by_property_name_path(path) else {
-            return false;
+            return None;
         };
         let next = u64::from((value as u32).wrapping_add(1));
         self.capture_cell(cell);
-        instance.set_trigger_by_source_handle(&source, next)
+        Some(instance.set_trigger_by_source_handle(&source, next))
     }
 
     pub fn set_list_index(
@@ -1269,18 +1324,27 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: u64,
     ) -> bool {
+        self.try_set_list_index(owner, path, value).unwrap_or(false)
+    }
+
+    pub fn try_set_list_index(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u64,
+    ) -> Option<bool> {
         let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-            return false;
+            return None;
         };
         let Some(source) = instance.symbol_list_index_source_handle_by_property_name_path(path)
         else {
-            return false;
+            return None;
         };
         let Some(cell) = instance.cell_by_property_path(source.path()) else {
-            return false;
+            return None;
         };
         self.capture_cell(cell);
-        instance.set_symbol_list_index_by_source_handle(&source, value)
+        Some(instance.set_symbol_list_index_by_source_handle(&source, value))
     }
 
     pub fn set_asset(
@@ -1289,17 +1353,26 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: u64,
     ) -> bool {
+        self.try_set_asset(owner, path, value).unwrap_or(false)
+    }
+
+    pub fn try_set_asset(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u64,
+    ) -> Option<bool> {
         let Ok(mut instance) = owner.instance.try_borrow_mut() else {
-            return false;
+            return None;
         };
         let Some(source) = instance.asset_source_handle_by_property_name_path(path) else {
-            return false;
+            return None;
         };
         let Some(cell) = instance.cell_by_property_path(source.path()) else {
-            return false;
+            return None;
         };
         self.capture_cell(cell);
-        instance.set_asset_by_source_handle(&source, value)
+        Some(instance.set_asset_by_source_handle(&source, value))
     }
 
     pub fn link_view_model(
@@ -1589,16 +1662,17 @@ mod upstream_viewmodel_instance_contract_tests {
     use nuxie_schema::definition_by_name;
 
     #[test]
-    fn scalar_transaction_reports_the_underlying_setter_change_status() {
+    fn scalar_transaction_distinguishes_rejection_no_op_and_change() {
         let file = two_number_instance_file();
         let root = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0).expect("root"),
         );
         let mut transaction = RuntimeOwnedViewModelTransaction::begin().expect("transaction");
 
-        assert!(!transaction.set_number(&root, "first", 0.0));
-        assert!(transaction.set_number(&root, "first", 4.0));
-        assert!(!transaction.set_number(&root, "first", 4.0));
+        assert_eq!(transaction.try_set_number(&root, "missing", 0.0), None);
+        assert_eq!(transaction.try_set_number(&root, "first", 0.0), Some(false));
+        assert_eq!(transaction.try_set_number(&root, "first", 4.0), Some(true));
+        assert_eq!(transaction.try_set_number(&root, "first", 4.0), Some(false));
         transaction.commit();
         assert_eq!(
             root.borrow().number_value_by_property_name("first"),

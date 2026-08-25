@@ -60,7 +60,6 @@ fn mangled_module_errors_attribute_to_the_library_in_traces() {
 }
 
 #[test]
-#[ignore = "expected-red: scope_probe is not registered from the exported fixture, so the three exact cached fields remain absent"]
 fn exported_file_resolves_statically_linked_library_requires() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/sync/scope_probe.riv");
@@ -69,17 +68,29 @@ fn exported_file_resolves_statically_linked_library_requires() {
     let scripts = file
         .scripting_file_assets_with_contents()
         .into_iter()
-        .filter(|entry| entry.asset.type_name == "ScriptAsset")
+        .filter(|entry| {
+            entry.asset.type_name == "ScriptAsset"
+                && entry.asset.bool_property("isModule").unwrap_or(false)
+        })
         .map(|entry| {
+            let bare_name = entry.asset.string_property("name").unwrap_or_default();
+            let folder = entry
+                .asset
+                .string_property("folderPath")
+                .unwrap_or_default();
             (
-                entry.asset.string_property("name").unwrap_or_default(),
+                if folder.is_empty() {
+                    bare_name.to_owned()
+                } else {
+                    format!("{folder}/{bare_name}")
+                },
                 entry.contents.unwrap(),
             )
         })
         .collect::<Vec<_>>();
     let vm = ScriptVm::new();
     let _registration_errors =
-        vm.perform_registration(scripts.iter().map(|(name, bytes)| (*name, *bytes)));
+        vm.perform_registration(scripts.iter().map(|(name, bytes)| (name.as_str(), *bytes)));
 
     assert_eq!(cached_int_field(&vm, "scope_probe", "lib"), 1);
     assert_eq!(cached_int_field(&vm, "scope_probe", "hasDecode"), 1);

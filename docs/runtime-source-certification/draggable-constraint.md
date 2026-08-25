@@ -91,9 +91,52 @@ unchanged.
 
 ## Certification boundary and verdict
 
-The two out-of-line and 16 executable inline definitions are literally
-accounted for. Component-provided construction, phase transitions, recursion
-order, scroll return, opacity, and no-op enable/disable behavior now match the
-pinned source under typed Rust ownership. Concrete proxy algorithms owned by
-`ScrollConstraint` and `ScrollBarConstraint` are dependencies and are not
-silently certified by this translation-unit audit.
+**Independent adversarial review: rejected.** The first-drag recursion and
+scrolled-completion recursion follow the pinned reentrant call site, including
+restoring the temporarily taken owner vectors before recursion, resuming after
+the triggering group, preserving `canHit` for the rest of that target, mapping
+`scroll` to opaque blocking, and retaining `m_hasScrolled` until the recursive
+`dragEnd` (and its final `pointerMove`) returns. The draggable-only no-op
+`enable`/`disable` specialization also leaves authored-group behavior intact.
+The following counterexamples prevent source certification:
+
+1. The Rust event branches do not use the pinned previous/current phase
+   predicates. Pinned C++ calls `startDrag` only for a transition from a
+   non-Down phase into Down. Rust calls `runtime_draggable_proxy_start` for
+   every hovered Down, even when that pointer was already Down. A repeated
+   hovered Down therefore restarts the concrete proxy and clears
+   `has_scrolled`; pinned C++ does neither. Conversely, pinned C++ calls
+   `endDrag` for any Down-to-Clicked/Out transition. A Down outside the target
+   after an earlier captured Down transitions the C++ pointer to Out and ends
+   the proxy immediately. Rust's Down branch does nothing when not hovered,
+   retains the pointer in `active_pointers`, and can continue dragging it on a
+   later Move.
+2. Rust clears proxy-global `has_scrolled` on Exit both in the draggable event
+   branch and again in `release_draggable_pointer`. Pinned Exit does not change
+   the phase inside `processEvent`; `releaseEvent` removes only that pointer's
+   record and does not clear group-global `m_hasScrolled`. This is observable
+   with two active pointers: after pointer A scrolls and exits while pointer B
+   remains Down, B's next successful Move must not emit another `dragStart` in
+   C++, but Rust emits one because A's Exit cleared the shared flag.
+3. The `listenerGroups` owner row says Rust retains provider order before hit
+   sorting, but `runtime_draggable_proxies` sorts proxies by hittable draw order
+   before it constructs listener groups. Pinned C++ constructs groups in
+   artboard provider order and each provider's `draggables()` order, then sorts
+   hit components later. No governing adaptation or behavioral proof currently
+   establishes that changing the owner-vector order is inert.
+
+The existing direct regression uses one ordinary Down/Move/Up pointer. It
+therefore proves the repaired happy-path recursion but cannot observe repeated
+Down, Down-to-Out cancellation, or the two-pointer Exit state leak above.
+Concrete proxy algorithms owned by `ScrollConstraint` and
+`ScrollBarConstraint` remain dependencies and are not silently certified by
+this translation-unit audit.
+
+There is also a denominator tooling defect independent of the runtime verdict:
+the generated symbol row for the inline
+`DraggableConstraintListenerGroup` constructor is currently named
+`DraggableConstraintListenerGroup::m_draggable`, having selected the final
+initializer-list member instead of the constructor declarator. The receipt's
+human count of 16 executable inline definitions is correct, but that malformed
+machine ID cannot serve as constructor disposition evidence until the generic
+initializer-list parser is corrected and the snapshot regenerated.

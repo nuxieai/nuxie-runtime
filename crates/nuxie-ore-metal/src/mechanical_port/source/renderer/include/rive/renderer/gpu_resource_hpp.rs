@@ -1427,6 +1427,7 @@ mod tests {
             .clone()
     }
 
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn ore_classes_preserve_offset_zero_base_chains_and_authored_member_order() {
         use core::mem::offset_of;
@@ -1577,6 +1578,7 @@ mod tests {
         owner.shutdown();
     }
 
+    #[cfg(target_vendor = "apple")]
     #[test]
     fn ore_classes_execute_exact_reverse_member_then_base_destruction() {
         use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_hpp::BindGroup;

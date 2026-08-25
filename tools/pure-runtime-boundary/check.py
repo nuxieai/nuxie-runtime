@@ -76,6 +76,9 @@ PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {
     "renderer-metal",
     "scripting",
 }
+PORTABLE_ABI_FACADE_ALLOWED_FEATURE_FORWARDINGS = {
+    ("apple-authored-msl", "ore-metal-authored-msl"),
+}
 PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "Artboard",
     "ArtboardInstance",
@@ -146,6 +149,14 @@ PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS = {
         "RuntimeOwnedViewModelTransaction",
         "RuntimeViewModelLinkError",
         "select_default_scene",
+    },
+}
+PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
+    "crates/nux-capi/src/apple_metal.rs": {
+        "ore_metal_gpu_canvas": {
+            "OreMetalGpuCanvas",
+            "OreMetalGpuCanvasImage",
+        },
     },
 }
 PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
@@ -253,6 +264,11 @@ PORTABLE_ABI_FACADE_TYPE_ALIAS = re.compile(
 PORTABLE_ABI_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS = {
     "import",
     "import_trusted_with_host_commands",
+}
+PORTABLE_ABI_FACADE_FILE_ASSOCIATED_ITEMS = {
+    "crates/nux-capi/src/lib.rs": {
+        "import_trusted_native_shader_artifact_with_host_commands",
+    },
 }
 PORTABLE_ABI_FACADE_TEST_ONLY_FILE_ASSOCIATED_ITEMS = {
     "import_with_unsigned_scripts",
@@ -1052,6 +1068,11 @@ def portable_abi_facade_feature_errors(
                 match
                 and match.group(1)
                 not in PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES
+                and (
+                    feature_name,
+                    match.group(1),
+                )
+                not in PORTABLE_ABI_FACADE_ALLOWED_FEATURE_FORWARDINGS
             ):
                 errors.append(
                     f"{package}/Cargo.toml: feature {feature_name!r} forwards "
@@ -1063,6 +1084,10 @@ def portable_abi_facade_feature_errors(
 def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     errors = []
     test_module_ranges = cfg_test_module_ranges(source)
+    file_module_symbols = PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS.get(relative, {})
+    file_associated_items = PORTABLE_ABI_FACADE_FILE_ASSOCIATED_ITEMS.get(
+        relative, set()
+    )
 
     def inside_test_module(match: re.Match[str]) -> bool:
         return any(start <= match.start() < end for start, end in test_module_ranges)
@@ -1133,7 +1158,9 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
         elif nested_grouped is not None:
             module = nested_grouped.group(1)
             items = [item.strip() for item in nested_grouped.group(2).split(",")]
-            module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(module)
+            module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(
+                module
+            ) or file_module_symbols.get(module)
             if module_symbols is not None and all(
                 re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", item)
                 for item in items
@@ -1173,7 +1200,9 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     for match in DIRECT_NUXIE_PATH.finditer(source):
         symbol = match.group("symbol")
         nested_symbol = match.group("nested_symbol")
-        module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(symbol)
+        module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(
+            symbol
+        ) or file_module_symbols.get(symbol)
         if module_symbols is not None:
             if nested_symbol is None:
                 continue
@@ -1215,7 +1244,10 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             and inside_test_module(match)
         ):
             continue
-        if item not in PORTABLE_ABI_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS:
+        if (
+            item not in PORTABLE_ABI_FACADE_ALLOWED_FILE_ASSOCIATED_ITEMS
+            and item not in file_associated_items
+        ):
             line = source.count("\n", 0, match.start()) + 1
             errors.append(
                 f"{relative}:{line}: File associated item {item!r} is not in the "

@@ -13849,6 +13849,28 @@ impl TaffyRuntimeLayoutEngine {
                     measured.width = measured.width.max(width);
                     measured.height = measured.height.max(height);
                 }
+                "NestedArtboard" | "NestedArtboardLeaf" => {
+                    // Exact `NestedArtboard::measureLayout`: the ordinary and
+                    // leaf host types inherit the mounted Artboard's intrinsic
+                    // dimensions and clamp each axis only when Yoga supplies a
+                    // finite constraint (`nested_artboard.cpp:774-787`). A
+                    // `NestedArtboardLayout` supplies its child's layout node
+                    // instead and is handled by `build_node` above.
+                    let Some(nested) = instance.nested_artboards.get(&child.local_id) else {
+                        continue;
+                    };
+                    let (child_width, child_height) = nested.child.artboard_dimensions();
+                    let maximum_width = known_dimensions
+                        .width
+                        .or_else(|| definite_available_space(available_space.width))
+                        .unwrap_or(f32::MAX);
+                    let maximum_height = known_dimensions
+                        .height
+                        .or_else(|| definite_available_space(available_space.height))
+                        .unwrap_or(f32::MAX);
+                    measured.width = measured.width.max(child_width.min(maximum_width));
+                    measured.height = measured.height.max(child_height.min(maximum_height));
+                }
                 "Joystick" => {
                     let maximum_width = known_dimensions
                         .width
@@ -34574,6 +34596,63 @@ mod tests {
         );
     }
 
+    #[test]
+    fn ordinary_nested_artboard_contributes_its_mounted_intrinsic_size() {
+        let bytes = synthetic_intrinsic_nested_artboard_riv();
+        let runtime = read_runtime_file(&bytes).expect("nested intrinsic fixture imports");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("nested intrinsic fixture graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has a host artboard");
+        let instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("host instance builds");
+
+        let unconstrained = TaffyRuntimeLayoutEngine
+            .measure_layout_component(
+                &runtime,
+                &instance,
+                graph,
+                1,
+                Size::NONE,
+                Size {
+                    width: AvailableSpace::MaxContent,
+                    height: AvailableSpace::MaxContent,
+                },
+            )
+            .expect("layout component measures");
+        assert_eq!(
+            unconstrained,
+            Size {
+                width: 80.0,
+                height: 60.0
+            }
+        );
+
+        let constrained = TaffyRuntimeLayoutEngine
+            .measure_layout_component(
+                &runtime,
+                &instance,
+                graph,
+                1,
+                Size::NONE,
+                Size {
+                    width: AvailableSpace::Definite(50.0),
+                    height: AvailableSpace::Definite(40.0),
+                },
+            )
+            .expect("layout component measures under at-most constraints");
+        assert_eq!(
+            constrained,
+            Size {
+                width: 50.0,
+                height: 40.0
+            }
+        );
+    }
+
     fn assert_mat2d_near(actual: [f32; 6], expected: [f32; 6]) {
         for (index, (actual, expected)) in actual.into_iter().zip(expected).enumerate() {
             assert!(
@@ -34599,6 +34678,29 @@ mod tests {
 
     // Two fixed-size layout children fill a row artboard. The queried shape is
     // authored under the second child at x=10, so its settled world x is 110.
+    fn synthetic_intrinsic_nested_artboard_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9_651);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "NestedArtboard", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_uint(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 80.0);
+            push_f32(bytes, "LayoutComponent", "height", 60.0);
+        });
+        bytes
+    }
+
     fn synthetic_layout_geometry_riv() -> Vec<u8> {
         synthetic_layout_geometry_riv_with_affine(None)
     }

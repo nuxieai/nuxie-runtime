@@ -1,0 +1,158 @@
+# Artboard-family literal source certification
+
+Pinned upstream: `rive-runtime@4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
+
+This receipt is a fresh, complete read of these translation units and their
+headers; it does not inherit the verdicts in the B6 or phase-3 audit records:
+
+- `src/artboard.cpp`
+- `src/nested_artboard.cpp`
+- `src/artboard_component_list.cpp`
+- `src/nested_artboard_layout.cpp`
+- `src/nested_artboard_leaf.cpp`
+
+The unit of review was every out-of-line function, override, constructor,
+destructor, anonymous-namespace helper, and conditional definition. Overloads
+are listed separately below. “Owner-safe equivalent” means the C++ operation
+is split across Rust value ownership or a retained subsystem, but its ordering
+and observable effect were checked against the complete C++ body. “Taffy
+adaptation” means the approved layout-engine substitution, not a parity claim
+about Yoga internals.
+
+## Finding corrected by this audit
+
+`NestedArtboard::measureLayout` at `nested_artboard.cpp:774-787` was absent.
+The pinned implementation returns the mounted Artboard's width and height,
+clamping each axis only when Yoga supplies a finite constraint. Rust's
+`TaffyRuntimeLayoutEngine::measure_layout_component` recognized an ordinary
+`NestedArtboard`/`NestedArtboardLeaf` as intrinsically sizeable but then fell
+through to `Size::ZERO`.
+
+The Rust dispatcher now maps both host types to the mounted occurrence's
+`artboard_dimensions()` with the same per-axis clamp. A
+`NestedArtboardLayout` remains separate because it transfers the mounted
+Artboard's layout node into the parent tree. The focused regression
+`ordinary_nested_artboard_contributes_its_mounted_intrinsic_size` proves both
+the unconstrained `80 x 60` result and the independently constrained `50 x 40`
+result.
+
+## `src/artboard.cpp`
+
+The 133 out-of-line definitions (counting overloads and conditional audio/tools
+definitions) map as follows.
+
+| C++ symbols, exhaustively enumerated | Exact Rust owner symbols | Disposition |
+| --- | --- | --- |
+| `Artboard::Artboard`, `Artboard::~Artboard`, `ArtboardInstance::ArtboardInstance`, `ArtboardInstance::~ArtboardInstance`, `canContinue`, `Artboard::validateObjects`, `Artboard::initialize` | `ArtboardInstance::from_graph_inner`, `ArtboardInstance::build_component_occurrence_relations`, `Drop for ArtboardInstance`, Rust field drop order | Owner-safe equivalent; rejected objects become import errors rather than dangling nullable slots |
+| `Artboard::addObject`, `addAnimation`, `addStateMachine`, `addScriptedObject`, `sortDependencies`, `cloneObjectDataBinds` | `from_graph_inner`, `build_component_interface_schedules`, retained `objects`, `linear_animations`, `state_machines`, script-owner tables, `RuntimeRetainedDataBind::clone` | Owner-safe equivalent |
+| `Artboard::sortDrawOrder`, `clearRedundantOperations` | `RuntimeDrawableList::from_graph`, `sort_draw_order`, `clear_redundant_operations`, retained clipping/draw-rule ordering in `draw.rs` | Equivalent retained draw list |
+| `Artboard::initScriptedObjects`, `pollAsyncWork`, `drawCanvases`, `advanceScriptedViewModels`, `internalDrawCanvases`, `findDrawCanvasLuauState` | `update_script_instances_with`, `poll_script_async_work_tree`, `draw_script_canvases`, `advance_script_instances_with`, recursive mounted-host dispatch | Approved scripting-backend adaptation; traversal and lifecycle order retained |
+| `Artboard::resolve`, `idOf` | `component`, `component_handle`, `component_local_for_global`, retained local/global index tables | Equivalent checked lookup |
+| `Artboard::onComponentDirty`, `onDirty`, `propagateSize`, `sharesLayoutWithHost` | `add_component_dirt`, `dispatch_component_on_dirty`, `set_artboard_dimensions`, `retain_runtime_layout_component_bounds`, `layout_node_owned_by_host` | Equivalent; preserves the Artboard-specific no-child-size-propagation override |
+| `Artboard::host` (setter), `host` (getter), `parentArtboard`, `markHostTransformDirty`, `changed`, `isAncestor` | `added_to_host`, mounted occurrence ownership, `ancestor_artboard_sources`, `root_transform`, `mark_changed`, `take_parent_change_request` | Owner-safe equivalent without a raw host pointer |
+| `Artboard::onAddedClean`, `layoutWidth`, `layoutHeight`, `layoutX`, `layoutY`, `updateRenderPath`, `origin`, `bounds`, `worldBounds`, `frameOrigin` | `from_graph_inner`, `artboard_dimensions`, `layout_bounds`, `set_frame_origin`, `artboard_bounds`, retained Artboard background/clip slots in `RuntimeArtboardPathState`, layout-state `current_bounds` | Equivalent under Taffy adaptation |
+| `Artboard::update`, `addDirtyDataBind`, `updateDataBinds`, `updateComponents`, `updatePass`, `advanceInternal`, `advance`, `reset` | `update_component_handle_with_mode`, `advance_artboard_data_binds_with_elapsed`, `update_pass_with_script_mode`, `advance_retained_components_collect_events_with_scripts`, `advance`, `reset_retained_components_for_state_machine_settlement` | Equivalent pass ordering and 100-step settlement ceiling |
+| `Artboard::takeLayoutData`, `cleanLayout`, `markLayoutDirty`, `syncStyleChangesWithUpdate`, `syncStyleChanges`, `calculateLayout` | `layout_node_owned_by_host`, `dirty_layout`, `mark_layout_node_changed`, `refresh_layout_constraint_bounds`, `RuntimeLayoutEngine::compute_bounds`, nested-layout transfer keys | Approved Taffy adaptation; ownership and invalidation edges retained |
+| `Artboard::hitTest`, `rootTransform`, `hitTestPoint` | retained hit-path dispatch, `root_transform`, `mounted_root_transform`, `component_world_transform_with_scroll`, state-machine pointer routing | Equivalent; includes the live mounted self-transform/host recursion corrected in phase 3 |
+| `Artboard::draw`, `drawInternal`, `addToRenderPath`, `addToRawPath` | `begin_draw_frame`, `draw_artboard_internal_with_path_cache`, `runtime_object_path_commands`, `geometry_world_bounds_with_context` | Equivalent renderer-neutral command traversal; backend calls are the approved renderer boundary |
+| `Artboard::xChanged`, `yChanged`, `originXChanged`, `originYChanged` | property callbacks in `after_double_property_set`, `mark_world_transform_changed`, `mark_path_changed`, host transform publication | Equivalent dirt edges |
+| `Artboard::isTranslucent()`; `isTranslucent(const LinearAnimation*)`; `isTranslucent(const LinearAnimationInstance*)`; `hasAudio` | `runtime_is_translucent`, `StaticScene::is_translucent`, `ArtboardInstance::has_audio`, recursive mounted-host scan | Equivalent; audio engine implementation remains the approved native backend |
+| `Artboard::animationNameAt`, `animation(const std::string&)`, `animation(size_t)`, `ArtboardInstance::animationAt`, `animationNamed` | `linear_animation`, `linear_animations`, `linear_animation_instance`, public `ArtboardDefinition::animation_name`/name lookup | Equivalent |
+| `hasParentFocusData`, `Artboard::rootFocusDataCount`, `rootFocusDataAt`, `buildFocusTreeVisit`, `buildFocusTree(FocusManager*, FocusNode)`, `buildFocusTree(FocusNode)`, `cleanupFocusTree`, `setExternalParentFocusNode`, `externalParentFocusNode`, `collapseSingle` | `build_artboard_focus_tree`, `build_component_focus_tree`, `RuntimeFocusTree::build_focus_tree`, `sync_mounted_focus_tree`, `cleanup_focus_tree`, `collapse_component` | Owner-safe equivalent retained focus tree |
+| `Artboard::buildSemanticTree`, `cleanupSemanticTree`, `collapseBoundarySubtree`, `collapseSemanticBoundary`, `markSemanticBoundaryTransformDirty` | `RuntimeSemanticTree::synchronize`, `visit_artboard`, `refresh_bounds`, `rebuild_routes`, `collapse_component` semantic publication | Owner-safe equivalent retained semantic tree |
+| `Artboard::stateMachineNameAt`, `stateMachine(const std::string&)`, `stateMachine(size_t)`, `defaultStateMachineIndex`, `ArtboardInstance::stateMachineAt`, `stateMachineNamed`, `defaultStateMachine`, `defaultScene` | `state_machine`, `state_machines`, `default_state_machine_index`, `state_machine_instance`, public state-machine name lookup, `StaticScene` selection | Equivalent default fallback order |
+| `Artboard::nestedArtboard`, `nestedArtboardAtPath`, `ArtboardInstance::input`, `getNamedInput`, `getBool`, `getNumber`, `getTrigger`, `getTextRun` | `RuntimeNestedArtboards` sparse/ordered index, occurrence path routing (`occurrence_state_machine_input`, mounted-child traversal), retained text-run lookup | Owner-safe equivalent |
+| `Artboard::import` | `GraphFile::from_runtime_file`, `ArtboardInstance::from_graph_inner` | Equivalent checked import registration |
+| `Artboard::buildDataContext`, `internalDataContext`, `rebind`, `relinkDataContext`, `rebuildDataBind`, `unbind`, `clearDataContext`, `dataContext` | `bind_owned_view_model_artboard_data_context`, `relink_data_context_for_state_machine`, `clear_data_context_for_state_machine_bind`, `unbind_for_state_machine_view_model_clear`, recursive host binding | Owner-safe equivalent |
+| `Artboard::bindViewModelInstance` (one argument), `bindViewModelInstance` (with parent), `setViewModelInstance`, `bindViewModelInstances`, `bind`, `globalViewModelInstance`, `setGlobalViewModelInstance` | owned `RuntimeOwnedDataContext` constructors and rebinding, `set_global_view_model_instance`, `global_view_model_instance` | Equivalent; Rust handles replace unsafe ref-count mutation |
+| `Artboard::volume` (getter), `volume` (setter), `hostOpacity`, `audioEngine` (getter), `audioEngine` (setter) | `audio_event_playback`, `inherit_audio_configuration_from`, `child_opacity`, `set_host_opacity`, recursive mounted-owner propagation | Approved native-audio adaptation; opacity behavior exact |
+| `Artboard::artboardFile`, `ArtboardInstance::file` (setter), `file` (getter), `artboardFile` | `runtime_file`, `runtime_file_arc`, `build_context` | Owner-safe equivalent lifetime retention |
+
+## `src/nested_artboard.cpp`
+
+All 50 out-of-line definitions map as follows.
+
+| C++ symbols, exhaustively enumerated | Exact Rust owner symbols | Disposition |
+| --- | --- | --- |
+| `buildVMIList`, `NestedArtboard::NestedArtboard`, `~NestedArtboard`, `clone`, `nest`, `applyOriginOverride`, `clearNestedAnimations` | `RuntimeNestedArtboardInstance`, its `Clone`, field drop order, `build_runtime_nested_artboard_instance`, `apply_nested_artboard_origin_override` | Owner-safe equivalent |
+| `tryScheduleBindStateful`, `bindStateful`, `findStatefulChildVmi`, `setActiveViewModelInstance`, `updateArtboard` | `pending_stateful_binding`, `bind_owned_view_model_occurrence_data_context`, `reuse_owned_stateful_view_model_context`, `commit_nested_artboard_replacement`, `rebind_owned_view_model_context_after_nested_artboard_swap` | Equivalent stateful/swap ordering |
+| `detectArtboardDataBinding`, `registerFocusScope`, `syncNestedFocusTree` | data-bind host catalog plus `RuntimeFocusTree::sync_mounted_focus_tree`, `install_external_focus_domain`, retained structural scopes | Owner-safe equivalent |
+| `makeTranslate`, `draw`, `willDraw`, `hitTest`, `hitTestHost`, `hostTransformPoint`, `worldTransformForArtboard`, `worldToLocal` | mounted drawable recursion in `draw_artboard_internal_with_path_cache`, ordinary component-world dispatch, retained hit paths, `root_transform`, `mounted_root_transform`, inverse world-transform routing | Equivalent |
+| `import`, `addNestedAnimation`, `onAddedClean` | `from_graph_inner`, `build_runtime_nested_artboard_instance`, retained animation-owner schedule | Equivalent checked construction |
+| `update`, `collapse`, `hasNestedStateMachines`, `nestedAnimations`, `nestedArtboard`, `stateMachine`, `input(name)`, `input(name, stateMachineName)` | `update_nested_artboard_from_host_dirt`, `collapse_component`, `RuntimeNestedArtboards` accessors/index, occurrence state-machine input routing | Equivalent |
+| `measureLayout` | `TaffyRuntimeLayoutEngine::measure_layout_component` ordinary/leaf branches | **Corrected here; exact per-axis clamp** |
+| `controlSize` | no-op, as pinned | Exact |
+| `decodeDataBindPathIds`, `copyDataBindPathIds`, `internalDataContext`, `relinkDataContext`, `clearDataContext`, `unbind`, `updateDataBinds`, `bindViewModelInstance` | retained `data_bind_path_ids`, `bind_owned_view_model_occurrence_data_context`, `bind_owned_view_model_animation_data_context`, child bind/unbind/update recursion | Owner-safe equivalent |
+| `calculateLocalElapsedSeconds`, `advanceComponent`, `reset` | `calculate_local_elapsed_seconds`, `begin_advance`, `advance_after_animation_owners`, `advance_outer_update`, `reset_retained_components_for_state_machine_settlement` | Exact quantization and animation-before-child ordering |
+| `file` (setter), `file` (getter), `referencedArtboardId`, `referencedArtboard` | mounted child `build_context`, source graph global id, `runtime_nested_artboard_instance_for_id` | Owner-safe equivalent |
+
+## `src/artboard_component_list.cpp`
+
+All 93 out-of-line definitions map as follows: 87
+`ArtboardComponentList` definitions including overloads, the five
+`ArtboardListDrawIndexDependent` definitions, and the anonymous-namespace
+`artboardHasFocusContent` helper.
+
+| C++ symbols, exhaustively enumerated | Exact Rust owner symbols | Disposition |
+| --- | --- | --- |
+| `ArtboardListDrawIndexDependent::{constructor, destructor, addDirt, relinkDataBind, clear}` | `component_list_draw_index_sink`, `RuntimeCellDirtSink`, `runtime_component_list_order` | Owner-safe equivalent dependent lifetime/cache invalidation |
+| `ArtboardComponentList::ArtboardComponentList`, `~ArtboardComponentList`, `clear`, `collapse`, `clone` | `RuntimeConstrainableListState::default/clone`, Rust field drop order, `collapse_component`, transient component-list restore | Owner-safe equivalent; state machines precede row Artboards in field drop order |
+| `listItem`, `artboardInstance`, `indexOfArtboardInstance`, `stateMachineInstance` | `component_list_state`, `component_list_items`, logical/occurrence identity lookup | Equivalent checked indexing |
+| `layoutNode`, `markLayoutNodeDirty`, `updateLayoutBounds`, `cascadeLayoutStyle`, `syncStyleChanges`, `layoutBounds`, `layoutBoundsForNode`, `markHostingLayoutDirty`, `syncLayoutChildren`, `mainAxisIsRow`, `layoutParent` | `build_node`, `component_list_item_style`, `update_component_list_layout_bounds`, `mark_layout_node_dirty`, retained `layout_size`, `runtime_component_list_item_layout_size` | Approved Taffy adaptation; transferred-node ownership retained |
+| `findArtboard`, `disposeListItem`, `createArtboard`, `createStateMachineInstance`, `listsAreEqual`, `updateList`, `createArtboardAt`, `addArtboardAt`, `bindArtboard`, `removeArtboardAt`, `removeArtboard` | `sync_component_list_items`, `create_component_list_item_instance`, `RuntimeComponentListResourcePools::{take,put}`, occurrence-identity reconciliation | Owner-safe equivalent list lifecycle |
+| `ensureListScopeFocusNode`, `removeListScopeFocusNode`, `makeListRowFocusNode`, `reparentListRowsInScope`, `artboardHasFocusContent`, `listItemNeedsBuildUnderRow`, `syncListRowNodesWithList` (current-list overload), `syncListRowNodesWithList` (previous-list overload), `linkStateMachineToArtboard` | `RuntimeFocusTree::build_focus_tree`, `rebuild_after_structure_change`, `sync_mounted_focus_tree`, `install_external_focus_domain`, `FocusNode::structural_scope` | Owner-safe equivalent retained focus scopes/rows |
+| `advanceComponent`, `reset` | `advance_component_list_entry`, `reset_component_list_instances` | Exact NewFrame/non-NewFrame and logical-row reset ordering |
+| `willDraw`, `draw`, `hitTest`, `hitTestHost`, `hostTransformPoint`, `worldTransformForArtboard`, `update`, `updateWorldTransform`, `updateArtboardsWorldTransform`, `artboardPosition`, `worldToLocal`, `listTransform`, `listItemTransforms` | `runtime_component_list_order`, component-list draw recursion, retained item transforms, mounted hit routing, `runtime_component_list_item_base_transforms` | Equivalent |
+| `invalidateOrderedListIndicesCache`, `recomputeListUsesDrawIndexSort`, `listItemDrawIndex`, `clearDrawIndexListeners`, `removeDrawIndexListenerForItem`, `syncDrawIndexListeners`, `ensureOrderedListIndices`, `orderedListIndices` | `runtime_component_list_order`, `component_list_draw_index_sink`, retained `RuntimeComponentListOrderCache` | Exact finite-value fallback and stable logical-index tiebreak |
+| `updateConstraints`, `addVirtualizable`, `virtualizableChanged`, `removeVirtualizable`, `setVirtualizablePosition`, `virtualizationEnabled`, `scrollConstraint` | retained constraint dispatch, `add_component_list_virtualizable`, `remove_component_list_virtualizable`, `set_component_list_virtualizable_position`, `component_list_virtualization` | Equivalent under Taffy/constraint ownership |
+| `internalDataContext`, `bindViewModelInstance`, `clearDataContext`, `unbind`, `updateDataBinds` | row `RuntimeOwnedDataContext`, `sync_component_list_items`, `advance_component_list_entry`, clear/drop | Owner-safe equivalent |
+| `file` (setter), `file` (getter), `addMapRule` | `build_context`, `ArtboardListMapRule` graph catalog | Equivalent |
+| `createArtboardRecorders`, `applyRecorders(Artboard*, source)`, `applyRecorders(StateMachineInstance*, source)` | `RuntimeComponentListItemInstance::restore_from_fresh`, cold child/state-machine reconstruction with backend-owner adoption | Owner-safe equivalent pooled reset semantics |
+| `computeLayoutBounds`, `size`, `itemSize`, `setItemSize`, `gap` | `update_component_list_layout_bounds`, retained logical item sizes/layout size, layout-style gap lookup | Equivalent under Taffy adaptation |
+| `attachArtboardOverride`, `clearArtboardOverride` | `component_list_item_override_local`, `component_list_item_style`, `mark_component_list_override_changed` | Equivalent, including default/specific selection and pinned height-hug quirk |
+
+The component-list flag test
+`upstream_flagged_component_list_joins_layout_through_a_group` remains an
+expected-red cross-owner dependency: the component-list owner honors
+`DrawableFlag::ParticipatesInLayout` when retained, but the pinned fixture's
+flag is not decoded by the binary/property owner. It is not silently counted
+as a certified component-list behavior.
+
+## `src/nested_artboard_layout.cpp`
+
+All 21 definitions map as follows.
+
+| C++ symbols, exhaustively enumerated | Exact Rust owner symbols | Disposition |
+| --- | --- | --- |
+| `NestedArtboardLayout::clone` | `RuntimeNestedArtboardInstance::clone`, reset transfer key/cache | Owner-safe equivalent |
+| `layoutBounds`, `layoutNode`, `markHostingLayoutDirty`, `markLayoutNodeDirty` | `runtime_nested_artboard_layout_bounds_frame`, `apply_nested_artboard_layout_bounds`, `mark_layout_node_dirty`, transfer-generation keys | Approved Taffy adaptation |
+| `update`, `updateConstraints`, `onAddedClean` | `runtime_nested_artboard_layout_world_transform`, generic constraint dispatch, initial override/style transfer | Equivalent; includes exact mounted-origin compensation |
+| `updateLayoutBounds`, `cascadeLayoutStyle`, `updateWidthOverride`, `updateHeightOverride`, `isRow`, `syncStyleChanges` | parent/child Taffy solve, `nested_artboard_layout_style`, `nested_artboard_layout_axis_*`, `apply_nested_artboard_layout_bounds_after_parent_solve` | Approved Taffy adaptation; source quirks retained |
+| `instanceWidthChanged`, `instanceHeightChanged`, `instanceWidthUnitsValueChanged`, `instanceHeightUnitsValueChanged`, `instanceWidthScaleTypeChanged`, `instanceHeightScaleTypeChanged` | nested-layout property callbacks plus `mark_layout_node_changed`/`mark_layout_node_dirty` | Equivalent dirt publication |
+| `updateArtboard` | `commit_nested_artboard_replacement`, `mark_nested_artboard_layout_changed`, refreshed parent-owned layout transfer | Owner-safe equivalent clear/swap/resync transaction |
+
+## `src/nested_artboard_leaf.cpp`
+
+| C++ symbols, exhaustively enumerated | Exact Rust owner symbols | Disposition |
+| --- | --- | --- |
+| `NestedArtboardLeaf::clone` | `RuntimeNestedArtboardInstance::clone` | Owner-safe equivalent |
+| `NestedArtboardLeaf::update` | `nested_artboard_leaf_uint_property_changed`, `update_nested_artboard_from_host_dirt`, `runtime_nested_artboard_leaf_alignment`, `runtime_nested_artboard_leaf_world_transform`; layout-fit same-frame resize/reflow in the host update pass | Exact, including Fit::layout resize and same-frame child update |
+
+The inline `fitChanged` override in `nested_artboard_leaf.hpp` maps to
+`nested_artboard_leaf_uint_property_changed` and adds recursive world-transform
+dirt exactly when the `fit` property changes.
+
+## Evidence
+
+- `cargo test -p nuxie-runtime ordinary_nested_artboard_contributes_its_mounted_intrinsic_size --lib`
+- `cargo test -p nuxie-runtime layout_fit_leaf_resizes_its_mounted_artboard_from_the_parent_layout_frame --lib`
+- `cargo test -p nuxie-runtime artboard_size_change_uses_artboard_propagate_size_override --lib`
+- `cargo test -p nuxie-runtime nested_layout_host_follows_its_interpolating_parent_frame --lib`
+- `cargo test -p nuxie-runtime component_list --lib`
+- `cargo fmt --all -- --check`
+
+Result: one hidden source omission found and corrected. No other discrepancy was
+found in the five complete translation units. Certification is source-owner
+complete for these files subject to the named Rust ownership, Taffy, audio,
+scripting, and renderer boundaries; the cross-owner
+`ParticipatesInLayout` decoder red remains open and explicit.

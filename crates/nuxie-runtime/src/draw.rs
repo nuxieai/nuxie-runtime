@@ -18710,7 +18710,16 @@ fn runtime_realize_owned_shape_paints(
                     render_paint.shader(backend.shader.as_deref());
                 }
             }
-            Some(RuntimeShapePaintState::SolidColor { .. }) | None => {
+            Some(RuntimeShapePaintState::SolidColor { .. }) => {
+                // `runtime_configure_owned_shape_paint` has already applied
+                // this exact source order: clear the shader, then write the
+                // solid color. Calling `shader(None)` again here would run
+                // `RiveRenderPaint::shader(nullptr)`, which intentionally
+                // resets the source paint value to opaque black.
+                backend.shader = None;
+                backend.shader_state = None;
+            }
+            None => {
                 backend.shader = None;
                 backend.shader_state = None;
                 // `runtime_configure_owned_shape_paint` has already detached

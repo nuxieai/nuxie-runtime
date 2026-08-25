@@ -325,7 +325,7 @@ guard let device = deviceObject as? MTLDevice else {
 let layer = CAMetalLayer()
 layer.device = device
 layer.pixelFormat = .bgra8Unorm
-layer.framebufferOnly = true
+layer.framebufferOnly = false
 layer.drawableSize = CGSize(width: 4, height: 3)
 layer.maximumDrawableCount = 2
 layer.allowsNextDrawableTimeout = true
@@ -357,6 +357,57 @@ check(outcome.disposition == UInt32(NUX_RENDERER_DISPOSITION_PRESENTED), "presen
 check(
     completion.semaphore.wait(timeout: .now() + 5) == .success,
     "deferred Metal completion"
+)
+
+let readbackRowBytes = 256
+let readbackLength = readbackRowBytes * drawable.texture.height
+guard let readbackBuffer = device.makeBuffer(
+          length: readbackLength,
+          options: .storageModeShared
+      ),
+      let readbackQueue = device.makeCommandQueue(),
+      let readbackCommand = readbackQueue.makeCommandBuffer(),
+      let readbackEncoder = readbackCommand.makeBlitCommandEncoder() else {
+    fatalError("could not construct Metal drawable readback")
+}
+readbackEncoder.copy(
+    from: drawable.texture,
+    sourceSlice: 0,
+    sourceLevel: 0,
+    sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+    sourceSize: MTLSize(
+        width: drawable.texture.width,
+        height: drawable.texture.height,
+        depth: 1
+    ),
+    to: readbackBuffer,
+    destinationOffset: 0,
+    destinationBytesPerRow: readbackRowBytes,
+    destinationBytesPerImage: readbackLength
+)
+readbackEncoder.endEncoding()
+readbackCommand.commit()
+readbackCommand.waitUntilCompleted()
+check(readbackCommand.status == .completed, "drawable readback completed")
+let readbackBytes = readbackBuffer.contents().assumingMemoryBound(to: UInt8.self)
+var hasNonblackPixel = false
+for y in 0..<drawable.texture.height {
+    for x in 0..<drawable.texture.width {
+        let offset = y * readbackRowBytes + x * 4
+        if readbackBytes[offset] != 0 ||
+            readbackBytes[offset + 1] != 0 ||
+            readbackBytes[offset + 2] != 0 {
+            hasNonblackPixel = true
+        }
+    }
+}
+check(
+    hasNonblackPixel,
+    "presented drawable contains nonblack pixels "
+        + "(draw_calls=\(outcome.draw_calls), "
+        + "logical_flushes=\(outcome.logical_flushes), "
+        + "first_bgra=[\(readbackBytes[0]), \(readbackBytes[1]), "
+        + "\(readbackBytes[2]), \(readbackBytes[3])])"
 )
 
 if composed {

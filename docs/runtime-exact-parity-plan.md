@@ -31,12 +31,14 @@ The frozen denominator is 157 files and 1,404 active Catch2 `TEST_CASE`s from
 `tests/unit_tests/runtime/scripting/*.cpp`. The starting correspondence census
 was 655 covered cases and 749 uncovered cases.
 
-A case counts as ported only when its evidence points to a discovered Rust test
-that retains the upstream fixture, action order, and complete assertion
-sequence. A currently failing production assertion may remain `#[ignore]`, but
-the test body and expected value must remain literal and its reason must name
-the missing production behavior. Nearby coverage, a source citation, a test
-that only proves its own helper, or a weakened assertion does not count.
+A case counts as ported only when a case-level row points to a discovered Rust
+test that retains the upstream fixture, action order, and complete assertion
+sequence, or to a live C++/Rust differential that executes that case. A
+file-level status plus an evidence path is not case-level proof. A currently
+failing production assertion may remain `#[ignore]`, but the test body and
+expected value must remain literal and its reason must name the missing
+production behavior. Nearby coverage, a source citation, a test that only
+proves its own helper, or a weakened assertion does not count.
 
 Approved language/backend adaptations must preserve the meaningful observable
 sequence and record any inapplicable C++-only assertion explicitly. They must
@@ -47,7 +49,8 @@ Phase acceptance:
 
 1. Every active upstream case has direct or differential Rust evidence, or an
    explicit adaptation disposition for an inapplicable C++-only observable.
-2. `test-correspondence-manifest.toml` has no `pending` or `partial` file row.
+2. Every one of the 1,404 cases has its own accepted disposition; a file row
+   cannot promote unnamed cases transitively.
 3. The correspondence checker recounts the pinned 157/1,404 denominator from
    source and accepts every evidence path.
 4. The PR reports active, failing, and ignored totals honestly. Green is not an

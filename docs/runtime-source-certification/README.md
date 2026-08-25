@@ -85,14 +85,15 @@ ledgers are inputs to this campaign, not symbol dispositions.
 ## Review discipline
 
 The implementing auditor reads the complete pinned C++ file and all mapped
-Rust owners side by side. A separate adversarial reviewer then tries to falsify
-the receipt, paying particular attention to syntactically similar constructs
-with different language semantics and to behavior split across Rust modules.
-The reviewer does not infer correctness from the original auditor's confidence
-or from a prior B6 verdict.
+Rust owners side by side. Two separate adversarial reviewers then try to
+falsify the receipt in independent contexts, paying particular attention to
+syntactically similar constructs with different language semantics and to
+behavior split across Rust modules. The implementer does not review, and a
+reviewer does not implement the patch it is reviewing. Neither reviewer infers
+correctness from the original auditor's confidence or from a prior B6 verdict.
 
-For files that require corrections, the reviewer checks both the patch and the
-new evidence. A workaround that merely satisfies the test is rejected when it
+For files that require corrections, both reviewers check the patch and the new
+evidence. A workaround that merely satisfies the test is rejected when it
 cannot be traced to the pinned source.
 
 ## Campaign gates
@@ -106,11 +107,12 @@ The campaign closes only when:
 - all 369 `dev/defs` inputs, 640 generated C++ outputs, the checked-in Rust
   schema, and nuxie-codegen inputs match their frozen byte fingerprints, and a
   fresh nuxie-codegen replay exactly reproduces `schema.rs`;
-- every receipt has independent adversarial review;
+- every receipt has two accepted independent adversarial reviews;
 - the 87 pending-verification rows, 27 historical tracked gaps, open gap
   register entries, shared owners, and explicit exceptions are re-adjudicated;
-- all 1,404 translated upstream tests execute with no ignored tests, and their
-  fixture/action/assertion correspondence is certified;
+- all 1,404 upstream cases have case-level evidence (not a file-level evidence
+  path), execute with no ignored tests at closeout, and have certified
+  fixture/action/assertion correspondence or a live C++/Rust differential;
 - ordinary and scripted C++/Rust differential gates contain no unexplained
   result;
 - focused state-trace or generative differentials cover lifecycle behavior that

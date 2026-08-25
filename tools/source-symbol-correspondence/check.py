@@ -1322,6 +1322,24 @@ def _receipt_path_error(
     return None
 
 
+def _independent_reviews_error(reviews: object) -> str | None:
+    if not isinstance(reviews, list) or len(reviews) < 2:
+        return "requires at least two accepted independent reviews"
+    reviewers: set[str] = set()
+    for review in reviews:
+        if (
+            not isinstance(review, dict)
+            or review.get("status") != "accepted"
+            or not isinstance(review.get("reviewer"), str)
+            or not review["reviewer"].strip()
+        ):
+            return "has an invalid or unaccepted independent review"
+        reviewers.add(review["reviewer"].strip())
+    if len(reviewers) < 2:
+        return "requires two distinct independent reviewers"
+    return None
+
+
 def check_dispositions(
     denominator: dict[str, object],
     dispositions_path: pathlib.Path,
@@ -1349,14 +1367,9 @@ def check_dispositions(
         receipt_error = _receipt_path_error(row.get("receipt"), repo_root)
         if receipt_error is not None:
             errors.append(f"owner {receipt_error}: {owner_path}")
-        review = row.get("independent_review")
-        if (
-            not isinstance(review, dict)
-            or review.get("status") != "accepted"
-            or not isinstance(review.get("reviewer"), str)
-            or not review["reviewer"].strip()
-        ):
-            errors.append(f"owner lacks accepted independent review: {owner_path}")
+        review_error = _independent_reviews_error(row.get("independent_reviews"))
+        if review_error is not None:
+            errors.append(f"owner {review_error}: {owner_path}")
         if expected_owners.get(owner_path) == 0 and not row.get(
             "no_executable_units_decision"
         ):
@@ -1399,16 +1412,9 @@ def check_dispositions(
             receipt_error = _receipt_path_error(row.get("receipt"), repo_root)
             if receipt_error is not None:
                 errors.append(f"{disposition} symbol {receipt_error}: {symbol_id}")
-            review = row.get("independent_review")
-            if (
-                not isinstance(review, dict)
-                or review.get("status") != "accepted"
-                or not isinstance(review.get("reviewer"), str)
-                or not review["reviewer"].strip()
-            ):
-                errors.append(
-                    f"{disposition} symbol lacks accepted independent review: {symbol_id}"
-                )
+            review_error = _independent_reviews_error(row.get("independent_reviews"))
+            if review_error is not None:
+                errors.append(f"{disposition} symbol {review_error}: {symbol_id}")
             evidence = row.get("evidence")
             has_evidence = isinstance(evidence, list) and bool(evidence) and all(
                 isinstance(item, str) and item.strip() for item in evidence

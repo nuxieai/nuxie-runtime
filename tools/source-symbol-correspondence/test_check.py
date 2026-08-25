@@ -507,16 +507,20 @@ class DispositionCheckTest(unittest.TestCase):
                         {
                             "upstream": "src/a.cpp",
                             "receipt": "docs/runtime-source-certification/a.md",
-                            "independent_review": {
-                                "status": "accepted",
-                                "reviewer": "adversarial lane",
-                            },
+                            "independent_reviews": self.accepted_reviews(),
                         }
                     ],
                     "symbols": rows,
                 }
             )
         )
+
+    @staticmethod
+    def accepted_reviews() -> list[dict[str, str]]:
+        return [
+            {"status": "accepted", "reviewer": "adversarial lane one"},
+            {"status": "accepted", "reviewer": "adversarial lane two"},
+        ]
 
     def test_complete_dispositions_pass(self) -> None:
         self.write(
@@ -526,10 +530,7 @@ class DispositionCheckTest(unittest.TestCase):
                     "disposition": "exact",
                     "rust_owners": ["crate::one"],
                     "receipt": "docs/runtime-source-certification/one.md",
-                    "independent_review": {
-                        "status": "accepted",
-                        "reviewer": "adversarial lane",
-                    },
+                    "independent_reviews": self.accepted_reviews(),
                     "evidence": ["one_matches_cpp"],
                 },
                 {
@@ -538,10 +539,7 @@ class DispositionCheckTest(unittest.TestCase):
                     "adaptation": "Taffy layout ceiling",
                     "rust_owners": ["crate::two"],
                     "receipt": "docs/runtime-source-certification/two.md",
-                    "independent_review": {
-                        "status": "accepted",
-                        "reviewer": "adversarial lane",
-                    },
+                    "independent_reviews": self.accepted_reviews(),
                     "evidence_exemption": "compile-time forwarding wrapper",
                 },
             ]
@@ -560,10 +558,7 @@ class DispositionCheckTest(unittest.TestCase):
                 "disposition": "exact",
                 "rust_owners": ["crate::one"],
                 "receipt": "docs/runtime-source-certification/missing.md",
-                "independent_review": {
-                    "status": "accepted",
-                    "reviewer": "adversarial lane",
-                },
+                "independent_reviews": self.accepted_reviews(),
                 "evidence": ["one_matches_cpp"],
             },
             {
@@ -571,10 +566,7 @@ class DispositionCheckTest(unittest.TestCase):
                 "disposition": "exact",
                 "rust_owners": ["crate::two"],
                 "receipt": "../outside.md",
-                "independent_review": {
-                    "status": "accepted",
-                    "reviewer": "adversarial lane",
-                },
+                "independent_reviews": self.accepted_reviews(),
                 "evidence": ["two_matches_cpp"],
             },
         ]
@@ -631,7 +623,7 @@ class DispositionCheckTest(unittest.TestCase):
         )
         self.assertTrue(any("duplicate owner" in error for error in errors))
         self.assertTrue(any("owner lacks a receipt" in error for error in errors))
-        self.assertTrue(any("accepted independent review" in error for error in errors))
+        self.assertTrue(any("two accepted independent reviews" in error for error in errors))
         self.assertTrue(any("unknown owner" in error for error in errors))
 
     def test_zero_unit_owner_requires_explicit_decision(self) -> None:
@@ -647,10 +639,7 @@ class DispositionCheckTest(unittest.TestCase):
                 {
                     "upstream": "src/wrapper.mm",
                     "receipt": "docs/runtime-source-certification/wrapper.md",
-                    "independent_review": {
-                        "status": "accepted",
-                        "reviewer": "adversarial lane",
-                    },
+                    "independent_reviews": self.accepted_reviews(),
                 }
             ],
         )
@@ -658,6 +647,38 @@ class DispositionCheckTest(unittest.TestCase):
             denominator, self.path, repo_root=self.repo_root
         )
         self.assertTrue(any("no-executable-units decision" in error for error in errors))
+
+    def test_reviews_must_be_accepted_and_have_distinct_reviewers(self) -> None:
+        rows = [
+            {
+                "id": "src/a.cpp::one:1",
+                "disposition": "exact",
+                "rust_owners": ["crate::one"],
+                "receipt": "docs/runtime-source-certification/one.md",
+                "independent_reviews": [
+                    {"status": "accepted", "reviewer": "same lane"},
+                    {"status": "accepted", "reviewer": "same lane"},
+                ],
+                "evidence": ["one_matches_cpp"],
+            },
+            {
+                "id": "src/a.cpp::two:1",
+                "disposition": "exact",
+                "rust_owners": ["crate::two"],
+                "receipt": "docs/runtime-source-certification/two.md",
+                "independent_reviews": [
+                    {"status": "accepted", "reviewer": "lane one"},
+                    {"status": "rejected", "reviewer": "lane two"},
+                ],
+                "evidence": ["two_matches_cpp"],
+            },
+        ]
+        self.write(rows)
+        errors = CHECK.check_dispositions(
+            self.denominator, self.path, repo_root=self.repo_root
+        )
+        self.assertTrue(any("two distinct independent reviewers" in error for error in errors))
+        self.assertTrue(any("invalid or unaccepted independent review" in error for error in errors))
 
 
 class DenominatorCheckTest(unittest.TestCase):

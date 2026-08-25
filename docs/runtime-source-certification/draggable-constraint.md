@@ -107,27 +107,22 @@ the relative order of draggable providers: the other pinned
 groups and contributes only a hit component, so it cannot interleave a
 listener group into this owner vector.
 
-### Recursive script execution context is not preserved
+### Recursive script execution context remains active
 
-The restored recursion still differs at the Rust execution boundary. The outer
-`update_listeners` call receives the caller's `ScriptHost`, optional owned view
-model context, and event context. On the first successful proxy drag it calls
-`drag_start_with_pointer_disable`; on scrolled completion it calls `drag_end`.
-Both helpers recursively call `update_listeners` with `NoopScriptHost` and
-`None` contexts. `drag_end` then performs its required final pointer Move via
-the public `pointer_move` path, which also uses the no-op host/context path.
+The component-provided recursion now reuses the outer `update_listeners`
+call's `ScriptHost`, optional owned view-model context, and event context.
+Dedicated fallible contextual helpers dispatch nested DragStart and DragEnd
+without substituting `NoopScriptHost` or `None`. DragEnd's required final Move
+uses the same active values and still runs after DragEnd even if the Rust host
+adapter makes a protected callback error terminal. The first nested error is
+then returned to the interrupted fallible pointer call.
 
-That is observable, not just a Rust ownership detail. An authored DragStart,
-DragEnd, or final-Move scripted listener reached by component-provided
-recursion can call `ScriptHost::mark_script_update`; the mark is delivered to a
-temporary no-op host instead of the host supplied to
-`try_pointer_move_with_timestamp_and_script_host` or the corresponding Up
-entry point. If the supplied host requires atomic callbacks, an ordinary inner
-script error is also swallowed under the no-op host's non-atomic policy rather
-than being returned by the outer fallible pointer call. Pinned C++ re-enters
-the same `StateMachineInstance` synchronously and does not replace the active
-script execution environment between the interrupted event and nested
-DragStart/DragEnd traversal.
+The ordinary public `drag_start`/`drag_end` compatibility paths retain their
+existing no-context facade behavior and return contract. The contextual path
+is selected specifically by the pinned component-provided reentry inside an
+already active event traversal. This keeps script update publication, atomic
+error policy, data-context targeting, and rendered occurrence metadata in the
+same synchronous execution environment as the interrupted event.
 
 ## Direct regression evidence
 
@@ -148,6 +143,11 @@ DragStart/DragEnd traversal.
 - `draggable_proxy_lifecycle_matches_cpp_owner_state` now asserts the concrete
   provider order `Viewport`, `Thumb`, `Track` before the independent hit-sort
   pass.
+- `component_provided_drag_recursion_preserves_script_host_and_atomic_errors`
+  attaches an authored scripted listener to the real active scroll proxy's
+  production hit owner. It proves recursive DragStart, DragEnd, and the final
+  Move publish through the caller's non-no-op host, and that an ordinary
+  nested script failure is returned when that host requires atomic callbacks.
 - `fl_c5_pointer_drag_discards_event_timestamps_then_follows_with_move`
   continues to prove ordinary `dragStart` uses the default
   `disablePointer=true`, while `dragEnd` enables before dispatch and performs
@@ -155,23 +155,13 @@ DragStart/DragEnd traversal.
 
 ## Certification boundary and verdict
 
-**Independent adversarial re-review: rejected.** Commit `90cfcde3a` correctly
-repairs all three counterexamples it set out to repair: decisions now use the
-pinned previous/current phases, Exit preserves group-global scroll state, and
-group construction retains draggable-provider order until hit sorting. The
-draggable-only no-op enable/disable overrides, proxy start/drag/end order,
-scroll blocking result, recursive traversal position, and final pointer Move
-also match for the no-script-host path exercised by the focused tests.
-
-Certification remains red because the recursive helpers replace the caller's
-script host and supplied contexts, including on `drag_end`'s final Move. The
-current end-to-end fixture installs `NoopScriptHost` and observes a synthetic
-`RecordingHitComponent`, so it cannot detect the lost scripted side effects or
-atomic error policy. The repair must thread the active host/context through the
-nested DragStart/DragEnd calls and through the final Move, then prove the
-production component-provided path with an authored scripted listener and a
-non-no-op host. This is a state-machine invocation-owner correction, not a
-local draggable-proxy workaround.
+**Script-context correction implemented; independent adversarial re-review
+pending.** The phase, group-global scroll, provider-order, draggable no-op
+enable/disable, recursion-position, scroll-result, and final-Move corrections
+remain intact. The state-machine invocation owner now also preserves the
+active host and contexts through nested DragStart, DragEnd, and final Move,
+with direct production-path evidence for host publication and atomic error
+propagation. This implementing lane does not self-certify the result.
 
 Concrete proxy algorithms owned by `ScrollConstraint` and
 `ScrollBarConstraint` remain dependencies and are not silently certified by

@@ -84,6 +84,67 @@ impl crate::ScriptHost for AtomicScriptHost {
     }
 }
 
+#[derive(Default)]
+struct ObservingAtomicScriptHost {
+    update_marks: usize,
+}
+
+impl crate::ScriptHost for ObservingAtomicScriptHost {
+    fn mark_script_update(&mut self) {
+        self.update_marks += 1;
+    }
+
+    fn requires_atomic_script_callbacks(&self) -> bool {
+        true
+    }
+}
+
+struct HostObservingListenerScript {
+    invocations: Rc<RefCell<Vec<ScriptPointerEventKind>>>,
+    fail_ordinary: bool,
+}
+
+impl ScriptInstance for HostObservingListenerScript {
+    fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+        Ok(method == ScriptMethod::PerformAction)
+    }
+
+    fn call_method(
+        &mut self,
+        _method: ScriptMethod,
+        _args: &[ScriptValue],
+        _host: &mut dyn ScriptHost,
+    ) -> Result<ScriptValue, ScriptError> {
+        Err(ScriptError::new(
+            "listener dispatch must use the typed invocation seam",
+        ))
+    }
+
+    fn call_preferred_listener_action(
+        &mut self,
+        invocation: &ScriptListenerInvocation,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
+        let ScriptListenerInvocation::Pointer { event, .. } = invocation else {
+            return Ok(false);
+        };
+        self.invocations.borrow_mut().push(*event);
+        host.mark_script_update();
+        if self.fail_ordinary {
+            return Err(ScriptError::new("component drag listener failed"));
+        }
+        Ok(true)
+    }
+
+    fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+        Ok(ScriptValue::Nil)
+    }
+
+    fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProjectionFailure {
     Ordinary,
@@ -1433,6 +1494,71 @@ fn component_provided_scroll_artboard_and_machine() -> (ArtboardInstance, StateM
     (artboard, machine)
 }
 
+fn attach_component_drag_script_listener(
+    artboard: &mut ArtboardInstance,
+    machine: &mut StateMachineInstance,
+    action_global_id: u32,
+    pointer_id: i32,
+    listener_types: Vec<RuntimeListenerType>,
+    invocations: &Rc<RefCell<Vec<ScriptPointerEventKind>>>,
+    fail_ordinary: bool,
+) {
+    let target = machine
+        .draggable_proxies
+        .iter()
+        .find(|proxy| proxy.active_pointers.contains(&pointer_id))
+        .expect("scroll fixture active draggable proxy")
+        .hittable;
+    let target_local_id = artboard.component_at(target).local_id;
+    let definition =
+        ScriptListenerActionDefinition::new(action_global_id, 1, "component drag".to_owned());
+    machine
+        .scripted_listener_action_definitions
+        .push(definition.clone());
+    machine
+        .set_scripted_listener_action_instance(
+            action_global_id,
+            Box::new(HostObservingListenerScript {
+                invocations: Rc::clone(invocations),
+                fail_ordinary,
+            }),
+        )
+        .expect("attach component drag scripted listener");
+
+    let listener_index = machine.listener_definitions.len();
+    Arc::make_mut(&mut machine.listener_definitions).push(RuntimeStateMachineListener {
+        name: Some("component drag scripted context".to_owned()),
+        target_local_id,
+        is_single: false,
+        listener_types,
+        event_local_indices: Vec::new(),
+        view_model_path: None,
+        view_model_input_types: Vec::new(),
+        gamepad_input_types: Vec::new(),
+        keyboard_input_types: Vec::new(),
+        semantic_input_types: Vec::new(),
+        hit_paths: Vec::new(),
+        listener_actions: vec![RuntimeScheduledListenerAction::scripted_for_test(
+            0,
+            Some(definition),
+        )],
+    });
+    let group_index = machine.listener_groups.len();
+    machine
+        .listener_groups
+        .push(ListenerGroup::authored(listener_index));
+    let hit = machine
+        .hit_components
+        .iter_mut()
+        .find(|hit| hit.component() == Some(target))
+        .expect("draggable target has its production hit owner");
+    assert!(hit.add_listener(
+        group_index,
+        &machine.listener_groups,
+        &machine.listener_definitions,
+    ));
+}
+
 #[test]
 fn component_provided_scroll_recurses_drag_events_at_the_pinned_call_site() {
     let (mut artboard, mut machine) = component_provided_scroll_artboard_and_machine();
@@ -1539,6 +1665,156 @@ fn component_provided_scroll_recurses_drag_events_at_the_pinned_call_site() {
             .iter()
             .all(|proxy| !proxy.has_scrolled)
     );
+}
+
+#[test]
+fn component_provided_drag_recursion_preserves_script_host_and_atomic_errors() {
+    let (mut artboard, mut machine) = component_provided_scroll_artboard_and_machine();
+    let invocations = Rc::new(RefCell::new(Vec::new()));
+    let mut host = ObservingAtomicScriptHost::default();
+    let x = artboard.width / 2.0;
+    let pointer_id = 61;
+    machine
+        .update_listeners(
+            &mut artboard,
+            RuntimeListenerType::Down,
+            x,
+            70.0,
+            pointer_id,
+            0.0,
+            None,
+            None,
+            &mut host,
+        )
+        .expect("pointer down");
+    attach_component_drag_script_listener(
+        &mut artboard,
+        &mut machine,
+        900_001,
+        pointer_id,
+        vec![
+            RuntimeListenerType::DragStart,
+            RuntimeListenerType::DragEnd,
+            RuntimeListenerType::Move,
+        ],
+        &invocations,
+        false,
+    );
+    let mut dragged_y = None;
+    for y in [62.0, 54.0, 46.0, 38.0, 30.0, 22.0, 14.0] {
+        machine
+            .update_listeners(
+                &mut artboard,
+                RuntimeListenerType::Move,
+                x,
+                y,
+                pointer_id,
+                1.25,
+                None,
+                None,
+                &mut host,
+            )
+            .expect("pointer move");
+        if machine
+            .draggable_proxies
+            .iter()
+            .any(|proxy| proxy.has_scrolled)
+        {
+            dragged_y = Some(y);
+            break;
+        }
+    }
+    let dragged_y = dragged_y.expect("fixture crosses the draggable threshold");
+    assert_eq!(
+        invocations.borrow().last(),
+        Some(&ScriptPointerEventKind::DragStart),
+        "the nested DragStart reaches the active scripted listener before the outer traversal resumes",
+    );
+
+    let before_end = invocations.borrow().len();
+    let marks_before_end = host.update_marks;
+    machine
+        .update_listeners(
+            &mut artboard,
+            RuntimeListenerType::Up,
+            x,
+            dragged_y,
+            pointer_id,
+            2.5,
+            None,
+            None,
+            &mut host,
+        )
+        .expect("pointer up");
+    assert_eq!(
+        &invocations.borrow()[before_end..],
+        [
+            ScriptPointerEventKind::DragEnd,
+            ScriptPointerEventKind::Move,
+        ],
+        "dragEnd and its required final Move retain the active scripted listener context",
+    );
+    assert_eq!(
+        host.update_marks - marks_before_end,
+        2,
+        "both nested callbacks publish through the caller's ScriptHost",
+    );
+    assert_eq!(host.update_marks, invocations.borrow().len());
+
+    let (mut failing_artboard, mut failing_machine) =
+        component_provided_scroll_artboard_and_machine();
+    let failing_invocations = Rc::new(RefCell::new(Vec::new()));
+    let mut failing_host = ObservingAtomicScriptHost::default();
+    let failing_x = failing_artboard.width / 2.0;
+    failing_machine
+        .update_listeners(
+            &mut failing_artboard,
+            RuntimeListenerType::Down,
+            failing_x,
+            70.0,
+            pointer_id,
+            0.0,
+            None,
+            None,
+            &mut failing_host,
+        )
+        .expect("failing fixture pointer down");
+    attach_component_drag_script_listener(
+        &mut failing_artboard,
+        &mut failing_machine,
+        900_002,
+        pointer_id,
+        vec![RuntimeListenerType::DragStart],
+        &failing_invocations,
+        true,
+    );
+    let mut observed_error = None;
+    for y in [62.0, 54.0, 46.0, 38.0, 30.0, 22.0, 14.0] {
+        match failing_machine.update_listeners(
+            &mut failing_artboard,
+            RuntimeListenerType::Move,
+            failing_x,
+            y,
+            pointer_id,
+            1.25,
+            None,
+            None,
+            &mut failing_host,
+        ) {
+            Ok(_) => {}
+            Err(error) => {
+                observed_error = Some(error);
+                break;
+            }
+        }
+    }
+    let error = observed_error.expect("atomic host receives the nested ordinary script failure");
+    assert_eq!(error.message(), "component drag listener failed");
+    assert_eq!(
+        failing_invocations.borrow().as_slice(),
+        [ScriptPointerEventKind::DragStart]
+    );
+    assert_eq!(failing_host.update_marks, 1);
 }
 
 #[test]

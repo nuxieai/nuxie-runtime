@@ -4825,24 +4825,28 @@ impl StateMachineInstance {
             // draggable group in the interrupted hit target.
             self.hit_components = hit_components;
             self.listener_groups = groups;
-            match resume.event {
+            let recursive_result = match resume.event {
                 ComponentProvidedDragRecursion::Start {
                     proxy_index,
                     position,
                     timestamp_seconds,
                     pointer_id,
                 } => {
-                    let _ = self.drag_start_with_pointer_disable(
+                    let result = self.drag_start_with_pointer_disable_and_context_and_script_host(
                         artboard,
                         position.0,
                         position.1,
                         timestamp_seconds,
                         false,
                         pointer_id,
+                        owned_context.as_deref_mut(),
+                        event_context,
+                        host,
                     );
                     if let Some(proxy) = self.draggable_proxies.get_mut(proxy_index) {
                         proxy.has_scrolled = true;
                     }
+                    result
                 }
                 ComponentProvidedDragRecursion::End {
                     proxy_index,
@@ -4850,20 +4854,28 @@ impl StateMachineInstance {
                     timestamp_seconds,
                     pointer_id,
                 } => {
-                    let _ = self.drag_end(
+                    let result = self.drag_end_with_context_and_script_host(
                         artboard,
                         position.0,
                         position.1,
                         timestamp_seconds,
                         pointer_id,
+                        owned_context.as_deref_mut(),
+                        event_context,
+                        host,
                     );
                     if let Some(proxy) = self.draggable_proxies.get_mut(proxy_index) {
                         proxy.has_scrolled = false;
                     }
+                    result
                 }
-            }
+            };
             groups = std::mem::take(&mut self.listener_groups);
             hit_components = std::mem::take(&mut self.hit_components);
+            if let Err(error) = recursive_result {
+                callback_error = Some(error);
+                break;
+            }
             resume_after_group_index = Some(resume.after_group_index);
         }
         self.hit_components = hit_components;
@@ -5679,24 +5691,49 @@ impl StateMachineInstance {
         disable_pointer: bool,
         pointer_id: i32,
     ) -> bool {
+        let result = self.drag_start_with_pointer_disable_and_context_and_script_host(
+            artboard,
+            x,
+            y,
+            timestamp_seconds,
+            disable_pointer,
+            pointer_id,
+            None,
+            None,
+            &mut NoopScriptHost,
+        );
+        self.retain_script_result(result)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn drag_start_with_pointer_disable_and_context_and_script_host(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        disable_pointer: bool,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
         let _ = timestamp_seconds;
         if disable_pointer {
             self.disable_pointer_events(pointer_id);
         }
-        let result = self
-            .update_listeners(
-                artboard,
-                RuntimeListenerType::DragStart,
-                x,
-                y,
-                pointer_id,
-                0.0,
-                None,
-                None,
-                &mut NoopScriptHost,
-            )
-            .map(HitResult::is_hit);
-        self.retain_script_result(result)
+        self.update_listeners(
+            artboard,
+            RuntimeListenerType::DragStart,
+            x,
+            y,
+            pointer_id,
+            0.0,
+            owned_context,
+            event_context,
+            host,
+        )
+        .map(HitResult::is_hit)
     }
 
     pub(crate) fn drag_end(
@@ -5721,7 +5758,51 @@ impl StateMachineInstance {
         );
         let drag_result = self.retain_script_result(result.map(HitResult::is_hit));
         let _ = self.pointer_move(artboard, x, y, timestamp_seconds, pointer_id);
-        return drag_result;
+        drag_result
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn drag_end_with_context_and_script_host(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
+        self.enable_pointer_events(pointer_id);
+        let drag_result = self.update_listeners(
+            artboard,
+            RuntimeListenerType::DragEnd,
+            x,
+            y,
+            pointer_id,
+            0.0,
+            owned_context.as_deref_mut(),
+            event_context,
+            host,
+        );
+        // Pinned `dragEnd` performs the final pointer Move even when a Rust
+        // host adapter makes a protected script error terminal. Keep the
+        // original error after completing that required traversal.
+        let move_result = self.update_listeners(
+            artboard,
+            RuntimeListenerType::Move,
+            x,
+            y,
+            pointer_id,
+            timestamp_seconds,
+            owned_context,
+            event_context,
+            host,
+        );
+        match (drag_result, move_result) {
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
+            (Ok(drag_result), Ok(_)) => Ok(drag_result.is_hit()),
+        }
     }
 
     pub fn pointer_exit_with_owned_view_model_context(

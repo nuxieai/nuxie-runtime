@@ -538,6 +538,7 @@ impl ArtboardInstance {
             runtime,
             graph,
             None,
+            None,
             &mut cache.paths,
             artboard_to_root,
             false,
@@ -572,6 +573,7 @@ impl ArtboardInstance {
             runtime,
             graph,
             None,
+            None,
             &mut cache.paths,
             artboard_to_root,
             true,
@@ -605,6 +607,7 @@ impl ArtboardInstance {
             runtime,
             graph,
             None,
+            None,
             &mut cache.paths,
             artboard_to_root,
             false,
@@ -632,12 +635,31 @@ impl ArtboardInstance {
         point: RenderVec2D,
         cache: &mut RuntimeGeometryState,
     ) -> Vec<usize> {
-        let mut seen = BTreeSet::new();
-        self.geometry_hit_test_paths_with_context(runtime, graph, point, cache)
-            .into_iter()
-            .filter_map(|path| path.into_iter().next())
-            .filter(|local_id| seen.insert(*local_id))
-            .collect()
+        cache.retain_instance(self);
+        let artboard_to_root = self.self_transform();
+        let Some(root_to_artboard) = runtime_mat2d_invert(artboard_to_root) else {
+            return Vec::new();
+        };
+        let (point_x, point_y) = root_to_artboard.transform_point(point.x, point.y);
+        let hit_area = crate::HitTestArea::around(point.x, point.y, 2.0);
+        self.geometry_path_segments_with_path_cache(
+            runtime,
+            graph,
+            Some(RenderVec2D::new(point_x, point_y)),
+            Some(hit_area),
+            &mut cache.paths,
+            artboard_to_root,
+            false,
+            false,
+            &[graph.global_id],
+            &cache.registered_image_dimensions,
+            &cache.presented_image_dimensions,
+        )
+        .into_iter()
+        .next()
+        .and_then(|hit| hit.path.first().copied())
+        .map(|segment| vec![segment.local_id])
+        .unwrap_or_default()
     }
 
     fn geometry_hit_test_paths_with_context(
@@ -677,6 +699,7 @@ impl ArtboardInstance {
             runtime,
             graph,
             Some(RenderVec2D::new(point_x, point_y)),
+            None,
             &mut cache.paths,
             artboard_to_root,
             false,
@@ -692,6 +715,7 @@ impl ArtboardInstance {
         runtime: &RuntimeFile,
         graph: &ArtboardGraph,
         point: Option<RenderVec2D>,
+        pinned_hit_area: Option<crate::HitTestArea>,
         path_cache: &mut RuntimeArtboardPathState,
         artboard_to_root: Mat2D,
         include_invisible: bool,
@@ -703,7 +727,7 @@ impl ArtboardInstance {
         // Geometry queries live in the artboard's unshifted world space. This
         // is the same clip rectangle used by drawing when the public origin
         // transform is not applied by the renderer-facing wrapper.
-        if self.clip {
+        if self.clip && pinned_hit_area.is_none() {
             let clip_left = -self.origin_x * self.width;
             let clip_top = -self.origin_y * self.height;
             let clip = RenderAabb::new(
@@ -792,7 +816,7 @@ impl ArtboardInstance {
                 RuntimeDrawableDispatchObjectKind::NestedArtboard
                     | RuntimeDrawableDispatchObjectKind::NestedArtboardLeaf
                     | RuntimeDrawableDispatchObjectKind::NestedArtboardLayout
-            ) && !active_clips.iter().any(|contains| !contains)
+            ) && (pinned_hit_area.is_some() || !active_clips.iter().any(|contains| !contains))
             {
                 let Some(host_local_id) = command.local_id else {
                     continue;
@@ -801,7 +825,7 @@ impl ArtboardInstance {
                     .component(host_local_id)
                     .map(|component| component.transform.render_opacity)
                     .unwrap_or(0.0);
-                if !include_invisible && host_render_opacity == 0.0 {
+                if pinned_hit_area.is_none() && !include_invisible && host_render_opacity == 0.0 {
                     continue;
                 }
                 let Some(nested) = self.nested_artboards.get(&host_local_id) else {
@@ -890,6 +914,7 @@ impl ArtboardInstance {
                             runtime,
                             child_graph,
                             child_point,
+                            pinned_hit_area,
                             child_cache,
                             child_to_root,
                             include_invisible,
@@ -917,6 +942,7 @@ impl ArtboardInstance {
                             runtime,
                             child_graph,
                             child_point,
+                            pinned_hit_area,
                             child_cache,
                             child_to_root,
                             include_invisible,
@@ -941,6 +967,7 @@ impl ArtboardInstance {
                 continue;
             }
             if command.object_kind == RuntimeDrawableDispatchObjectKind::ArtboardComponentList
+                && pinned_hit_area.is_none()
                 && !active_clips.iter().any(|contains| !contains)
             {
                 let Some(host_local_id) = command.local_id else {
@@ -1054,6 +1081,7 @@ impl ArtboardInstance {
                             runtime,
                             child_graph,
                             child_point,
+                            pinned_hit_area,
                             child_cache,
                             artboard_to_root.multiply(child_world),
                             include_invisible,
@@ -1087,7 +1115,7 @@ impl ArtboardInstance {
                 continue;
             }
             if command.object_kind == RuntimeDrawableDispatchObjectKind::Image
-                && !active_clips.iter().any(|contains| !contains)
+                && (pinned_hit_area.is_some() || !active_clips.iter().any(|contains| !contains))
             {
                 let Some(local_id) = command.local_id else {
                     continue;
@@ -1096,7 +1124,10 @@ impl ArtboardInstance {
                     .component(local_id)
                     .map(|component| component.transform.render_opacity)
                     .unwrap_or(0.0);
-                if !include_invisible && (!render_opacity.is_finite() || render_opacity <= 0.0) {
+                if pinned_hit_area.is_none()
+                    && !include_invisible
+                    && (!render_opacity.is_finite() || render_opacity <= 0.0)
+                {
                     continue;
                 }
                 let Some(asset_global) = self.resolved_image_asset_global(
@@ -1131,17 +1162,18 @@ impl ArtboardInstance {
                 else {
                     continue;
                 };
-                let matches_query = point.is_none_or(|point| {
-                    let mut tester = crate::math::hit_test::HitTester::new(
-                        crate::HitTestArea::around(point.x, point.y, 2.0),
-                    );
-                    tester.add_rect(
-                        local_bounds,
-                        image_transform,
-                        RenderPathDirection::Counterclockwise,
-                    );
-                    tester.test(RenderFillRule::NonZero)
-                });
+                let matches_query = pinned_hit_area.map_or_else(
+                    || point.is_none(),
+                    |area| {
+                        let mut tester = crate::math::hit_test::HitTester::new(area);
+                        tester.add_rect(
+                            local_bounds,
+                            artboard_to_root.multiply(image_transform),
+                            RenderPathDirection::Counterclockwise,
+                        );
+                        tester.test(RenderFillRule::NonZero)
+                    },
+                );
                 if matches_query {
                     back_to_front_hits.push(RuntimeGeometryHit {
                         path: vec![RuntimeGeometryHitPathSegment {
@@ -1164,6 +1196,7 @@ impl ArtboardInstance {
                 continue;
             }
             if command.object_kind == RuntimeDrawableDispatchObjectKind::Text
+                && pinned_hit_area.is_none()
                 && !active_clips.iter().any(|contains| !contains)
             {
                 let Some(local_id) = command.local_id else {
@@ -1224,7 +1257,9 @@ impl ArtboardInstance {
                 }
                 continue;
             }
-            if command.type_name != "Shape" || active_clips.iter().any(|contains| !contains) {
+            if command.type_name != "Shape"
+                || (pinned_hit_area.is_none() && active_clips.iter().any(|contains| !contains))
+            {
                 continue;
             }
             let Some(local_id) = command.local_id else {

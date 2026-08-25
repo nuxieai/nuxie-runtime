@@ -976,6 +976,114 @@ fn artboard_hit_test_reaches_the_pinned_image_hittester_rectangle_path() {
 }
 
 #[test]
+fn image_hit_test_keeps_the_pinned_caller_space_area_under_artboard_scale() {
+    let mut artboard = image_fixture_artboard();
+    artboard.update_pass();
+    artboard
+        .register_image_dimensions(1, 100, 50)
+        .expect("image dimensions register");
+    let scale_x = fixture_property("Artboard", "scaleX", FixtureValue::Double(2.0)).key;
+    assert!(artboard.set_double_property(0, scale_x, 2.0));
+    artboard.update_pass();
+
+    assert!(
+        artboard.hit_test(Vec2D::new(-103.0, 0.0)).is_empty(),
+        "the four-pixel caller-space area ends left of the scaled Image",
+    );
+}
+
+#[test]
+fn image_hit_test_preserves_pinned_opacity_and_unimplemented_clip_behavior() {
+    let file = RuntimeFile::from_fixture_records(vec![
+        fixture_record("Backboard", vec![]),
+        fixture_record("ImageAsset", vec![]),
+        fixture_record(
+            "Artboard",
+            vec![
+                fixture_property("Artboard", "clip", FixtureValue::Bool(true)),
+                fixture_property("LayoutComponent", "width", FixtureValue::Double(1.0)),
+                fixture_property("LayoutComponent", "height", FixtureValue::Double(1.0)),
+            ],
+        ),
+        fixture_record(
+            "Image",
+            vec![
+                fixture_property("Image", "parentId", FixtureValue::Uint(0)),
+                fixture_property("Image", "assetId", FixtureValue::Uint(0)),
+            ],
+        ),
+    ])
+    .expect("clipped image fixture imports");
+    let graphs = GraphFile::from_runtime_file(&file).expect("clipped image graph builds");
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
+            .expect("clipped image fixture instantiates");
+    artboard.update_pass();
+    let image_local = artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "Image")
+        .map(|component| component.local_id)
+        .expect("fixture has an Image");
+    artboard
+        .register_image_dimensions(1, 100, 50)
+        .expect("image dimensions register");
+
+    assert!(artboard.set_transform_property(image_local, TransformProperty::Opacity, 0.0));
+    artboard.update_pass();
+
+    assert_eq!(
+        artboard.hit_test(Vec2D::new(40.0, 0.0)),
+        vec![image_local],
+        "pinned Image hit testing ignores render opacity and the Artboard clip TODO",
+    );
+}
+
+#[test]
+fn artboard_hit_test_returns_only_the_first_pinned_overlapping_image() {
+    let file = RuntimeFile::from_fixture_records(vec![
+        fixture_record("Backboard", vec![]),
+        fixture_record("ImageAsset", vec![]),
+        fixture_record("Artboard", vec![]),
+        fixture_record(
+            "Image",
+            vec![
+                fixture_property("Image", "parentId", FixtureValue::Uint(0)),
+                fixture_property("Image", "assetId", FixtureValue::Uint(0)),
+            ],
+        ),
+        fixture_record(
+            "Image",
+            vec![
+                fixture_property("Image", "parentId", FixtureValue::Uint(0)),
+                fixture_property("Image", "assetId", FixtureValue::Uint(0)),
+            ],
+        ),
+    ])
+    .expect("overlapping image fixture imports");
+    let graphs = GraphFile::from_runtime_file(&file).expect("overlapping image graph builds");
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
+            .expect("overlapping image fixture instantiates");
+    artboard.update_pass();
+    artboard
+        .register_image_dimensions(1, 100, 50)
+        .expect("image dimensions register");
+    let image_locals = artboard
+        .components()
+        .iter()
+        .filter(|component| component.type_name == "Image")
+        .map(|component| component.local_id)
+        .collect::<Vec<_>>();
+    assert_eq!(image_locals.len(), 2);
+
+    assert_eq!(
+        artboard.hit_test(Vec2D::new(0.0, 0.0)),
+        vec![*image_locals.first().expect("first pinned hit exists")],
+    );
+}
+
+#[test]
 fn semantic_geometry_revision_changes_immediately_for_image_origin_mutation() {
     for (property_name, expected_min_x, expected_min_y) in
         [("originX", -25.0, -25.0), ("originY", -50.0, -12.5)]

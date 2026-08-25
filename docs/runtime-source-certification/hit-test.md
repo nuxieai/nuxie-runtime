@@ -1,6 +1,6 @@
 # HitTester source certification
 
-> **First independent correction review: REJECTED.**
+> **Second correction candidate complete; two fresh independent reviews pending.**
 
 ## Authority and scope
 
@@ -200,3 +200,36 @@ invented opacity and clip filters from the exact path, and exposes the pinned
 first-hit result (an additional all-hits catalogue may remain a separately
 named Rust API). Two fresh independent reviews are still required after those
 changes.
+
+## Second production correction candidate
+
+The four findings from the first correction review are now corrected at the
+shared Artboard traversal boundary rather than special-cased for its witness.
+The exact `ArtboardInstance::hit_test` path creates one `HitTestArea` in the
+caller's root coordinate space and carries it unchanged through nested
+Artboards. Image rectangles are rasterized with the full
+`artboard_to_root * image_world * origin_translation` transform. The local
+point remains available only for other retained query owners; it no longer
+defines the Image raster area.
+
+The exact path also follows the pinned dispatch policy:
+
+- Artboard and active drawable clips are ignored because both pinned owners
+  leave hit-test clipping as TODOs;
+- Image opacity does not participate in `Image::hitTest`;
+- Text and `ArtboardComponentList` remain absent from the exact path because
+  their pinned `hitTest` overrides return null; and
+- `ArtboardInstance::hit_test` returns only the first successful traversal
+  result. The separately named path/segment geometry APIs retain Rust's
+  editor-facing all-hit catalogue and clipped visibility queries.
+
+Three focused regressions bind the four rejected observations: the defined
+scaled-Image `(-103, 0)` miss, a zero-opacity Image outside an enabled Artboard
+clip that still hits, and two overlapping Images yielding only the first
+pinned traversal result. The original identity hit/miss regression remains
+green. The complete `semantic_geometry_revision` target passes 52/52.
+
+Implementation status: **SECOND CORRECTION CANDIDATE COMPLETE**. Certification
+status: **PENDING TWO FRESH INDEPENDENT ADVERSARIAL REVIEWS**. The prior
+rejection remains part of the audit history and is not overwritten by green
+implementer tests.

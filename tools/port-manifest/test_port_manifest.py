@@ -580,7 +580,7 @@ class PortManifestCliTest(unittest.TestCase):
                 "ported",
                 "Phase 3",
             ),
-            "src/text/text_modifier.cpp": ("partial", "F13"),
+            "src/text/text_modifier.cpp": ("ported", "Phase 3"),
             "src/core/binary_writer.cpp": ("ported", "F14"),
             "src/core/binary_data_reader.cpp": ("ported", "F14"),
             "src/static_scene.cpp": ("ported", "F14"),

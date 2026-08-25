@@ -219,9 +219,9 @@ FEATURE_ROWS.update(
             "Phase 3 paired owner audit: integer fallback and ArtboardReferencer dispatch match the pin, including live/cross-file sources, explicit null, ancestor rejection, unresolved preservation, and generated-id separation.",
         ),
         "src/text/text_modifier.cpp": (
-            "partial",
-            "crates/nuxie-runtime/src/text.rs",
-            "F13: static text modifiers are ported with richer modifier ceilings.",
+            "ported",
+            "crates/nuxie-runtime/src/text/text_modifier.rs; crates/nuxie-runtime/src/text/text_modifier_group.rs; crates/nuxie-runtime/src/text.rs",
+            "Phase 3 paired owner audit: onAddedDirty direct-parent validation and authored-order TextModifierGroup registration match the pin; derived indexes remain group-owned.",
         ),
         "src/core/binary_data_reader.cpp": (
             "ported",

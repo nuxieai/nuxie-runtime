@@ -4880,8 +4880,8 @@ legacy_port_status = "partial"
 b6_row_id = "B6-0395"
 b6_verdict = "ADAPTED"
 b6_cluster = "text"
-audit_record = "docs/b6-audit/results/text.md"
-note = "FL-E8 WP1 faithful candidate: authored-order generic modifier registration plus derived shape/follow-path indexes are owned by crates/nuxie-runtime/src/text/text_modifier.rs and text_modifier_group.rs; D-ST-STRUCT and R-ST-OWNER pin the live C++ structure."
+audit_record = "docs/parity-audits/text-modifier.md"
+note = "Phase 3 paired owner audit: the direct text_modifier.rs owner performs onAddedDirty-equivalent registration and text.rs enforces the direct TextModifierGroup parent requirement; authored order and derived group indexes remain explicit."
 
 [[file]]
 upstream = "src/text/text_modifier_group.cpp"

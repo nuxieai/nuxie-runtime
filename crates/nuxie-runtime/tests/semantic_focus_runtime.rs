@@ -4,11 +4,13 @@
 use nuxie_binary::read_runtime_file;
 use nuxie_graph::GraphFile;
 use nuxie_runtime::{
-    ArtboardInstance, SemanticActionType, SemanticRole, SemanticState, SemanticTrait, SemanticsDiff,
-    StateMachineInstance, has_semantic_state, has_semantic_trait,
+    ArtboardInstance, SemanticActionType, SemanticRole, SemanticState, SemanticTrait,
+    SemanticsDiff, StateMachineInstance, has_semantic_state, has_semantic_trait,
 };
 
-fn upstream_semantic_fixture(asset: &str) -> (ArtboardInstance, StateMachineInstance, SemanticsDiff) {
+fn upstream_semantic_fixture(
+    asset: &str,
+) -> (ArtboardInstance, StateMachineInstance, SemanticsDiff) {
     let fixture = std::path::PathBuf::from(
         std::env::var_os("RIVE_RUNTIME_DIR")
             .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
@@ -65,7 +67,12 @@ fn apply_semantic_diff(
     for id in &diff.removed {
         snapshot.remove(id);
     }
-    for node in diff.added.iter().chain(&diff.moved).chain(&diff.updated_semantic) {
+    for node in diff
+        .added
+        .iter()
+        .chain(&diff.moved)
+        .chain(&diff.updated_semantic)
+    {
         snapshot.insert(node.id, node.clone());
     }
     for geometry in &diff.updated_geometry {
@@ -154,10 +161,9 @@ fn upstream_simpsons_pointer_and_semantic_tap_converge() {
     let y = (pointer_target.min_y + pointer_target.max_y) * 0.5;
     pointer_machine.pointer_down(&mut pointer_artboard, x, y, 0);
     pointer_machine.pointer_up(&mut pointer_artboard, x, y, 0);
-    assert!(semantic_machine.fire_semantic_action(
-        semantic_target.id,
-        SemanticActionType::Tap as u32
-    ));
+    assert!(
+        semantic_machine.fire_semantic_action(semantic_target.id, SemanticActionType::Tap as u32)
+    );
     settle(&mut pointer_machine, &mut pointer_artboard);
     settle(&mut semantic_machine, &mut semantic_artboard);
     let mut pointer_snapshot = semantic_snapshot(&pointer_initial);
@@ -270,12 +276,9 @@ fn upstream_enable_semantics_is_idempotent_and_manager_stays_selected() {
     .join("tests/unit_tests/assets/semantic/simpsons.riv");
     let file = read_runtime_file(&std::fs::read(fixture).unwrap()).unwrap();
     let graphs = GraphFile::from_runtime_file(&file).unwrap();
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(
-        &file,
-        &graphs.artboards[0],
-        &graphs.artboards,
-    )
-    .unwrap();
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
+            .unwrap();
     let mut machine = artboard.state_machine_instance(0).unwrap();
     assert!(!machine.semantic_manager());
     assert!(machine.enable_semantics());
@@ -295,7 +298,12 @@ fn upstream_first_semantic_drain_delivers_tree_and_second_is_empty() {
             .iter()
             .any(|node| node.role == SemanticRole::TabList as u32)
     );
-    assert!(machine.drain_semantics_diff(&mut artboard).unwrap().is_empty());
+    assert!(
+        machine
+            .drain_semantics_diff(&mut artboard)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -327,7 +335,11 @@ fn upstream_list_scroll_focus_exposes_one_list_and_five_labelled_items() {
         .collect::<Vec<_>>();
     assert_eq!(items.len(), 5);
     for index in 1..=5 {
-        assert!(items.iter().any(|item| item.label == format!("Element {index}")));
+        assert!(
+            items
+                .iter()
+                .any(|item| item.label == format!("Element {index}"))
+        );
     }
 }
 

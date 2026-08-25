@@ -19103,8 +19103,8 @@ fn follow_path_constraint_retains_measure_and_applies_like_cpp_probe() {
 fn assert_upstream_follow_path_fixture_matches_target(fixture: &str) {
     let bytes = std::fs::read(cpp_runtime_fixture(fixture))
         .unwrap_or_else(|error| panic!("read {fixture}: {error}"));
-    let runtime = read_runtime_file(&bytes)
-        .unwrap_or_else(|error| panic!("import {fixture}: {error:#}"));
+    let runtime =
+        read_runtime_file(&bytes).unwrap_or_else(|error| panic!("import {fixture}: {error:#}"));
     let graphs = GraphFile::from_runtime_file(&runtime)
         .unwrap_or_else(|error| panic!("graph {fixture}: {error:#}"));
     let graph = &graphs.artboards[0];
@@ -19188,8 +19188,7 @@ fn upstream_component_origin_overrides_the_mounted_instance_origin() {
 #[test]
 #[ignore = "expected-red: Rust has no runtime object-list insertion API for ComponentOrigin"]
 fn upstream_component_origin_pivots_a_layout_transform() {
-    let (runtime, graphs, index, mut artboard) =
-        upstream_layout_fixture("layout/stack.riv", None);
+    let (runtime, graphs, index, mut artboard) = upstream_layout_fixture("layout/stack.riv", None);
     let graph = &graphs.artboards[index];
     artboard.update_pass();
     let report = artboard
@@ -19198,9 +19197,7 @@ fn upstream_component_origin_pivots_a_layout_transform() {
     let box_local = report
         .iter()
         .find(|entry| {
-            entry.type_name == "LayoutComponent"
-                && entry.width == 40.0
-                && entry.height == 40.0
+            entry.type_name == "LayoutComponent" && entry.width == 40.0 && entry.height == 40.0
         })
         .expect("fixed 40x40 box")
         .local_id;
@@ -19374,8 +19371,8 @@ fn upstream_file_with_bad_keyed_property_loads() {
 #[test]
 #[ignore = "expected-red: imported ScriptAsset verification state has no Rust owner"]
 fn upstream_file_can_be_read_with_verified_signed_scripts() {
-    let bytes = std::fs::read(cpp_runtime_fixture("joel_signed.riv"))
-        .expect("read signed-script fixture");
+    let bytes =
+        std::fs::read(cpp_runtime_fixture("joel_signed.riv")).expect("read signed-script fixture");
     let runtime = read_runtime_file(&bytes).expect("import signed-script fixture");
     let scripts = runtime
         .file_assets()
@@ -21221,8 +21218,8 @@ fn upstream_state_machine_fixture_instance(
     let fixture = cpp_runtime_fixture(fixture_name);
     let bytes = std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
-    let runtime = read_runtime_file(&bytes)
-        .unwrap_or_else(|error| panic!("import {fixture_name}: {error}"));
+    let runtime =
+        read_runtime_file(&bytes).unwrap_or_else(|error| panic!("import {fixture_name}: {error}"));
     let graph = GraphFile::from_runtime_file(&runtime)
         .unwrap_or_else(|error| panic!("graph {fixture_name}: {error}"));
     let artboard_index = artboard_name
@@ -21272,12 +21269,18 @@ fn current_animation_name<'a>(
 fn upstream_event_fixture_instance(
     fixture_name: &str,
     artboard_name: Option<&str>,
-) -> (RuntimeFile, GraphFile, usize, ArtboardInstance, StateMachineInstance) {
+) -> (
+    RuntimeFile,
+    GraphFile,
+    usize,
+    ArtboardInstance,
+    StateMachineInstance,
+) {
     let fixture = cpp_runtime_fixture(fixture_name);
     let bytes = std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
-    let runtime = read_runtime_file(&bytes)
-        .unwrap_or_else(|error| panic!("import {fixture_name}: {error}"));
+    let runtime =
+        read_runtime_file(&bytes).unwrap_or_else(|error| panic!("import {fixture_name}: {error}"));
     let graph = GraphFile::from_runtime_file(&runtime)
         .unwrap_or_else(|error| panic!("graph {fixture_name}: {error}"));
     let artboard_index = artboard_name
@@ -21307,10 +21310,13 @@ fn upstream_state_machine_event_definition_contracts() {
     let bullet_definition = &bullet.artboard_state_machine_graphs(bullet_artboard)[0];
     assert_eq!(bullet_definition.listeners.len(), 3);
     assert_eq!(bullet_definition.inputs.len(), 4);
-    for (listener_index, (target_name, input_id)) in
-        [("HandWickHit", 0), ("HandCannonHit", 1), ("HandHelmetHit", 2)]
-            .into_iter()
-            .enumerate()
+    for (listener_index, (target_name, input_id)) in [
+        ("HandWickHit", 0),
+        ("HandCannonHit", 1),
+        ("HandHelmetHit", 2),
+    ]
+    .into_iter()
+    .enumerate()
     {
         let listener = &bullet_definition.listeners[listener_index];
         let target_id = usize::try_from(
@@ -21321,12 +21327,16 @@ fn upstream_state_machine_event_definition_contracts() {
         )
         .expect("targetId fits usize");
         let target = &bullet_graph.artboards[bullet_artboard].components[target_id];
-        assert!(definition_by_name(target.type_name).is_some_and(|definition| definition.is_a("Node")));
+        assert!(
+            definition_by_name(target.type_name).is_some_and(|definition| definition.is_a("Node"))
+        );
         assert_eq!(target.name.as_deref(), Some(target_name));
         assert_eq!(listener.actions.len(), 1);
         let action = listener.actions[0].object;
-        assert!(definition_by_name(action.type_name)
-            .is_some_and(|definition| definition.is_a("ListenerInputChange")));
+        assert!(
+            definition_by_name(action.type_name)
+                .is_some_and(|definition| definition.is_a("ListenerInputChange"))
+        );
         assert_eq!(action.uint_property("inputId"), Some(input_id));
     }
 
@@ -21347,7 +21357,10 @@ fn upstream_state_machine_event_definition_contracts() {
     assert_eq!(event_definition.listeners[0].actions.len(), 2);
     let fire = &event_definition.listeners[0].actions[0];
     assert_eq!(fire.object.type_name, "ListenerFireEvent");
-    assert_eq!(fire.event.and_then(|event| event.string_property("name")), Some("Footstep"));
+    assert_eq!(
+        fire.event.and_then(|event| event.string_property("name")),
+        Some("Footstep")
+    );
 
     let (states, _, states_artboard, _, _) =
         upstream_event_fixture_instance("events_on_states.riv", None);
@@ -21369,22 +21382,44 @@ fn upstream_state_machine_event_pointer_input_contracts() {
         upstream_event_fixture_instance("bullet_man.riv", Some("Bullet Man"));
     bullet_artboard.update_components();
     bullet_artboard.advance_state_machine_instance(&mut bullet_machine, 0.0);
-    let light = bullet_machine.input_index_named("Light").expect("Light trigger");
+    let light = bullet_machine
+        .input_index_named("Light")
+        .expect("Light trigger");
     bullet_machine.pointer_down(&mut bullet_artboard, 71.0, 263.0, 1);
-    assert_eq!(bullet_machine.input(light).and_then(|input| input.trigger_fired()), Some(true));
+    assert_eq!(
+        bullet_machine
+            .input(light)
+            .and_then(|input| input.trigger_fired()),
+        Some(true)
+    );
 
     let (_, _, _, mut switch_artboard, mut switch_machine) =
         upstream_event_fixture_instance("light_switch.riv", None);
     switch_artboard.update_components();
     switch_artboard.advance_state_machine_instance(&mut switch_machine, 0.0);
     let on = switch_machine.input_index_named("On").expect("On boolean");
-    assert_eq!(switch_machine.input(on).and_then(|input| input.bool_value()), Some(true));
+    assert_eq!(
+        switch_machine
+            .input(on)
+            .and_then(|input| input.bool_value()),
+        Some(true)
+    );
     switch_machine.pointer_down(&mut switch_artboard, 150.0, 258.0, 1);
     switch_machine.pointer_up(&mut switch_artboard, 150.0, 258.0, 1);
-    assert_eq!(switch_machine.input(on).and_then(|input| input.bool_value()), Some(false));
+    assert_eq!(
+        switch_machine
+            .input(on)
+            .and_then(|input| input.bool_value()),
+        Some(false)
+    );
     switch_machine.pointer_down(&mut switch_artboard, 150.0, 258.0, 1);
     switch_machine.pointer_up(&mut switch_artboard, 150.0, 258.0, 1);
-    assert_eq!(switch_machine.input(on).and_then(|input| input.bool_value()), Some(true));
+    assert_eq!(
+        switch_machine
+            .input(on)
+            .and_then(|input| input.bool_value()),
+        Some(true)
+    );
 }
 
 #[test]
@@ -21397,8 +21432,18 @@ fn upstream_state_machine_event_reporting_contracts() {
     listener_machine.pointer_down(&mut listener_artboard, 343.0, 116.0, 1);
     listener_machine.pointer_up(&mut listener_artboard, 343.0, 116.0, 1);
     assert_eq!(listener_machine.reported_event_count(), 2);
-    assert_eq!(listener_machine.reported_event(&listener_artboard, 0).and_then(|event| event.name()), Some("Footstep"));
-    assert_eq!(listener_machine.reported_event(&listener_artboard, 1).and_then(|event| event.name()), Some("Event 3"));
+    assert_eq!(
+        listener_machine
+            .reported_event(&listener_artboard, 0)
+            .and_then(|event| event.name()),
+        Some("Footstep")
+    );
+    assert_eq!(
+        listener_machine
+            .reported_event(&listener_artboard, 1)
+            .and_then(|event| event.name()),
+        Some("Event 3")
+    );
     listener_artboard.advance_state_machine_instance(&mut listener_machine, 0.0);
     assert_eq!(listener_machine.reported_event_count(), 0);
 
@@ -21407,16 +21452,36 @@ fn upstream_state_machine_event_reporting_contracts() {
     states_artboard.update_components();
     states_artboard.advance_state_machine_instance(&mut states_machine, 0.0);
     assert_eq!(states_machine.reported_event_count(), 1);
-    assert_eq!(states_machine.reported_event(&states_artboard, 0).and_then(|event| event.name()), Some("First"));
+    assert_eq!(
+        states_machine
+            .reported_event(&states_artboard, 0)
+            .and_then(|event| event.name()),
+        Some("First")
+    );
     states_artboard.advance_state_machine_instance(&mut states_machine, 1.0);
     assert_eq!(states_machine.reported_event_count(), 0);
     states_artboard.advance_state_machine_instance(&mut states_machine, 1.0);
     assert_eq!(states_machine.reported_event_count(), 2);
-    assert_eq!(states_machine.reported_event(&states_artboard, 0).and_then(|event| event.name()), Some("Second"));
-    assert_eq!(states_machine.reported_event(&states_artboard, 1).and_then(|event| event.name()), Some("Third"));
+    assert_eq!(
+        states_machine
+            .reported_event(&states_artboard, 0)
+            .and_then(|event| event.name()),
+        Some("Second")
+    );
+    assert_eq!(
+        states_machine
+            .reported_event(&states_artboard, 1)
+            .and_then(|event| event.name()),
+        Some("Third")
+    );
     states_artboard.advance_state_machine_instance(&mut states_machine, 1.0);
     assert_eq!(states_machine.reported_event_count(), 1);
-    assert_eq!(states_machine.reported_event(&states_artboard, 0).and_then(|event| event.name()), Some("Fourth"));
+    assert_eq!(
+        states_machine
+            .reported_event(&states_artboard, 0)
+            .and_then(|event| event.name()),
+        Some("Fourth")
+    );
 
     let (_, _, _, mut timeline_artboard, mut timeline_machine) =
         upstream_event_fixture_instance("timeline_event_test.riv", None);
@@ -21440,7 +21505,10 @@ fn upstream_nested_state_machine_event_reaches_parent_listener() {
         upstream_event_fixture_instance("nested_event_test.riv", None);
     assert_eq!(machine.input_count(), 1);
     let boolean = machine.input_index_named("Boolean 1").expect("Boolean 1");
-    assert_eq!(machine.input(boolean).and_then(|input| input.bool_value()), Some(false));
+    assert_eq!(
+        machine.input(boolean).and_then(|input| input.bool_value()),
+        Some(false)
+    );
     let nested_count = graph.artboards[artboard_index]
         .components
         .iter()
@@ -21453,7 +21521,10 @@ fn upstream_nested_state_machine_event_reaches_parent_listener() {
     artboard
         .advance_frame_components_with_state_machine(0.0, &mut machine)
         .expect("nested-event Artboard advance");
-    assert_eq!(machine.input(boolean).and_then(|input| input.bool_value()), Some(true));
+    assert_eq!(
+        machine.input(boolean).and_then(|input| input.bool_value()),
+        Some(true)
+    );
     artboard.advance_state_machine_instance(&mut machine, 0.0);
     assert_eq!(machine.reported_event_count(), 0);
 }
@@ -21468,11 +21539,7 @@ fn upstream_view_model_listener_event_is_visible_to_host() {
         .advance_and_apply(&mut artboard, 0.0)
         .expect("initial advance");
     assert_eq!(machine.reported_event_count(), 0);
-    assert!(machine.set_default_view_model_trigger_source_by_property_name(
-        &runtime,
-        "go",
-        1,
-    ));
+    assert!(machine.set_default_view_model_trigger_source_by_property_name(&runtime, "go", 1,));
     machine
         .advance_and_apply(&mut artboard, 0.016)
         .expect("listener event advance");
@@ -21519,11 +21586,8 @@ fn upstream_animation_state_without_animation_advances_without_crashing() {
 
 #[test]
 fn upstream_oneshot_blend_keeps_advancing_after_animations_stop() {
-    let (_, _, _, _, mut artboard, mut machine) = upstream_state_machine_fixture_instance(
-        "oneshotblend.riv",
-        None,
-        "State Machine 1",
-    );
+    let (_, _, _, _, mut artboard, mut machine) =
+        upstream_state_machine_fixture_instance("oneshotblend.riv", None, "State Machine 1");
     artboard.advance_state_machine_instance(&mut machine, 0.0);
     assert!(machine.needs_advance());
     artboard.advance_state_machine_instance(&mut machine, 0.5);
@@ -21682,12 +21746,18 @@ fn upstream_collapsed_nested_artboards_do_not_advance() {
 fn upstream_first_machine_fixture(
     fixture_name: &str,
     artboard_name: &str,
-) -> (RuntimeFile, GraphFile, usize, ArtboardInstance, StateMachineInstance) {
+) -> (
+    RuntimeFile,
+    GraphFile,
+    usize,
+    ArtboardInstance,
+    StateMachineInstance,
+) {
     let fixture = cpp_runtime_fixture(fixture_name);
     let bytes = std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
-    let runtime = read_runtime_file(&bytes)
-        .unwrap_or_else(|error| panic!("import {fixture_name}: {error}"));
+    let runtime =
+        read_runtime_file(&bytes).unwrap_or_else(|error| panic!("import {fixture_name}: {error}"));
     let graph = GraphFile::from_runtime_file(&runtime)
         .unwrap_or_else(|error| panic!("graph {fixture_name}: {error}"));
     let artboard_index = graph
@@ -21746,9 +21816,7 @@ fn upstream_nested_joystick_remap_applies_child_time_after_joystick() {
             .expect("instantiate parent");
     artboard.update_components();
     assert!(artboard_graph.component_named("child").is_some());
-    panic!(
-        "nested_artboard_test.cpp requires child NestedArtboard instance Shape 'rect'.x == 250"
-    );
+    panic!("nested_artboard_test.cpp requires child NestedArtboard instance Shape 'rect'.x == 250");
 }
 
 #[test]
@@ -21874,7 +21942,9 @@ fn upstream_scripted_property_listener_fixture_advances_without_leaking() {
     let mut artboard =
         ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
             .expect("instantiate default artboard");
-    let mut machine = artboard.state_machine_instance(0).expect("default state machine");
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("default state machine");
     assert!(machine.bind_default_view_model_context_on_artboard(&mut artboard));
     machine
         .advance_and_apply(&mut artboard, 0.0)
@@ -21899,11 +21969,18 @@ fn upstream_nested_solo_shape_expanded_path_collapsed() {
     assert_eq!(root.type_name, "Shape");
     let solo = graph.component_named("Solo-1").expect("Solo-1");
     assert_eq!(solo.children.len(), 2);
-    let rectangle = graph.component_named("Rectangle-shape").expect("Rectangle-shape");
+    let rectangle = graph
+        .component_named("Rectangle-shape")
+        .expect("Rectangle-shape");
     let path = graph.component_named("Path-2").expect("Path-2");
     assert_eq!(rectangle.type_name, "Shape");
     assert_eq!(path.type_name, "Rectangle");
-    assert!(!artboard.component(rectangle.local_id).unwrap().is_collapsed());
+    assert!(
+        !artboard
+            .component(rectangle.local_id)
+            .unwrap()
+            .is_collapsed()
+    );
     assert!(artboard.component(path.local_id).unwrap().is_collapsed());
     assert_clipping_contour_count_unavailable(&artboard, 0);
 }
@@ -21915,14 +21992,24 @@ fn upstream_nested_solo_clip_shape_collapsed_path_expanded() {
         upstream_solo_path_fixture("test-2-clip-with-shape-and-path");
     let graph = &graph.artboards[artboard_index];
     assert_eq!(
-        graph.component_named("Rectangle-clipped").unwrap().type_name,
+        graph
+            .component_named("Rectangle-clipped")
+            .unwrap()
+            .type_name,
         "Shape"
     );
     let solo = graph.component_named("Solo-name").expect("Solo-name");
     assert_eq!(solo.children.len(), 2);
-    let rectangle = graph.component_named("Rectangle-shape").expect("Rectangle-shape");
+    let rectangle = graph
+        .component_named("Rectangle-shape")
+        .expect("Rectangle-shape");
     let path = graph.component_named("Path-2").expect("Path-2");
-    assert!(artboard.component(rectangle.local_id).unwrap().is_collapsed());
+    assert!(
+        artboard
+            .component(rectangle.local_id)
+            .unwrap()
+            .is_collapsed()
+    );
     assert!(!artboard.component(path.local_id).unwrap().is_collapsed());
     assert_clipping_contour_count_unavailable(&artboard, 1);
 }
@@ -21934,7 +22021,10 @@ fn upstream_nested_solo_clipping_animation_contours() {
         upstream_solo_path_fixture("test-5-clip-with-group-and-path-and-shape");
     let graph = &graph.artboards[artboard_index];
     assert_eq!(
-        graph.component_named("Rectangle-clipped").unwrap().type_name,
+        graph
+            .component_named("Rectangle-clipped")
+            .unwrap()
+            .type_name,
         "Shape"
     );
     let mut animation = artboard.linear_animation_instance(0).expect("animation 0");
@@ -21963,7 +22053,10 @@ fn upstream_double_nested_solo_clipping_animation_contours() {
         upstream_solo_path_fixture("test-6-clip-with-nested-solos");
     let graph = &graph.artboards[artboard_index];
     assert_eq!(
-        graph.component_named("Rectangle-clipped").unwrap().type_name,
+        graph
+            .component_named("Rectangle-clipped")
+            .unwrap()
+            .type_name,
         "Shape"
     );
     let mut animation = artboard.linear_animation_instance(0).expect("animation 0");
@@ -92133,9 +92226,7 @@ fn upstream_animating_a_grid_track_value_reflows_the_layout() {
     assert_eq!(tracks.len(), 4);
     let first_column = tracks
         .iter()
-        .find(|track| {
-            artboard.debug_uint_property(track.local_id, collection) == Some(0)
-        })
+        .find(|track| artboard.debug_uint_property(track.local_id, collection) == Some(0))
         .expect("first template column");
     assert!(artboard.set_double_property(first_column.local_id, track_value, 150.0));
     artboard.update_pass();
@@ -92180,8 +92271,7 @@ fn upstream_grid_line_offsets_are_exposed_after_layout() {
 
 #[test]
 fn upstream_stack_alignment_positions_a_fixed_child() {
-    let (runtime, graphs, index, mut artboard) =
-        upstream_layout_fixture("layout/stack.riv", None);
+    let (runtime, graphs, index, mut artboard) = upstream_layout_fixture("layout/stack.riv", None);
     let graph = &graphs.artboards[index];
     artboard.update_pass();
 
@@ -92214,9 +92304,7 @@ fn upstream_stack_alignment_positions_a_fixed_child() {
         let box_bounds = report
             .iter()
             .find(|entry| {
-                entry.type_name == "LayoutComponent"
-                    && entry.width == 40.0
-                    && entry.height == 40.0
+                entry.type_name == "LayoutComponent" && entry.width == 40.0 && entry.height == 40.0
             })
             .expect("fixed 40x40 child");
         assert_eq!((box_bounds.x, box_bounds.y), expected);
@@ -92263,12 +92351,9 @@ fn upstream_padding_insets_a_fill_child() {
             entry.type_name == "LayoutComponent"
                 && entry.parent_local.is_some_and(|parent| {
                     parent != 0
-                        && report
-                            .iter()
-                            .any(|candidate| {
-                                candidate.local_id == parent
-                                    && candidate.type_name == "LayoutComponent"
-                            })
+                        && report.iter().any(|candidate| {
+                            candidate.local_id == parent && candidate.type_name == "LayoutComponent"
+                        })
                 })
         })
         .expect("fill child under the non-artboard container");

@@ -408,15 +408,13 @@ pub struct ArtboardInstance {
     /// DataBind. C++ registers the concrete DataBind as a dependent and only
     /// writes the ScriptInput when that source subsequently changes; the
     /// source's initial value after a DataContext bind is only the baseline.
-    resolved_script_primitive_inputs:
-        RuntimeScriptState<BTreeMap<(u32, String), ScriptValue>>,
+    resolved_script_primitive_inputs: RuntimeScriptState<BTreeMap<(u32, String), ScriptValue>>,
     /// Last artboard id projected through each live `ScriptInputArtboard`.
     /// C++ retains this on the concrete input occurrence and only calls
     /// `ScriptedObject::setArtboardInput` when its DataBind changes the
     /// referenced Artboard. Keep the same occurrence-owned edge here so a
     /// steady frame does not clone another scripted Artboard.
-    resolved_script_artboard_inputs:
-        RuntimeScriptState<BTreeMap<(u32, String), u64>>,
+    resolved_script_artboard_inputs: RuntimeScriptState<BTreeMap<(u32, String), u64>>,
     /// Generation of concrete script occurrence attachments. Rust's
     /// authenticated facade mounts these after Artboard cloning, while C++
     /// mounts them before state-machine input-group construction.
@@ -1270,10 +1268,8 @@ impl ArtboardInstance {
 
     fn restore_transient_script_handles_from(&mut self, source: &Self) {
         self.script_instances_by_global.0 = source.script_instances_by_global.0.clone();
-        self.resolved_script_primitive_inputs.0 =
-            source.resolved_script_primitive_inputs.0.clone();
-        self.resolved_script_artboard_inputs.0 =
-            source.resolved_script_artboard_inputs.0.clone();
+        self.resolved_script_primitive_inputs.0 = source.resolved_script_primitive_inputs.0.clone();
+        self.resolved_script_artboard_inputs.0 = source.resolved_script_artboard_inputs.0.clone();
         self.scripted_data_converter_instances_by_global.0 =
             source.scripted_data_converter_instances_by_global.0.clone();
         for (local_id, source_nested) in source.nested_artboards.iter() {
@@ -3711,7 +3707,8 @@ impl ArtboardInstance {
         if *previous == value {
             return Ok(false);
         }
-        self.resolved_script_primitive_inputs.insert(key, value.clone());
+        self.resolved_script_primitive_inputs
+            .insert(key, value.clone());
         self.set_script_input_for_global(global_id, name, value)?;
         Ok(true)
     }

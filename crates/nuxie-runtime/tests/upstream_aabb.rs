@@ -20,13 +20,11 @@ fn iaabb_join_direct_port() {
 #[test]
 fn iaabb_intersect_direct_port() {
     assert_eq!(
-        IntegerAabb::new(1, -2, 99, 101)
-            .intersect(IntegerAabb::new(0, 0, 100, 100)),
+        IntegerAabb::new(1, -2, 99, 101).intersect(IntegerAabb::new(0, 0, 100, 100)),
         IntegerAabb::new(1, 0, 99, 100)
     );
     assert_eq!(
-        IntegerAabb::new(1, -2, 99, 101)
-            .intersect(IntegerAabb::new(2, -3, 98, 103)),
+        IntegerAabb::new(1, -2, 99, 101).intersect(IntegerAabb::new(2, -3, 98, 103)),
         IntegerAabb::new(2, -2, 98, 101)
     );
 }

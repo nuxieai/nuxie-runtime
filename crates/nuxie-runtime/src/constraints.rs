@@ -996,14 +996,10 @@ pub(crate) fn runtime_draggable_proxy_start(
             scrolling::scroll_constraint_proxy::start(artboard, proxy, position);
         }
         RuntimeDraggableProxyKind::Thumb => {
-            scrolling::scroll_bar_constraint_proxy::start(
-                artboard, proxy, position, timestamp,
-            );
+            scrolling::scroll_bar_constraint_proxy::start(artboard, proxy, position, timestamp);
         }
         RuntimeDraggableProxyKind::Track => {
-            scrolling::scroll_bar_constraint_proxy::start(
-                artboard, proxy, position, timestamp,
-            );
+            scrolling::scroll_bar_constraint_proxy::start(artboard, proxy, position, timestamp);
         }
     }
 }
@@ -1022,11 +1018,9 @@ pub(crate) fn runtime_draggable_proxy_drag(
         RuntimeDraggableProxyKind::Viewport => {
             scrolling::scroll_constraint_proxy::drag(artboard, proxy, position, delta, timestamp)
         }
-        RuntimeDraggableProxyKind::Thumb => {
-            scrolling::scroll_bar_constraint_proxy::drag(
-                artboard, proxy, delta, position, timestamp,
-            )
-        }
+        RuntimeDraggableProxyKind::Thumb => scrolling::scroll_bar_constraint_proxy::drag(
+            artboard, proxy, delta, position, timestamp,
+        ),
         RuntimeDraggableProxyKind::Track => scrolling::scroll_bar_constraint_proxy::drag(
             artboard, proxy, delta, position, timestamp,
         ),
@@ -1353,11 +1347,7 @@ fn scroll_bar_hit_track(
             artboard,
             scroll_constraint,
             RuntimeScrollAxis::X,
-            rive_math_clamp(
-                local_position.0 / track_range * max_offset,
-                max_offset,
-                0.0,
-            ),
+            rive_math_clamp(local_position.0 / track_range * max_offset, max_offset, 0.0),
         );
     }
     if matches!(direction, 1 | 2) {
@@ -1370,11 +1360,7 @@ fn scroll_bar_hit_track(
             artboard,
             scroll_constraint,
             RuntimeScrollAxis::Y,
-            rive_math_clamp(
-                local_position.1 / track_range * max_offset,
-                max_offset,
-                0.0,
-            ),
+            rive_math_clamp(local_position.1 / track_range * max_offset, max_offset, 0.0),
         );
     }
 }
@@ -3387,7 +3373,12 @@ mod tests {
     fn scroll_bar_proxies_require_layout_thumb_and_track_like_cpp() {
         let (mut instance, _, scroll_bar_local) = scroll_bar_proxy_fixture();
         let scroll_bar = instance.component_handle(scroll_bar_local).unwrap();
-        let thumb = instance.objects.component(scroll_bar).unwrap().parent.unwrap();
+        let thumb = instance
+            .objects
+            .component(scroll_bar)
+            .unwrap()
+            .parent
+            .unwrap();
         instance
             .objects
             .component_mut(thumb)
@@ -4525,8 +4516,7 @@ mod tests {
 
     #[test]
     fn elastic_run_and_scroll_bar_clamp_keep_cpp_float_edges() {
-        let mut helper =
-            crate::components::RuntimeElasticScrollPhysicsHelper::new(8.0, 1.0, 0.66);
+        let mut helper = crate::components::RuntimeElasticScrollPhysicsHelper::new(8.0, 1.0, 0.66);
         helper.run(0.0, 1.0, 0.0, 0.5, &[], 1.0, 1.0);
         assert_eq!(helper.target, 1.0, "reversed bounds do not panic");
 
@@ -4537,7 +4527,10 @@ mod tests {
 
         let mut clamped = crate::components::RuntimeScrollPhysicsState::clamped();
         clamped.run((1.0, -10.0), (0.0, 0.0), (0.5, f32::NAN), &[], 1.0, 1.0);
-        assert_eq!(clamped.clamp((1.0, -10.0), (0.0, 0.0), (0.5, f32::NAN)), (0.0, -10.0));
+        assert_eq!(
+            clamped.clamp((1.0, -10.0), (0.0, 0.0), (0.5, f32::NAN)),
+            (0.0, -10.0)
+        );
         assert!(matches!(
             clamped.kind,
             crate::components::RuntimeScrollPhysicsKind::Clamped {
@@ -4591,9 +4584,7 @@ mod tests {
         );
         assert!(matches!(
             infinite_clamped.kind,
-            crate::components::RuntimeScrollPhysicsKind::Clamped {
-                value: (0.0, 25.0)
-            }
+            crate::components::RuntimeScrollPhysicsKind::Clamped { value: (0.0, 25.0) }
         ));
         assert!(
             virtualized_provider_content_size(

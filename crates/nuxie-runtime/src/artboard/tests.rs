@@ -13218,3 +13218,167 @@
         assert!(dirt.contains(ComponentDirt::PATH));
         assert!(dirt.contains(ComponentDirt::WORLD_TRANSFORM));
     }
+
+    fn upstream_global_binding_fixture() -> (RuntimeFile, ArtboardInstance, usize) {
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let fixture = PathBuf::from(root).join("tests/unit_tests/assets/global_variables_test.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
+        let file = read_runtime_file(&bytes).expect("import global_variables_test.riv");
+        let graphs = GraphFile::from_runtime_file(&file).expect("graph global_variables_test.riv");
+        let artboard_index = graphs
+            .artboards
+            .iter()
+            .position(|artboard| artboard.name.as_deref() == Some("Main"))
+            .unwrap_or(0);
+        let artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[artboard_index],
+            &graphs.artboards,
+        )
+        .expect("instantiate global_variables_test.riv");
+        (file, artboard, artboard_index)
+    }
+
+    fn upstream_global_binding_handle(
+        file: &RuntimeFile,
+        view_model_name: &str,
+    ) -> RuntimeOwnedViewModelHandle {
+        let view_model_index = file
+            .view_models()
+            .iter()
+            .position(|view_model| {
+                view_model.object.string_property("name") == Some(view_model_name)
+            })
+            .unwrap_or_else(|| panic!("missing ViewModel {view_model_name:?}"));
+        RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(file, view_model_index)
+                .unwrap_or_else(|| panic!("instantiate ViewModel {view_model_name:?}")),
+        )
+    }
+
+    fn upstream_global_binding_main_handle(
+        file: &RuntimeFile,
+        artboard_index: usize,
+    ) -> RuntimeOwnedViewModelHandle {
+        let view_model_index = file
+            .resolved_view_model_for_artboard(artboard_index)
+            .expect("Main artboard ViewModel")
+            .view_model_index;
+        RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(file, view_model_index)
+                .expect("instantiate Main artboard ViewModel"),
+        )
+    }
+
+    #[test]
+    fn upstream_global_view_model_binding_fixture_contracts() {
+        let (file, artboard, artboard_index) = upstream_global_binding_fixture();
+        let global_names = crate::runtime_global_view_model_names(&file);
+        assert!(!global_names.is_empty());
+        assert!(artboard.owned_view_model_context().is_none());
+
+        let (_, mut artboard, _) = upstream_global_binding_fixture();
+        let first = upstream_global_binding_handle(&file, &global_names[0]);
+        assert!(artboard.global_view_model_instance(&file, &global_names[0]).is_none());
+        assert!(artboard.set_global_view_model_instance(
+            &file,
+            &global_names[0],
+            Some(first.clone()),
+        ));
+        assert!(artboard
+            .global_view_model_instance(&file, &global_names[0])
+            .is_some_and(|bound| bound.ptr_eq(&first)));
+        assert!(!artboard.set_global_view_model_instance(
+            &file,
+            "not-a-global",
+            Some(first),
+        ));
+
+        let (_, mut ordered_artboard, _) = upstream_global_binding_fixture();
+        for name in global_names.iter().rev() {
+            assert!(ordered_artboard.set_global_view_model_instance(
+                &file,
+                name,
+                Some(upstream_global_binding_handle(&file, name)),
+            ));
+        }
+        let ordered = ordered_artboard
+            .owned_view_model_context()
+            .expect("globals create a context");
+        assert_eq!(
+            ordered
+                .handles()
+                .map(|handle| handle.borrow().view_model_index())
+                .collect::<Vec<_>>(),
+            crate::runtime_global_view_model_indices(&file),
+        );
+
+        let (_, mut machine_artboard, _) = upstream_global_binding_fixture();
+        let mut machine = machine_artboard
+            .state_machine_instance(0)
+            .expect("state machine");
+        assert!(machine.data_context().is_none());
+        machine
+            .bind(Some(&file), &mut machine_artboard)
+            .expect("bind creates and completes context");
+        let completed = machine.data_context().expect("completed context").snapshot();
+        assert_eq!(completed.handles().count(), global_names.len() + 1);
+        for name in &global_names {
+            assert!(machine.global_view_model_instance(Some(&file), name).is_some());
+        }
+
+        let replacement = upstream_global_binding_handle(&file, &global_names[0]);
+        assert!(machine.set_global_view_model_instance(
+            Some(&file),
+            &global_names[0],
+            Some(replacement.clone()),
+        ));
+        assert!(machine
+            .global_view_model_instance(Some(&file), &global_names[0])
+            .is_some_and(|bound| bound.ptr_eq(&replacement)));
+        assert!(machine.set_global_view_model_instance(
+            Some(&file),
+            &global_names[0],
+            None,
+        ));
+        assert!(machine.global_view_model_instance(Some(&file), &global_names[0]).is_none());
+
+        let (_, mut empty_artboard, _) = upstream_global_binding_fixture();
+        let mut empty_machine = empty_artboard
+            .state_machine_instance(0)
+            .expect("state machine");
+        assert!(empty_machine.set_global_view_model_instance(
+            Some(&file),
+            &global_names[0],
+            None,
+        ));
+        assert!(empty_machine.data_context().is_none());
+        assert!(!empty_machine.set_global_view_model_instance(
+            Some(&file),
+            "not-a-global",
+            None,
+        ));
+        assert!(empty_artboard.set_global_view_model_instance(
+            &file,
+            &global_names[0],
+            None,
+        ));
+        assert!(empty_artboard.owned_view_model_context().is_none());
+
+        let main = upstream_global_binding_main_handle(&file, artboard_index);
+        assert!(empty_machine.set_view_model_instance(Some(main)));
+        empty_machine
+            .bind(Some(&file), &mut empty_artboard)
+            .expect("main-only bind completes global slots");
+        assert_eq!(
+            empty_machine
+                .data_context()
+                .expect("main and globals")
+                .snapshot()
+                .handles()
+                .count(),
+            global_names.len() + 1,
+        );
+    }

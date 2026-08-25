@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **rejected at the current pin**
+Adversarial review: **correction implemented; independent re-review pending**
 
 This receipt deliberately includes executable methods defined inline in the
 handwritten `include/rive/script_input_*.hpp` headers. Those methods exposed
@@ -108,10 +108,10 @@ every nonzero changed Core value invokes the named table callback.
 | `ScriptInputArtboard::hydrateScriptInput` | authored phase-two artboard resolution and projection | exact | authored artboard hydration tests |
 | `ScriptInputArtboard::syncReferencedArtboard` | `set_artboard_input_core`; live `apply_scripted_input_update` | exact | artboard projection tests |
 | `ScriptInputArtboard::onAddedClean` | ordered input/binding-definition construction | exact | imported input order/count comparison |
-| `ScriptInputArtboard::clone` | `RuntimeScriptInputArtboardOccurrence::clone_for_scripted_object` | **incomplete** | file-index clone test only; live asset-backed references are not represented |
+| `ScriptInputArtboard::clone` | `RuntimeScriptInputArtboardOccurrence::clone_for_scripted_object` | corrected; pending review | `fresh_clone_preserves_the_exact_live_bindable_identity` |
 | `ScriptInputArtboard::file` (inline) | `RuntimeScriptInputArtboardOccurrence::file_attached` | exact | resolved/unresolved clone authority test |
 | `ScriptInputArtboard::artboardIdChanged` | `RuntimeScriptInputProperties::apply_target`; `apply_artboard_id_changed` | exact | missing-id clear and generated-id separation tests |
-| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | **incomplete** | current tests exercise file indices, failed lookup, and repeated ids, not a live `ViewModelInstanceArtboard::asset` or the ancestor rejection |
+| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | corrected; pending review | `live_asset_is_preferred_and_preserves_generated_artboard_id`; `ancestor_live_asset_is_rejected_then_absent_asset_uses_file_index` |
 | `ScriptInputArtboard::referencedArtboardId` | generated value in `RuntimeScriptInputProperties::value`; binary `cpp_artboard_referencer_index` | exact | import resolver and generated-id tests |
 
 The generated `artboardId` and retained referenced Artboard remain separate.
@@ -143,7 +143,7 @@ passes preflight, performs no table write, continues to later inputs, and may
 run user `init`. The path and its resolved-name buffer are independently
 cloned for every scripted-object occurrence.
 
-## Adversarial findings
+## Adversarial correction
 
 The header-aware denominator is correct. The seven `.cpp` files contain 42
 out-of-line definitions. The handwritten headers add exactly 11 executable
@@ -152,20 +152,22 @@ and `validateForScriptInit` for each of Boolean, Color, Number, and String; and
 `validateForScriptInit` for Trigger. No additional handwritten inline body was
 omitted.
 
-The Artboard input is nevertheless not source-exact. Pinned
-`ArtboardReferencer::findArtboard`, called by
-`ScriptInputArtboard::updateArtboard`, first accepts a live
-`ViewModelInstanceArtboard::asset()->artboard()` and rejects that Artboard when
-it is an ancestor of the scripted component's parent Artboard. Only when no
-live asset exists does it resolve `propertyValue()` through the File. Current
-Rust listener-input binding collapses the source to
-`RuntimeDataBindGraphValue::Artboard(u64)` and
-`RuntimeScriptInputArtboardOccurrence::apply_artboard_source` can only test a
-File artboard index. It carries neither the live `RuntimeBindableArtboard`
-identity nor the parent Artboard needed for the ancestor check. The same
-representation means `clone_for_scripted_object` cannot copy an asset-backed
-retained Artboard pointer as pinned `ScriptInputArtboard::clone` does. The
-cited failed-index and repeated-id tests do not exercise either case.
+The rejected ID-only representation has been replaced by an explicit retained
+`ScriptArtboardSource::{File, Live}` identity. A context binding separately
+retains the ViewModel Artboard state handle, so a dirty source reads its current
+live `RuntimeBindableArtboard` rather than trying to reconstruct it from the
+generated integer. Each state-machine ScriptInput clone also receives an
+owner-Artboard source chain keyed by File identity plus global id. The pinned
+order is now literal: a live asset is preferred; an ancestor live asset is
+rejected without falling through; only an absent live asset uses the numeric
+File lookup. Failed lookup preserves the old reference. Successful projection
+carries the retained source through hydration and the facade resolver rather
+than collapsing it back to an id.
+
+`clone_for_scripted_object` now clones the exact retained live bindable
+identity and copies File authority whenever that pointer exists. The generated
+`artboardId` remains unchanged and continues to own
+`referencedArtboardId()`.
 
 The nullable ViewModel verdict was checked and is sound. C++ preflight tests
 the resolved `ViewModelInstanceValue`'s schema property, while
@@ -178,7 +180,13 @@ classes have concrete destructors, not five. Rust collection/drop ownership
 is an accepted representation adaptation, and the occurrence-drop test proves
 source unregistration, but that changes the arithmetic below.
 
-Focused evidence rerun with `CARGO_INCREMENTAL=0`:
+Focused correction evidence with `CARGO_INCREMENTAL=0`:
+
+- `script_input_artboard::tests`: 4 passed, including live asset precedence,
+  generated-id separation, ancestor rejection, numeric fallback only when the
+  live asset is absent, and live identity preservation through clone;
+- `cargo check -p nuxie --features scripting`: passed;
+- `cargo test -p nuxie-runtime --no-run`: passed;
 
 - binary scripted-object import-context test: passed;
 - typed live Core values/occurrence isolation, Artboard clone authority,
@@ -191,18 +199,15 @@ Focused evidence rerun with `CARGO_INCREMENTAL=0`:
   `RIVE_CPP_PROBE_SCRIPTED` was not configured in this checkout;
 - `cargo fmt --all -- --check`: passed.
 
-None of those tests supplies the missing live asset-backed ScriptInputArtboard
-case, which is why green focused evidence does not override the rejection.
-
 ## Result
 
 The seven files contribute 42 out-of-line definitions and 11 executable inline
-methods. All 53 have identified Rust owners, but identified ownership is not
-parity: seven destructor rows use the approved Rust ownership adaptation, 44
-rows preserve the supported observable contract, and the two Artboard rows
-named above remain incomplete. Certification is rejected until live
-asset-backed Artboard input update/clone behavior and ancestor rejection are
-represented and differentially exercised.
+methods. All 53 have identified Rust owners. Seven destructor rows use the
+approved Rust ownership adaptation and 44 rows retain their prior accepted
+verdict. The two formerly rejected Artboard rows are corrected in this change
+with focused behavioral evidence, but remain explicitly pending an independent
+adversarial acceptance pass across every ScriptedObject owner path; this
+implementing lane does not self-certify them.
 
 The historical scalar RB4 gap is stale: scalar Core values,
 occurrence-local scalar cloning, converter ownership, callback projection, and

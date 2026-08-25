@@ -8,7 +8,7 @@
 
 use crate::data_bind_graph::RuntimeDataBindGraphValue;
 use crate::script_input_artboard::{
-    RuntimeScriptInputArtboardApply, RuntimeScriptInputArtboardOccurrence,
+    RuntimeScriptInputArtboardApply, RuntimeScriptInputArtboardOccurrence, ScriptArtboardSource,
 };
 use crate::script_input_viewmodel_property::ScriptInputViewModelPropertyPath;
 use crate::scripting::{ScriptCoreString, ScriptListenerInputKind};
@@ -143,6 +143,21 @@ impl RuntimeScriptInputProperties {
             .and_then(RuntimeScriptInputArtboardOccurrence::referenced_artboard_id)
     }
 
+    pub(crate) fn artboard_source(&self) -> Option<&ScriptArtboardSource> {
+        self.artboard
+            .as_ref()
+            .and_then(RuntimeScriptInputArtboardOccurrence::referenced_artboard)
+    }
+
+    pub(crate) fn set_artboard_ancestor_sources(
+        &mut self,
+        sources: crate::artboard::RuntimeArtboardAncestorSources,
+    ) {
+        if let Some(artboard) = self.artboard.as_mut() {
+            artboard.set_ancestor_sources(sources);
+        }
+    }
+
     pub(crate) fn view_model_path(&self) -> Option<&ScriptInputViewModelPropertyPath> {
         self.view_model_path.as_ref()
     }
@@ -259,10 +274,17 @@ impl RuntimeScriptInputProperties {
         &mut self,
         file: &RuntimeFile,
         artboard_id: u64,
+        runtime_artboard: Option<crate::RuntimeBindableArtboard>,
     ) -> RuntimeScriptInputTargetApply {
         self.artboard
             .as_mut()
-            .map(|artboard| map_artboard_apply(artboard.apply_artboard_source(file, artboard_id)))
+            .map(|artboard| {
+                map_artboard_apply(artboard.apply_artboard_source(
+                    file,
+                    artboard_id,
+                    runtime_artboard,
+                ))
+            })
             .unwrap_or(RuntimeScriptInputTargetApply::Rejected)
     }
 }

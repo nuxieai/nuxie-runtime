@@ -286,7 +286,7 @@ pub struct ScriptListenerInputSnapshot {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScriptListenerInputSnapshotValue {
     Value(ScriptValue),
-    Artboard(u64),
+    Artboard(crate::script_input_artboard::ScriptArtboardSource),
 }
 
 /// A fully resolved, occurrence-local listener hydration batch.
@@ -377,12 +377,12 @@ impl ScriptListenerActionHydration {
                 }
                 ScriptListenerInputHydration::Artboard {
                     name,
-                    artboard_id,
+                    source,
                     resolver,
                     parent_context,
                 } => {
                     let artboard =
-                        resolver.resolve_script_artboard(artboard_id, parent_context.as_ref())?;
+                        resolver.resolve_script_artboard(&source, parent_context.as_ref())?;
                     instance.set_artboard_input_core(&name, artboard)?;
                 }
                 ScriptListenerInputHydration::ViewModel {
@@ -416,7 +416,7 @@ pub enum ScriptListenerInputHydration {
     },
     Artboard {
         name: ScriptCoreString,
-        artboard_id: u64,
+        source: crate::script_input_artboard::ScriptArtboardSource,
         resolver: Rc<dyn ScriptArtboardResolver>,
         parent_context: Option<ScriptArtboardParentContext>,
     },
@@ -2553,7 +2553,7 @@ impl ScriptArtboardDataContext {
 pub trait ScriptArtboardResolver: fmt::Debug {
     fn resolve_script_artboard(
         &self,
-        artboard_id: u64,
+        source: &crate::script_input_artboard::ScriptArtboardSource,
         parent_context: Option<&ScriptArtboardParentContext>,
     ) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
 }

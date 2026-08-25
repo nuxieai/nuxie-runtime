@@ -239,7 +239,8 @@ impl RuntimeScriptedDataConverterState {
                 let value = if input.kind == ScriptListenerInputKind::Artboard {
                     input
                         .properties
-                        .artboard_referenced_id()
+                        .artboard_source()
+                        .cloned()
                         .map(ScriptListenerInputSnapshotValue::Artboard)
                 } else {
                     match (input.kind, input.properties.value()) {
@@ -1139,7 +1140,7 @@ where
     let target_apply = if kind == ScriptListenerInputKind::Artboard
         && let RuntimeDataBindGraphValue::Artboard(artboard_id) = &source
     {
-        properties.apply_artboard_source(file, *artboard_id)
+        properties.apply_artboard_source(file, *artboard_id, None)
     } else {
         properties.apply_target(file, kind, target_property, source)
     };
@@ -1203,7 +1204,9 @@ fn scripted_input_bound_value(
             RuntimeScriptedListenerBoundValue::Trigger(value)
         }
         (ScriptListenerInputKind::Artboard, RuntimeDataBindGraphValue::Artboard(value)) => {
-            RuntimeScriptedListenerBoundValue::Artboard(value)
+            RuntimeScriptedListenerBoundValue::Artboard(
+                crate::script_input_artboard::ScriptArtboardSource::File(value),
+            )
         }
         (kind, value) => {
             return Err(ScriptError::new(format!(

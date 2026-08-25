@@ -142,7 +142,10 @@ impl StateMachineInstance {
         )? {
             Some(super::scripted_listener_action::RuntimeScriptedListenerBoundValue::Artboard(
                 value,
-            )) => Ok(Some(value)),
+            )) => Ok(match value {
+                crate::script_input_artboard::ScriptArtboardSource::File(value) => Some(value),
+                crate::script_input_artboard::ScriptArtboardSource::Live(_) => None,
+            }),
             Some(value) => Err(ScriptError::new(format!(
                 "scripted listener artboard input global {input_global_id} received {value:?}",
             ))),

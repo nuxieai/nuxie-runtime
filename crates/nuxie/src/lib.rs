@@ -2707,7 +2707,7 @@ enum PreparedScriptListenerInput {
     },
     Artboard {
         name: ScriptCoreString,
-        artboard_id: usize,
+        source: nuxie_runtime::ScriptArtboardSource,
     },
     ViewModel {
         input_global_id: u32,
@@ -2940,14 +2940,12 @@ fn prepare_scripted_data_converter_hydration_from_snapshots(
             // Base hydration never invokes an authored trigger callback.
             nuxie_runtime::ScriptListenerInputKind::Trigger => {}
             nuxie_runtime::ScriptListenerInputKind::Artboard => {
-                let artboard_id = match snapshot.value {
+                let source = match snapshot.value.clone() {
                     Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Artboard(value)) => {
                         Some(value)
                     }
                     _ => None,
                 }
-                .filter(|id| *id != u64::from(u32::MAX))
-                .and_then(|id| usize::try_from(id).ok())
                 .ok_or_else(|| {
                     scripted_data_converter_hydration_error(
                         owner,
@@ -2955,16 +2953,23 @@ fn prepare_scripted_data_converter_hydration_from_snapshots(
                         "referenced artboard is unresolved",
                     )
                 })?;
-                if file.artboard(artboard_id).is_none() {
-                    return Err(scripted_data_converter_hydration_error(
-                        owner,
-                        input.id,
-                        &format!(
-                            "referenced artboard {artboard_id} is unavailable: missing scripted artboard index {artboard_id}"
-                        ),
-                    ));
+                if let nuxie_runtime::ScriptArtboardSource::File(artboard_id) = &source {
+                    let artboard_index = usize::try_from(*artboard_id).ok();
+                    if *artboard_id == u64::from(u32::MAX)
+                        || artboard_index
+                            .and_then(|index| file.artboard(index))
+                            .is_none()
+                    {
+                        return Err(scripted_data_converter_hydration_error(
+                            owner,
+                            input.id,
+                            &format!(
+                                "referenced artboard {artboard_id} is unavailable: missing scripted artboard index {artboard_id}"
+                            ),
+                        ));
+                    }
                 }
-                prepared_inputs.push(PreparedScriptListenerInput::Artboard { name, artboard_id });
+                prepared_inputs.push(PreparedScriptListenerInput::Artboard { name, source });
             }
             nuxie_runtime::ScriptListenerInputKind::ViewModelProperty => {
                 let path = view_model_path.ok_or_else(|| {
@@ -3005,11 +3010,10 @@ fn prepare_scripted_data_converter_hydration_from_snapshots(
             PreparedScriptListenerInput::Value { name, value, .. } => {
                 inputs.push(nuxie_runtime::ScriptListenerInputHydration::Value { name, value });
             }
-            PreparedScriptListenerInput::Artboard { name, artboard_id } => {
+            PreparedScriptListenerInput::Artboard { name, source } => {
                 inputs.push(nuxie_runtime::ScriptListenerInputHydration::Artboard {
                     name,
-                    artboard_id: u64::try_from(artboard_id)
-                        .expect("validated ScriptInputArtboard id originated as u64"),
+                    source,
                     resolver: Rc::clone(&artboard_resolver),
                     parent_context: artboard_parent_context.clone(),
                 });
@@ -3377,14 +3381,12 @@ fn prepare_script_listener_hydration(
             // callback (`script_input_trigger.cpp:49-55`).
             nuxie_runtime::ScriptListenerInputKind::Trigger => {}
             nuxie_runtime::ScriptListenerInputKind::Artboard => {
-                let artboard_id = match snapshot.value {
+                let source = match snapshot.value.clone() {
                     Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Artboard(value)) => {
                         Some(value)
                     }
                     _ => None,
                 }
-                .filter(|id| *id != u64::from(u32::MAX))
-                .and_then(|id| usize::try_from(id).ok())
                 .ok_or_else(|| {
                     listener_input_hydration_error(
                         definition,
@@ -3392,16 +3394,23 @@ fn prepare_script_listener_hydration(
                         "referenced artboard is unresolved",
                     )
                 })?;
-                if file.artboard(artboard_id).is_none() {
-                    return Err(listener_input_hydration_error(
-                        definition,
-                        input.id,
-                        &format!(
-                            "referenced artboard {artboard_id} is unavailable: missing scripted artboard index {artboard_id}"
-                        ),
-                    ));
+                if let nuxie_runtime::ScriptArtboardSource::File(artboard_id) = &source {
+                    let artboard_index = usize::try_from(*artboard_id).ok();
+                    if *artboard_id == u64::from(u32::MAX)
+                        || artboard_index
+                            .and_then(|index| file.artboard(index))
+                            .is_none()
+                    {
+                        return Err(listener_input_hydration_error(
+                            definition,
+                            input.id,
+                            &format!(
+                                "referenced artboard {artboard_id} is unavailable: missing scripted artboard index {artboard_id}"
+                            ),
+                        ));
+                    }
                 }
-                prepared_inputs.push(PreparedScriptListenerInput::Artboard { name, artboard_id });
+                prepared_inputs.push(PreparedScriptListenerInput::Artboard { name, source });
             }
             nuxie_runtime::ScriptListenerInputKind::ViewModelProperty => {
                 if phase == ScriptedListenerDataContextPhase::Cold {
@@ -3457,11 +3466,10 @@ fn prepare_script_listener_hydration(
             PreparedScriptListenerInput::Value { name, value, .. } => {
                 inputs.push(nuxie_runtime::ScriptListenerInputHydration::Value { name, value });
             }
-            PreparedScriptListenerInput::Artboard { name, artboard_id } => {
+            PreparedScriptListenerInput::Artboard { name, source } => {
                 inputs.push(nuxie_runtime::ScriptListenerInputHydration::Artboard {
                     name,
-                    artboard_id: u64::try_from(artboard_id)
-                        .expect("validated ScriptInputArtboard id originated as u64"),
+                    source,
                     resolver: Rc::clone(&artboard_resolver),
                     parent_context: artboard_parent_context.clone(),
                 });
@@ -3582,22 +3590,71 @@ impl nuxie_runtime::ScriptViewModelInputResolver for FileScriptViewModelInputRes
 impl nuxie_runtime::ScriptArtboardResolver for FileScriptArtboardResolver {
     fn resolve_script_artboard(
         &self,
-        artboard_id: u64,
+        source: &nuxie_runtime::ScriptArtboardSource,
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
     ) -> std::result::Result<Box<dyn nuxie_runtime::ScriptArtboard>, nuxie_runtime::ScriptError>
     {
-        let artboard_index = usize::try_from(artboard_id).map_err(|_| {
-            nuxie_runtime::ScriptError::new(format!(
-                "script artboard id {artboard_id} does not fit this platform",
-            ))
-        })?;
-        FileScriptArtboard::new(Arc::clone(&self.file), artboard_index, parent_context)
-            .map(|artboard| Box::new(artboard) as Box<dyn nuxie_runtime::ScriptArtboard>)
+        let artboard = match source {
+            nuxie_runtime::ScriptArtboardSource::File(artboard_id) => {
+                let artboard_index = usize::try_from(*artboard_id).map_err(|_| {
+                    nuxie_runtime::ScriptError::new(format!(
+                        "script artboard id {artboard_id} does not fit this platform",
+                    ))
+                })?;
+                FileScriptArtboard::new(Arc::clone(&self.file), artboard_index, parent_context)
+            }
+            nuxie_runtime::ScriptArtboardSource::Live(bindable) => {
+                FileScriptArtboard::new_from_live(Arc::clone(&self.file), bindable, parent_context)
+            }
+        }?;
+        Ok(Box::new(artboard) as Box<dyn nuxie_runtime::ScriptArtboard>)
     }
 }
 
 #[cfg(feature = "scripting")]
 impl FileScriptArtboard {
+    fn new_from_live(
+        file: Arc<File>,
+        bindable: &nuxie_runtime::RuntimeBindableArtboard,
+        parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
+    ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
+        let source = bindable.artboard_instance().ok_or_else(|| {
+            nuxie_runtime::ScriptError::new("live scripted artboard source is unavailable")
+        })?;
+        let artboard_index = file
+            .graph
+            .artboards
+            .iter()
+            .position(|graph| graph.global_id == source.graph_global_id())
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "live scripted artboard global {} is unavailable in its resolver File",
+                    source.graph_global_id(),
+                ))
+            })?;
+        let mut scripted = Self::new(file, artboard_index, parent_context)?;
+        scripted.instance = source;
+        scripted.instance.set_frame_origin(false);
+        scripted.state_machine = scripted
+            .file
+            .artboard(artboard_index)
+            .and_then(|artboard| artboard.default_state_machine_index())
+            .and_then(|state_machine_index| {
+                scripted
+                    .instance
+                    .state_machine_instance(state_machine_index)
+            });
+        if let (Some(state_machine), Some(context)) = (
+            scripted.state_machine.as_mut(),
+            scripted._data_context.as_ref(),
+        ) {
+            state_machine.bind_script_artboard_data_context(context);
+            state_machine.advance_data_context();
+        }
+        (scripted.width, scripted.height) = scripted.instance.artboard_dimensions();
+        Ok(scripted)
+    }
+
     fn new(
         file: Arc<File>,
         artboard_index: usize,

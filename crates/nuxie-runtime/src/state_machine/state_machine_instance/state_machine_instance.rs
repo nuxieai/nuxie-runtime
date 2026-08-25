@@ -2020,24 +2020,21 @@ pub(super) fn apply_scripted_input_update(
                 .borrow_mut()
                 .call_input_trigger_core(input_name, host)
         }
-        super::scripted_listener_action::RuntimeScriptedListenerBoundValue::Artboard(
-            artboard_id,
-        ) => {
+        super::scripted_listener_action::RuntimeScriptedListenerBoundValue::Artboard(source) => {
             let Some(artboard_resolver) = artboard_resolver else {
                 return Ok(false);
             };
-            let artboard = match artboard_resolver
-                .resolve_script_artboard(artboard_id, artboard_parent_context)
-            {
-                Ok(artboard) => artboard,
-                Err(error)
-                    if error.resource_code().is_some()
-                        || host.requires_atomic_script_callbacks() =>
-                {
-                    return Err(error);
-                }
-                Err(_) => return Ok(false),
-            };
+            let artboard =
+                match artboard_resolver.resolve_script_artboard(&source, artboard_parent_context) {
+                    Ok(artboard) => artboard,
+                    Err(error)
+                        if error.resource_code().is_some()
+                            || host.requires_atomic_script_callbacks() =>
+                    {
+                        return Err(error);
+                    }
+                    Err(_) => return Ok(false),
+                };
             instance
                 .borrow_mut()
                 .set_artboard_input_core(input_name, artboard)
@@ -2588,6 +2585,10 @@ impl StateMachineInstance {
             .iter()
             .map(|binding| binding.instantiate())
             .collect();
+        let ancestor_sources = artboard.artboard_referencer_ancestor_sources();
+        for binding in &mut self.scripted_object_bindings {
+            binding.set_artboard_ancestor_sources(ancestor_sources.clone());
+        }
         // Scripted-object binds join only after listener/hit/TextInput
         // facilities, matching cloneScriptedObject's C++ constructor phase.
         self.append_scripted_data_binds_to_container();

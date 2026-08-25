@@ -153,6 +153,7 @@ struct RuntimeScriptedListenerInputDataBindOccurrence {
     formula_source: Option<RuntimeViewModelCell>,
     formula_source_sink: RuntimeCellDirtSink,
     unresolved_converter: bool,
+    artboard_source: Option<crate::view_model::RuntimeOwnedViewModelArtboardBindingSource>,
     last_source: Option<RuntimeDataBindGraphValue>,
     last_target: Option<RuntimeDataBindGraphValue>,
 }
@@ -171,7 +172,7 @@ impl RuntimeScriptedListenerInputDataBindOccurrence {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RuntimeScriptedListenerBoundValue {
     Value(ScriptValue),
-    Artboard(u64),
+    Artboard(crate::script_input_artboard::ScriptArtboardSource),
     Trigger(u64),
 }
 
@@ -428,6 +429,7 @@ impl RuntimeScriptedListenerInputBindingOccurrence {
                     formula_source: None,
                     formula_source_sink: RuntimeCellDirtSink::new(),
                     unresolved_converter: binding.unresolved_converter,
+                    artboard_source: None,
                     last_source: None,
                     last_target: None,
                 };
@@ -441,6 +443,17 @@ impl RuntimeScriptedListenerInputBindingOccurrence {
 impl RuntimeScriptedListenerActionBindingOccurrence {
     pub(crate) fn action_global_id(&self) -> u32 {
         self.action_global_id
+    }
+
+    pub(crate) fn set_artboard_ancestor_sources(
+        &mut self,
+        sources: crate::artboard::RuntimeArtboardAncestorSources,
+    ) {
+        for input in &mut self.inputs {
+            input
+                .properties
+                .set_artboard_ancestor_sources(sources.clone());
+        }
     }
 
     /// Clone-owned ScriptInput DataBinds join the same state-machine
@@ -475,7 +488,8 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
                 let value = if input.kind == ScriptListenerInputKind::Artboard {
                     input
                         .properties
-                        .artboard_referenced_id()
+                        .artboard_source()
+                        .cloned()
                         .map(ScriptListenerInputSnapshotValue::Artboard)
                 } else {
                     match (input.kind, input.properties.value()) {
@@ -559,6 +573,7 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
                             formula_source: None,
                             formula_source_sink: RuntimeCellDirtSink::new(),
                             unresolved_converter: binding.unresolved_converter,
+                            artboard_source: None,
                             last_source: None,
                             last_target: None,
                         };
@@ -820,6 +835,7 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
     fn bind_resolved_source(
         binding: &mut RuntimeScriptedListenerInputDataBindOccurrence,
         source_cell: Option<RuntimeViewModelCell>,
+        artboard_source: Option<crate::view_model::RuntimeOwnedViewModelArtboardBindingSource>,
         force_reconcile: bool,
     ) {
         let source_resolved = source_cell.is_some();
@@ -855,6 +871,7 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
         if source_resolved && (source_rebound || force_reconcile) {
             binding.retained_bind.mark_rebind_reconcile();
         }
+        binding.artboard_source = artboard_source;
     }
 
     pub(crate) fn bind_listener_input_source(
@@ -873,15 +890,21 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
         else {
             return false;
         };
-        let source_cell = context
+        let resolved_source = context
             .property_path_for_context_source_path_with_persistent_resolver(
                 file,
                 &[],
                 &binding.source_path,
                 binding.name_based,
             )
-            .and_then(|property_path| context.cell_by_property_path(&property_path));
-        Self::bind_resolved_source(binding, source_cell, explicit_rebind);
+            .map(|property_path| {
+                (
+                    context.cell_by_property_path(&property_path),
+                    context.runtime_artboard_binding_source_by_property_path(&property_path),
+                )
+            });
+        let (source_cell, artboard_source) = resolved_source.unwrap_or_default();
+        Self::bind_resolved_source(binding, source_cell, artboard_source, explicit_rebind);
         true
     }
 
@@ -903,7 +926,7 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
         };
         let source_path = binding.source_path.clone();
         let name_based = binding.name_based;
-        let source_cell = data_context.resolve_instance(&mut |_, context, scope_path| {
+        let resolved_source = data_context.resolve_instance(&mut |_, context, scope_path| {
             let property_path = context
                 .property_path_for_context_source_path_with_persistent_resolver(
                     file,
@@ -911,9 +934,15 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
                     &source_path,
                     name_based,
                 )?;
-            context.cell_by_property_path(&property_path)
+            Some((
+                context.cell_by_property_path(&property_path)?,
+                context.runtime_artboard_binding_source_by_property_path(&property_path),
+            ))
         });
-        Self::bind_resolved_source(binding, source_cell, explicit_rebind);
+        let (source_cell, artboard_source) = resolved_source
+            .map(|(cell, source)| (Some(cell), source))
+            .unwrap_or_default();
+        Self::bind_resolved_source(binding, source_cell, artboard_source, explicit_rebind);
         true
     }
 
@@ -1048,7 +1077,14 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
             let RuntimeDataBindGraphValue::Artboard(artboard_id) = source else {
                 unreachable!("Artboard referencer path was selected from an Artboard source")
             };
-            input.properties.apply_artboard_source(file, artboard_id)
+            input.properties.apply_artboard_source(
+                file,
+                artboard_id,
+                binding
+                    .artboard_source
+                    .as_ref()
+                    .and_then(|source| source.runtime_artboard()),
+            )
         } else {
             let target = match binding.converter.as_mut() {
                 Some(converter) => {
@@ -1086,6 +1122,13 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
         if target_apply != RuntimeScriptInputTargetApply::ChangedWithTableProjection {
             return Ok(None);
         }
+        if input.kind == ScriptListenerInputKind::Artboard {
+            return Ok(input
+                .properties
+                .artboard_source()
+                .cloned()
+                .map(RuntimeScriptedListenerBoundValue::Artboard));
+        }
         let Some(projected_target) = input.properties.projection_value(input.kind) else {
             return Ok(None);
         };
@@ -1108,15 +1151,21 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
             if !binding.is_context {
                 continue;
             }
-            let source_cell = context
+            let resolved_source = context
                 .property_path_for_context_source_path_with_persistent_resolver(
                     file,
                     &[],
                     &binding.source_path,
                     binding.name_based,
                 )
-                .and_then(|property_path| context.cell_by_property_path(&property_path));
-            Self::bind_resolved_source(binding, source_cell, explicit_rebind);
+                .map(|property_path| {
+                    (
+                        context.cell_by_property_path(&property_path),
+                        context.runtime_artboard_binding_source_by_property_path(&property_path),
+                    )
+                });
+            let (source_cell, artboard_source) = resolved_source.unwrap_or_default();
+            Self::bind_resolved_source(binding, source_cell, artboard_source, explicit_rebind);
             if let Some(converter) = binding.converter.as_mut() {
                 binding.converter_data_binds.bind_sources(
                     converter,
@@ -1155,7 +1204,7 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
             }
             let source_path = binding.source_path.clone();
             let name_based = binding.name_based;
-            let source_cell = data_context.resolve_instance(&mut |_, context, scope_path| {
+            let resolved_source = data_context.resolve_instance(&mut |_, context, scope_path| {
                 let property_path = context
                     .property_path_for_context_source_path_with_persistent_resolver(
                         file,
@@ -1163,9 +1212,15 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
                         &source_path,
                         name_based,
                     )?;
-                context.cell_by_property_path(&property_path)
+                Some((
+                    context.cell_by_property_path(&property_path)?,
+                    context.runtime_artboard_binding_source_by_property_path(&property_path),
+                ))
             });
-            Self::bind_resolved_source(binding, source_cell, explicit_rebind);
+            let (source_cell, artboard_source) = resolved_source
+                .map(|(cell, source)| (Some(cell), source))
+                .unwrap_or_default();
+            Self::bind_resolved_source(binding, source_cell, artboard_source, explicit_rebind);
             if let Some(converter) = binding.converter.as_mut() {
                 binding.converter_data_binds.bind_sources_from_data_context(
                     converter,
@@ -1917,7 +1972,9 @@ fn runtime_scripted_listener_bound_value(
             RuntimeScriptedListenerBoundValue::Trigger(value)
         }
         (ScriptListenerInputKind::Artboard, RuntimeDataBindGraphValue::Artboard(value)) => {
-            RuntimeScriptedListenerBoundValue::Artboard(value)
+            RuntimeScriptedListenerBoundValue::Artboard(
+                crate::script_input_artboard::ScriptArtboardSource::File(value),
+            )
         }
         (kind, value) => {
             return Err(ScriptError::new(format!(
@@ -2465,6 +2522,7 @@ mod tests {
                 formula_source: None,
                 formula_source_sink: RuntimeCellDirtSink::new(),
                 unresolved_converter: false,
+                artboard_source: None,
                 last_source: None,
                 last_target: None,
             }),
@@ -2521,6 +2579,7 @@ mod tests {
                 formula_source: None,
                 formula_source_sink: RuntimeCellDirtSink::new(),
                 unresolved_converter: false,
+                artboard_source: None,
                 last_source: None,
                 last_target: None,
             }),
@@ -2541,6 +2600,7 @@ mod tests {
         RuntimeScriptedListenerActionBindingOccurrence::bind_resolved_source(
             binding,
             Some(source.clone()),
+            None,
             true,
         );
     }
@@ -2675,7 +2735,9 @@ mod tests {
         );
         assert_eq!(
             live.resolve(&file, &context, 25, false).unwrap(),
-            Some(RuntimeScriptedListenerBoundValue::Artboard(0)),
+            Some(RuntimeScriptedListenerBoundValue::Artboard(
+                crate::script_input_artboard::ScriptArtboardSource::File(0),
+            )),
         );
 
         assert!(trigger.set_value(RuntimeViewModelCellValue::Trigger(1)));
@@ -2706,7 +2768,9 @@ mod tests {
         assert!(artboard.set_value(RuntimeViewModelCellValue::Artboard(0)));
         assert_eq!(
             live.resolve(&file, &context, 25, false).unwrap(),
-            Some(RuntimeScriptedListenerBoundValue::Artboard(0)),
+            Some(RuntimeScriptedListenerBoundValue::Artboard(
+                crate::script_input_artboard::ScriptArtboardSource::File(0),
+            )),
             "a successful update projects fresh artboard userdata even when the numeric id repeats",
         );
 
@@ -2736,7 +2800,9 @@ mod tests {
                     ScriptValue::CoreString(ScriptCoreString::default())
                 )),
                 None,
-                Some(ScriptListenerInputSnapshotValue::Artboard(0)),
+                Some(ScriptListenerInputSnapshotValue::Artboard(
+                    crate::script_input_artboard::ScriptArtboardSource::File(0),
+                )),
             ],
         );
     }
@@ -2852,7 +2918,9 @@ mod tests {
         assert!(converter_state.bind_test_input_source(0, 0, converter_source.clone()));
         assert_eq!(converter_source.dependent_count(), 1);
 
-        RuntimeScriptedListenerActionBindingOccurrence::bind_resolved_source(binding, None, true);
+        RuntimeScriptedListenerActionBindingOccurrence::bind_resolved_source(
+            binding, None, None, true,
+        );
 
         assert_eq!(
             converter_source.dependent_count(),

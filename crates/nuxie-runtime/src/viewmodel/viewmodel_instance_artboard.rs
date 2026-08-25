@@ -18,6 +18,29 @@ pub struct RuntimeBindableArtboard {
     inner: Rc<RuntimeBindableArtboardInner>,
 }
 
+impl PartialEq for RuntimeBindableArtboard {
+    fn eq(&self, other: &Self) -> bool {
+        self.ptr_eq(other)
+    }
+}
+
+impl Eq for RuntimeBindableArtboard {}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeOwnedViewModelArtboardBindingSource {
+    state: Rc<RefCell<RuntimeOwnedViewModelArtboardState>>,
+}
+
+impl RuntimeOwnedViewModelArtboardBindingSource {
+    fn new(state: Rc<RefCell<RuntimeOwnedViewModelArtboardState>>) -> Self {
+        Self { state }
+    }
+
+    pub(crate) fn runtime_artboard(&self) -> Option<RuntimeBindableArtboard> {
+        self.state.borrow().bindable_artboard.clone()
+    }
+}
+
 impl RuntimeBindableArtboard {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
@@ -56,7 +79,8 @@ impl RuntimeBindableArtboard {
         Rc::ptr_eq(&self.inner, &other.inner)
     }
 
-    pub(crate) fn artboard_instance(&self) -> Option<ArtboardInstance> {
+    #[doc(hidden)]
+    pub fn artboard_instance(&self) -> Option<ArtboardInstance> {
         self.inner.source.borrow().clone()
     }
 }

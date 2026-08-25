@@ -913,6 +913,50 @@ struct RuntimeArtboardSourceIdentity {
     graph_global_id: u32,
 }
 
+/// Snapshot of the C++ parent Artboard chain used by ArtboardReferencer.
+/// Identity includes the source File so equal global ids from different files
+/// do not become false ancestors.
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeArtboardAncestorSources {
+    sources: Vec<RuntimeArtboardSourceIdentity>,
+}
+
+impl PartialEq for RuntimeArtboardAncestorSources {
+    fn eq(&self, other: &Self) -> bool {
+        self.sources.len() == other.sources.len()
+            && self
+                .sources
+                .iter()
+                .zip(&other.sources)
+                .all(|(left, right)| {
+                    left.matches(&right.source_file_identity, right.graph_global_id)
+                })
+    }
+}
+
+impl Eq for RuntimeArtboardAncestorSources {}
+
+impl RuntimeArtboardAncestorSources {
+    pub(crate) fn rejects(&self, candidate: &ArtboardInstance) -> bool {
+        let Some(context) = candidate.build_context.as_ref() else {
+            return false;
+        };
+        self.sources
+            .iter()
+            .any(|source| source.matches(&context.source_file_identity, candidate.graph_global_id))
+    }
+
+    pub(crate) fn rejects_file_artboard_global(&self, graph_global_id: u32) -> bool {
+        let Some(current) = self.sources.last() else {
+            return false;
+        };
+        self.sources.iter().any(|source| {
+            Arc::ptr_eq(&source.source_file_identity, &current.source_file_identity)
+                && source.graph_global_id == graph_global_id
+        })
+    }
+}
+
 impl RuntimeArtboardSourceIdentity {
     fn matches(&self, source_file_identity: &Arc<()>, graph_global_id: u32) -> bool {
         Arc::ptr_eq(&self.source_file_identity, source_file_identity)
@@ -10635,6 +10679,12 @@ impl ArtboardInstance {
             });
         }
         ancestors
+    }
+
+    pub(crate) fn artboard_referencer_ancestor_sources(&self) -> RuntimeArtboardAncestorSources {
+        RuntimeArtboardAncestorSources {
+            sources: self.child_ancestor_artboard_sources(),
+        }
     }
 
     fn visiting_graphs_for_file(&self, source_file_identity: &Arc<()>) -> BTreeSet<u32> {

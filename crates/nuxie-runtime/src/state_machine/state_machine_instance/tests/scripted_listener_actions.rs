@@ -200,12 +200,12 @@ struct ProjectionArtboardResolver;
 impl ScriptArtboardResolver for ProjectionArtboardResolver {
     fn resolve_script_artboard(
         &self,
-        artboard_id: u64,
+        source: &crate::ScriptArtboardSource,
         _parent_context: Option<&crate::ScriptArtboardParentContext>,
     ) -> Result<Box<dyn crate::ScriptArtboard>, ScriptError> {
-        match artboard_id {
-            7 => Ok(Box::new(ProjectionArtboard { width: 7.0 })),
-            8 => Err(ScriptError::new("ordinary missing artboard")),
+        match source {
+            crate::ScriptArtboardSource::File(7) => Ok(Box::new(ProjectionArtboard { width: 7.0 })),
+            crate::ScriptArtboardSource::File(8) => Err(ScriptError::new("ordinary missing artboard")),
             _ => Err(ScriptError::with_resource_code(
                 "terminal artboard resource failure",
                 "script.resource.test",
@@ -279,13 +279,17 @@ struct HydrationArtboardResolver {
 impl ScriptArtboardResolver for HydrationArtboardResolver {
     fn resolve_script_artboard(
         &self,
-        artboard_id: u64,
+        source: &crate::ScriptArtboardSource,
         _parent_context: Option<&crate::ScriptArtboardParentContext>,
     ) -> Result<Box<dyn crate::ScriptArtboard>, ScriptError> {
+        let label = match source {
+            crate::ScriptArtboardSource::File(id) => id.to_string(),
+            crate::ScriptArtboardSource::Live(_) => "live".to_owned(),
+        };
         self.trace
             .borrow_mut()
-            .push(format!("resolve-artboard:{artboard_id}"));
-        if artboard_id == 7 {
+            .push(format!("resolve-artboard:{label}"));
+        if source == &crate::ScriptArtboardSource::File(7) {
             Ok(Box::new(ProjectionArtboard { width: 7.0 }))
         } else {
             Err(ScriptError::with_resource_code(
@@ -814,7 +818,9 @@ fn scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp() {
         apply_scripted_input_update(
             &ordinary,
             &ScriptCoreString::from("panel"),
-            crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(7),
+            crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(
+                crate::ScriptArtboardSource::File(7),
+            ),
             Some(&resolver),
             None,
             &mut host,
@@ -826,7 +832,9 @@ fn scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp() {
         !apply_scripted_input_update(
             &ordinary,
             &ScriptCoreString::from("panel"),
-            crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(8),
+            crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(
+                crate::ScriptArtboardSource::File(8),
+            ),
             Some(&resolver),
             None,
             &mut host,
@@ -873,7 +881,9 @@ fn scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp() {
     let artboard_error = apply_scripted_input_update(
         &terminal,
         &ScriptCoreString::from("panel"),
-        crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(9),
+        crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(
+            crate::ScriptArtboardSource::File(9),
+        ),
         Some(&resolver),
         None,
         &mut host,
@@ -894,7 +904,9 @@ fn scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp() {
     for value in [
         crate::state_machine::RuntimeScriptedListenerBoundValue::Value(ScriptValue::Bool(true)),
         crate::state_machine::RuntimeScriptedListenerBoundValue::Trigger(1),
-        crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(7),
+        crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(
+            crate::ScriptArtboardSource::File(7),
+        ),
     ] {
         assert!(
             !apply_scripted_input_update(
@@ -969,7 +981,7 @@ fn scripted_hydration_resolves_artboard_then_viewmodel_in_authored_apply_order()
                     vec![
                         crate::ScriptListenerInputHydration::Artboard {
                             name: ScriptCoreString::from("panel"),
-                            artboard_id: 7,
+                            source: crate::ScriptArtboardSource::File(7),
                             resolver: Rc::clone(&artboard_resolver),
                             parent_context: None,
                         },
@@ -1084,7 +1096,7 @@ fn scripted_hydration_typed_artboard_failure_stops_later_inputs_and_init() {
                         },
                         crate::ScriptListenerInputHydration::Artboard {
                             name: ScriptCoreString::from("panel"),
-                            artboard_id: 9,
+                            source: crate::ScriptArtboardSource::File(9),
                             resolver: Rc::clone(&artboard_resolver),
                             parent_context: None,
                         },

@@ -2650,6 +2650,22 @@ impl RuntimeOwnedViewModelInstance {
             .active_runtime_artboard_by_property_path(rest)
     }
 
+    pub(crate) fn runtime_artboard_binding_source_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeOwnedViewModelArtboardBindingSource> {
+        if property_path.len() == 1 {
+            return self
+                .artboard_runtime_state_by_property_index(property_path[0])
+                .map(RuntimeOwnedViewModelArtboardBindingSource::new);
+        }
+        let (view_model_index, rest) = property_path.split_first()?;
+        self.view_models
+            .iter()
+            .find(|view_model| view_model.property_index == *view_model_index)?
+            .active_runtime_artboard_binding_source_by_property_path(rest)
+    }
+
     pub fn set_runtime_artboard_by_property_name(
         &mut self,
         property_name: &str,

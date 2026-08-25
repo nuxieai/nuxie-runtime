@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use nuxie::{ArtboardInstance, File, PersistentFactory};
 use nuxie_graph::{ArtboardGraph, GraphFile};
-use nuxie_render_api::SerializingFactory;
+use nuxie_render_api::{NullFactory, SerializingFactory};
 use nuxie_schema::definition_by_name;
 use silver_corpus::{compare_sriv, parse_sriv};
 
@@ -375,7 +375,6 @@ fn hit_test_on_nested_artboards_in_solos() {
 // private Solo owner in `nuxie-runtime/src/artboard/tests.rs`.
 
 #[test]
-#[ignore = "expected-red: Rust silver stream records frameSize before pinned C++ makeRenderPaint"]
 fn data_bound_solos_with_enums_work_in_both_directions() {
     let file = File::import(&pinned_fixture("databind_solo_to_enum.riv"))
         .expect("databind_solo_to_enum imports");
@@ -384,6 +383,9 @@ fn data_bound_solos_with_enums_work_in_both_directions() {
         .instantiate()
         .expect("default artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("default renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -430,10 +432,10 @@ fn data_bound_solos_with_enums_work_in_both_directions() {
 }
 
 #[test]
-#[ignore = "expected-red: scripted advanceCount remains zero on the first bound frame"]
 fn do_not_advance_collapsed_scripts() {
     let file = File::import_with_unsigned_scripts(&pinned_fixture("script_advance_test.riv"))
         .expect("script_advance_test imports with trusted scripts");
+    let mut factory = PersistentFactory::new(NullFactory::new());
     let artboard = file.default_artboard().expect("default artboard");
     let mut artboard = artboard
         .instantiate()
@@ -456,11 +458,14 @@ fn do_not_advance_collapsed_scripts() {
         Some(0.0)
     );
     for expected in [1.0, 2.0] {
-        artboard.advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut machine),
-            0.016,
-            &mut view_model,
-        );
+        artboard
+            .try_advance_with_state_machines_and_view_model_and_factory(
+                std::slice::from_mut(&mut machine),
+                0.016,
+                &mut view_model,
+                &mut factory,
+            )
+            .expect("scripted Solo frame advances");
         assert_eq!(
             view_model
                 .raw()
@@ -470,11 +475,14 @@ fn do_not_advance_collapsed_scripts() {
     }
     for (index, expected) in [(1.0, 3.0), (2.0, 4.0), (3.0, 5.0)] {
         assert!(view_model.set_number("soloIndex", index));
-        artboard.advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut machine),
-            0.016,
-            &mut view_model,
-        );
+        artboard
+            .try_advance_with_state_machines_and_view_model_and_factory(
+                std::slice::from_mut(&mut machine),
+                0.016,
+                &mut view_model,
+                &mut factory,
+            )
+            .expect("scripted Solo selection frame advances");
         assert_eq!(
             view_model
                 .raw()
@@ -482,11 +490,14 @@ fn do_not_advance_collapsed_scripts() {
             Some(expected)
         );
     }
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.016,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut factory,
+        )
+        .expect("collapsed scripted Solo frame advances");
     assert_eq!(
         view_model
             .raw()
@@ -494,22 +505,28 @@ fn do_not_advance_collapsed_scripts() {
         Some(5.0)
     );
     assert!(view_model.set_number("soloIndex", 0.0));
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.016,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut factory,
+        )
+        .expect("Solo reactivation frame advances");
     assert_eq!(
         view_model
             .raw()
             .number_value_by_property_name_path("advanceCount"),
         Some(5.0)
     );
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.016,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut factory,
+        )
+        .expect("reactivated scripted Solo frame advances");
     assert_eq!(
         view_model
             .raw()
@@ -519,7 +536,6 @@ fn do_not_advance_collapsed_scripts() {
 }
 
 #[test]
-#[ignore = "expected-red: exact solo-index silver was previously classified before the mutation surface existed"]
 fn data_bind_by_index_skipping_non_hierarchical_children() {
     let file =
         File::import(&pinned_fixture("solo_index_test.riv")).expect("solo_index_test imports");
@@ -528,6 +544,9 @@ fn data_bind_by_index_skipping_non_hierarchical_children() {
         .instantiate()
         .expect("default artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("default renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut renderer = silver.borrow().make_renderer();

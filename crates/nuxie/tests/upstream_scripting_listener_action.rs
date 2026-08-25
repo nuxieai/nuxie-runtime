@@ -62,41 +62,25 @@ fn compare_silver(name: &str, actual: &[u8]) {
 fn pointer_down(
     machine: &mut StateMachineInstance,
     artboard: &mut nuxie::ArtboardInstance<'_>,
-    view_model: &ViewModelInstance,
     x: f32,
     y: f32,
     pointer_id: i32,
 ) {
-    let mut view_model = view_model.raw_mut();
-    machine.pointer_down_with_owned_view_model_context(
-        artboard.raw_mut(),
-        x,
-        y,
-        pointer_id,
-        &mut view_model,
-    );
+    machine.pointer_down(artboard.raw_mut(), x, y, pointer_id);
 }
 
 fn pointer_up(
     machine: &mut StateMachineInstance,
     artboard: &mut nuxie::ArtboardInstance<'_>,
-    view_model: &ViewModelInstance,
     x: f32,
     y: f32,
     pointer_id: i32,
 ) {
-    let mut view_model = view_model.raw_mut();
-    machine.pointer_up_with_owned_view_model_context(
-        artboard.raw_mut(),
-        x,
-        y,
-        pointer_id,
-        &mut view_model,
-    );
+    machine.pointer_up(artboard.raw_mut(), x, y, pointer_id);
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
+#[ignore = "expected-red: frame 1 op 180 expects makeRenderPaint while Rust starts drawing"]
 fn scripted_listener_action() {
     let file = File::import_with_unsigned_scripts(&pinned_fixture("scripted_listener_action.riv"))
         .expect("scripted_listener_action.riv imports with trusted scripts");
@@ -106,6 +90,9 @@ fn scripted_listener_action() {
         .expect("default artboard instantiates");
 
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("default renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -113,13 +100,14 @@ fn scripted_listener_action() {
     let mut view_model = artboard
         .instantiate_view_model()
         .expect("default artboard view-model instance");
-    artboard
-        .try_advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-        )
-        .expect("initial scripted advance");
+    nuxie::ArtboardInstance::try_advance_with_state_machines_and_view_model_and_factory(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.1,
+        &mut view_model,
+        &mut silver,
+    )
+    .expect("initial scripted advance");
 
     let mut renderer = silver.borrow().make_renderer();
     artboard
@@ -128,83 +116,44 @@ fn scripted_listener_action() {
 
     silver.borrow_mut().add_frame();
 
-    pointer_down(
-        &mut state_machine,
+    pointer_down(&mut state_machine, &mut artboard, 200.0, 20.0, 1);
+    pointer_up(&mut state_machine, &mut artboard, 200.0, 20.0, 1);
+    nuxie::ArtboardInstance::try_advance_with_state_machines_and_view_model_and_factory(
         &mut artboard,
-        &view_model,
-        200.0,
-        20.0,
-        1,
-    );
-    pointer_up(
-        &mut state_machine,
-        &mut artboard,
-        &view_model,
-        200.0,
-        20.0,
-        1,
-    );
-    artboard
-        .try_advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut state_machine),
-            0.016,
-            &mut view_model,
-        )
-        .expect("first listener frame advances");
+        std::slice::from_mut(&mut state_machine),
+        0.016,
+        &mut view_model,
+        &mut silver,
+    )
+    .expect("first listener frame advances");
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("first listener frame draws");
 
-    pointer_down(
-        &mut state_machine,
+    pointer_down(&mut state_machine, &mut artboard, 300.0, 20.0, 2);
+    pointer_up(&mut state_machine, &mut artboard, 300.0, 20.0, 2);
+    nuxie::ArtboardInstance::try_advance_with_state_machines_and_view_model_and_factory(
         &mut artboard,
-        &view_model,
-        300.0,
-        20.0,
-        2,
-    );
-    pointer_up(
-        &mut state_machine,
-        &mut artboard,
-        &view_model,
-        300.0,
-        20.0,
-        2,
-    );
-    artboard
-        .try_advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut state_machine),
-            0.016,
-            &mut view_model,
-        )
-        .expect("second listener frame advances");
+        std::slice::from_mut(&mut state_machine),
+        0.016,
+        &mut view_model,
+        &mut silver,
+    )
+    .expect("second listener frame advances");
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("second listener frame draws");
 
-    pointer_down(
-        &mut state_machine,
+    pointer_down(&mut state_machine, &mut artboard, 400.0, 20.0, 3);
+    pointer_up(&mut state_machine, &mut artboard, 400.0, 20.0, 3);
+    nuxie::ArtboardInstance::try_advance_with_state_machines_and_view_model_and_factory(
         &mut artboard,
-        &view_model,
-        400.0,
-        20.0,
-        3,
-    );
-    pointer_up(
-        &mut state_machine,
-        &mut artboard,
-        &view_model,
-        400.0,
-        20.0,
-        3,
-    );
-    artboard
-        .try_advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut state_machine),
-            0.016,
-            &mut view_model,
-        )
-        .expect("third listener frame advances");
+        std::slice::from_mut(&mut state_machine),
+        0.016,
+        &mut view_model,
+        &mut silver,
+    )
+    .expect("third listener frame advances");
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("third listener frame draws");
@@ -213,7 +162,7 @@ fn scripted_listener_action() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
+#[ignore = "expected-red: frame 1 op 30 expects paint color update while Rust starts drawing"]
 fn listener_action_inputs() {
     let file = File::import_with_unsigned_scripts(&pinned_fixture("listener_action_inputs.riv"))
         .expect("listener_action_inputs.riv imports with trusted scripts");
@@ -222,6 +171,9 @@ fn listener_action_inputs() {
         .instantiate()
         .expect("default artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("default renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
 
@@ -234,13 +186,14 @@ fn listener_action_inputs() {
     .expect("default artboard view-model instance");
 
     let mut renderer = silver.borrow().make_renderer();
-    artboard
-        .try_advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut state_machine),
-            0.016,
-            &mut view_model,
-        )
-        .expect("initial listener-input advance");
+    nuxie::ArtboardInstance::try_advance_with_state_machines_and_view_model_and_factory(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.016,
+        &mut view_model,
+        &mut silver,
+    )
+    .expect("initial listener-input advance");
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("initial listener-input draw");
@@ -248,7 +201,6 @@ fn listener_action_inputs() {
     pointer_down(
         &mut state_machine,
         &mut artboard,
-        &view_model,
         width / 2.0,
         height / 2.0,
         3,
@@ -256,19 +208,19 @@ fn listener_action_inputs() {
     pointer_up(
         &mut state_machine,
         &mut artboard,
-        &view_model,
         width / 2.0,
         height / 2.0,
         3,
     );
     silver.borrow_mut().add_frame();
-    artboard
-        .try_advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut state_machine),
-            0.016,
-            &mut view_model,
-        )
-        .expect("listener-input click frame advances");
+    nuxie::ArtboardInstance::try_advance_with_state_machines_and_view_model_and_factory(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.016,
+        &mut view_model,
+        &mut silver,
+    )
+    .expect("listener-input click frame advances");
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("listener-input click frame draws");
@@ -361,22 +313,8 @@ fn listener_action_script_receives_pointer_types_and_the_data() {
         .expect("pointer-enter frame advances");
     assert_context(&view_model, "", "pointerEnter", "", 200.0, 210.0, false);
 
-    pointer_down(
-        &mut state_machine,
-        &mut artboard,
-        &view_model,
-        250.0,
-        251.0,
-        0,
-    );
-    pointer_up(
-        &mut state_machine,
-        &mut artboard,
-        &view_model,
-        250.0,
-        251.0,
-        0,
-    );
+    pointer_down(&mut state_machine, &mut artboard, 250.0, 251.0, 0);
+    pointer_up(&mut state_machine, &mut artboard, 250.0, 251.0, 0);
     artboard
         .try_advance_with_state_machines_and_view_model(
             std::slice::from_mut(&mut state_machine),

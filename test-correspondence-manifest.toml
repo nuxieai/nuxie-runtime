@@ -759,7 +759,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_listener_action_test.cp
 test_case_count = 3
 status = "ported-direct"
 evidence = ["crates/nuxie/tests/upstream_scripting_listener_action.rs"]
-note = "All three upstream cases retain their exact fixtures, frame timing, pointer coordinates and IDs, focus/key/text sequence, and assertion order. The two silver cases are honestly red at the shared frameSize-versus-makeRenderPaint stream-prefix difference; the listener-context case is honestly red at the first post-move assertion because pointerType remains empty instead of becoming pointerEnter."
+note = "All three upstream cases retain their exact fixtures, frame timing, pointer coordinates and IDs, focus/key/text sequence, and assertion order. The silver harnesses now attach the renderer before frameSize, hydrate state-machine scripts through factory-bearing advances, and dispatch pointer events through the state machine's retained context like C++. scripted_listener_action now matches through frame 1 operation 179 before Rust omits a makeRenderPaint allocation; listener_action_inputs executes its script and changes toGreen but still omits the frame 1 paint-2 color update at operation 30. The listener-context case is honestly red at the first post-move assertion because pointerType remains empty instead of becoming pointerEnter."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_mat2d_test.cpp"

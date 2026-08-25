@@ -19,7 +19,7 @@ surface, but it does not yet establish literal source certification.
 | `graphics_roundf`, `graphics_round` | 2 | `graphics_round`; the private float helper is inlined into the Rust expression. |
 | Three `Point` constructors, `operator+`, `operator-`, `operator+=`, `operator-=`, and both `operator*` overloads | 9 | Private `Point` construction and field arithmetic in `midpoint`, cubic coefficient construction, clipping, and subdivision. C++ overload syntax is not reproduced. |
 | `ave`, `append_line`, `clip_line` | 3 | `Point::midpoint`, `append_line`, and `clip_line`, preserving half-pixel rounding, vertical clipping, winding sign, row order, and x clamping. |
-| `compute_cubic_segments` | 1 | `compute_cubic_segments`; **rejected** because Rust fuses the squared-distance addition with `mul_add`, changing a finite pinned segment count. |
+| `compute_cubic_segments` | 1 | `compute_cubic_segments`; the rejected fused addition is corrected to the pinned separately rounded multiply/add sequence, pending fresh review. |
 | `CubicCoeff::CubicCoeff`, `CubicCoeff::eval` | 2 | `CubicCoefficient::{new,evaluate}` with the same polynomial grouping. |
 | Both `HitTester::reset` overloads | 2 | `clear_windings` preserves the no-argument clear-only behavior; `reset` restores offset, dimensions, zeroed winding storage, and move state. |
 | `HitTester::move`, `line`, `quad`, `cubic`, `recurse_cubic`, `close` | 6 | `move_to`, `line_to`, `quad_to`, `cubic_to`, `recurse_cubic`, and `close`. The unusual pinned `quad` behavior is literal: it only assigns the un-offset endpoint. |
@@ -46,7 +46,9 @@ decision rather than the blanket exclusion in the original receipt.
 Pinned `compute_cubic_segments` evaluates `dx * dx + dy * dy`. The upstream
 unit-test build selects `--no_ffp_contract` in `tests/unit_tests/test.sh`, so
 the two products and addition are separately rounded. Rust instead evaluates
-`dx.mul_add(dx, dy * dy)`, requiring a fused multiply-add.
+`dx.mul_add(dx, dy * dy)`, requiring a fused multiply-add. The correction now
+uses `dx * dx + dy * dy`, and a focused bit witness requires the pinned
+`0x48364002` squared distance and 36 segments.
 
 A finite witness is `a = (f32::from_bits(0x43d7ffe2),
 f32::from_bits(0x3f69e89d))` with `b = c = d = (0, 0)`. Compiling the complete
@@ -113,6 +115,16 @@ math::hit_test::tests -- --nocapture` passes all five focused tests, and
 `make --no-print-directory runtime-source-symbol-check` confirms the corrected
 7,818-unit/1,105-owner denominator. Those tests prove the restored surface but
 do not cover the finite FP witness or the absent image call edge. Verdict:
-**REJECTED** pending an exact pinned segmentation correction, production image
-integration, explicit negative-area adjudication, and a fresh independent
-re-review.
+**REJECTED** pending production Image/Artboard geometry-hit integration and two
+fresh independent re-reviews. The segmentation correction is implemented but
+not self-certified. Negative, non-overflowing IAABB extents are explicitly a
+safe-ownership adaptation: pinned C++ converts the resulting negative element
+count to an impractically large `size_t` allocation, while Rust fails closed
+without attempting that allocation. This is not presented as a literal return
+value equivalence.
+
+The production correction must be made at the actual pinned call edge:
+`Artboard::hitTest -> Image::hitTest -> HitTester::addRect`. It must not be
+worked around in state-machine `HitExpandable`, because pinned Image does not
+override `hitTestPoint`; listener hit testing and drawable geometry hit testing
+are separate surfaces.

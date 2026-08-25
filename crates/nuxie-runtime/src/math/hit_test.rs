@@ -474,7 +474,11 @@ fn compute_cubic_segments(a: Point, b: Point, c: Point, d: Point) -> i32 {
     };
     let dx = abc.x.abs().max(bcd.x.abs());
     let dy = abc.y.abs().max(bcd.y.abs());
-    ((3.0 * dx.mul_add(dx, dy * dy).sqrt()).sqrt().ceil() as i32).clamp(1, 1 << 8)
+    // Pinned runtime tests disable FP contraction for this owner. Keep the
+    // multiply and add separately rounded: `mul_add` changes a finite witness
+    // from 36 to 37 segments.
+    let squared_distance = dx * dx + dy * dy;
+    ((3.0 * squared_distance.sqrt()).sqrt().ceil() as i32).clamp(1, 1 << 8)
 }
 
 struct CubicCoefficient {
@@ -593,5 +597,17 @@ mod tests {
         assert!(!tester.expects_move);
         assert_eq!(tester.width_i32, 2);
         assert_eq!(tester.height_i32, 2);
+    }
+
+    #[test]
+    fn cubic_segment_count_preserves_pinned_noncontracted_rounding() {
+        let a = Point {
+            x: f32::from_bits(0x43d7_ffe2),
+            y: f32::from_bits(0x3f69_e89d),
+        };
+        let zero = Point::default();
+        let squared_distance = a.x * a.x + a.y * a.y;
+        assert_eq!(squared_distance.to_bits(), 0x4836_4002);
+        assert_eq!(compute_cubic_segments(a, zero, zero, zero), 36);
     }
 }

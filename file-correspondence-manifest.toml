@@ -3571,7 +3571,7 @@ b6_row_id = "B6-0285"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "P1-d direct owner split at d788e8ec: the existing adapted Path, PathCommand, contour/path measurement, path-effect update, and registration behavior moved to crates/nuxie-scripting/src/vm/lua_path.rs:21-436. The B6-0285 audit found the pinned same-frame RenderPath replacement guard at lua_path.cpp:14-35 genuinely missing; it is implemented at lua_path.rs:51-76 against the global Artboard draw-frame identity shared by nuxie-runtime Artboard draw and nuxie-render-api SerializingFactory::add_frame. The Phase 3 animated-oval silver exposed that the Rust serializer had omitted C++ SerializingFactory::addFrame's Artboard::incFrameId action; restoring that paired action changes later-frame path rebuilds from replacement to rewind exactly. Lua ScriptedArtboard draw uses the non-advancing drawInternal-equivalent in both facade and golden-runner implementations. Regression coverage includes tests/path_render_path_lifetime.rs, the nuxie scripted-artboard draw test, and tools/silver-corpus/tests/upstream_scripting_renderer.rs."
+note = "P1-d direct owner split at d788e8ec: the adapted Path, PathCommand, contour/path measurement, path-effect update, and registration behavior live in crates/nuxie-scripting/src/vm/lua_path.rs. The B6-0285 audit found the pinned same-frame RenderPath replacement guard genuinely missing; it now uses the global Artboard draw-frame identity shared by nuxie-runtime Artboard draw and nuxie-render-api SerializingFactory::add_frame. The Phase 3 animated-oval silver exposed and corrected the serializer's omitted Artboard::incFrameId action. A later paired audit restored contour/path getSegment's in-place destination contract: startWithMove=false now continues an existing destination contour instead of appending an intermediate path whose implicit Move changed the verb stream. Lua ScriptedArtboard draw uses the non-advancing drawInternal-equivalent in both facade and golden-runner implementations."
 
 [[file]]
 upstream = "src/lua/renderer/lua_renderer.cpp"
@@ -3655,7 +3655,7 @@ b6_row_id = "B6-0292"
 b6_verdict = "ADAPTED"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Direct behavior-neutral source owner extracted from draw.rs; shared helpers remain private one-to-one sibling includes."
+note = "Direct source owner extracted from draw.rs; shared helpers remain private one-to-one sibling includes. Phase 3 restored the pinned in-place getSegment destination contract through RuntimeContourMeasure::append_segment, preserving startWithMove=false when the caller already has an open contour."
 
 [[file]]
 upstream = "src/math/hit_test.cpp"
@@ -3715,7 +3715,7 @@ b6_row_id = "B6-0297"
 b6_verdict = "ADAPTED"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Direct behavior-neutral source owner extracted from draw.rs; it retains the same private TrimContour collaboration."
+note = "Direct source owner extracted from draw.rs; it retains the same private TrimContour collaboration. Phase 3 restored the pinned in-place getSegment destination contract through RuntimePathMeasure::append_segment, including the per-contour startWithMove rule."
 
 [[file]]
 upstream = "src/math/random.cpp"

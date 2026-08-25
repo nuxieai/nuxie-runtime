@@ -33,7 +33,8 @@ use crate::components::ComponentHandle;
 pub use crate::math::raw_path::runtime_path_commands_from_raw_path;
 use crate::math::raw_path::{
     path_commands_backwards, prune_empty_path_segments, prune_empty_path_segments_from,
-    runtime_raw_path_from_commands, runtime_rebuild_raw_path_from_commands,
+    runtime_append_path_commands, runtime_raw_path_from_commands,
+    runtime_rebuild_raw_path_from_commands,
 };
 use crate::objects::InstanceObjectArena;
 use crate::properties::{

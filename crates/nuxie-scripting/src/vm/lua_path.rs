@@ -342,14 +342,13 @@ impl UserData for ScriptedContourMeasure {
             ))
         });
         methods.add_method("extract", |_, this, args: MultiValue| {
-            extract_measure_segment(
-                this.measure().segment(
-                    number_arg(args.front(), "startDistance")?,
-                    number_arg(args.get(1), "endDistance")?,
-                    bool_arg_or(args.get(3), true)?,
-                ),
-                args.get(2),
-            )
+            let start = number_arg(args.front(), "startDistance")?;
+            let end = number_arg(args.get(1), "endDistance")?;
+            let start_with_move = bool_arg_or(args.get(3), true)?;
+            extract_measure_segment(args.get(2), |destination| {
+                this.measure()
+                    .append_segment(start, end, destination, start_with_move);
+            })
         });
     }
 }
@@ -381,26 +380,28 @@ impl UserData for ScriptedPathMeasure {
             ))
         });
         methods.add_method("extract", |_, this, args: MultiValue| {
-            extract_measure_segment(
-                this.measure.segment(
-                    number_arg(args.front(), "startDistance")?,
-                    number_arg(args.get(1), "endDistance")?,
-                    bool_arg_or(args.get(3), true)?,
-                ),
-                args.get(2),
-            )
+            let start = number_arg(args.front(), "startDistance")?;
+            let end = number_arg(args.get(1), "endDistance")?;
+            let start_with_move = bool_arg_or(args.get(3), true)?;
+            extract_measure_segment(args.get(2), |destination| {
+                this.measure
+                    .append_segment(start, end, destination, start_with_move);
+            })
         });
     }
 }
 
-fn extract_measure_segment(segment: RawPath, destination: Option<&Value>) -> Result<()> {
+fn extract_measure_segment(
+    destination: Option<&Value>,
+    append: impl FnOnce(&mut RawPath),
+) -> Result<()> {
     let Some(Value::UserData(destination)) = destination else {
         return Err(Error::runtime(
             "Path measure extract expects a destination Path",
         ));
     };
     let mut destination = destination.borrow_mut::<ScriptedPath>()?;
-    destination.raw_path.add_path(&segment, Mat2D::IDENTITY);
+    append(&mut destination.raw_path);
     destination.mark_dirty();
     Ok(())
 }
@@ -608,7 +609,6 @@ mod upstream_scripted_path_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: startWithMove=false inserts a second move instead of a line"]
     fn contour_measure_extract_with_start_with_move_false() {
         let path = extracted_path(
             "local path: Path = Path.new()\n\
@@ -801,7 +801,6 @@ mod upstream_scripted_path_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: startWithMove=false inserts a second move instead of a line"]
     fn path_measure_extract_with_start_with_move_false() {
         let path = extracted_path(
             "local path: Path = Path.new()\n\

@@ -20,6 +20,27 @@ pub(crate) fn runtime_rebuild_raw_path_from_commands(
     });
 }
 
+pub(crate) fn runtime_append_path_commands(
+    raw_path: &mut RawPath,
+    commands: &[RuntimePathCommand],
+) {
+    for command in commands {
+        match *command {
+            RuntimePathCommand::Move { x, y } => raw_path.move_to(x, y),
+            RuntimePathCommand::Line { x, y } => raw_path.line_to(x, y),
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => raw_path.cubic_to(x1, y1, x2, y2, x3, y3),
+            RuntimePathCommand::Close => raw_path.close(),
+        }
+    }
+}
+
 fn runtime_path_command_counts(commands: &[RuntimePathCommand]) -> (usize, usize) {
     let mut points = 0;
     for command in commands {

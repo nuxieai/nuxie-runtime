@@ -21531,6 +21531,119 @@ fn upstream_nested_joystick_remap_applies_child_time_after_joystick() {
     );
 }
 
+#[test]
+#[ignore = "expected-red: Rust exposes no external default-ViewModel image asset identity/binding surface"]
+fn upstream_data_binding_images_from_file_assets() {
+    fn assert_bound_image_asset_identity_unavailable(
+        _artboard: &ArtboardInstance,
+        property: &str,
+        image: &str,
+    ) {
+        panic!(
+            "data_binding_images_test.cpp requires ViewModel image property {property:?} identity-equal to Image {image:?}.imageAsset()"
+        );
+    }
+    fn set_bound_image_asset_index_unavailable(property: &str, index: u64) {
+        panic!(
+            "data_binding_images_test.cpp requires {property:?}.propertyValue({index}) on the bound default ViewModel"
+        );
+    }
+    let fixture = cpp_runtime_fixture("data_binding_images_test.riv");
+    let bytes = std::fs::read(&fixture).expect("read data_binding_images_test.riv");
+    let runtime = read_runtime_file(&bytes).expect("import data_binding_images_test.riv");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("graph data_binding_images_test.riv");
+    let artboard_index = graph
+        .artboards
+        .iter()
+        .position(|artboard| artboard.name.as_deref() == Some("main"))
+        .expect("main artboard");
+    let artboard_graph = &graph.artboards[artboard_index];
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .expect("instantiate main");
+    artboard.update_components();
+    assert!(artboard_graph.component_named("root_img").is_some());
+    assert!(artboard_graph.component_named("sub_1").is_some());
+    assert_bound_image_asset_identity_unavailable(&artboard, "main_im", "root_img");
+    assert_bound_image_asset_identity_unavailable(&artboard, "sub_1/sub_1_im", "sub_1_img");
+    set_bound_image_asset_index_unavailable("main_im", 2);
+    set_bound_image_asset_index_unavailable("sub_1/sub_1_im", 6);
+    artboard.update_components();
+    assert_bound_image_asset_identity_unavailable(&artboard, "main_im=2", "root_img");
+    assert_bound_image_asset_identity_unavailable(&artboard, "sub_1/sub_1_im=6", "sub_1_img");
+}
+
+#[test]
+#[ignore = "expected-red: Rust has no external default-ViewModel bind plus decoded layout-image scale owner"]
+fn upstream_layout_image_composes_user_scale_for_7_2_files() {
+    fn bind_default_view_model_and_decode_images_unavailable(
+        _runtime: &RuntimeFile,
+        _artboard: &mut ArtboardInstance,
+        version: &str,
+    ) {
+        panic!(
+            "data_binding_images_test.cpp requires decoded images and default ViewModel binding for {version}"
+        );
+    }
+    let fixture = cpp_runtime_fixture("image_fit_alignment.riv");
+    let legacy_bytes = std::fs::read(&fixture).expect("read image_fit_alignment.riv");
+    assert!(legacy_bytes.len() > 6);
+    assert_eq!(&legacy_bytes[..4], b"RIVE");
+    assert_eq!(legacy_bytes[4], 7);
+    assert!(legacy_bytes[5] < 2);
+    let mut modern_bytes = legacy_bytes.clone();
+    modern_bytes[5] = 2;
+
+    let mut loaded = Vec::new();
+    for (version, bytes) in [("legacy", legacy_bytes), ("7.2", modern_bytes)] {
+        let runtime = read_runtime_file(&bytes).expect("import version-adjusted image fixture");
+        let graph = GraphFile::from_runtime_file(&runtime).expect("graph image fixture");
+        let artboard_index = graph
+            .artboards
+            .iter()
+            .position(|artboard| artboard.name.as_deref() == Some("Main"))
+            .expect("Main artboard");
+        let mut artboard = ArtboardInstance::from_graph_with_artboards(
+            &runtime,
+            &graph.artboards[artboard_index],
+            &graph.artboards,
+        )
+        .expect("instantiate Main");
+        let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
+        bind_default_view_model_and_decode_images_unavailable(&runtime, &mut artboard, version);
+        artboard.advance_state_machine_instance(&mut machine, 0.1);
+        for _ in 0..120 {
+            artboard.advance_state_machine_instance(&mut machine, 0.016);
+        }
+        loaded.push((graph, artboard_index, artboard));
+    }
+    let (legacy, modern) = loaded.split_at_mut(1);
+    let legacy = &mut legacy[0];
+    let modern = &mut modern[0];
+    let legacy_image = legacy.0.artboards[legacy.1]
+        .components
+        .iter()
+        .find(|component| component.type_name == "Image")
+        .expect("legacy layout image");
+    let modern_image = modern.0.artboards[modern.1]
+        .components
+        .iter()
+        .find(|component| component.global_id == legacy_image.global_id)
+        .expect("matching modern layout image");
+    let legacy_transform = legacy
+        .2
+        .component_world_transform_with_scroll(legacy_image.local_id)
+        .expect("legacy image transform");
+    let modern_transform = modern
+        .2
+        .component_world_transform_with_scroll(modern_image.local_id)
+        .expect("modern image transform");
+    let legacy_scale = legacy_transform.0[0].hypot(legacy_transform.0[1]);
+    let modern_scale = modern_transform.0[0].hypot(modern_transform.0[1]);
+    assert!(legacy_scale > 0.0);
+    assert!(modern_scale > legacy_scale);
+}
+
 fn assert_clipping_contour_count_unavailable(_artboard: &ArtboardInstance, expected: usize) {
     panic!("path_test.cpp requires ClippingShape::path()->numContours() == {expected}");
 }

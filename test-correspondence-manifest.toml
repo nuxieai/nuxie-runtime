@@ -217,10 +217,9 @@ note = "Both complete fixture-backed cases are translated with the shared Rust v
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 test_case_count = 10
-status = "partial"
-evidence = ["silver-corpus.toml::{image_fit_alignment_2,image_fit_alignment_3,image_fit_alignment_updated_test,viewmodel_based_condition}"]
-covered_test_cases = ["Image fit & alignment with databound images 2", "Image fit & alignment images 3", "Image fit & alignment with image scaling", "Image based conditions work"]
-note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+status = "ported-direct"
+evidence = ["silver-corpus.toml (all data_binding_images_test.cpp provenance rows)", "crates/nuxie-runtime/tests/cpp_probe.rs::{upstream_data_binding_images_from_file_assets,upstream_layout_image_composes_user_scale_for_7_2_files}"]
+note = "All ten cases are represented. Eight renderer-silver cases retain their exact actions and outcomes. The file-asset case preserves main/sub_1 selection, root/nested image identities, indices 2/6 mutations, and pre/post identity assertions as red at the unavailable external default-ViewModel image identity owner. The 7.2 case preserves byte header checks, minor-version patch, dual imports, Main/state-machine setup, 0.1 plus 120x0.016 lockstep advances, and scale relationship as red at the external decoded-image/default-bind seam."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/data_binding_keyframes.cpp"

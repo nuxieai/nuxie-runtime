@@ -214,9 +214,9 @@ FEATURE_ROWS.update(
             "F13: nested artboards are ported; latent hit-propagation ceilings remain.",
         ),
         "src/data_bind/context/context_value_artboard.cpp": (
-            "partial",
-            "crates/nuxie-runtime/src/view_model.rs",
-            "F13: artboard context values are ported; live nested-host ceilings remain.",
+            "ported",
+            "crates/nuxie-runtime/src/data_bind/context/context_value_artboard.rs; crates/nuxie-runtime/src/data_bind/data_bind_context.rs; crates/nuxie-runtime/src/artboard.rs",
+            "Phase 3 paired owner audit: integer fallback and ArtboardReferencer dispatch match the pin, including live/cross-file sources, explicit null, ancestor rejection, unresolved preservation, and generated-id separation.",
         ),
         "src/text/text_modifier.cpp": (
             "partial",

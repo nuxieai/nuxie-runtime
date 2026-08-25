@@ -2003,10 +2003,10 @@ verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/data_bind/context/context_value_artboard.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0160"
-b6_verdict = "DIVERGENT"
+b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
-audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "F13: artboard context values are ported; live nested-host ceilings remain."
+audit_record = "docs/parity-audits/context-value-artboard.md"
+note = "Phase 3 current-pin re-audit supersedes the pre-RB-1 B6 verdict: the direct owner now contains integer matching and ArtboardReferencer dispatch, with retained-cell dirt and mounted-occurrence behavior verified against the pin."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_asset_font.cpp"

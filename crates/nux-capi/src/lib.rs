@@ -1901,9 +1901,17 @@ pub(crate) unsafe fn prepare_optional_host_command_import(
     }))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NativeShaderImportAuthority {
+    Denied,
+    #[cfg(feature = "apple-authored-msl")]
+    TrustedExporter,
+}
+
 pub(crate) fn import_file_with_prepared_host_commands(
     bytes: &[u8],
     prepared: Option<PreparedHostCommandImport>,
+    native_shader_authority: NativeShaderImportAuthority,
 ) -> Result<File, String> {
     record_file_import_call();
     let Some(prepared) = prepared else {
@@ -1924,9 +1932,25 @@ pub(crate) fn import_file_with_prepared_host_commands(
             .with_max_command_bytes_per_cycle(prepared.max_command_bytes_per_step);
         HostCommandImportConfig::new(prepared.module_name, execution_limits, command_limits)
             .and_then(|config| {
-                // SAFETY: this helper is reachable only from the explicit C
-                // trust surface; its caller authenticated these exact bytes.
-                unsafe { File::import_trusted_with_host_commands(bytes, config) }
+                match native_shader_authority {
+                    NativeShaderImportAuthority::Denied => {
+                        // SAFETY: this helper is reachable only from the
+                        // explicit generic C trust surface; its caller
+                        // authenticated these exact bytes.
+                        unsafe { File::import_trusted_with_host_commands(bytes, config) }
+                    }
+                    #[cfg(feature = "apple-authored-msl")]
+                    NativeShaderImportAuthority::TrustedExporter => {
+                        // SAFETY: only the product-specific Rust entrypoint
+                        // selects this branch after its caller establishes
+                        // trusted native-compiler provenance for exact bytes.
+                        unsafe {
+                            File::import_trusted_native_shader_artifact_with_host_commands(
+                                bytes, config,
+                            )
+                        }
+                    }
+                }
             })
             .map_err(|error| error.to_string())
     }
@@ -1985,7 +2009,11 @@ pub unsafe extern "C" fn nux_file_import_trusted_with_host_commands(
         } else {
             unsafe { slice::from_raw_parts(bytes, len) }
         };
-        let imported = import_file_with_prepared_host_commands(bytes, Some(prepared));
+        let imported = import_file_with_prepared_host_commands(
+            bytes,
+            Some(prepared),
+            NativeShaderImportAuthority::Denied,
+        );
         match imported {
             Ok(file) => {
                 let handle = Box::into_raw(Box::new(NuxFile {

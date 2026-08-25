@@ -508,6 +508,13 @@ impl ScriptExecutionCapability {
     }
 }
 
+#[cfg(feature = "scripting")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NativeShaderAuthority {
+    Denied,
+    TrustedExporter,
+}
+
 /// One atomic baseline operation over an owned artboard.
 ///
 /// The transaction owns the script-effect checkpoint. Dropping it before
@@ -5761,15 +5768,69 @@ impl File {
         bytes: &[u8],
         config: HostCommandImportConfig,
     ) -> Result<Self> {
+        // SAFETY: upheld by this function's caller contract. Generic host-
+        // command trust deliberately does not authorize native shader code.
+        unsafe {
+            Self::import_trusted_with_host_commands_and_native_shader_authority(
+                bytes,
+                config,
+                NativeShaderAuthority::Denied,
+            )
+        }
+    }
+
+    /// Import trusted-exporter bytes with a generic command module and native
+    /// shader authority bound to the exact artifact.
+    ///
+    /// This stronger product-adapter seam is separate from
+    /// [`Self::import_trusted_with_host_commands`] so ordinary authenticated
+    /// scripts cannot opt themselves into unsafe backend shader passthrough.
+    ///
+    /// # Safety
+    ///
+    /// The caller must have authenticated `bytes` and established that every
+    /// native shader payload was emitted by the trusted native-shader exporter.
+    /// A package signature without compiler provenance is insufficient.
+    #[cfg(feature = "ore-metal-authored-msl")]
+    #[doc(hidden)]
+    pub unsafe fn import_trusted_native_shader_artifact_with_host_commands(
+        bytes: &[u8],
+        config: HostCommandImportConfig,
+    ) -> Result<Self> {
+        // SAFETY: upheld by this function's stronger caller contract.
+        unsafe {
+            Self::import_trusted_with_host_commands_and_native_shader_authority(
+                bytes,
+                config,
+                NativeShaderAuthority::TrustedExporter,
+            )
+        }
+    }
+
+    #[cfg(feature = "scripting")]
+    unsafe fn import_trusted_with_host_commands_and_native_shader_authority(
+        bytes: &[u8],
+        config: HostCommandImportConfig,
+        native_shader_authority: NativeShaderAuthority,
+    ) -> Result<Self> {
         let execution_limits = config.execution_limits();
         let extension = Arc::new(GenericHostCommandExtension {
             module_name: config.module_name,
             limits: config.command_limits,
         });
-        // SAFETY: upheld by this function's caller contract. The capability
-        // itself remains cryptographically bound to the exact input bytes.
+        // SAFETY: upheld by the selected public trust-boundary contract. Both
+        // capabilities remain cryptographically bound to the exact input.
         let capability = unsafe {
-            ScriptExecutionCapability::for_verified_artifact_unchecked(bytes, extension)?
+            match native_shader_authority {
+                NativeShaderAuthority::Denied => {
+                    ScriptExecutionCapability::for_verified_artifact_unchecked(bytes, extension)?
+                }
+                NativeShaderAuthority::TrustedExporter => {
+                    ScriptExecutionCapability::for_verified_native_shader_artifact_unchecked(
+                        bytes, extension,
+                    )?
+                }
+            }
         };
         Self::import_with_execution_capability(bytes, capability, execution_limits)
     }
@@ -9231,6 +9292,40 @@ mod inert_script_import_tests {
             u64::try_from(shader_payload.len()).expect("tiny fixture length"),
             &Sha256::digest([0, 1, 2, 4]).into(),
         ));
+    }
+
+    #[cfg(feature = "ore-metal-authored-msl")]
+    #[test]
+    fn trusted_native_shader_host_command_import_mints_shader_provenance() {
+        let shader_payload = [0, 1, 2, 3];
+        let bytes = imported_shader_asset_bytes(&shader_payload);
+        let config = HostCommandImportConfig::new(
+            "bridge",
+            ScriptExecutionLimits::new(),
+            HostCommandLimits::new(),
+        )
+        .expect("host command config");
+
+        // SAFETY: this comparison import authenticates the exact bytes for
+        // generic script execution only.
+        let generic = unsafe { File::import_trusted_with_host_commands(&bytes, config.clone()) }
+            .expect("generic host-command import");
+        assert!(
+            generic.scripts.borrow().assets[0]
+                .shader_provenance
+                .is_none()
+        );
+
+        // SAFETY: this synthetic fixture stands in for exact output from the
+        // trusted native-shader exporter and is never submitted to Metal.
+        let trusted = unsafe {
+            File::import_trusted_native_shader_artifact_with_host_commands(&bytes, config)
+        }
+        .expect("trusted native-shader host-command import");
+
+        let scripts = trusted.scripts.borrow();
+        assert!(scripts.capability.is_some());
+        assert!(scripts.assets[0].shader_provenance.is_some());
     }
 
     #[test]

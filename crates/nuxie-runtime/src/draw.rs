@@ -6655,23 +6655,63 @@ impl ArtboardInstance {
                 .and_then(|bounds| bounds.get(&local_id).copied())
                 .or_else(|| self.runtime_supported_layout_component_bounds(local_id, graph))
         {
-            if mat2d_linear_is_identity(component.transform.local_transform) {
-                return Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y]);
+            let (origin_x, origin_y) =
+                self.nested_artboards
+                    .get(&local_id)
+                    .map_or((0.0, 0.0), |nested| {
+                        (
+                            nested.child.width * nested.child.origin_x,
+                            nested.child.height * nested.child.origin_y,
+                        )
+                    });
+            let mut world = if mat2d_linear_is_identity(component.transform.local_transform) {
+                Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y])
+            } else {
+                let mut components = component.transform.local_transform.decompose();
+                components.x = bounds.x + origin_x;
+                components.y = bounds.y + origin_y;
+                Mat2D::compose(components)
+            };
+            if let Some(parent_local) = self.component_parent_local(local_id) {
+                // `NestedArtboardLayout::update` first calls
+                // `NestedArtboard::update`/`TransformComponent::update`, so
+                // its base world transform already contains the parent's
+                // current `m_layout` frame. Taffy's accumulated bounds are
+                // the newer solved target; carry only the parent's retained
+                // delta onto that target before applying the mounted
+                // Artboard's own retained layout position below
+                // (`nested_artboard_layout.cpp:62-84`).
+                let parent_world = self.runtime_component_world_transform_with_bounds_guarded(
+                    parent_local,
+                    graph,
+                    layout_bounds,
+                    visited,
+                );
+                let parent_bounds = layout_bounds
+                    .and_then(|all| all.get(&parent_local).copied())
+                    .or_else(|| {
+                        self.runtime_supported_layout_component_bounds(parent_local, graph)
+                    });
+                if let Some(parent_bounds) = parent_bounds {
+                    world.0[4] += parent_world.0[4] - parent_bounds.x;
+                    world.0[5] += parent_world.0[5] - parent_bounds.y;
+                    if let Some((retained_x, retained_y)) = self
+                        .nested_artboards
+                        .get(&local_id)
+                        .and_then(|nested| nested.child.component(0))
+                        .and_then(|root| root.concrete.layout.as_ref())
+                        .map(|layout| layout.position())
+                    {
+                        let solved_x = bounds.x - parent_bounds.x;
+                        let solved_y = bounds.y - parent_bounds.y;
+                        let delta_x = retained_x - solved_x;
+                        let delta_y = retained_y - solved_y;
+                        world.0[4] += parent_world.0[0] * delta_x + parent_world.0[2] * delta_y;
+                        world.0[5] += parent_world.0[1] * delta_x + parent_world.0[3] * delta_y;
+                    }
+                }
             }
-            let (origin_x, origin_y) = self
-                .nested_artboards
-                .get(&local_id)
-                .map(|nested| {
-                    (
-                        nested.child.width * nested.child.origin_x,
-                        nested.child.height * nested.child.origin_y,
-                    )
-                })
-                .unwrap_or((0.0, 0.0));
-            let mut components = component.transform.local_transform.decompose();
-            components.x = bounds.x + origin_x;
-            components.y = bounds.y + origin_y;
-            return Mat2D::compose(components);
+            return world;
         }
         let Some(parent_local) = self.component_parent_local(local_id) else {
             return component.transform.world_transform;
@@ -16009,9 +16049,6 @@ impl RuntimeArtboardPathState {
         if component.type_name == "NestedArtboardLayout"
             && let Some(bounds) = layout_bounds.get(&local_id).copied()
         {
-            if mat2d_linear_is_identity(component.transform.local_transform) {
-                return Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y]);
-            }
             let (origin_x, origin_y) = instance
                 .nested_artboards
                 .get(&local_id)
@@ -16022,10 +16059,30 @@ impl RuntimeArtboardPathState {
                     )
                 })
                 .unwrap_or((0.0, 0.0));
-            let mut components = component.transform.local_transform.decompose();
-            components.x = bounds.x + origin_x;
-            components.y = bounds.y + origin_y;
-            return Mat2D::compose(components);
+            let mut world = if mat2d_linear_is_identity(component.transform.local_transform) {
+                Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y])
+            } else {
+                let mut components = component.transform.local_transform.decompose();
+                components.x = bounds.x + origin_x;
+                components.y = bounds.y + origin_y;
+                Mat2D::compose(components)
+            };
+            if let Some(parent_local) = instance.component_parent_local(local_id)
+                && let Some(parent_bounds) = layout_bounds.get(&parent_local).copied()
+            {
+                // The render cache must start from the same retained parent
+                // frame as `NestedArtboardLayout::update`; the helper below
+                // then substitutes the mounted Artboard's retained x/y.
+                let parent_world = self.component_world_transform_with_bounds(
+                    instance,
+                    graph,
+                    parent_local,
+                    Some(layout_bounds),
+                );
+                world.0[4] += parent_world.0[4] - parent_bounds.x;
+                world.0[5] += parent_world.0[5] - parent_bounds.y;
+            }
+            return world;
         }
         let Some(parent_local) = instance.component_parent_local(local_id) else {
             return component.transform.world_transform;
@@ -30977,6 +31034,104 @@ mod tests {
     }
 
     #[test]
+    fn nested_layout_host_follows_its_interpolating_parent_frame() {
+        let bytes = synthetic_nested_layout_under_layout_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic nested layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic nested layout graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has a parent artboard");
+        let instance = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+            .expect("instance builds");
+        let container_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "LayoutComponent")
+            .expect("fixture has a container layout")
+            .local_id;
+        let parent_local = instance
+            .components()
+            .iter()
+            .filter(|component| component.type_name == "LayoutComponent")
+            .nth(1)
+            .expect("fixture has an animated parent layout")
+            .local_id;
+        let host_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "NestedArtboardLayout")
+            .expect("fixture has a nested layout host")
+            .local_id;
+        let parent = instance
+            .component(parent_local)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("parent has retained layout state");
+        parent.set_animation_style(2, 1, 1.0, None);
+        parent.retain_bounds(100.0, 200.0, 100.0, 100.0);
+        parent.retain_bounds(10.0, 20.0, 100.0, 100.0);
+        let solved_bounds = BTreeMap::from([
+            (
+                container_local,
+                RuntimeLayoutBounds {
+                    x: 50.0,
+                    y: 60.0,
+                    width: 200.0,
+                    height: 200.0,
+                },
+            ),
+            (
+                parent_local,
+                RuntimeLayoutBounds {
+                    x: 60.0,
+                    y: 80.0,
+                    width: 100.0,
+                    height: 100.0,
+                },
+            ),
+            (
+                host_local,
+                RuntimeLayoutBounds {
+                    x: 60.0,
+                    y: 80.0,
+                    width: 100.0,
+                    height: 100.0,
+                },
+            ),
+        ]);
+
+        assert!(parent.is_interpolating());
+        assert_mat2d_near(
+            instance
+                .runtime_component_world_transform_with_bounds(
+                    host_local,
+                    graph,
+                    Some(&solved_bounds),
+                )
+                .0,
+            [1.0, 0.0, 0.0, 1.0, 150.0, 260.0],
+        );
+
+        let nested = instance
+            .nested_artboards
+            .get(&host_local)
+            .expect("host owns a mounted child");
+        let mut path_cache = RuntimeArtboardPathState::default();
+        assert_mat2d_near(
+            runtime_nested_artboard_layout_world_transform(
+                &instance,
+                graph,
+                host_local,
+                nested.child.as_ref(),
+                Some(&solved_bounds),
+                &mut path_cache,
+            )
+            .0,
+            [1.0, 0.0, 0.0, 1.0, 150.0, 260.0],
+        );
+    }
+
+    #[test]
     fn settled_layout_world_transform_is_identical_with_and_without_animation_style() {
         let bytes = synthetic_layout_geometry_riv();
         let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
@@ -34346,6 +34501,43 @@ mod tests {
             push_uint(bytes, "Node", "parentId", 7);
             push_f32(bytes, "ParametricPath", "width", 20.0);
             push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    fn synthetic_nested_layout_under_layout_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9_651);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 300.0);
+            push_f32(bytes, "LayoutComponent", "height", 300.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 200.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 4);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "NestedArtboardLayout", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_uint(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
         });
         bytes
     }

@@ -38760,10 +38760,10 @@
           "definition_sha256": "78d07d5be623a82419fa5f31bf2080f1b6a60c39edf96a7e1357618ddd714d1e"
         },
         {
-          "id": "include/rive/animation/blend_state_instance.hpp::7ce30e05063d3e2e:1",
+          "id": "include/rive/animation/blend_state_instance.hpp::4eae0b8b49a4c9e7:1",
           "kind": "function",
-          "symbol": "BlendStateAnimationInstance::m_AnimationInstance",
-          "signature": "BlendStateAnimationInstance ( const T * blendAnimation , ArtboardInstance * instance ) : m_BlendAnimation ( blendAnimation ) , m_AnimationInstance ( blendAnimation -> animation ( ) , instance )",
+          "symbol": "BlendStateAnimationInstance::BlendStateAnimationInstance",
+          "signature": "BlendStateAnimationInstance ( const T * blendAnimation , ArtboardInstance * instance )",
           "line": 35,
           "definition_sha256": "88704b5b13bc39ab650ce3dac9d75334c1acff0443b4e1f28c256ca02da8c734"
         },
@@ -38776,10 +38776,10 @@
           "definition_sha256": "c7988d16e04443c7504c3449ed031659fbc1c5927410f4e502d579108208e03c"
         },
         {
-          "id": "include/rive/animation/blend_state_instance.hpp::1862314b169f70c7:1",
+          "id": "include/rive/animation/blend_state_instance.hpp::e433217934a61a4f:1",
           "kind": "function",
-          "symbol": "BlendStateInstance::StateInstance",
-          "signature": "public : BlendStateInstance ( const K * blendState , ArtboardInstance * instance ) : StateInstance ( blendState )",
+          "symbol": "BlendStateInstance::BlendStateInstance",
+          "signature": "public : BlendStateInstance ( const K * blendState , ArtboardInstance * instance )",
           "line": 50,
           "definition_sha256": "afeebb3f1e311da750023d000dcda64cf06a75880c06d92f69213d00eb90fbba"
         },
@@ -40004,10 +40004,10 @@
           "definition_sha256": "b418ff1aad2a76f47333feec9ffa8d4cdf7c3f6c651c7745f7757790ca03aa78"
         },
         {
-          "id": "include/rive/animation/listener_invocation.hpp::da141495e53bf881:1",
+          "id": "include/rive/animation/listener_invocation.hpp::06d8ac6a959e54a6:1",
           "kind": "function",
-          "symbol": "ListenerInvocation::m_storage",
-          "signature": "private : explicit ListenerInvocation ( ListenerInvocationStorage && storage ) : m_storage ( std :: move ( storage ) )",
+          "symbol": "ListenerInvocation::ListenerInvocation",
+          "signature": "private : explicit ListenerInvocation ( ListenerInvocationStorage && storage )",
           "line": 170,
           "definition_sha256": "257092d96b6dbf06206d1a980b3d44395cdd20532a71ddf6b82f0ca4761480c0"
         },
@@ -41140,10 +41140,10 @@
           "definition_sha256": "c8db6e1dbae0e8045e3f425fb85ce2e3908d331a093234faa0fa288986cee446"
         },
         {
-          "id": "include/rive/animation/state_machine_instance.hpp::bcd5a401b4ae185d:1",
+          "id": "include/rive/animation/state_machine_instance.hpp::2821bce3faa79cef:1",
           "kind": "function",
-          "symbol": "HitComponent::m_stateMachineInstance",
-          "signature": "HitComponent ( Component * component , StateMachineInstance * stateMachineInstance ) : m_component ( component ) , m_stateMachineInstance ( stateMachineInstance )",
+          "symbol": "HitComponent::HitComponent",
+          "signature": "HitComponent ( Component * component , StateMachineInstance * stateMachineInstance )",
           "line": 483,
           "definition_sha256": "1f3794185780adb0ca49b1dc2674f9a6a9f949fc3f590422c1dd3b2ecc76ed86"
         },
@@ -42312,10 +42312,10 @@
           "definition_sha256": "49c1adbe1ef57b39c75906af9458ef4d54b91774225f73a760e471866d59305a"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::fe72c413fff8b7ef:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::35c2b7ff01da842d:1",
           "kind": "function",
-          "symbol": "ConditionComparandNumberBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandNumberBindable ( BindablePropertyNumber * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandNumberBindable::ConditionComparandNumberBindable",
+          "signature": "public : ConditionComparandNumberBindable ( BindablePropertyNumber * property )",
           "line": 157,
           "definition_sha256": "d4169d2cffd3e39d3296d9d26eac2a4150e2f4668865ce2f4e288f6547957a55"
         },
@@ -42328,10 +42328,10 @@
           "definition_sha256": "18c38eef3da5f048c9c6e926ff61a219c039dfc04cdf8a4b7b619c73a3c6001f"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::2fe1a39a20409d91:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::290ce4dc2bcd0018:1",
           "kind": "function",
-          "symbol": "ConditionComparandArtboardProperty::m_transitionPropertyArtboardComparator",
-          "signature": "public : ConditionComparandArtboardProperty ( TransitionPropertyArtboardComparator * property ) : m_transitionPropertyArtboardComparator ( property )",
+          "symbol": "ConditionComparandArtboardProperty::ConditionComparandArtboardProperty",
+          "signature": "public : ConditionComparandArtboardProperty ( TransitionPropertyArtboardComparator * property )",
           "line": 178,
           "definition_sha256": "912f87245fc49efa213d9829df5cde91614a039d25f0b3206600896d1a564f58"
         },
@@ -42344,10 +42344,10 @@
           "definition_sha256": "05c2e4e892ac2b0e68b8a68474f4ed3e2320b5bd5e4451c6f9e46157472ed75c"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::b06c82cf16c1d21d:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::a7d1114764d23293:1",
           "kind": "function",
-          "symbol": "ConditionComparandNumberBindableInteger::m_bindableProperty",
-          "signature": "public : ConditionComparandNumberBindableInteger ( BindablePropertyInteger * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandNumberBindableInteger::ConditionComparandNumberBindableInteger",
+          "signature": "public : ConditionComparandNumberBindableInteger ( BindablePropertyInteger * property )",
           "line": 217,
           "definition_sha256": "d0be710284ac6b353bad62417b53f90919ec8f2c8fe6314561790a533e98a973"
         },
@@ -42360,10 +42360,10 @@
           "definition_sha256": "88bdc5f4a8d91f783b9467a7275084896b6fc053843419829e5ae905ed1416c0"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::81eeac81352c6708:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::2de2405514b63146:1",
           "kind": "function",
-          "symbol": "ConditionComparandNumberValue::m_value",
-          "signature": "public : ConditionComparandNumberValue ( TransitionValueNumberComparator * value ) : m_value ( value )",
+          "symbol": "ConditionComparandNumberValue::ConditionComparandNumberValue",
+          "signature": "public : ConditionComparandNumberValue ( TransitionValueNumberComparator * value )",
           "line": 239,
           "definition_sha256": "8128ff31aae2a237d896ed837e60e7e10b4420e50411ff3a0889d044293359ad"
         },
@@ -42384,10 +42384,10 @@
           "definition_sha256": "923dd5226c8593ea8b8912915e218ba671fd22796eca6f9fd9845e0f2f8a8542"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::382dafec5d053e94:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::00c82cb3bbde807e:1",
           "kind": "function",
-          "symbol": "ConditionComparandBooleanBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandBooleanBindable ( BindablePropertyBoolean * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandBooleanBindable::ConditionComparandBooleanBindable",
+          "signature": "public : ConditionComparandBooleanBindable ( BindablePropertyBoolean * property )",
           "line": 260,
           "definition_sha256": "213af5d87f6ee18f81e05649d381b5dfff1a1aad7f801d4b0e6b49af9d04a6c2"
         },
@@ -42400,10 +42400,10 @@
           "definition_sha256": "47f0052ac23042e453efbf4cf484ea8fdded86a82655bdfd6ffc52c378ed7a6f"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::4c14b5bdac71ab63:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::e93e577956e37ed9:1",
           "kind": "function",
-          "symbol": "ConditionComparandBooleanValue::m_value",
-          "signature": "public : ConditionComparandBooleanValue ( TransitionValueBooleanComparator * value ) : m_value ( value )",
+          "symbol": "ConditionComparandBooleanValue::ConditionComparandBooleanValue",
+          "signature": "public : ConditionComparandBooleanValue ( TransitionValueBooleanComparator * value )",
           "line": 281,
           "definition_sha256": "1ce0e5372d500cff473b7819e27f29686e43b04185891a90d95ee60a310bae4c"
         },
@@ -42424,10 +42424,10 @@
           "definition_sha256": "f65611aa82c910d7612c2dd99d6a2727b8a527d459a8a0bba6d5c0a9da813c4b"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::bcf8e4d886e5bdaf:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::90e00e55f83b9847:1",
           "kind": "function",
-          "symbol": "ConditionComparandStringBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandStringBindable ( BindablePropertyString * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandStringBindable::ConditionComparandStringBindable",
+          "signature": "public : ConditionComparandStringBindable ( BindablePropertyString * property )",
           "line": 303,
           "definition_sha256": "73146541fcded83796e0d706dfdb41462c8a5759e19d86c280256b13ca4155cf"
         },
@@ -42440,10 +42440,10 @@
           "definition_sha256": "9baf28990d556f73aba715b47c3e1d446ce732bbb4c2137e5f2af2eb99cede42"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::7e8d367d292f2581:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::c9ae90d15e18374d:1",
           "kind": "function",
-          "symbol": "ConditionComparandStringValue::m_value",
-          "signature": "public : ConditionComparandStringValue ( TransitionValueStringComparator * value ) : m_value ( value )",
+          "symbol": "ConditionComparandStringValue::ConditionComparandStringValue",
+          "signature": "public : ConditionComparandStringValue ( TransitionValueStringComparator * value )",
           "line": 324,
           "definition_sha256": "c2b156266b2d7adebc181648c8128504bd78e555cbbe67c3435e2676af840ece"
         },
@@ -42464,10 +42464,10 @@
           "definition_sha256": "07164c42fdfc41d0d5e1399328c60ad506ea8bf1f8a3ee2395341fc6af53eaa4"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::42b73ce382db04c1:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::41dfe72078665612:1",
           "kind": "function",
-          "symbol": "ConditionComparandColorBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandColorBindable ( BindablePropertyColor * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandColorBindable::ConditionComparandColorBindable",
+          "signature": "public : ConditionComparandColorBindable ( BindablePropertyColor * property )",
           "line": 345,
           "definition_sha256": "24c6e26eb1be7334fe0cc7dcab2341e2a2cfe9e7e9a1ee6475975e0a72acf4e7"
         },
@@ -42480,10 +42480,10 @@
           "definition_sha256": "93293f775f02a04b66998565802324183b9025b5fc00999b158fd57c0c091894"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::57cb67d4ca64a727:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::837fb66c9a91d73e:1",
           "kind": "function",
-          "symbol": "ConditionComparandColorValue::m_value",
-          "signature": "public : ConditionComparandColorValue ( TransitionValueColorComparator * value ) : m_value ( value )",
+          "symbol": "ConditionComparandColorValue::ConditionComparandColorValue",
+          "signature": "public : ConditionComparandColorValue ( TransitionValueColorComparator * value )",
           "line": 366,
           "definition_sha256": "571ca665c841772f5448c28f3c4769b9503fcafa304bc60e0ebd922af0499ef7"
         },
@@ -42504,10 +42504,10 @@
           "definition_sha256": "84eb3e229f3a97153a916364ff3ff6b449d1c98cf8d43f3116ca7ede94165907"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::4cfe6675a5f2f1cc:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::69c5e030539e9902:1",
           "kind": "function",
-          "symbol": "ConditionComparandEnumBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandEnumBindable ( BindablePropertyEnum * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandEnumBindable::ConditionComparandEnumBindable",
+          "signature": "public : ConditionComparandEnumBindable ( BindablePropertyEnum * property )",
           "line": 388,
           "definition_sha256": "027512e3a4b164cb5d3cdc73c2159e3ce003dd7b95a460fb34fb0da6022f6e90"
         },
@@ -42520,10 +42520,10 @@
           "definition_sha256": "a00ff5c4aecc45e03abb4e9556718c6d79a2a371cac5dc01f23c4e215f57acdf"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::0a913e0af8a86fc7:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::95b913d94063385b:1",
           "kind": "function",
-          "symbol": "ConditionComparandEnumValue::m_value",
-          "signature": "public : ConditionComparandEnumValue ( TransitionValueEnumComparator * value ) : m_value ( value )",
+          "symbol": "ConditionComparandEnumValue::ConditionComparandEnumValue",
+          "signature": "public : ConditionComparandEnumValue ( TransitionValueEnumComparator * value )",
           "line": 409,
           "definition_sha256": "42679f68b7c868f32aa9f035bf2c64a6d6e05f57839c500a65c8d1e5b184fc1f"
         },
@@ -42536,10 +42536,10 @@
           "definition_sha256": "ff09c51d1af9b6e6d7805f5a5349b7c91735bcdd7cefca9a8708ed1d1045dbcd"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::a4383f141cf98fc0:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::b322ae471eb9713f:1",
           "kind": "function",
-          "symbol": "ConditionComparandTriggerBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandTriggerBindable ( BindablePropertyTrigger * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandTriggerBindable::ConditionComparandTriggerBindable",
+          "signature": "public : ConditionComparandTriggerBindable ( BindablePropertyTrigger * property )",
           "line": 423,
           "definition_sha256": "e6e270fe7ded1d9844f38f98a14779a549ed40b2583833b7f4c6c5b6701fbd29"
         },
@@ -42552,10 +42552,10 @@
           "definition_sha256": "b23c7f49d2404bdf91cbf151d84a0291a5a1fe76fd09e2e738ef82a7b008c57b"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::a0d78c7b17c782b5:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::76d00d89f42075cf:1",
           "kind": "function",
-          "symbol": "ConditionComparandTriggerValue::m_value",
-          "signature": "public : ConditionComparandTriggerValue ( TransitionValueTriggerComparator * value ) : m_value ( value )",
+          "symbol": "ConditionComparandTriggerValue::ConditionComparandTriggerValue",
+          "signature": "public : ConditionComparandTriggerValue ( TransitionValueTriggerComparator * value )",
           "line": 444,
           "definition_sha256": "13b6a52fd03bd9e3c0bef185874b5869141e424374ae60d47fc3a6af88958cfd"
         },
@@ -42568,10 +42568,10 @@
           "definition_sha256": "ff09c51d1af9b6e6d7805f5a5349b7c91735bcdd7cefca9a8708ed1d1045dbcd"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::0b294bffaca924bc:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::858d538467e084c4:1",
           "kind": "function",
-          "symbol": "ConditionComparandIntegerBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandIntegerBindable ( BindablePropertyInteger * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandIntegerBindable::ConditionComparandIntegerBindable",
+          "signature": "public : ConditionComparandIntegerBindable ( BindablePropertyInteger * property )",
           "line": 458,
           "definition_sha256": "26f801edc067d01b81f9ad4af53919819f600f299c3ed9d3fd431f88d0db67d5"
         },
@@ -42584,10 +42584,10 @@
           "definition_sha256": "4adf302bc66bdf103383009d784ac69396cef8b4ec7bb35fa63ea34206f91db3"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::8ff0f68c0e4bd5b1:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::53e8dd2dafd6d88d:1",
           "kind": "function",
-          "symbol": "ConditionComparandAssetBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandAssetBindable ( BindablePropertyAsset * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandAssetBindable::ConditionComparandAssetBindable",
+          "signature": "public : ConditionComparandAssetBindable ( BindablePropertyAsset * property )",
           "line": 479,
           "definition_sha256": "3b3a58c3dcac647231f1bbce8a07a5bf6d162801817fe862364d115b3e1d7a2a"
         },
@@ -42608,10 +42608,10 @@
           "definition_sha256": "4e6c2c2162032a7c39325ff8165ce3b91215390fca2f0a1cd869aa303379e429"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::c58cbcb0721ea6c1:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::111317a9afd9069d:1",
           "kind": "function",
-          "symbol": "ConditionComparandViewModelBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandViewModelBindable ( BindablePropertyViewModel * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandViewModelBindable::ConditionComparandViewModelBindable",
+          "signature": "public : ConditionComparandViewModelBindable ( BindablePropertyViewModel * property )",
           "line": 507,
           "definition_sha256": "236af27780bb161910c98215a477292cb148f8cc0482279d624d8eb06263d10c"
         },
@@ -42624,10 +42624,10 @@
           "definition_sha256": "bde6c267200619e930ae617559b5f077e216c04b07be2ecb8261b5e7d2c0638d"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::bb3cc26602b9a31d:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::b030800610331e39:1",
           "kind": "function",
-          "symbol": "ConditionComparandAssetValue::m_value",
-          "signature": "public : ConditionComparandAssetValue ( TransitionValueAssetComparator * value ) : m_value ( value )",
+          "symbol": "ConditionComparandAssetValue::ConditionComparandAssetValue",
+          "signature": "public : ConditionComparandAssetValue ( TransitionValueAssetComparator * value )",
           "line": 572,
           "definition_sha256": "bc2e70823a1c48385a9719de0e4e50c9c2556c7fdb9be86f9e9469ffc1a5d639"
         },
@@ -42640,10 +42640,10 @@
           "definition_sha256": "ff09c51d1af9b6e6d7805f5a5349b7c91735bcdd7cefca9a8708ed1d1045dbcd"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::3163765d4ab2c6d0:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::b785e70bd0f708ef:1",
           "kind": "function",
-          "symbol": "ConditionComparandArtboardBindable::m_bindableProperty",
-          "signature": "public : ConditionComparandArtboardBindable ( BindablePropertyArtboard * property ) : m_bindableProperty ( property )",
+          "symbol": "ConditionComparandArtboardBindable::ConditionComparandArtboardBindable",
+          "signature": "public : ConditionComparandArtboardBindable ( BindablePropertyArtboard * property )",
           "line": 586,
           "definition_sha256": "3bc071375c56577a25d52d01cedc229061f6c9d1ddc4dabae2dfcdea5b676ed2"
         },
@@ -42656,10 +42656,10 @@
           "definition_sha256": "19e4bf848cc9ecadc678708f09d9f4bc5600db38a8d8f6e966bd8286cd53ac8a"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::1207c2f027eac6ef:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::952073a89bd2cb0f:1",
           "kind": "function",
-          "symbol": "ConditionComparandArtboardValue::m_value",
-          "signature": "public : ConditionComparandArtboardValue ( TransitionValueArtboardComparator * value ) : m_value ( value )",
+          "symbol": "ConditionComparandArtboardValue::ConditionComparandArtboardValue",
+          "signature": "public : ConditionComparandArtboardValue ( TransitionValueArtboardComparator * value )",
           "line": 607,
           "definition_sha256": "bd5ea51d4753224d6129eaabd6a1b9b573e8e2f2891f7a4a5ba72a2c21036002"
         },
@@ -42672,10 +42672,10 @@
           "definition_sha256": "ff09c51d1af9b6e6d7805f5a5349b7c91735bcdd7cefca9a8708ed1d1045dbcd"
         },
         {
-          "id": "include/rive/animation/transition_viewmodel_condition.hpp::c15bc70d6728026c:1",
+          "id": "include/rive/animation/transition_viewmodel_condition.hpp::054e301e63bf4643:1",
           "kind": "function",
-          "symbol": "ConditionComparison::m_operation",
-          "signature": "public : ConditionComparison ( ConditionOperation * op ) : m_operation ( op )",
+          "symbol": "ConditionComparison::ConditionComparison",
+          "signature": "public : ConditionComparison ( ConditionOperation * op )",
           "line": 702,
           "definition_sha256": "d4817df70ac830d5b03fbc5f4a04b3f2c120e0bf81d9892e01c6d16780497888"
         },
@@ -42833,10 +42833,10 @@
           "definition_sha256": "365e81a505530540a7866162ae8bd7cd181d47ffb93af54568df296d5388e79b"
         },
         {
-          "id": "include/rive/artboard.hpp::8e6d8efc9abcb022:1",
+          "id": "include/rive/artboard.hpp::ac2ca830051cc492:1",
           "kind": "function",
-          "symbol": "Artboard::m_Factory",
-          "signature": "private : public : Artboard ( Factory * factory ) : m_Factory ( factory )",
+          "symbol": "Artboard::Artboard",
+          "signature": "private : public : Artboard ( Factory * factory )",
           "line": 248,
           "definition_sha256": "f5dfe4ad5b67ec6d22aa908353cb1de0f4c87c36f23c8b3348582c8c288f046b"
         },
@@ -44882,10 +44882,10 @@
           "definition_sha256": "4b0785a3d14f4ff71258201953ddf70f8f0fb0fc59e05f9748ba7b80e725ae88"
         },
         {
-          "id": "include/rive/command_queue.hpp::407fdd1407ecfa3a:1",
+          "id": "include/rive/command_queue.hpp::89ca519d3b962b1f:1",
           "kind": "function",
-          "symbol": "CommandQueue::ListenerBase::m_handle",
-          "signature": "ListenerBase ( ListenerBase && other ) : m_owningQueue ( std :: move ( other . m_owningQueue ) ) , m_handle ( std :: move ( other . m_handle ) )",
+          "symbol": "CommandQueue::ListenerBase::ListenerBase",
+          "signature": "ListenerBase ( ListenerBase && other )",
           "line": 88,
           "definition_sha256": "a09ca706ac3b2e0df21c12c8b2e5e62408aeb7827096189bd0cd1c5513245a9f"
         },
@@ -44898,10 +44898,10 @@
           "definition_sha256": "c8be5d193edf82a31c00fa583b5547f894a5b34324a6818c0841a200fc46e9c8"
         },
         {
-          "id": "include/rive/command_queue.hpp::2620c331d82daad6:1",
+          "id": "include/rive/command_queue.hpp::277a5dbf7bae969f:1",
           "kind": "function",
-          "symbol": "CommandQueue::ListenerBase::m_handle",
-          "signature": "ListenerBase ( ) : m_handle ( RIVE_NULL_HANDLE )",
+          "symbol": "CommandQueue::ListenerBase::ListenerBase",
+          "signature": "ListenerBase ( )",
           "line": 109,
           "definition_sha256": "618bd1542cc32573828094114638cdd9a622c6b98e389df624bb1346afd9d0f9"
         },
@@ -45531,10 +45531,10 @@
           "definition_sha256": "85795fe19e0562be828362f2bbd35c89a540f46039448dc342ec07d193ca3d2b"
         },
         {
-          "id": "include/rive/command_server.hpp::a96c91d9f5a2d4e3:1",
+          "id": "include/rive/command_server.hpp::068ba3e3604aefb3:1",
           "kind": "function",
-          "symbol": "CommandServer::ErrorReporter::m_lock",
-          "signature": "public : ErrorReporter ( CommandServer * server , HandleType handle , uint64_t requestId , CommandQueue :: Message message ) : m_server ( server ) , m_lock ( m_server -> m_commandQueue -> m_messageMutex )",
+          "symbol": "CommandServer::ErrorReporter::ErrorReporter",
+          "signature": "public : ErrorReporter ( CommandServer * server , HandleType handle , uint64_t requestId , CommandQueue :: Message message )",
           "line": 103,
           "definition_sha256": "586a44eb0fa7d4a765b0717fc1ff660be0ee93b3d3610e0e45033dc9c753c322"
         },
@@ -45579,10 +45579,10 @@
           "definition_sha256": "a51848f0ea0a8964d2ac427b73529d64146786326613a43e72a23a20c71a80f8"
         },
         {
-          "id": "include/rive/command_server.hpp::a004ad21b46ecd98:1",
+          "id": "include/rive/command_server.hpp::7477bc28c177afad:1",
           "kind": "function",
-          "symbol": "CommandServer::SynchronizedStateMachine::instance",
-          "signature": "SynchronizedStateMachine ( std :: unique_ptr < StateMachineInstance > instance ) : instance ( std :: move ( instance ) )",
+          "symbol": "CommandServer::SynchronizedStateMachine::SynchronizedStateMachine",
+          "signature": "SynchronizedStateMachine ( std :: unique_ptr < StateMachineInstance > instance )",
           "line": 197,
           "definition_sha256": "d93cc4ba4594cef8cea12dcceffac76c488682a8b20c1732b7b4a05c2e6f9350"
         }
@@ -45858,10 +45858,10 @@
           "definition_sha256": "a2ee899edf42a7927d02fea37bc2cf25dca7eb70a5f5fafeb3c43e3198e8e213"
         },
         {
-          "id": "include/rive/constraints/draggable_constraint.hpp::9579a5dbc726785d:1",
+          "id": "include/rive/constraints/draggable_constraint.hpp::35b4670e57c27261:1",
           "kind": "function",
-          "symbol": "DraggableConstraintListenerGroup::m_draggable",
-          "signature": "public : DraggableConstraintListenerGroup ( const StateMachineListener * listener , DraggableConstraint * constraint , DraggableProxy * draggable ) : ListenerGroup ( listener ) , m_constraint ( constraint ) , m_draggable ( draggable )",
+          "symbol": "DraggableConstraintListenerGroup::DraggableConstraintListenerGroup",
+          "signature": "public : DraggableConstraintListenerGroup ( const StateMachineListener * listener , DraggableConstraint * constraint , DraggableProxy * draggable )",
           "line": 67,
           "definition_sha256": "3376efafb393f44270ea2e8d7a3712e4706c7cad542667ac474d616b41a5691d"
         },
@@ -46261,10 +46261,10 @@
           "definition_sha256": "dd60d5545010d6d67aad478844b6d8d77d40f9ffefb241b89c48ecf8c408cbac"
         },
         {
-          "id": "include/rive/constraints/scrolling/scroll_bar_constraint_proxy.hpp::2e844e8694298929:1",
+          "id": "include/rive/constraints/scrolling/scroll_bar_constraint_proxy.hpp::b2e35d7614a8fa62:1",
           "kind": "function",
-          "symbol": "ThumbDraggableProxy::m_constraint",
-          "signature": "public : ThumbDraggableProxy ( ScrollBarConstraint * constraint , Drawable * hittable ) : m_constraint ( constraint )",
+          "symbol": "ThumbDraggableProxy::ThumbDraggableProxy",
+          "signature": "public : ThumbDraggableProxy ( ScrollBarConstraint * constraint , Drawable * hittable )",
           "line": 16,
           "definition_sha256": "6e699f91b90cd4138faebf4fd54b48ce818ebd77a221106e611dec22e636f669"
         },
@@ -46285,10 +46285,10 @@
           "definition_sha256": "c81b9ff9af1a1451bb98360ca15d6f8dbe28758562b2f39ab98349b553984ed9"
         },
         {
-          "id": "include/rive/constraints/scrolling/scroll_bar_constraint_proxy.hpp::52124ec27689869b:1",
+          "id": "include/rive/constraints/scrolling/scroll_bar_constraint_proxy.hpp::b4fb668478006b2b:1",
           "kind": "function",
-          "symbol": "TrackDraggableProxy::m_constraint",
-          "signature": "public : TrackDraggableProxy ( ScrollBarConstraint * constraint , Drawable * hittable ) : m_constraint ( constraint )",
+          "symbol": "TrackDraggableProxy::TrackDraggableProxy",
+          "signature": "public : TrackDraggableProxy ( ScrollBarConstraint * constraint , Drawable * hittable )",
           "line": 34,
           "definition_sha256": "9cd703154a83423bad8c10873f5569781caff1be07719046ed7546f7676c44eb"
         },
@@ -46527,10 +46527,10 @@
           "definition_sha256": "98da2c8b2b4a16a6bac5df90cc13cf4876a97bf8e33b2b184f9f8e771969f572"
         },
         {
-          "id": "include/rive/constraints/scrolling/scroll_constraint_proxy.hpp::5b392ab48fc158cc:1",
+          "id": "include/rive/constraints/scrolling/scroll_constraint_proxy.hpp::cffe88014dfd9cf3:1",
           "kind": "function",
-          "symbol": "ViewportDraggableProxy::m_constraint",
-          "signature": "public : ViewportDraggableProxy ( ScrollConstraint * constraint , Drawable * hittable ) : m_constraint ( constraint )",
+          "symbol": "ViewportDraggableProxy::ViewportDraggableProxy",
+          "signature": "public : ViewportDraggableProxy ( ScrollConstraint * constraint , Drawable * hittable )",
           "line": 17,
           "definition_sha256": "76cff0b1291fe02f4ea59e37cdc09ebf1030a5b990eb68fde82d10d82ef51bba"
         },
@@ -46913,10 +46913,10 @@
           "definition_sha256": "3f1a065a3c45b33ad17187023b943e5011ec2c80881941696e22a60d3fd25817"
         },
         {
-          "id": "include/rive/core.hpp::abbec93c71a3210b:1",
+          "id": "include/rive/core.hpp::2fef65542e1978da:1",
           "kind": "function",
-          "symbol": "Core::m_firstObserver",
-          "signature": "Core ( const Core & ) : m_firstObserver ( nullptr )",
+          "symbol": "Core::Core",
+          "signature": "Core ( const Core & )",
           "line": 30,
           "definition_sha256": "dd87eb9f7a72d6209fe22a040db1a51929fc2a21528b0d35d17f1d378251aa87"
         },
@@ -46929,10 +46929,10 @@
           "definition_sha256": "067965d0f179b76ee37569bd1c0b67870f1a393390b5c2b606d64d73f3057673"
         },
         {
-          "id": "include/rive/core.hpp::573c18890a40b477:1",
+          "id": "include/rive/core.hpp::75d95c514745bfa6:1",
           "kind": "function",
-          "symbol": "Core::m_firstObserver",
-          "signature": "Core ( Core && ) noexcept : m_firstObserver ( nullptr )",
+          "symbol": "Core::Core",
+          "signature": "Core ( Core && )",
           "line": 42,
           "definition_sha256": "35a9a197569b95429df3fa100690224950ffbbdeaebf870fe652877c5acc60b9"
         },
@@ -47200,10 +47200,10 @@
           "definition_sha256": "4045bc13191912bfdc9c16f3117b786c1fc30ae52a66d2348417881992d9592d"
         },
         {
-          "id": "include/rive/core/field_types/core_callback_type.hpp::81dc5c60025d3393:1",
+          "id": "include/rive/core/field_types/core_callback_type.hpp::aae6acb14c069b0e:1",
           "kind": "function",
-          "symbol": "CallbackData::m_delaySeconds",
-          "signature": "CallbackData ( CallbackContext * context , float delaySeconds ) : m_context ( context ) , m_delaySeconds ( delaySeconds )",
+          "symbol": "CallbackData::CallbackData",
+          "signature": "CallbackData ( CallbackContext * context , float delaySeconds )",
           "line": 20,
           "definition_sha256": "aab15ebd61f159130d2ad7515e049871c75b9161d9937d55ff751b09071c6e90"
         }
@@ -47513,10 +47513,10 @@
           "definition_sha256": "586165be519f1a46118f630001d7e3ffcddcbfae9e2f3c91f6f6d3f0d7d0b19c"
         },
         {
-          "id": "include/rive/core/vector_binary_writer.hpp::7c154522e8227d2b:1",
+          "id": "include/rive/core/vector_binary_writer.hpp::588d822d2102b6c1:1",
           "kind": "function",
-          "symbol": "VectorBinaryWriter::m_Start",
-          "signature": "public : VectorBinaryWriter ( std :: vector < uint8_t > * buffer ) : BinaryWriter ( this ) , m_WriteBuffer ( buffer ) , m_Start ( m_WriteBuffer -> size ( ) )",
+          "symbol": "VectorBinaryWriter::VectorBinaryWriter",
+          "signature": "public : VectorBinaryWriter ( std :: vector < uint8_t > * buffer )",
           "line": 18,
           "definition_sha256": "f806a0c7e53c9f459d3a837d9a5a896da80127af258bb0d1813f1f5dd1a87db9"
         },
@@ -47838,10 +47838,10 @@
           "definition_sha256": "114cda793077b80ca3cd9f34f41466c420b5b51df34aac25e27de109c84b1df7"
         },
         {
-          "id": "include/rive/data_bind/bindable_property_asset.hpp::fa51b74bc6f4471c:1",
+          "id": "include/rive/data_bind/bindable_property_asset.hpp::74d2b0697d139518:1",
           "kind": "function",
-          "symbol": "BindablePropertyAsset::m_fontAsset",
-          "signature": "public : BindablePropertyAsset ( ) : m_fileAsset ( rcp < ImageAsset > ( new ImageAsset ( ) ) ) , m_fontAsset ( rcp < FontAsset > ( new FontAsset ( ) ) )",
+          "symbol": "BindablePropertyAsset::BindablePropertyAsset",
+          "signature": "public : BindablePropertyAsset ( )",
           "line": 17,
           "definition_sha256": "69e4aac8f33ac20106d519fb96d92840933e78a280ee9e69184a1f3fd0a753c4"
         },
@@ -49984,18 +49984,18 @@
           "definition_sha256": "dde12fad1085b20cd157caa86d07910657766ad2923b000c669712792e727169"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_artboard.hpp::9d0f13f2bb51ac87:1",
+          "id": "include/rive/data_bind/data_values/data_value_artboard.hpp::819159bd425e3be5:1",
           "kind": "function",
-          "symbol": "DataValueArtboard::DataValueInteger",
-          "signature": "public : DataValueArtboard ( uint32_t value ) : DataValueInteger ( value )",
+          "symbol": "DataValueArtboard::DataValueArtboard",
+          "signature": "public : DataValueArtboard ( uint32_t value )",
           "line": 11,
           "definition_sha256": "17554d8f541a5b3d5a859d60bd2e97a5d8466a06409602eb2e03ca8107dd8742"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_artboard.hpp::546d87154032928a:1",
+          "id": "include/rive/data_bind/data_values/data_value_artboard.hpp::877e04938f890fe7:1",
           "kind": "function",
-          "symbol": "DataValueArtboard::DataValueInteger",
-          "signature": "DataValueArtboard ( ) : DataValueInteger ( - 1 )",
+          "symbol": "DataValueArtboard::DataValueArtboard",
+          "signature": "DataValueArtboard ( )",
           "line": 13,
           "definition_sha256": "ec0461536e082e54cb596e3d9e1dd24b42d4f83beaeff5fc2f5914a4ba8e0897"
         },
@@ -50025,18 +50025,18 @@
           "definition_sha256": "5f1c424efa0846716185a3fc18ba8125514328144e2c9e02eb0c23e3de7ea76d"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_asset_blob.hpp::730b30b380af81e5:1",
+          "id": "include/rive/data_bind/data_values/data_value_asset_blob.hpp::1c84f2f144475810:1",
           "kind": "function",
-          "symbol": "DataValueAssetBlob::DataValueInteger",
-          "signature": "public : DataValueAssetBlob ( uint32_t value ) : DataValueInteger ( value )",
+          "symbol": "DataValueAssetBlob::DataValueAssetBlob",
+          "signature": "public : DataValueAssetBlob ( uint32_t value )",
           "line": 12,
           "definition_sha256": "8e140a2584cc0e4b29998ca8c59887b26eadc3d4fa66d52c511d3d7ada88a507"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_asset_blob.hpp::9d97aaa736845a58:1",
+          "id": "include/rive/data_bind/data_values/data_value_asset_blob.hpp::3f08dd49d1eb06c7:1",
           "kind": "function",
-          "symbol": "DataValueAssetBlob::DataValueInteger",
-          "signature": "DataValueAssetBlob ( ) : DataValueInteger ( - 1 )",
+          "symbol": "DataValueAssetBlob::DataValueAssetBlob",
+          "signature": "DataValueAssetBlob ( )",
           "line": 14,
           "definition_sha256": "1704116885ffa7086e7d8907d8931611a4e14eefe4fc4de044e922ea858f353f"
         },
@@ -50090,18 +50090,18 @@
           "definition_sha256": "2d6ff08197f5dc59be6b167d39d5a32a828ac4555add70d750b6d61cd58e4d4c"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_asset_font.hpp::12de5c2db621359e:1",
+          "id": "include/rive/data_bind/data_values/data_value_asset_font.hpp::8ebb16ec141d51cd:1",
           "kind": "function",
-          "symbol": "DataValueAssetFont::m_fileAsset",
-          "signature": "public : DataValueAssetFont ( uint32_t value ) : DataValueInteger ( value ) , m_fileAsset ( rcp < FontAsset > ( new FontAsset ( ) ) )",
+          "symbol": "DataValueAssetFont::DataValueAssetFont",
+          "signature": "public : DataValueAssetFont ( uint32_t value )",
           "line": 12,
           "definition_sha256": "2979fdaaf3115bc8a86697e7718f7491e1b6ab787d63d9c0e5ae124f67006930"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_asset_font.hpp::ddc17c86faa7bcb4:1",
+          "id": "include/rive/data_bind/data_values/data_value_asset_font.hpp::ea00a1418fd75a04:1",
           "kind": "function",
-          "symbol": "DataValueAssetFont::m_fileAsset",
-          "signature": "DataValueAssetFont ( ) : DataValueInteger ( - 1 ) , m_fileAsset ( rcp < FontAsset > ( new FontAsset ( ) ) )",
+          "symbol": "DataValueAssetFont::DataValueAssetFont",
+          "signature": "DataValueAssetFont ( )",
           "line": 16,
           "definition_sha256": "48cc9fbb26d9b4779ed1f0117a157b86598a364fc2afc96984c025000097c122"
         },
@@ -50155,18 +50155,18 @@
           "definition_sha256": "f983cef6b8a1d2f8be086928439e86871bc66a397a5cd87b7bf760eabe3b2a0b"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_asset_image.hpp::754606b8183f0b98:1",
+          "id": "include/rive/data_bind/data_values/data_value_asset_image.hpp::d707f22c6fd73b74:1",
           "kind": "function",
-          "symbol": "DataValueAssetImage::m_fileAsset",
-          "signature": "public : DataValueAssetImage ( uint32_t value ) : DataValueInteger ( value ) , m_fileAsset ( rcp < ImageAsset > ( new ImageAsset ( ) ) )",
+          "symbol": "DataValueAssetImage::DataValueAssetImage",
+          "signature": "public : DataValueAssetImage ( uint32_t value )",
           "line": 12,
           "definition_sha256": "9efc2aad38d831978582b19fff625bd55fb60bad6fbf1c4c7aa51b9993c1c70e"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_asset_image.hpp::e786a03026a82140:1",
+          "id": "include/rive/data_bind/data_values/data_value_asset_image.hpp::111197f499c4d206:1",
           "kind": "function",
-          "symbol": "DataValueAssetImage::m_fileAsset",
-          "signature": "DataValueAssetImage ( ) : DataValueInteger ( - 1 ) , m_fileAsset ( rcp < ImageAsset > ( new ImageAsset ( ) ) )",
+          "symbol": "DataValueAssetImage::DataValueAssetImage",
+          "signature": "DataValueAssetImage ( )",
           "line": 16,
           "definition_sha256": "a6ef4cdefe87939fe69f782897e6ec8876554ba87b0bd7598bd4e6aa9e0bfb76"
         },
@@ -50220,10 +50220,10 @@
           "definition_sha256": "f2248affeda279961e9fa472ad7090642ea76c4b2a57bcfb1608f3bcbcd84f0f"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_boolean.hpp::5e6e28e01a67a18d:1",
+          "id": "include/rive/data_bind/data_values/data_value_boolean.hpp::9ef508ac4ae84e5e:1",
           "kind": "function",
-          "symbol": "DataValueBoolean::m_value",
-          "signature": "public : DataValueBoolean ( bool value ) : m_value ( value )",
+          "symbol": "DataValueBoolean::DataValueBoolean",
+          "signature": "public : DataValueBoolean ( bool value )",
           "line": 13,
           "definition_sha256": "767366a4cb2267af6a59948ae0410c686001c6a0ae0b29bc16291e03709f8940"
         },
@@ -50277,10 +50277,10 @@
           "definition_sha256": "6b20f14d7f24c00b3aebf1f05e5fa926a46585fb5291b9b6cb266d4ae7c89590"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_color.hpp::209d3a32fad5fd35:1",
+          "id": "include/rive/data_bind/data_values/data_value_color.hpp::4969d6e04c286725:1",
           "kind": "function",
-          "symbol": "DataValueColor::m_value",
-          "signature": "public : DataValueColor ( int value ) : m_value ( value )",
+          "symbol": "DataValueColor::DataValueColor",
+          "signature": "public : DataValueColor ( int value )",
           "line": 14,
           "definition_sha256": "789f5af3bf4014e524c18734fb5007b5bf15230e2e1e9aefc56b1a06677aecb9"
         },
@@ -50422,10 +50422,10 @@
           "definition_sha256": "60850fb7421413c9aa818e53eaa2753567682bcfec528abafa36ac27979cf9b4"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_enum.hpp::2c41433c37ab73f4:1",
+          "id": "include/rive/data_bind/data_values/data_value_enum.hpp::daa789ebb3937c57:1",
           "kind": "function",
-          "symbol": "DataValueEnum::m_dataEnum",
-          "signature": "public : DataValueEnum ( uint32_t value , DataEnum * dataEnum ) : DataValueInteger ( value ) , m_dataEnum ( dataEnum )",
+          "symbol": "DataValueEnum::DataValueEnum",
+          "signature": "public : DataValueEnum ( uint32_t value , DataEnum * dataEnum )",
           "line": 15,
           "definition_sha256": "291b8c2f820679e2900918dc3ec933829c6a0390183f753c8abf6be4f04240ba"
         },
@@ -50479,10 +50479,10 @@
           "definition_sha256": "99fb1cca719aca6bd61ef8dfeac92bc402c3020ca899a565dc0a8aabea28d796"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_integer.hpp::25621b4a6f49a4ab:1",
+          "id": "include/rive/data_bind/data_values/data_value_integer.hpp::4e8569b71700b124:1",
           "kind": "function",
-          "symbol": "DataValueInteger::m_value",
-          "signature": "public : DataValueInteger ( uint32_t value ) : m_value ( value )",
+          "symbol": "DataValueInteger::DataValueInteger",
+          "signature": "public : DataValueInteger ( uint32_t value )",
           "line": 13,
           "definition_sha256": "707a31cfb9609af26958c91e926bbbc3bbd652f7403f4ffe86095eb4120f004d"
         },
@@ -50593,10 +50593,10 @@
           "definition_sha256": "08cd668e9c9ae4dbd64b01ac3f043a7fa03b765dd29b36ecc83da4dc6c541e46"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_number.hpp::9d81b6c41341cbf4:1",
+          "id": "include/rive/data_bind/data_values/data_value_number.hpp::c07ebbc5f8cdf8c0:1",
           "kind": "function",
-          "symbol": "DataValueNumber::m_value",
-          "signature": "public : DataValueNumber ( float value ) : m_value ( value )",
+          "symbol": "DataValueNumber::DataValueNumber",
+          "signature": "public : DataValueNumber ( float value )",
           "line": 13,
           "definition_sha256": "83054bc2a31bd3b7e2d873cf7c1d0626d9e31eeb619d99696c211aaf8362c41d"
         },
@@ -50674,10 +50674,10 @@
           "definition_sha256": "df1cfeadab2702351e5173c1cce6fba61c353c4e6f7096edf18e76f3ca5db1f5"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_string.hpp::3fb58afefc9aeaa2:1",
+          "id": "include/rive/data_bind/data_values/data_value_string.hpp::569e0b30d77b0899:1",
           "kind": "function",
-          "symbol": "DataValueString::m_value",
-          "signature": "public : DataValueString ( std :: string value ) : m_value ( value )",
+          "symbol": "DataValueString::DataValueString",
+          "signature": "public : DataValueString ( std :: string value )",
           "line": 13,
           "definition_sha256": "083d0b9b5e770ed2eeb9ffc014c5a78eb8203f1bfd11b20ce31d6109b5bb94da"
         },
@@ -50731,10 +50731,10 @@
           "definition_sha256": "bd5ffdb7d2c5cf2a94466346b7f24573b23bcd19abaadc73aab9eb1b096cf178"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_symbol_list_index.hpp::06659d9387d51919:1",
+          "id": "include/rive/data_bind/data_values/data_value_symbol_list_index.hpp::c2ee8855053b7610:1",
           "kind": "function",
-          "symbol": "DataValueSymbolListIndex::DataValueInteger",
-          "signature": "public : DataValueSymbolListIndex ( uint32_t value ) : DataValueInteger ( value )",
+          "symbol": "DataValueSymbolListIndex::DataValueSymbolListIndex",
+          "signature": "public : DataValueSymbolListIndex ( uint32_t value )",
           "line": 11,
           "definition_sha256": "c77fa76ef0cc526ca2e6619489502ce2da37c33ac04297fddc006ef29036441a"
         },
@@ -50772,10 +50772,10 @@
           "definition_sha256": "75910c16d1bf417cc3be31de480a799e73dc1cb357464ba5dec969e525619b42"
         },
         {
-          "id": "include/rive/data_bind/data_values/data_value_trigger.hpp::970f4e48405155b2:1",
+          "id": "include/rive/data_bind/data_values/data_value_trigger.hpp::5bc3cd27e77aab1e:1",
           "kind": "function",
-          "symbol": "DataValueTrigger::DataValueInteger",
-          "signature": "public : DataValueTrigger ( uint32_t value ) : DataValueInteger ( value )",
+          "symbol": "DataValueTrigger::DataValueTrigger",
+          "signature": "public : DataValueTrigger ( uint32_t value )",
           "line": 11,
           "definition_sha256": "5cb904af0bed06f69b1444477e08fd9c41e51e0602ed0f1f9eb90c6f872e2145"
         },
@@ -51216,10 +51216,10 @@
           "definition_sha256": "83833e66b36b24030a1e80a63f39fdb80196b7327119ae6d642e860b6a9f47c6"
         },
         {
-          "id": "include/rive/drawable.hpp::f883cac6c919616a:1",
+          "id": "include/rive/drawable.hpp::4ae80492d7d3f270:1",
           "kind": "function",
-          "symbol": "DrawableProxy::m_proxyDrawing",
-          "signature": "public : DrawableProxy ( ProxyDrawing * proxy ) : m_proxyDrawing ( proxy )",
+          "symbol": "DrawableProxy::DrawableProxy",
+          "signature": "public : DrawableProxy ( ProxyDrawing * proxy )",
           "line": 93,
           "definition_sha256": "c379e7f3aef00dd30252641066925feea7c8a545b8f23a037ac95de55de05255"
         },
@@ -51484,10 +51484,10 @@
           "definition_sha256": "9548152290aa923de38c667dd3a82b54124a50a3ef95875cf27c1ef725eec982"
         },
         {
-          "id": "include/rive/event_report.hpp::9bc4f9b34eb84fd9:1",
+          "id": "include/rive/event_report.hpp::2452261f6b818355:1",
           "kind": "function",
-          "symbol": "EventReport::m_secondsDelay",
-          "signature": "public : EventReport ( Event * event , float secondsDelay ) : m_event ( event ) , m_secondsDelay ( secondsDelay )",
+          "symbol": "EventReport::EventReport",
+          "signature": "public : EventReport ( Event * event , float secondsDelay )",
           "line": 10,
           "definition_sha256": "b410374553b88ea54cc1339389f2825cb11a476adbdc8d3e5357c40955cbe945"
         },
@@ -52628,10 +52628,10 @@
           "definition_sha256": "4ddf4b793cc7a47e48d4fc4a5b286419afc86086937197b4d5d880acb6c0d465"
         },
         {
-          "id": "include/rive/input/focus_node.hpp::be4c9e1f2869aa5a:1",
+          "id": "include/rive/input/focus_node.hpp::7f5541df4715fbf0:1",
           "kind": "function",
-          "symbol": "FocusNode::m_focusable",
-          "signature": "public : FocusNode ( Focusable * focusable = nullptr ) : m_focusable ( focusable )",
+          "symbol": "FocusNode::FocusNode",
+          "signature": "public : FocusNode ( Focusable * focusable = nullptr )",
           "line": 30,
           "definition_sha256": "e01dbc94f0b93104f4b88b8eb6572500d01bc5743f8f476d58481ca136f147ed"
         },
@@ -53333,18 +53333,18 @@
           "definition_sha256": "f6e939b70c3135cf89c353338a86b736dfd37add8d6dd704c1ee323bcd0efa74"
         },
         {
-          "id": "include/rive/layout.hpp::25d185ab55eca466:1",
+          "id": "include/rive/layout.hpp::9b694d577f895832:1",
           "kind": "function",
-          "symbol": "Alignment::m_y",
-          "signature": "public : Alignment ( float x , float y ) : m_x ( x ) , m_y ( y )",
+          "symbol": "Alignment::Alignment",
+          "signature": "public : Alignment ( float x , float y )",
           "line": 19,
           "definition_sha256": "d41d5c20f3ed855620e5098541d24a55f932027b920cb36cecb31e123990c03a"
         },
         {
-          "id": "include/rive/layout.hpp::addc89b9cc5e6128:1",
+          "id": "include/rive/layout.hpp::9a725f74422f9aed:1",
           "kind": "function",
-          "symbol": "Alignment::m_y",
-          "signature": "Alignment ( ) : m_x ( 0.0f ) , m_y ( 0.0f )",
+          "symbol": "Alignment::Alignment",
+          "signature": "Alignment ( )",
           "line": 21,
           "definition_sha256": "7425520c2363d7bdb6ae5c212c0106eaca390c61b8cae8f998a420fc519af838"
         },
@@ -54305,10 +54305,10 @@
           "definition_sha256": "a5aafdc1b4e9ce29bee198303c961f447ce6dc4bbfefb18c8c1585aafeed61c8"
         },
         {
-          "id": "include/rive/layout/style_overrider.hpp::a67b3d7f0e07ecea:1",
+          "id": "include/rive/layout/style_overrider.hpp::d226858f126bf376:1",
           "kind": "function",
-          "symbol": "StyleOverrider::m_styleProvider",
-          "signature": "public : StyleOverrider ( T * sp ) : m_styleProvider ( sp )",
+          "symbol": "StyleOverrider::StyleOverrider",
+          "signature": "public : StyleOverrider ( T * sp )",
           "line": 11,
           "definition_sha256": "decf6df8a8600c1587a4c35be6582fc794f939e0c2a625d1cbc5a528e492f616"
         },
@@ -54362,18 +54362,18 @@
           "definition_sha256": "3ab275c85d01f720f95429096754a615c9a9c7d041b6107ad7b6069bd04ea727"
         },
         {
-          "id": "include/rive/layout_component.hpp::88b3ad7aa7f1ef54:1",
+          "id": "include/rive/layout_component.hpp::d493e4e253b43186:1",
           "kind": "function",
-          "symbol": "Layout::m_height",
-          "signature": "public : Layout ( ) : m_left ( 0.0f ) , m_top ( 0.0f ) , m_width ( 0.0f ) , m_height ( 0.0f )",
+          "symbol": "Layout::Layout",
+          "signature": "public : Layout ( )",
           "line": 24,
           "definition_sha256": "425eb66c261b9d6f1075df8a079176c11363a4dc7cc7911ebed70d1615eff7c0"
         },
         {
-          "id": "include/rive/layout_component.hpp::71237d93fa96cd0b:1",
+          "id": "include/rive/layout_component.hpp::7f2f3f6cdb61d6d5:1",
           "kind": "function",
-          "symbol": "Layout::m_height",
-          "signature": "Layout ( float left , float top , float width , float height ) : m_left ( left ) , m_top ( top ) , m_width ( width ) , m_height ( height )",
+          "symbol": "Layout::Layout",
+          "signature": "Layout ( float left , float top , float width , float height )",
           "line": 26,
           "definition_sha256": "581bf035da9e9111910455cd4ab6b6d80b9b52de7c186532628dcfc7d8e6bb76"
         },
@@ -54434,18 +54434,18 @@
           "definition_sha256": "9d8704f9cc75b543376ebda02b81218e28639488ecb375d0a2d196bb29bc50f0"
         },
         {
-          "id": "include/rive/layout_component.hpp::e8e0fc5a77c29684:1",
+          "id": "include/rive/layout_component.hpp::353293a5a81ca0d6:1",
           "kind": "function",
-          "symbol": "LayoutPadding::m_bottom",
-          "signature": "public : LayoutPadding ( ) : m_left ( 0.0f ) , m_top ( 0.0f ) , m_right ( 0.0f ) , m_bottom ( 0.0f )",
+          "symbol": "LayoutPadding::LayoutPadding",
+          "signature": "public : LayoutPadding ( )",
           "line": 60,
           "definition_sha256": "865eb919d88949a80bf2e551ddefc92c4188036834dd6296b467d97242189d84"
         },
         {
-          "id": "include/rive/layout_component.hpp::b4e8926ae36edc54:1",
+          "id": "include/rive/layout_component.hpp::901d52ad8ad62a66:1",
           "kind": "function",
-          "symbol": "LayoutPadding::m_bottom",
-          "signature": "LayoutPadding ( float left , float top , float right , float bottom ) : m_left ( left ) , m_top ( top ) , m_right ( right ) , m_bottom ( bottom )",
+          "symbol": "LayoutPadding::LayoutPadding",
+          "signature": "LayoutPadding ( float left , float top , float right , float bottom )",
           "line": 63,
           "definition_sha256": "4669c7087f4e55be90f5fd0e6b92ebb09c0ca2c026588cbd3925cddc432b5e30"
         },
@@ -54819,10 +54819,10 @@
           "definition_sha256": "1ed834b3fd0df7e2b3419abd27fd2706058c97f54871549edac96597ed67d58f"
         },
         {
-          "id": "include/rive/lazy_vector.hpp::f4885ab0db3763ee:1",
+          "id": "include/rive/lazy_vector.hpp::da566407b1973905:1",
           "kind": "function",
-          "symbol": "LazyVector::m_v",
-          "signature": "LazyVector ( const LazyVector & other ) : m_v ( other . m_v != nullptr ? new std :: vector < T > ( * other . m_v ) : nullptr )",
+          "symbol": "LazyVector::LazyVector",
+          "signature": "LazyVector ( const LazyVector & other )",
           "line": 37,
           "definition_sha256": "82d34caefcb2f8bcfe202333898be1de21d3ff7e8f80479a2943d16839fe6e48"
         },
@@ -54835,10 +54835,10 @@
           "definition_sha256": "929798830299a3a0bfd500623da9ba8a758fb07def6a09ca1608d9a46e04bf45"
         },
         {
-          "id": "include/rive/lazy_vector.hpp::10ae9795ebba17a8:1",
+          "id": "include/rive/lazy_vector.hpp::35526a3d63a4a53d:1",
           "kind": "function",
-          "symbol": "LazyVector::m_v",
-          "signature": "LazyVector ( LazyVector && other ) noexcept : m_v ( other . m_v )",
+          "symbol": "LazyVector::LazyVector",
+          "signature": "LazyVector ( LazyVector && other )",
           "line": 51,
           "definition_sha256": "a308e981eaa30501e703f20fb3f267a893901ca6c3ea7ff830b00bc2e154af59"
         },
@@ -54956,10 +54956,10 @@
           "definition_sha256": "da2c68f65e009395a38242542b9e439e6946108fe44c2f310e448fcf8b5e774f"
         },
         {
-          "id": "include/rive/listener_group.hpp::279be93d56a0a8a2:1",
+          "id": "include/rive/listener_group.hpp::064d31612aa7e25a:1",
           "kind": "function",
-          "symbol": "ListenerGroup::m_listener",
-          "signature": "public : ListenerGroup ( const StateMachineListener * listener ) : m_listener ( listener )",
+          "symbol": "ListenerGroup::ListenerGroup",
+          "signature": "public : ListenerGroup ( const StateMachineListener * listener )",
           "line": 34,
           "definition_sha256": "979a6f4cd5a521a22b80d58128866a251f2a9e000a33d30479409c194c8c4a6d"
         },
@@ -54988,10 +54988,10 @@
           "definition_sha256": "88e52dae724e8096f75390d0ca42cf4a7ebdc8565d74dc2c28099779cf2e6bec"
         },
         {
-          "id": "include/rive/listener_group.hpp::bd6e0ce53a2ec57f:1",
+          "id": "include/rive/listener_group.hpp::2763daf6f5c7b900:1",
           "kind": "function",
-          "symbol": "HitTarget::m_isOpaque",
-          "signature": "public : HitTarget ( Component * component , bool isOpaque ) : m_component ( component ) , m_isOpaque ( isOpaque )",
+          "symbol": "HitTarget::HitTarget",
+          "signature": "public : HitTarget ( Component * component , bool isOpaque )",
           "line": 75,
           "definition_sha256": "ebc43b0bb77407ddb3cf55f2e5d7ee6bcacc6b2a354f45bc6c8427642af82d83"
         },
@@ -55012,10 +55012,10 @@
           "definition_sha256": "93ea94bc47e0c813c2a0344ecad920fd17784c072467a907311186cac21122ee"
         },
         {
-          "id": "include/rive/listener_group.hpp::6caef5f3cf3ae540:1",
+          "id": "include/rive/listener_group.hpp::e9db44ea4c42b86a:1",
           "kind": "function",
-          "symbol": "ListenerGroupWithTargets::m_targets",
-          "signature": "public : ListenerGroupWithTargets ( ListenerGroup * group , std :: vector < HitTarget * > targets ) : m_group ( group ) , m_targets ( targets )",
+          "symbol": "ListenerGroupWithTargets::ListenerGroupWithTargets",
+          "signature": "public : ListenerGroupWithTargets ( ListenerGroup * group , std :: vector < HitTarget * > targets )",
           "line": 89,
           "definition_sha256": "e828758241437224381ea76391be320c90fc90ebd645db25c8c08ff378ec3c5c"
         },
@@ -55104,18 +55104,18 @@
           "definition_sha256": "5a11e0128114cc3e8bfcc2af3206ac4450019118ab315071112b810ebb9eaf58"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::bc90f401d8b71e01:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::4057b8f2dea7411c:1",
           "kind": "function",
-          "symbol": "ScriptedMat2D::value",
-          "signature": "ScriptedMat2D ( float x1 , float y1 , float x2 , float y2 , float tx , float ty ) : value ( x1 , y1 , x2 , y2 , tx , ty )",
+          "symbol": "ScriptedMat2D::ScriptedMat2D",
+          "signature": "ScriptedMat2D ( float x1 , float y1 , float x2 , float y2 , float tx , float ty )",
           "line": 401,
           "definition_sha256": "4066b38131b1bda3010be013f45644ae7848005934b91f71c0ef7df322954a01"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::c17f985e91b93bb6:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::5b0f7e99ded5c846:1",
           "kind": "function",
-          "symbol": "ScriptedMat2D::value",
-          "signature": "ScriptedMat2D ( const Mat2D & mat ) : value ( mat )",
+          "symbol": "ScriptedMat2D::ScriptedMat2D",
+          "signature": "ScriptedMat2D ( const Mat2D & mat )",
           "line": 405,
           "definition_sha256": "10be76fd9c3e1f4803f6103d82d398bed6e8055cc28f124a68194aa1d03ffd45"
         },
@@ -55136,18 +55136,18 @@
           "definition_sha256": "a7ef9988be90765345e30ae6e33134fa601169227d8df8341570d9bf49b48eb6"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::c0d4a9e0fed30d0a:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::db1cff1133e45cf7:1",
           "kind": "function",
-          "symbol": "ScriptedMat4::value",
-          "signature": "ScriptedMat4 ( const Mat4 & mat ) : value ( mat )",
+          "symbol": "ScriptedMat4::ScriptedMat4",
+          "signature": "ScriptedMat4 ( const Mat4 & mat )",
           "line": 422,
           "definition_sha256": "f8171ba1ddf1657df5d040fa2894049477ff383f1bb7a1caad6c0ebd6f1a60db"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::e2ea12e93e9315c8:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::ab1706d088ace65c:1",
           "kind": "function",
-          "symbol": "ScriptedPathCommand::m_points",
-          "signature": "public : ScriptedPathCommand ( std :: string type , std :: vector < Vec2D > points = { } ) : m_type ( type ) , m_points ( points )",
+          "symbol": "ScriptedPathCommand::ScriptedPathCommand",
+          "signature": "public : ScriptedPathCommand ( std :: string type , std :: vector < Vec2D > points = { } )",
           "line": 432,
           "definition_sha256": "32793471d1505697437e61e2b691c9dc778191640e76da6e781b94f34a2268ef"
         },
@@ -55200,10 +55200,10 @@
           "definition_sha256": "1a553f281216d5d9d947b1e63d7e722b5ab5cbd20021bc3b0585aec22aa91636"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::4edb9bda46612541:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::dc350d7e947dde81:1",
           "kind": "function",
-          "symbol": "ScriptedPath::ScriptedPathData",
-          "signature": "ScriptedPath ( const RawPath * path ) : ScriptedPathData ( path )",
+          "symbol": "ScriptedPath::ScriptedPath",
+          "signature": "ScriptedPath ( const RawPath * path )",
           "line": 473,
           "definition_sha256": "991f814ffcd97403c74b6ea524ab0ba49508b198a5d55bcfab894902244fbccc"
         },
@@ -55216,10 +55216,10 @@
           "definition_sha256": "8fc055c3d09041fe24749a4d7f8517619d2226a0a27a95729e0b3fe9aded8bc9"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::28985fbd26e98821:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::6baa6345ed9f9a74:1",
           "kind": "function",
-          "symbol": "ScriptedAudioSound::m_artboard",
-          "signature": "public : ScriptedAudioSound ( Artboard * artboard ) : m_artboard ( artboard )",
+          "symbol": "ScriptedAudioSound::ScriptedAudioSound",
+          "signature": "public : ScriptedAudioSound ( Artboard * artboard )",
           "line": 588,
           "definition_sha256": "49ef12a2b9c46145e6db353a6c780e88768f5b9b0b0b8265a7d22aac75498b12"
         },
@@ -55272,10 +55272,10 @@
           "definition_sha256": "50cb64d3c39760c41d8c4ea0862b100d0644c6ca04b5a70fc473e839e2757ca6"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::bb00d0efd6c0b64c:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::a6cf167936030388:1",
           "kind": "function",
-          "symbol": "ScriptedPromise::m_state",
-          "signature": "ScriptedPromise ( lua_State * mainThread ) : m_state ( mainThread )",
+          "symbol": "ScriptedPromise::ScriptedPromise",
+          "signature": "ScriptedPromise ( lua_State * mainThread )",
           "line": 863,
           "definition_sha256": "185065ccd06d92ca4c283d100c8058e7d8b33a4c303cc141ca80f5bd41bb13c2"
         },
@@ -55480,10 +55480,10 @@
           "definition_sha256": "f977f4eb3e111e15c475965bdf94a5517d031eb88bd5c757f82128e15a69b96c"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::436c323f860181bc:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::967d4e7c6e740fc6:1",
           "kind": "function",
-          "symbol": "ScriptedRenderer::m_saveCount",
-          "signature": "public : ScriptedRenderer ( Renderer * renderer ) : m_renderer ( renderer ) , m_saveCount ( 0 )",
+          "symbol": "ScriptedRenderer::ScriptedRenderer",
+          "signature": "public : ScriptedRenderer ( Renderer * renderer )",
           "line": 1053,
           "definition_sha256": "646f28fd4cb3882f4d2d97715dc24982fc076562d6ab55f0a01ad0b8a184215d"
         },
@@ -55608,10 +55608,10 @@
           "definition_sha256": "0f380693d6d8c6ab1c27a79537d91dd84258bf6e977bb74bc0c4b138cc026522"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::0d7b3e8b86867c72:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::07a03416f375fd6c:1",
           "kind": "function",
-          "symbol": "ScriptedEnumValues::m_dataEnum",
-          "signature": "public : ScriptedEnumValues ( lua_State * L , DataEnum * value ) : m_state ( L ) , m_dataEnum ( value )",
+          "symbol": "ScriptedEnumValues::ScriptedEnumValues",
+          "signature": "public : ScriptedEnumValues ( lua_State * L , DataEnum * value )",
           "line": 1360,
           "definition_sha256": "7edc39a6aacc549414842e5d6a295942de798172b4171a0aafccfb0b2eb24470"
         },
@@ -55680,10 +55680,10 @@
           "definition_sha256": "28f9e4caf52c480fccd8b0b3e4cd7a5d5fc59dff7303ed16800f6beed0faf550"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::b5f1f0b3be080181:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::781cc1a929cbcad4:1",
           "kind": "function",
-          "symbol": "ScriptingContext::m_factory",
-          "signature": "public : ScriptingContext ( Factory * factory ) : m_factory ( factory )",
+          "symbol": "ScriptingContext::ScriptingContext",
+          "signature": "public : ScriptingContext ( Factory * factory )",
           "line": 1530,
           "definition_sha256": "776240f5147a4a6298b673a9e1279cfe193565be75bb1e94047830325ff86180"
         },
@@ -55880,10 +55880,10 @@
           "definition_sha256": "ec5d7ef70a5a24fe9548b38eb84ca6e07154522e0dafb832af34031db0b21e87"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::bfeb991dee789e52:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::74f0492594e05807:1",
           "kind": "function",
-          "symbol": "ScopedScriptedObjectContext::m_previous",
-          "signature": "public : ScopedScriptedObjectContext ( ScriptingContext * context , ScriptedObject * scriptedObject ) : m_context ( context ) , m_previous ( context == nullptr ? nullptr : context -> currentScriptedObject ( ) )",
+          "symbol": "ScopedScriptedObjectContext::ScopedScriptedObjectContext",
+          "signature": "public : ScopedScriptedObjectContext ( ScriptingContext * context , ScriptedObject * scriptedObject )",
           "line": 1740,
           "definition_sha256": "1d9f09a6d8f33c3e9df9e5976032d54c22780b4c5386b9145ae121242ab20c6f"
         },
@@ -55896,10 +55896,10 @@
           "definition_sha256": "647ea39f1f92bbf7168540bbca07952605479c63f1afd58f984d3df6a9b7ac7d"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::f1beef12f5e274e7:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::20430620308adf97:1",
           "kind": "function",
-          "symbol": "ScopedCanvasDrawingPhase::m_previous",
-          "signature": "public : ScopedCanvasDrawingPhase ( ScriptingContext * context ) : m_context ( context ) , m_previous ( context == nullptr ? false : context -> canvasDrawingPhase ( ) )",
+          "symbol": "ScopedCanvasDrawingPhase::ScopedCanvasDrawingPhase",
+          "signature": "public : ScopedCanvasDrawingPhase ( ScriptingContext * context )",
           "line": 1768,
           "definition_sha256": "e847e5394f510c885303900851a20b690ff76d3bfd41c9524b8bfdd29dc26b37"
         },
@@ -55968,10 +55968,10 @@
           "definition_sha256": "b2c1a734f49b97bb61f5fea364f32a7ffb779d49c6b54eabe1cd41eebd0878da"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::93d0aba4338a5bfd:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::affb34cdfa7ce98d:1",
           "kind": "function",
-          "symbol": "ScriptedDataValueNumber::ScriptedDataValue",
-          "signature": "public : ScriptedDataValueNumber ( lua_State * L , float value ) : ScriptedDataValue ( L )",
+          "symbol": "ScriptedDataValueNumber::ScriptedDataValueNumber",
+          "signature": "public : ScriptedDataValueNumber ( lua_State * L , float value )",
           "line": 1813,
           "definition_sha256": "625c43655f4a9eb412d7a9e568f56fcb7498ddc8da0fd05e7ea7722f408dea4d"
         },
@@ -55984,10 +55984,10 @@
           "definition_sha256": "197e969bafd0da78fab2bb2fbd6448acadc4e4429e06dd912171f128b1bf424e"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::20eca413fd5f8af3:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::9449120ac40d45b2:1",
           "kind": "function",
-          "symbol": "ScriptedDataValueString::ScriptedDataValue",
-          "signature": "public : ScriptedDataValueString ( lua_State * L , std :: string value ) : ScriptedDataValue ( L )",
+          "symbol": "ScriptedDataValueString::ScriptedDataValueString",
+          "signature": "public : ScriptedDataValueString ( lua_State * L , std :: string value )",
           "line": 1826,
           "definition_sha256": "b244e0aacaec2e9b9ea28b210e4e80694cee2de747f7f06af3487159b0716da8"
         },
@@ -56000,10 +56000,10 @@
           "definition_sha256": "28bee3200dac6ed969209c20484a42aa4629e0ee357bb0b3990e9b73c578efc0"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::84f59eff9649316d:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::df61dbafe7011cf4:1",
           "kind": "function",
-          "symbol": "ScriptedDataValueBoolean::ScriptedDataValue",
-          "signature": "public : ScriptedDataValueBoolean ( lua_State * L , bool value ) : ScriptedDataValue ( L )",
+          "symbol": "ScriptedDataValueBoolean::ScriptedDataValueBoolean",
+          "signature": "public : ScriptedDataValueBoolean ( lua_State * L , bool value )",
           "line": 1840,
           "definition_sha256": "625f3123ab0d4557d339dc45e49e4967d75d41e6adadd0dfbe3c1d105da22ae7"
         },
@@ -56016,10 +56016,10 @@
           "definition_sha256": "3a3a32d9a73d2b4a613e277afb23c66a228f3620a2c0faa453b01f6d6d75a29d"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::ff0c65edfc7db5e9:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::898af5fb081f766f:1",
           "kind": "function",
-          "symbol": "ScriptedDataValueColor::ScriptedDataValue",
-          "signature": "public : ScriptedDataValueColor ( lua_State * L , int value ) : ScriptedDataValue ( L )",
+          "symbol": "ScriptedDataValueColor::ScriptedDataValueColor",
+          "signature": "public : ScriptedDataValueColor ( lua_State * L , int value )",
           "line": 1853,
           "definition_sha256": "eb0f1b7612b3f84c71e819a4daae8341b2748cd5699d429ed675c2cfb1407713"
         },
@@ -56032,10 +56032,10 @@
           "definition_sha256": "a871483d831bff395a2d3f653ffb544b158450913f871c4858a73312baa87de8"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::06af3e2bdbca7662:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::9307eb4b980fa4b4:1",
           "kind": "function",
-          "symbol": "ScriptedPointerEvent::m_timeStamp",
-          "signature": "public : ScriptedPointerEvent ( uint8_t id , Vec2D position , Vec2D previousPosition = Vec2D ( ) , int hitListenerType = 0 , float timeStamp = 0.f ) : m_id ( id ) , m_position ( position ) , m_previousPosition ( previousPosition ) , m_hitListenerType ( hitListenerType ) , m_timeStamp ( timeStamp )",
+          "symbol": "ScriptedPointerEvent::ScriptedPointerEvent",
+          "signature": "public : ScriptedPointerEvent ( uint8_t id , Vec2D position , Vec2D previousPosition = Vec2D ( ) , int hitListenerType = 0 , float timeStamp = 0.f )",
           "line": 1866,
           "definition_sha256": "3c9ec4610b7ebc3cc727a380dd3f50d246bced44b32d550d36433d16201a660d"
         },
@@ -56064,10 +56064,10 @@
           "definition_sha256": "3f01c83e2a4390d677a795eeff86df20d45a44b393befb15ea4aa25a5760eba6"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::c1c1b477e0163eb2:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::af34e339a147272c:1",
           "kind": "function",
-          "symbol": "ScriptedContourMeasure::m_iter",
-          "signature": "public : ScriptedContourMeasure ( rcp < ContourMeasure > measure , rcp < RefCntContourMeasureIter > iter ) : m_measure ( measure ) , m_iter ( iter )",
+          "symbol": "ScriptedContourMeasure::ScriptedContourMeasure",
+          "signature": "public : ScriptedContourMeasure ( rcp < ContourMeasure > measure , rcp < RefCntContourMeasureIter > iter )",
           "line": 1915,
           "definition_sha256": "67903713590735b2754305b8e6777b951828cb990bac782344720a11c1c55c40"
         },
@@ -56088,10 +56088,10 @@
           "definition_sha256": "1a037373b1bd8364ecdd56ad5c745c9c0f1b7391fb29192d9a658ae2864ee8f7"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::806540440ede9a5f:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::b5716b874f324f5e:1",
           "kind": "function",
-          "symbol": "ScriptedPathMeasure::m_measure",
-          "signature": "public : ScriptedPathMeasure ( PathMeasure measure ) : m_measure ( std :: move ( measure ) )",
+          "symbol": "ScriptedPathMeasure::ScriptedPathMeasure",
+          "signature": "public : ScriptedPathMeasure ( PathMeasure measure )",
           "line": 1935,
           "definition_sha256": "4dc9935d858e91d60f5c32739560d5afbc5ddb1636189e2b2a156016a757586c"
         },
@@ -56128,10 +56128,10 @@
           "definition_sha256": "064eadfc924e55c9e256a2d49e933fa2f5b98d358382b758c21bddb738a9f0be"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::a58860a75af75f0e:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::fb37066b8eca9eb2:1",
           "kind": "function",
-          "symbol": "ScriptedInvocation::m_invocation",
-          "signature": "public : explicit ScriptedInvocation ( ListenerInvocation inv ) : m_invocation ( std :: move ( inv ) )",
+          "symbol": "ScriptedInvocation::ScriptedInvocation",
+          "signature": "public : explicit ScriptedInvocation ( ListenerInvocation inv )",
           "line": 1971,
           "definition_sha256": "dca1316011492fd7c13d4d44dc565e1651f4b5d4b50d9a36e7e6d550ae0bf3c9"
         },
@@ -56152,18 +56152,18 @@
           "definition_sha256": "578af5fbbe0008120c2b0cc81e4b23f36ac82eff165306b84e51d258092b799e"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::776ef8e0419c8f9f:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::e02af3b7a2344c24:1",
           "kind": "function",
-          "symbol": "ScriptedKeyboardInvocation::m_isRepeat",
-          "signature": "public : ScriptedKeyboardInvocation ( Key key , KeyModifiers modifiers , bool isPressed , bool isRepeat ) : m_key ( key ) , m_modifiers ( modifiers ) , m_isPressed ( isPressed ) , m_isRepeat ( isRepeat )",
+          "symbol": "ScriptedKeyboardInvocation::ScriptedKeyboardInvocation",
+          "signature": "public : ScriptedKeyboardInvocation ( Key key , KeyModifiers modifiers , bool isPressed , bool isRepeat )",
           "line": 1989,
           "definition_sha256": "08131b76b32177ba9a578cd269af72902b5055daeb3c0608478fea732863c1aa"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::cc7acbbed6253857:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::c3bd38c633b8efc3:1",
           "kind": "function",
-          "symbol": "ScriptedTextInputInvocation::m_text",
-          "signature": "public : explicit ScriptedTextInputInvocation ( std :: string text ) : m_text ( std :: move ( text ) )",
+          "symbol": "ScriptedTextInputInvocation::ScriptedTextInputInvocation",
+          "signature": "public : explicit ScriptedTextInputInvocation ( std :: string text )",
           "line": 2012,
           "definition_sha256": "034a5420c860bbcce389a2a05cf83539488e7f928a2d32e3e2d6f815f90f538f"
         },
@@ -56176,58 +56176,58 @@
           "definition_sha256": "8da4520ea4317bae8fa246b533df2e5ef18cb64b3c263028cf20d9b22db01926"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::a8eb0eaaaf4d3944:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::2302e887f2c60459:1",
           "kind": "function",
-          "symbol": "ScriptedFocusInvocation::m_isFocus",
-          "signature": "public : explicit ScriptedFocusInvocation ( bool isFocus ) : m_isFocus ( isFocus )",
+          "symbol": "ScriptedFocusInvocation::ScriptedFocusInvocation",
+          "signature": "public : explicit ScriptedFocusInvocation ( bool isFocus )",
           "line": 2029,
           "definition_sha256": "aca399b38ba5753c26865ddea987947e14e3f54092a8133bdb46c1560970ef41"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::4401709057e7b90a:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::54c87ee8e4618146:1",
           "kind": "function",
-          "symbol": "ScriptedReportedEventInvocation::m_delaySeconds",
-          "signature": "public : ScriptedReportedEventInvocation ( Event * event , float delaySeconds ) : m_event ( event ) , m_delaySeconds ( delaySeconds )",
+          "symbol": "ScriptedReportedEventInvocation::ScriptedReportedEventInvocation",
+          "signature": "public : ScriptedReportedEventInvocation ( Event * event , float delaySeconds )",
           "line": 2041,
           "definition_sha256": "a69366daf5dc51d645752d088a663bdb25fc9117bc71e27f9561d60f762dc0e2"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::b3178c3c8a1aa8cf:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::74ffdcf32fa6b850:1",
           "kind": "function",
-          "symbol": "ScriptedGamepadConnected::m_snapshot",
-          "signature": "public : explicit ScriptedGamepadConnected ( const GamepadSnapshot & snapshot ) : m_snapshot ( snapshot )",
+          "symbol": "ScriptedGamepadConnected::ScriptedGamepadConnected",
+          "signature": "public : explicit ScriptedGamepadConnected ( const GamepadSnapshot & snapshot )",
           "line": 2067,
           "definition_sha256": "435a70f497f32e4bbf63783e46fa05232cea2415f94b71b5478b1348fbf7daed"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::1125bd03f0250ea0:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::f6b8ee1660cbd687:1",
           "kind": "function",
-          "symbol": "ScriptedGamepadEvent::m_data",
-          "signature": "public : explicit ScriptedGamepadEvent ( const GamepadEventInvocation & v ) : m_data ( v )",
+          "symbol": "ScriptedGamepadEvent::ScriptedGamepadEvent",
+          "signature": "public : explicit ScriptedGamepadEvent ( const GamepadEventInvocation & v )",
           "line": 2081,
           "definition_sha256": "ef2f53257a084399b6bb52cdc4263dbbdb349bc4195d322a17f030cf3ba2bb2c"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::37332f6422099a0e:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::a2c0c92b9030b63a:1",
           "kind": "function",
-          "symbol": "ScriptedGamepadDisconnected::m_deviceId",
-          "signature": "public : explicit ScriptedGamepadDisconnected ( int deviceId ) : m_deviceId ( deviceId )",
+          "symbol": "ScriptedGamepadDisconnected::ScriptedGamepadDisconnected",
+          "signature": "public : explicit ScriptedGamepadDisconnected ( int deviceId )",
           "line": 2094,
           "definition_sha256": "d566d6679c0a6438f1b0d892a6e535c70c9a7b9badf5183c53861d337e21d5d6"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::3822e556547db1c4:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::a6a07bb476aa3a9e:1",
           "kind": "function",
-          "symbol": "CPPRuntimeScriptingContext::m_consoleCallback",
-          "signature": "public : CPPRuntimeScriptingContext ( Factory * factory , int timeoutMs = 200 , ConsoleCallback consoleCallback = nullptr ) : ScriptingContext ( factory ) , m_timeoutMs ( timeoutMs ) , m_consoleCallback ( consoleCallback )",
+          "symbol": "CPPRuntimeScriptingContext::CPPRuntimeScriptingContext",
+          "signature": "public : CPPRuntimeScriptingContext ( Factory * factory , int timeoutMs = 200 , ConsoleCallback consoleCallback = nullptr )",
           "line": 2130,
           "definition_sha256": "3c925bbdc38985e67485a04c7c1fde11b4e58fb1b00b9acb8a97644f00b8480e"
         },
         {
-          "id": "include/rive/lua/rive_lua_libs.hpp::2a757e276a539bd4:1",
+          "id": "include/rive/lua/rive_lua_libs.hpp::221b89ed1e0ce5df:1",
           "kind": "function",
-          "symbol": "CPPRuntimeScriptingContext::m_timeoutMs",
-          "signature": "CPPRuntimeScriptingContext ( Factory * factory , int timeoutMs = 200 ) : ScriptingContext ( factory ) , m_timeoutMs ( timeoutMs )",
+          "symbol": "CPPRuntimeScriptingContext::CPPRuntimeScriptingContext",
+          "signature": "CPPRuntimeScriptingContext ( Factory * factory , int timeoutMs = 200 )",
           "line": 2140,
           "definition_sha256": "c6f27e3497615d4fc48ae4fa3d7b82b24193f716203795fc9b4d2b45a367b60a"
         },
@@ -56563,18 +56563,18 @@
           "definition_sha256": "e8f196132a5f9e5e9e06f49becf4243d60c86a0229a05c96b91193674e93d967"
         },
         {
-          "id": "include/rive/math/aabb.hpp::8720c7b1ecfa99dc:1",
+          "id": "include/rive/math/aabb.hpp::d05beeb8c2d47977:1",
           "kind": "function",
-          "symbol": "AABB::maxY",
-          "signature": "AABB ( ) : minX ( 0 ) , minY ( 0 ) , maxX ( 0 ) , maxY ( 0 )",
+          "symbol": "AABB::AABB",
+          "signature": "AABB ( )",
           "line": 148,
           "definition_sha256": "233059aa2dddb2b49315a7b41949601cb4d1bf876f63a5a01d13cb3ed06b594d"
         },
         {
-          "id": "include/rive/math/aabb.hpp::11bf8534f5bf00a1:1",
+          "id": "include/rive/math/aabb.hpp::bcd82df39de55073:1",
           "kind": "function",
-          "symbol": "AABB::maxY",
-          "signature": "AABB ( const Vec2D & min , const Vec2D & max ) : minX ( min . x ) , minY ( min . y ) , maxX ( max . x ) , maxY ( max . y )",
+          "symbol": "AABB::AABB",
+          "signature": "AABB ( const Vec2D & min , const Vec2D & max )",
           "line": 149,
           "definition_sha256": "f53553c951f8d098d127eabf87a7ec2ca149c5e51c4847604482a5bb1bb510fd"
         },
@@ -56587,18 +56587,18 @@
           "definition_sha256": "fde8f5612da80756a03998947b33c2b4622867a3b6ad5c47e578a3b93809ba0a"
         },
         {
-          "id": "include/rive/math/aabb.hpp::11c7d6d1a319d375:1",
+          "id": "include/rive/math/aabb.hpp::319ec9c14ea3010e:1",
           "kind": "function",
-          "symbol": "AABB::maxY",
-          "signature": "AABB ( float minX , float minY , float maxX , float maxY ) : minX ( minX ) , minY ( minY ) , maxX ( maxX ) , maxY ( maxY )",
+          "symbol": "AABB::AABB",
+          "signature": "AABB ( float minX , float minY , float maxX , float maxY )",
           "line": 157,
           "definition_sha256": "32330a64d71647847c3c681ffa421cc0213ea35502cb5cbc087c79f456b14379"
         },
         {
-          "id": "include/rive/math/aabb.hpp::84dab9bfda2d715a:1",
+          "id": "include/rive/math/aabb.hpp::c99d63109c9c0ae1:1",
           "kind": "function",
           "symbol": "AABB::AABB",
-          "signature": "AABB ( const IAABB & o ) : AABB ( ( float ) o . left , ( float ) o . top , ( float ) o . right , ( float ) o . bottom )",
+          "signature": "AABB ( const IAABB & o )",
           "line": 161,
           "definition_sha256": "19a4c11d9f219c8fb2f83b68b6750df5249294fd20f1e64311018e63d8c0b037"
         },
@@ -56796,68 +56796,68 @@
       "symbol_count": 15,
       "symbols": [
         {
-          "id": "include/rive/math/bezier_utils.hpp::702883245c969d74:1",
-          "kind": "function",
-          "symbol": "CubicCoeffs::CubicCoeffs",
-          "signature": "RIVE_ALWAYS_INLINE CubicCoeffs ( const Vec2D pts [ 4 ] ) : CubicCoeffs ( simd :: load2f ( & pts [ 0 ] . x ) , simd :: load2f ( & pts [ 1 ] . x ) , simd :: load2f ( & pts [ 2 ] . x ) , simd :: load2f ( & pts [ 3 ] . x ) )",
+          "id": "include/rive/math/bezier_utils.hpp::9ee6c8be99ba71e8:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@38>",
+          "signature": "brace-authority RIVE_ALWAYS_INLINE CubicCoeffs ( const Vec2D pts [ 4 ] ) : CubicCoeffs ( simd :: load2f ( & pts [ 0 ] . x ) , simd :: load2f ( & pts [ 1 ] . x ) , simd :: load2f ( & pts [ 2 ] . x ) , simd :: load2f ( & pts [ 3 ] . x ) )",
           "line": 38,
           "definition_sha256": "b6dc7fbb041f22d3f2b288f860259f0a0fd23134dbbe6ca4bd5aae529c9089c0"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::10b6b36e50c82dd6:1",
-          "kind": "function",
-          "symbol": "CubicCoeffs::CubicCoeffs",
-          "signature": "RIVE_ALWAYS_INLINE CubicCoeffs ( float2 p0 , float2 p1 , float2 p2 , float2 p3 )",
-          "line": 45,
-          "definition_sha256": "2f829843669d2a25849e098ae93b07e4524741af856a3d496e019e09faa61388"
+          "id": "include/rive/math/bezier_utils.hpp::1acf4dc68b503fb8:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@38>",
+          "signature": "brace-authority RIVE_ALWAYS_INLINE CubicCoeffs ( const Vec2D pts [ 4 ] ) : CubicCoeffs ( simd :: load2f ( & pts [ 0 ] . x ) , simd :: load2f ( & pts [ 1 ] . x ) , simd :: load2f ( & pts [ 2 ] . x ) , simd :: load2f ( & pts [ 3 ] . x ) ) { } RIVE_ALWAYS_INLINE CubicCoeffs ( float2 p0 , float2 p1 , float2 p2 , float2 p3 )",
+          "line": 38,
+          "definition_sha256": "fdddcabe8c95126cbff21bdce0a146371f6815a2ef758e6dd0f4d42da46d79d3"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::934a0c6511ebf82c:1",
-          "kind": "function",
-          "symbol": "EvalCubic::EvalCubic",
-          "signature": "public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] )",
+          "id": "include/rive/math/bezier_utils.hpp::b50d7dd00d52e4e3:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@60>",
+          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] )",
           "line": 60,
           "definition_sha256": "e4c8d69d9c9eba83a7d2a291216452d342852d69ceeb1b94e6b83169cde4fc8f"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::eed93ccdc0b6d322:1",
-          "kind": "function",
-          "symbol": "EvalCubic::EvalCubic",
-          "signature": "RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) )",
-          "line": 65,
-          "definition_sha256": "2670cc88db5c627076f4d7229348aa86f8ae3999b56cdf3280c7e68824ef774a"
+          "id": "include/rive/math/bezier_utils.hpp::d6f752292eecaa35:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@60>",
+          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) )",
+          "line": 60,
+          "definition_sha256": "f564965ad531931e107631d83ad390e41d9beacdd3ec3c2309d43211f9caaaaa"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::c52ebfe63f90b91b:1",
-          "kind": "function",
-          "symbol": "EvalCubic::D",
-          "signature": "RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 ) : A ( coeffs . A . xyxy ) , B ( ( 3.f * coeffs . B ) . xyxy ) , C ( ( 3.f * coeffs . C ) . xyxy ) , D ( p0 . xyxy )",
-          "line": 69,
-          "definition_sha256": "d48ddc7a41d47e88b4a37e169e775ce5491cfa051004e041df5cfc565778cba3"
+          "id": "include/rive/math/bezier_utils.hpp::e088a56774d00e7a:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@60>",
+          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 ) : A ( coeffs . A . xyxy ) , B ( ( 3.f * coeffs . B ) . xyxy ) , C ( ( 3.f * coeffs . C ) . xyxy ) , D ( p0 . xyxy )",
+          "line": 60,
+          "definition_sha256": "493537e296bf7b5308addd48fd21cb50876adfacb45dacee8a7807e735249701"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::4c74d4ccef0f7dc3:1",
-          "kind": "function",
-          "symbol": "EvalCubic::operator()",
-          "signature": "RIVE_ALWAYS_INLINE float2 operator ( ) ( float t )",
-          "line": 79,
-          "definition_sha256": "cd34ac10a4bc1ede7d166515f817e4c6d87e48ad2fd9c09470a4ec979df5184e"
+          "id": "include/rive/math/bezier_utils.hpp::6754f0c9963653e1:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@60>",
+          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 ) : A ( coeffs . A . xyxy ) , B ( ( 3.f * coeffs . B ) . xyxy ) , C ( ( 3.f * coeffs . C ) . xyxy ) , D ( p0 . xyxy ) { } RIVE_ALWAYS_INLINE float2 operator ( ) ( float t ) const",
+          "line": 60,
+          "definition_sha256": "399075822cd7186272a10e29c87407bda34ce6b9ae378b90ff89590386983bdc"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::a88031d77a53ad57:1",
-          "kind": "function",
-          "symbol": "EvalCubic::operator()",
-          "signature": "RIVE_ALWAYS_INLINE float4 operator ( ) ( float4 t )",
-          "line": 86,
-          "definition_sha256": "d3a0dc8b6672b58838ebdce32fe13ac412be851c89948e3c8813db5feec2e174"
+          "id": "include/rive/math/bezier_utils.hpp::f10bce7dba3bd3ff:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@60>",
+          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 ) : A ( coeffs . A . xyxy ) , B ( ( 3.f * coeffs . B ) . xyxy ) , C ( ( 3.f * coeffs . C ) . xyxy ) , D ( p0 . xyxy ) { } RIVE_ALWAYS_INLINE float2 operator ( ) ( float t ) const { return ( ( A . xy * t + B . xy ) * t + C . xy ) * t + D . xy ; } RIVE_ALWAYS_INLINE float4 operator ( ) ( float4 t ) const",
+          "line": 60,
+          "definition_sha256": "82ab971fd155fd8b1e15967bccac9e73253fd6b35eca8cfb1e2fc20e73ffef49"
         },
         {
-          "id": "include/rive/math/bezier_utils.hpp::60f02e60d69675c6:1",
-          "kind": "function",
-          "symbol": "EvalCubic::at",
-          "signature": "RIVE_ALWAYS_INLINE float4 at ( float4 t )",
-          "line": 92,
-          "definition_sha256": "a744b8d9af62a05d55f30b313df9cc9258a3b71ef08d6a1dd5b7a3c55946e0b7"
+          "id": "include/rive/math/bezier_utils.hpp::054d26fa20c556b2:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@60>",
+          "signature": "brace-authority public : RIVE_ALWAYS_INLINE EvalCubic ( const Vec2D pts [ ] ) : EvalCubic ( CubicCoeffs ( pts ) , pts [ 0 ] ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , Vec2D p0 ) : EvalCubic ( coeffs , simd :: load2f ( & p0 ) ) { } RIVE_ALWAYS_INLINE EvalCubic ( const CubicCoeffs & coeffs , float2 p0 ) : A ( coeffs . A . xyxy ) , B ( ( 3.f * coeffs . B ) . xyxy ) , C ( ( 3.f * coeffs . C ) . xyxy ) , D ( p0 . xyxy ) { } RIVE_ALWAYS_INLINE float2 operator ( ) ( float t ) const { return ( ( A . xy * t + B . xy ) * t + C . xy ) * t + D . xy ; } RIVE_ALWAYS_INLINE float4 operator ( ) ( float4 t ) const { return ( ( A * t + B ) * t + C ) * t + D ; } RIVE_ALWAYS_INLINE float4 at ( float4 t ) const",
+          "line": 60,
+          "definition_sha256": "73608a10c801582c709d334186e0557304b47c84b7f3c3d4fd01e5fbf38cbb37"
         },
         {
           "id": "include/rive/math/bezier_utils.hpp::aa166427c4f99d9d:1",
@@ -57014,18 +57014,18 @@
           "definition_sha256": "8889e62deaefbff6b1d1b26cf49a6b5c3fbd037f226d9b6af9a28c3d228cb123"
         },
         {
-          "id": "include/rive/math/bitwise.hpp::ae54a103d6804df5:1",
+          "id": "include/rive/math/bitwise.hpp::9f35928977d6ca04:1",
           "kind": "function",
-          "symbol": "BitCombinationIterable::m_mask",
-          "signature": "public : explicit constexpr BitCombinationIterable ( T mask ) : m_mask ( mask )",
+          "symbol": "BitCombinationIterable::BitCombinationIterable",
+          "signature": "public : explicit constexpr BitCombinationIterable ( T mask )",
           "line": 147,
           "definition_sha256": "2a75fd2875c854937f88ba62d0df27060e9a43cb60cfef61365eaf72ff417d95"
         },
         {
-          "id": "include/rive/math/bitwise.hpp::056317c9095be33e:1",
+          "id": "include/rive/math/bitwise.hpp::26d18f2f466327f4:1",
           "kind": "function",
-          "symbol": "BitCombinationIterable::Iterator::m_mask",
-          "signature": "public : explicit constexpr Iterator ( T mask ) noexcept : m_currentValue ( mask ) , m_mask ( mask )",
+          "symbol": "BitCombinationIterable::Iterator::Iterator",
+          "signature": "public : explicit constexpr Iterator ( T mask )",
           "line": 152,
           "definition_sha256": "51b9c5848268c7eda043b759592893fa03a7b8b2ce0bb960d099a4916564d5ae"
         },
@@ -57192,18 +57192,18 @@
           "definition_sha256": "74a03b53513b081438ae1dde2c96e5d4db6afa5b32dd5c089d6da37084ca6233"
         },
         {
-          "id": "include/rive/math/contour_measure.hpp::ebca50c6904efa88:1",
+          "id": "include/rive/math/contour_measure.hpp::03e7688b8cf2126a:1",
           "kind": "function",
-          "symbol": "ContourMeasure::PosTanDistance::sqDistanceToPoint",
-          "signature": "PosTanDistance ( ) : distance ( 0.0f ) , sqDistanceToPoint ( 0.0f )",
+          "symbol": "ContourMeasure::PosTanDistance::PosTanDistance",
+          "signature": "PosTanDistance ( )",
           "line": 77,
           "definition_sha256": "895fb127cd3e1292d51021e87ad1384f7fa5c12e0107040831ef9ab47c544605"
         },
         {
-          "id": "include/rive/math/contour_measure.hpp::765a63b77db3ca69:1",
+          "id": "include/rive/math/contour_measure.hpp::960fabd23ddb0f44:1",
           "kind": "function",
-          "symbol": "ContourMeasure::PosTanDistance::sqDistanceToPoint",
-          "signature": "PosTanDistance ( PosTan posTan , float dist ) : pos ( posTan . pos ) , tan ( posTan . tan ) , distance ( dist ) , sqDistanceToPoint ( 0.0f )",
+          "symbol": "ContourMeasure::PosTanDistance::PosTanDistance",
+          "signature": "PosTanDistance ( PosTan posTan , float dist )",
           "line": 78,
           "definition_sha256": "3791efc5873cb63c59946d51e31152b2c047102f2c6ea4f05549b66648a749de"
         },
@@ -57232,10 +57232,10 @@
           "definition_sha256": "8fd82d83aee87316ed7fa0488edeb22d866d9767b001f362363abe1fc68d7240"
         },
         {
-          "id": "include/rive/math/contour_measure.hpp::a2635b31f7e5c67a:1",
+          "id": "include/rive/math/contour_measure.hpp::950d4a248beacbb8:1",
           "kind": "function",
-          "symbol": "RefCntContourMeasureIter::m_iter",
-          "signature": "public : RefCntContourMeasureIter ( const RawPath & path , float tol = ContourMeasureIter :: kDefaultTolerance ) : m_iter ( path , tol )",
+          "symbol": "RefCntContourMeasureIter::RefCntContourMeasureIter",
+          "signature": "public : RefCntContourMeasureIter ( const RawPath & path , float tol = ContourMeasureIter :: kDefaultTolerance )",
           "line": 169,
           "definition_sha256": "235be3a4698129675f6130514408e9d2af8ac5c13651ed7832b28549eeb42595"
         },
@@ -58242,10 +58242,10 @@
           "definition_sha256": "f18841dde0d37677f45b5675f84da47fb5da445050cefb5eb8d6eeeaefd0d6f1"
         },
         {
-          "id": "include/rive/math/raw_path.hpp::ad876dde29cbba15:1",
+          "id": "include/rive/math/raw_path.hpp::094465281954b657:1",
           "kind": "function",
-          "symbol": "RawPath::Iter::m_pts",
-          "signature": "Iter ( const PathVerb * verbs , const Vec2D * pts ) : m_verbs ( verbs ) , m_pts ( pts )",
+          "symbol": "RawPath::Iter::Iter",
+          "signature": "Iter ( const PathVerb * verbs , const Vec2D * pts )",
           "line": 98,
           "definition_sha256": "cc97811cf0fad8c277f4f50e33824bdf59cdeecdde61135c85645d9f6b8d5f0d"
         },
@@ -58451,36 +58451,36 @@
           "definition_sha256": "1f7163ef60cc5aec72d06f083f7fd30069fd5f85de032fff693217dd13cd54ac"
         },
         {
-          "id": "include/rive/math/raw_path_utils.hpp::81661011b5f49950:1",
-          "kind": "function",
-          "symbol": "EvalQuad::c",
-          "signature": "EvalQuad ( const Vec2D pts [ 3 ] ) : a ( pts [ 0 ] - two ( pts [ 1 ] ) + pts [ 2 ] ) , b ( two ( pts [ 1 ] - pts [ 0 ] ) ) , c ( pts [ 0 ] )",
+          "id": "include/rive/math/raw_path_utils.hpp::d438157d022772fd:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@21>",
+          "signature": "brace-authority EvalQuad ( const Vec2D pts [ 3 ] ) : a ( pts [ 0 ] - two ( pts [ 1 ] ) + pts [ 2 ] ) , b ( two ( pts [ 1 ] - pts [ 0 ] ) ) , c ( pts [ 0 ] )",
           "line": 21,
           "definition_sha256": "f6207a4370f0ec5c152a71089437b88fe421f5e6ee4e4d6a345c0e4cbe859a9a"
         },
         {
-          "id": "include/rive/math/raw_path_utils.hpp::024cae7cf4452001:1",
-          "kind": "function",
-          "symbol": "EvalQuad::operator()",
-          "signature": "Vec2D operator ( ) ( float t )",
-          "line": 26,
-          "definition_sha256": "6026be3edd2335b12497436d85d5457aa35d8706e95eb1a2cfadb9496b5d9c4e"
+          "id": "include/rive/math/raw_path_utils.hpp::7b36e2f7d1e20419:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@21>",
+          "signature": "brace-authority EvalQuad ( const Vec2D pts [ 3 ] ) : a ( pts [ 0 ] - two ( pts [ 1 ] ) + pts [ 2 ] ) , b ( two ( pts [ 1 ] - pts [ 0 ] ) ) , c ( pts [ 0 ] ) { } Vec2D operator ( ) ( float t ) const",
+          "line": 21,
+          "definition_sha256": "c31eea9c6308a118c6da5e2666faca48f13ac4347528c2ecb5cd84ffe4a4aae9"
         },
         {
-          "id": "include/rive/math/raw_path_utils.hpp::c8d8287b5d754a61:1",
-          "kind": "function",
-          "symbol": "EvalCubic::d",
-          "signature": "EvalCubic ( const Vec2D pts [ 4 ] ) : a ( pts [ 3 ] + 3 * ( pts [ 1 ] - pts [ 2 ] ) - pts [ 0 ] ) , b ( 3 * ( pts [ 2 ] - two ( pts [ 1 ] ) + pts [ 0 ] ) ) , c ( 3 * ( pts [ 1 ] - pts [ 0 ] ) ) , d ( pts [ 0 ] )",
+          "id": "include/rive/math/raw_path_utils.hpp::b5dc6973276780df:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@37>",
+          "signature": "brace-authority EvalCubic ( const Vec2D pts [ 4 ] ) : a ( pts [ 3 ] + 3 * ( pts [ 1 ] - pts [ 2 ] ) - pts [ 0 ] ) , b ( 3 * ( pts [ 2 ] - two ( pts [ 1 ] ) + pts [ 0 ] ) ) , c ( 3 * ( pts [ 1 ] - pts [ 0 ] ) ) , d ( pts [ 0 ] )",
           "line": 37,
           "definition_sha256": "feb906dd07c3fd327a1979db442684817309a4a8f64fa8de2d499f2504783a7f"
         },
         {
-          "id": "include/rive/math/raw_path_utils.hpp::024cae7cf4452001:2",
-          "kind": "function",
-          "symbol": "EvalCubic::operator()",
-          "signature": "Vec2D operator ( ) ( float t )",
-          "line": 44,
-          "definition_sha256": "c707008c7438f860aa60bef58b1ab93a1fa57d448af6afd654e095323e2dd0aa"
+          "id": "include/rive/math/raw_path_utils.hpp::54516f366a22f76e:1",
+          "kind": "lexical-brace-authority",
+          "symbol": "<lexical-brace@37>",
+          "signature": "brace-authority EvalCubic ( const Vec2D pts [ 4 ] ) : a ( pts [ 3 ] + 3 * ( pts [ 1 ] - pts [ 2 ] ) - pts [ 0 ] ) , b ( 3 * ( pts [ 2 ] - two ( pts [ 1 ] ) + pts [ 0 ] ) ) , c ( 3 * ( pts [ 1 ] - pts [ 0 ] ) ) , d ( pts [ 0 ] ) { } Vec2D operator ( ) ( float t ) const",
+          "line": 37,
+          "definition_sha256": "629fe285fbcc73102e4240ff1e853bffbf8562c3fdc83b6d1e664c4aebf11476"
         }
       ]
     },
@@ -58508,10 +58508,10 @@
           "definition_sha256": "bd44fc31997c23f4b6cb0ede643b3f4986fe214aea9be2964cb10e155848afa0"
         },
         {
-          "id": "include/rive/math/rectangles_to_contour.hpp::d981e67429515576:1",
+          "id": "include/rive/math/rectangles_to_contour.hpp::bb7af761a1dc7cf7:1",
           "kind": "function",
-          "symbol": "ContourPoint::dir",
-          "signature": "ContourPoint ( const Vec2D & vec , int dir ) : vec ( vec ) , dir ( dir )",
+          "symbol": "ContourPoint::ContourPoint",
+          "signature": "ContourPoint ( const Vec2D & vec , int dir )",
           "line": 34,
           "definition_sha256": "dd418ec01972bae613bd66dab1fb103275283e6c624fd29989016afdabab0952"
         },
@@ -58524,10 +58524,10 @@
           "definition_sha256": "105dd9c92ac2894862e2ecb076febdc5d218464f7144878d337f844b45a5c2c8"
         },
         {
-          "id": "include/rive/math/rectangles_to_contour.hpp::33996b0d7732aa7e:1",
+          "id": "include/rive/math/rectangles_to_contour.hpp::e52af0ef02c1b69f:1",
           "kind": "function",
-          "symbol": "ContourPointItr::m_pointIndex",
-          "signature": "ContourPointItr ( const Span < const ContourPoint > contour , size_t pointIndex ) : m_contour ( contour ) , m_pointIndex ( pointIndex )",
+          "symbol": "ContourPointItr::ContourPointItr",
+          "signature": "ContourPointItr ( const Span < const ContourPoint > contour , size_t pointIndex )",
           "line": 51,
           "definition_sha256": "506b92cc96529bd18ecf56df066b2d354ddcfe6d582b9935699077579b5d6cab"
         },
@@ -58548,10 +58548,10 @@
           "definition_sha256": "9ac1c3570dc2665a988615bbb525f7f9ead9f3e15302d2fe1222927dac7923a5"
         },
         {
-          "id": "include/rive/math/rectangles_to_contour.hpp::33e26a0217e3e9b3:1",
+          "id": "include/rive/math/rectangles_to_contour.hpp::6112c073a10cf157:1",
           "kind": "function",
-          "symbol": "Contour::m_points",
-          "signature": "public : Contour ( Span < const ContourPoint > points ) : m_points ( points )",
+          "symbol": "Contour::Contour",
+          "signature": "public : Contour ( Span < const ContourPoint > points )",
           "line": 75,
           "definition_sha256": "6d2e87f64cd661607a02a23be2701ec68a6b510b22d6ceaa4ac672dc8a4a0a33"
         },
@@ -58596,10 +58596,10 @@
           "definition_sha256": "425ec42afd66cdb765a6e54730f9832ea98b2acf5cdef22ae45883a54f964bc9"
         },
         {
-          "id": "include/rive/math/rectangles_to_contour.hpp::e8958df0a511a478:1",
+          "id": "include/rive/math/rectangles_to_contour.hpp::eab6f8a75b31eee9:1",
           "kind": "function",
-          "symbol": "ContourItr::m_contourIndex",
-          "signature": "ContourItr ( const RectanglesToContour * rectanglesToContour , size_t contourIndex ) : m_rectanglesToContour ( rectanglesToContour ) , m_contourIndex ( contourIndex )",
+          "symbol": "ContourItr::ContourItr",
+          "signature": "ContourItr ( const RectanglesToContour * rectanglesToContour , size_t contourIndex )",
           "line": 106,
           "definition_sha256": "c989b495869cd34687b54f6e12fc63a2dbec307da2dd5fa4e0243eff2c8054bd"
         },
@@ -59775,18 +59775,18 @@
           "definition_sha256": "13dea83ee955a4d51e4cb1b284200da622750b52d5d164ca8448dfd70087e633"
         },
         {
-          "id": "include/rive/math/transform_components.hpp::96491a18881ca367:1",
+          "id": "include/rive/math/transform_components.hpp::b25f113a91c00082:1",
           "kind": "function",
-          "symbol": "TransformComponents::m_Skew",
-          "signature": "public : TransformComponents ( ) : m_X ( 0.0f ) , m_Y ( 0.0f ) , m_ScaleX ( 1.0f ) , m_ScaleY ( 1.0f ) , m_Rotation ( 0.0f ) , m_Skew ( 0.0f )",
+          "symbol": "TransformComponents::TransformComponents",
+          "signature": "public : TransformComponents ( )",
           "line": 18,
           "definition_sha256": "c2f0f26a7df46a75180d7c516a5e1cb7cc3f59fbe21c7717f97741b6662621e6"
         },
         {
-          "id": "include/rive/math/transform_components.hpp::dd5570e5186a6dcd:1",
+          "id": "include/rive/math/transform_components.hpp::8a0e4b84cc5d2957:1",
           "kind": "function",
-          "symbol": "TransformComponents::m_Skew",
-          "signature": "TransformComponents ( const TransformComponents & copy ) : m_X ( copy . m_X ) , m_Y ( copy . m_Y ) , m_ScaleX ( copy . m_ScaleX ) , m_ScaleY ( copy . m_ScaleY ) , m_Rotation ( copy . m_Rotation ) , m_Skew ( copy . m_Skew )",
+          "symbol": "TransformComponents::TransformComponents",
+          "signature": "TransformComponents ( const TransformComponents & copy )",
           "line": 27,
           "definition_sha256": "b8662dc500b364ca8398f3b9418de150562a37fea7ac29cba4f657d829b0c023"
         },
@@ -59928,10 +59928,10 @@
           "definition_sha256": "3b2810a60549cb3002ba0b2dc019393e5263be8359f267721a6ec78ddca24b02"
         },
         {
-          "id": "include/rive/math/vec2d.hpp::35842a32e32874e1:1",
+          "id": "include/rive/math/vec2d.hpp::074afe1cbc581c6f:1",
           "kind": "function",
-          "symbol": "Vec2D::y",
-          "signature": "constexpr Vec2D ( float x , float y ) : x ( x ) , y ( y )",
+          "symbol": "Vec2D::Vec2D",
+          "signature": "constexpr Vec2D ( float x , float y )",
           "line": 15,
           "definition_sha256": "40da704dd6e01be171744c85c925b3dec37764c83c204a62ad7545ffa6a67aef"
         },
@@ -60185,17 +60185,17 @@
           "definition_sha256": "601efae4dcf3b7618953b9d7d2ce59fb75e17231028ce4f3d0e969fcaff7f0ec"
         },
         {
-          "id": "include/rive/math/wangs_formula.hpp::3205fed69460ec1b:1",
+          "id": "include/rive/math/wangs_formula.hpp::160585f040ea9b03:1",
           "kind": "function",
-          "symbol": "alignas::m_skew",
-          "signature": "public : AI VectorXform ( ) : m_scale ( 1 ) , m_skew ( 0 )",
+          "symbol": "VectorXform::VectorXform",
+          "signature": "public : AI VectorXform ( )",
           "line": 88,
           "definition_sha256": "2789df5cee18273a8c2024c3d90585f3d0a81b5130ea1a0046b23f1270ebf9ad"
         },
         {
           "id": "include/rive/math/wangs_formula.hpp::052cd89846cce646:1",
           "kind": "function",
-          "symbol": "alignas::VectorXform",
+          "symbol": "VectorXform::VectorXform",
           "signature": "AI explicit VectorXform ( const Mat2D & m )",
           "line": 90,
           "definition_sha256": "041b796d50d99a3d68cc4e9fbecec75ea50cdc22d5f5f24cf304b5c438677a3a"
@@ -60203,7 +60203,7 @@
         {
           "id": "include/rive/math/wangs_formula.hpp::a83e8c4860479e88:1",
           "kind": "function",
-          "symbol": "alignas::operator=",
+          "symbol": "VectorXform::operator=",
           "signature": "AI VectorXform & operator = ( const Mat2D & m )",
           "line": 92,
           "definition_sha256": "c837e49342cf2974d47885aeedcfeed4b6853344748f373c5b3ef43b3c41bb34"
@@ -60211,7 +60211,7 @@
         {
           "id": "include/rive/math/wangs_formula.hpp::dcc9f0e39f100592:1",
           "kind": "function",
-          "symbol": "alignas::operator()",
+          "symbol": "VectorXform::operator()",
           "signature": "AI float2 operator ( ) ( float2 vector )",
           "line": 99,
           "definition_sha256": "94c1079585915ba5f29094b445459c2df5067d088d963a1f4390a7f9be3cff4d"
@@ -60219,7 +60219,7 @@
         {
           "id": "include/rive/math/wangs_formula.hpp::da23352ceeceda51:1",
           "kind": "function",
-          "symbol": "alignas::operator()",
+          "symbol": "VectorXform::operator()",
           "signature": "AI float4 operator ( ) ( float4 vectors )",
           "line": 103,
           "definition_sha256": "266c9341c9bfbd61f6f8f925e4cee015320a39442ce4a65ad66aba06770d1a3d"
@@ -61658,10 +61658,10 @@
           "definition_sha256": "47988eec4ea1c94e388f0e1b857f9bb52226435a993052234c2b86bdaf9f3fd8"
         },
         {
-          "id": "include/rive/refcnt.hpp::0691c62410729f24:1",
+          "id": "include/rive/refcnt.hpp::4b1e1bf931787a04:1",
           "kind": "function",
-          "symbol": "RefCnt::m_refcnt",
-          "signature": "public : RefCnt ( ) : m_refcnt ( 1 )",
+          "symbol": "RefCnt::RefCnt",
+          "signature": "public : RefCnt ( )",
           "line": 36,
           "definition_sha256": "765d12d2b6f1a51e6a3491bd07ef10d2af98185668cfe2cd32100389c7e1c1c3"
         },
@@ -61714,58 +61714,58 @@
           "definition_sha256": "c4274e1cb2409688e61c7dc83c33dc872ca0a771f7cccf3777d2d372be603d47"
         },
         {
-          "id": "include/rive/refcnt.hpp::235ce9bfa9c00884:1",
+          "id": "include/rive/refcnt.hpp::e0f29db90010514a:1",
           "kind": "function",
-          "symbol": "rcp::m_ptr",
-          "signature": "public : constexpr rcp ( ) : m_ptr ( nullptr )",
+          "symbol": "rcp::rcp",
+          "signature": "public : constexpr rcp ( )",
           "line": 95,
           "definition_sha256": "b7989e57b8184104360109faa1c6411dcc854ba0eda3d9f36017287e45afe53c"
         },
         {
-          "id": "include/rive/refcnt.hpp::a1fc69996aff6a8c:1",
+          "id": "include/rive/refcnt.hpp::8cc9d7220c2b7da2:1",
           "kind": "function",
-          "symbol": "rcp::m_ptr",
-          "signature": "constexpr rcp ( std :: nullptr_t ) : m_ptr ( nullptr )",
+          "symbol": "rcp::rcp",
+          "signature": "constexpr rcp ( std :: nullptr_t )",
           "line": 97,
           "definition_sha256": "bb3c6984721d7b9286022866c062bc8f45cf47f1dddf1b54af4b059c8a0093c1"
         },
         {
-          "id": "include/rive/refcnt.hpp::d4621ca8e80f106c:1",
+          "id": "include/rive/refcnt.hpp::fda268d21004e3f1:1",
           "kind": "function",
-          "symbol": "rcp::m_ptr",
-          "signature": "explicit rcp ( T * ptr ) : m_ptr ( ptr )",
+          "symbol": "rcp::rcp",
+          "signature": "explicit rcp ( T * ptr )",
           "line": 98,
           "definition_sha256": "b0c232666d465827e49b33c732d862a63cf87c2644d8160122ee10337ccbf3ed"
         },
         {
-          "id": "include/rive/refcnt.hpp::bb8e1d6267ad5974:1",
+          "id": "include/rive/refcnt.hpp::b30e1675a80a3f07:1",
           "kind": "function",
-          "symbol": "rcp::m_ptr",
-          "signature": "rcp ( const rcp < T > & other ) : m_ptr ( safe_ref ( other . get ( ) ) )",
+          "symbol": "rcp::rcp",
+          "signature": "rcp ( const rcp < T > & other )",
           "line": 100,
           "definition_sha256": "5e30c3b991b9dcadb0f31da9756b7fc59fa29b4b55a4cfc09c15618d5d83581e"
         },
         {
-          "id": "include/rive/refcnt.hpp::f3f045bed812f62b:1",
+          "id": "include/rive/refcnt.hpp::083ead26728adad5:1",
           "kind": "function",
-          "symbol": "rcp::m_ptr",
-          "signature": "rcp ( rcp < T > && other ) : m_ptr ( other . release ( ) )",
+          "symbol": "rcp::rcp",
+          "signature": "rcp ( rcp < T > && other )",
           "line": 101,
           "definition_sha256": "afcfcc97c5f6cbba931644737d1eda6a8f1ba2f53a62c17aa7eacf05b78672ff"
         },
         {
-          "id": "include/rive/refcnt.hpp::134c2ed67ed7cf20:1",
+          "id": "include/rive/refcnt.hpp::11ef6a6ab1ab198b:1",
           "kind": "function",
-          "symbol": "rcp::m_ptr",
-          "signature": "template < typename U , typename = typename std :: enable_if < std :: is_convertible < U * , T * > :: value > :: type > rcp ( const rcp < U > & other ) : m_ptr ( safe_ref ( other . get ( ) ) )",
+          "symbol": "rcp::rcp",
+          "signature": "template < typename U , typename = typename std :: enable_if < std :: is_convertible < U * , T * > :: value > :: type > rcp ( const rcp < U > & other )",
           "line": 103,
           "definition_sha256": "d8bd44667a2d8eac52729410a63130a43962b1c0fd227b5c32b61101e40bd11a"
         },
         {
-          "id": "include/rive/refcnt.hpp::2445de187d2f30d4:1",
+          "id": "include/rive/refcnt.hpp::c594b64bc15e5712:1",
           "kind": "function",
-          "symbol": "rcp::m_ptr",
-          "signature": "template < typename U , typename = typename std :: enable_if < std :: is_convertible < U * , T * > :: value > :: type > rcp ( rcp < U > && other ) : m_ptr ( other . release ( ) )",
+          "symbol": "rcp::rcp",
+          "signature": "template < typename U , typename = typename std :: enable_if < std :: is_convertible < U * , T * > :: value > :: type > rcp ( rcp < U > && other )",
           "line": 109,
           "definition_sha256": "be22f4c01844aa67b18c859f135f524081061452aab9932807fdb14c0f168fce"
         },
@@ -62149,10 +62149,10 @@
           "definition_sha256": "2d9b2d95c49980026b69d612f854e302d117537d43666003840b6b03952f2467"
         },
         {
-          "id": "include/rive/renderer_utils.hpp::824bddd1d664fdb0:1",
+          "id": "include/rive/renderer_utils.hpp::a2258414f67f61fc:1",
           "kind": "function",
-          "symbol": "AutoSTArray::m_count",
-          "signature": "public : AutoSTArray ( size_t n ) : m_count ( n )",
+          "symbol": "AutoSTArray::AutoSTArray",
+          "signature": "public : AutoSTArray ( size_t n )",
           "line": 18,
           "definition_sha256": "276f7d00e73861d277a3b70bcb934884fb9aef2b8c5a22b408159feb6af82f30"
         },
@@ -62537,10 +62537,10 @@
           "definition_sha256": "32e36450b6ff8f3fe699e8dbd559d860d81070f2c381b450058006214c0d57c5"
         },
         {
-          "id": "include/rive/scene.hpp::14873f0f865dc416:1",
+          "id": "include/rive/scene.hpp::5f675a6881031326:1",
           "kind": "function",
-          "symbol": "Scene::m_artboardInstance",
-          "signature": "Scene ( Scene const & lhs ) : m_artboardInstance ( lhs . m_artboardInstance )",
+          "symbol": "Scene::Scene",
+          "signature": "Scene ( Scene const & lhs )",
           "line": 32,
           "definition_sha256": "c320a0330c863f68cb00ca4d526ee60264976f80a1306dd5a4cb3b701f2bda19"
         },
@@ -62898,10 +62898,10 @@
           "definition_sha256": "72377a6e8f20ee684b1675a16ae76e028da5a36e1f20d6e4aebe40047fd27920"
         },
         {
-          "id": "include/rive/scripted/scripted_drawable.hpp::d368c742529d701e:1",
+          "id": "include/rive/scripted/scripted_drawable.hpp::38e0e392c38cd0e5:1",
           "kind": "function",
-          "symbol": "HitScriptedDrawable::HitComponent",
-          "signature": "public : HitScriptedDrawable ( ScriptedDrawable * drawable , StateMachineInstance * stateMachineInstance ) : HitComponent ( drawable , stateMachineInstance )",
+          "symbol": "HitScriptedDrawable::HitScriptedDrawable",
+          "signature": "public : HitScriptedDrawable ( ScriptedDrawable * drawable , StateMachineInstance * stateMachineInstance )",
           "line": 85,
           "definition_sha256": "36048a5cb072b1a5ac14b77b4f890738a19536249df50f51fdc0cda3421a5616"
         },
@@ -63347,10 +63347,10 @@
           "definition_sha256": "b82a58358222567197687e38f6e19bac6209ba30be7a55a7f54c6e950f2ce6a6"
         },
         {
-          "id": "include/rive/semantic/semantic_node.hpp::749ec7597b48c1a4:1",
+          "id": "include/rive/semantic/semantic_node.hpp::031e541b5df9637f:1",
           "kind": "function",
-          "symbol": "SemanticNode::m_id",
-          "signature": "public : explicit SemanticNode ( uint32_t id = 0 ) : m_id ( id )",
+          "symbol": "SemanticNode::SemanticNode",
+          "signature": "public : explicit SemanticNode ( uint32_t id = 0 )",
           "line": 45,
           "definition_sha256": "1b18d6972888a729cb1871ab9de6ec33f0a3fce9da265703ff8d6b65150ababc"
         },
@@ -63858,10 +63858,10 @@
           "definition_sha256": "6b6943ce4de93b7e04d32473e754bb14b2633fa30a157ab181d223ecd63f85a5"
         },
         {
-          "id": "include/rive/shapes/clipping_shape.hpp::be4b8ca449a12760:1",
+          "id": "include/rive/shapes/clipping_shape.hpp::78565d020451a295:1",
           "kind": "function",
-          "symbol": "ClippingShapeProxyDrawable::m_clippingShapeOperation",
-          "signature": "public : ClippingShapeProxyDrawable ( ClippingShapeOperation * operation ) : m_clippingShapeOperation ( operation )",
+          "symbol": "ClippingShapeProxyDrawable::ClippingShapeProxyDrawable",
+          "signature": "public : ClippingShapeProxyDrawable ( ClippingShapeOperation * operation )",
           "line": 48,
           "definition_sha256": "80eca710721daaca3f1a0e3383794e4be757a44f4277ebf61426f77d62692325"
         },
@@ -65710,10 +65710,10 @@
           "definition_sha256": "f77bc9ccd27d39b03af109f0c2f27e72596a2f90c41a39a6bf05b8493d19ab37"
         },
         {
-          "id": "include/rive/signed_content_header.hpp::a836f8576e978f36:1",
+          "id": "include/rive/signed_content_header.hpp::c6fef6a25a5df509:1",
           "kind": "function",
-          "symbol": "SignedContentHeader::m_data",
-          "signature": "public : explicit SignedContentHeader ( Span < const uint8_t > data ) : m_data ( data )",
+          "symbol": "SignedContentHeader::SignedContentHeader",
+          "signature": "public : explicit SignedContentHeader ( Span < const uint8_t > data )",
           "line": 29,
           "definition_sha256": "188efa3a0d5c056884b0defe6ca6bc875cddc88868d22d4a0e5511d63bb8aa7f"
         },
@@ -65831,42 +65831,42 @@
           "definition_sha256": "8e2efbe3b123cd3e6e4d34ded3fc733d3cc6a6bea7ac227288c782770995bce2"
         },
         {
-          "id": "include/rive/simple_array.hpp::d0617b0d012a224b:1",
+          "id": "include/rive/simple_array.hpp::34816dbfd8f36732:1",
           "kind": "function",
-          "symbol": "SimpleArray::m_size",
-          "signature": "public : SimpleArray ( ) : m_ptr ( nullptr ) , m_size ( 0 )",
+          "symbol": "SimpleArray::SimpleArray",
+          "signature": "public : SimpleArray ( )",
           "line": 83,
           "definition_sha256": "79f9d216cd96508738eeb2352b2402d999e87656d6265934bf0e984715bc7fb1"
         },
         {
-          "id": "include/rive/simple_array.hpp::12507baf908845c6:1",
+          "id": "include/rive/simple_array.hpp::cd8e9632150c24a3:1",
           "kind": "function",
-          "symbol": "SimpleArray::m_size",
-          "signature": "SimpleArray ( size_t size ) : m_ptr ( nullptr ) , m_size ( 0 )",
+          "symbol": "SimpleArray::SimpleArray",
+          "signature": "SimpleArray ( size_t size )",
           "line": 85,
           "definition_sha256": "3e09eb24e18ad24468b5b5646a1ff03693077b2e257f93fda890a6bfced752f7"
         },
         {
-          "id": "include/rive/simple_array.hpp::35b6938dcc799c06:1",
+          "id": "include/rive/simple_array.hpp::6ab36031524a8e96:1",
           "kind": "function",
           "symbol": "SimpleArray::SimpleArray",
-          "signature": "SimpleArray ( const T * ptr , size_t size ) : SimpleArray ( size )",
+          "signature": "SimpleArray ( const T * ptr , size_t size )",
           "line": 102,
           "definition_sha256": "0ad8f2a3e99f3858822ee21d16e123fa96c6fa911e4246a5aa55a6c45108a8b5"
         },
         {
-          "id": "include/rive/simple_array.hpp::ea85b121f9c19b2a:1",
+          "id": "include/rive/simple_array.hpp::07c584322cb164b4:1",
           "kind": "function",
           "symbol": "SimpleArray::SimpleArray",
-          "signature": "constexpr SimpleArray ( const SimpleArray < T > & other ) : SimpleArray ( other . m_ptr , other . m_size )",
+          "signature": "constexpr SimpleArray ( const SimpleArray < T > & other )",
           "line": 116,
           "definition_sha256": "6e68f7f4c8d8f77b566a8def2d8807f14d79e0b4e53f921a287b5079461b9af3"
         },
         {
-          "id": "include/rive/simple_array.hpp::a2ad9b581adc0be6:1",
+          "id": "include/rive/simple_array.hpp::5c067559898d0d4e:1",
           "kind": "function",
-          "symbol": "SimpleArray::m_size",
-          "signature": "SimpleArray ( SimpleArray < T > && other ) : m_ptr ( other . m_ptr ) , m_size ( other . m_size )",
+          "symbol": "SimpleArray::SimpleArray",
+          "signature": "SimpleArray ( SimpleArray < T > && other )",
           "line": 120,
           "definition_sha256": "245587c395291049960123f55fc44600972001cec9ef1d8b8fe1edff4279518f"
         },
@@ -65879,18 +65879,18 @@
           "definition_sha256": "ef63cf8dc00a5c5d5e2f1799d39dffa5b7cb423d17305bb205303940eb36a06e"
         },
         {
-          "id": "include/rive/simple_array.hpp::edd0a99ee93e01f3:1",
+          "id": "include/rive/simple_array.hpp::f06e244f887f16b0:1",
           "kind": "function",
           "symbol": "SimpleArray::SimpleArray",
-          "signature": "template < typename Container > constexpr SimpleArray ( Container & c ) : SimpleArray ( c . data ( ) , c . size ( ) )",
+          "signature": "template < typename Container > constexpr SimpleArray ( Container & c )",
           "line": 144,
           "definition_sha256": "9ca56a8242768b64f29aaa3a72e58e0101cea8713eed1aac99e8894e1c4dc0d8"
         },
         {
-          "id": "include/rive/simple_array.hpp::8e9a464975b3d038:1",
+          "id": "include/rive/simple_array.hpp::a187e8ff7f10ba32:1",
           "kind": "function",
           "symbol": "SimpleArray::SimpleArray",
-          "signature": "constexpr SimpleArray ( const std :: initializer_list < T > & il ) : SimpleArray ( il . begin ( ) , il . size ( ) )",
+          "signature": "constexpr SimpleArray ( const std :: initializer_list < T > & il )",
           "line": 147,
           "definition_sha256": "8631a3d684f04dff4972ebdfb44661370121aab641c105fc1572a4807ce68e64"
         },
@@ -65983,10 +65983,10 @@
           "definition_sha256": "72340c551c91e40da82592f948589cf45d235e896bf51a8647f1b7c2c8cffb0b"
         },
         {
-          "id": "include/rive/simple_array.hpp::c43f3bc0f80ef40d:1",
+          "id": "include/rive/simple_array.hpp::728c0c365c22be67:1",
           "kind": "function",
           "symbol": "SimpleArrayBuilder::SimpleArrayBuilder",
-          "signature": "SimpleArrayBuilder ( ) : SimpleArrayBuilder ( 0 )",
+          "signature": "SimpleArrayBuilder ( )",
           "line": 202,
           "definition_sha256": "cbc0236def176b62333e60471a43263f4823b2fb1a9329af1778e48c61320642"
         },
@@ -66129,42 +66129,42 @@
           "definition_sha256": "59bdacac5d7e2b3abb72f796e954d3d11bc0f9dd69061f88974fb602f691d46c"
         },
         {
-          "id": "include/rive/span.hpp::2460b3e4eb5fb655:1",
+          "id": "include/rive/span.hpp::54ba2be218c15765:1",
           "kind": "function",
-          "symbol": "Span::m_Size",
-          "signature": "public : constexpr Span ( ) : m_Ptr ( nullptr ) , m_Size ( 0 )",
+          "symbol": "Span::Span",
+          "signature": "public : constexpr Span ( )",
           "line": 69,
           "definition_sha256": "c6205c413625af3b8bd8a9ea94e0d4cbc0eb5e80df6630c6541040a8789650df"
         },
         {
-          "id": "include/rive/span.hpp::3658591ecda5c8c8:1",
+          "id": "include/rive/span.hpp::b23f056c66bea305:1",
           "kind": "function",
-          "symbol": "Span::m_Size",
-          "signature": "constexpr Span ( T * ptr , size_t size ) : m_Ptr ( ptr ) , m_Size ( size )",
+          "symbol": "Span::Span",
+          "signature": "constexpr Span ( T * ptr , size_t size )",
           "line": 71,
           "definition_sha256": "68445becc6e4903c1f31f335f2331e6e73ac532c39954cced9de445f81c58028"
         },
         {
-          "id": "include/rive/span.hpp::9302d6a81604f964:1",
+          "id": "include/rive/span.hpp::27c7865f70afa862:1",
           "kind": "function",
-          "symbol": "Span::m_Size",
-          "signature": "template < size_t N > constexpr Span ( T ( & array ) [ N ] ) : m_Ptr ( array ) , m_Size ( N )",
+          "symbol": "Span::Span",
+          "signature": "template < size_t N > constexpr Span ( T ( & array ) [ N ] )",
           "line": 76,
           "definition_sha256": "760fc32bae26c0128232b98add12e531442d557ff2efdbcbb026fcced44bd9ad"
         },
         {
-          "id": "include/rive/span.hpp::af83a3f1053153e8:1",
+          "id": "include/rive/span.hpp::ab50e4eced5b38d9:1",
           "kind": "function",
           "symbol": "Span::Span",
-          "signature": "template < typename U , typename = typename std :: enable_if_t < internal :: IsTypedSpannable < U , T > , U >> constexpr Span ( U & that ) : Span ( that . data ( ) , that . size ( ) )",
+          "signature": "template < typename U , typename = typename std :: enable_if_t < internal :: IsTypedSpannable < U , T > , U >> constexpr Span ( U & that )",
           "line": 80,
           "definition_sha256": "825550faeed4127a257382dc78fe177077188521b86466af4d27ba7978a367b2"
         },
         {
-          "id": "include/rive/span.hpp::60206f7d37e24057:1",
+          "id": "include/rive/span.hpp::75c2799ad9a4ce8a:1",
           "kind": "function",
           "symbol": "Span::Span",
-          "signature": "template < typename U , typename = typename std :: enable_if_t < internal :: IsTypedSpannable < const U , T > , U >> constexpr Span ( const U & that ) : Span ( that . data ( ) , that . size ( ) )",
+          "signature": "template < typename U , typename = typename std :: enable_if_t < internal :: IsTypedSpannable < const U , T > , U >> constexpr Span ( const U & that )",
           "line": 87,
           "definition_sha256": "cb3c60038583d6c1bf47fa4ea340785e696323acd6596c405380cf07a1241c49"
         },
@@ -66348,10 +66348,10 @@
           "definition_sha256": "a68fe27c26a8a68178f5451a8448047e998c9cea1c0b6f47ebf86244e6ce5d44"
         },
         {
-          "id": "include/rive/text/cursor.hpp::52b751d42731304b:1",
+          "id": "include/rive/text/cursor.hpp::ed3c7d3bf305cf28:1",
           "kind": "function",
-          "symbol": "CursorVisualPosition::m_bottom",
-          "signature": "CursorVisualPosition ( float x , float top , float bottom ) : m_found ( true ) , m_x ( x ) , m_top ( top ) , m_bottom ( bottom )",
+          "symbol": "CursorVisualPosition::CursorVisualPosition",
+          "signature": "CursorVisualPosition ( float x , float top , float bottom )",
           "line": 21,
           "definition_sha256": "1c4ccaae7eef02de5d49e10eaf4e71ec20da6da88aee1cc88a1cf35f84b90431"
         },
@@ -66388,26 +66388,26 @@
           "definition_sha256": "4750fb9f2c3bb1832c4904866489bc0a8e1a012b01e921832a6aa4c42c414e7b"
         },
         {
-          "id": "include/rive/text/cursor.hpp::7fed69032e93774c:1",
+          "id": "include/rive/text/cursor.hpp::01e51cd7498632b2:1",
           "kind": "function",
-          "symbol": "CursorVisualPosition::m_bottom",
-          "signature": "private : CursorVisualPosition ( ) : m_found ( false ) , m_x ( 0.0f ) , m_top ( 0.0f ) , m_bottom ( 0.0f )",
+          "symbol": "CursorVisualPosition::CursorVisualPosition",
+          "signature": "private : CursorVisualPosition ( )",
           "line": 30,
           "definition_sha256": "d3f14ec98b424ad5651c9170a7d94f766a60724dc5784a1686fc07f766ff536c"
         },
         {
-          "id": "include/rive/text/cursor.hpp::759d4a8afd759a13:1",
+          "id": "include/rive/text/cursor.hpp::4561c10d6b7bbb95:1",
           "kind": "function",
-          "symbol": "CursorPosition::m_codePointIndex",
-          "signature": "public : CursorPosition ( uint32_t lineIndex , uint32_t codePointIndex ) : m_lineIndex ( lineIndex ) , m_codePointIndex ( codePointIndex )",
+          "symbol": "CursorPosition::CursorPosition",
+          "signature": "public : CursorPosition ( uint32_t lineIndex , uint32_t codePointIndex )",
           "line": 43,
           "definition_sha256": "3d47f87ea3b73d47168d90cd16eeac0463b7d5ba1e88d63cf927c248bcd8b3cb"
         },
         {
-          "id": "include/rive/text/cursor.hpp::e15c265b24ae6aba:1",
+          "id": "include/rive/text/cursor.hpp::a02f144cb898caf5:1",
           "kind": "function",
-          "symbol": "CursorPosition::m_codePointIndex",
-          "signature": "CursorPosition ( uint32_t codePointIndex ) : m_lineIndex ( - 1 ) , m_codePointIndex ( codePointIndex )",
+          "symbol": "CursorPosition::CursorPosition",
+          "signature": "CursorPosition ( uint32_t codePointIndex )",
           "line": 48,
           "definition_sha256": "89b85740e6ceb63e1a2da79ed2b093f63c71d4340b19dda4657f590f6968ab7c"
         },
@@ -66524,10 +66524,10 @@
           "definition_sha256": "ab6d58034b7c355238aa3f87a53b03cb70af0441f05e3516cef9aedf49ba23a4"
         },
         {
-          "id": "include/rive/text/cursor.hpp::eb9a613bfe8dc0af:1",
+          "id": "include/rive/text/cursor.hpp::9db8bf04b6f3b60c:1",
           "kind": "function",
-          "symbol": "Cursor::m_end",
-          "signature": "public : Cursor ( CursorPosition start , CursorPosition end ) : m_start ( start ) , m_end ( end )",
+          "symbol": "Cursor::Cursor",
+          "signature": "public : Cursor ( CursorPosition start , CursorPosition end )",
           "line": 155,
           "definition_sha256": "fa42932749e771c96ecb9d54123e56e7fa44828beba238b1fe4fe75aa0746c70"
         },
@@ -67533,10 +67533,10 @@
           "definition_sha256": "a9480c426cc3a0e65f60d7c93f4fb2b5c2036518c729efaba138dfe438c27b78"
         },
         {
-          "id": "include/rive/text/text_modifier_group.hpp::abda9fee6d6e9d8b:1",
+          "id": "include/rive/text/text_modifier_group.hpp::bd8354aa97042365:1",
           "kind": "function",
-          "symbol": "TransformGlyphArg::paragraphLines",
-          "signature": "TransformGlyphArg ( Vec2D position_ , float centerX_ , int lineIndexInParagraph_ , const SimpleArray < GlyphLine > & lines ) : position ( position_ ) , originPosition ( Vec2D ( position_ . x + centerX_ , position_ . y ) ) , centerX ( centerX_ ) , lineIndexInParagraph ( lineIndexInParagraph_ ) , paragraphLines ( lines )",
+          "symbol": "TransformGlyphArg::TransformGlyphArg",
+          "signature": "TransformGlyphArg ( Vec2D position_ , float centerX_ , int lineIndexInParagraph_ , const SimpleArray < GlyphLine > & lines )",
           "line": 28,
           "definition_sha256": "81dcf76f561d0bc10e6d83865f03431d345d3aaf557caf6956f630f97973ae5c"
         },
@@ -67967,10 +67967,10 @@
           "definition_sha256": "352da34e3f4f54e99cb9aa3700d6e649186fe33ad0a5cbd9f0a4be949c03e207"
         },
         {
-          "id": "include/rive/text/text_variation_helper.hpp::4a4e0d2400ef4be9:1",
+          "id": "include/rive/text/text_variation_helper.hpp::b6aacb84be08d79a:1",
           "kind": "function",
-          "symbol": "TextVariationHelper::m_textStyle",
-          "signature": "public : TextVariationHelper ( TextStyle * style ) : m_textStyle ( style )",
+          "symbol": "TextVariationHelper::TextVariationHelper",
+          "signature": "public : TextVariationHelper ( TextStyle * style )",
           "line": 10,
           "definition_sha256": "60360af7b518d7427b79a3ef3b5702b97ebef59992cf917937fa7ef01ec2f7ca"
         },
@@ -68066,18 +68066,18 @@
           "definition_sha256": "89354668aca3b67b2dc627eb64a2ce01edf5609666417d1d857ee26245523729"
         },
         {
-          "id": "include/rive/text_engine.hpp::3a7b8a1c48daed68:1",
+          "id": "include/rive/text_engine.hpp::44bd861dd79f4483:1",
           "kind": "function",
-          "symbol": "GlyphLine::startX",
-          "signature": "GlyphLine ( ) : startRunIndex ( 0 ) , startGlyphIndex ( 0 ) , endRunIndex ( 0 ) , endGlyphIndex ( 0 ) , startX ( 0.0f )",
+          "symbol": "GlyphLine::GlyphLine",
+          "signature": "GlyphLine ( )",
           "line": 138,
           "definition_sha256": "28dbaa97cd5c92bf8f3e9fac5f47aef27e28f1d363435bd173cc852057a5f419"
         },
         {
-          "id": "include/rive/text_engine.hpp::c1704aa3b1a051ef:1",
+          "id": "include/rive/text_engine.hpp::449c00a8f3a75990:1",
           "kind": "function",
-          "symbol": "GlyphLine::startX",
-          "signature": "GlyphLine ( uint32_t run , uint32_t index ) : startRunIndex ( run ) , startGlyphIndex ( index ) , endRunIndex ( run ) , endGlyphIndex ( index ) , startX ( 0.0f )",
+          "symbol": "GlyphLine::GlyphLine",
+          "signature": "GlyphLine ( uint32_t run , uint32_t index )",
           "line": 145,
           "definition_sha256": "77dc28c562dd369911c018b34015f4107652e9120d73df84cf23db6dd0fd7f6d"
         },
@@ -68186,26 +68186,26 @@
           "definition_sha256": "fefcadb13b265fdc5d483ddce68b2a15436b01067d2fa49bd5491fa01973f8c0"
         },
         {
-          "id": "include/rive/text_engine.hpp::77d2b8df894d0b6e:1",
+          "id": "include/rive/text_engine.hpp::901f2264302d0ade:1",
           "kind": "function",
-          "symbol": "Font::m_lineMetrics",
-          "signature": "protected : Font ( const LineMetrics & lm ) : m_lineMetrics ( lm )",
+          "symbol": "Font::Font",
+          "signature": "protected : Font ( const LineMetrics & lm )",
           "line": 356,
           "definition_sha256": "d7ad9bdbdd92bbaf876abfa5b9d6d6661d6a5a827dedb30b5a9e1f48d9483ba7"
         },
         {
-          "id": "include/rive/text_engine.hpp::22d0522b7178bfb9:1",
+          "id": "include/rive/text_engine.hpp::0b737ee664670156:1",
           "kind": "function",
-          "symbol": "GlyphRun::offsets",
-          "signature": "GlyphRun ( size_t glyphCount = 0 ) : glyphs ( glyphCount ) , textIndices ( glyphCount ) , advances ( glyphCount ) , xpos ( glyphCount + 1 ) , offsets ( glyphCount )",
+          "symbol": "GlyphRun::GlyphRun",
+          "signature": "GlyphRun ( size_t glyphCount = 0 )",
           "line": 387,
           "definition_sha256": "8f495ebfab010001837d6394417896018366f5f7010656657c470ac8be716ce6"
         },
         {
-          "id": "include/rive/text_engine.hpp::80604bbfdb8e2b13:1",
+          "id": "include/rive/text_engine.hpp::18e33a10e779cfc7:1",
           "kind": "function",
-          "symbol": "GlyphRun::offsets",
-          "signature": "GlyphRun ( SimpleArray < GlyphID > glyphIds , SimpleArray < uint32_t > offsets , SimpleArray < float > ws , SimpleArray < float > xs , SimpleArray < rive :: Vec2D > offs ) : glyphs ( glyphIds ) , textIndices ( offsets ) , advances ( ws ) , xpos ( xs ) , offsets ( offs )",
+          "symbol": "GlyphRun::GlyphRun",
+          "signature": "GlyphRun ( SimpleArray < GlyphID > glyphIds , SimpleArray < uint32_t > offsets , SimpleArray < float > ws , SimpleArray < float > xs , SimpleArray < rive :: Vec2D > offs )",
           "line": 395,
           "definition_sha256": "1183b3173acda06e453c8d57d434a2d5b6905b7c45849d450d4b1ecf46060e3b"
         },
@@ -68218,10 +68218,10 @@
           "definition_sha256": "200be7b65291f94de76c164321f23001cb96ea78428219ef833992f6649d28ce"
         },
         {
-          "id": "include/rive/text_engine.hpp::03f48b861739e554:1",
+          "id": "include/rive/text_engine.hpp::9e22e5f1fb753e49:1",
           "kind": "function",
-          "symbol": "GlyphItr::m_glyphIndex",
-          "signature": "GlyphItr ( const OrderedLine * line , const rive :: GlyphRun * const * run , uint32_t glyphIndex ) : m_line ( line ) , m_run ( run ) , m_glyphIndex ( glyphIndex )",
+          "symbol": "GlyphItr::GlyphItr",
+          "signature": "GlyphItr ( const OrderedLine * line , const rive :: GlyphRun * const * run , uint32_t glyphIndex )",
           "line": 472,
           "definition_sha256": "2139bf5ba141b01c18942c646c108bedaf88ea14429ebe395989967ceb546160"
         },
@@ -68462,10 +68462,10 @@
           "definition_sha256": "d6e2cf33bf16264b17e603cabb9f6cd5c0f2f4f46cd0ba899907d47670f1723c"
         },
         {
-          "id": "include/rive/typed_children.hpp::af7ae87b7c80f7fe:1",
+          "id": "include/rive/typed_children.hpp::6fe9c71d11d5b1d4:1",
           "kind": "function",
-          "symbol": "TypedChild::m_end",
-          "signature": "public : TypedChild ( Core * * child , Core * * end ) : m_child ( child ) , m_end ( end )",
+          "symbol": "TypedChild::TypedChild",
+          "signature": "public : TypedChild ( Core * * child , Core * * end )",
           "line": 12,
           "definition_sha256": "f7fb6080cb4d38fdbc0862d622d21d9e67804c75c413e32d51175d35cfe672c4"
         },
@@ -68502,10 +68502,10 @@
           "definition_sha256": "9f4b240dcf148dd48d00f4010a8324a714833d5c548f7cb65357b3db901138e8"
         },
         {
-          "id": "include/rive/typed_children.hpp::9c183240b785f9ea:1",
+          "id": "include/rive/typed_children.hpp::b2da6febb4ce6906:1",
           "kind": "function",
-          "symbol": "TypedChildren::m_children",
-          "signature": "public : TypedChildren ( Span < Core * > children ) : m_children ( children )",
+          "symbol": "TypedChildren::TypedChildren",
+          "signature": "public : TypedChildren ( Span < Core * > children )",
           "line": 47,
           "definition_sha256": "7f2e653e9b933eda5308240b06580d843cebf38329815f3668483ea35fd6821e"
         },
@@ -68701,10 +68701,10 @@
           "definition_sha256": "a1819f0e441675c30a757976ef158d96bdf639efdc92bec7f88902f3c484c590"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_artboard_runtime.hpp::80862d97bdff40f5:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_artboard_runtime.hpp::e8a70339e1e52908:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceArtboardRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceArtboardRuntime ( ViewModelInstanceArtboard * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceArtboardRuntime::ViewModelInstanceArtboardRuntime",
+          "signature": "public : ViewModelInstanceArtboardRuntime ( ViewModelInstanceArtboard * viewModelInstance )",
           "line": 16,
           "definition_sha256": "d66e39af6d37ae08c3d7818d3ab79b1aeba623bd6875a5c01a35ac8c61c054da"
         },
@@ -68734,10 +68734,10 @@
           "definition_sha256": "d8b6ac7a1bcb62d08eb35a087f85dc527ce99d6c3af57264eff9baec6610fb48"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.hpp::70dace155f7bb488:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.hpp::d4fc5b8a1359dfbf:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceAssetBlobRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceAssetBlobRuntime ( ViewModelInstanceAssetBlob * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceAssetBlobRuntime::ViewModelInstanceAssetBlobRuntime",
+          "signature": "public : ViewModelInstanceAssetBlobRuntime ( ViewModelInstanceAssetBlob * viewModelInstance )",
           "line": 15,
           "definition_sha256": "1f675a690b7a6401dd531d2b0b2d0bc1a1325cc2c7b11577656f9225754165ab"
         },
@@ -68767,10 +68767,10 @@
           "definition_sha256": "6cde1f14d30e20d0e2ecf721ac65ead40e6d163d8b4152200758cddb8ad7d2b5"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_asset_font_runtime.hpp::c1369182bc011e70:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_asset_font_runtime.hpp::745dd71e2c6c3721:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceAssetFontRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceAssetFontRuntime ( ViewModelInstanceAssetFont * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceAssetFontRuntime::ViewModelInstanceAssetFontRuntime",
+          "signature": "public : ViewModelInstanceAssetFontRuntime ( ViewModelInstanceAssetFont * viewModelInstance )",
           "line": 15,
           "definition_sha256": "a93ed9eca58639e1f4a465009b94aa3b306b7a36d651233cbb15a6f61df15db8"
         },
@@ -68800,10 +68800,10 @@
           "definition_sha256": "7f7500e4105098d57744426ea4f1f24a55356234bc346a87a5f1d5e1ce6b2715"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_asset_image_runtime.hpp::b9f8a60de9dbee37:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_asset_image_runtime.hpp::26fc085ecbb050c9:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceAssetImageRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceAssetImageRuntime ( ViewModelInstanceAssetImage * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceAssetImageRuntime::ViewModelInstanceAssetImageRuntime",
+          "signature": "public : ViewModelInstanceAssetImageRuntime ( ViewModelInstanceAssetImage * viewModelInstance )",
           "line": 15,
           "definition_sha256": "0eccd51fec5d20ba0d85bd52026d8211668681ff504b10f402f2830aa86c6278"
         },
@@ -68833,10 +68833,10 @@
           "definition_sha256": "b0856063de0232c63461aa286303fa61ae74cea516b64da0325e480b9d2a69c1"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_boolean_runtime.hpp::8c83468f1d49e683:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_boolean_runtime.hpp::1d74bc9bea2a689e:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceBooleanRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceBooleanRuntime ( ViewModelInstanceBoolean * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceBooleanRuntime::ViewModelInstanceBooleanRuntime",
+          "signature": "public : ViewModelInstanceBooleanRuntime ( ViewModelInstanceBoolean * viewModelInstance )",
           "line": 15,
           "definition_sha256": "6f4188ddf0964535d22c95aedc302ca7d126ed19f6c8350fcdfaa0ee4efe9567"
         },
@@ -68866,10 +68866,10 @@
           "definition_sha256": "34cb9e06e5a3c606f6179fb5b7c7ad0c99872dbbb5510b6220bd218d8eeb92a1"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_color_runtime.hpp::4582f8d85bf837b3:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_color_runtime.hpp::44bc715d4f924854:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceColorRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceColorRuntime ( ViewModelInstanceColor * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceColorRuntime::ViewModelInstanceColorRuntime",
+          "signature": "public : ViewModelInstanceColorRuntime ( ViewModelInstanceColor * viewModelInstance )",
           "line": 15,
           "definition_sha256": "24ff451eabfaaadb1b94ded436b0ae4453c8ad818d6604106b9e390804a5aee9"
         },
@@ -68899,10 +68899,10 @@
           "definition_sha256": "f5b40e43ac67c3bf636d98b98612d90612f7956f00ea8b3b45028314ce6f1f77"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_enum_runtime.hpp::2b0e53ef458cc89e:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_enum_runtime.hpp::4b8c2374ced263d5:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceEnumRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceEnumRuntime ( ViewModelInstanceEnum * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceEnumRuntime::ViewModelInstanceEnumRuntime",
+          "signature": "public : ViewModelInstanceEnumRuntime ( ViewModelInstanceEnum * viewModelInstance )",
           "line": 17,
           "definition_sha256": "a2507484297f8c055f75fc07a6ebb394c5063c292dcaf2f3f63beccacf7d769b"
         },
@@ -68932,10 +68932,10 @@
           "definition_sha256": "476cb00f8edd6fea476d35d3967f0307e7bd177ac2e1e000c525dbccfc7c44b8"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_list_index_runtime.hpp::bfc0ff965469e5fb:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_list_index_runtime.hpp::3b516bdb8d4f9d0f:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceListIndexRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceListIndexRuntime ( ViewModelInstanceSymbolListIndex * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceListIndexRuntime::ViewModelInstanceListIndexRuntime",
+          "signature": "public : ViewModelInstanceListIndexRuntime ( ViewModelInstanceSymbolListIndex * viewModelInstance )",
           "line": 15,
           "definition_sha256": "1e0f433836f069e66391f3f4355446f0415277f338fe4dd0bf4e73b99d9f3575"
         },
@@ -68965,10 +68965,10 @@
           "definition_sha256": "c8f235d09b582970cd15cadec67050190d20a08080f67110db52e26ba04d2d50"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_list_runtime.hpp::5449e270c6c65a6c:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_list_runtime.hpp::88bf99ef5984e4ad:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceListRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceListRuntime ( ViewModelInstanceList * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceListRuntime::ViewModelInstanceListRuntime",
+          "signature": "public : ViewModelInstanceListRuntime ( ViewModelInstanceList * viewModelInstance )",
           "line": 18,
           "definition_sha256": "a01a053cf7d99dfdc254a419821e728ae5da2bc0e7f105d030663c6b42ecd4c7"
         },
@@ -68998,10 +68998,10 @@
           "definition_sha256": "00da9669b2c114eb28f9fe09da5e5c2caa8d6e9678dad68e5758ae731c7f7623"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_number_runtime.hpp::f3816fc3b2cfed64:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_number_runtime.hpp::8e3bfd5f8394ec3b:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceNumberRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceNumberRuntime ( ViewModelInstanceNumber * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceNumberRuntime::ViewModelInstanceNumberRuntime",
+          "signature": "public : ViewModelInstanceNumberRuntime ( ViewModelInstanceNumber * viewModelInstance )",
           "line": 15,
           "definition_sha256": "cc8965870678f0e46b858ba2a27f1fc76fa5058e8c3db5bf784b3d287e2ba544"
         },
@@ -69064,10 +69064,10 @@
           "definition_sha256": "f93351faf5a3af7c344b523c69be500c51643b316d6c6cdb73e346bf55008454"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_string_runtime.hpp::fa649979cc889393:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_string_runtime.hpp::c26397f4930e6910:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceStringRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceStringRuntime ( ViewModelInstanceString * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceStringRuntime::ViewModelInstanceStringRuntime",
+          "signature": "public : ViewModelInstanceStringRuntime ( ViewModelInstanceString * viewModelInstance )",
           "line": 15,
           "definition_sha256": "880340e0aea116e3384f0cc72555f3bf7b8e28b9f4fd0d274fe2b833dc9b59ea"
         },
@@ -69097,10 +69097,10 @@
           "definition_sha256": "0188fd71a5d05774aacee161a2f98042a55c1f168ddb2938273099c79cf3c1a5"
         },
         {
-          "id": "include/rive/viewmodel/runtime/viewmodel_instance_trigger_runtime.hpp::1e4313479bb0c67d:1",
+          "id": "include/rive/viewmodel/runtime/viewmodel_instance_trigger_runtime.hpp::ac0b67c354f1a298:1",
           "kind": "function",
-          "symbol": "ViewModelInstanceTriggerRuntime::ViewModelInstanceValueRuntime",
-          "signature": "public : ViewModelInstanceTriggerRuntime ( ViewModelInstanceTrigger * viewModelInstance ) : ViewModelInstanceValueRuntime ( viewModelInstance )",
+          "symbol": "ViewModelInstanceTriggerRuntime::ViewModelInstanceTriggerRuntime",
+          "signature": "public : ViewModelInstanceTriggerRuntime ( ViewModelInstanceTrigger * viewModelInstance )",
           "line": 15,
           "definition_sha256": "10534f7e4db557b31dd1eb0546dab9b86640eb9868fa9b403fe7d9a9a2a50bd1"
         },
@@ -69799,10 +69799,10 @@
           "definition_sha256": "843c0b512d5c9fa308e53f34e004924bbd4d1dd2b438f6a131551f22a0d11ded"
         },
         {
-          "id": "include/rive/viewmodel/viewmodel_instance_value.hpp::d3f8832cb4c561d1:1",
+          "id": "include/rive/viewmodel/viewmodel_instance_value.hpp::9a5bc0ece57a7d3b:1",
           "kind": "function",
-          "symbol": "SuppressDelegation::m_suppressed",
-          "signature": "public : SuppressDelegation ( ViewModelInstanceValue * value ) : m_value ( value ) , m_suppressed ( value -> suppressDelegation ( ) )",
+          "symbol": "SuppressDelegation::SuppressDelegation",
+          "signature": "public : SuppressDelegation ( ViewModelInstanceValue * value )",
           "line": 103,
           "definition_sha256": "3769cec7ec92c710d9fd3c64daef9292ba606650893a3be6ad7247d7f8091539"
         },

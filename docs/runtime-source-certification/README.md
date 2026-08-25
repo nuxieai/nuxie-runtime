@@ -124,6 +124,11 @@ function false positives. Every remaining unclassified handwritten-header
 brace region is nevertheless emitted as a `lexical-brace-authority` row. An
 auditor must either map executable behavior in that region or give a governing
 `not-applicable` decision for a non-executable aggregate initializer.
+Constructor declarators are selected before their initializer lists, including
+inline constructors and `alignas` class declarations. Because the pinned
+corpus has no legitimate function whose final qualified segment begins `m_`,
+the gate rejects such a row as a probable member-initializer misparse; the
+frozen snapshot has a direct regression assertion for that invariant.
 
 Arbitrary macros and includes are not expanded. That limitation is explicit:
 every local `#define` is its own denominator authority unit, body-generating

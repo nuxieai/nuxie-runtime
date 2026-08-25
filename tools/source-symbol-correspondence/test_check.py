@@ -113,6 +113,52 @@ class SourceSymbolExtractionTest(unittest.TestCase):
             ],
         )
 
+    def test_inline_constructor_parenthesized_initializers_are_not_functions(self) -> None:
+        source = r'''
+        template <typename T>
+        struct alignas(32) Child : Parent {
+            Child(T value) : Parent(value), m_value(value), m_callback(make(value)) {}
+        private:
+            T m_value;
+            Callback m_callback;
+        };
+        '''
+        self.assertEqual(
+            [
+                definition.symbol
+                for definition in CHECK.extract_definitions(
+                    source, include_inline_class=True
+                )
+            ],
+            ["Child::Child"],
+        )
+
+    def test_probable_member_initializer_function_names_fail_the_corpus_gate(self) -> None:
+        owners = [
+            {
+                "upstream": "include/rive/example.hpp",
+                "symbols": [
+                    {"kind": "function", "symbol": "Example::m_value", "line": 12}
+                ],
+            }
+        ]
+        with self.assertRaisesRegex(ValueError, "probable constructor initializer"):
+            CHECK._require_plausible_function_symbols(owners)
+
+    def test_frozen_pinned_corpus_has_no_member_initializer_function_names(self) -> None:
+        snapshot = json.loads(
+            (TOOL.parents[2] / "docs/runtime-source-certification/symbol-denominator.json")
+            .read_text()
+        )
+        invalid = [
+            (owner["upstream"], symbol["symbol"])
+            for owner in snapshot["owners"]
+            for symbol in owner["symbols"]
+            if symbol["kind"] == "function"
+            and symbol["symbol"].split("::")[-1].startswith("m_")
+        ]
+        self.assertEqual(invalid, [])
+
     def test_inline_extraction_rejects_lambdas_and_braced_member_data(self) -> None:
         source = r'''
         struct Callbacks {

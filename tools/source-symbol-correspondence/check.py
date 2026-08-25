@@ -493,7 +493,9 @@ def _has_top_level_assignment(tokens: list[Token]) -> bool:
     return False
 
 
-def _function_header(header: list[Token]) -> tuple[str, int, int] | None:
+def _function_header(
+    header: list[Token], class_scope: tuple[str, ...] = ()
+) -> tuple[str, int, int] | None:
     """Return (symbol, header start, declarator close) for a body header."""
     if not header:
         return None
@@ -548,7 +550,10 @@ def _function_header(header: list[Token]) -> tuple[str, int, int] | None:
         if colon_index is None:
             continue
         pieces = symbol.replace("~", "").split("::")
-        if len(pieces) >= 2 and pieces[-1] == pieces[-2]:
+        qualified_constructor = len(pieces) >= 2 and pieces[-1] == pieces[-2]
+        inline_class = class_scope[-1].split("<", 1)[0] if class_scope else None
+        inline_constructor = len(pieces) == 1 and pieces[-1] == inline_class
+        if qualified_constructor or inline_constructor:
             after_colon = tail[colon_index + 1 :]
             # At `member{...}` this is an initializer brace, not the function
             # body. At the real body the preceding initializer is complete.
@@ -627,7 +632,27 @@ def _class_scope_name(header: list[Token]) -> str | None:
         and header[cursor].value in {"class", "struct"}
     ):
         cursor += 1
-    while cursor < len(header) and header[cursor].kind != "identifier":
+    while cursor < len(header):
+        if (
+            header[cursor].value == "alignas"
+            and cursor + 1 < len(header)
+            and header[cursor + 1].value == "("
+        ):
+            depth = 0
+            cursor += 1
+            while cursor < len(header):
+                if header[cursor].value == "(":
+                    depth += 1
+                elif header[cursor].value == ")":
+                    depth -= 1
+                cursor += 1
+                if depth == 0:
+                    break
+            continue
+        if header[cursor].kind == "identifier" and not header[cursor].value.startswith(
+            "RIVE_"
+        ):
+            break
         cursor += 1
     if cursor >= len(header):
         return None
@@ -737,7 +762,7 @@ def extract_definitions(
                 statement_start = close + 1
                 cursor = close + 1
                 continue
-            function = _function_header(header)
+            function = _function_header(header, class_scope)
             if function is not None:
                 symbol, name_start, declarator_close = function
                 if _contains_lambda_capture_after(header, declarator_close + 1):
@@ -876,6 +901,25 @@ def _owner_row(
     }
 
 
+def _require_plausible_function_symbols(owners: list[dict[str, object]]) -> None:
+    """Reject the common signature of an initializer mistaken for its constructor."""
+    invalid: list[str] = []
+    for owner in owners:
+        for symbol in owner["symbols"]:
+            if symbol["kind"] != "function":
+                continue
+            final_segment = str(symbol["symbol"]).split("::")[-1]
+            if final_segment.startswith("m_"):
+                invalid.append(
+                    f"{owner['upstream']}:{symbol['line']} ({symbol['symbol']})"
+                )
+    if invalid:
+        raise ValueError(
+            "function census contains probable constructor initializer names: "
+            + ", ".join(invalid[:10])
+        )
+
+
 def build_denominator(
     upstream_root: pathlib.Path, manifest_path: pathlib.Path
 ) -> dict[str, object]:
@@ -973,6 +1017,7 @@ def build_denominator(
         for path in (repo_root / "tools" / "nuxie-codegen" / "src").rglob("*.rs")
     )
     owners = [*cpp_owners, *objective_cpp_owners, *header_owners]
+    _require_plausible_function_symbols(owners)
     total = sum(int(owner["symbol_count"]) for owner in owners)
     return {
         "schema": DENOMINATOR_SCHEMA,

@@ -565,7 +565,7 @@ note = "Consolidated Rust port for animation."
 
 [[file]]
 upstream = "src/artboard.cpp"
-status = "ported"
+status = "partial"
 rust_module = "crates/nuxie-runtime/src/artboard.rs"
 note = "P2F2: core Artboard behavior includes retained volume/audio-engine configuration, recursive propagation to nested and component-list occurrences, and Artboard-scoped sound teardown. Additive host extensions X1 semantic-geometry cache authority and X2 scripted-global occurrence broadcast are recorded separately and do not replace baseline Artboard behavior. Other historical Artboard ceilings keep this legacy row partial."
 
@@ -831,7 +831,7 @@ note = "Phase 2 direct owner and Phase 3 paired audit: Thumb/Track lifecycle mat
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/constraints.rs; crates/nuxie-runtime/src/constraints/scrolling/scroll_constraint.rs"
-note = "Paired owner audit covers retained metrics/intents, constraint rendezvous, drag/physics lifecycle, computed velocity/active observables, directional snap, focus scrolling, and generated computed-property setter behavior."
+note = "Phase 3 paired owner audit covers retained metrics/intents, constraint rendezvous, drag/physics lifecycle, computed velocity/active observables, directional snap, focus scrolling, and generated computed-property setter behavior."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint_proxy.cpp"

@@ -844,6 +844,7 @@
             has_scripted_drawables: false,
             nested_script_owned_contexts: BTreeMap::new(),
             script_update_error: None,
+            script_source_file_authority: None,
             external_focus_domain: None,
             nested_artboards: RuntimeNestedArtboards::default(),
             active_nested_state_machines: BTreeMap::new(),

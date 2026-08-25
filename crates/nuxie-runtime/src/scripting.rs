@@ -339,6 +339,23 @@ impl ScriptListenerActionHydration {
         }
     }
 
+    /// Install only the already-selected DataContext chain.
+    ///
+    /// This operation is deliberately allocation-free with respect to typed
+    /// ScriptInput prerequisites. Retry owners use it before recreating the
+    /// generated table, then validate Artboard/ViewModel inputs only after the
+    /// recreated table has passed its concrete lifetime guard.
+    #[doc(hidden)]
+    pub fn install_context(&self, instance: &mut dyn ScriptInstance) -> Result<(), ScriptError> {
+        if self.context_resolved {
+            instance.set_context_view_model_chain(
+                self.context_view_model.clone(),
+                self.context_parent_view_models.clone(),
+            )?;
+        }
+        Ok(())
+    }
+
     /// Validate every facade-owned typed prerequisite and retain the authority
     /// needed to apply it later. Pinned C++ performs this validation in its
     /// first loop, but repeats the live ViewModel lookup and does not construct
@@ -2226,6 +2243,60 @@ pub fn bound_script_artboard_input(
     }
 }
 
+pub(crate) fn bound_script_input_value_from_data_context(
+    file: &RuntimeFile,
+    context: &crate::artboard_data_bind::RuntimeOwnedDataContext,
+    input: &RuntimeObject,
+) -> Result<Option<ScriptValue>, ScriptError> {
+    if !matches!(
+        input.type_name,
+        "ScriptInputBoolean" | "ScriptInputNumber" | "ScriptInputColor" | "ScriptInputString"
+    ) {
+        return Ok(None);
+    }
+    let Some(value) =
+        bound_script_input_graph_value_from_data_context(file, context, input, "propertyValue")?
+    else {
+        return Ok(None);
+    };
+    match (input.type_name, value) {
+        ("ScriptInputBoolean", RuntimeDataBindGraphValue::Boolean(value)) => {
+            Ok(Some(ScriptValue::Bool(value)))
+        }
+        ("ScriptInputNumber", RuntimeDataBindGraphValue::Number(value)) => {
+            Ok(Some(ScriptValue::Number(f64::from(value))))
+        }
+        ("ScriptInputColor", RuntimeDataBindGraphValue::Color(value)) => {
+            Ok(Some(ScriptValue::Color(value)))
+        }
+        ("ScriptInputString", RuntimeDataBindGraphValue::String(value)) => Ok(Some(
+            ScriptValue::CoreString(ScriptCoreString::from_bytes(value)),
+        )),
+        (_, value) => Err(ScriptError::new(format!(
+            "{} global {} data binding produced incompatible value {value:?}",
+            input.type_name, input.id
+        ))),
+    }
+}
+
+pub(crate) fn bound_script_artboard_input_from_data_context(
+    file: &RuntimeFile,
+    context: &crate::artboard_data_bind::RuntimeOwnedDataContext,
+    input: &RuntimeObject,
+) -> Result<Option<u64>, ScriptError> {
+    if input.type_name != "ScriptInputArtboard" {
+        return Ok(None);
+    }
+    match bound_script_input_graph_value_from_data_context(file, context, input, "artboardId")? {
+        Some(RuntimeDataBindGraphValue::Artboard(value)) => Ok(Some(value)),
+        Some(value) => Err(ScriptError::new(format!(
+            "{} global {} data binding produced incompatible value {value:?}",
+            input.type_name, input.id
+        ))),
+        None => Ok(None),
+    }
+}
+
 /// Resolves the current count of a data-bound `ScriptInputTrigger`.
 ///
 /// The listener hydrator compares counts across retained data-context rebinds
@@ -2295,6 +2366,66 @@ fn bound_script_input_graph_value(
         return Ok(None);
     };
 
+    convert_bound_script_input_graph_value(file, input, data_bind, source)
+}
+
+fn bound_script_input_graph_value_from_data_context(
+    file: &RuntimeFile,
+    context: &crate::artboard_data_bind::RuntimeOwnedDataContext,
+    input: &RuntimeObject,
+    property_name: &str,
+) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
+    let Some(property_key) = property_key_for_name(input.type_name, property_name) else {
+        return Ok(None);
+    };
+    let Some(data_bind) = (0..file.object_count())
+        .filter_map(|id| file.object(id))
+        .filter(|candidate| {
+            nuxie_schema::definition_by_name(candidate.type_name)
+                .is_some_and(|definition| definition.is_a("DataBind"))
+        })
+        .filter(|candidate| {
+            file.data_bind_target_for_object(candidate)
+                .is_some_and(|target| target.id == input.id)
+        })
+        .last()
+    else {
+        return Ok(None);
+    };
+    if data_bind.type_name != "DataBindContext"
+        || data_bind.uint_property("propertyKey") != Some(u64::from(property_key))
+        || !file
+            .data_bind_to_target_for_object(data_bind)
+            .unwrap_or(false)
+    {
+        return Ok(None);
+    }
+    let Some(source_path) = file.data_bind_context_source_path_ids_for_object(data_bind) else {
+        return Ok(None);
+    };
+    let name_based = file
+        .data_bind_is_name_based_for_object(data_bind)
+        .unwrap_or(false);
+    let Some(source) = context.resolve_instance(&mut |_, candidate, scope_path| {
+        owned_script_input_source_value_for_scope(
+            file,
+            candidate,
+            scope_path,
+            &source_path,
+            name_based,
+        )
+    }) else {
+        return Ok(None);
+    };
+    convert_bound_script_input_graph_value(file, input, data_bind, source)
+}
+
+fn convert_bound_script_input_graph_value(
+    file: &RuntimeFile,
+    input: &RuntimeObject,
+    data_bind: &RuntimeObject,
+    source: RuntimeDataBindGraphValue,
+) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
     let Some(converter_object) = file.resolved_data_converter_for_data_bind_object(data_bind)
     else {
         // Backboard importer resolution leaves an invalid/out-of-range
@@ -3216,6 +3347,25 @@ impl RuntimeScriptInstanceHandle {
     }
 }
 
+/// Shared pinned `ensureScriptInitialized` boundary for every retained Rust
+/// ScriptedObject owner. Context installation cannot resolve typed inputs;
+/// table recreation then runs before the concrete `m_self` guard. Callers may
+/// prepare Artboard/ViewModel recipes only after this returns true.
+pub(crate) fn install_context_recreate_and_guard_script_lifetime(
+    handle: &RuntimeScriptInstanceHandle,
+    context: &ScriptListenerActionHydration,
+    factory: &mut Option<&mut dyn RenderFactory>,
+) -> Result<bool, ScriptError> {
+    let mut instance = handle.borrow_mut();
+    context.install_context(&mut **instance)?;
+    if let Some(factory) = factory.as_deref_mut() {
+        instance.prepare_init_retry_with_factory(factory)?;
+    } else {
+        instance.prepare_init_retry()?;
+    }
+    Ok(instance.script_lifetime_valid())
+}
+
 impl PartialEq for RuntimeScriptInstanceHandle {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.inner, &other.inner)
@@ -3355,6 +3505,92 @@ mod hydration_atomicity_tests {
         fn script_lifetime_valid(&self) -> bool {
             false
         }
+    }
+
+    struct RetryOrderingScript {
+        trace: Rc<RefCell<Vec<&'static str>>>,
+    }
+
+    impl ScriptInstance for RetryOrderingScript {
+        fn set_context_view_model_chain(
+            &mut self,
+            _view_model: Option<ScriptViewModel>,
+            _parents: Vec<Option<ScriptViewModel>>,
+        ) -> Result<(), ScriptError> {
+            self.trace.borrow_mut().push("context");
+            Ok(())
+        }
+
+        fn prepare_init_retry(&mut self) -> Result<(), ScriptError> {
+            self.trace.borrow_mut().push("recreate");
+            Ok(())
+        }
+
+        fn script_lifetime_valid(&self) -> bool {
+            self.trace.borrow_mut().push("guard");
+            false
+        }
+
+        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(false)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn every_retry_owner_uses_the_shared_recreate_then_guard_boundary() {
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let handle = RuntimeScriptInstanceHandle::new(Box::new(RetryOrderingScript {
+            trace: Rc::clone(&trace),
+        }));
+        let context = ScriptListenerActionHydration::new(None, Vec::new());
+        assert!(
+            !install_context_recreate_and_guard_script_lifetime(&handle, &context, &mut None)
+                .expect("retry boundary")
+        );
+        assert_eq!(&*trace.borrow(), &["context", "recreate", "guard"]);
+
+        let owners = [
+            include_str!("state_machine/state_machine_instance/state_machine_instance.rs"),
+            include_str!("state_machine/state_machine_instance/data_converter_group.rs"),
+            include_str!("scripted_interpolator.rs"),
+        ];
+        let owner_calls = owners
+            .iter()
+            .map(|source| {
+                source
+                    .matches("install_context_recreate_and_guard_script_lifetime(")
+                    .count()
+            })
+            .sum::<usize>();
+        assert_eq!(
+            owner_calls, 5,
+            "the complete retry-owner census must stay on the shared boundary"
+        );
+        assert_eq!(
+            owners
+                .iter()
+                .map(|source| source.matches(".prepare_init_retry").count())
+                .sum::<usize>(),
+            0,
+            "no retry sibling may reacquire recipes before the shared lifetime guard"
+        );
     }
 
     #[derive(Debug)]

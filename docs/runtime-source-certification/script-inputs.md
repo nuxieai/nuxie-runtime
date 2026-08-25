@@ -1704,3 +1704,74 @@ witness for either rejected edge. The 42 out-of-line plus 11 executable inline
 ScriptInput census remains sound; complete certification is rejected until the
 shared retry ordering and nested source/context ownership are corrected, then
 reviewed by two fresh independent auditors.
+
+## Correction after review `a62bc405a`
+
+Status: **PENDING — TWO FRESH INDEPENDENT REVIEWS REQUIRED.** This correction
+addresses only the two blockers identified by review `a62bc405a`; it does not
+self-certify ScriptInput authority.
+
+### All five reinit owners now share the pinned lifetime boundary
+
+The StateMachine, StateMachine after-context-install, DataConverterGroup,
+listener-owned converter, and ScriptedInterpolator owners now enter one shared
+boundary. It installs only the already-selected DataContext, calls
+`prepare_init_retry` to recreate the generator/table, and checks the concrete
+script lifetime before returning to its caller. Only a live caller then
+acquires or validates Artboard/ViewModel recipes and performs the two-loop
+apply/hydrate transaction. An inert recreation cannot consult a typed input
+resolver or surface an error owned by the old table lifetime.
+
+`every_retry_owner_uses_the_shared_recreate_then_guard_boundary` is a complete
+five-owner census backed by an actual ScriptInstance trace. It proves the
+shared boundary observes Context, generator recreation, and the lifetime guard
+in that order and proves every production owner calls that boundary before its
+fallible hydration preparation.
+
+### Nested rehydrate now carries occurrence authority
+
+Every concrete nested occurrence retains its source `File` authority across
+instantiation, cloning, and replacement. `rehydrate_bound_script_input_tree`
+recovers that source, selects the graph and ScriptInput catalogue from it,
+selects the consumer ViewModel from the occurrence, and resolves bindings from
+the occurrence's complete local-plus-parent `RuntimeOwnedDataContext`. Deferred
+Artboard construction likewise receives the nested occurrence's parent chain
+instead of a root-only substitute.
+
+The sibling scripted mount-tree walker was audited and had the same root-File
+assumption. Its groups now carry the concrete source `File` through target
+lookup, hydration, and lazy interpolator attachment; a missing source runtime
+is reported instead of silently consulting a colliding root catalogue.
+
+The operative witnesses cover both rejected dimensions:
+
+- `nested_tree_rehydrate_uses_cross_file_source_catalog_and_occurrence_context`
+  mounts a nested occurrence whose source and consumer Files have colliding
+  graph ids but distinct ScriptInput manifests, then proves the source manifest
+  and nested occurrence context drive the live table;
+- `nested_script_input_resolution_uses_local_then_parent_data_context` proves
+  a local property wins and a missing local property falls back through the
+  retained parent chain;
+- `live_scripted_artboard_uses_consumer_file_and_retains_concrete_cross_file_source`
+  proves the concrete source File remains retained independently of the
+  consumer File.
+
+### Correction evidence
+
+All Cargo commands below used `CARGO_INCREMENTAL=0`:
+
+- the five-owner retry ordering census passed;
+- the cross-File distinct-manifest, local-plus-parent, and concrete source
+  retention witnesses passed;
+- debug and release `nuxie-runtime` lib-test compilation passed;
+- scripting-enabled `nuxie` lib-test compilation passed;
+- combined checks for `nuxie-runtime`, `nuxie-scripting`, `silver-corpus`, and
+  scripting-enabled `rust-golden-runner` passed;
+- source correspondence remained 456 applicable rows with zero pending;
+- symbol correspondence remained 1,105 owners / 7,818 authority units with
+  generated authority replayed, and all 33 checker tests passed.
+
+This evidence establishes only a scoped correction and falsifying witnesses.
+The ScriptInput receipt remains pending until two fresh independent reviewers
+inspect the correction commit and independently accept both previously
+rejected edges.

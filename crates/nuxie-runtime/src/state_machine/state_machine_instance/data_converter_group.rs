@@ -321,7 +321,6 @@ impl StateMachineInstance {
     where
         F: FnOnce(&Self) -> Result<crate::ScriptListenerActionHydration, ScriptError>,
     {
-        let context = context.preflight_artboards()?;
         let handle = self
             .data_bind_graph
             .scripted_converter_instance_at_occurrence(
@@ -334,19 +333,14 @@ impl StateMachineInstance {
                 ))
             })?;
         let mut factory = factory;
-        {
-            let mut instance = handle.borrow_mut();
-            context.install_context(&mut **instance)?;
+        if !crate::scripting::install_context_recreate_and_guard_script_lifetime(
+            &handle,
+            &context,
+            &mut factory,
+        )? {
+            return Ok(false);
         }
         let hydration = prepare_hydration(self)?.preflight_artboards()?;
-        {
-            let mut instance = handle.borrow_mut();
-            if let Some(factory) = factory.as_deref_mut() {
-                instance.prepare_init_retry_with_factory(factory)?;
-            } else {
-                instance.prepare_init_retry()?;
-            }
-        }
 
         let mut instance = handle.borrow_mut();
         hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;
@@ -490,7 +484,6 @@ impl StateMachineInstance {
     where
         F: FnOnce(&Self) -> Result<crate::ScriptListenerActionHydration, ScriptError>,
     {
-        let context = context.preflight_artboards()?;
         let handle = self
             .scripted_object_bindings
             .iter()
@@ -506,19 +499,14 @@ impl StateMachineInstance {
             })?;
         let mut factory = factory;
 
-        {
-            let mut instance = handle.borrow_mut();
-            context.install_context(&mut **instance)?;
+        if !crate::scripting::install_context_recreate_and_guard_script_lifetime(
+            &handle,
+            &context,
+            &mut factory,
+        )? {
+            return Ok(false);
         }
         let hydration = prepare_hydration(self)?.preflight_artboards()?;
-        {
-            let mut instance = handle.borrow_mut();
-            if let Some(factory) = factory.as_deref_mut() {
-                instance.prepare_init_retry_with_factory(factory)?;
-            } else {
-                instance.prepare_init_retry()?;
-            }
-        }
 
         let mut instance = handle.borrow_mut();
         hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;

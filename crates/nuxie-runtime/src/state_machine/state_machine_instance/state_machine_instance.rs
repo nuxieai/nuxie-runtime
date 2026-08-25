@@ -3411,7 +3411,6 @@ impl StateMachineInstance {
         // validation callback then produces deferred Artboard recipes; recipe
         // preparation can fail before any authored phase-two input write,
         // while infallible construction remains at its authored position.
-        let context = context.preflight_artboards()?;
         let handle = self
             .scripted_instances_by_global
             .get(&global_id)
@@ -3422,19 +3421,14 @@ impl StateMachineInstance {
                 ))
             })?;
         let mut factory = factory;
-        {
-            let mut instance = handle.borrow_mut();
-            context.install_context(&mut **instance)?;
+        if !crate::scripting::install_context_recreate_and_guard_script_lifetime(
+            &handle,
+            &context,
+            &mut factory,
+        )? {
+            return Ok(false);
         }
         let hydration = prepare_hydration(self)?.preflight_artboards()?;
-        {
-            let mut instance = handle.borrow_mut();
-            if let Some(factory) = factory.as_deref_mut() {
-                instance.prepare_init_retry_with_factory(factory)?;
-            } else {
-                instance.prepare_init_retry()?;
-            }
-        }
         let mut instance = handle.borrow_mut();
         hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;
         if !inits || !instance.user_init_pending()? {
@@ -3460,7 +3454,6 @@ impl StateMachineInstance {
     where
         F: FnOnce(&Self) -> Result<crate::ScriptListenerActionHydration, ScriptError>,
     {
-        let hydration = prepare_hydration(self)?.preflight_artboards()?;
         let handle = self
             .scripted_instances_by_global
             .get(&global_id)
@@ -3471,14 +3464,14 @@ impl StateMachineInstance {
                 ))
             })?;
         let mut factory = factory;
-        {
-            let mut instance = handle.borrow_mut();
-            if let Some(factory) = factory.as_deref_mut() {
-                instance.prepare_init_retry_with_factory(factory)?;
-            } else {
-                instance.prepare_init_retry()?;
-            }
+        if !crate::scripting::install_context_recreate_and_guard_script_lifetime(
+            &handle,
+            &crate::ScriptListenerActionHydration::unresolved(Vec::new()),
+            &mut factory,
+        )? {
+            return Ok(false);
         }
+        let hydration = prepare_hydration(self)?.preflight_artboards()?;
 
         let mut instance = handle.borrow_mut();
         hydration.apply_inputs(&mut **instance, &mut NoopScriptHost)?;

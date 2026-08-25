@@ -422,6 +422,13 @@ pub struct ArtboardInstance {
     has_scripted_drawables: bool,
     nested_script_owned_contexts: BTreeMap<u32, RuntimeOwnedViewModelInstance>,
     script_update_error: Option<ScriptError>,
+    /// Facade-level File owner that constructed this concrete occurrence.
+    ///
+    /// The runtime never interprets this type-erased pin. It only preserves it
+    /// across occurrence clones so a host can recover the exact source File
+    /// for a cross-File nested scripted tree instead of guessing from a
+    /// process-local numeric graph id.
+    script_source_file_authority: Option<RuntimeScriptSourceFileAuthority>,
     /// C++ `Artboard::m_FocusManager`: a mounted child Artboard retains the
     /// parent state-machine focus domain so component-list rows and nested
     /// state machines can install it at their exact link boundary.
@@ -585,6 +592,17 @@ pub struct ArtboardInstance {
     solved_layout_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
+#[derive(Clone)]
+struct RuntimeScriptSourceFileAuthority(Rc<dyn std::any::Any>);
+
+impl std::fmt::Debug for RuntimeScriptSourceFileAuthority {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeScriptSourceFileAuthority")
+            .finish_non_exhaustive()
+    }
+}
+
 impl Clone for ArtboardInstance {
     fn clone(&self) -> Self {
         let instance_identity = self.instance_identity.clone();
@@ -631,6 +649,7 @@ impl Clone for ArtboardInstance {
             has_scripted_drawables: self.has_scripted_drawables,
             nested_script_owned_contexts: self.nested_script_owned_contexts.clone(),
             script_update_error: None,
+            script_source_file_authority: self.script_source_file_authority.clone(),
             external_focus_domain: None,
             nested_artboards: self.nested_artboards.clone(),
             active_nested_state_machines: BTreeMap::new(),
@@ -2678,6 +2697,7 @@ impl ArtboardInstance {
             }),
             nested_script_owned_contexts: BTreeMap::new(),
             script_update_error: None,
+            script_source_file_authority: None,
             external_focus_domain: None,
             nested_artboards,
             active_nested_state_machines: BTreeMap::new(),
@@ -4491,6 +4511,48 @@ impl ArtboardInstance {
             .map(|context| Arc::clone(&context.file))
     }
 
+    /// Retain the facade File owner on this complete concrete occurrence tree.
+    /// Hosts recover it only by its original concrete type.
+    #[doc(hidden)]
+    pub fn attach_script_source_file_authority(&mut self, authority: Rc<dyn std::any::Any>) {
+        let authority = RuntimeScriptSourceFileAuthority(authority);
+        self.attach_script_source_file_authority_inner(&authority);
+    }
+
+    fn attach_script_source_file_authority_inner(
+        &mut self,
+        authority: &RuntimeScriptSourceFileAuthority,
+    ) {
+        self.script_source_file_authority = Some(authority.clone());
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .attach_script_source_file_authority_inner(authority);
+        }
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items_mut(local_id) else {
+                continue;
+            };
+            for item in items {
+                item.child
+                    .attach_script_source_file_authority_inner(authority);
+            }
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn script_source_file_authority<T: 'static>(&self) -> Option<Rc<T>> {
+        self.script_source_file_authority
+            .as_ref()?
+            .0
+            .clone()
+            .downcast::<T>()
+            .ok()
+    }
+
     pub(crate) fn runtime_file_view_model_instances(
         &self,
     ) -> Option<RuntimeFileViewModelInstanceCatalog> {
@@ -4805,6 +4867,31 @@ impl ArtboardInstance {
                     )
                 })
             })
+    }
+
+    /// Resolve one ScriptInput against this concrete occurrence's complete
+    /// local-plus-parent DataContext, with the supplied root used only when
+    /// the occurrence has never acquired its own context.
+    #[doc(hidden)]
+    pub fn bound_script_input_value_for_occurrence(
+        &self,
+        file: &RuntimeFile,
+        input: &nuxie_binary::RuntimeObject,
+        fallback_root: Option<&RuntimeOwnedViewModelHandle>,
+    ) -> Result<Option<ScriptValue>, ScriptError> {
+        let context = self.scripted_interpolator_owned_data_context(fallback_root);
+        crate::scripting::bound_script_input_value_from_data_context(file, &context, input)
+    }
+
+    #[doc(hidden)]
+    pub fn bound_script_artboard_input_for_occurrence(
+        &self,
+        file: &RuntimeFile,
+        input: &nuxie_binary::RuntimeObject,
+        fallback_root: Option<&RuntimeOwnedViewModelHandle>,
+    ) -> Result<Option<u64>, ScriptError> {
+        let context = self.scripted_interpolator_owned_data_context(fallback_root);
+        crate::scripting::bound_script_artboard_input_from_data_context(file, &context, input)
     }
 
     /// Resolve a ScriptInputViewModelProperty through the same complete
@@ -10527,7 +10614,8 @@ impl ArtboardInstance {
         self.commit_nested_artboard_replacement(local_id, nested, force)
     }
 
-    pub(crate) fn replace_nested_artboard_artboard_instance(
+    #[doc(hidden)]
+    pub fn replace_nested_artboard_artboard_instance(
         &mut self,
         local_id: usize,
         source: ArtboardInstance,
@@ -10556,6 +10644,13 @@ impl ArtboardInstance {
         }
         if let Some(existing) = self.nested_artboards.get(&local_id) {
             nested.reuse_owned_stateful_view_model_context(existing);
+        }
+        if nested.child.script_source_file_authority.is_none()
+            && let Some(authority) = self.script_source_file_authority.as_ref()
+        {
+            nested
+                .child
+                .attach_script_source_file_authority_inner(authority);
         }
         if let Some(parent_focus) = self.external_focus_domain.as_ref() {
             nested.install_external_focus_domain(parent_focus);

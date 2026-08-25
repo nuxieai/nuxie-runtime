@@ -206,14 +206,14 @@ pub(crate) use data_bind_graph::{
 };
 pub use draw::image_asset::{RuntimeImageAssetLoader, RuntimeImageAssetOwners};
 pub use draw::{
-    AabbScalarBounds, IntegerAabb, RuntimeContourMeasure, RuntimeDrawableDispatch,
-    RuntimeDrawableDispatchKind, RuntimeDrawableDispatchObjectKind, RuntimeFeatherState,
-    RuntimeGeometryHit, RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment,
-    RuntimeGradientStop, RuntimeImageDimensionConflict, RuntimeLayoutBounds,
-    RuntimeLayoutBoundsReport, RuntimePathCommand, RuntimePathMeasure, RuntimePathSample,
-    RuntimeRenderPaints, RuntimeSemanticTextHit, RuntimeShapePaintCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, TypedAabb, preallocate_source_render_paints,
-    runtime_path_commands_from_raw_path,
+    AabbInteger, AabbScalarBounds, FloatAabb, IntegerAabb, RuntimeContourMeasure,
+    RuntimeDrawableDispatch, RuntimeDrawableDispatchKind, RuntimeDrawableDispatchObjectKind,
+    RuntimeFeatherState, RuntimeGeometryHit, RuntimeGeometryHitOccurrence,
+    RuntimeGeometryHitPathSegment, RuntimeGradientStop, RuntimeImageDimensionConflict,
+    RuntimeLayoutBounds, RuntimeLayoutBoundsReport, RuntimePathCommand, RuntimePathMeasure,
+    RuntimePathSample, RuntimeRenderPaints, RuntimeSemanticTextHit, RuntimeShapePaintCommand,
+    RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState, TypedAabb,
+    preallocate_source_render_paints, runtime_path_commands_from_raw_path,
 };
 #[cfg(feature = "tools")]
 #[doc(hidden)]

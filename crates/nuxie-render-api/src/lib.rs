@@ -12,7 +12,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod aabb;
 mod serializing;
+pub use aabb::{Aabb, AabbInteger, AabbScalarBounds, IntegerAabb, TypedAabb};
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
 pub use serializing::{SerializingFactory, SerializingRenderer};
 
@@ -43,50 +45,6 @@ pub struct Vec2D {
 impl Vec2D {
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
-    }
-}
-
-/// Axis-aligned bounds in the same coordinate space as the queried geometry.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Aabb {
-    pub min_x: f32,
-    pub min_y: f32,
-    pub max_x: f32,
-    pub max_y: f32,
-}
-
-impl Aabb {
-    pub const fn new(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> Self {
-        Self {
-            min_x,
-            min_y,
-            max_x,
-            max_y,
-        }
-    }
-
-    pub fn width(self) -> f32 {
-        self.max_x - self.min_x
-    }
-
-    pub fn height(self) -> f32 {
-        self.max_y - self.min_y
-    }
-
-    /// Inclusive containment, including points on the maximum edges.
-    pub fn contains(self, point: Vec2D) -> bool {
-        point.x >= self.min_x
-            && point.x <= self.max_x
-            && point.y >= self.min_y
-            && point.y <= self.max_y
-    }
-
-    /// Strict-edge overlap from pinned C++ `AABB::overlaps`.
-    pub fn overlaps(self, other: Self) -> bool {
-        self.min_x < other.max_x
-            && self.max_x > other.min_x
-            && self.min_y < other.max_y
-            && self.max_y > other.min_y
     }
 }
 
@@ -431,17 +389,7 @@ impl RawPath {
 
     /// Coarse control-point bounds, matching C++ `RawPath::bounds()`.
     pub fn bounds(&self) -> Option<Aabb> {
-        let first = *self.points.first()?;
-        Some(self.points.iter().copied().fold(
-            Aabb::new(first.x, first.y, first.x, first.y),
-            |mut bounds, point| {
-                bounds.min_x = bounds.min_x.min(point.x);
-                bounds.min_y = bounds.min_y.min(point.y);
-                bounds.max_x = bounds.max_x.max(point.x);
-                bounds.max_y = bounds.max_y.max(point.y);
-                bounds
-            },
-        ))
+        (!self.points.is_empty()).then(|| Aabb::from_points(&self.points))
     }
 
     /// Exact Bézier extrema bounds, matching C++ `RawPath::preciseBounds()`.
@@ -847,13 +795,12 @@ impl RawPath {
 
 fn include_raw_path_point(bounds: &mut Option<Aabb>, point: Vec2D) {
     match bounds {
-        Some(bounds) => {
-            bounds.min_x = bounds.min_x.min(point.x);
-            bounds.min_y = bounds.min_y.min(point.y);
-            bounds.max_x = bounds.max_x.max(point.x);
-            bounds.max_y = bounds.max_y.max(point.y);
+        Some(bounds) => bounds.expand_to(point),
+        None => {
+            let mut first = Aabb::for_expansion();
+            first.expand_to(point);
+            *bounds = Some(first);
         }
-        None => *bounds = Some(Aabb::new(point.x, point.y, point.x, point.y)),
     }
 }
 
@@ -4578,6 +4525,31 @@ mod tests {
         distinct_object.renew_mutation_id();
         assert_eq!(distinct_object, snapshot);
         assert_ne!(distinct_object.mutation_id(), snapshot.mutation_id());
+    }
+
+    #[test]
+    fn raw_path_bounds_use_the_shared_pinned_aabb_extrema_contracts() {
+        let mut signed_zero = RawPath::new();
+        signed_zero.move_to(0.0, 0.0);
+        signed_zero.line_to(-0.0, -0.0);
+        let bounds = signed_zero.bounds().expect("nonempty path has bounds");
+        assert_eq!(bounds.min_x.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(bounds.min_y.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(bounds.max_x.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(bounds.max_y.to_bits(), 0.0_f32.to_bits());
+
+        let mut first_nan = RawPath::new();
+        first_nan.move_to(f32::NAN, f32::NAN);
+        first_nan.line_to(2.0, 3.0);
+        let bounds = first_nan.bounds().expect("nonempty path has bounds");
+        assert!(bounds.min_x.is_nan());
+        assert!(bounds.min_y.is_nan());
+        assert!(bounds.max_x.is_nan());
+        assert!(bounds.max_y.is_nan());
+
+        let mut precise_nan = RawPath::new();
+        precise_nan.move_to(f32::NAN, f32::NAN);
+        assert_eq!(precise_nan.precise_bounds(), Some(Aabb::for_expansion()),);
     }
 
     #[test]

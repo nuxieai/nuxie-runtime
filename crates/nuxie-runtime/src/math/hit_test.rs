@@ -19,12 +19,8 @@ impl HitTestArea {
     }
 
     pub fn around(x: f32, y: f32, radius: f32) -> Self {
-        Self::new(
-            graphics_round(x - radius),
-            graphics_round(y - radius),
-            graphics_round(x + radius),
-            graphics_round(y + radius),
-        )
+        let bounds = crate::FloatAabb::new(x - radius, y - radius, x + radius, y + radius).round();
+        Self::new(bounds.left, bounds.top, bounds.right, bounds.bottom)
     }
 
     fn width(self) -> i32 {
@@ -378,26 +374,14 @@ fn cross_lt(a: (f32, f32), b: (f32, f32)) -> bool {
 }
 
 fn mesh_bounds(vertices: &[(f32, f32)]) -> Option<(f32, f32, f32, f32)> {
-    let &(mut left, mut top) = vertices.first()?;
-    let mut right = left;
-    let mut bottom = top;
-    for &(x, y) in &vertices[1..] {
-        // `AABB(Span<Vec2D>)` uses `std::min/std::max`, whose first-operand
-        // NaN behavior differs from Rust's `f32::{min,max}`.
-        left = cpp_min(left, x);
-        top = cpp_min(top, y);
-        right = cpp_max(right, x);
-        bottom = cpp_max(bottom, y);
-    }
-    Some((left, top, right, bottom))
-}
-
-fn cpp_min(first: f32, second: f32) -> f32 {
-    if second < first { second } else { first }
-}
-
-fn cpp_max(first: f32, second: f32) -> f32 {
-    if first < second { second } else { first }
+    (!vertices.is_empty()).then(|| {
+        let points = vertices
+            .iter()
+            .map(|&(x, y)| nuxie_render_api::Vec2D::new(x, y))
+            .collect::<Vec<_>>();
+        let bounds = crate::FloatAabb::from_points(&points);
+        (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
+    })
 }
 
 fn graphics_round(value: f32) -> i32 {

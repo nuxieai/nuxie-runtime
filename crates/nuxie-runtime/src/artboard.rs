@@ -4898,16 +4898,10 @@ impl ArtboardInstance {
             transform.transform_point(width, 0.0),
             transform.transform_point(0.0, height),
             transform.transform_point(width, height),
-        ];
-        let (mut min_x, mut min_y) = corners[0];
-        let (mut max_x, mut max_y) = corners[0];
-        for (x, y) in corners.into_iter().skip(1) {
-            min_x = min_x.min(x);
-            min_y = min_y.min(y);
-            max_x = max_x.max(x);
-            max_y = max_y.max(y);
-        }
-        Some((min_x, min_y, max_x, max_y))
+        ]
+        .map(|(x, y)| Vec2D::new(x, y));
+        let bounds = crate::FloatAabb::from_points(&corners);
+        Some((bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y))
     }
 
     /// Layout-derived world transform with live ancestor ScrollConstraint

@@ -22769,13 +22769,12 @@ fn runtime_exact_path_bounds(commands: &[RuntimePathCommand]) -> Option<RenderAa
 
 fn runtime_geometry_include_point(bounds: &mut Option<RenderAabb>, point: (f32, f32)) {
     match bounds {
-        Some(bounds) => {
-            bounds.min_x = bounds.min_x.min(point.0);
-            bounds.min_y = bounds.min_y.min(point.1);
-            bounds.max_x = bounds.max_x.max(point.0);
-            bounds.max_y = bounds.max_y.max(point.1);
+        Some(bounds) => bounds.expand_to(RenderVec2D::new(point.0, point.1)),
+        None => {
+            let mut first = RenderAabb::for_expansion();
+            first.expand_to(RenderVec2D::new(point.0, point.1));
+            *bounds = Some(first);
         }
-        None => *bounds = Some(RenderAabb::new(point.0, point.1, point.0, point.1)),
     }
 }
 

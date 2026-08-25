@@ -188,16 +188,10 @@ fn root_transform_bounds(transform: Mat2D, bounds: SemanticBounds) -> SemanticBo
         transform.transform_point(bounds.max_x, bounds.min_y),
         transform.transform_point(bounds.max_x, bounds.max_y),
         transform.transform_point(bounds.min_x, bounds.max_y),
-    ];
-    let (mut min_x, mut min_y) = corners[0];
-    let (mut max_x, mut max_y) = corners[0];
-    for (x, y) in corners.into_iter().skip(1) {
-        min_x = min_x.min(x);
-        min_y = min_y.min(y);
-        max_x = max_x.max(x);
-        max_y = max_y.max(y);
-    }
-    SemanticBounds::new(min_x, min_y, max_x, max_y)
+    ]
+    .map(|(x, y)| nuxie_render_api::Vec2D::new(x, y));
+    let bounds = crate::FloatAabb::from_points(&corners);
+    SemanticBounds::new(bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
 }
 
 pub(crate) fn semantic_uint_property(

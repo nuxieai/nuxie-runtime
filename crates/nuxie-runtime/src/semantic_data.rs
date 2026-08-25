@@ -551,20 +551,18 @@ impl SemanticBounds {
     }
 
     pub fn is_empty_or_nan(self) -> bool {
-        // Pinned `AABB::isEmptyOrNaN` uses inverse positive-area checks,
-        // which also classify point/line fallbacks as empty and trigger the
-        // one-shot SemanticData bounds retry.
-        !(self.max_x - self.min_x > 0.0 && self.max_y - self.min_y > 0.0)
+        crate::FloatAabb::new(self.min_x, self.min_y, self.max_x, self.max_y).is_empty_or_nan()
     }
 
     pub fn expand(&mut self, other: Self) {
-        if other.is_empty_or_nan() {
-            return;
-        }
-        self.min_x = self.min_x.min(other.min_x);
-        self.min_y = self.min_y.min(other.min_y);
-        self.max_x = self.max_x.max(other.max_x);
-        self.max_y = self.max_y.max(other.max_y);
+        let mut bounds = crate::FloatAabb::new(self.min_x, self.min_y, self.max_x, self.max_y);
+        bounds.expand(crate::FloatAabb::new(
+            other.min_x,
+            other.min_y,
+            other.max_x,
+            other.max_y,
+        ));
+        *self = Self::new(bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y);
     }
 }
 

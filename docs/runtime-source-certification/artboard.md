@@ -32,8 +32,8 @@ transient clone paths, inspected every production `clone_for_transient_layout`
 call site, followed ordinary nested measurement through style registration and
 the Taffy callback, and reran the focused evidence against the exact reviewed
 commit. No production change was needed. This acceptance is deliberately
-narrow: the Artboard family remains uncertified because the static frame
-counter and cross-owner decoder findings below are still open.
+narrow: the later frame-counter and fixture-test corrections are tracked
+separately below and still require two fresh independent reviews.
 
 ### Exact denominator
 
@@ -132,13 +132,15 @@ The remaining header definitions are:
    applies the same per-axis finite-mode clamp as pinned
    `NestedArtboard::measureLayout`.
 
-3. **The inline frame counter remains unadjudicated.** Pinned `frameId()` is a
-   static process-wide counter incremented by root `Artboard::draw`. Rust has
-   the process-wide `artboard_draw_frame_id()` but also exposes
-   `ArtboardInstance::frame_id()` from a per-occurrence counter and copies that
-   counter in `Clone`. The receipt maps neither inline definition nor explains
-   which Rust API is the literal owner. This must be resolved explicitly; an
-   instance-local accessor cannot silently certify a static upstream symbol.
+3. **The inline frame counter mismatch is corrected, pending fresh review.**
+   Pinned `frameId()` is a static process-wide counter incremented by root
+   `Artboard::draw`. Correction `eba0a89b2` removes the invented clone-owned
+   Rust counter. Both `artboard_draw_frame_id()` and
+   `ArtboardInstance::frame_id()` now read the single process-wide
+   `nuxie-render-api` owner; public root draw and
+   `SerializingFactory::add_frame` remain the only increment paths. Nested,
+   component-list, and scripted internal draws still enter `drawInternal` and
+   do not increment. This correction requires two fresh independent reviews.
 
 ### Areas accepted by the adversarial pass
 
@@ -189,7 +191,7 @@ follows.
 
 | C++ symbols, exhaustively enumerated | Exact Rust owner symbols | Disposition |
 | --- | --- | --- |
-| `Artboard::sm_frameId` | process-wide `artboard_draw_frame_id`; instance-local `ArtboardInstance::frame_id` remains separately exposed | **Pending:** static/instance ownership is the unresolved finding below |
+| `Artboard::sm_frameId` | process-wide `artboard_draw_frame_id`; `ArtboardInstance::frame_id` reads the same static owner | Corrected by `eba0a89b2`; pending two fresh reviews |
 | `Artboard::Artboard`, `Artboard::~Artboard`, `ArtboardInstance::ArtboardInstance`, `ArtboardInstance::~ArtboardInstance`, `canContinue`, `Artboard::validateObjects`, `Artboard::initialize` | `ArtboardInstance::from_graph_inner`, `ArtboardInstance::build_component_occurrence_relations`, `Drop for ArtboardInstance`, Rust field drop order | Owner-safe equivalent; rejected objects become import errors rather than dangling nullable slots |
 | `Artboard::addObject`, `addAnimation`, `addStateMachine`, `addScriptedObject`, `sortDependencies`, `cloneObjectDataBinds` | `from_graph_inner`, `build_component_interface_schedules`, retained `objects`, `linear_animations`, `state_machines`, script-owner tables, `RuntimeRetainedDataBind::clone` | Owner-safe equivalent |
 | `Artboard::sortDrawOrder`, `clearRedundantOperations` | `RuntimeDrawableList::from_graph`, `sort_draw_order`, `clear_redundant_operations`, retained clipping/draw-rule ordering in `draw.rs` | Equivalent retained draw list |
@@ -258,12 +260,14 @@ All 93 out-of-line definitions map as follows: 87
 | `computeLayoutBounds`, `size`, `itemSize`, `setItemSize`, `gap` | `update_component_list_layout_bounds`, retained logical item sizes/layout size, layout-style gap lookup | Equivalent under Taffy adaptation |
 | `attachArtboardOverride`, `clearArtboardOverride` | `component_list_item_override_local`, `component_list_item_style`, `mark_component_list_override_changed` | Equivalent, including default/specific selection and pinned height-hug quirk |
 
-The component-list flag test
-`upstream_flagged_component_list_joins_layout_through_a_group` remains an
-expected-red cross-owner dependency: the component-list owner honors
-`DrawableFlag::ParticipatesInLayout` when retained, but the pinned fixture's
-flag is not decoded by the binary/property owner. It is not silently counted
-as a certified component-list behavior.
+The previous component-list decoder finding was a false negative in the test,
+not a production gap. The pinned fixture retains key `129` with value `256`;
+the graph and instance arenas preserve it, and `layout_provider_children`
+honors `DrawableFlag::ParticipatesInLayout`. The old helper queried root local
+`0`, whose direct provider is the owning `LayoutComponent` local `1`, so it
+could never directly return the nested list local `3`. Correction `eba0a89b2`
+first asserts the retained flag, resolves the list's owning layout ancestor,
+and queries that owner. Both the unflagged and flagged pinned fixtures now pass.
 
 ## `src/nested_artboard_layout.cpp`
 
@@ -294,6 +298,9 @@ dirt exactly when the `fit` property changes.
 - `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime ordinary_nested_artboard_contributes_its_mounted_intrinsic_size --lib`
 - `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime public_clone_starts_changed_while_transient_clone_preserves_source_state --lib`
 - `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime public_artboard_clone_is_cold_but_transient_layout_clone_keeps_scripts --lib`
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime public_clones_observe_the_single_process_wide_draw_frame_id --lib`
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime upstream_component_list_inside_a_group_stays_out_of_layout --lib`
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime upstream_flagged_component_list_joins_layout_through_a_group --lib`
 - `make --no-print-directory runtime-source-symbol-check`
 - `cargo test -p nuxie-runtime layout_fit_leaf_resizes_its_mounted_artboard_from_the_parent_layout_frame --lib`
 - `cargo test -p nuxie-runtime artboard_size_change_uses_artboard_propagate_size_override --lib`
@@ -311,12 +318,11 @@ test's compile step because an unrelated concurrent `draw.rs` edit referenced
 an unresolved `path_cache_image_dimensions`; the exact-commit worktree removes
 that unrelated failure from this verdict.
 
-The overall Artboard family verdict remains **REJECTED / UNCERTIFIED** while the
-static process-wide frame-counter ownership and the cross-owner
-`ParticipatesInLayout` decoder red remain unresolved. The corrected
-1,105-owner/7,818-unit campaign denominator is accepted; it is no longer an
-open Artboard finding. Neither remaining gap is silently credited to this
-family.
+The two remaining blockers from the prior reviews were corrected by
+`eba0a89b2`. The Artboard family is still **PENDING / UNCERTIFIED** until two
+fresh independent reviews accept that exact correction; a green focused suite
+does not certify it. The corrected 1,105-owner/7,818-unit campaign denominator
+is accepted and is no longer an open Artboard finding.
 
 ## Second independent adversarial re-review of `d3df628c7`: corrections accepted
 
@@ -358,7 +364,6 @@ axis-local minima as the pinned body.
 All three focused commands listed in Evidence passed from an isolated detached
 worktree at exact commit `d3df628c7` with `CARGO_INCREMENTAL=0` (the repository's
 ignored fixture files were mirrored into that worktree solely so the lib-test
-target could compile). This second acceptance is limited to the two corrected
-rows. The Artboard family remains **REJECTED / UNCERTIFIED** for the independent
-static-frame-counter and cross-owner `ParticipatesInLayout` gaps already
-recorded above.
+target could compile). This second acceptance is limited to the two earlier
+corrected rows. The subsequent frame-counter and fixture-test correction is
+tracked at `eba0a89b2` and remains pending two fresh independent reviews.

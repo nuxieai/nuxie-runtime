@@ -7,13 +7,15 @@
 )]
 
 use nuxie::{
-    BlendMode, ColorInt, Factory, File, FillRule, ImageDecodeError, RawPath, RecordingFactory,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StateMachineInputKind, StrokeCap, StrokeJoin,
+    BlendMode, ColorInt, Factory, File, FillRule, ImageDecodeError, OwnedArtboardInstance, RawPath,
+    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StateMachineInputKind, StrokeCap,
+    StrokeJoin,
 };
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 
 struct DropTrackedRenderImage {
     inner: Box<dyn RenderImage>,
@@ -662,4 +664,25 @@ fn borrowed_view_model_advance_facade_forces_zero_seconds_true() {
         0.0,
         &mut view_model,
     ));
+}
+
+#[test]
+fn owned_artboard_occurrence_fork_is_independent_and_shares_its_file() {
+    let file = Arc::new(
+        File::import(&external_fixture("hosted_font_file.riv")).expect("import font file"),
+    );
+    let mut source = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("instantiate source occurrence");
+    let fork = source.fork_occurrence();
+    assert!(Arc::ptr_eq(source.file(), fork.file()));
+    assert_eq!(source.artboard().index(), fork.artboard().index());
+
+    let fork_dimensions = fork.artboard_dimensions();
+    assert!(
+        source
+            .raw_mut()
+            .set_artboard_dimensions(fork_dimensions.0 + 17.0, fork_dimensions.1 + 23.0)
+    );
+    assert_ne!(source.artboard_dimensions(), fork.artboard_dimensions());
+    assert_eq!(fork.artboard_dimensions(), fork_dimensions);
 }

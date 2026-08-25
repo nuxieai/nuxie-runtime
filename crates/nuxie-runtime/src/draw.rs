@@ -37202,4 +37202,130 @@ mod tests {
         assert_eq!(stream.matches("drawImage").count(), 2);
         assert_eq!(image_cache.len(), 1);
     }
+
+    fn upstream_parametric_path(parametric: ParametricPathNode) -> PathGeometryNode {
+        PathGeometryNode {
+            local_id: 0,
+            global_id: 1,
+            type_name: "Path",
+            is_closed: true,
+            is_hole: false,
+            is_clockwise: true,
+            parametric: Some(parametric),
+            vertices: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn upstream_rectangle_path_builds_expected_commands() {
+        let path = upstream_parametric_path(ParametricPathNode::Rectangle {
+            width: 100.0,
+            height: 200.0,
+            origin_x: 0.0,
+            origin_y: 0.0,
+            link_corner_radius: false,
+            corner_radius_tl: 0.0,
+            corner_radius_tr: 0.0,
+            corner_radius_bl: 0.0,
+            corner_radius_br: 0.0,
+        });
+        let commands = rectangle_path_commands(&path, ShapePaintPathKind::Local, Mat2D::IDENTITY);
+        assert_eq!(commands.len(), 6);
+        assert!(matches!(commands[0], RuntimePathCommand::Move { .. }));
+        assert!(matches!(commands[1], RuntimePathCommand::Line { .. }));
+        assert!(matches!(commands[2], RuntimePathCommand::Line { .. }));
+        assert!(matches!(commands[3], RuntimePathCommand::Line { .. }));
+        assert!(matches!(commands[4], RuntimePathCommand::Line { .. }));
+        assert!(matches!(commands[5], RuntimePathCommand::Close));
+    }
+
+    #[test]
+    fn upstream_rounded_rectangle_path_builds_expected_commands() {
+        let path = upstream_parametric_path(ParametricPathNode::Rectangle {
+            width: 100.0,
+            height: 200.0,
+            origin_x: 0.0,
+            origin_y: 0.0,
+            link_corner_radius: true,
+            corner_radius_tl: 20.0,
+            corner_radius_tr: 0.0,
+            corner_radius_bl: 0.0,
+            corner_radius_br: 0.0,
+        });
+        let commands = rectangle_path_commands(&path, ShapePaintPathKind::Local, Mat2D::IDENTITY);
+        assert_eq!(commands.len(), 10);
+        for (index, expected) in [
+            "move", "cubic", "line", "cubic", "line", "cubic", "line", "cubic", "line",
+            "close",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let actual = match commands[index] {
+                RuntimePathCommand::Move { .. } => "move",
+                RuntimePathCommand::Line { .. } => "line",
+                RuntimePathCommand::Cubic { .. } => "cubic",
+                RuntimePathCommand::Close => "close",
+            };
+            assert_eq!(actual, expected, "verb {index}");
+        }
+    }
+
+    #[test]
+    fn upstream_ellipse_path_builds_expected_commands_and_points() {
+        let path = upstream_parametric_path(ParametricPathNode::Ellipse {
+            width: 100.0,
+            height: 200.0,
+            origin_x: 0.5,
+            origin_y: 0.5,
+        });
+        let commands = ellipse_path_commands(&path, ShapePaintPathKind::Local, Mat2D::IDENTITY);
+        assert_eq!(commands.len(), 6);
+        assert_eq!(commands[0], RuntimePathCommand::Move { x: 0.0, y: -100.0 });
+        assert_eq!(
+            commands[1],
+            RuntimePathCommand::Cubic {
+                x1: 50.0 * CIRCLE_CONSTANT,
+                y1: -100.0,
+                x2: 50.0,
+                y2: -100.0 * CIRCLE_CONSTANT,
+                x3: 50.0,
+                y3: 0.0,
+            }
+        );
+        assert_eq!(
+            commands[2],
+            RuntimePathCommand::Cubic {
+                x1: 50.0,
+                y1: 100.0 * CIRCLE_CONSTANT,
+                x2: 50.0 * CIRCLE_CONSTANT,
+                y2: 100.0,
+                x3: 0.0,
+                y3: 100.0,
+            }
+        );
+        assert_eq!(
+            commands[3],
+            RuntimePathCommand::Cubic {
+                x1: -50.0 * CIRCLE_CONSTANT,
+                y1: 100.0,
+                x2: -50.0,
+                y2: 100.0 * CIRCLE_CONSTANT,
+                x3: -50.0,
+                y3: 0.0,
+            }
+        );
+        assert_eq!(
+            commands[4],
+            RuntimePathCommand::Cubic {
+                x1: -50.0,
+                y1: -100.0 * CIRCLE_CONSTANT,
+                x2: -50.0 * CIRCLE_CONSTANT,
+                y2: -100.0,
+                x3: 0.0,
+                y3: -100.0,
+            }
+        );
+        assert_eq!(commands[5], RuntimePathCommand::Close);
+    }
 }

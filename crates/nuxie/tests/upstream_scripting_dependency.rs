@@ -48,6 +48,10 @@ fn run_number_dependency(asset: &str, silver_name: &str) {
         .unwrap_or_else(|error| panic!("{asset} imports with trusted scripts: {error:#}"));
     let artboard = file.artboard_named("Artboard").expect("Artboard artboard");
     let mut instance = artboard.instantiate().expect("Artboard instantiates");
+    let mut silver = PersistentFactory::new(SerializingFactory::new());
+    instance
+        .initialize_renderer(&mut silver)
+        .expect("Artboard renderer initializes at the import boundary");
     let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
     let mut view_model = if instance.view_model_index().is_none() {
         instance.instantiate_view_model()
@@ -55,7 +59,6 @@ fn run_number_dependency(asset: &str, silver_name: &str) {
         instance.instantiate_view_model_instance(0)
     }
     .expect("Artboard view-model instance");
-    let mut silver = PersistentFactory::new(SerializingFactory::new());
     let (width, height) = instance.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
 
@@ -97,6 +100,10 @@ fn run_string_dependency(asset: &str, silver_name: &str) {
         .unwrap_or_else(|error| panic!("{asset} imports with trusted scripts: {error:#}"));
     let artboard = file.artboard_named("Artboard").expect("Artboard artboard");
     let mut instance = artboard.instantiate().expect("Artboard instantiates");
+    let mut silver = PersistentFactory::new(SerializingFactory::new());
+    instance
+        .initialize_renderer(&mut silver)
+        .expect("Artboard renderer initializes at the import boundary");
     let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
     let mut view_model = if instance.view_model_index().is_none() {
         instance.instantiate_view_model()
@@ -104,7 +111,6 @@ fn run_string_dependency(asset: &str, silver_name: &str) {
         instance.instantiate_view_model_instance(0)
     }
     .expect("Artboard view-model instance");
-    let mut silver = PersistentFactory::new(SerializingFactory::new());
     let (width, height) = instance.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
 
@@ -140,7 +146,6 @@ fn run_string_dependency(asset: &str, silver_name: &str) {
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
 fn scripted_data_converter_number_using_multi_chain_requires() {
     run_number_dependency(
         "script_dependency_test.riv",
@@ -149,7 +154,6 @@ fn scripted_data_converter_number_using_multi_chain_requires() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
 fn scripted_data_converter_string_using_multi_chain_requires() {
     run_string_dependency(
         "script_dependency_test2.riv",
@@ -158,7 +162,6 @@ fn scripted_data_converter_string_using_multi_chain_requires() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
 fn scripted_data_converter_string_using_multi_chain_requires_from_library() {
     run_string_dependency(
         "script_dependency_test_using_library.riv",
@@ -167,7 +170,6 @@ fn scripted_data_converter_string_using_multi_chain_requires_from_library() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
 fn scripted_data_converter_string_using_multi_chain_requires_from_library_with_update() {
     run_string_dependency(
         "script_dependency_test_using_library_v2.riv",
@@ -176,7 +178,6 @@ fn scripted_data_converter_string_using_multi_chain_requires_from_library_with_u
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
 fn scripted_data_converter_string_with_namespaced_requires() {
     run_string_dependency("script_namespace_test.riv", "script_namespace_test");
 }

@@ -340,3 +340,81 @@ render-API `mapPoints` grouping also remains unchanged.
 This correction does not touch the separately tracked IK skew writes and does
 not self-certify its production changes. Verdict: **PENDING two fresh
 independent re-reviews.**
+
+## First fresh independent final-add correction re-review — REJECTED
+
+This independent review accepts the scalar-point correction in `d85dc97a1`.
+For dynamic matrix and point inputs, both Rust scalar-point owners emit the
+same ARM64 sequence as the pinned inline C++ operator: a separate skew
+`fmul.2s`, a scale `fmla.2s` into that linear addend, and a translation-first
+`fadd.2s`. A four-million-case linked raw-bit probe found zero runtime-point
+differences and zero render-API-point differences. Its first two million cases
+were sampled from positive and negative zero, the smallest and largest
+subnormals, the smallest normals, positive and negative one, finite extrema,
+both infinities, and positive and negative signaling and quiet NaNs with
+distinct payloads; its remaining two million cases used unrestricted raw
+32-bit patterns. This includes the rejected review's payload witness:
+dynamic point inputs return translation payload `0x7fc0bbbb` in both C++ and
+Rust.
+
+The review also compared optimized constant-point caller contexts instead of
+mistaking an inlining difference for an owner difference. With `(1, 1)` known
+to the optimizer, both pinned C++ and Rust simplify the products and return
+linear payload `0x7fc0aaaa`. Thus the workspace release profile may change the
+instruction shape at a specialized caller, but it changes the corresponding
+C++ and Rust expressions the same way. The source-shaped finite contraction,
+translation grouping, signed-zero, subnormal, infinity, signaling-NaN,
+quiet-NaN, and payload-precedence checks therefore accept both corrected
+scalar owners and `Mul<(f32, f32)>`, which delegates to the runtime owner.
+
+`transform_direction` also remains a distinct and accepted owner. Its linked
+comparison had zero differences across the same four million cases, and its
+ARM64 body remains only the pinned `fmul.2s`/`fmla.2s` linear contraction with
+no translation add. The separately tracked IK skew-write owner was excluded
+from this review as required.
+
+The required control audit did, however, invalidate the older claim that all
+Rust `mapPoints` forms were exact. The failure is not the new scalar-point fix;
+it is an earlier translation error caused by replacing pinned `float2`/`float4`
+SIMD source with superficially equivalent scalar `mul_add` expressions:
+
+- runtime `map_point`, `map_points`, and `map_points_in_place` preserve the
+  ordinary-real-number grouping but not the pinned SIMD instruction operand
+  placement for multiple NaNs. For matrix bits
+  `[ffc01234, ffc01234, 7fc0bbbb, 80000000, 00800000, bf800000]` and point bits
+  `[ffffffff, 3f800000]`, pinned `Mat2D::mapPoints` returns
+  `[7fc0bbbb, ffffffff]`; all three actual runtime forms return
+  `[7fc0bbbb, ffc01234]` in the unoptimized owner probe. The linked dynamic
+  comparison found 190,377 runtime-map differences in four million cases,
+  all in exceptional NaN precedence rather than finite grouping.
+- render-API `map_raw_path_point`, used by `RawPath::add_path` and
+  `add_path_backwards`, always executes the affine nested-FMA form. Pinned
+  `Mat2D::mapPoints` first tests both skew lanes and uses its scale-plus-
+  translation branch when they compare equal to zero, including signed zero.
+  With matrix bits
+  `[007fffff, 80000000, 80000000, 007fffff, 7fa01234, 7f800000]` and point bits
+  `[7f800000, 80000000]`, pinned source returns
+  `[7fe01234, 7f800000]`; the actual Rust `RawPath` caller returns
+  `[7fe01234, 7fc00000]` because its supposedly zero skew is still multiplied
+  by infinity. The linked probe found 7,678 render-map differences.
+
+This is precisely the kind of hidden parity failure the control review is
+intended to catch: retaining the high-level algebra was insufficient because
+the port dropped both an authored branch and the source's SIMD lane ownership.
+The correction must restore `mapPoints` from the pinned implementation as one
+shared behavioral owner, including its scale specialization and exceptional
+operand precedence, rather than patch either witness independently.
+
+Focused evidence, with `CARGO_INCREMENTAL=0` where applicable:
+
+- `cargo test -p nuxie-runtime math::mat2d --lib`: 10 passed;
+- `cargo test -p nuxie-render-api mat2d_point_transform_preserves_pinned_cpp_operator_contraction_bits --lib`: 1 passed;
+- a temporary actual-owner test confirmed the three runtime map forms and the
+  render-API `RawPath` witness above, then was removed;
+- direct pinned C++ and source-shaped Rust ARM64 assembly plus linked raw-bit
+  comparison produced the counts above.
+
+Verdict: **REJECTED for Mat2D certification while accepting the
+`d85dc97a1` scalar-point correction itself.** Restore the complete pinned
+`mapPoints` owner in both runtime and render-API paths, add non-circular
+exceptional-value witnesses, and obtain fresh independent re-reviews.

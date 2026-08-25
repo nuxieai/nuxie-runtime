@@ -32,7 +32,7 @@
   "wave": "b1",
   "case_count": 70,
   "ratchet": {
-    "max_pending": 7
+    "max_pending": 0
   },
   "cases": [
     {
@@ -260,9 +260,17 @@
       "ordinal": 1,
       "line": 30,
       "name": "Test data binding images from file assets",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
+          "line": 96,
+          "symbol": "data_binding_images_from_file_assets"
+        }
+      ],
+      "note": "Executable Rust owner-flow port performs the pinned fixture setup, actions, and behavioral assertions."
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_images_test.cpp#2",
@@ -306,9 +314,18 @@
       "ordinal": 4,
       "line": 179,
       "name": "Dynamic image binding with listener action",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
+          "line": 160,
+          "symbol": "dynamic_image_binding_with_listener_action"
+        }
+      ],
+      "note": "Executable Rust owner-flow port performs the pinned fixture setup, actions, and behavioral assertions.",
+      "expected_red_reason": "expected-red: after exact eager decode and assignment, dynamic listener image binding diverges at frame 3 op 101 (expected save, got restore)"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_images_test.cpp#5",
@@ -389,9 +406,18 @@
       "ordinal": 9,
       "line": 471,
       "name": "Layout image composes user scale on top of fit for 7.2 files",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
+          "line": 318,
+          "symbol": "layout_image_composes_user_scale_on_top_of_fit_for_7_2_files"
+        }
+      ],
+      "note": "Executable Rust owner-flow port performs the pinned fixture setup, actions, and behavioral assertions.",
+      "expected_red_reason": "expected-red: 7.2 layout image render scale is 3.65 instead of legacy 1.0105 multiplied by the authored user scale 3.65"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_images_test.cpp#10",
@@ -399,9 +425,17 @@
       "ordinal": 10,
       "line": 581,
       "name": "Stateful component image bind",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_images_direct.rs",
+          "line": 386,
+          "symbol": "stateful_component_image_bind"
+        }
+      ],
+      "note": "Executable Rust owner-flow port performs the pinned fixture setup, actions, and behavioral assertions."
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_keyframes.cpp#1",
@@ -500,9 +534,17 @@
       "ordinal": 1,
       "line": 39,
       "name": "artboard with bound properties",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
+          "line": 754,
+          "symbol": "artboard_has_bound_properties"
+        }
+      ],
+      "note": "Executable Rust owner-flow port performs the pinned fixture setup, actions, and behavioral assertions."
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_test.cpp#2",
@@ -516,7 +558,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 678,
+          "line": 714,
           "symbol": "state_machine_is_led_by_bound_enum_and_trigger"
         }
       ],
@@ -534,7 +576,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 422,
+          "line": 458,
           "symbol": "advance_and_apply_can_skip_view_model_reset"
         }
       ],
@@ -552,7 +594,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 197,
+          "line": 233,
           "symbol": "calculate_and_to_string_converters_with_numbers"
         }
       ],
@@ -570,7 +612,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 245,
+          "line": 281,
           "symbol": "trim_string_converter"
         }
       ],
@@ -588,7 +630,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 299,
+          "line": 335,
           "symbol": "to_string_converter_with_color_formatters"
         }
       ],
@@ -606,7 +648,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 350,
+          "line": 386,
           "symbol": "range_mapper"
         }
       ],
@@ -624,7 +666,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 384,
+          "line": 420,
           "symbol": "pad_string"
         }
       ],
@@ -637,9 +679,17 @@
       "ordinal": 9,
       "line": 694,
       "name": "Boolean Toggle",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
+          "line": 852,
+          "symbol": "boolean_toggle_converter_negates_bound_value"
+        }
+      ],
+      "note": "Executable Rust owner-flow port performs the pinned fixture setup, actions, and behavioral assertions."
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_test.cpp#10",
@@ -653,7 +703,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 575,
+          "line": 611,
           "symbol": "same_view_model_instance_is_shared_by_two_properties"
         }
       ],
@@ -671,7 +721,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 600,
+          "line": 636,
           "symbol": "different_view_model_instances_are_not_shared_by_two_properties"
         }
       ],
@@ -689,7 +739,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 625,
+          "line": 661,
           "symbol": "newly_created_view_model_instances_do_not_share_nested_instances"
         }
       ],
@@ -707,7 +757,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 647,
+          "line": 683,
           "symbol": "triggers_updated_by_events_update_parent_state"
         }
       ],
@@ -719,9 +769,18 @@
       "ordinal": 14,
       "line": 951,
       "name": "Transition self conditions",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_transition_self.rs",
+          "line": 36,
+          "symbol": "transition_self_conditions_reach_empty_list_swap_seam"
+        }
+      ],
+      "note": "Executable Rust owner-flow port performs the pinned fixture setup, actions, and behavioral assertions.",
+      "expected_red_reason": "expected-red: after faithfully replaying scalar and empty-list count transitions, Rust cannot swap the counted empty list items because the public list stores no concrete item occurrences"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_test.cpp#15",
@@ -881,7 +940,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 453,
+          "line": 489,
           "symbol": "view_model_runtime_properties"
         }
       ],
@@ -1026,7 +1085,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 516,
+          "line": 552,
           "symbol": "two_way_source_change_reaches_target_under_target_first_precedence"
         }
       ],
@@ -1192,7 +1251,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_data_binding_values.rs",
-          "line": 548,
+          "line": 584,
           "symbol": "two_way_target_change_reaches_source_under_source_first_precedence"
         }
       ],

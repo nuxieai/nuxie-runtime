@@ -34,6 +34,42 @@ fn local(artboard: &nuxie::ArtboardInstance<'_>, name: &str) -> usize {
         .local_id
 }
 
+fn local_of_type(artboard: &nuxie::ArtboardInstance<'_>, type_name: &str) -> usize {
+    artboard
+        .artboard()
+        .graph()
+        .components
+        .iter()
+        .find(|component| component.type_name == type_name)
+        .unwrap_or_else(|| panic!("component of type {type_name}"))
+        .local_id
+}
+
+fn assert_live_bool(
+    artboard: &mut nuxie::ArtboardInstance<'_>,
+    local_id: usize,
+    owner: &str,
+    property: &str,
+    expected: bool,
+) {
+    // The runtime exposes the exact generated bool setter but deliberately
+    // keeps the raw getter internal. A generated setter reports `false` for a
+    // no-op write, so an opposite write followed by restoration is an exact,
+    // executable observation of the pre-write value.
+    assert!(
+        artboard
+            .raw_mut()
+            .set_bool_property(local_id, key(owner, property), !expected),
+        "{owner}.{property} was not {expected} before the opposite write"
+    );
+    assert!(
+        artboard
+            .raw_mut()
+            .set_bool_property(local_id, key(owner, property), expected),
+        "{owner}.{property} did not restore to {expected}"
+    );
+}
+
 fn number(artboard: &nuxie::ArtboardInstance<'_>, name: &str, owner: &str, property: &str) -> f32 {
     artboard
         .raw()
@@ -712,4 +748,133 @@ fn state_machine_is_led_by_bound_enum_and_trigger() {
     assert!(view_model.fire_trigger("trigger-prop"));
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_eq!(read_position(&artboard), (350.0, 350.0));
+}
+
+#[test]
+fn artboard_has_bound_properties() {
+    let file = Box::leak(Box::new(
+        File::import(&pinned("data_binding_test.riv")).expect("fixture imports"),
+    ));
+    let mut artboard = file
+        .artboard_named("artboard-1")
+        .expect("artboard-1")
+        .instantiate()
+        .expect("artboard instantiates");
+    let mut view_model = artboard
+        .instantiate_default_view_model_instance()
+        .expect("default view model");
+    assert!(artboard.bind_view_model(&view_model));
+    artboard.advance(0.0);
+
+    let rectangle = local(&artboard, "bound_rect");
+    let shape = local(&artboard, "bound_rect_shape");
+    let solid = descendant_of_type(&artboard, "bound_rect_shape", "SolidColor");
+    let text = local(&artboard, "bound_text_run");
+    let follow = local_of_type(&artboard, "FollowPathConstraint");
+    assert_eq!(
+        artboard
+            .raw()
+            .double_property(rectangle, key("Rectangle", "width")),
+        Some(100.0)
+    );
+    assert!(
+        (artboard
+            .raw()
+            .double_property(shape, key("Node", "rotation"))
+            .expect("bound_rect_shape rotation")
+            - 1.5708)
+            .abs()
+            < 0.0001
+    );
+    assert_eq!(
+        artboard
+            .raw()
+            .color_property(solid, key("SolidColor", "colorValue")),
+        Some(0xffff_0000)
+    );
+    assert_eq!(
+        artboard
+            .raw()
+            .debug_string_property(text, key("TextValueRun", "text")),
+        Some(b"bound text".as_slice())
+    );
+    assert_live_bool(
+        &mut artboard,
+        follow,
+        "FollowPathConstraint",
+        "orient",
+        false,
+    );
+
+    assert!(view_model.set_number("width", 200.0));
+    assert!(view_model.set_number("rotation", 180.0));
+    assert!(view_model.set_color("color", 0xff00_ff00));
+    assert!(view_model.set_string("text", "New text"));
+    assert!(view_model.set_bool("orient", true));
+    artboard.advance(0.0);
+    assert_eq!(
+        artboard
+            .raw()
+            .double_property(rectangle, key("Rectangle", "width")),
+        Some(200.0)
+    );
+    assert!(
+        (artboard
+            .raw()
+            .double_property(shape, key("Node", "rotation"))
+            .expect("bound_rect_shape rotation")
+            - std::f32::consts::PI)
+            .abs()
+            < 0.0001
+    );
+    assert_eq!(
+        artboard
+            .raw()
+            .color_property(solid, key("SolidColor", "colorValue")),
+        Some(0xff00_ff00)
+    );
+    assert_eq!(
+        artboard
+            .raw()
+            .debug_string_property(text, key("TextValueRun", "text")),
+        Some(b"New text".as_slice())
+    );
+    assert_live_bool(
+        &mut artboard,
+        follow,
+        "FollowPathConstraint",
+        "orient",
+        true,
+    );
+}
+
+#[test]
+fn boolean_toggle_converter_negates_bound_value() {
+    let (mut artboard, mut machine, mut view_model) =
+        fixture("data_binding_test_2.riv", "artboard-3");
+    advance(&mut artboard, &mut machine, &mut view_model, 0.0);
+    let target = local(&artboard, "negate-bool-1");
+    assert_live_bool(
+        &mut artboard,
+        target,
+        "CustomPropertyBoolean",
+        "propertyValue",
+        true,
+    );
+    assert_eq!(
+        view_model
+            .raw()
+            .boolean_value_by_property_name_path("bool-prop"),
+        Some(false)
+    );
+
+    assert!(view_model.set_bool("bool-prop", true));
+    advance(&mut artboard, &mut machine, &mut view_model, 0.0);
+    assert_live_bool(
+        &mut artboard,
+        target,
+        "CustomPropertyBoolean",
+        "propertyValue",
+        false,
+    );
 }

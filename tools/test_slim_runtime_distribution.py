@@ -56,7 +56,7 @@ class SlimRuntimeSourceTests(unittest.TestCase):
         self.assertIn("feature-set: apple-runtime", plan)
         self.assertNotIn("legacy", plan.lower())
 
-    def test_distribution_exposes_one_module_and_three_symbol_partitions(self) -> None:
+    def test_distribution_exposes_one_module_and_platform_symbol_partitions(self) -> None:
         extension_root = REPO_ROOT / "crates/nux-apple-product-extension"
         module_map = (extension_root / "include/module.modulemap").read_text()
         self.assertEqual(module_map.count("module "), 1)
@@ -80,6 +80,13 @@ class SlimRuntimeSourceTests(unittest.TestCase):
         self.assertEqual(
             (extension_root / manifests[0]).read_text(),
             "nux_product_file_import_configured\n",
+        )
+
+        verifier = (REPO_ROOT / "tools/verify-nux-capi-xcframeworks.sh").read_text()
+        self.assertIn(
+            '"androidExtension=${repo_root}/crates/nux-capi/'
+            'exports-v3-android-vulkan-extension.txt"',
+            verifier,
         )
 
     def test_release_size_evidence_pins_the_exact_v040_baseline(self) -> None:

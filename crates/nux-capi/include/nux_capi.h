@@ -76,7 +76,7 @@
  *    module name are copied synchronously. It installs no foreign callback;
  *    scripts only enqueue bounded owned values for the active player step.
  *    Ordinary nux_file_import remains script-inert.
- * 12. On Apple, NuxRenderer owns the wgpu/Metal device domain; it never owns a
+ * 12. On Apple, NuxRenderer owns the exact Metal device domain; it never owns a
  *    CAMetalLayer or acquires a drawable. nux_renderer_copy_metal_device gives
  *    the caller Objective-C +1 ownership. A non-NULL AVAILABLE drawable is
  *    borrowed only for the synchronous render call. TIMEOUT and OCCLUDED are

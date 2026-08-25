@@ -241,21 +241,31 @@ class DistributionContractTests(unittest.TestCase):
                 "_nux_file_free\n",
             )
 
-    def test_headers_equal_the_three_manifests(self) -> None:
+    def test_headers_equal_all_platform_manifests(self) -> None:
         header = (
             "NuxStatus nux_file_free(NuxFile *file);\n"
+            "NuxStatus nux_file_import_configured(const uint8_t *bytes);\n"
             "NuxStatus nux_renderer_free(NuxRenderer *renderer);\n"
+            "NuxStatus nux_renderer_new_android_vulkan(void);\n"
             "NuxStatus nux_product_file_import_configured(const uint8_t *bytes);\n"
         )
         manifests = {
             "portable": "nux_file_free\n",
-            "appleExtension": "nux_renderer_free\n",
+            "appleExtension": "nux_file_import_configured\nnux_renderer_free\n",
+            "androidExtension": (
+                "nux_file_import_configured\nnux_renderer_new_android_vulkan\n"
+            ),
             "productExtension": "nux_product_file_import_configured\n",
         }
         validate_header_symbol_partitions(header, manifests)
         with self.assertRaisesRegex(ContractError, "missing=.*nux_player_step"):
             validate_header_symbol_partitions(
                 header, {**manifests, "extra": "nux_player_step\n"}
+            )
+
+        with self.assertRaisesRegex(ContractError, "overlap"):
+            validate_header_symbol_partitions(
+                header, {**manifests, "portable": "nux_file_free\nnux_renderer_free\n"}
             )
 
     def test_slice_provenance_uses_only_shipping_features(self) -> None:

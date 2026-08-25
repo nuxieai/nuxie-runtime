@@ -6993,24 +6993,36 @@ impl ArtboardInstance {
                 self.layout_revision = self.layout_revision.wrapping_add(1);
             }
             if size_changed {
-                let affected_text = self
-                    .components()
-                    .iter()
-                    .filter_map(|component| {
-                        (matches!(component.type_name, "Text" | "TextInput")
-                            // `LayoutComponent::propagateSizeToChildren`
-                            // skips nested LayoutComponents and transparent
-                            // layout containers such as Group/Solo. Rust's
-                            // supported Text control-size seam is the exact
-                            // direct-child case represented by
-                            // `runtime_text_layout_constraint`; an arbitrary
-                            // layout ancestor must not manufacture Text Path
-                            // dirt (`layout_component.cpp:981-1025`,
-                            // `text.cpp:160-178`).
-                            && self.component_parent_local(component.local_id) == Some(local_id))
-                        .then_some(component.local_id)
+                // Artboard overrides LayoutComponent::propagateSize and
+                // never calls propagateSizeToChildren. Other concrete
+                // LayoutComponents retain the ordinary direct-child control
+                // path (`artboard.cpp:1017-1030`,
+                // `layout_component.cpp:981-1025`).
+                let controls_children = self
+                    .component(local_id)
+                    .is_none_or(|component| component.type_name != "Artboard");
+                let affected_text = controls_children
+                    .then(|| {
+                        self.components()
+                            .iter()
+                            .filter_map(|component| {
+                                (matches!(component.type_name, "Text" | "TextInput")
+                                    // `LayoutComponent::propagateSizeToChildren`
+                                    // skips nested LayoutComponents and transparent
+                                    // layout containers such as Group/Solo. Rust's
+                                    // supported Text control-size seam is the exact
+                                    // direct-child case represented by
+                                    // `runtime_text_layout_constraint`; an arbitrary
+                                    // layout ancestor must not manufacture Text Path
+                                    // dirt (`layout_component.cpp:981-1025`,
+                                    // `text.cpp:160-178`).
+                                    && self.component_parent_local(component.local_id)
+                                        == Some(local_id))
+                                .then_some(component.local_id)
+                            })
+                            .collect::<Vec<_>>()
                     })
-                    .collect::<Vec<_>>();
+                    .unwrap_or_default();
                 for text_local in affected_text {
                     if let Some(text) = self
                         .component(text_local)
@@ -31868,6 +31880,49 @@ mod tests {
     }
 
     #[test]
+    fn artboard_size_change_uses_artboard_propagate_size_override() {
+        let bytes = synthetic_artboard_text_bounds_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic Artboard Text riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic Artboard Text graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let text_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+
+        instance.component_mut(text_local).unwrap().dirt = ComponentDirt::NONE;
+        assert!(instance.set_artboard_dimensions(240.0, 120.0));
+        assert!(
+            !instance
+                .component(text_local)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::TEXT_SHAPE),
+            "Artboard::propagateSize does not control child Text"
+        );
+
+        let bounds = RuntimeLayoutBounds {
+            x: 0.0,
+            y: 0.0,
+            width: 280.0,
+            height: 140.0,
+        };
+        instance.component_mut(text_local).unwrap().dirt = ComponentDirt::NONE;
+        instance.retain_runtime_layout_component_bounds(0, bounds, None);
+        assert!(
+            !instance
+                .component(text_local)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::TEXT_SHAPE),
+            "hosted Artboard layout settlement preserves the same override"
+        );
+    }
+
+    #[test]
     fn component_list_behind_transparent_group_requires_layout_opt_in() {
         let bytes = cpp_runtime_fixture("nested_hug.riv");
         let file = read_runtime_file(&bytes).expect("nested hug fixture imports");
@@ -34725,6 +34780,27 @@ mod tests {
             push_f32(bytes, "Text", "height", 10.0);
             push_f32(bytes, "Text", "originX", 0.25);
             push_f32(bytes, "Text", "originY", 0.5);
+        });
+        bytes
+    }
+
+    fn synthetic_artboard_text_bounds_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9661);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "Text", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "Text", "sizingValue", 0);
+            push_f32(bytes, "Text", "width", 20.0);
+            push_f32(bytes, "Text", "height", 10.0);
         });
         bytes
     }

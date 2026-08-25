@@ -4752,27 +4752,13 @@ impl ArtboardInstance {
         }
         self.width = width;
         self.height = height;
-        let root_layout = self.component_handle(0);
-        let controlled_text = self
-            .components()
-            .iter()
-            .filter_map(|component| {
-                (component.type_name == "Text"
-                    && root_layout
-                        .is_some_and(|layout| component.layout_ancestors.contains(&layout)))
-                .then_some(component.local_id)
-            })
-            .collect::<Vec<_>>();
-        for text_local in controlled_text {
-            // A hosting-layout resize publishes Path dirt. Pinned
-            // `Text::update(Path)` calls `buildRenderStyles()`, whose
-            // `clearRenderStyles()` step clears TextStylePaint opacity-path
-            // owners before rebuilding (`layout_component.cpp:1116-1124`,
-            // `text.cpp:208-219,558-566,1154-1234`).
-            self.runtime_drawables
-                .mark_text_render_styles_dirty_for_local(text_local);
-            crate::text_owner::mark_shape_dirty_without_layout(self, text_local);
-        }
+        // Artboard overrides LayoutComponent::propagateSize. A hosted
+        // Artboard resize dirties the Artboard path and its host transform,
+        // but deliberately does not call propagateSizeToChildren; only an
+        // ordinary LayoutComponent controls direct sizeable children
+        // (`artboard.cpp:1017-1030`, `layout_component.cpp:981-1025`).
+        // Treating the root as that ordinary owner incorrectly reshapes Text
+        // whenever a component-list row changes size.
         self.mark_changed();
         // Artboard inherits LayoutComponent in C++; generated width/height
         // setters therefore route through LayoutComponent::widthChanged and

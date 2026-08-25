@@ -1184,7 +1184,7 @@ b6_row_id = "B6-0094"
 b6_verdict = "DIVERGENT"
 b6_cluster = "artboard"
 audit_record = "docs/parity-audits/artboard.md"
-note = "Phase 3 paired owner audit supersedes the stale B6 snapshot and confirms the FL-D7 whole-file closeout: updatePass ordering, root advance settlement, drawCanvases/drawInternal ordering, default state-machine/scene selection, factory-late initialization, audio/volume propagation, clone/drop, and host recursion remain source-faithful. The audit corrected two remaining hand-port omissions: nested rootTransform(point) now retains and applies the exact host/self matrix order, and SolidColor Artboard::changed() now propagates its false-to-true edge through value-owned mounted parents. X1/X2 are additive observational/host extensions and do not replace baseline behavior. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/draw.rs`; `crates/nuxie/src/lib.rs`; consolidating further would cross a crate or tool boundary or move public integration API."
+note = "Phase 3 paired owner audit supersedes the stale B6 snapshot and confirms the FL-D7 whole-file closeout: updatePass ordering, root advance settlement, drawCanvases/drawInternal ordering, default state-machine/scene selection, factory-late initialization, audio/volume propagation, clone/drop, and host recursion remain source-faithful. The audit and final golden closeout corrected three remaining hand-port omissions: nested rootTransform(point) now retains and applies the exact host/self matrix order; SolidColor Artboard::changed() now propagates its false-to-true edge through value-owned mounted parents; and hosted Artboard size settlement now preserves Artboard::propagateSize's override instead of incorrectly controlling child Text as an ordinary LayoutComponent. X1/X2 are additive observational/host extensions and do not replace baseline behavior. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/draw.rs`; `crates/nuxie/src/lib.rs`; consolidating further would cross a crate or tool boundary or move public integration API."
 
 [[file]]
 upstream = "src/artboard_component_list.cpp"
@@ -1741,7 +1741,7 @@ b6_row_id = "B6-0139"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "constraints"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "Phase 3 paired audit: threshold direction dispatch, initPhysics, dragView, last-position update, runPhysics, and interactive guards match the pin. The audit corrected noninteractive startDrag to leave the retained m_isDragging-equivalent untouched, and no-physics offset clamping now uses pinned math::clamp NaN semantics. Invalid generated direction values remain a fail-closed safe-Rust adaptation."
+note = "Phase 3 paired audit: threshold direction dispatch, initPhysics, dragView, last-position update, runPhysics, and interactive guards match the pin. The audit corrected noninteractive startDrag to leave the retained m_isDragging-equivalent untouched, and no-physics offset clamping now uses pinned math::clamp NaN semantics. Invalid generated direction values remain a fail-closed safe-Rust adaptation. Owned by F4."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_physics.cpp"
@@ -1753,7 +1753,7 @@ b6_row_id = "B6-0140"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "constraints"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "Phase 3 paired audit: deterministic accumulate, reset, prepare, run, stop, clearVelocity, and imported variant dispatch match the pinned ScrollPhysics base lifecycle. Rust intentionally uses the supplied event timestamp clock used by the deterministic C++ oracle rather than a process-global wall clock; this is the explicit host-clock adaptation. Clamped and elastic variants remain in the smallest shared state owner."
+note = "Phase 3 paired audit: deterministic accumulate, reset, prepare, run, stop, clearVelocity, and imported variant dispatch match the pinned ScrollPhysics base lifecycle. Rust intentionally uses the supplied event timestamp clock used by the deterministic C++ oracle rather than a process-global wall clock; this is the explicit host-clock adaptation. Clamped and elastic variants remain in the smallest shared state owner. Owned by F4."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_virtualizer.cpp"
@@ -3799,7 +3799,7 @@ b6_row_id = "B6-0304"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "FL-D5 direct NestedArtboardLayout transfer-key and retained bounds owner. Artboard-side bounds capture, computation, and settlement live in `crates/nuxie-runtime/src/artboard/nested_artboard_layout.rs`. MR-2b/C05 justified exception: nested layout drawing remains embedded in the same recursion as siblings B6-0303 NestedArtboard and B6-0305 NestedArtboardLeaf."
+note = "FL-D5 direct NestedArtboardLayout transfer-key and retained bounds owner. Artboard-side bounds capture, computation, and settlement live in `crates/nuxie-runtime/src/artboard/nested_artboard_layout.rs`. MR-2b/C05 justified exception: nested layout drawing remains embedded in the same recursion as siblings B6-0303 NestedArtboard and B6-0305 NestedArtboardLeaf. Final golden closeout restored pinned `NestedArtboardLayout::update` mounted-origin compensation (`-artboard->origin()`) exactly once across identity and affine cached/uncached world-transform paths; `artboard_width_test`, `script_verbs_resize`, and `db_health_tracker` are exact in ordinary and scripted lanes."
 
 [[file]]
 upstream = "src/nested_artboard_leaf.cpp"

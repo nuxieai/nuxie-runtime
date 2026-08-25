@@ -110,7 +110,6 @@ impl ShaderAsset {
             });
         }
         let mut texture_sampler_pairs = Vec::new();
-        let mut has_texture_sampler_pairs = false;
         #[cfg(any(feature = "apple-authored-msl", test))]
         let mut supplemental_reflection = None;
         for _ in 0..section_count {
@@ -118,13 +117,7 @@ impl ShaderAsset {
             let length = usize::from(cursor.read_u16("section length")?);
             let section = cursor.read_bytes(length, "section payload")?;
             if tag == TEXTURE_SAMPLER_PAIR_SECTION {
-                if has_texture_sampler_pairs {
-                    return Err(Error::runtime(
-                        "RSTB contains duplicate texture/sampler pair sections",
-                    ));
-                }
-                has_texture_sampler_pairs = true;
-                texture_sampler_pairs = decode_texture_sampler_pairs(name, section)?;
+                texture_sampler_pairs.extend(decode_texture_sampler_pairs(section)?);
             }
             #[cfg(any(feature = "apple-authored-msl", test))]
             if tag == SUPPLEMENTAL_REFLECTION_SECTION {
@@ -513,10 +506,18 @@ fn validate_gl_fixup(name: &str, stage: &str, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn decode_texture_sampler_pairs(
-    name: &str,
-    bytes: &[u8],
-) -> Result<Vec<GpuCanvasShaderTextureSamplerPair>> {
+fn decode_texture_sampler_pairs(bytes: &[u8]) -> Result<Vec<GpuCanvasShaderTextureSamplerPair>> {
+    // Match C++ `ShaderAsset::decode`: a missing count or a pair count whose
+    // payload is truncated invalidates only this optional metadata section.
+    // The shader variants remain usable and the pair list stays empty.
+    let Some((&count, pair_bytes)) = bytes.split_first() else {
+        return Ok(Vec::new());
+    };
+    let required_pair_bytes = usize::from(count) * 4;
+    if pair_bytes.len() < required_pair_bytes {
+        return Ok(Vec::new());
+    }
+
     let mut cursor = Cursor::new(bytes);
     let count = usize::from(cursor.read_u8("texture/sampler pair count")?);
     let mut pairs = Vec::with_capacity(count);
@@ -527,11 +528,6 @@ fn decode_texture_sampler_pairs(
             sampler_group: cursor.read_u8("sampler pair group")?,
             sampler_binding: cursor.read_u8("sampler pair binding")?,
         });
-    }
-    if cursor.remaining() != 0 {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' texture/sampler pair section has trailing bytes"
-        )));
     }
     Ok(pairs)
 }
@@ -1901,11 +1897,17 @@ mod tests {
         samp_binding: u8,
     }
 
-    fn upstream_texture_sampler_pairs(_asset: &ShaderAsset) -> Vec<UpstreamTextureSamplerPair> {
-        // The production Rust ShaderAsset has no tag-1 texture/sampler-pair
-        // owner yet. Returning its observable empty surface keeps all four
-        // upstream section cases executable without adding runtime behavior.
-        Vec::new()
+    fn upstream_texture_sampler_pairs(asset: &ShaderAsset) -> Vec<UpstreamTextureSamplerPair> {
+        asset
+            .texture_sampler_pairs
+            .iter()
+            .map(|pair| UpstreamTextureSamplerPair {
+                tex_group: pair.texture_group,
+                tex_binding: pair.texture_binding,
+                samp_group: pair.sampler_group,
+                samp_binding: pair.sampler_binding,
+            })
+            .collect()
     }
 
     fn make_upstream_tex_sampler_pairs_tag(pairs: &[[u8; 4]]) -> Vec<u8> {
@@ -1988,7 +1990,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "expected-red: Rust ShaderAsset does not retain tag-1 texture/sampler pairs"]
     fn upstream_shader_asset_decode_texture_sampler_pairs() {
         let pairs =
             make_upstream_tex_sampler_pairs_tag(&[[0, 1, 0, 2], [1, 3, 1, 4], [2, 5, 2, 6]]);
@@ -2012,6 +2013,62 @@ mod tests {
         let blob = asset.variant(2).unwrap();
         assert_eq!(blob.len(), 1);
         assert_eq!(blob[0], 0xaa);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_texture_sampler_pairs_ignores_trailing_bytes() {
+        let mut pairs = make_upstream_tex_sampler_pairs_tag(&[[0, 1, 0, 2]]);
+        pairs.extend_from_slice(&[0xfe, 0xff]);
+        let data = upstream_envelope(&make_upstream_rstb(
+            4,
+            &[(2, vec![0xaa])],
+            &[(1, pairs)],
+            0x5253_5442,
+        ));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+
+        assert_eq!(
+            upstream_texture_sampler_pairs(&asset),
+            vec![UpstreamTextureSamplerPair {
+                tex_group: 0,
+                tex_binding: 1,
+                samp_group: 0,
+                samp_binding: 2,
+            }]
+        );
+        assert_eq!(asset.variant(2).unwrap(), [0xaa]);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_appends_texture_sampler_pair_sections() {
+        let first = make_upstream_tex_sampler_pairs_tag(&[[0, 1, 0, 2]]);
+        let second = make_upstream_tex_sampler_pairs_tag(&[[1, 3, 1, 4]]);
+        let data = upstream_envelope(&make_upstream_rstb(
+            4,
+            &[(2, vec![0xaa])],
+            &[(1, first), (1, second)],
+            0x5253_5442,
+        ));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+
+        assert_eq!(
+            upstream_texture_sampler_pairs(&asset),
+            vec![
+                UpstreamTextureSamplerPair {
+                    tex_group: 0,
+                    tex_binding: 1,
+                    samp_group: 0,
+                    samp_binding: 2,
+                },
+                UpstreamTextureSamplerPair {
+                    tex_group: 1,
+                    tex_binding: 3,
+                    samp_group: 1,
+                    samp_binding: 4,
+                },
+            ]
+        );
+        assert_eq!(asset.variant(2).unwrap(), [0xaa]);
     }
 
     #[test]

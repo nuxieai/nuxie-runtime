@@ -30,9 +30,9 @@ EXPECTED_AUDIT_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 EXPECTED_ROW_COUNT = 456
 EXPECTED_COUNTS = {
     "ISOMORPHIC": 22,
-    "ADAPTED": 211,
-    "DIVERGENT": 156,
-    "TRACKED-GAP": 30,
+    "ADAPTED": 216,
+    "DIVERGENT": 154,
+    "TRACKED-GAP": 27,
     "N/A": 37,
 }
 # Upstream files that appeared after the audit ref and therefore carry no
@@ -65,12 +65,10 @@ SECOND_PASS_VERDICTS = {
         "B6-0098",
         "B6-0103",
         "B6-0127",
-        "B6-0134",
         "B6-0139",
         "B6-0140",
         "B6-0246",
         "B6-0301",
-        "B6-0323",
         "B6-0324",
         "B6-0378",
         "B6-0384",

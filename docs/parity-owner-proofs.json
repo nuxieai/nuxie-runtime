@@ -98,8 +98,7 @@
       "entries": 364,
       "status_counts": {
         "diverges": 5,
-        "exact": 358,
-        "not-yet": 1
+        "exact": 359
       }
     },
     "silver": {

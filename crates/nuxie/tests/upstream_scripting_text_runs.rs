@@ -36,7 +36,35 @@ fn fire_button(view_model: &mut ViewModelInstance, button: &str, count: usize) {
 }
 
 #[test]
-#[ignore = "expected-red: Node Script 1 init receives nil for its authored lis input"]
+fn scripted_text_run_view_model_inputs_hydrate_before_user_init() {
+    let file = File::import_with_unsigned_scripts(&pinned_fixture("script_create_text_runs.riv"))
+        .expect("script_create_text_runs.riv imports with trusted scripts");
+    let artboard = file.artboard_named("main").expect("main artboard");
+    let mut instance = artboard.instantiate().expect("main artboard instantiates");
+    let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
+    let mut view_model = if instance.view_model_index().is_none() {
+        instance.instantiate_view_model()
+    } else {
+        instance.instantiate_view_model_instance(0)
+    }
+    .expect("main view-model instance");
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    instance
+        .initialize_renderer(&mut factory)
+        .expect("main renderer initializes at the import boundary");
+
+    instance
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut state_machine),
+            0.1,
+            &mut view_model,
+            &mut factory,
+        )
+        .expect("authored ViewModel inputs are present when user init runs");
+}
+
+#[test]
+#[ignore = "expected-red: after exact ViewModel-input hydration, frame 1 op 251 reuses a render path where C++ allocates makeRenderPath"]
 fn script_creates_view_models_that_map_to_text_runs() {
     let file = File::import_with_unsigned_scripts(&pinned_fixture("script_create_text_runs.riv"))
         .expect("script_create_text_runs.riv imports with trusted scripts");
@@ -50,6 +78,9 @@ fn script_creates_view_models_that_map_to_text_runs() {
     }
     .expect("main view-model instance");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    instance
+        .initialize_renderer(&mut silver)
+        .expect("main renderer initializes at the import boundary");
     let (width, height) = instance.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
 

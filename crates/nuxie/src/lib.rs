@@ -1396,14 +1396,16 @@ fn instantiate_script_mounts(
                     ))
                 })?;
             if target.kind.hydrates_script_inputs() {
-                hydrate_prepared_scripted_object_inputs(
+                if !hydrate_prepared_scripted_object_inputs(
                     file,
                     group.graph_global_id,
                     target,
                     script.as_mut(),
                     root_view_model,
                     factory,
-                )?;
+                )? {
+                    return Ok(None);
+                }
             }
             if nuxie_runtime::scripted_object_inits(target.serialized_implemented_methods) {
                 // Pinned `ScriptedObject::tryLuaUserInit` resolves `init`
@@ -1485,14 +1487,16 @@ async fn instantiate_script_mounts_async(
                     ))
                 })?;
             if target.kind.hydrates_script_inputs() {
-                hydrate_prepared_scripted_object_inputs(
+                if !hydrate_prepared_scripted_object_inputs(
                     file,
                     group.graph_global_id,
                     target,
                     script.as_mut(),
                     root_view_model,
                     factory,
-                )?;
+                )? {
+                    return Ok(None);
+                }
             }
             if nuxie_runtime::scripted_object_inits(target.serialized_implemented_methods) {
                 let initialized = script
@@ -1524,6 +1528,23 @@ async fn instantiate_script_mounts_async(
 }
 
 #[cfg(feature = "scripting")]
+enum PreparedScriptedObjectInput {
+    Value {
+        name: ScriptCoreString,
+        value: ScriptValue,
+    },
+    Artboard {
+        name: ScriptCoreString,
+        artboard_id: usize,
+    },
+    ViewModel {
+        name: ScriptCoreString,
+        input_global_id: u32,
+        path: nuxie_runtime::ScriptInputViewModelPropertyPath,
+    },
+}
+
+#[cfg(feature = "scripting")]
 fn hydrate_prepared_scripted_object_inputs(
     file: &Arc<File>,
     graph_global_id: u32,
@@ -1531,17 +1552,8 @@ fn hydrate_prepared_scripted_object_inputs(
     script: &mut dyn ScriptInstance,
     root_view_model: Option<&RuntimeOwnedViewModelHandle>,
     factory: &mut dyn Factory,
-) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
     let runtime = &file.runtime;
-    for (name, value) in resolved_scripted_primitive_inputs(
-        runtime,
-        graph_global_id,
-        target.local_id,
-        root_view_model,
-    )? {
-        script.set_input(&name, value)?;
-    }
-
     let start = graph_global_id as usize;
     let end = ((start + 1)..runtime.object_count())
         .find(|global_id| {
@@ -1555,39 +1567,126 @@ fn hydrate_prepared_scripted_object_inputs(
             nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(runtime, root.clone());
         nuxie_runtime::ScriptArtboardParentContext::root(&context)
     });
+    // Pinned `ScriptedObject::hydrateScriptInputs` validates the complete
+    // custom-property list before publishing any field to the script table,
+    // then hydrates the same entries in authored order.
+    let mut prepared = Vec::new();
     for global_id in start..end {
         let Some(input) = runtime.object(global_id) else {
             continue;
         };
-        if input.type_name != "ScriptInputArtboard"
-            || input.uint_property("parentId") != Some(target.local_id as u64)
-        {
+        if input.uint_property("parentId") != Some(target.local_id as u64) {
             continue;
         }
-        let artboard_id = root_view_model
-            .map(|root| nuxie_runtime::bound_script_artboard_input(runtime, &root.borrow(), input))
-            .transpose()?
-            .flatten()
-            .or_else(|| input.uint_property("artboardId"))
-            .filter(|artboard_id| *artboard_id != u64::from(u32::MAX))
-            .and_then(|artboard_id| usize::try_from(artboard_id).ok())
-            .ok_or_else(|| {
-                nuxie_runtime::ScriptError::new(format!(
-                    "{} {} global {} ScriptInputArtboard global {} has no resolved artboard",
-                    target.kind.label(),
-                    target.asset_name,
-                    target.global_id,
-                    input.id,
-                ))
-            })?;
         let name =
             ScriptCoreString::from_bytes(input.string_property_bytes("name").unwrap_or_default());
-        let artboard =
-            FileScriptArtboard::new(Arc::clone(file), artboard_id, parent_context.as_ref())?;
-        artboard.initialize_renderer(factory)?;
-        script.set_artboard_input_core(&name, Box::new(artboard))?;
+        match input.type_name {
+            "ScriptInputBoolean" | "ScriptInputNumber" | "ScriptInputColor"
+            | "ScriptInputString" => {
+                let bound = root_view_model
+                    .map(|root| {
+                        nuxie_runtime::bound_script_input_value(runtime, &root.borrow(), input)
+                    })
+                    .transpose()?
+                    .flatten();
+                let Some(value) = bound.or_else(|| default_script_input_value(input)) else {
+                    return Ok(false);
+                };
+                prepared.push(PreparedScriptedObjectInput::Value { name, value });
+            }
+            // Initial trigger hydration deliberately leaves the authored
+            // callback field untouched.
+            "ScriptInputTrigger" => {}
+            "ScriptInputArtboard" => {
+                let artboard_id = root_view_model
+                    .map(|root| {
+                        nuxie_runtime::bound_script_artboard_input(runtime, &root.borrow(), input)
+                    })
+                    .transpose()?
+                    .flatten()
+                    .or_else(|| input.uint_property("artboardId"))
+                    .filter(|artboard_id| *artboard_id != u64::from(u32::MAX))
+                    .and_then(|artboard_id| usize::try_from(artboard_id).ok());
+                let Some(artboard_id) = artboard_id else {
+                    return Ok(false);
+                };
+                if file.artboard(artboard_id).is_none() {
+                    return Err(nuxie_runtime::ScriptError::new(format!(
+                        "{} {} global {} ScriptInputArtboard global {} references unavailable artboard {artboard_id}",
+                        target.kind.label(),
+                        target.asset_name,
+                        target.global_id,
+                        input.id,
+                    )));
+                }
+                prepared.push(PreparedScriptedObjectInput::Artboard { name, artboard_id });
+            }
+            "ScriptInputViewModelProperty" => {
+                let Some(context) = parent_context.as_ref() else {
+                    return Ok(false);
+                };
+                let path = nuxie_runtime::ScriptInputViewModelPropertyPath::from_imported(
+                    runtime, input,
+                )
+                .ok_or_else(|| {
+                    nuxie_runtime::ScriptError::new(format!(
+                        "{} {} global {} ScriptInputViewModelProperty global {} has no imported path",
+                        target.kind.label(),
+                        target.asset_name,
+                        target.global_id,
+                        input.id,
+                    ))
+                })?;
+                if context
+                    .resolve_script_view_model_input(runtime, &path)
+                    .is_none()
+                {
+                    return Ok(false);
+                }
+                prepared.push(PreparedScriptedObjectInput::ViewModel {
+                    name,
+                    input_global_id: input.id,
+                    path,
+                });
+            }
+            _ => continue,
+        }
     }
-    Ok(())
+
+    for input in prepared {
+        match input {
+            PreparedScriptedObjectInput::Value { name, value } => {
+                script.set_input_core(&name, value)?;
+            }
+            PreparedScriptedObjectInput::Artboard { name, artboard_id } => {
+                let artboard = FileScriptArtboard::new(
+                    Arc::clone(file),
+                    artboard_id,
+                    parent_context.as_ref(),
+                )?;
+                artboard.initialize_renderer(factory)?;
+                script.set_artboard_input_core(&name, Box::new(artboard))?;
+            }
+            PreparedScriptedObjectInput::ViewModel {
+                name,
+                input_global_id,
+                path,
+            } => {
+                let value = parent_context
+                    .as_ref()
+                    .and_then(|context| context.resolve_script_view_model_input(runtime, &path))
+                    .ok_or_else(|| {
+                        nuxie_runtime::ScriptError::new(format!(
+                            "ScriptInputViewModelProperty global {input_global_id} became unresolved during authored hydration",
+                        ))
+                    })?;
+                if let Some(value) = value {
+                    script.set_view_model_input_core(&name, value)?;
+                }
+            }
+        }
+    }
+    Ok(true)
 }
 
 #[cfg(feature = "scripting")]

@@ -187,6 +187,17 @@ fn chop_cubic_at_repeated_endpoint_roots_expected_red() {
 }
 
 #[test]
+#[ignore = "expected-red: Rust multi-chop is not exact for equal and repeated endpoint roots"]
+fn chop_cubic_at_complete_direct_port_expected_red() {
+    // The pinned Catch2 case contains all three assertion groups. Keep one
+    // case-level entry point so the correspondence ledger cannot promote only
+    // the currently green subset.
+    chop_cubic_at();
+    chop_cubic_at_equal_roots_are_exactly_degenerate_expected_red();
+    chop_cubic_at_repeated_endpoint_roots_expected_red();
+}
+
+#[test]
 fn chop_cubic_at_t_values_null() {
     let mut random = 7;
     for num_chops in 1..=20 {

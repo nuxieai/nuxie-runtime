@@ -1,0 +1,4817 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "a",
+  "case_count": 259,
+  "ratchet": {
+    "max_pending": 0
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/aabb_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/aabb_test.cpp",
+      "ordinal": 1,
+      "line": 7,
+      "name": "IAABB_join",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_aabb.rs",
+          "line": 8,
+          "symbol": "iaabb_join_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/aabb_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/aabb_test.cpp",
+      "ordinal": 2,
+      "line": 15,
+      "name": "IAABB_intersect",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_aabb.rs",
+          "line": 20,
+          "symbol": "iaabb_intersect_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/aabb_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/aabb_test.cpp",
+      "ordinal": 3,
+      "line": 23,
+      "name": "IAABB_empty",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_aabb.rs",
+          "line": 32,
+          "symbol": "iaabb_empty_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/aabb_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/aabb_test.cpp",
+      "ordinal": 4,
+      "line": 37,
+      "name": "isEmptyOrNaN",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_aabb.rs",
+          "line": 50,
+          "symbol": "is_empty_or_nan_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/aabb_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/aabb_test.cpp",
+      "ordinal": 5,
+      "line": 57,
+      "name": "AABB contains",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_aabb.rs",
+          "line": 87,
+          "symbol": "aabb_contains_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/aabb_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/aabb_test.cpp",
+      "ordinal": 6,
+      "line": 73,
+      "name": "IAABB overlaps",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_aabb.rs",
+          "line": 120,
+          "symbol": "iaabb_overlaps_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/aabb_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/aabb_test.cpp",
+      "ordinal": 7,
+      "line": 106,
+      "name": "AABB overlaps",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_aabb.rs",
+          "line": 128,
+          "symbol": "aabb_overlaps_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/aabb_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/aabb_test.cpp",
+      "ordinal": 8,
+      "line": 157,
+      "name": "TAABB::makeMaximal",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_aabb.rs",
+          "line": 162,
+          "symbol": "taabb_make_maximal_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/aabb_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/aabb_test.cpp",
+      "ordinal": 9,
+      "line": 177,
+      "name": "TAABB::makeMaximallyNegative",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_aabb.rs",
+          "line": 167,
+          "symbol": "taabb_make_maximally_negative_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 1,
+      "line": 13,
+      "name": "AnimationStateInstance advances in step with animation speed 1",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 2,
+      "line": 47,
+      "name": "AnimationStateInstance advances twice as fast when speed is doubled",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 3,
+      "line": 83,
+      "name": "AnimationStateInstance advances half as fast when speed is halved",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 4,
+      "line": 118,
+      "name": "AnimationStateInstance advances backwards when speed is negative",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 5,
+      "line": 154,
+      "name": "AnimationStateInstance starts a positive animation at the beginning",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 6,
+      "line": 182,
+      "name": "AnimationStateInstance starts a negative animation at the end",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 7,
+      "line": 211,
+      "name": "AnimationStateInstance with negative speed starts a positive animation at the end",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 8,
+      "line": 241,
+      "name": "AnimationStateInstance with negative speed starts a negative animation at the beginning",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 9,
+      "line": 272,
+      "name": "AnimationStateInstance spilledTime accounts for Nx speed with oneShot",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 10,
+      "line": 313,
+      "name": "AnimationStateInstance spilledTime accounts for 1/Nx speed with oneShot",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 11,
+      "line": 354,
+      "name": "AnimationStateInstance spilledTime accounts for Nx speed with loop",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 12,
+      "line": 394,
+      "name": "AnimationStateInstance spilledTime accounts for 1/Nx speed with loop",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 13,
+      "line": 434,
+      "name": "AnimationStateInstance spilledTime accounts for -Nx speed with oneShot",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/animation_state_instance_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/animation_state_instance_test.cpp",
+      "ordinal": 14,
+      "line": 477,
+      "name": "AnimationStateInstance spilledTime accounts for -Nx speed with loop",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/animation.rs",
+          "line": 1097,
+          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/artboard_transform_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/artboard_transform_test.cpp",
+      "ordinal": 1,
+      "line": 48,
+      "name": "Artboard bakes its own rotation/scale into draw",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_artboard_transform.rs",
+          "line": 154,
+          "symbol": "artboard_bakes_its_own_rotation_and_scale_into_draw"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/artboard_transform_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/artboard_transform_test.cpp",
+      "ordinal": 2,
+      "line": 81,
+      "name": "Artboard transform is only pushed when non-default",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_artboard_transform.rs",
+          "line": 179,
+          "symbol": "artboard_transform_is_only_pushed_when_non_default"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/artboard_transform_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/artboard_transform_test.cpp",
+      "ordinal": 3,
+      "line": 104,
+      "name": "Artboard rotation is honored in state-machine hit-testing",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_artboard_transform.rs",
+          "line": 200,
+          "symbol": "artboard_rotation_is_honored_in_state_machine_hit_testing"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/artboard_transform_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/artboard_transform_test.cpp",
+      "ordinal": 4,
+      "line": 148,
+      "name": "Nested artboard's own rotation affects rootTransform",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_artboard_transform.rs",
+          "line": 253,
+          "symbol": "nested_artboards_own_rotation_affects_root_transform"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/artboard_transform_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/artboard_transform_test.cpp",
+      "ordinal": 5,
+      "line": 168,
+      "name": "Artboard transform and opacity",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_artboard_transform.rs",
+          "line": 316,
+          "symbol": "artboard_transform_and_opacity"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned artboard transform/opacity silver comparator is not wired here"
+    },
+    {
+      "id": "tests/unit_tests/runtime/artboard_transform_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/artboard_transform_test.cpp",
+      "ordinal": 6,
+      "line": 230,
+      "name": "Artboard clip is transformed by its own rotation",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_artboard_transform.rs",
+          "line": 355,
+          "symbol": "artboard_clip_is_transformed_by_its_own_rotation"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 1,
+      "line": 16,
+      "name": "audio engine initializes",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 17,
+          "symbol": "factory_decode_audio_owns_and_decodes_the_pinned_wav"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 2,
+      "line": 37,
+      "name": "audio source can be opened",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 17,
+          "symbol": "factory_decode_audio_owns_and_decodes_the_pinned_wav"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 3,
+      "line": 82,
+      "name": "file with audio loads correctly",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 28,
+          "symbol": "sound_fixture_loads_embedded_audio_and_host_loader_gets_first_refusal"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 4,
+      "line": 109,
+      "name": "audio sound can outlive engine",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 155,
+          "symbol": "audio_event_artboard_clone_retains_its_asset_and_stops_independently"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 5,
+      "line": 128,
+      "name": "many audio sounds can outlive engine",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 155,
+          "symbol": "audio_event_artboard_clone_retains_its_asset_and_stops_independently"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 6,
+      "line": 153,
+      "name": "audio sounds from different artboards stop accordingly",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 99,
+          "symbol": "audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 7,
+      "line": 191,
+      "name": "Artboard has audio",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 76,
+          "symbol": "sound_fixtures_match_direct_nested_and_no_audio_queries"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 8,
+      "line": 206,
+      "name": "Artboard has audio in nested artboard",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 76,
+          "symbol": "sound_fixtures_match_direct_nested_and_no_audio_queries"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 9,
+      "line": 221,
+      "name": "Artboard does not have audio",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 76,
+          "symbol": "sound_fixtures_match_direct_nested_and_no_audio_queries"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 10,
+      "line": 236,
+      "name": "Scripted audio plays",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/audio_core.rs",
+          "line": 189,
+          "symbol": "scripted_audio_plays_and_updates_volume_from_the_pinned_fixture"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 11,
+      "line": 275,
+      "name": "audio source duration from file",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 150,
+          "symbol": "audio_source_reader_and_headless_schedule_match_pinned_cpp"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 12,
+      "line": 291,
+      "name": "audio source duration from buffered samples",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 150,
+          "symbol": "audio_source_reader_and_headless_schedule_match_pinned_cpp"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/audio_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/audio_test.cpp",
+      "ordinal": 13,
+      "line": 305,
+      "name": "audio source duration mp3",
+      "status": "adapted",
+      "outcome": "pass",
+      "note": "Pinned behavior is exercised through the approved Rust-native audio backend adaptation.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 150,
+          "symbol": "audio_source_reader_and_headless_schedule_match_pinned_cpp"
+        }
+      ],
+      "adaptation": {
+        "kind": "native-audio",
+        "inapplicable_observable": "miniaudio engine/source/sound concrete identity and allocator lifetime",
+        "rationale": "The campaign permanently retains the Rust-native audio backend; the same decode, duration, scheduling, ownership, stop, nesting, and scripting observables are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 1,
+      "line": 34,
+      "name": "chop_cubic_at",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 191,
+          "symbol": "chop_cubic_at_complete_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: Rust multi-chop is not exact for equal and repeated endpoint roots"
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 2,
+      "line": 131,
+      "name": "chop_cubic_at(tValues=null)",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 201,
+          "symbol": "chop_cubic_at_t_values_null"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 3,
+      "line": 189,
+      "name": "measure_non_inflect_cubic_rotation",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 254,
+          "symbol": "measure_non_inflect_cubic_rotation_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 4,
+      "line": 451,
+      "name": "find_cubic_convex_180_chops",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 317,
+          "symbol": "find_cubic_convex_180_chops_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 5,
+      "line": 536,
+      "name": "find_cubic_convex_180_chops_lines",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 345,
+          "symbol": "find_cubic_convex_180_chops_lines_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 6,
+      "line": 603,
+      "name": "EvalCubic",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 376,
+          "symbol": "eval_cubic_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 7,
+      "line": 639,
+      "name": "find_cubic_coeffs_tangents_glsl",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 401,
+          "symbol": "find_cubic_coeffs_tangents_glsl_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 8,
+      "line": 670,
+      "name": "clamped_divide_glsl",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 456,
+          "symbol": "clamped_divide_glsl_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 9,
+      "line": 716,
+      "name": "find_cubic_max_height_glsl",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 504,
+          "symbol": "find_cubic_max_height_glsl_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 10,
+      "line": 958,
+      "name": "find_cubic_convex_90_chops",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 551,
+          "symbol": "find_cubic_convex_90_chops_direct_port"
+        }
+      ],
+      "expected_red_reason": "expected-red: deprecated convex-90 test helper has no Rust shader execution bridge"
+    },
+    {
+      "id": "tests/unit_tests/runtime/bezier_utils_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/bezier_utils_test.cpp",
+      "ordinal": 11,
+      "line": 1042,
+      "name": "measure_cubic_local_curvature_glsl",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw/upstream_bezier_utils_tests.rs",
+          "line": 560,
+          "symbol": "measure_cubic_local_curvature_glsl_direct_port"
+        }
+      ],
+      "expected_red_reason": "expected-red: GLSL curvature helper has no Rust shader execution bridge"
+    },
+    {
+      "id": "tests/unit_tests/runtime/binary_reader_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/binary_reader_test.cpp",
+      "ordinal": 1,
+      "line": 15,
+      "name": "fitsIn checks",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/binary_reader_roundtrip.rs",
+          "line": 61,
+          "symbol": "binary_reader_test_fits_in_checks_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/binary_reader_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/binary_reader_test.cpp",
+      "ordinal": 2,
+      "line": 56,
+      "name": "range checks",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/binary_reader_roundtrip.rs",
+          "line": 71,
+          "symbol": "binary_reader_test_range_checks_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/binary_reader_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/binary_reader_test.cpp",
+      "ordinal": 3,
+      "line": 71,
+      "name": "all data types can be written & read",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/binary_reader_roundtrip.rs",
+          "line": 167,
+          "symbol": "binary_reader_test_all_data_types_can_be_written_and_read_direct_port"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/binary_reader_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/binary_reader_test.cpp",
+      "ordinal": 4,
+      "line": 91,
+      "name": "readBytes overflows on a length past the end of the buffer",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/src/core/binary_reader.rs",
+          "line": 87,
+          "symbol": "read_bytes_overflows_on_a_length_past_the_end_of_the_buffer"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/binary_reader_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/binary_reader_test.cpp",
+      "ordinal": 5,
+      "line": 106,
+      "name": "readBytes returns exactly the in-range bytes requested",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/src/core/binary_reader.rs",
+          "line": 100,
+          "symbol": "read_bytes_returns_exactly_the_in_range_bytes_requested"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bound_bones_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/bound_bones_test.cpp",
+      "ordinal": 1,
+      "line": 15,
+      "name": "bound bones load correctly",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_bound_bones.rs",
+          "line": 18,
+          "symbol": "bound_bones_load_correctly"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bounds_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/bounds_test.cpp",
+      "ordinal": 1,
+      "line": 16,
+      "name": "compute bounds of background shape",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 91995,
+          "symbol": "upstream_background_shape_bounds_follow_text_and_artboard_transform"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bounds_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/bounds_test.cpp",
+      "ordinal": 2,
+      "line": 55,
+      "name": "compute precise bounds of a raw path",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 91664,
+          "symbol": "upstream_raw_path_coarse_and_precise_bounds_are_ported"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/bounds_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/bounds_test.cpp",
+      "ordinal": 3,
+      "line": 77,
+      "name": "test local bounds",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 91618,
+          "symbol": "upstream_text_local_bounds_fixture_retains_origin_adjusted_bounds"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/cdn_asset_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/cdn_asset_test.cpp",
+      "ordinal": 1,
+      "line": 18,
+      "name": "Image assets with cdn information loads correctly",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/src/lib.rs",
+          "line": 9937,
+          "symbol": "hosted_image_cdn_descriptor_matches_pinned_cpp"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/cdn_asset_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/cdn_asset_test.cpp",
+      "ordinal": 2,
+      "line": 38,
+      "name": "Font assets with cdn information loads correctly",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/src/lib.rs",
+          "line": 9960,
+          "symbol": "hosted_font_cdn_descriptor_matches_pinned_cpp"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/child_iterator_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/child_iterator_test.cpp",
+      "ordinal": 1,
+      "line": 10,
+      "name": "child typed iterators work",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 25574,
+          "symbol": "child_typed_iterators_work"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/clip_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/clip_test.cpp",
+      "ordinal": 1,
+      "line": 15,
+      "name": "clipping loads correctly",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Direct fixture port retains clipping graph ownership and cloned clip membership assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_instancing.rs",
+          "line": 80,
+          "symbol": "instancing_artboard_clones_clipped_properties"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/clip_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/clip_test.cpp",
+      "ordinal": 2,
+      "line": 70,
+      "name": "artboard is clipped correctly",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; the prior rotated-clip test was only nearby coverage.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 19,
+          "symbol": "clip_artboard_is_clipped_correctly_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: typed Rust port lacks the pinned frameOrigin/worldPath point assertions"
+    },
+    {
+      "id": "tests/unit_tests/runtime/clip_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/clip_test.cpp",
+      "ordinal": 3,
+      "line": 107,
+      "name": "Apply clipping to elements that are moved outside their hierarchy",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal pinned SRIV fixture/action stream is replayed and fully compared.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 38,
+          "symbol": "clip_apply_outside_hierarchy"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/clip_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/clip_test.cpp",
+      "ordinal": 4,
+      "line": 139,
+      "name": "Animated node clippings work",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal pinned SRIV fixture/action stream is replayed and fully compared.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 43,
+          "symbol": "clip_animated_nodes"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/clip_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/clip_test.cpp",
+      "ordinal": 5,
+      "line": 170,
+      "name": "Animated layout clippings work",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal pinned SRIV fixture/action stream is replayed and fully compared.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 48,
+          "symbol": "clip_animated_layouts"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 1,
+      "line": 30,
+      "name": "non-emoji font reports no color glyphs",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 80,
+          "symbol": "non_emoji_font_reports_no_color_glyphs"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 2,
+      "line": 45,
+      "name": "emoji font reports color glyphs",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 92,
+          "symbol": "emoji_font_reports_color_glyphs"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 3,
+      "line": 53,
+      "name": "isColorGlyph returns false for non-color glyph in emoji font",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 99,
+          "symbol": "is_color_glyph_returns_false_for_non_color_glyph_in_emoji_font"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 4,
+      "line": 63,
+      "name": "known color glyph IDs are detected in subset font",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 106,
+          "symbol": "known_color_glyph_ids_are_detected_in_subset_font"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 5,
+      "line": 74,
+      "name": "getColorLayers returns layers for a color glyph",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 115,
+          "symbol": "get_color_layers_returns_layers_for_a_color_glyph"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 6,
+      "line": 96,
+      "name": "getColorLayers returns empty for non-color glyph",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 130,
+          "symbol": "get_color_layers_returns_empty_for_non_color_glyph"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 7,
+      "line": 107,
+      "name": "color glyph layers are cached",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 140,
+          "symbol": "color_glyph_layers_are_cached"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 8,
+      "line": 134,
+      "name": "foreground color is applied for 0xFFFF color index",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 155,
+          "symbol": "foreground_color_is_applied_for_ffff_color_index"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 9,
+      "line": 176,
+      "name": "withOptions preserves color glyph support",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 176,
+          "symbol": "with_options_preserves_color_glyph_support"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 10,
+      "line": 188,
+      "name": "RawText renders with color glyph font without crashing",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 186,
+          "symbol": "raw_text_renders_with_color_glyph_font_without_crashing"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 11,
+      "line": 224,
+      "name": "shaping emoji font produces glyphs",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 192,
+          "symbol": "shaping_emoji_font_produces_glyphs"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 12,
+      "line": 242,
+      "name": "shaping with fallback uses emoji font for missing glyphs",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 200,
+          "symbol": "shaping_with_fallback_uses_emoji_font_for_missing_glyphs"
+        }
+      ],
+      "expected_red_reason": "expected-red: Rust shaping does not select the emoji fallback for A\u2764B"
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 13,
+      "line": 293,
+      "name": "COLRv0 layers have solid paint type",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 208,
+          "symbol": "colrv0_layers_have_solid_paint_type"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 14,
+      "line": 313,
+      "name": "all known color glyph IDs return layers",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 219,
+          "symbol": "all_known_color_glyph_ids_return_layers"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 15,
+      "line": 328,
+      "name": "cached layers update foreground color correctly",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 231,
+          "symbol": "cached_layers_update_foreground_color_correctly"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 16,
+      "line": 359,
+      "name": "getColorLayers returns zero for non-color font",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 248,
+          "symbol": "get_color_layers_returns_zero_for_non_color_font"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 17,
+      "line": 374,
+      "name": "getColorLayers appends to existing vector",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 260,
+          "symbol": "get_color_layers_appends_to_existing_vector"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 18,
+      "line": 390,
+      "name": "isColorGlyph is false for high glyph IDs",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 273,
+          "symbol": "is_color_glyph_is_false_for_high_glyph_ids"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#19",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 19,
+      "line": 402,
+      "name": "RawText with multiple color glyphs renders without crashing",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 281,
+          "symbol": "raw_text_with_multiple_color_glyphs_renders_without_crashing"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#20",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 20,
+      "line": 423,
+      "name": "RawText with mixed regular and emoji text renders without crashing",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 287,
+          "symbol": "raw_text_with_mixed_regular_and_emoji_text_renders_without_crashing"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#21",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 21,
+      "line": 457,
+      "name": "RawText at small font size with emoji does not crash",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 294,
+          "symbol": "raw_text_at_small_font_size_with_emoji_does_not_crash"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_glyph_test.cpp#22",
+      "upstream": "tests/unit_tests/runtime/color_glyph_test.cpp",
+      "ordinal": 22,
+      "line": 474,
+      "name": "RawText at large font size with emoji does not crash",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
+          "line": 300,
+          "symbol": "raw_text_at_large_font_size_with_emoji_does_not_crash"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/color_test.cpp",
+      "ordinal": 1,
+      "line": 5,
+      "name": "unpacking",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/shapes/paint/color.rs",
+          "line": 76,
+          "symbol": "packed_color_unpacking_matches_pinned_argb_layout"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/color_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/color_test.cpp",
+      "ordinal": 2,
+      "line": 30,
+      "name": "color lerp",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/shapes/paint/color.rs",
+          "line": 99,
+          "symbol": "packed_color_lerp_matches_pinned_channel_rounding_and_clamping"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 1,
+      "line": 136,
+      "name": "POD Stream RCP",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 208,
+          "symbol": "pod_stream_rcp"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 2,
+      "line": 158,
+      "name": "artboard management",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 684,
+          "symbol": "artboard_management"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 3,
+      "line": 213,
+      "name": "state machine management",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 715,
+          "symbol": "state_machine_management"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 4,
+      "line": 269,
+      "name": "default artboard & state machine",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 754,
+          "symbol": "default_artboard_and_state_machine"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 5,
+      "line": 312,
+      "name": "invalid handles",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 781,
+          "symbol": "invalid_handles"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 6,
+      "line": 401,
+      "name": "draw loops",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 844,
+          "symbol": "draw_loops"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 7,
+      "line": 530,
+      "name": "test support for all asset types",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 885,
+          "symbol": "test_support_for_all_asset_types"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 8,
+      "line": 548,
+      "name": "wait for server race condition",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 930,
+          "symbol": "wait_for_server_race_condition"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 9,
+      "line": 584,
+      "name": "stopMesssages command",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 956,
+          "symbol": "stop_messages_command"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 10,
+      "line": 614,
+      "name": "draw happens once per poll",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3262,
+          "symbol": "draw_happens_once_per_poll"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 11,
+      "line": 642,
+      "name": "cancelDraw prevents pending draw from running",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3278,
+          "symbol": "cancel_draw_only_cancels_matching_pending_key"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 12,
+      "line": 663,
+      "name": "cancelDraw only cancels the matching draw key",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3278,
+          "symbol": "cancel_draw_only_cancels_matching_pending_key"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 13,
+      "line": 695,
+      "name": "disconnect",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3251,
+          "symbol": "disconnect_stops_a_non_waiting_server"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 14,
+      "line": 708,
+      "name": "global asset set / remove",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 984,
+          "symbol": "global_asset_set_and_remove"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 15,
+      "line": 870,
+      "name": "View Models",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1337,
+          "symbol": "view_models"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 16,
+      "line": 1075,
+      "name": "View Model Listed Listener",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1387,
+          "symbol": "view_model_listed_listener"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 17,
+      "line": 1204,
+      "name": "View Model Listener",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1412,
+          "symbol": "view_model_listener"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 18,
+      "line": 1279,
+      "name": "View Model Instance Listener",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1460,
+          "symbol": "view_model_instance_listener"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#19",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 19,
+      "line": 1381,
+      "name": "External Resources",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1031,
+          "symbol": "external_resources"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#20",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 20,
+      "line": 1475,
+      "name": "RenderImage",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1082,
+          "symbol": "render_image"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#21",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 21,
+      "line": 1507,
+      "name": "BlobAsset",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1098,
+          "symbol": "blob_asset"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#22",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 22,
+      "line": 1585,
+      "name": "blob asset listener callbacks",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1122,
+          "symbol": "blob_asset_listener_callbacks"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#23",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 23,
+      "line": 1650,
+      "name": "AudioSource",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1293,
+          "symbol": "audio_source"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#24",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 24,
+      "line": 1713,
+      "name": "Font",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1315,
+          "symbol": "font"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#25",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 25,
+      "line": 1996,
+      "name": "View Model Property Set/Get",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1522,
+          "symbol": "view_model_property_set_get"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#26",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 26,
+      "line": 2442,
+      "name": "CommandServer::getHandleForInstance",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3203,
+          "symbol": "command_server_get_handle_for_instance"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#27",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 27,
+      "line": 2466,
+      "name": "Set Artboard Size / Reset Artboard Size",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1821,
+          "symbol": "set_and_reset_artboard_size"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#28",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 28,
+      "line": 2531,
+      "name": "Set Artboard Volume / Get Artboard Volume",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1849,
+          "symbol": "set_and_get_artboard_volume"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#29",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 29,
+      "line": 2579,
+      "name": "View Model Property Subscriptions",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1874,
+          "symbol": "view_model_property_subscriptions"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#30",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 30,
+      "line": 2833,
+      "name": "View Model Blob Property Set",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1170,
+          "symbol": "view_model_blob_property_set"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#31",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 31,
+      "line": 2919,
+      "name": "View Model Blob Property Subscription",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1245,
+          "symbol": "view_model_blob_property_subscription"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#32",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 32,
+      "line": 3003,
+      "name": "View Model Property Async Subscriptions",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 1979,
+          "symbol": "view_model_property_async_subscriptions"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#33",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 33,
+      "line": 3199,
+      "name": "List View Model Property Set/Get",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2034,
+          "symbol": "list_view_model_property_set_get"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#34",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 34,
+      "line": 3276,
+      "name": "file Error Messages",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2145,
+          "symbol": "file_error_messages"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#35",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 35,
+      "line": 3379,
+      "name": "listArtboard",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2206,
+          "symbol": "list_artboard"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#36",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 36,
+      "line": 3449,
+      "name": "listEnums",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2224,
+          "symbol": "list_enums"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#37",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 37,
+      "line": 3539,
+      "name": "requestViewModelInstanceViewModelName and requestViewModelInstanceName",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2242,
+          "symbol": "request_view_model_and_instance_name"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#38",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 38,
+      "line": 3657,
+      "name": "render image / audio source / font error",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2280,
+          "symbol": "render_image_audio_source_font_error"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#39",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 39,
+      "line": 3702,
+      "name": "state machine error",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2307,
+          "symbol": "state_machine_error"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#40",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 40,
+      "line": 3761,
+      "name": "artboard errors",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2335,
+          "symbol": "artboard_errors"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#41",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 41,
+      "line": 3803,
+      "name": "Set Artboard Volume / Get Artboard Volume errors on invalid handles",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2353,
+          "symbol": "invalid_artboard_volume_errors"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#42",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 42,
+      "line": 3828,
+      "name": "Set Artboard Size / Reset Artboard Size errors on invalid handles",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2377,
+          "symbol": "invalid_artboard_size_errors"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#43",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 43,
+      "line": 3878,
+      "name": "listStateMachine",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2401,
+          "symbol": "list_state_machine"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#44",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 44,
+      "line": 3961,
+      "name": "requestArtboardSize",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2421,
+          "symbol": "request_artboard_size"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#45",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 45,
+      "line": 4074,
+      "name": "requestDefaultViewModel",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2442,
+          "symbol": "request_default_view_model"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#46",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 46,
+      "line": 4172,
+      "name": "bindViewModelInstance",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2468,
+          "symbol": "bind_view_model_instance"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#47",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 47,
+      "line": 4227,
+      "name": "advanceStateMachine",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2501,
+          "symbol": "advance_state_machine"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#48",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 48,
+      "line": 4343,
+      "name": "listenerDeleteCallbacks",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2524,
+          "symbol": "listener_delete_callbacks"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#49",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 49,
+      "line": 4429,
+      "name": "fileLoadedCallback",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2560,
+          "symbol": "file_loaded_callback"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#50",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 50,
+      "line": 4481,
+      "name": "artboardInstantiatedCallback",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2577,
+          "symbol": "artboard_instantiated_callback"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#51",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 51,
+      "line": 4540,
+      "name": "stateMachineInstantiatedCallback",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2594,
+          "symbol": "state_machine_instantiated_callback"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#52",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 52,
+      "line": 4602,
+      "name": "viewModelInstanceInstantiatedCallback",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2610,
+          "symbol": "view_model_instance_instantiated_callback"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#53",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 53,
+      "line": 4693,
+      "name": "decodedCallbacks",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2625,
+          "symbol": "decoded_callbacks"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#54",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 54,
+      "line": 4759,
+      "name": "listenerLifeTimes",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2653,
+          "symbol": "listener_lifetimes"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#55",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 55,
+      "line": 4885,
+      "name": "empty test for code cove",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2702,
+          "symbol": "empty_listener_code_coverage"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#56",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 56,
+      "line": 4919,
+      "name": "pointer input",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2719,
+          "symbol": "pointer_input"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#57",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 57,
+      "line": 5029,
+      "name": "pointer down advances before rapid pointer up",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2779,
+          "symbol": "pointer_down_advances_before_rapid_pointer_up"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#58",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 58,
+      "line": 5081,
+      "name": "pointer input translation",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2814,
+          "symbol": "pointer_input_translation"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#59",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 59,
+      "line": 5480,
+      "name": "global Listener",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2847,
+          "symbol": "global_listener"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#60",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 60,
+      "line": 5614,
+      "name": "sync pointer events",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2932,
+          "symbol": "sync_pointer_events"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#61",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 61,
+      "line": 5668,
+      "name": "requestViewModelInstanceListClear",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2960,
+          "symbol": "request_view_model_instance_list_clear"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#62",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 62,
+      "line": 5770,
+      "name": "dependency lifetime management",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 2997,
+          "symbol": "dependency_lifetime_management"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#63",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 63,
+      "line": 5878,
+      "name": "file assets listed - image asset",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3069,
+          "symbol": "file_assets_listed_image_asset"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#64",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 64,
+      "line": 5912,
+      "name": "file assets listed - font asset",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3082,
+          "symbol": "file_assets_listed_font_asset"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#65",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 65,
+      "line": 5945,
+      "name": "file assets listed - type IDs match runtime",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3094,
+          "symbol": "file_assets_listed_type_ids_match_runtime"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#66",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 66,
+      "line": 5955,
+      "name": "file assets listed - empty file",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3119,
+          "symbol": "file_assets_listed_empty_file"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#67",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 67,
+      "line": 5981,
+      "name": "file assets listed - invalid handle",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3124,
+          "symbol": "file_assets_listed_invalid_handle"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#68",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 68,
+      "line": 6006,
+      "name": "file assets listed - all assets returned",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3141,
+          "symbol": "file_assets_listed_all_assets_returned"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#69",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 69,
+      "line": 6204,
+      "name": "Semantics advance does not auto-deliver diff",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 235,
+          "symbol": "semantics_advance_does_not_auto_deliver_diff"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#70",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 70,
+      "line": 6217,
+      "name": "Semantics enable + initial diff on drainSemanticsDiff",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 251,
+          "symbol": "semantics_enable_and_initial_diff_on_drain"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#71",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 71,
+      "line": 6245,
+      "name": "Semantics no diff when not enabled",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 285,
+          "symbol": "semantics_no_diff_when_not_enabled"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#72",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 72,
+      "line": 6257,
+      "name": "Semantics drainSemanticsDiff errors when not enabled",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 300,
+          "symbol": "semantics_drain_diff_errors_when_not_enabled"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#73",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 73,
+      "line": 6272,
+      "name": "Semantics drainSemanticsDiff only emits for non-empty diff",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 329,
+          "symbol": "semantics_drain_diff_only_emits_for_non_empty_diff"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#74",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 74,
+      "line": 6297,
+      "name": "Semantics fireSemanticAction tap changes selected tab",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 370,
+          "symbol": "semantics_fire_tap_changes_selected_tab"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#75",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 75,
+      "line": 6344,
+      "name": "Semantics commands on invalid state machine handle",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 425,
+          "symbol": "semantics_commands_on_invalid_state_machine_handle"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#76",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 76,
+      "line": 6381,
+      "name": "Semantics drainSemanticsDiff maps bounds into view space",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 467,
+          "symbol": "semantics_drain_diff_maps_bounds_into_view_space"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#77",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 77,
+      "line": 6453,
+      "name": "Semantics requestSemanticFocus errors when not enabled",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 501,
+          "symbol": "semantics_request_focus_errors_when_not_enabled"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#78",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 78,
+      "line": 6470,
+      "name": "Semantics fireSemanticAction errors when not enabled",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 530,
+          "symbol": "semantics_fire_action_errors_when_not_enabled"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#79",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 79,
+      "line": 6490,
+      "name": "Semantics requestSemanticFocus on a valid node routes without error",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 559,
+          "symbol": "semantics_request_focus_on_valid_node_routes_without_error"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#80",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 80,
+      "line": 6516,
+      "name": "Semantics clearSemanticFocus removes Focused bit from focused node",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 585,
+          "symbol": "semantics_clear_focus_removes_focused_bit"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#81",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 81,
+      "line": 6563,
+      "name": "Semantics drainSemanticsDiff honors scaleFactor when the view matches the artboard",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 636,
+          "symbol": "semantics_drain_diff_honors_scale_factor_for_matching_view"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#82",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 82,
+      "line": 6652,
+      "name": "Global View Model Names Listed",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3148,
+          "symbol": "global_view_model_names_listed"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/command_queue_test.cpp#83",
+      "upstream": "tests/unit_tests/runtime/command_queue_test.cpp",
+      "ordinal": 83,
+      "line": 6727,
+      "name": "Set/Bind/Get Global View Model Instance",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/command_queue.rs",
+          "line": 3170,
+          "symbol": "set_bind_get_global_view_model_instance"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 1,
+      "line": 20,
+      "name": "Component List Artboard Count",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 62,
+          "symbol": "component_list_case_01_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 2,
+      "line": 43,
+      "name": "Component List Artboards & State Machines",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 91,
+          "symbol": "component_list_case_02_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 3,
+      "line": 70,
+      "name": "Component List Artboards Layout Nodes",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 124,
+          "symbol": "component_list_case_03_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 4,
+      "line": 93,
+      "name": "Component List Artboards Layout Bounds",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 153,
+          "symbol": "component_list_case_04_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 5,
+      "line": 119,
+      "name": "Component List Artboards Data Context",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 185,
+          "symbol": "component_list_case_05_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 6,
+      "line": 151,
+      "name": "Component List Artboards Labels",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 223,
+          "symbol": "component_list_case_06_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 7,
+      "line": 179,
+      "name": "Component list state machine listener",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 257,
+          "symbol": "component_list_case_07_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 8,
+      "line": 230,
+      "name": "Number To List Artboard Count",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 314,
+          "symbol": "component_list_case_08_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 9,
+      "line": 262,
+      "name": "Number To List Artboards & State Machines",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 352,
+          "symbol": "component_list_case_09_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 10,
+      "line": 289,
+      "name": "Number To List Artboards Layout Nodes",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 385,
+          "symbol": "component_list_case_10_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 11,
+      "line": 312,
+      "name": "Number To List Artboards Data Context",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 414,
+          "symbol": "component_list_case_11_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 12,
+      "line": 342,
+      "name": "Number to List Artboards Labels",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 450,
+          "symbol": "component_list_case_12_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 13,
+      "line": 370,
+      "name": "Component List Virtualized Artboards & State Machines",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 484,
+          "symbol": "component_list_case_13_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 14,
+      "line": 408,
+      "name": "Component List Virtualized Artboards Layout Bounds",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 528,
+          "symbol": "component_list_case_14_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 15,
+      "line": 444,
+      "name": "Component List Virtualized Scroll",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 570,
+          "symbol": "component_list_case_15_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 16,
+      "line": 482,
+      "name": "Component List Virtualized Scroll manual",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 54,
+          "symbol": "component_list_virtualized_scroll_manual"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for component_list_virtualized_scroll_manual"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 17,
+      "line": 538,
+      "name": "Artboard override with horizontal distribution",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 60,
+          "symbol": "component_list_override_horizontal"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for artboard_list_overrides_horizontal"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 18,
+      "line": 572,
+      "name": "Artboard override with vertical distribution",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 66,
+          "symbol": "component_list_override_vertical"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for artboard_list_overrides_vertical"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#19",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 19,
+      "line": 606,
+      "name": "Number to Lists reset triggers correctly",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 72,
+          "symbol": "component_list_reset_triggers"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for reset_phase_multi_main"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#20",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 20,
+      "line": 640,
+      "name": "Non Layout List Artboard Position",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 78,
+          "symbol": "component_list_non_layout_position"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for component_list_grouped"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#21",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 21,
+      "line": 771,
+      "name": "Artboard list with follow path constraint",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 83,
+          "symbol": "component_list_follow_path"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#22",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 22,
+      "line": 820,
+      "name": "Artboard list with follow path constraint distance",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 88,
+          "symbol": "component_list_follow_path_distance"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#23",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 23,
+      "line": 855,
+      "name": "Component List Hit order",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 94,
+          "symbol": "component_list_hit_order"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for component_list_hit_order"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#24",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 24,
+      "line": 906,
+      "name": "Virtualized list with nested data bound artboards",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 100,
+          "symbol": "component_list_virtualized_nested_data_binding"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for virtualized_artboard_databound_children"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#25",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 25,
+      "line": 960,
+      "name": "Artboard list map rules",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 105,
+          "symbol": "component_list_map_rules"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#26",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 26,
+      "line": 983,
+      "name": "Stateful Component",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 110,
+          "symbol": "component_list_stateful_component"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#27",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 27,
+      "line": 1006,
+      "name": "Artboard lists with child artboard origin offset",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 116,
+          "symbol": "component_list_child_origin"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for component_list_child_origin"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#28",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 28,
+      "line": 1040,
+      "name": "Component list orderedListIndices default order",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 614,
+          "symbol": "component_list_case_28_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#29",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 29,
+      "line": 1073,
+      "name": "Draw index overrides draw order",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 122,
+          "symbol": "component_list_draw_index_order"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for draw_index_list"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_list_test.cpp#30",
+      "upstream": "tests/unit_tests/runtime/component_list_test.cpp",
+      "ordinal": 30,
+      "line": 1318,
+      "name": "Virtualized list items are clipped by an ancestor layout viewport",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
+          "line": 653,
+          "symbol": "component_list_case_30_direct_port_expected_red"
+        }
+      ],
+      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_origin_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/component_origin_test.cpp",
+      "ordinal": 1,
+      "line": 24,
+      "name": "ComponentOrigin overrides the mounted instance origin",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 19153,
+          "symbol": "upstream_component_origin_overrides_the_mounted_instance_origin"
+        }
+      ],
+      "expected_red_reason": "expected-red: Rust has no runtime object-list insertion API for ComponentOrigin"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_origin_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/component_origin_test.cpp",
+      "ordinal": 2,
+      "line": 61,
+      "name": "ComponentOrigin pivots a layout's transform",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 19190,
+          "symbol": "upstream_component_origin_pivots_a_layout_transform"
+        }
+      ],
+      "expected_red_reason": "expected-red: Rust has no runtime object-list insertion API for ComponentOrigin"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_origin_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/component_origin_test.cpp",
+      "ordinal": 3,
+      "line": 108,
+      "name": "Animated origin and click events",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 127,
+          "symbol": "component_origin_animated_clicks"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/component_test.cpp",
+      "ordinal": 1,
+      "line": 28,
+      "name": "Stateful Component ViewModelInstance",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 132,
+          "symbol": "component_stateful_view_model"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/component_test.cpp",
+      "ordinal": 2,
+      "line": 74,
+      "name": "Stateful Component ViewModelInstance multi",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 137,
+          "symbol": "component_stateful_view_model_multi"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/component_test.cpp",
+      "ordinal": 3,
+      "line": 120,
+      "name": "Stateful Component multi-property independence",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 143,
+          "symbol": "component_stateful_multi_property"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for stateful_multi_property"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/component_test.cpp",
+      "ordinal": 4,
+      "line": 221,
+      "name": "Stateful Component nested in stateful",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 149,
+          "symbol": "component_stateful_nested"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for stateful_nested"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/component_test.cpp",
+      "ordinal": 5,
+      "line": 481,
+      "name": "Stateful Component dynamic artboard swap via VMI artboard property",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/artboard/tests.rs",
+          "line": 2867,
+          "symbol": "nested_artboard_swap_creates_the_replacement_default_state_machine"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/component_test.cpp",
+      "ordinal": 6,
+      "line": 652,
+      "name": "Stateful nested artboard borrows stateful child on matching VM and preserves it across different-VM swap",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/artboard/tests.rs",
+          "line": 2984,
+          "symbol": "stateful_nested_source_switch_uses_the_replacement_view_model_default"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/component_test.cpp",
+      "ordinal": 7,
+      "line": 813,
+      "name": "Stateful Component list bridge binds clean up on item remove",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 155,
+          "symbol": "component_stateful_list_cleanup"
+        }
+      ],
+      "expected_red_reason": "expected-red: silver replay lacks stateful_list_props_lifecycle required runtime feature"
+    },
+    {
+      "id": "tests/unit_tests/runtime/component_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/component_test.cpp",
+      "ordinal": 8,
+      "line": 924,
+      "name": "Stateful Component Keyed Triggers",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 160,
+          "symbol": "component_stateful_keyed_triggers"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/contour_measure_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/contour_measure_test.cpp",
+      "ordinal": 1,
+      "line": 37,
+      "name": "contour-basics",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_contour_measure.rs",
+          "line": 48,
+          "symbol": "contour_basics"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/contour_measure_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/contour_measure_test.cpp",
+      "ordinal": 2,
+      "line": 86,
+      "name": "multi-contours",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_contour_measure.rs",
+          "line": 128,
+          "symbol": "multi_contours"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/contour_measure_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/contour_measure_test.cpp",
+      "ordinal": 3,
+      "line": 132,
+      "name": "contour-oval",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_contour_measure.rs",
+          "line": 160,
+          "symbol": "contour_oval"
+        }
+      ],
+      "expected_red_reason": "expected-red: Rust fixes a coarser contour subdivision tolerance internally"
+    },
+    {
+      "id": "tests/unit_tests/runtime/contour_measure_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/contour_measure_test.cpp",
+      "ordinal": 4,
+      "line": 146,
+      "name": "bad contour",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_contour_measure.rs",
+          "line": 197,
+          "symbol": "bad_contour"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/contour_measure_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/contour_measure_test.cpp",
+      "ordinal": 5,
+      "line": 157,
+      "name": "nan-path",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_contour_measure.rs",
+          "line": 216,
+          "symbol": "nan_path"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/contour_measure_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/contour_measure_test.cpp",
+      "ordinal": 6,
+      "line": 182,
+      "name": "fuzz_issue_7295",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_contour_measure.rs",
+          "line": 241,
+          "symbol": "fuzz_issue_7295"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/cubic_value_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/cubic_value_test.cpp",
+      "ordinal": 1,
+      "line": 8,
+      "name": "test cubic value load and interpolate properly",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 20766,
+          "symbol": "upstream_cubic_and_elastic_fixture_assertions_match_cpp_probe"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/dash_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/dash_test.cpp",
+      "ordinal": 1,
+      "line": 25,
+      "name": "0 length dashes don't cause a crash",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 25511,
+          "symbol": "zero_length_dashes_do_not_cause_a_crash"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 1,
+      "line": 49,
+      "name": "addDataBind registers backpointer and persisting flag",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
+          "line": 289,
+          "symbol": "add_registers_membership_and_persisting_state"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 2,
+      "line": 67,
+      "name": "removeDataBind clears backpointer and membership flags",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
+          "line": 303,
+          "symbol": "remove_clears_membership_persisting_and_dirty_state"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 3,
+      "line": 87,
+      "name": "addDirtyDataBind dedupes via inDirtyList flag",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
+          "line": 203,
+          "symbol": "persisting_occurrences_run_first_and_are_not_duplicated_by_dirt"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 4,
+      "line": 114,
+      "name": "recursive updateDataBinds is rejected",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
+          "line": 219,
+          "symbol": "notifications_during_processing_wait_for_the_next_snapshot"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 5,
+      "line": 143,
+      "name": "addDataBind during update is deferred and flushed after",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
+          "line": 318,
+          "symbol": "add_during_update_is_deferred_and_flushed_after"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 6,
+      "line": 177,
+      "name": "removeDataBind during update is deferred and flushed after",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
+          "line": 335,
+          "symbol": "remove_during_update_is_deferred_and_flushed_after"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 7,
+      "line": 212,
+      "name": "same-tick add then remove of the same bind resolves to removed",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
+          "line": 353,
+          "symbol": "same_tick_add_then_remove_resolves_to_removed"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 8,
+      "line": 243,
+      "name": "pending-dirty binds swap into dirty on next tick",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
+          "line": 369,
+          "symbol": "dirty_added_during_update_runs_on_next_tick"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 9,
+      "line": 284,
+      "name": "source-originated dirt does not run target->source",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind.rs",
+          "line": 1060,
+          "symbol": "one_sided_changes_latch_their_own_origin"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 10,
+      "line": 314,
+      "name": "target-originated dirt runs target->source",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind.rs",
+          "line": 1060,
+          "symbol": "one_sided_changes_latch_their_own_origin"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 11,
+      "line": 329,
+      "name": "persisting bind polls target->source regardless of origin",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind_container.rs",
+          "line": 203,
+          "symbol": "persisting_occurrences_run_first_and_are_not_duplicated_by_dirt"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_container_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/data_bind_container_test.cpp",
+      "ordinal": 12,
+      "line": 347,
+      "name": "addDirt latches a single change origin",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/data_bind.rs",
+          "line": 1025,
+          "symbol": "reconcile_favors_the_declared_direction"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_lists_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/data_bind_lists_test.cpp",
+      "ordinal": 1,
+      "line": 17,
+      "name": "data bind lists reset triggers",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal pinned SRIV fixture/action stream is replayed and fully compared.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 165,
+          "symbol": "data_bind_lists_reset_triggers"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_lists_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/data_bind_lists_test.cpp",
+      "ordinal": 2,
+      "line": 57,
+      "name": "data bind list with number to list and lists children",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal pinned SRIV fixture/action stream is replayed and fully compared.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 171,
+          "symbol": "data_bind_lists_number_to_list_children"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for number_to_list_nested_children"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_lists_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/data_bind_lists_test.cpp",
+      "ordinal": 3,
+      "line": 102,
+      "name": "Test that adding and removing an item updates the list",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal pinned SRIV fixture/action stream is replayed and fully compared.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 176,
+          "symbol": "data_bind_lists_add_remove_item"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_bind_lists_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/data_bind_lists_test.cpp",
+      "ordinal": 4,
+      "line": 142,
+      "name": "Clear view model list",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal pinned SRIV fixture/action stream is replayed and fully compared.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 182,
+          "symbol": "data_bind_lists_clear"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for clear_viewmodel_list"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 1,
+      "line": 33,
+      "name": "Test data binding artboards from same and different sources",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
+          "line": 97,
+          "symbol": "data_binding_artboards_from_same_and_different_sources"
+        }
+      ],
+      "expected_red_reason": "expected-red: external bindable-artboard registration is absent"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 2,
+      "line": 141,
+      "name": "Test recursive data binding artboards is skipped",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
+          "line": 165,
+          "symbol": "recursive_data_binding_artboards_are_skipped"
+        }
+      ],
+      "expected_red_reason": "expected-red: recursive artboard stream diverges at frame 1 makeRenderPaint"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 3,
+      "line": 205,
+      "name": "Setting a bindable artboard clears stale bound instance",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_instance_artboard_runtime.rs",
+          "line": 117,
+          "symbol": "setting_a_bindable_artboard_clears_stale_bound_instance"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 4,
+      "line": 239,
+      "name": "Runtime artboard property exposes the bound artboard name",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_instance_artboard_runtime.rs",
+          "line": 143,
+          "symbol": "runtime_artboard_property_exposes_the_bound_artboard_name"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 5,
+      "line": 274,
+      "name": "Test default data binding artboard from different source",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
+          "line": 211,
+          "symbol": "default_data_binding_artboard_from_different_source"
+        }
+      ],
+      "expected_red_reason": "expected-red: external default bindable-artboard registration is absent"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 6,
+      "line": 329,
+      "name": "Test Scripted Artboard Input data bound to internal and external artboards",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
+          "line": 245,
+          "symbol": "scripted_artboard_input_bound_to_internal_and_external_artboards"
+        }
+      ],
+      "expected_red_reason": "expected-red: scripted external Artboard input registration is absent"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 7,
+      "line": 392,
+      "name": "Data bind external artboard with no initial source artboard",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
+          "line": 291,
+          "symbol": "external_artboard_with_no_initial_source"
+        }
+      ],
+      "expected_red_reason": "expected-red: external artboard plus view-model graph registration is absent"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 8,
+      "line": 431,
+      "name": "Data bound artboard with view model instance resets its properties",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
+          "line": 317,
+          "symbol": "bound_artboard_with_view_model_instance_resets_properties"
+        }
+      ],
+      "expected_red_reason": "expected-red: external artboard with bound view-model injection is absent"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 9,
+      "line": 480,
+      "name": "Data bound artboards with multiple targets bound to same property bidirectionally",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
+          "line": 363,
+          "symbol": "multiple_targets_bound_to_same_artboard_property_bidirectionally"
+        }
+      ],
+      "expected_red_reason": "expected-red: multiple external artboard targets are not registered"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_artboards_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/data_binding_artboards_test.cpp",
+      "ordinal": 10,
+      "line": 555,
+      "name": "Null-bound artboard swap survives pending layout sync",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_data_binding_artboards.rs",
+          "line": 401,
+          "symbol": "null_bound_artboard_swap_survives_pending_layout_sync"
+        }
+      ],
+      "expected_red_reason": "expected-red: nested-artboard instance presence is not exposed through the facade"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_blobs_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/data_binding_blobs_test.cpp",
+      "ordinal": 1,
+      "line": 26,
+      "name": "Blob data bind stores and clears the blob on the property",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/bindables.rs",
+          "line": 2279,
+          "symbol": "bindable_blob_retains_live_empty_payload_and_replaces_it_for_id_binds"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_blobs_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/data_binding_blobs_test.cpp",
+      "ordinal": 2,
+      "line": 50,
+      "name": "Blob data value applies to the instance property",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/blob_view_model.rs",
+          "line": 55,
+          "symbol": "blob_runtime_wrapper_stores_swaps_and_clears_live_values"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_blobs_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/data_binding_blobs_test.cpp",
+      "ordinal": 3,
+      "line": 68,
+      "name": "Blob data value with only an id applies the id",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/blob_view_model.rs",
+          "line": 13,
+          "symbol": "blob_property_imports_and_preserves_live_empty_values"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_blobs_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/data_binding_blobs_test.cpp",
+      "ordinal": 4,
+      "line": 83,
+      "name": "Directly-set blob yields a non-null asset even when empty",
+      "status": "direct",
+      "outcome": "pass",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/blob_view_model.rs",
+          "line": 13,
+          "symbol": "blob_property_imports_and_preserves_live_empty_values"
+        }
+      ]
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_blobs_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/data_binding_blobs_test.cpp",
+      "ordinal": 5,
+      "line": 104,
+      "name": "Data bind blobs internally and externally",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 188,
+          "symbol": "data_binding_blobs_internal_external"
+        }
+      ],
+      "expected_red_reason": "expected-red: silver replay lacks data_bind_blob_test required runtime feature"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_computed_values_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/data_binding_computed_values_test.cpp",
+      "ordinal": 1,
+      "line": 13,
+      "name": "Computed root values",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal pinned fixture/action/assertion stream is retained; the known renderer result remains expected-red.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 194,
+          "symbol": "data_binding_computed_root_values"
+        }
+      ],
+      "expected_red_reason": "expected-red: pinned SRIV stream diverges for computed_values_test"
+    },
+    {
+      "id": "tests/unit_tests/runtime/data_binding_computed_values_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/data_binding_computed_values_test.cpp",
+      "ordinal": 2,
+      "line": 42,
+      "name": "Image computed width/height track layout resize",
+      "status": "direct",
+      "outcome": "expected-red",
+      "note": "Literal pinned fixture/action/assertion stream is retained; the known renderer result remains expected-red.",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_a.rs",
+          "line": 200,
+          "symbol": "data_binding_computed_image_resize"
+        }
+      ],
+      "expected_red_reason": "expected-red: silver replay lacks image_computed_transform_bind required runtime feature"
+    }
+  ]
+}

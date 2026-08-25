@@ -1094,64 +1094,6 @@ mod tests {
     }
 
     #[test]
-    fn upstream_animation_state_speed_start_and_spilled_time_matrix() {
-        // Assertion-for-assertion port of animation_state_instance_test.cpp.
-        for (label, animation_speed, state_speed, loop_value, elapsed, expected) in [
-            ("speed 1", 1.0, 1.0, 0, 2.0, (2.0, 2.0, 0.0)),
-            ("state speed 2", 1.0, 2.0, 0, 2.0, (4.0, 4.0, 0.0)),
-            ("state speed 0.5", 1.0, 0.5, 0, 2.0, (1.0, 1.0, 0.0)),
-            ("negative state speed", 1.0, -1.0, 1, 2.0, (3.0, 2.0, 0.0)),
-        ] {
-            let animation = upstream_test_animation(animation_speed, loop_value, false);
-            let mut instance = LinearAnimationInstance::new_for_test(
-                RuntimeLinearAnimationHandle::new(0),
-                &animation,
-                state_speed,
-            );
-            let _ = instance.advance(elapsed * state_speed);
-            assert_eq!(instance.time(), expected.0, "{label} time");
-            assert_eq!(instance.total_time(), expected.1, "{label} totalTime");
-            assert_eq!(instance.spilled_time(), expected.2, "{label} spilledTime");
-        }
-
-        for (label, animation_speed, state_speed, expected_time) in [
-            ("positive animation, positive state", 1.0, 1.0, 0.0),
-            ("negative animation, positive state", -1.0, 1.0, 5.0),
-            ("positive animation, negative state", 1.0, -1.0, 5.0),
-            ("negative animation, negative state", -1.0, -1.0, 0.0),
-        ] {
-            let animation = upstream_test_animation(animation_speed, 0, false);
-            let instance = LinearAnimationInstance::new_for_test(
-                RuntimeLinearAnimationHandle::new(0),
-                &animation,
-                state_speed,
-            );
-            assert_eq!(instance.time(), expected_time, "{label} initial time");
-        }
-
-        for (label, animation_speed, loop_value, elapsed, expected) in [
-            ("2x one-shot", 2.0, 0, 3.0, (2.0, 6.0, 2.0)),
-            ("0.5x one-shot", 0.5, 0, 5.0, (2.0, 2.5, 1.0)),
-            ("2x loop", 2.0, 1, 5.5, (1.0, 11.0, 0.5)),
-            ("0.5x loop", 0.5, 1, 10.0, (1.0, 5.0, 2.0)),
-            ("-2x one-shot", -2.0, 0, 3.0, (0.0, 6.0, 2.0)),
-            ("-2x loop", -2.0, 1, 5.5, (1.0, 11.0, 0.5)),
-        ] {
-            let mut animation = upstream_test_animation(animation_speed, loop_value, false);
-            animation.duration = 4;
-            let mut instance = LinearAnimationInstance::new_for_test(
-                RuntimeLinearAnimationHandle::new(0),
-                &animation,
-                1.0,
-            );
-            let _ = instance.advance(elapsed);
-            assert_eq!(instance.time(), expected.0, "{label} time");
-            assert_eq!(instance.total_time(), expected.1, "{label} totalTime");
-            assert_eq!(instance.spilled_time(), expected.2, "{label} spilledTime");
-        }
-    }
-
-    #[test]
     fn upstream_linear_animation_definition_timing_and_keep_going() {
         // Literal ports of the definition-only and work-area keep-going cases
         // in linear_animation_test.cpp.

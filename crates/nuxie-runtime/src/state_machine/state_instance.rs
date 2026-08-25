@@ -311,3 +311,227 @@ impl RuntimeStateInstance {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nuxie_binary::FixtureRecord;
+    use nuxie_graph::GraphFile;
+
+    struct AnimationStateFixture {
+        layer: RuntimeStateMachineLayer,
+        occurrence: RuntimeStateInstance,
+        artboard: ArtboardInstance,
+    }
+
+    impl AnimationStateFixture {
+        fn new(
+            duration: u64,
+            fps: u64,
+            animation_speed: f32,
+            loop_value: u64,
+            state_speed: f32,
+        ) -> Self {
+            let file = RuntimeFile::from_fixture_records(vec![
+                fixture_record("Backboard"),
+                fixture_record("Artboard"),
+            ])
+            .expect("dummy upstream Artboard imports");
+            let graph = GraphFile::from_runtime_file(&file).expect("dummy Artboard graph builds");
+            let artboard = ArtboardInstance::from_graph(
+                &file,
+                graph.artboards.first().expect("dummy Artboard exists"),
+            )
+            .expect("dummy Artboard instance builds");
+
+            let animation_definitions = Arc::new(vec![RuntimeLinearAnimation {
+                global_id: 1,
+                name: None,
+                fps,
+                duration,
+                speed: animation_speed,
+                loop_value,
+                work_start: 0,
+                work_end: 0,
+                enable_work_area: false,
+                quantize: false,
+                keyed_objects: Arc::new(Vec::new()),
+                key_frame_data_bind_templates: Arc::new(Vec::new()),
+                has_keyed_callbacks: false,
+            }]);
+            let empty_animation_definition = Arc::new(RuntimeLinearAnimation::empty());
+            let layer = RuntimeStateMachineLayer {
+                global_id: 1,
+                name: None,
+                states: vec![RuntimeLayerState {
+                    global_id: None,
+                    type_name: Some("AnimationState"),
+                    animation: Some(RuntimeLinearAnimationHandle::new(0)),
+                    blend_state_1d: None,
+                    blend_state_direct: None,
+                    speed: state_speed,
+                    flags: 0,
+                    fire_actions: Vec::new(),
+                    listener_actions: Vec::new(),
+                    transitions: Vec::new(),
+                }],
+                entry_state_index: None,
+                any_state_index: None,
+                exit_state_index: None,
+            };
+            let occurrence = RuntimeStateInstance::make(
+                &layer,
+                0,
+                &artboard,
+                &animation_definitions,
+                &empty_animation_definition,
+                &[],
+                &[],
+            )
+            .expect("AnimationState creates an AnimationStateInstance occurrence");
+            Self {
+                layer,
+                occurrence,
+                artboard,
+            }
+        }
+
+        fn advance(&mut self, elapsed_seconds: f32) {
+            self.occurrence.advance(
+                &self.layer,
+                &mut self.artboard,
+                &[],
+                &[],
+                elapsed_seconds,
+                &mut Vec::new(),
+            );
+        }
+
+        fn animation_instance(&self) -> &LinearAnimationInstance {
+            self.occurrence
+                .plain_animation()
+                .expect("AnimationState occurrence retains its LinearAnimationInstance")
+        }
+    }
+
+    fn fixture_record(type_name: &str) -> FixtureRecord {
+        FixtureRecord {
+            type_key: nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing {type_name}"))
+                .type_key
+                .int,
+            properties: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_01_advances_in_step_with_animation_speed_1() {
+        let mut fixture = AnimationStateFixture::new(10, 2, 1.0, 0, 1.0);
+        fixture.advance(2.0);
+        assert_eq!(fixture.animation_instance().time(), 2.0);
+        assert_eq!(fixture.animation_instance().total_time(), 2.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_02_advances_twice_as_fast_when_speed_is_doubled() {
+        let mut fixture = AnimationStateFixture::new(10, 2, 1.0, 0, 2.0);
+        fixture.advance(2.0);
+        assert_eq!(fixture.animation_instance().time(), 4.0);
+        assert_eq!(fixture.animation_instance().total_time(), 4.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_03_advances_half_as_fast_when_speed_is_halved() {
+        let mut fixture = AnimationStateFixture::new(10, 2, 1.0, 0, 0.5);
+        fixture.advance(2.0);
+        assert_eq!(fixture.animation_instance().time(), 1.0);
+        assert_eq!(fixture.animation_instance().total_time(), 1.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_04_advances_backwards_when_speed_is_negative() {
+        let mut fixture = AnimationStateFixture::new(10, 2, 1.0, 1, -1.0);
+        fixture.advance(2.0);
+        assert_eq!(fixture.animation_instance().time(), 3.0);
+        assert_eq!(fixture.animation_instance().total_time(), 2.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_05_starts_a_positive_animation_at_the_beginning() {
+        let fixture = AnimationStateFixture::new(10, 2, 1.0, 0, 1.0);
+        assert_eq!(fixture.animation_instance().time(), 0.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_06_starts_a_negative_animation_at_the_end() {
+        let fixture = AnimationStateFixture::new(10, 2, -1.0, 0, 1.0);
+        assert_eq!(fixture.animation_instance().time(), 5.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_07_negative_state_starts_positive_animation_at_end() {
+        let fixture = AnimationStateFixture::new(10, 2, 1.0, 0, -1.0);
+        assert_eq!(fixture.animation_instance().time(), 5.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_08_negative_state_starts_negative_animation_at_beginning()
+    {
+        let fixture = AnimationStateFixture::new(10, 2, -1.0, 0, -1.0);
+        assert_eq!(fixture.animation_instance().time(), 0.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_09_spilled_time_nx_one_shot() {
+        let mut fixture = AnimationStateFixture::new(4, 2, 2.0, 0, 1.0);
+        fixture.advance(3.0);
+        assert_eq!(fixture.animation_instance().time(), 2.0);
+        assert_eq!(fixture.animation_instance().total_time(), 6.0);
+        assert_eq!(fixture.animation_instance().spilled_time(), 2.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_10_spilled_time_inverse_nx_one_shot() {
+        let mut fixture = AnimationStateFixture::new(4, 2, 0.5, 0, 1.0);
+        fixture.advance(5.0);
+        assert_eq!(fixture.animation_instance().time(), 2.0);
+        assert_eq!(fixture.animation_instance().total_time(), 2.5);
+        assert_eq!(fixture.animation_instance().spilled_time(), 1.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_11_spilled_time_nx_loop() {
+        let mut fixture = AnimationStateFixture::new(4, 2, 2.0, 1, 1.0);
+        fixture.advance(5.5);
+        assert_eq!(fixture.animation_instance().time(), 1.0);
+        assert_eq!(fixture.animation_instance().total_time(), 11.0);
+        assert_eq!(fixture.animation_instance().spilled_time(), 0.5);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_12_spilled_time_inverse_nx_loop() {
+        let mut fixture = AnimationStateFixture::new(4, 2, 0.5, 1, 1.0);
+        fixture.advance(10.0);
+        assert_eq!(fixture.animation_instance().time(), 1.0);
+        assert_eq!(fixture.animation_instance().total_time(), 5.0);
+        assert_eq!(fixture.animation_instance().spilled_time(), 2.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_13_spilled_time_negative_nx_one_shot() {
+        let mut fixture = AnimationStateFixture::new(4, 2, -2.0, 0, 1.0);
+        fixture.advance(3.0);
+        assert_eq!(fixture.animation_instance().time(), 0.0);
+        assert_eq!(fixture.animation_instance().total_time(), 6.0);
+        assert_eq!(fixture.animation_instance().spilled_time(), 2.0);
+    }
+
+    #[test]
+    fn upstream_animation_state_instance_14_spilled_time_negative_nx_loop() {
+        let mut fixture = AnimationStateFixture::new(4, 2, -2.0, 1, 1.0);
+        fixture.advance(5.5);
+        assert_eq!(fixture.animation_instance().time(), 1.0);
+        assert_eq!(fixture.animation_instance().total_time(), 11.0);
+        assert_eq!(fixture.animation_instance().spilled_time(), 0.5);
+    }
+}

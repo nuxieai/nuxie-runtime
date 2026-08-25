@@ -205,13 +205,13 @@
       "name": "AnimationStateInstance advances in step with animation speed 1",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port constructs an AnimationState occurrence at state speed 1, advances the owner by 2 seconds, and asserts time and totalTime are both 2.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 428,
+          "symbol": "upstream_animation_state_instance_01_advances_in_step_with_animation_speed_1"
         }
       ]
     },
@@ -223,13 +223,13 @@
       "name": "AnimationStateInstance advances twice as fast when speed is doubled",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port constructs an AnimationState occurrence at state speed 2, advances the owner by 2 seconds, and asserts time and totalTime are both 4.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 436,
+          "symbol": "upstream_animation_state_instance_02_advances_twice_as_fast_when_speed_is_doubled"
         }
       ]
     },
@@ -241,13 +241,13 @@
       "name": "AnimationStateInstance advances half as fast when speed is halved",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port constructs an AnimationState occurrence at state speed 0.5, advances the owner by 2 seconds, and asserts time and totalTime are both 1.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 444,
+          "symbol": "upstream_animation_state_instance_03_advances_half_as_fast_when_speed_is_halved"
         }
       ]
     },
@@ -259,13 +259,13 @@
       "name": "AnimationStateInstance advances backwards when speed is negative",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port constructs a looping AnimationState occurrence at state speed -1, advances the owner by 2 seconds, and asserts reverse time 3 with totalTime 2.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 452,
+          "symbol": "upstream_animation_state_instance_04_advances_backwards_when_speed_is_negative"
         }
       ]
     },
@@ -277,13 +277,13 @@
       "name": "AnimationStateInstance starts a positive animation at the beginning",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port constructs the positive-animation, positive-state AnimationState occurrence and asserts its owned animation begins at time 0.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 460,
+          "symbol": "upstream_animation_state_instance_05_starts_a_positive_animation_at_the_beginning"
         }
       ]
     },
@@ -295,13 +295,13 @@
       "name": "AnimationStateInstance starts a negative animation at the end",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port constructs the negative-animation, positive-state AnimationState occurrence and asserts its owned animation begins at duration time 5.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 466,
+          "symbol": "upstream_animation_state_instance_06_starts_a_negative_animation_at_the_end"
         }
       ]
     },
@@ -313,13 +313,13 @@
       "name": "AnimationStateInstance with negative speed starts a positive animation at the end",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port constructs the positive-animation, negative-state AnimationState occurrence and asserts its owned animation begins at duration time 5.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 472,
+          "symbol": "upstream_animation_state_instance_07_negative_state_starts_positive_animation_at_end"
         }
       ]
     },
@@ -331,13 +331,13 @@
       "name": "AnimationStateInstance with negative speed starts a negative animation at the beginning",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port constructs the negative-animation, negative-state AnimationState occurrence and asserts its owned animation begins at time 0.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 478,
+          "symbol": "upstream_animation_state_instance_08_negative_state_starts_negative_animation_at_beginning"
         }
       ]
     },
@@ -349,13 +349,13 @@
       "name": "AnimationStateInstance spilledTime accounts for Nx speed with oneShot",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port advances the one-shot 2x AnimationState owner by 3 seconds and asserts time 2, totalTime 6, and spilledTime 2.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 485,
+          "symbol": "upstream_animation_state_instance_09_spilled_time_nx_one_shot"
         }
       ]
     },
@@ -367,13 +367,13 @@
       "name": "AnimationStateInstance spilledTime accounts for 1/Nx speed with oneShot",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port advances the one-shot 0.5x AnimationState owner by 5 seconds and asserts time 2, totalTime 2.5, and spilledTime 1.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 494,
+          "symbol": "upstream_animation_state_instance_10_spilled_time_inverse_nx_one_shot"
         }
       ]
     },
@@ -385,13 +385,13 @@
       "name": "AnimationStateInstance spilledTime accounts for Nx speed with loop",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port advances the looping 2x AnimationState owner by 5.5 seconds and asserts time 1, totalTime 11, and spilledTime 0.5.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 503,
+          "symbol": "upstream_animation_state_instance_11_spilled_time_nx_loop"
         }
       ]
     },
@@ -403,13 +403,13 @@
       "name": "AnimationStateInstance spilledTime accounts for 1/Nx speed with loop",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port advances the looping 0.5x AnimationState owner by 10 seconds and asserts time 1, totalTime 5, and spilledTime 2.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 512,
+          "symbol": "upstream_animation_state_instance_12_spilled_time_inverse_nx_loop"
         }
       ]
     },
@@ -421,13 +421,13 @@
       "name": "AnimationStateInstance spilledTime accounts for -Nx speed with oneShot",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port advances the one-shot -2x AnimationState owner by 3 seconds and asserts time 0, totalTime 6, and spilledTime 2.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 521,
+          "symbol": "upstream_animation_state_instance_13_spilled_time_negative_nx_one_shot"
         }
       ]
     },
@@ -439,13 +439,13 @@
       "name": "AnimationStateInstance spilledTime accounts for -Nx speed with loop",
       "status": "direct",
       "outcome": "pass",
-      "note": "The named tuple in the assertion-for-assertion matrix retains this pinned case independently.",
+      "note": "Direct port advances the looping -2x AnimationState owner by 5.5 seconds and asserts time 1, totalTime 11, and spilledTime 0.5.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/animation.rs",
-          "line": 1097,
-          "symbol": "upstream_animation_state_speed_start_and_spilled_time_matrix"
+          "path": "crates/nuxie-runtime/src/state_machine/state_instance.rs",
+          "line": 530,
+          "symbol": "upstream_animation_state_instance_14_spilled_time_negative_nx_loop"
         }
       ]
     },

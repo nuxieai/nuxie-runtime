@@ -1065,3 +1065,67 @@ With `CARGO_INCREMENTAL=0`:
 - `cargo check -p rust-golden-runner --features scripting`: passed;
 - `cargo check -p nuxie-runtime -p nuxie-scripting -p nuxie -p silver-corpus
   --features nuxie/scripting`: passed.
+
+## First fresh independent review after `dd0f5ca7f`
+
+Status: **REJECTED.** The four new focused witnesses are green and the main
+prepared-hydration path now has the intended empty-Live preflight, deferred
+backend guard, source RuntimeFile resolver, default-state-machine-before-bind
+order, and host-frame-tail trigger consumption. The combined behavior is not
+yet certifiable because two operative ScriptInputArtboard paths bypass those
+recovered invariants.
+
+### Live Artboard updates still construct before the ScriptAsset guard
+
+Pinned `ScriptInputArtboard::syncReferencedArtboard` calls
+`ScriptedObject::setArtboardInput`, whose `state()` and `scriptAsset()` checks
+both precede `Artboard::instance()` and `ScriptReffedArtboard` construction
+(`src/script_input_artboard.cpp:68-79`;
+`src/scripted/scripted_object.cpp:43-59`).
+
+The ordinary bound-input update owner still checks only
+`script_lifetime_valid`, calls the eager convenience
+`resolve_script_artboard`, and only then passes the already constructed child
+to `set_artboard_input_core`
+(`crates/nuxie-runtime/src/state_machine/state_machine_instance/
+state_machine_instance.rs:2005-2041`). That bypasses both the new
+`script_artboard_input_context_live`/ScriptAsset guard and the prepared recipe
+boundary. A live table whose ScriptAsset authority is absent can therefore
+clone, bind, or fail a child where pinned C++ returns before construction.
+The new counter witness exercises only prepared hydration, so it cannot catch
+this update path.
+
+Correction must retain the prepared recipe through the live update and hand
+it to the backend-owned guarded setter, rather than calling
+`resolve_script_artboard` before that guard.
+
+### Golden DataContext rehydration publishes an unbound Artboard
+
+Pinned `hydrateScriptInputs` replays `ScriptInputArtboard::hydrateScriptInput`
+on every hydration, and every resulting `ScriptReffedArtboard` constructs its
+default state machine and then binds its selected consumer/parent ViewModel
+when both exist (`src/scripted/scripted_object.cpp:399-426`;
+`src/lua/lua_artboards.cpp:21-60`).
+
+The golden cold path calls `bind_view_model`, and the prepared listener recipe
+does too. The golden DataContext rehydration path does not: it creates
+`RunnerScriptArtboard` and immediately publishes it through
+`set_script_artboard_input_for_global`
+(`tools/rust-golden-runner/src/main.rs:6028-6045`). The constructor has already
+created the default state machine, but `_data_context` remains absent and
+neither the Artboard nor machine receives the selected replacement context.
+This makes the receipt's statement that the golden paths bind exactly once
+false, and none of the new production-focused witnesses enters this direct
+golden rehydration owner.
+
+Correction must run the same post-state-machine `bind_view_model` step before
+publishing the rehydrated golden Artboard and add a witness that distinguishes
+an unbound child from the pinned consumer/parent binding.
+
+### Review evidence
+
+At `dd0f5ca7f`, with `CARGO_INCREMENTAL=0`, the focused empty-Live and inert
+constructor tests, the concrete Luau ScriptAsset constructor guard, the
+incompatible cross-File manifest witness, and the default-state-machine/
+frame-tail trigger witness all passed. Those results accept the corrected
+prepared listener path but are non-probative for the two bypasses above.

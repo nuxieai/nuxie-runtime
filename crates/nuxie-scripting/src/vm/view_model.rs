@@ -2590,6 +2590,79 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "expected-red: Rust has no constructor or mutation for a schema-known but null nested ViewModel reference"]
+    fn upstream_nested_view_model_value_refreshes_after_reference_relink() {
+        fn clear_nested_reference_unavailable(_owner: &ScriptViewModel, property_name: &str) {
+            panic!(
+                "scripting_nested_viewmodel_test.cpp requires {property_name:?} to retain its property wrapper while referenceViewModelInstance is null"
+            );
+        }
+        let (owner, property_name) = model_with_property(ScriptViewModelProperty::ViewModel);
+        let item = owner
+            .view_model(&property_name)
+            .expect("authored referenced item");
+        let lua = Lua::new();
+        let owner_table = create_scripted_view_model(&lua, owner.clone()).expect("scripted owner");
+        lua.globals().set("owner", owner_table).unwrap();
+        lua.globals().set("propertyName", property_name.clone()).unwrap();
+        lua.load(
+            "function getProp(owner) return owner:getViewModel(propertyName) end\n\
+             function getValue(prop) return prop.value end\n\
+             prop = getProp(owner)",
+        )
+        .exec()
+        .expect("cache property wrapper");
+        clear_nested_reference_unavailable(&owner, &property_name);
+        let before: Value = lua.load("return getValue(prop)").eval().unwrap();
+        assert!(matches!(before, Value::Nil));
+        assert!(owner.set_view_model(&property_name, &item));
+        let after: Table = lua.load("return getValue(prop)").eval().unwrap();
+        let refreshed = model_from_table(&after).expect("refreshed nested model");
+        assert!(Rc::ptr_eq(
+            &refreshed.owned_instance(),
+            &item.owned_instance()
+        ));
+    }
+
+    #[test]
+    #[ignore = "expected-red: dropping ScriptInstance leaves its two ViewModel property listeners registered"]
+    fn upstream_script_dispose_clears_view_model_listeners_immediately() {
+        let model = fixture_first_authored_instance("scripted_color.riv", "colorsVm");
+        let vm = ScriptVm::new();
+        let chunk = vm
+            .load(
+                "upstream-script-dispose.luau",
+                "upstreamDisposeCalls = 0\n\
+                 return function(context)\n\
+                   return { init = function(self)\n\
+                     local prop = context:viewModel():getColor('colorProp')\n\
+                     prop:addListener(function() upstreamDisposeCalls += 1 end)\n\
+                     prop:addListener(function() upstreamDisposeCalls += 1 end)\n\
+                     return true\n\
+                   end }\n\
+                 end",
+            )
+            .expect("listener script compiles");
+        let generator: Function = chunk.call(()).expect("listener script generator");
+        let program = ScriptProgram { generator };
+        let mut instance = vm
+            .instantiate_registered_script_with_context(&program, Some(model.clone()), Vec::new())
+            .expect("script instance");
+        assert!(
+            instance
+                .call_init(&mut nuxie_runtime::NoopScriptHost)
+                .expect("initialize listeners")
+        );
+        assert!(model.set_color("colorProp", 0xff10_1567));
+        vm.advance_detached_view_models();
+        assert_eq!(vm.lua.globals().get::<i64>("upstreamDisposeCalls").unwrap(), 2);
+        drop(instance);
+        assert!(model.set_color("colorProp", 0xff10_1568));
+        vm.advance_detached_view_models();
+        assert_eq!(vm.lua.globals().get::<i64>("upstreamDisposeCalls").unwrap(), 2);
+    }
+
+    #[test]
     fn detached_root_recurses_through_shared_list_instances() {
         let (parent, list) = model_with_property(ScriptViewModelProperty::List);
         let (child, trigger) = model_with_property(ScriptViewModelProperty::Trigger);

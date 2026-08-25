@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **REJECTED AFTER FIRST INDEPENDENT RE-REVIEW OF `01e0c65bf`**
+Adversarial review: **REJECTED AFTER SECOND INDEPENDENT RE-REVIEW OF `01e0c65bf`**
 
 This receipt deliberately includes executable methods defined inline in the
 handwritten `include/rive/script_input_*.hpp` headers. Those methods exposed
@@ -101,17 +101,17 @@ every nonzero changed Core value invokes the named table callback.
 |---|---|---|---|
 | `ScriptInputArtboard::~ScriptInputArtboard` | owning occurrence drop; `RuntimeScriptInputArtboardOccurrence` drop | adapted | occurrence replacement/disposal tests |
 | `ScriptInputArtboard::import` | binary Backboard + scripted-object context validation; runtime definition builders | exact | `runtime_import_status_tracks_scripted_object_input_contexts`; C++/Rust import comparison |
-| `ScriptInputArtboard::initScriptedValue` | artboard branch of `prepare_script_listener_hydration`; `ScriptListenerActionHydration::preflight_artboards`; `apply_inputs` | corrected in ordinary facade builders; rejected as complete ownership | facade preflight is optional at the hydration boundary; cross-File test uses the wrong File oracle |
+| `ScriptInputArtboard::initScriptedValue` | artboard branch of `prepare_script_listener_hydration`; `ScriptListenerActionHydration::preflight_artboards`; `apply_inputs` | rejected | resolution is reordered before authored phase-two writes; source-File facade uses the opposite pinned File |
 | `ScriptInputArtboard::validateForScriptInit` (inline) | resolved-reference preflight | exact | typed-artboard validation failure tests |
 | `ScriptInputArtboard::validateForColdScriptInit` | cold phase accepts the unresolved live context | exact | cold/live hydration lifecycle tests |
 | `ScriptInputArtboard::validateHydrationPrerequisites` | snapshot/reference preflight before any writes | exact | `scripted_hydration_validation_failure_applies_no_inputs_or_init` |
-| `ScriptInputArtboard::hydrateScriptInput` | authored phase-two artboard resolution and projection | corrected in ordinary facade builders; rejected as complete ownership | facade preflight is optional at the hydration boundary; cross-File test uses the wrong File oracle |
-| `ScriptInputArtboard::syncReferencedArtboard` | `set_artboard_input_core`; live `apply_scripted_input_update` | converter callback fixed; end-to-end facade ownership rejected | converter projection regression; pinned `ScriptedObject::setArtboardInput` File trace |
+| `ScriptInputArtboard::hydrateScriptInput` | authored phase-two artboard resolution and projection | rejected | ordinary callers pre-resolve Artboards outside authored phase two; public hydration paths can still resolve inline after writes |
+| `ScriptInputArtboard::syncReferencedArtboard` | `set_artboard_input_core`; live `apply_scripted_input_update` | exact | converter production-path regression observes one projection carrying the retained live identity |
 | `ScriptInputArtboard::onAddedClean` | ordered input/binding-definition construction | exact | imported input order/count comparison |
 | `ScriptInputArtboard::clone` | `RuntimeScriptInputArtboardOccurrence::clone_for_scripted_object` | exact | `fresh_clone_preserves_the_exact_live_bindable_identity` |
 | `ScriptInputArtboard::file` (inline) | `RuntimeScriptInputArtboardOccurrence::file_attached` | exact | resolved/unresolved clone authority test |
 | `ScriptInputArtboard::artboardIdChanged` | `RuntimeScriptInputProperties::apply_target`; `apply_artboard_id_changed` | exact | missing-id clear and generated-id separation tests |
-| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | source selection/ancestry corrected; downstream projection remains rejected | converter live-projection and owner-rejection regressions; pinned facade File trace |
+| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | rejected | ordinary owner/ancestor selection is corrected, but `StateMachineInstance::clone` drops listener converter-state ancestry |
 | `ScriptInputArtboard::referencedArtboardId` | generated value in `RuntimeScriptInputProperties::value`; binary `cpp_artboard_referencer_index` | exact | import resolver and generated-id tests |
 
 The generated `artboardId` and retained referenced Artboard remain separate.
@@ -483,3 +483,124 @@ bypass atomic preflight. After those exact-source corrections, the silver and
 golden test adapters must migrate to the retained-source API, the corrected
 cross-File oracle must execute, and a fresh independent review must repeat the
 four-row audit.
+
+## Second independent re-review of correction `01e0c65bf`
+
+Verdict: **REJECTED.** This review was performed independently against the
+exact correction commit in an isolated worktree. It re-read the pinned
+Artboard-input, Artboard-referencer, ScriptedObject, BindableArtboard, and Lua
+Artboard call chains rather than adopting either the correction rationale or
+the first re-review. The four previously rejected source rows now divide as
+follows: `syncReferencedArtboard` is accepted; `initScriptedValue`,
+`hydrateScriptInput`, and `updateArtboard` remain rejected.
+
+### Four-row adjudication
+
+| Pinned row | Second-review result |
+| --- | --- |
+| `ScriptInputArtboard::initScriptedValue` | **Rejected.** The corrected ordinary `nuxie` builders resolve every Artboard facade before Context or any authored input write. Pinned `ScriptedObject::hydrateScriptInputs` validates the whole object first, but constructs and installs each input in authored phase-two order. Earlier scalar writes therefore precede a later Artboard construction. The correction changes that order and still permits bypass through public hydration APIs. |
+| `ScriptInputArtboard::hydrateScriptInput` | **Rejected.** `preflight_artboards` resolves all Artboards in a separate first pass, while `apply_inputs` retains the old inline-fallible Artboard branch. This is neither the pinned authored pass nor a structural transaction: ordinary helpers reorder work, and public `apply`/`apply_inputs` callers can still fail after Context or scalar mutation. |
+| `ScriptInputArtboard::syncReferencedArtboard` | **Accepted.** The converter path now forwards the retained `ScriptArtboardSource::Live` to the hydrated owner's production callback and performs one table projection even when the generated numeric id is unchanged. The former expected-red regression observes the exact retained bindable identity. |
+| `ScriptInputArtboard::updateArtboard` | **Rejected.** Live-first selection, failed-lookup preservation, and ordinary owner/ancestor rejection are present. However, `StateMachineInstance::clone` fresh-clones listener bindings without reinstalling the containing Artboard's ancestry. A scripted converter in such a binding is recreated by `RuntimeDataBindGraphConverterState::for_converter`, which starts without `ancestor_sources`; the clone path never calls `initialize_scripted_clones_and_facilities`. The cloned public snapshot can therefore accept its owner or an ancestor where pinned `ArtboardReferencer::findArtboard` must reject it. |
+
+### Pinned File authority remains reversed
+
+The retained bindable source File is valid lifetime authority, but it is not
+the operative scripting File in pinned C++. `BindableArtboard::m_file` is
+private and is not returned by `ArtboardReferencer::findArtboard`.
+`ScriptedObject::setArtboardInput` clones the resolved concrete Artboard and
+constructs `ScriptedArtboard` with `scriptAsset()->file()`. That consumer File
+is stored by `ScriptReffedArtboard` and used to create ViewModel instances;
+the default state machine is obtained separately from the cloned Artboard.
+
+`FileScriptArtboard::new_from_live` instead promotes
+`RuntimeBindableArtboard::source_file_authority` to `FileScriptArtboard.file`,
+searches that File for a matching graph id, and calls `Self::new` with it. The
+new cross-File test explicitly asserts that source-File identity, so its oracle
+is opposite to pinned behavior. Exact translation needs to keep the consumer
+File operative, instantiate from the already-retained concrete Artboard, and
+retain source authority only for the source object's lifetime. This finding
+rejects complete `initScriptedValue`/`hydrateScriptInput` ownership even if the
+preflight API is later made non-bypassable.
+
+### Ordering evidence is internally contradictory
+
+Both ordering tests pass at the exact correction commit, but they certify two
+different contracts:
+
+- `scripted_hydration_typed_artboard_failure_stops_later_inputs_and_init`
+  exercises `apply_inputs` and observes the pinned phase-two shape: Context and
+  an earlier scalar are written before a later Artboard resolution error;
+- `artboard_facade_failure_precedes_every_hydration_write` calls
+  `preflight_artboards` explicitly and proves only that this helper can fail
+  before it is handed a `ScriptInstance`.
+
+The second test does not prove that resolver work is unobservable, preserve
+authored construction order, or prevent a caller from skipping the helper.
+Consequently it cannot serve as exact-order evidence for the pinned method.
+
+### Fresh-clone ancestry gap
+
+The normal `StateMachineInstance::new` path calls
+`initialize_scripted_clones_and_facilities` and installs one ancestor-source
+chain on listener bindings, the state-machine DataBind graph, and keyframe
+graphs. Several nested converter reset paths also preserve this metadata.
+Those facts make the ordinary correction tests green, but do not cover the
+public snapshot path:
+
+1. `StateMachineInstance::clone` maps every scripted listener binding through
+   `RuntimeScriptedListenerActionBindingOccurrence::fresh_clone`.
+2. That method preserves each input's outer `properties`, but constructs its
+   primary `converter_state` with
+   `RuntimeDataBindGraphConverterState::for_converter`.
+3. A newly constructed scripted converter state has no ancestor-source chain.
+   Preservation inside `converter_data_binds.fresh_clone()` applies only to
+   those nested/detached states, not to this primary converter state.
+4. The `Clone` implementation does not rerun
+   `initialize_scripted_clones_and_facilities`.
+
+No correction test takes this route. Therefore the prior failure “converter
+occurrences do not reject owner/ancestors” is closed for ordinary construction
+but not for all live Rust owners of the pinned row.
+
+### Silver-corpus scope
+
+The stale adapter is excluded from the shipping `nuxie` library: it is a
+`[dev-dependencies]` entry and every `nuxie` reference found by this review is
+under `crates/nuxie/tests`. That is why `cargo check -p nuxie --features
+scripting` succeeds.
+
+It is nevertheless not literally test-only code. `silver-corpus` is a normal
+workspace member and a normal library target, with the obsolete API in
+unconditional `tools/silver-corpus/src/scripting.rs`. At the exact correction
+commit, `cargo check -p silver-corpus` fails with five errors: the resolver
+still takes `u64`, File-source filtering and integer conversion still assume a
+numeric value, and hydration initializes the removed `artboard_id` field
+instead of `source`. The drift does not affect the production library artifact,
+but it blocks workspace checks and all `nuxie` test-target compilation. It
+should be classified as stale test-support/workspace code, not as a hidden
+production policy and not as code gated by `cfg(test)`.
+
+### Second-review evidence
+
+With `CARGO_INCREMENTAL=0` at detached `01e0c65bf`:
+
+- all seven `converter_owned_` focused tests passed;
+- `artboard_facade_failure_precedes_every_hydration_write` passed;
+- `nested_scripted_converter_reset_preserves_artboard_ancestor_authority`
+  passed, but exercises a nested reset rather than the listener primary-state
+  clone counterexample above;
+- both authored-order tests passed:
+  `scripted_hydration_resolves_artboard_then_viewmodel_in_authored_apply_order`
+  and
+  `scripted_hydration_typed_artboard_failure_stops_later_inputs_and_init`;
+- `cargo check -p nuxie --features scripting` passed;
+- `cargo check -p silver-corpus` failed with the five stale API errors above.
+
+The 42 out-of-line + 11 inline census remains accepted. The second review
+accepts 50 of 53 behavioral rows and rejects three Artboard rows. Certification
+requires literal consumer-File semantics, one non-bypassable hydration design
+that preserves pinned authored phase-two behavior, and ancestor authority on
+the listener-converter `StateMachineInstance::clone` path. Silver-corpus then
+needs a separate API-shape migration before the blocked `nuxie` evidence can
+compile and run.

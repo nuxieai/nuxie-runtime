@@ -3258,8 +3258,8 @@ legacy_port_status = "partial"
 b6_row_id = "B6-0259"
 b6_verdict = "ADAPTED"
 b6_cluster = "state-machine"
-audit_record = "docs/b6-audit/results/state-machine.md"
-note = "FL-D6 direct owner with per-group pointer records, capture context, pooling, hover/click/drag/Down-to-Out phase, C++ action overwrite order, prior position, disable state, and pointer-local release."
+audit_record = "docs/parity-audits/listener-group.md"
+note = "Phase 3 current-pin paired audit confirms the FL-D6 direct owner: per-group pointer records, capture context, pooling, hover/click/drag/Down-to-Out phase, recursive drag-end suppression, C++ action overwrite order, prior position, disable state, provider dispatch, and pointer-local release."
 
 [[file]]
 upstream = "src/lua/logging_scripting_context.cpp"

@@ -66,9 +66,9 @@ FEATURE_ROWS = {
     ),
     "src/async/work_pool.cpp": ("absent", "", "F12: async work pool is absent."),
     "src/listener_group.cpp": (
-        "partial",
-        "crates/nuxie-runtime/src/state_machine.rs",
-        "F13: advanced ListenerGroup behavior remains latent.",
+        "ported",
+        "crates/nuxie-runtime/src/listener_group.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs",
+        "Phase 3 paired owner audit: per-pointer pooling, hover/click/drag phases, recursive drag-end click suppression, action precedence, enable/disable, consumption, prior position, provider dispatch, and release match the pin.",
     ),
     "src/core/binary_writer.cpp": (
         "ported",

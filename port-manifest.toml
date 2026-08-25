@@ -1555,9 +1555,9 @@ note = "Consolidated runtime port."
 
 [[file]]
 upstream = "src/listener_group.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/state_machine.rs"
-note = "F13: advanced ListenerGroup behavior remains latent."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/listener_group.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs"
+note = "Phase 3 paired owner audit: per-pointer pooling, hover/click/drag phases, recursive drag-end click suppression, action precedence, enable/disable, consumption, prior position, provider dispatch, and release match the pin."
 
 [[file]]
 upstream = "src/lua/logging_scripting_context.cpp"

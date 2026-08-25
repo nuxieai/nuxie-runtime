@@ -416,3 +416,36 @@ corrected commit.
 
 Implementation status: **CORRECTED CANDIDATE REJECTED**. Certification status:
 **REJECTED BY FIRST FRESH INDEPENDENT REVIEW**.
+
+## Correction after first fresh review `4368ad8c4`
+
+Both surviving bypasses were removed at the exact source-shaped callers:
+
+1. `PathDraw::Make`'s operative Rust route no longer calls
+   `transformed_control_bounds`. `path_pixel_bounds` now sends the complete raw
+   point span through the shared `Mat2D::map_bounding_box` owner and rounds its
+   returned AABB. The stroke/Feather route uses that same mapped path box, maps
+   `{0, 0, outset, outset}` through the shared four-corner `map_bounds` owner,
+   then applies the source width/height plus one-pixel outset before rounding.
+   The old point-at-a-time transform, scalar extrema fold, nonfinite `None`,
+   and absolute-coefficient outset substitute have been deleted. A focused
+   live-call witness proves that positive-infinity scale now reaches pinned
+   nonfinite normalization and returns the zero pixel box rather than `None`.
+
+2. `LogicalFlush::pushDraws` now spells the source assertion as
+   `!bounds.empty()` through the shared `TypedAabb<i32>` owner. The last known
+   manual expansion of this pinned `TAABB` member call is gone.
+
+Focused correction evidence:
+
+- `path_pixel_bounds_uses_pinned_map_bounding_box_nonfinite_normalization`
+  passed.
+- The ordinary path rounding witness passed.
+- Both transformed Feather/stroke outset witnesses passed.
+
+The correction is intentionally limited to the two rejected call-chain
+bypasses. The preceding accepted RawPath SIMD, `Mat2D::map_bounding_box`,
+typed-AABB, and float-layout owners are unchanged.
+
+Implementation status: **CORRECTED CANDIDATE**. Certification status:
+**PENDING TWO FRESH INDEPENDENT REVIEWS**.

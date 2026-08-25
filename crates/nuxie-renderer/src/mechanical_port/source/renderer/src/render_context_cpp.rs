@@ -5979,7 +5979,7 @@ impl LogicalFlush {
         for owner in draws.iter_mut() {
             let draw = unsafe { &mut *owner.0 };
             let bounds = draw.pixelBounds();
-            debug_assert!(bounds.left < bounds.right && bounds.top < bounds.bottom);
+            debug_assert!(!bounds.empty());
             debug_assert!(
                 unsafe { self.m_ctx.as_ref() }.frameSupportsClipRectsExecutable()
                     || draw.clipRectInverseMatrix().is_null()

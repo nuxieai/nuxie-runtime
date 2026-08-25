@@ -11,7 +11,7 @@ use crate::gpu::{
 };
 use crate::gr_triangulator::{InnerFanTriangulator, SweepDirection, WindingFaces};
 use bytemuck::Zeroable;
-use nuxie_render_api::{FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
+use nuxie_render_api::{Aabb, FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
 use smallvec::SmallVec;
 
 #[cfg(test)]
@@ -455,7 +455,7 @@ fn feather_pixel_bounds_impl(
         && feather_fill_requires_softening(paint_feather, matrix_scale))
     .then(|| softened_path_for_feathering(path, paint_feather * 1.5, matrix_scale));
     let path = softened_path.as_ref().unwrap_or(path);
-    let (min, max) = transformed_control_bounds(path, transform)?;
+    let mut mapped_bounds = transform.map_bounding_box(path.points());
     let mut radius = stroke.map_or(0.0, |(thickness, join, cap)| {
         let stroke_radius = thickness * 0.5;
         if join == StrokeJoin::Miter {
@@ -467,41 +467,18 @@ fn feather_pixel_bounds_impl(
         }
     });
     radius += paint_feather * 1.5;
-    let [xx, yx, xy, yy, _, _] = transform.0;
-    let outset_x = radius * (xx.abs() + xy.abs()) + 1.0;
-    let outset_y = radius * (yx.abs() + yy.abs()) + 1.0;
-    Some([
-        (min.x - outset_x).floor() as i32,
-        (min.y - outset_y).floor() as i32,
-        (max.x + outset_x).ceil() as i32,
-        (max.y + outset_y).ceil() as i32,
-    ])
+    let stroke_pixel_outset = transform.map_bounds(Aabb::new(0.0, 0.0, radius, radius));
+    mapped_bounds = mapped_bounds.outset(
+        stroke_pixel_outset.width() + 1.0,
+        stroke_pixel_outset.height() + 1.0,
+    );
+    let bounds = mapped_bounds.round_out();
+    Some([bounds.left, bounds.top, bounds.right, bounds.bottom])
 }
 
 pub(crate) fn path_pixel_bounds(path: &RawPath, transform: Mat2D) -> Option<[i32; 4]> {
-    let (min, max) = transformed_control_bounds(path, transform)?;
-    Some([
-        min.x.floor() as i32,
-        min.y.floor() as i32,
-        max.x.ceil() as i32,
-        max.y.ceil() as i32,
-    ])
-}
-
-fn transformed_control_bounds(path: &RawPath, transform: Mat2D) -> Option<(Vec2D, Vec2D)> {
-    let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
-    let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
-    for point in path.points() {
-        let point = transform.transform_point(*point);
-        min.x = min.x.min(point.x);
-        min.y = min.y.min(point.y);
-        max.x = max.x.max(point.x);
-        max.y = max.y.max(point.y);
-    }
-    if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
-        return None;
-    }
-    Some((min, max))
+    let bounds = transform.map_bounding_box(path.points()).round_out();
+    Some([bounds.left, bounds.top, bounds.right, bounds.bottom])
 }
 
 #[cfg(test)]
@@ -3906,6 +3883,19 @@ mod tests {
             path_pixel_bounds(&path, Mat2D::IDENTITY),
             Some([1, 2, 7, 9])
         );
+    }
+
+    #[test]
+    fn path_pixel_bounds_uses_pinned_map_bounding_box_nonfinite_normalization() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(1.0, 1.0);
+
+        // Pinned `PathDraw::Make` calls `Mat2D::mapBoundingBox` directly. Its
+        // extent subtraction normalizes this infinite mapped box to zero
+        // before `roundOut`; a pointwise scalar fold instead returns `None`.
+        let transform = Mat2D([f32::INFINITY, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(path_pixel_bounds(&path, transform), Some([0, 0, 0, 0]));
     }
 
     #[test]

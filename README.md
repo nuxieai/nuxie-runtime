@@ -43,12 +43,12 @@ those `.riv` binaries are intentionally not stored in this repository.
 
 Nuxie-specific experience, package, authentication, and SDK-session behavior
 lives above this repository's shipped runtime. `nux-capi` is the sole static
-library distribution root: its portable base composes generic scripting, and
-its Apple extension adds renderer-owned Metal presentation and image/asset
-hooks, while its Android extension returns owned headless Vulkan frames for an
-SDK to blit. See [Apple C runtime distribution](docs/nux-capi-apple-release.md). The
-iOS SDK consumes the published binary through a pure Swift package layer and
-does not compile Rust.
+library distribution root: its portable base composes generic scripting; the
+Apple Metal and Android Vulkan extensions share portable image/asset hooks.
+Apple owns Metal presentation, while Android returns owned headless Vulkan
+frames for an SDK to blit. See [Apple C runtime distribution](docs/nux-capi-apple-release.md).
+The iOS SDK consumes the published binary through a pure Swift package layer
+and does not compile Rust.
 
 ## License
 

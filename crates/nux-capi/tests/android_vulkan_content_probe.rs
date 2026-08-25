@@ -21,27 +21,81 @@ fn probe_fixture_path() -> Option<std::path::PathBuf> {
     repository_fixture.is_file().then_some(repository_fixture)
 }
 
-// Minimal artboard with two missing external images. Keeping the fixture inline
-// makes the hook-path regression independent of the optional live-test corpus.
-const EXTERNAL_IMAGE_ARTBOARD: &[u8] = &[
-    0x52, 0x49, 0x56, 0x45, 0x07, 0x00, 0xc5, 0x1b, 0xcb, 0x01, 0xcc, 0x01, 0xce, 0x01, 0xcf, 0x01,
-    0xd0, 0x01, 0x00, 0x81, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x17, 0x00, 0x69, 0xcb, 0x01,
-    0x09, 0x77, 0x61, 0x6c, 0x6c, 0x65, 0x2e, 0x6a, 0x70, 0x67, 0xcc, 0x01, 0xf2, 0x02, 0xcf, 0x01,
-    0x00, 0x00, 0xf6, 0x43, 0xd0, 0x01, 0x00, 0x00, 0xfa, 0x43, 0x00, 0x69, 0xcb, 0x01, 0x07, 0x65,
-    0x76, 0x65, 0x2e, 0x70, 0x6e, 0x67, 0xcc, 0x01, 0xbd, 0x02, 0xcf, 0x01, 0x00, 0x40, 0x7d, 0x44,
-    0xd0, 0x01, 0x00, 0x00, 0x61, 0x44, 0x00, 0x01, 0x07, 0xbc, 0xa4, 0xa1, 0x44, 0x08, 0x00, 0x00,
-    0xfa, 0x43, 0x04, 0x0c, 0x4e, 0x65, 0x77, 0x20, 0x41, 0x72, 0x74, 0x62, 0x6f, 0x61, 0x72, 0x64,
-    0x00, 0x64, 0x04, 0x05, 0x77, 0x61, 0x6c, 0x6c, 0x65, 0x05, 0x00, 0x0d, 0x9d, 0x68, 0x0d, 0x44,
-    0x0e, 0x01, 0x00, 0x7e, 0x43, 0xce, 0x01, 0x00, 0x00, 0x64, 0x04, 0x09, 0x65, 0x76, 0x65, 0x5f,
-    0x72, 0x69, 0x67, 0x68, 0x74, 0x05, 0x00, 0x0f, 0xda, 0x0f, 0x49, 0xc0, 0x10, 0xdf, 0x0d, 0x86,
-    0x3f, 0x11, 0x00, 0x00, 0x80, 0xbf, 0x0d, 0x4b, 0x0a, 0x5d, 0x44, 0x0e, 0xfe, 0xff, 0x75, 0x43,
-    0xce, 0x01, 0x01, 0x00, 0x64, 0x04, 0x08, 0x65, 0x76, 0x65, 0x5f, 0x6c, 0x65, 0x66, 0x74, 0x05,
-    0x00, 0x0d, 0xdc, 0x89, 0x86, 0x43, 0x0e, 0x28, 0x91, 0x6a, 0x43, 0xce, 0x01, 0x01, 0x00, 0x12,
-    0x05, 0x05, 0x25, 0x31, 0x31, 0x31, 0xff, 0x00, 0x14, 0x05, 0x00, 0x00, 0x1c, 0x00, 0x1f, 0x37,
-    0x0b, 0x41, 0x6e, 0x69, 0x6d, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x20, 0x31, 0x3b, 0x02, 0x00, 0x19,
-    0x33, 0x03, 0x00, 0x1a, 0x35, 0x0f, 0x00, 0x1e, 0x44, 0x02, 0x45, 0x06, 0x00, 0x1e, 0x43, 0x3c,
-    0x44, 0x01, 0x46, 0xdb, 0x0f, 0x49, 0x40, 0x00,
-];
+fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        bytes.push(byte);
+        if value == 0 {
+            break;
+        }
+    }
+}
+
+fn property_key(type_name: &str, property_name: &str) -> u16 {
+    let definition = nuxie_schema::definition_by_name(type_name).expect("fixture type");
+    definition
+        .properties
+        .iter()
+        .chain(definition.ancestors.iter().flat_map(|ancestor| {
+            nuxie_schema::definition_by_name(ancestor)
+                .expect("fixture ancestor")
+                .properties
+                .iter()
+        }))
+        .find(|property| property.name == property_name)
+        .expect("fixture property")
+        .key
+        .int
+}
+
+fn push_object(bytes: &mut Vec<u8>, type_name: &str, body: impl FnOnce(&mut Vec<u8>)) {
+    push_var_uint(
+        bytes,
+        u64::from(
+            nuxie_schema::definition_by_name(type_name)
+                .expect("fixture type")
+                .type_key
+                .int,
+        ),
+    );
+    body(bytes);
+    push_var_uint(bytes, 0);
+}
+
+fn push_uint(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: u64) {
+    push_var_uint(bytes, u64::from(property_key(type_name, property_name)));
+    push_var_uint(bytes, value);
+}
+
+fn push_f32(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: f32) {
+    push_var_uint(bytes, u64::from(property_key(type_name, property_name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Repository-owned schema fixture with one external image used by one drawable.
+fn external_image_artboard() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 2, 26_520, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ImageAsset", |bytes| {
+        push_uint(bytes, "ImageAsset", "assetId", 7);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 64.0);
+        push_f32(bytes, "Artboard", "height", 64.0);
+    });
+    push_object(&mut bytes, "Image", |bytes| {
+        push_uint(bytes, "Image", "parentId", 0);
+        push_uint(bytes, "Image", "assetId", 0);
+    });
+    bytes
+}
 
 const ENCODED_IMAGE: &[u8] = include_bytes!("fixtures/external-image.png");
 const DECODED_PIXELS: &[u8] = &[0xff; 4 * 2 * 4];
@@ -117,6 +171,7 @@ unsafe extern "C" fn decode_external_image(
 
 #[test]
 fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
+    let rive = external_image_artboard();
     let probe = AssetHookProbe::default();
     let hooks = NuxAssetHooks {
         context: std::ptr::from_ref(&probe).cast_mut().cast(),
@@ -129,19 +184,13 @@ fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
         let mut file = ptr::null_mut();
         let mut result = ptr::null_mut();
         assert_eq!(
-            nux_file_import_with_assets(
-                EXTERNAL_IMAGE_ARTBOARD.as_ptr(),
-                EXTERNAL_IMAGE_ARTBOARD.len(),
-                &hooks,
-                &mut file,
-                &mut result,
-            ),
+            nux_file_import_with_assets(rive.as_ptr(), rive.len(), &hooks, &mut file, &mut result),
             NuxStatus::Ok
         );
-        assert_eq!(probe.lookups.load(Ordering::Relaxed), 2);
-        assert_eq!(probe.decodes.load(Ordering::Relaxed), 2);
-        assert_eq!(probe.retains.load(Ordering::Relaxed), 4);
-        assert_eq!(probe.releases.load(Ordering::Relaxed), 4);
+        assert_eq!(probe.lookups.load(Ordering::Relaxed), 1);
+        assert_eq!(probe.decodes.load(Ordering::Relaxed), 1);
+        assert_eq!(probe.retains.load(Ordering::Relaxed), 2);
+        assert_eq!(probe.releases.load(Ordering::Relaxed), 2);
         assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
 
         let mut artboard = ptr::null_mut();
@@ -178,8 +227,8 @@ fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
             ),
             NuxStatus::Ok
         );
-        assert_eq!(probe.lookups.load(Ordering::Relaxed), 2);
-        assert_eq!(probe.decodes.load(Ordering::Relaxed), 2);
+        assert_eq!(probe.lookups.load(Ordering::Relaxed), 1);
+        assert_eq!(probe.decodes.load(Ordering::Relaxed), 1);
         assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
         assert_eq!(nux_android_vulkan_frame_free(frame), NuxStatus::Ok);
         assert_eq!(nux_renderer_android_vulkan_free(renderer), NuxStatus::Ok);

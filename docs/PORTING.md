@@ -563,10 +563,13 @@ Clang contracts the determinant and inverse translation cross-product
 subtractions. Matrix multiplication contracts each two-term dot product, but
 adds the left-hand translation separately. Rust therefore uses `mul_add` for
 the inverse cross products and the first two terms of each multiply column,
-then a separate `+ a[4]`/`+ a[5]` for translation. Local path composition uses
-that same `multiply`; transform-shape heuristics can mask a missing contraction
-in `invert`, but do not reflect any C++ branch. `transform_point` uses plain
-`*`/`+` while `map_point` fuses, matching their distinct C++ call sites.
+then a separate translation add. Local path composition uses that same
+`multiply`; transform-shape heuristics can mask a missing contraction in
+`invert`, but do not reflect any C++ branch. Scalar `transform_point` likewise
+contracts its two linear products and adds translation separately, while
+bulk-path `map_point` nests translation in the skew addend, matching their
+distinct C++ call sites. Preserve the final-add operand order too: on arm64 it
+controls which payload survives when both inputs are NaNs.
 
 **Perf caveat:** closing the FMA gap globally
 (bulk `mul_add`) changes float results and can flip exact files. Treat any new

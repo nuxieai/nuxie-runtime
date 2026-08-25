@@ -4,8 +4,8 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **matrix-vector correction implemented; fresh independent
-re-review pending**
+Adversarial review: **first fresh independent matrix-vector correction
+re-review rejects certification on final-add qNaN payload order**
 
 ## `src/math/mat2d.cpp`
 
@@ -53,7 +53,7 @@ The v2 denominator contains 33 header authority rows:
 | `translation` | `Mat2D::translation` | adapted: tuple-vector representation |
 | six overloaded scalar setters | `set_xx`, `set_xy`, `set_yx`, `set_yy`, `set_tx`, `set_ty` | adapted: Rust cannot overload getter/setter names |
 | `determinant` | `Mat2D::determinant` | exact |
-| matrix-vector `operator*` | `Mul<(f32, f32)>`; `transform_point`; render-API `Mat2D::transform_point` | corrected; pending fresh independent re-review; tuple-vector representation is the approved adaptation; pinned-oracle evidence in `point_and_direction_transforms_preserve_pinned_cpp_contraction_bits` and render-API `mat2d_point_transform_preserves_pinned_cpp_operator_contraction_bits` |
+| matrix-vector `operator*` | `Mul<(f32, f32)>`; `transform_point`; render-API `Mat2D::transform_point` | corrected contraction, but rejected by the first fresh independent re-review: the final add has reversed qNaN payload precedence; tuple-vector representation is the approved adaptation |
 | matrix-matrix `operator*` | `Mul<Mat2D>` | exact |
 | `operator==` and `operator!=` | derived `PartialEq` | exact |
 
@@ -245,3 +245,79 @@ The separate inline IK skew-write finding remains outside this correction and
 belongs to `IKConstraint::constrainRotation` ownership. This implementing lane
 does not self-certify the corrected Mat2D/Vec2D owners. Verdict: **PENDING a
 fresh independent re-review.**
+
+## First fresh independent matrix-vector correction re-review — REJECTED
+
+This independent review accepts the finite arithmetic correction in
+`1336e9661`. Runtime and render-API `transform_point` now contract the two
+linear products, runtime `transform_direction` has the same contraction
+without translation, and `Mul<(f32, f32)>` reaches the runtime owner. Direct
+arm64 assembly comparison also confirms that the direction owners emit the
+same `fmul`/`fmla` sequence. The distinct bulk `Mat2D::mapPoints` translation
+continues to be nested inside the skew addend, and its runtime `map_point`,
+runtime bulk/in-place forms, render-API raw-path helper, and draw path helper
+all emit the expected two-stage `fmadd` grouping. The scripting matrix-vector
+operator and renderer point consumers reach the corrected render-API owner;
+the audited runtime hit-test, input, semantic, constraint, bone, text, mesh,
+and slice-mesh callers reach the appropriate runtime or render-API owner.
+
+The correction is nevertheless not bit-exact for the final translation add
+when both the contracted linear result and translation are distinct NaNs. On
+this arm64 host, compiling the actual pinned expression with clang 22.1.8 at
+`-O3 -ffp-contract=on` emits:
+
+```text
+fmul   linear_addend, skew, y
+fmla   linear_addend, scale, x
+fadd   result, translation, linear_addend
+```
+
+The corrected Rust owner emits the same first two instructions but reverses
+the final `fadd` operands:
+
+```text
+fmul   linear_addend, skew, y
+fmla   linear_addend, scale, x
+fadd   result, linear_addend, translation
+```
+
+That commutation is invisible for finite values, infinities generated from
+non-NaN inputs, and signed zero, but arm64 NaN propagation exposes it. For the
+x-coordinate witness
+
+```text
+m = [qNaN(0x7fc0aaaa), 0, 0, 0, qNaN(0x7fc0bbbb), 0]
+p = (1, 1)
+```
+
+the pinned C++ operator returns bits `0x7fc0bbbb`, while both corrected Rust
+`transform_point` owners return `0x7fc0aaaa`. A two-million-case raw-bit probe
+found 112 matrix-point differences of this kind, zero matrix-direction
+differences, and zero nested-`mapPoints` differences. A separate three-million
+case probe restricted every input to `+0`, `-0`, the smallest positive and
+negative subnormal, `+1`, `-1`, the largest finite values, and both infinities
+found zero differences in all three algorithms. Thus the blocker is narrowly
+the final-add NaN operand precedence, not the accepted contraction or the
+translation-grouping distinction.
+
+Spelling the final add as `tx + xx.mul_add(x, xy * y)` (and the corresponding
+y expression) emits the same translation-first `fadd` as the pinned arm64
+owner while preserving the already accepted non-NaN results. This review does
+not edit production; both runtime and render-API owners need that correction
+and then a new independent review.
+
+Focused evidence, with `CARGO_INCREMENTAL=0` where applicable:
+
+- `cargo test -p nuxie-runtime math::mat2d --lib`: 10 passed;
+- `cargo test -p nuxie-runtime --test mat2d_adversarial`: 2 passed;
+- `cargo test -p nuxie-render-api mat2d_point_transform_preserves_pinned_cpp_operator_contraction_bits --lib`: 1 passed;
+- `cargo test -p nuxie-scripting mat2d --lib`: 6 passed;
+- direct arm64 C++/Rust assembly inspection confirmed the matching contraction
+  and the mismatching final-add operand order;
+- direct linked C++/Rust randomized and edge-value probes produced the counts
+  and qNaN witness above.
+
+The separately identified inline IK skew writes remain an explicit dependency
+of the IK-constraint receipt and are outside this verdict, as required.
+Verdict: **REJECTED.** Correct final-add qNaN payload precedence in both scalar
+point owners and obtain a fresh independent re-review.

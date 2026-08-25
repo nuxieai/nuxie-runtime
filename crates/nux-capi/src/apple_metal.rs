@@ -10,6 +10,8 @@ use super::{
     ffi_guard_with_handle_result, ffi_guard_with_result, publish_result, register_handle,
     remove_handle, struct_size_supports, write_caller_struct,
 };
+#[cfg(feature = "apple-authored-msl")]
+use super::{NuxFile, NuxFileImportConfig};
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
 #[cfg(feature = "apple-authored-msl")]
 use nuxie::ore_metal_gpu_canvas::{OreMetalGpuCanvas, OreMetalGpuCanvasImage};
@@ -35,6 +37,36 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
+
+/// Rust-only trust seam for the upper-leaf product adapter. This is kept out
+/// of the product-neutral C ABI so a generic embedding cannot toggle native
+/// shader authority with a forgeable field.
+///
+/// # Safety
+///
+/// In addition to the configured-import pointer contract, the caller must
+/// establish that every native shader payload in the exact artifact was
+/// emitted by the trusted native-shader exporter.
+#[cfg(feature = "apple-authored-msl")]
+#[doc(hidden)]
+pub unsafe fn nux_file_import_configured_with_trusted_native_shaders(
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    unsafe {
+        super::asset_hooks::nux_file_import_configured_with_authority(
+            bytes,
+            len,
+            config,
+            out_file,
+            out_result,
+            super::NativeShaderImportAuthority::TrustedExporter,
+        )
+    }
+}
 
 pub type NuxRendererDisposition = u32;
 pub const NUX_RENDERER_DISPOSITION_NONE: NuxRendererDisposition = 0;

@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: pending
+Adversarial review: accepted
 
 ## `src/animation/nested_bool.cpp`
 
@@ -43,9 +43,37 @@ the live child trigger, and construction deliberately does not fire an authored
 NestedTrigger. Rust's direct callback dispatch is an ownership adaptation, not
 a behavior change.
 
+## Adversarial review
+
+Accepted after independently reading all three pinned C++ translation units,
+their generated defaults, and the complete cited Rust nested-instance,
+Artboard, input-instance, virtual-property, and clone paths.
+
+- The denominator contains exactly the eight claimed definitions, with ids
+  `fa3a144a594ad3b1`, `97181a72fe0c6e52`, `b32cb3e33d68310c`,
+  `3f67850810b3bebc`, `3ae30acecdaacb4e`, `565ffb249860caa7`,
+  `e7ae25dbd4921cc0`, and `12039581e3974c50`.
+- Authored bool/number values are applied once, in authored slot order, during
+  child state-machine construction; triggers are skipped. Later getters and
+  setters use the live child occurrence, preserve the false/zero fallback and
+  equal-value early return, and notify only the child state machine on a real
+  value edge. Every trigger call fires the live child trigger and ignores the
+  callback payload as pinned C++ does.
+- Public cold clone reconstruction reapplies authored bool/number values, while
+  transient live clone preserves the child occurrence's current values and
+  trigger state. The cited clone and alias tests observe both boundaries rather
+  than only inspecting serialized parent properties.
+- Focused authored-initialization, fixture-alias, public/transient clone,
+  repeated-trigger, missing-target, and notification tests passed with
+  `CARGO_INCREMENTAL=0`.
+
+This acceptance covers the eight out-of-line `.cpp` denominator entries only.
+It does not certify executable handwritten header bodies, which require their
+own denominator coverage.
+
 ## Result
 
 All eight pinned out-of-line symbols in these three files have concrete Rust
 owners and direct lifecycle evidence. The literal pass found no missing or
 incorrect translation. No production code changed. Independent adversarial
-review remains required before these rows are certified.
+review accepted this receipt.

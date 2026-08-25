@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: pending
+Adversarial review: accepted
 
 ## `src/shapes/paint/solid_color.cpp`
 
@@ -34,10 +34,42 @@ runtime behavior. The source's unusual `if (opacity > 0) ... else if (opacity
 including a partially transparent solid, is classified as opaque, while zero
 alpha is classified as translucent.
 
+## Adversarial review
+
+Accepted after independently reading the complete pinned C++ translation unit,
+the generated color default, and the complete cited Rust paint allocation,
+initialization, callback, retained-state, rendering, visibility, and clone
+paths.
+
+- The denominator contains exactly the four claimed definitions, with ids
+  `31d2dd6ec71c21c4`, `3a97284d7fd4956a`, `64a0d93ba96f7ad3`, and
+  `670c7fa9a9168258`.
+- Superclass initialization and failure occur before mutator attachment;
+  successful attachment immediately applies the authored color. Duplicate
+  mutators remain malformed. Source and clone paint allocation tests observe
+  allocation/style/color ordering rather than merely checking final state.
+- Color and render-opacity callbacks synchronously update the same retained
+  paint, reset and recompute the source flags, and publish the Artboard change.
+  `applyTo` uses `renderOpacity * opacityModifier`. The Rust text/configuration
+  path preserves that second opacity factor instead of reusing the base paint
+  color unchanged.
+- Generated default materialization, unchanged-value callback suppression,
+  zero-alpha membership changes, nonzero partial-alpha classification, and
+  clone reconstruction all match the pinned behavior. The extra prepared-list
+  invalidation is confined to Rust's non-intrusive drawable representation and
+  does not alter the source-visible paint state.
+- Focused callback, topology, opacity, source allocation, clone allocation,
+  clone reconstruction, and C++/Rust malformed-import comparison tests passed
+  with `CARGO_INCREMENTAL=0`.
+
+This acceptance covers the four out-of-line `.cpp` denominator entries only.
+It does not certify executable handwritten header bodies, which require their
+own denominator coverage.
+
 ## Result
 
 All four pinned out-of-line symbols have concrete Rust owners and lifecycle
 evidence. No production change was required. The historical RB5/B6 divergence
 described a now-obsolete deferred-revision design; the current callback mutates
 the occurrence-owned render paint immediately. Independent adversarial review
-remains required before this row is certified.
+accepted this receipt.

@@ -4,7 +4,29 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: pending
+Adversarial review: accepted
+
+## `include/rive/animation/listener_action.hpp`
+
+| C++ symbol | Rust owner | disposition | evidence |
+|---|---|---|---|
+| `ListenerAction::matchesScheduledOccurrence` | `perform_scheduled_listener_actions` flags predicate | exact | `upstream_listener_action_flag_decode_occurrence_and_import_routing_matrix` |
+| `ListenerAction::parentKind` | `nuxie_binary::importers::state_machine_layer_importer` parent-kind decode | exact | `listener_parent_kind_requires_owner_and_raw_three_falls_back_to_listener`; `upstream_listener_action_flag_decode_occurrence_and_import_routing_matrix` |
+
+Occurrence matching reads only bit zero and compares it to the raw at-start or
+at-end value. Parent-kind decoding reads bits one and two, maps `0..=2`
+literally, and canonicalizes reserved raw `3` to Listener.
+
+## `include/rive/animation/listener_input_change.hpp`
+
+| C++ symbol | Rust owner | disposition | evidence |
+|---|---|---|---|
+| `ListenerInputChange::validateInputType` default | `RuntimeScheduledListenerAction::validates_for_import` default branch | exact | listener-action import matrix for non-specialized actions |
+| `ListenerInputChange::validateNestedInputType` default | `RuntimeScheduledListenerAction::validates_for_import` default branch | exact | listener-action import matrix for non-specialized actions |
+
+The base virtuals accept every pointer, including null. Rust specializes the
+same bool/number/trigger subclasses and returns true for all remaining action
+kinds, preserving the base default rather than applying an invented type gate.
 
 ## `src/animation/listener_action.cpp`
 
@@ -76,11 +98,46 @@ The event id is resolved against the live Artboard at perform time, wrong or
 non-Event targets are ignored, the triggering `ListenerInvocation` context is
 not copied, and a valid Event is appended to the state-machine report queue.
 
+## Adversarial review
+
+Accepted after independently reading all six pinned C++ translation units, the
+generated defaults they consume, and the complete cited Rust import, owner,
+dispatch, input-instance, nested-target, and event-report paths.
+
+- The `.cpp` denominator contains exactly the 12 claimed definitions, with ids
+  `2975600a9eb9652b`, `798fa1859dfed913`, `737a5b474044f848`,
+  `f0ce5a4caa5300b2`, `8138c398a6f93ed7`, `bfa7688955cefaf5`,
+  `5fecfbf3769cdd76`, `83e6402b9022a640`, `0a1c78d1a4756c05`,
+  `06192b31de61ff1b`, `ea3b93b8175ae253`, and `7fcefb55549b75de`.
+- A header-aware backcheck adds four executable handwritten definitions:
+  `ListenerAction::matchesScheduledOccurrence`, `ListenerAction::parentKind`,
+  and the two default-true `ListenerInputChange` validation virtuals. Their bit
+  masking, reserved-value fallback, and permissive default are also exact.
+- Parent-kind routing, owner lookup, action attachment, nested-before-direct
+  validation, generated defaults, bool switch behavior, live-field reads,
+  equal-value notification edges, repeated trigger behavior, and live event-id
+  resolution match the pinned order and side effects. Missing owners fail;
+  missing direct input slots and unresolved perform-time targets remain the
+  intended no-ops.
+- The Rust event-context facade can attach occurrence metadata after the source
+  action reports an event. That metadata is not copied from C++
+  `ListenerInvocation`, and the certified `RuntimeListenerFireEvent::perform`
+  path still creates the source-equivalent context-free event. It is therefore
+  an explicit host boundary, not a translation of this source symbol.
+- Focused listener import, live-field, direct-input notification, nested-input,
+  repeated-trigger, and event-context tests passed with
+  `CARGO_INCREMENTAL=0`.
+
+This acceptance covers the 12 out-of-line `.cpp` denominator entries and the
+four handwritten header bodies listed above. It does not certify other
+executable handwritten header bodies elsewhere in the runtime; those require
+the campaign's header-aware denominator.
+
 ## Result
 
-All 12 pinned out-of-line symbols in these six files have concrete Rust owners.
-The literal pass found no missing or incorrect translation. No production code
-changed. The historical `TRACKED-GAP` verdicts on the bool/number/trigger rows
-therefore describe stale campaign metadata, not missing behavior in these
-owners; they must not be promoted until independent adversarial review accepts
-this receipt.
+All 16 pinned executable definitions in these six source files and two headers
+have concrete Rust owners. The literal pass found no missing or incorrect
+translation. No production code changed. The historical `TRACKED-GAP` verdicts
+on the bool/number/trigger rows therefore describe stale campaign metadata, not
+missing behavior in these owners. Independent adversarial review accepted this
+receipt.

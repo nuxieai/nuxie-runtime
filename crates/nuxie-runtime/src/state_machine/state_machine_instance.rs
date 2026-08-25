@@ -3,7 +3,7 @@ use super::focused_input_dispatch::RuntimeInputDispatchOutcome;
 use super::listener_types::RuntimeListenerViewModelPath;
 use super::*;
 use crate::artboard_component_list_order::runtime_component_list_order;
-use crate::artboard_data_bind::RuntimeOwnedDataContext;
+use crate::artboard_data_bind::{RuntimeOwnedDataContext, RuntimeOwnedDataContextPropertyOwner};
 #[cfg(any(test, feature = "tools"))]
 use crate::components::TransformProperty;
 use crate::components::{ComponentHandle, Mat2D, RuntimeShapeState};

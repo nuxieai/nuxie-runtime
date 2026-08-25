@@ -961,6 +961,12 @@ pub(crate) struct RuntimeOwnedDataContext {
     state: Rc<RuntimeOwnedDataContextState>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) enum RuntimeOwnedDataContextPropertyOwner {
+    Retained(RuntimeOwnedViewModelHandle),
+    Borrowed(RuntimeOwnedViewModelHandle),
+}
+
 impl RuntimeOwnedDataContext {
     pub(crate) fn from_root_handle(context: RuntimeOwnedViewModelHandle) -> Self {
         Self {
@@ -1147,6 +1153,20 @@ impl RuntimeOwnedDataContext {
     /// root plus its property path, so project that path to the same concrete
     /// child instance before returning it.
     pub(crate) fn main_view_model_handle(&self) -> Option<RuntimeOwnedViewModelHandle> {
+        self.main_view_model_handle_with_borrowed_root(None)
+    }
+
+    pub(crate) fn main_view_model_handle_for_borrowed_root(
+        &self,
+        root: &RuntimeOwnedViewModelInstance,
+    ) -> Option<RuntimeOwnedViewModelHandle> {
+        self.main_view_model_handle_with_borrowed_root(Some(root))
+    }
+
+    fn main_view_model_handle_with_borrowed_root(
+        &self,
+        root: Option<&RuntimeOwnedViewModelInstance>,
+    ) -> Option<RuntimeOwnedViewModelHandle> {
         let main = self
             .state
             .instances
@@ -1154,6 +1174,11 @@ impl RuntimeOwnedDataContext {
             .find(|instance| instance.is_main)?;
         if main.scope_path.is_empty() {
             Some(main.context.clone())
+        } else if let Some(root) = root
+            && main.context.ptr_eq_instance(root)
+        {
+            main.context
+                .linked_view_model_by_property_path_with_borrowed_root(root, &main.scope_path)
         } else {
             main.context
                 .linked_view_model_by_property_path(&main.scope_path)
@@ -1177,6 +1202,33 @@ impl RuntimeOwnedDataContext {
             .parent
             .as_ref()
             .and_then(|parent| parent.resolve(resolve))
+    }
+
+    fn resolve_with_borrowed_root<R>(
+        &self,
+        root: &RuntimeOwnedViewModelInstance,
+        resolve: &mut impl FnMut(
+            &RuntimeOwnedDataContextInstance,
+            &RuntimeOwnedViewModelInstance,
+            bool,
+        ) -> Option<R>,
+    ) -> Option<R> {
+        for instance in &self.state.instances {
+            if instance.context.ptr_eq_instance(root) {
+                if let Some(value) = resolve(instance, root, true) {
+                    return Some(value);
+                }
+                continue;
+            }
+            let context = instance.context.borrow();
+            if let Some(value) = resolve(instance, &context, false) {
+                return Some(value);
+            }
+        }
+        self.state
+            .parent
+            .as_ref()
+            .and_then(|parent| parent.resolve_with_borrowed_root(root, resolve))
     }
 
     pub(crate) fn resolve_instance<R>(
@@ -1377,6 +1429,31 @@ impl RuntimeOwnedDataContext {
             // (`data_context.cpp:265-332,397-442`).
             context.cell_by_property_path(property_path)?;
             Some((instance.context.clone(), property_path.to_vec()))
+        })
+    }
+
+    pub(crate) fn resolved_property_path_for_borrowed_root(
+        &self,
+        source_path: &[u32],
+        root: &RuntimeOwnedViewModelInstance,
+    ) -> Option<(RuntimeOwnedDataContextPropertyOwner, Vec<usize>)> {
+        if source_path.len() < 2 {
+            return None;
+        }
+        self.resolve_with_borrowed_root(root, &mut |instance, context, borrowed| {
+            let path = RuntimeOwnedViewModelContextPathStorage::from_context_source_path(
+                context,
+                &instance.scope_path,
+                source_path,
+            )?;
+            let property_path = path.as_slice();
+            context.cell_by_property_path(property_path)?;
+            let owner = if borrowed {
+                RuntimeOwnedDataContextPropertyOwner::Borrowed(instance.context.clone())
+            } else {
+                RuntimeOwnedDataContextPropertyOwner::Retained(instance.context.clone())
+            };
+            Some((owner, property_path.to_vec()))
         })
     }
 

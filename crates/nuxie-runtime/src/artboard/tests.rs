@@ -11308,6 +11308,31 @@
     }
 
     #[test]
+    fn retained_data_context_listener_reuses_an_explicitly_borrowed_root() {
+        let (file, mut artboard, mut state_machine) =
+            owned_view_model_action_fixture(9733, false);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has an owned ViewModel context"),
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        let mut borrowed_context = context.borrow_mut();
+        assert!(
+            artboard.advance_state_machine_instances_with_nested_and_owned_view_model_context(
+                std::slice::from_mut(&mut state_machine),
+                0.0,
+                &mut borrowed_context,
+            )
+        );
+        assert_eq!(
+            borrowed_context.number_value_by_property_path(&[1]),
+            Some(42.0),
+            "the retained DataContext must reuse its explicitly borrowed root instead of re-borrowing the same handle",
+        );
+    }
+
+    #[test]
     fn retained_data_context_listener_queues_each_mutation_until_next_frame() {
         let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9720, true);
         let context = RuntimeOwnedViewModelHandle::new(

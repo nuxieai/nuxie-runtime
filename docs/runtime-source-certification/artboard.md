@@ -20,15 +20,20 @@ reset traversal survived review. The rejected receipt nevertheless had an
 incomplete source denominator, its focused measurement test bypassed the
 production registration path, and a fresh-clone default differed observably
 from pinned C++. The denominator defect has since been corrected campaign-wide;
-the two behavioral findings are corrected below and await independent
-re-review.
+the two behavioral findings were corrected by `d3df628c7` and accepted by the
+independent review recorded below.
 
-## Adjudicated corrections: independent re-review pending
+## Independent re-review of `d3df628c7`: corrections accepted
 
-The two rejected behavioral-evidence rows have now been corrected by literal
-pinned translation. This is not a self-certification: an independent reviewer
-must still accept the corrections and resolve the remaining
-static-frame-counter and cross-owner decoder findings below.
+The first independent adversarial review accepts both corrections in
+`d3df628c7`. The review re-read pinned commit
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`, traced the complete public and
+transient clone paths, inspected every production `clone_for_transient_layout`
+call site, followed ordinary nested measurement through style registration and
+the Taffy callback, and reran the focused evidence against the exact reviewed
+commit. No production change was needed. This acceptance is deliberately
+narrow: the Artboard family remains uncertified because the static frame
+counter and cross-owner decoder findings below are still open.
 
 ### Exact denominator
 
@@ -94,7 +99,7 @@ The remaining header definitions are:
 
 ### Falsifying findings
 
-1. **Fresh clone change-state default differed; corrected pending review.** Pinned
+1. **Fresh clone change-state default differed; correction accepted.** Pinned
    `Artboard::instance<T>` constructs `new T`; `m_didChange` has an in-class
    default of `true`, and `instance<T>` never copies that runtime bit. This is
    observable after the source has drawn because `drawInternal` first clears
@@ -105,16 +110,27 @@ The remaining header definitions are:
    regression starts with a clean source and proves source `false`, public
    clone `true`, and transient clone `false`. The initial nested-layout paint
    evaluation now also calls that explicit transient path instead of silently
-   relying on the former public-clone behavior.
+   relying on the former public-clone behavior. Adversarial call-site review
+   found the other production same-occurrence clone in nested geometry
+   traversal already uses `clone_for_transient_layout`; normal nested-host
+   cloning continues through `RuntimeNestedArtboardInstance::clone`, where a
+   fresh child occurrence is required and the new `true` default is literal.
 
-2. **Production measurement registration lacked evidence; corrected pending
-   review.** `ordinary_nested_artboard_contributes_its_mounted_intrinsic_size`
+2. **Production measurement registration lacked evidence; correction
+   accepted.** `ordinary_nested_artboard_contributes_its_mounted_intrinsic_size`
    now imports a synthetic host `LayoutComponent` with an authored
    `LayoutComponentStyle` that is intrinsically sized and hugs both axes. A
    real `NestedArtboard` mounts an `80 x 60` child, and the test enters through
    `TaffyRuntimeLayoutEngine::compute_bounds`/`build_node`. It proves the
    unconstrained host is `80 x 60`; a second authored fixture with `50 x 40`
    maximums proves the production solve clamps the measured host to `50 x 40`.
+   The independent review accepts this evidence: without the authored
+   `intrinsicallySizedValue` and Hug-axis style, `build_node` would not install
+   `LayoutComponentMeasure`; the `80 x 60` assertion therefore cannot be
+   satisfied by the parent artboard's authored `200 x 100` bounds alone. The
+   callback's ordinary/leaf branch reads the mounted child's dimensions and
+   applies the same per-axis finite-mode clamp as pinned
+   `NestedArtboard::measureLayout`.
 
 3. **The inline frame counter remains unadjudicated.** Pinned `frameId()` is a
    static process-wide counter incremented by root `Artboard::draw`. Rust has
@@ -277,6 +293,7 @@ dirt exactly when the `fit` property changes.
 
 - `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime ordinary_nested_artboard_contributes_its_mounted_intrinsic_size --lib`
 - `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime public_clone_starts_changed_while_transient_clone_preserves_source_state --lib`
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime public_artboard_clone_is_cold_but_transient_layout_clone_keeps_scripts --lib`
 - `make --no-print-directory runtime-source-symbol-check`
 - `cargo test -p nuxie-runtime layout_fit_leaf_resizes_its_mounted_artboard_from_the_parent_layout_frame --lib`
 - `cargo test -p nuxie-runtime artboard_size_change_uses_artboard_propagate_size_override --lib`
@@ -284,12 +301,19 @@ dirt exactly when the `fit` property changes.
 - `cargo test -p nuxie-runtime component_list --lib`
 
 Result of the original audit: one hidden source omission was found and
-corrected. Result of the independent adversarial review: **REJECTED, WITH TWO
-CORRECTIONS PENDING INDEPENDENT RE-REVIEW**. Fresh-clone `didChange` now follows
-pinned C++ while same-occurrence transient clones preserve the source bit, and
-ordinary nested measurement now has production registration/solve evidence.
-This family remains uncertified until an independent reviewer accepts those
-corrections and the static frame-counter owner is resolved. The corrected
+corrected. Result of the first independent adversarial review of `d3df628c7`:
+**ACCEPTED FOR BOTH CORRECTIONS**. Fresh-clone `didChange` now follows pinned C++
+while same-occurrence transient clones preserve the source bit, and ordinary
+nested measurement now has production registration/solve evidence. All three
+focused tests above passed against the exact reviewed commit with
+`CARGO_INCREMENTAL=0`. The live shared tree briefly failed the measurement
+test's compile step because an unrelated concurrent `draw.rs` edit referenced
+an unresolved `path_cache_image_dimensions`; the exact-commit worktree removes
+that unrelated failure from this verdict.
+
+The overall Artboard family verdict remains **REJECTED / UNCERTIFIED** while the
+static process-wide frame-counter ownership and the cross-owner
+`ParticipatesInLayout` decoder red remain unresolved. The corrected
 1,105-owner/7,818-unit campaign denominator is accepted; it is no longer an
-open Artboard finding. The cross-owner `ParticipatesInLayout` decoder red also
-remains open and explicit.
+open Artboard finding. Neither remaining gap is silently credited to this
+family.

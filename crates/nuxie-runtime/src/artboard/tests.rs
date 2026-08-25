@@ -13409,6 +13409,8 @@
         assert!(dirt.contains(ComponentDirt::WORLD_TRANSFORM));
     }
 
+    include!("component_list_wave_a.rs");
+
     fn upstream_global_binding_fixture() -> (RuntimeFile, ArtboardInstance, usize) {
         let root = std::env::var_os("RIVE_RUNTIME_DIR")
             .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());

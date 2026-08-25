@@ -101,6 +101,27 @@ mod scripted_listener_action_tests {
 }
 
 #[cfg(test)]
+pub(crate) fn component_list_wave_a_hit_components_count(
+    instance: &StateMachineInstance,
+) -> usize {
+    instance.hit_components_count()
+}
+
+#[cfg(test)]
+pub(crate) fn component_list_wave_a_state_machine_belongs_to_artboard(
+    instance: &StateMachineInstance,
+    artboard: &ArtboardInstance,
+) -> bool {
+    instance
+        .state_machine_definitions
+        .as_ref()
+        .is_some_and(|definitions| {
+            Arc::ptr_eq(definitions, &artboard.state_machines)
+                && instance.state_machine_index < definitions.len()
+        })
+}
+
+#[cfg(test)]
 use state_machine_instance::RuntimeDeferredCallbackProbe;
 use state_machine_instance::{
     AudioEventOccurrence, AudioEventSeam, HitComponent, HitDrawable, HitResult,

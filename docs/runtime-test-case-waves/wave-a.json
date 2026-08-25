@@ -3321,17 +3321,16 @@
       "line": 20,
       "name": "Component List Artboard Count",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 62,
-          "symbol": "component_list_case_01_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 107,
+          "symbol": "wave_a_component_list_case_01_artboard_count"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#2",
@@ -3340,17 +3339,16 @@
       "line": 43,
       "name": "Component List Artboards & State Machines",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 91,
-          "symbol": "component_list_case_02_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 118,
+          "symbol": "wave_a_component_list_case_02_artboards_and_state_machines"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#3",
@@ -3359,17 +3357,16 @@
       "line": 70,
       "name": "Component List Artboards Layout Nodes",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 124,
-          "symbol": "component_list_case_03_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 125,
+          "symbol": "wave_a_component_list_case_03_layout_nodes"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#4",
@@ -3378,17 +3375,16 @@
       "line": 93,
       "name": "Component List Artboards Layout Bounds",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 153,
-          "symbol": "component_list_case_04_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 136,
+          "symbol": "wave_a_component_list_case_04_layout_bounds"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#5",
@@ -3397,17 +3393,16 @@
       "line": 119,
       "name": "Component List Artboards Data Context",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 185,
-          "symbol": "component_list_case_05_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 149,
+          "symbol": "wave_a_component_list_case_05_data_context"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#6",
@@ -3416,17 +3411,16 @@
       "line": 151,
       "name": "Component List Artboards Labels",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 223,
-          "symbol": "component_list_case_06_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 166,
+          "symbol": "wave_a_component_list_case_06_labels"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#7",
@@ -3436,16 +3430,16 @@
       "name": "Component list state machine listener",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 257,
-          "symbol": "component_list_case_07_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 183,
+          "symbol": "wave_a_component_list_case_07_state_machine_listener"
         }
       ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      "expected_red_reason": "expected-red: row three Hover is already true after the pointer moves over row one instead of the pinned false state"
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#8",
@@ -3454,17 +3448,16 @@
       "line": 230,
       "name": "Number To List Artboard Count",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 314,
-          "symbol": "component_list_case_08_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 215,
+          "symbol": "wave_a_component_list_case_08_number_to_list_count"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#9",
@@ -3473,17 +3466,16 @@
       "line": 262,
       "name": "Number To List Artboards & State Machines",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 352,
-          "symbol": "component_list_case_09_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 230,
+          "symbol": "wave_a_component_list_case_09_number_to_list_artboards_and_state_machines"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#10",
@@ -3492,17 +3484,16 @@
       "line": 289,
       "name": "Number To List Artboards Layout Nodes",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 385,
-          "symbol": "component_list_case_10_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 237,
+          "symbol": "wave_a_component_list_case_10_number_to_list_layout_nodes"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#11",
@@ -3511,17 +3502,16 @@
       "line": 312,
       "name": "Number To List Artboards Data Context",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 414,
-          "symbol": "component_list_case_11_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 245,
+          "symbol": "wave_a_component_list_case_11_number_to_list_data_context"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#12",
@@ -3530,17 +3520,16 @@
       "line": 342,
       "name": "Number to List Artboards Labels",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 450,
-          "symbol": "component_list_case_12_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 255,
+          "symbol": "wave_a_component_list_case_12_number_to_list_labels"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#13",
@@ -3549,17 +3538,16 @@
       "line": 370,
       "name": "Component List Virtualized Artboards & State Machines",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 484,
-          "symbol": "component_list_case_13_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 270,
+          "symbol": "wave_a_component_list_case_13_virtualized_artboards_and_state_machines"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#14",
@@ -3568,17 +3556,16 @@
       "line": 408,
       "name": "Component List Virtualized Artboards Layout Bounds",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 528,
-          "symbol": "component_list_case_14_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 294,
+          "symbol": "wave_a_component_list_case_14_virtualized_layout_bounds"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#15",
@@ -3587,17 +3574,16 @@
       "line": 444,
       "name": "Component List Virtualized Scroll",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 570,
-          "symbol": "component_list_case_15_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 311,
+          "symbol": "wave_a_component_list_case_15_virtualized_scroll"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#16",
@@ -3607,8 +3593,14 @@
       "name": "Component List Virtualized Scroll manual",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "note": "The literal drag flow executes the omitted offset, scroll-index, and physics assertions; the retained SRIV replay still diverges.",
       "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 352,
+          "symbol": "wave_a_component_list_case_16_manual_scroll_direct_assertions"
+        },
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_a.rs",
@@ -3616,7 +3608,7 @@
           "symbol": "component_list_virtualized_scroll_manual"
         }
       ],
-      "expected_red_reason": "expected-red: pinned SRIV stream diverges for component_list_virtualized_scroll_manual"
+      "expected_red_reason": "expected-red: direct scroll assertions pass, but the pinned component_list_virtualized_scroll_manual SRIV stream diverges"
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#17",
@@ -3683,8 +3675,14 @@
       "name": "Non Layout List Artboard Position",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "note": "The pinned initial x/y row positions execute directly before the retained component_list_grouped SRIV replay.",
       "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 380,
+          "symbol": "wave_a_component_list_case_20_non_layout_initial_positions"
+        },
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_a.rs",
@@ -3692,7 +3690,7 @@
           "symbol": "component_list_non_layout_position"
         }
       ],
-      "expected_red_reason": "expected-red: pinned SRIV stream diverges for component_list_grouped"
+      "expected_red_reason": "expected-red: direct initial child-position assertions pass, but the pinned component_list_grouped SRIV stream diverges"
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#21",
@@ -3702,8 +3700,14 @@
       "name": "Artboard list with follow path constraint",
       "status": "direct",
       "outcome": "pass",
-      "note": "The exact named component-list observable is asserted by this operative fixture or literal SRIV replay.",
+      "note": "The omitted initial ItemCount=10 assertion and 10-to-5 list mutation execute directly alongside the passing SRIV replay.",
       "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 391,
+          "symbol": "wave_a_component_list_case_21_follow_path_initial_item_count"
+        },
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_a.rs",
@@ -3830,17 +3834,16 @@
       "line": 1040,
       "name": "Component list orderedListIndices default order",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 614,
-          "symbol": "component_list_case_28_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 403,
+          "symbol": "wave_a_component_list_case_28_default_order"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_list_test.cpp#29",
@@ -3868,17 +3871,16 @@
       "line": 1318,
       "name": "Virtualized list items are clipped by an ancestor layout viewport",
       "status": "direct",
-      "outcome": "expected-red",
-      "note": "The complete pinned fixture/action/assertion body is retained in a dedicated red entry point; prior evidence proved only a narrower component-list observable.",
+      "outcome": "pass",
+      "note": "The pinned fixture, binding, advance/draw actions, concrete runtime owners, and direct assertions execute in Rust.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_a_expected_red.rs",
-          "line": 653,
-          "symbol": "component_list_case_30_direct_port_expected_red"
+          "path": "crates/nuxie-runtime/src/artboard/component_list_wave_a.rs",
+          "line": 522,
+          "symbol": "wave_a_component_list_case_30_clipped_viewport"
         }
-      ],
-      "expected_red_reason": "expected-red: prior Rust evidence covered only a narrower observable, not this complete pinned case"
+      ]
     },
     {
       "id": "tests/unit_tests/runtime/component_origin_test.cpp#1",

@@ -11,9 +11,10 @@ use nuxie_image_codec::decoded_rgba_len;
 use nuxie_render_api::{
     Aabb as RenderAabb, BlendMode as RenderBlendMode, Factory as RenderFactory,
     FillRule as RenderFillRule, ImageDecodeError, ImageSampler as RenderImageSampler,
-    Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
+    Mat2D as RenderMat2D, PathDirection as RenderPathDirection, PathVerb as RenderPathVerb,
+    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap as RenderStrokeCap,
+    StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -442,8 +443,8 @@ impl ArtboardInstance {
         self.draw_commands_with_layout_bounds(graph, self.retained_layout_bounds())
     }
 
-    /// Settle pending writes and return visible Shape and Text locals under
-    /// `point`, from front to back, including descendants reached through
+    /// Settle pending writes and return visible Shape, Text, and Image locals
+    /// under `point`, from front to back, including descendants reached through
     /// nested artboards and component-list items, using this instance's
     /// retained file/graph context.
     pub fn geometry_hit_test(
@@ -482,8 +483,8 @@ impl ArtboardInstance {
             .collect()
     }
 
-    /// Settle pending writes and return visible Shape and Text hit paths with
-    /// the containing runtime artboard identity attached to every local id.
+    /// Settle pending writes and return visible Shape, Text, and Image hit paths
+    /// with the containing runtime artboard identity attached to every local id.
     pub fn geometry_hit_test_path_segments(
         &mut self,
         point: RenderVec2D,
@@ -514,7 +515,7 @@ impl ArtboardInstance {
         self.geometry_hit_test_path_segments_with_context(runtime, graph, point, cache)
     }
 
-    /// Settle pending writes and enumerate every visible Shape and Text
+    /// Settle pending writes and enumerate every visible Shape, Text, and Image
     /// occurrence with bounds in the root artboard's coordinate space.
     ///
     /// Paths and repeated-item occurrences remain runtime-local here. The
@@ -542,10 +543,12 @@ impl ArtboardInstance {
             false,
             false,
             &[graph.global_id],
+            &cache.registered_image_dimensions,
+            &cache.presented_image_dimensions,
         )
     }
 
-    /// Settle pending writes and enumerate every retained Shape and Text
+    /// Settle pending writes and enumerate every retained Shape, Text, and Image
     /// occurrence with bounds in the root artboard's coordinate space.
     ///
     /// Unlike [`Self::geometry_path_segments_with_bounds`], this catalogue is
@@ -574,6 +577,8 @@ impl ArtboardInstance {
             true,
             false,
             &[graph.global_id],
+            &cache.registered_image_dimensions,
+            &cache.presented_image_dimensions,
         )
     }
 
@@ -605,6 +610,8 @@ impl ArtboardInstance {
             false,
             true,
             &[graph.global_id],
+            &cache.registered_image_dimensions,
+            &cache.presented_image_dimensions,
         )
         .into_iter()
         .filter_map(|hit| {
@@ -675,6 +682,8 @@ impl ArtboardInstance {
             false,
             false,
             &[graph.global_id],
+            &cache.registered_image_dimensions,
+            &cache.presented_image_dimensions,
         )
     }
 
@@ -688,6 +697,8 @@ impl ArtboardInstance {
         include_invisible: bool,
         include_text_value: bool,
         nested_ancestors: &[u32],
+        registered_image_dimensions: &BTreeMap<u32, (u32, u32)>,
+        presented_image_dimensions: &BTreeMap<u32, (u32, u32, usize)>,
     ) -> Vec<RuntimeGeometryHit> {
         // Geometry queries live in the artboard's unshifted world space. This
         // is the same clip rectangle used by drawing when the public origin
@@ -884,6 +895,8 @@ impl ArtboardInstance {
                             include_invisible,
                             include_text_value,
                             &child_ancestors,
+                            registered_image_dimensions,
+                            presented_image_dimensions,
                         )
                         .into_iter()
                         .rev()
@@ -909,6 +922,8 @@ impl ArtboardInstance {
                             include_invisible,
                             include_text_value,
                             &child_ancestors,
+                            registered_image_dimensions,
+                            presented_image_dimensions,
                         )
                         .into_iter()
                         .rev()
@@ -1044,6 +1059,8 @@ impl ArtboardInstance {
                             include_invisible,
                             include_text_value,
                             &child_ancestors,
+                            registered_image_dimensions,
+                            presented_image_dimensions,
                         )
                         .into_iter()
                         .rev()
@@ -1066,6 +1083,83 @@ impl ArtboardInstance {
                         );
                         back_to_front_hits.push(hit);
                     }
+                }
+                continue;
+            }
+            if command.object_kind == RuntimeDrawableDispatchObjectKind::Image
+                && !active_clips.iter().any(|contains| !contains)
+            {
+                let Some(local_id) = command.local_id else {
+                    continue;
+                };
+                let render_opacity = self
+                    .component(local_id)
+                    .map(|component| component.transform.render_opacity)
+                    .unwrap_or(0.0);
+                if !include_invisible && (!render_opacity.is_finite() || render_opacity <= 0.0) {
+                    continue;
+                }
+                let Some(asset_global) = self.resolved_image_asset_global(
+                    Some(local_id),
+                    command.resolved_image_asset_global,
+                ) else {
+                    continue;
+                };
+                let Some((image_width, image_height, _)) = presented_image_dimensions
+                    .get(&asset_global)
+                    .copied()
+                    .or_else(|| {
+                        registered_image_dimensions
+                            .get(&asset_global)
+                            .copied()
+                            .map(|(width, height)| (width, height, asset_global as usize))
+                    })
+                else {
+                    continue;
+                };
+                let Some((local_bounds, image_transform)) = self
+                    .geometry_image_local_bounds_and_transform(
+                        runtime,
+                        graph,
+                        local_id,
+                        command.global_id,
+                        image_width,
+                        image_height,
+                        layout_bounds,
+                        path_cache,
+                    )
+                else {
+                    continue;
+                };
+                let matches_query = point.is_none_or(|point| {
+                    let mut tester = crate::math::hit_test::HitTester::new(
+                        crate::HitTestArea::around(point.x, point.y, 2.0),
+                    );
+                    tester.add_rect(
+                        local_bounds,
+                        image_transform,
+                        RenderPathDirection::Counterclockwise,
+                    );
+                    tester.test(RenderFillRule::NonZero)
+                });
+                if matches_query {
+                    back_to_front_hits.push(RuntimeGeometryHit {
+                        path: vec![RuntimeGeometryHitPathSegment {
+                            artboard_global_id: graph.global_id,
+                            local_id,
+                        }],
+                        occurrence: Vec::new(),
+                        bounds: runtime_transformed_rect_bounds(
+                            (
+                                local_bounds.min_x,
+                                local_bounds.min_y,
+                                local_bounds.max_x,
+                                local_bounds.max_y,
+                            ),
+                            artboard_to_root.multiply(image_transform),
+                        ),
+                        text_value: None,
+                    });
                 }
                 continue;
             }
@@ -1291,14 +1385,41 @@ impl ArtboardInstance {
         image_height: u32,
         path_cache: &mut RuntimeArtboardPathState,
     ) -> Option<RenderAabb> {
+        let prepared = path_cache.live_traversal_frame(self, graph, Some(runtime));
+        let (bounds, world) = self.geometry_image_local_bounds_and_transform(
+            runtime,
+            graph,
+            local_id,
+            image_global_id,
+            image_width,
+            image_height,
+            prepared.layout_bounds.as_ref().as_ref(),
+            path_cache,
+        )?;
+        Some(runtime_transformed_rect_bounds(
+            (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+            world,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn geometry_image_local_bounds_and_transform(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        image_global_id: Option<u32>,
+        image_width: u32,
+        image_height: u32,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeArtboardPathState,
+    ) -> Option<(RenderAabb, Mat2D)> {
         if image_width == 0 || image_height == 0 || self.runtime_images.mesh(local_id).is_some() {
             // A mesh can deform the source image independently of its component
             // transform. Until that geometry is retained explicitly, returning
             // the undecorated image rectangle would silently lie to callers.
             return None;
         }
-        let prepared = path_cache.live_traversal_frame(self, graph, Some(runtime));
-        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
         let image_object = image_global_id.and_then(|global_id| runtime.object(global_id as usize));
         let origin_x_key = runtime_draw_property_key_for_name("Image", "originX")?;
         let origin_y_key = runtime_draw_property_key_for_name("Image", "originY")?;
@@ -1338,19 +1459,14 @@ impl ArtboardInstance {
         {
             return None;
         }
-        let bounds = runtime_transformed_rect_bounds(
-            (
-                -image_width * origin_x,
-                -image_height * origin_y,
-                image_width,
-                image_height,
-            ),
-            world,
-        );
-        [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
-            .into_iter()
-            .all(f32::is_finite)
-            .then_some(bounds)
+        let image_transform = world.multiply(Mat2D::from_translation(
+            -image_width * origin_x,
+            -image_height * origin_y,
+        ));
+        Some((
+            RenderAabb::new(0.0, 0.0, image_width, image_height),
+            image_transform,
+        ))
     }
 
     fn geometry_world_bounds_with_path_cache_and_transform(

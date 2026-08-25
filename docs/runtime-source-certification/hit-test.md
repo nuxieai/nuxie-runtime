@@ -25,7 +25,7 @@ surface, but it does not yet establish literal source certification.
 | `HitTester::move`, `line`, `quad`, `cubic`, `recurse_cubic`, `close` | 6 | `move_to`, `line_to`, `quad_to`, `cubic_to`, `recurse_cubic`, and `close`. The unusual pinned `quad` behavior is literal: it only assigns the un-offset endpoint. |
 | `quickRejectCubic` | 1 | `quick_reject_cubic`, with inclusive top/bottom comparisons. |
 | `CubicChop::CubicChop`, `CubicChop::operator[]` | 2 | The seven subdivision points are local values in `recurse_cubic`; checked Rust indexing replaces the source-local wrapper. |
-| `HitTester::addRect`, `HitTester::test` | 2 | `add_rect` and `test` preserve the local bodies, but `add_rect` is not connected to the pinned production `Image::hitTest` caller. |
+| `HitTester::addRect`, `HitTester::test` | 2 | `add_rect` and `test` preserve the local bodies. The runtime Artboard drawable traversal now dispatches an Image through the same intrinsic rectangle, composed origin/world transform, counterclockwise default direction, and non-zero test. This correction is pending fresh review. |
 | `cross_lt`, both `HitTester::testMesh` overloads | 3 | `cross_lt`, `test_mesh_point`, and `test_mesh_area`, preserving whole-mesh culling, triangle order, point sign comparison, 1x1 delegation, and the area winding accumulation after every triangle. |
 | Header `HitTester()`, `HitTester(const IAABB&)` | 2 | The area constructor is `HitTester::new`. The uninitialized C++ default has no safe callable Rust equivalent; Rust constructs initialized state and exposes the pinned no-argument reset separately. |
 | Header include guard | 1 | Not applicable: nonbehavioral C++ preprocessing guard. |
@@ -61,16 +61,21 @@ intermediate conversions are finite and defined. Because both counts exceed
 sampling density. This falsifies the claim that the distance formula is
 literal.
 
-### 2. The required production `addRect` call edge is still absent
+### 2. The required production `addRect` call edge was absent; corrected pending review
 
 Pinned `src/shapes/image.cpp::Image::hitTest` constructs `HitTester` with the
 query area, calls `addRect` using the image bounds and composed transform, then
-calls `test`. Rust `HitTester::add_rect` is referenced only by its focused unit
-test. The production listener path in
-`StateMachineInstance::hit_expandable` sends every non-`Shape` owner,
-including `Image`, through `component_hit_test_point`; it never invokes the
-restored rectangle raster. Thus the method body exists but the pinned image
-hit-test behavior remains unreachable. The mesh overloads have only pinned GM
+calls `test`. The correction adds Image dispatch to the runtime Artboard
+drawable traversal. It resolves the presented intrinsic dimensions, rejects
+the same still-unimplemented mesh branch, composes `worldTransform *
+translate(-width * originX, -height * originY)`, then invokes `add_rect` with
+the local `(0, 0, width, height)` rectangle and the default counterclockwise
+direction before the non-zero test. The public `ArtboardInstance::hit_test`
+therefore reaches the restored rectangle raster through the ordinary drawable
+path instead of through a listener-specific workaround. A production-path
+regression demonstrates an Image center hit and a distant miss. This closes
+the demonstrated omission but remains unaccepted until two independent
+reviewers verify the complete edge. The mesh overloads have only pinned GM
 callers, and `quad`/clear-only reset likewise have no required runtime caller;
 their lack of production calls is not independently a mismatch.
 
@@ -97,9 +102,10 @@ match their defined pinned observations.
 The prior `faithful` file row was incomplete. Rust had no owners for the
 no-argument reset, `quad`, `addRect`, `cross_lt`, or either `testMesh` overload.
 The correction restores those bodies without introducing a new curve algorithm
-or mesh hit-test policy. The independent review nevertheless rejects complete
-certification because cubic segmentation is numerically different and the
-required image caller does not reach `add_rect`.
+or mesh hit-test policy. Follow-up corrections restore the non-contracted cubic
+distance arithmetic and connect the Image drawable traversal to `add_rect`.
+The receipt remains rejected until both corrections survive two fresh
+independent reviews.
 
 Focused evidence in `math::hit_test::tests` now observes:
 
@@ -113,18 +119,19 @@ Focused evidence in `math::hit_test::tests` now observes:
 `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --lib
 math::hit_test::tests -- --nocapture` passes all five focused tests, and
 `make --no-print-directory runtime-source-symbol-check` confirms the corrected
-7,818-unit/1,105-owner denominator. Those tests prove the restored surface but
-do not cover the finite FP witness or the absent image call edge. Verdict:
-**REJECTED** pending production Image/Artboard geometry-hit integration and two
-fresh independent re-reviews. The segmentation correction is implemented but
-not self-certified. Negative, non-overflowing IAABB extents are explicitly a
+7,818-unit/1,105-owner denominator. Those tests prove the restored surface. The
+focused non-contracted witness and
+`semantic_geometry_revision::artboard_hit_test_reaches_the_pinned_image_hittester_rectangle_path`
+cover the two correction boundaries. Verdict: **REJECTED** pending two fresh
+independent re-reviews; neither correction is self-certified. Negative,
+non-overflowing IAABB extents are explicitly a
 safe-ownership adaptation: pinned C++ converts the resulting negative element
 count to an impractically large `size_t` allocation, while Rust fails closed
 without attempting that allocation. This is not presented as a literal return
 value equivalence.
 
-The production correction must be made at the actual pinned call edge:
-`Artboard::hitTest -> Image::hitTest -> HitTester::addRect`. It must not be
-worked around in state-machine `HitExpandable`, because pinned Image does not
-override `hitTestPoint`; listener hit testing and drawable geometry hit testing
-are separate surfaces.
+The production correction is made at the drawable call edge equivalent to
+`Artboard::hitTest -> Image::hitTest -> HitTester::addRect`. It is not worked
+around in state-machine `HitExpandable`, because pinned Image does not override
+`hitTestPoint`; listener hit testing and drawable geometry hit testing remain
+separate surfaces.

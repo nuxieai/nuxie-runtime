@@ -1,6 +1,6 @@
 use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, read_runtime_file};
 use nuxie_graph::GraphFile;
-use nuxie_render_api::NullFactory;
+use nuxie_render_api::{NullFactory, Vec2D};
 use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, RuntimeOwnedViewModelInstance, TransformProperty,
 };
@@ -951,6 +951,27 @@ fn semantic_geometry_revision_changes_when_image_dimensions_are_registered_late(
             .expect("fixture has covered semantic geometry"),
         after,
         "re-registering identical dimensions must keep the authority stable",
+    );
+}
+
+#[test]
+fn artboard_hit_test_reaches_the_pinned_image_hittester_rectangle_path() {
+    let mut artboard = image_fixture_artboard();
+    artboard.update_pass();
+    let image_local = artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "Image")
+        .map(|component| component.local_id)
+        .expect("fixture has an Image");
+    artboard
+        .register_image_dimensions(1, 100, 50)
+        .expect("image dimensions register");
+
+    assert_eq!(artboard.hit_test(Vec2D::new(0.0, 0.0)), vec![image_local]);
+    assert!(
+        artboard.hit_test(Vec2D::new(80.0, 0.0)).is_empty(),
+        "the Image rectangle must not become an unbounded geometry fallback",
     );
 }
 

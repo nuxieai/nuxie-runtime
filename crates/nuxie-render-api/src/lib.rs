@@ -64,6 +64,14 @@ impl Aabb {
             && point.y >= self.min_y
             && point.y <= self.max_y
     }
+
+    /// Strict-edge overlap from pinned C++ `AABB::overlaps`.
+    pub fn overlaps(self, other: Self) -> bool {
+        self.min_x < other.max_x
+            && self.max_x > other.min_x
+            && self.min_y < other.max_y
+            && self.max_y > other.min_y
+    }
 }
 
 /// Pinned C++ `rive::Fit` values from `include/rive/layout.hpp`.

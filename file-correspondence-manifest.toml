@@ -1729,7 +1729,7 @@ b6_row_id = "B6-0138"
 b6_verdict = "DIVERGENT"
 b6_cluster = "constraints"
 audit_record = "docs/b6-audit/results/constraints.md"
-note = "MR-3 justification: F4: core scrolling is ported; interactive momentum remains partial. The row-exclusive constrain implementation lives in scrolling/scroll_constraint.rs; shared retained metrics and rendezvous helpers remain in constraints.rs."
+note = "Phase 3 paired audit: the row-exclusive constrain owner lives in scrolling/scroll_constraint.rs; retained metrics, intents, property dispatch, focus scrolling, and child rendezvous helpers remain in constraints.rs. The audit restored generated velocityX/velocityY/scrollActive getters and no-op computed setters, converted clamped offsets and resolved intents to pinned math::clamp semantics, preserved std::min signed-zero order, restored the literal directional snap scan including NaN behavior, passed +infinity as the physics range maximum on an infinite main axis, and made no-physics focus scrolling clear held intents before direct writes. The four pinned scroll_velocity tests are green using the approved explicit event-timestamp host-clock adaptation. Taffy layout readiness/cache access replaces Yoga callbacks within the fixed layout-backend ceiling; invalid generated topology fails closed instead of dereferencing raw pointers."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint_proxy.cpp"
@@ -1765,7 +1765,7 @@ b6_row_id = "B6-0141"
 b6_verdict = "DIVERGENT"
 b6_cluster = "constraints"
 audit_record = "docs/b6-audit/results/constraints.md"
-note = "Consolidated Rust port for constraints."
+note = "Phase 3 paired audit: normalized offset, literal visible-range selection (including the pinned non-advancing childIndex behavior), prior-window diff, sorted recycling, item mounting/positioning, visible-index publication, and virtualizableChanged callbacks live in scrolling/scroll_virtualizer.rs. The audit removed Rust-only finite/nonnegative item-size sanitization, restored the pinned contentSize > 0 NaN gate and signed remainder, and preserved the otherwise-unused parent-world inverse gate that skips singular item placement. Provider/item arrays and mounted occurrences are owned Rust values rather than raw pointers; empty-provider and out-of-range float-to-int cases fail safely. When the retained Taffy bounds cache is unavailable, authored/root-host sizes are the explicit layout-backend timing adaptation; once live bounds exist their values are consumed without sanitization."
 
 [[file]]
 upstream = "src/constraints/targeted_constraint.cpp"

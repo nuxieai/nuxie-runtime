@@ -151,6 +151,10 @@ fn run_physics(artboard: &mut ArtboardInstance, constraint: ComponentHandle) {
         metrics.max_offset(RuntimeScrollAxis::X),
         metrics.max_offset(RuntimeScrollAxis::Y),
     );
+    let range_max = (
+        metrics.min_offset(RuntimeScrollAxis::X),
+        metrics.min_offset(RuntimeScrollAxis::Y),
+    );
     let content_size = if metrics.main_axis_horizontal {
         metrics.content_width
     } else {
@@ -170,7 +174,7 @@ fn run_physics(artboard: &mut ArtboardInstance, constraint: ComponentHandle) {
         if let Some(physics) = scroll.physics.as_mut() {
             physics.run(
                 range_min,
-                (0.0, 0.0),
+                range_max,
                 (scroll.offset_x, scroll.offset_y),
                 &snapping_points,
                 content_size,

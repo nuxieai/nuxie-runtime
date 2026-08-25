@@ -829,9 +829,9 @@ note = "Phase 2 direct owner and Phase 3 paired audit: Thumb/Track lifecycle mat
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/constraints.rs"
-note = "F4: core scrolling is ported; interactive momentum remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/constraints.rs; crates/nuxie-runtime/src/constraints/scrolling/scroll_constraint.rs"
+note = "Paired owner audit covers retained metrics/intents, constraint rendezvous, drag/physics lifecycle, computed velocity/active observables, directional snap, focus scrolling, and generated computed-property setter behavior."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint_proxy.cpp"
@@ -848,8 +848,8 @@ note = "Phase 3 paired audit: base accumulate/reset/prepare/run/stop lifecycle m
 [[file]]
 upstream = "src/constraints/scrolling/scroll_virtualizer.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/constraints.rs"
-note = "Consolidated Rust port for constraints."
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_virtualizer.rs"
+note = "Paired owner audit covers normalized offset/range selection, retained window diff and recycling, mounted-item positioning, visible-index publication, and virtualizableChanged ordering."
 
 [[file]]
 upstream = "src/constraints/targeted_constraint.cpp"

@@ -6956,7 +6956,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:animation:ownership",
@@ -6990,7 +6990,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 15,
+        "recent_touch_count": 16,
         "state": "stale"
       },
       "cluster_id": "cluster:animation:ownership",
@@ -7025,7 +7025,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 19,
+        "recent_touch_count": 20,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7371,7 +7371,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -7406,7 +7406,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 9,
+        "recent_touch_count": 10,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -7616,7 +7616,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7651,7 +7651,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -7686,7 +7686,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 23,
+        "recent_touch_count": 24,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -7721,7 +7721,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -11612,7 +11612,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 12,
+        "recent_touch_count": 13,
         "state": "stale"
       },
       "cluster_id": "cluster:assets:ownership",
@@ -11646,7 +11646,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -14199,7 +14199,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:lua:ownership",
@@ -14586,7 +14586,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 6,
+        "recent_touch_count": 7,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -14620,7 +14620,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 11,
+        "recent_touch_count": 12,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -14657,7 +14657,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 26,
+        "recent_touch_count": 27,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -18452,7 +18452,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:runtime-core:ownership",
@@ -18486,7 +18486,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 7,
+        "recent_touch_count": 8,
         "state": "stale"
       },
       "cluster_id": "cluster:importers:ownership",

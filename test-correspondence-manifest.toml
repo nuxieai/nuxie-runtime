@@ -850,7 +850,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_text_runs.cpp"
 test_case_count = 1
 status = "ported-direct"
 evidence = ["crates/nuxie/tests/upstream_scripting_text_runs.rs"]
-note = "The complete seven-frame scripted fixture scenario is translated with the exact button order, trigger multiplicities, 0.1-second advances, draws, and pinned script_create_text_runs SRIV comparison. It is honestly expected-red at the first scripted advance because Node Script 1 init receives nil for its authored list-backed lis input; no fallback or script rewrite masks that source-port discrepancy."
+note = "The complete seven-frame scripted fixture scenario is translated with the exact button order, trigger multiplicities, 0.1-second advances, draws, and pinned script_create_text_runs SRIV comparison. Phase 3 restored ScriptedObject's two-pass, authored-order custom-property hydration, including the omitted ScriptInputViewModelProperty inputs; an active regression now proves those values exist before user init. The full silver remains honestly red at frame 1 operation 251 because Rust reuses a render path after dynamic text-run insertion where pinned C++ allocates makeRenderPath."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_transition_condition_test.cpp"

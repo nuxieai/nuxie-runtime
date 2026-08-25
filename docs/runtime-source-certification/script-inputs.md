@@ -2074,3 +2074,45 @@ contain no real mount witness with occurrence-local ScriptInputs. Complete
 ScriptInput authority remains rejected until cold nested and dynamic-row mount
 hydration carries the exact occurrence DataContext, followed by two fresh
 independent reviews.
+
+## Mount-group occurrence-context correction after review `1e36b4a92`
+
+Status: **PENDING TWO FRESH INDEPENDENT REVIEWS.** No acceptance from an
+earlier ScriptInput review carries over to this correction.
+
+The mount transaction now retains the authority that pinned
+`Artboard::internalDataContext` supplies to each concrete scripted occurrence.
+Every `ScriptMountGroup` owns the occurrence's selected ViewModel handle, its
+projected local-plus-parent ViewModel chain, and an opaque complete
+`ScriptArtboardParentContext`; the source `File` remains the independently
+retained `group.file`. Synchronous and detached-asynchronous construction set
+the concrete occurrence chain on the generated table before ScriptInput
+hydration and authored `init`. Primitive and Artboard DataBinds, relative
+ViewModel inputs, and the parent context passed to a constructed
+`ScriptInputArtboard` all resolve from that retained occurrence context rather
+than the outer consumer root. Lazy interpolators likewise retain the selected
+occurrence VM instead of the outer root.
+
+The operative cold witnesses compile and register a real ScriptAsset, enter
+the public mount transaction, execute its generator, hydrate its authored
+ScriptInputNumber fields, and run authored `init`. A cross-File nested
+occurrence has local value 11, retained-parent value 22, and a colliding outer
+consumer value 99. Both the synchronous mount and detached plan/prepare/install
+path reach `init` with 11 and 22; using the former outer-root implementation
+produces 99 and the authored fallback remains unresolved. The witness attaches
+no probe table and does not call the hydration helper directly. The shared
+opaque context used by those passing scalar resolutions is also the only
+authority passed to the Artboard and ViewModel hydration branches.
+
+The correction deliberately does not publish a new acceptance. Two fresh
+reviewers must independently census the nested and dynamic component-list
+creation/refresh/pool owners, both mount transactions, primitive/Artboard/
+ViewModel hydration, facade parent chaining, source/consumer File separation,
+and detached snapshot lifetime before changing this status.
+
+All commands used `CARGO_INCREMENTAL=0`. The two new cold real-mount witnesses
+passed. The complete scripting-enabled `nuxie` lib suite reached 63 passed / 1
+ignored with only the already-recorded host-log wording failure. Source
+correspondence remained 456 applicable rows with zero pending; symbol
+correspondence remained 1,105 owners / 7,818 authority units with generated
+authority replayed, and all 33 checker tests passed.

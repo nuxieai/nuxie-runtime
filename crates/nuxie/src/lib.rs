@@ -998,11 +998,11 @@ impl FileScriptRuntime {
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
         default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
-        root_view_model: Option<&RuntimeOwnedViewModelHandle>,
+        _root_view_model: Option<&RuntimeOwnedViewModelHandle>,
     ) -> std::result::Result<Option<PreparedFileScriptMounts>, nuxie_runtime::ScriptError> {
         let runtimes =
             prepare_script_mount_runtimes(self, file, groups, factory, default_context_view_model)?;
-        let Some(groups) = instantiate_script_mounts(&runtimes, groups, factory, root_view_model)?
+        let Some(groups) = instantiate_script_mounts(&runtimes, groups, factory)?
         else {
             return Ok(None);
         };
@@ -1016,12 +1016,11 @@ impl FileScriptRuntime {
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
         default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
-        root_view_model: Option<&RuntimeOwnedViewModelHandle>,
+        _root_view_model: Option<&RuntimeOwnedViewModelHandle>,
     ) -> std::result::Result<Option<PreparedFileScriptMounts>, nuxie_runtime::ScriptError> {
         let runtimes =
             prepare_script_mount_runtimes(self, file, groups, factory, default_context_view_model)?;
-        let Some(groups) =
-            instantiate_script_mounts_async(&runtimes, groups, factory, root_view_model).await?
+        let Some(groups) = instantiate_script_mounts_async(&runtimes, groups, factory).await?
         else {
             return Ok(None);
         };
@@ -1119,6 +1118,10 @@ struct ScriptMountGroup {
     file: Arc<File>,
     path: String,
     graph_global_id: u32,
+    selected_view_model: Option<RuntimeOwnedViewModelHandle>,
+    context_view_model: Option<nuxie_runtime::ScriptViewModel>,
+    context_parents: Vec<Option<nuxie_runtime::ScriptViewModel>>,
+    parent_context: Option<nuxie_runtime::ScriptArtboardParentContext>,
     targets: Vec<ScriptMountTarget>,
 }
 
@@ -1461,7 +1464,6 @@ fn instantiate_script_mounts(
     runtimes: &[PreparedScriptMountRuntime],
     groups: &[ScriptMountGroup],
     factory: &mut dyn Factory,
-    root_view_model: Option<&RuntimeOwnedViewModelHandle>,
 ) -> std::result::Result<Option<Vec<PreparedScriptMountGroup>>, nuxie_runtime::ScriptError> {
     let mut prepared = Vec::with_capacity(groups.len());
     for group in groups {
@@ -1504,7 +1506,7 @@ fn instantiate_script_mounts(
                     asset_ordinal: target.asset_ordinal,
                     asset_name: target.asset_name.clone(),
                     serialized_implemented_methods: target.serialized_implemented_methods,
-                    fallback_root: root_view_model.cloned(),
+                    fallback_root: group.selected_view_model.clone(),
                 });
                 continue;
             }
@@ -1521,13 +1523,17 @@ fn instantiate_script_mounts(
                         target.asset_name
                     ))
                 })?;
+            script.set_context_view_model_chain(
+                group.context_view_model.clone(),
+                group.context_parents.clone(),
+            )?;
             if target.kind.hydrates_script_inputs() {
                 if !hydrate_prepared_scripted_object_inputs(
                     &group.file,
                     group.graph_global_id,
                     target,
                     script.as_mut(),
-                    root_view_model,
+                    group.parent_context.as_ref(),
                     factory,
                 )? {
                     return Ok(None);
@@ -1576,7 +1582,6 @@ async fn instantiate_script_mounts_async(
     runtimes: &[PreparedScriptMountRuntime],
     groups: &[ScriptMountGroup],
     factory: &mut dyn Factory,
-    root_view_model: Option<&RuntimeOwnedViewModelHandle>,
 ) -> std::result::Result<Option<Vec<PreparedScriptMountGroup>>, nuxie_runtime::ScriptError> {
     let mut prepared = Vec::with_capacity(groups.len());
     for group in groups {
@@ -1615,7 +1620,7 @@ async fn instantiate_script_mounts_async(
                     asset_ordinal: target.asset_ordinal,
                     asset_name: target.asset_name.clone(),
                     serialized_implemented_methods: target.serialized_implemented_methods,
-                    fallback_root: root_view_model.cloned(),
+                    fallback_root: group.selected_view_model.clone(),
                 });
                 continue;
             }
@@ -1629,13 +1634,17 @@ async fn instantiate_script_mounts_async(
                         group.path, target.global_id, target.asset_ordinal, target.asset_name
                     ))
                 })?;
+            script.set_context_view_model_chain(
+                group.context_view_model.clone(),
+                group.context_parents.clone(),
+            )?;
             if target.kind.hydrates_script_inputs() {
                 if !hydrate_prepared_scripted_object_inputs(
                     &group.file,
                     group.graph_global_id,
                     target,
                     script.as_mut(),
-                    root_view_model,
+                    group.parent_context.as_ref(),
                     factory,
                 )? {
                     return Ok(None);
@@ -1694,7 +1703,7 @@ fn hydrate_prepared_scripted_object_inputs(
     graph_global_id: u32,
     target: &ScriptMountTarget,
     script: &mut dyn ScriptInstance,
-    root_view_model: Option<&RuntimeOwnedViewModelHandle>,
+    parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
     factory: &mut dyn Factory,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
     let runtime = &file.runtime;
@@ -1706,11 +1715,6 @@ fn hydrate_prepared_scripted_object_inputs(
                 .is_some_and(|object| object.type_name == "Artboard")
         })
         .unwrap_or_else(|| runtime.object_count());
-    let parent_context = root_view_model.map(|root| {
-        let context =
-            nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(runtime, root.clone());
-        nuxie_runtime::ScriptArtboardParentContext::root(&context)
-    });
     // Pinned `ScriptedObject::hydrateScriptInputs` validates the complete
     // custom-property list before publishing any field to the script table,
     // then hydrates the same entries in authored order.
@@ -1727,10 +1731,8 @@ fn hydrate_prepared_scripted_object_inputs(
         match input.type_name {
             "ScriptInputBoolean" | "ScriptInputNumber" | "ScriptInputColor"
             | "ScriptInputString" => {
-                let bound = root_view_model
-                    .map(|root| {
-                        nuxie_runtime::bound_script_input_value(runtime, &root.borrow(), input)
-                    })
+                let bound = parent_context
+                    .map(|context| context.resolve_script_input_value(runtime, input))
                     .transpose()?
                     .flatten();
                 let Some(value) = bound.or_else(|| default_script_input_value(input)) else {
@@ -1742,10 +1744,8 @@ fn hydrate_prepared_scripted_object_inputs(
             // callback field untouched.
             "ScriptInputTrigger" => {}
             "ScriptInputArtboard" => {
-                let artboard_id = root_view_model
-                    .map(|root| {
-                        nuxie_runtime::bound_script_artboard_input(runtime, &root.borrow(), input)
-                    })
+                let artboard_id = parent_context
+                    .map(|context| context.resolve_script_artboard_input(runtime, input))
                     .transpose()?
                     .flatten()
                     .or_else(|| input.uint_property("artboardId"))
@@ -1766,7 +1766,7 @@ fn hydrate_prepared_scripted_object_inputs(
                 prepared.push(PreparedScriptedObjectInput::Artboard { name, artboard_id });
             }
             "ScriptInputViewModelProperty" => {
-                let Some(context) = parent_context.as_ref() else {
+                let Some(context) = parent_context else {
                     return Ok(false);
                 };
                 let path = nuxie_runtime::ScriptInputViewModelPropertyPath::from_imported(
@@ -1806,7 +1806,7 @@ fn hydrate_prepared_scripted_object_inputs(
                 let artboard = FileScriptArtboard::new(
                     Arc::clone(file),
                     artboard_id,
-                    parent_context.as_ref(),
+                    parent_context,
                 )?;
                 artboard.initialize_renderer(factory)?;
                 script.set_artboard_input_core(&name, Box::new(artboard))?;
@@ -1817,7 +1817,6 @@ fn hydrate_prepared_scripted_object_inputs(
                 path,
             } => {
                 let value = parent_context
-                    .as_ref()
                     .and_then(|context| context.resolve_script_view_model_input(runtime, &path))
                     .ok_or_else(|| {
                         nuxie_runtime::ScriptError::new(format!(
@@ -4234,8 +4233,17 @@ fn script_mount_group(
     graph: &ArtboardGraph,
     instance: &RuntimeArtboardInstance,
     path: String,
+    fallback_root: Option<&RuntimeOwnedViewModelHandle>,
 ) -> std::result::Result<(bool, ScriptMountGroup), nuxie_runtime::ScriptError> {
     let runtime = &file.runtime;
+    let selected_view_model = instance.scripted_interpolator_root_view_model(runtime, fallback_root);
+    let (context_view_model, context_parents) =
+        instance.scripted_interpolator_data_context_view_models(runtime, fallback_root);
+    let fallback_context = fallback_root.map(|root| {
+        nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(runtime, root.clone())
+    });
+    let parent_context =
+        instance.scripted_interpolator_artboard_parent_context(fallback_context.as_ref());
     let scripts = file.scripts.borrow();
     if !scripts.scripts_are_authenticated() || !scripts.has_executable_script_assets() {
         return Ok((
@@ -4244,6 +4252,10 @@ fn script_mount_group(
                 file: Arc::clone(file),
                 path,
                 graph_global_id: graph.global_id,
+                selected_view_model,
+                context_view_model,
+                context_parents,
+                parent_context,
                 targets: Vec::new(),
             },
         ));
@@ -4337,6 +4349,10 @@ fn script_mount_group(
             file: Arc::clone(file),
             path,
             graph_global_id: graph.global_id,
+            selected_view_model,
+            context_view_model,
+            context_parents,
+            parent_context,
             targets,
         },
     ))
@@ -4347,12 +4363,14 @@ fn collect_script_mount_groups(
     file: &Arc<File>,
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
+    fallback_root: Option<&RuntimeOwnedViewModelHandle>,
 ) -> std::result::Result<(bool, Vec<ScriptMountGroup>), nuxie_runtime::ScriptError> {
     let (mut has_script_target, root) = script_mount_group(
         file,
         root_graph,
         instance,
         format!("root graph {}", root_graph.global_id),
+        fallback_root,
     )?;
     let mut groups = vec![root];
     let mut visitor = |depth: usize, graph_global_id: u32, nested: &mut RuntimeArtboardInstance| {
@@ -4373,6 +4391,25 @@ fn collect_script_mount_groups(
                     groups.len()
                 ),
                 graph_global_id,
+                selected_view_model: nested
+                    .scripted_interpolator_root_view_model(file.runtime(), fallback_root),
+                context_view_model: nested
+                    .scripted_interpolator_data_context_view_models(file.runtime(), fallback_root)
+                    .0,
+                context_parents: nested
+                    .scripted_interpolator_data_context_view_models(file.runtime(), fallback_root)
+                    .1,
+                parent_context: {
+                    let fallback_context = fallback_root.map(|root| {
+                        nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
+                            file.runtime(),
+                            root.clone(),
+                        )
+                    });
+                    nested.scripted_interpolator_artboard_parent_context(
+                        fallback_context.as_ref(),
+                    )
+                },
                 targets: Vec::new(),
             });
             return Ok(());
@@ -4392,7 +4429,8 @@ fn collect_script_mount_groups(
             "occurrence {} depth {depth} graph {graph_global_id}",
             groups.len()
         );
-        let (has_scripts, group) = script_mount_group(&source_file, graph, nested, path)?;
+        let (has_scripts, group) =
+            script_mount_group(&source_file, graph, nested, path, fallback_root)?;
         has_script_target |= has_scripts;
         groups.push(group);
         Ok::<(), nuxie_runtime::ScriptError>(())
@@ -4757,7 +4795,12 @@ fn mount_scripted_artboard_tree(
     factory: &mut dyn Factory,
     root_view_model: Option<&ViewModelInstance>,
 ) -> std::result::Result<ScriptMountResult, nuxie_runtime::ScriptError> {
-    let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
+    let (has_script_target, groups) = collect_script_mount_groups(
+        file,
+        root_graph,
+        instance,
+        root_view_model.map(ViewModelInstance::handle),
+    )?;
     let mounted = groups.iter().any(|group| !group.targets.is_empty());
     let Some(prepared) = file.scripts.borrow_mut().prepare_mounts(
         file,
@@ -4786,7 +4829,12 @@ fn mount_scripted_artboard_tree(
 
     // Facade execution fails closed: every concrete scripted target must
     // have an attached table before entering the lower runtime draw path.
-    let (_, verified) = collect_script_mount_groups(file, root_graph, instance)?;
+    let (_, verified) = collect_script_mount_groups(
+        file,
+        root_graph,
+        instance,
+        root_view_model.map(ViewModelInstance::handle),
+    )?;
     if let Some(group) = verified.iter().find(|group| !group.targets.is_empty()) {
         return Err(nuxie_runtime::ScriptError::new(format!(
             "{} still has unattached scripted runtime instances",
@@ -4807,7 +4855,12 @@ async fn mount_scripted_artboard_tree_async(
     factory: &mut dyn Factory,
     root_view_model: Option<&ViewModelInstance>,
 ) -> std::result::Result<ScriptMountResult, nuxie_runtime::ScriptError> {
-    let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
+    let (has_script_target, groups) = collect_script_mount_groups(
+        file,
+        root_graph,
+        instance,
+        root_view_model.map(ViewModelInstance::handle),
+    )?;
     let mounted = groups.iter().any(|group| !group.targets.is_empty());
     let mut scripts = file.scripts.borrow().clone();
     let prepared = scripts
@@ -4832,7 +4885,12 @@ async fn mount_scripted_artboard_tree_async(
     let PreparedFileScriptMounts { groups, runtimes } = prepared;
     publish_script_mount_runtimes(runtimes);
     attach_prepared_script_mounts(instance, groups);
-    let (_, verified) = collect_script_mount_groups(file, root_graph, instance)?;
+    let (_, verified) = collect_script_mount_groups(
+        file,
+        root_graph,
+        instance,
+        root_view_model.map(ViewModelInstance::handle),
+    )?;
     if let Some(group) = verified.iter().find(|group| !group.targets.is_empty()) {
         return Err(nuxie_runtime::ScriptError::new(format!(
             "{} still has unattached scripted runtime instances",
@@ -4862,7 +4920,13 @@ fn verify_scripted_artboard_tree_attached(
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
 ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
-    let (_, after_lifecycle) = collect_script_mount_groups(file, root_graph, instance)?;
+    let fallback = retained_artboard_root_view_model(instance);
+    let (_, after_lifecycle) = collect_script_mount_groups(
+        file,
+        root_graph,
+        instance,
+        fallback.as_ref().map(ViewModelInstance::handle),
+    )?;
     if let Some(group) = after_lifecycle
         .iter()
         .find(|group| !group.targets.is_empty())
@@ -8782,13 +8846,18 @@ impl OwnedArtboardInstance {
             .artboards
             .get(self.artboard_index)
             .context("owned artboard instance graph is unavailable")?;
+        let root_view_model = retained_artboard_root_view_model(&self.raw);
         let (has_script_target, groups) =
-            collect_script_mount_groups(&self.file, artboard, &mut self.raw)
+            collect_script_mount_groups(
+                &self.file,
+                artboard,
+                &mut self.raw,
+                root_view_model.as_ref().map(ViewModelInstance::handle),
+            )
                 .context("failed to plan scripted drawable mounts")?;
         if !has_script_target {
             return Ok(None);
         }
-        let root_view_model = retained_artboard_root_view_model(&self.raw);
         let scripts = {
             let mut scripts = self.file.scripts.borrow_mut();
             if let Some(ready) = scripts.ready.as_mut()
@@ -10665,6 +10734,301 @@ mod owned_instance_tests {
         ])
         .expect("nested ScriptInput context fixture imports");
         File::from_runtime(runtime).expect("nested ScriptInput context graph")
+    }
+
+    #[cfg(feature = "scripting")]
+    fn cold_mount_occurrence_context_file() -> File {
+        let number_key = fixture_property(
+            "ScriptInputNumber",
+            "propertyValue",
+            FixtureValue::Double(0.0),
+        )
+        .key;
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "ScriptAsset",
+                vec![
+                    ("assetId", FixtureValue::Uint(0)),
+                    ("name", FixtureValue::String("occurrence-context".to_owned())),
+                    ("serializedImplementedMethods", FixtureValue::Uint(1 << 9)),
+                ],
+            ),
+            fixture_record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Local".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelPropertyNumber",
+                vec![("name", FixtureValue::String("localValue".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Parent".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelPropertyNumber",
+                vec![("name", FixtureValue::String("parentValue".to_owned()))],
+            ),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record(
+                "ScriptedDrawable",
+                vec![
+                    ("parentId", FixtureValue::Uint(0)),
+                    ("scriptAssetId", FixtureValue::Uint(0)),
+                ],
+            ),
+            fixture_record(
+                "ScriptInputNumber",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("localValue".to_owned())),
+                    ("propertyValue", FixtureValue::Double(-1.0)),
+                ],
+            ),
+            fixture_record(
+                "DataBindContext",
+                vec![
+                    ("propertyKey", FixtureValue::Uint(u64::from(number_key))),
+                    ("sourcePathIds", FixtureValue::Bytes(vec![0, 0])),
+                ],
+            ),
+            fixture_record(
+                "ScriptInputNumber",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("parentValue".to_owned())),
+                    ("propertyValue", FixtureValue::Double(-2.0)),
+                ],
+            ),
+            fixture_record(
+                "DataBindContext",
+                vec![
+                    ("propertyKey", FixtureValue::Uint(u64::from(number_key))),
+                    ("sourcePathIds", FixtureValue::Bytes(vec![1, 0])),
+                ],
+            ),
+        ])
+        .expect("cold occurrence-context fixture imports");
+        let script_global_id = runtime
+            .objects
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|object| object.type_name == "ScriptAsset")
+            .expect("fixture ScriptAsset")
+            .id;
+        let mut payload = vec![0];
+        payload.extend(compile_luau_probe(
+            "return function(_context)\n\
+             return {\n\
+               localValue = -1, parentValue = -2,\n\
+               init = function(self)\n\
+                 if self.localValue ~= 11 or self.parentValue ~= 22 then\n\
+                   error('wrong occurrence context ' .. tostring(self.localValue) .. ' ' .. tostring(self.parentValue))\n\
+                 end\n\
+                 return true\n\
+               end,\n\
+               draw = function(_self, _renderer) end\n\
+             }\n\
+             end",
+        ));
+        let file = File::from_runtime(runtime).expect("cold occurrence-context graph");
+        *file.scripts.borrow_mut() = FileScriptRuntime::new(
+            vec![FileScriptAsset {
+                ordinal: 0,
+                global_id: script_global_id,
+                type_name: "ScriptAsset",
+                bare_name: "occurrence-context".to_owned(),
+                name: "occurrence-context".to_owned(),
+                is_module: false,
+                serialized_implemented_methods: 1 << 9,
+                payload: Some(payload),
+                shader_provenance: None,
+                is_external_data_converter: false,
+            }]
+            .into(),
+            decoded_test_script_capability(),
+            Some(ScriptExecutionLimits::new()),
+            None,
+        );
+        file
+    }
+
+    #[cfg(feature = "scripting")]
+    fn cold_nested_occurrence_context_scenario(
+    ) -> (Arc<File>, Arc<File>, OwnedArtboardInstance) {
+        let source_file = Arc::new(cold_mount_occurrence_context_file());
+        let mut source = OwnedArtboardInstance::instantiate_default(Arc::clone(&source_file))
+            .expect("cold scripted source occurrence");
+        let local = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(source_file.runtime(), 0)
+                .expect("local occurrence model"),
+        );
+        let parent = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(source_file.runtime(), 1)
+                .expect("parent occurrence model"),
+        );
+        assert!(local.borrow_mut().set_number_by_property_index(0, 11.0));
+        assert!(parent.borrow_mut().set_number_by_property_index(0, 22.0));
+        let local_context = nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
+            source_file.runtime(),
+            local,
+        );
+        let parent_context = nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
+            source_file.runtime(),
+            parent,
+        );
+        let context = nuxie_runtime::ScriptArtboardParentContext::root(&parent_context)
+            .with_local_view_model(&local_context);
+        source
+            .raw_mut()
+            .bind_script_artboard_data_context(source_file.runtime(), &context);
+        let resolved = source_file
+            .runtime()
+            .objects
+            .iter()
+            .filter_map(Option::as_ref)
+            .filter(|object| object.type_name == "ScriptInputNumber")
+            .map(|input| {
+                source
+                    .raw()
+                    .bound_script_input_value_for_occurrence(
+                        source_file.runtime(),
+                        input,
+                        None,
+                    )
+                    .expect("fixture binding resolves")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            resolved,
+            [
+                Some(ScriptValue::Number(11.0)),
+                Some(ScriptValue::Number(22.0)),
+            ]
+        );
+        source
+            .raw_mut()
+            .attach_script_source_file_authority(Rc::new(Arc::clone(&source_file)));
+
+        let consumer_runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Consumer".to_owned()))],
+            ),
+            fixture_record(
+                "ViewModelPropertyNumber",
+                vec![("name", FixtureValue::String("localValue".to_owned()))],
+            ),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record(
+                "NestedArtboard",
+                vec![
+                    ("parentId", FixtureValue::Uint(0)),
+                    ("artboardId", FixtureValue::Uint(1)),
+                ],
+            ),
+            fixture_record("Artboard", Vec::new()),
+        ])
+        .expect("consumer collision fixture imports");
+        let consumer_file = Arc::new(
+            File::from_runtime(consumer_runtime).expect("consumer collision graph"),
+        );
+        let mut consumer = OwnedArtboardInstance::instantiate_default(Arc::clone(&consumer_file))
+            .expect("consumer occurrence");
+        let mut collision = consumer_file
+            .view_model(0)
+            .and_then(|view_model| view_model.instantiate())
+            .expect("consumer collision model");
+        assert!(collision.set_number("localValue", 99.0));
+        consumer.bind_view_model(&collision);
+        let host_local = consumer_file.graph.artboards[0].nested_artboards[0].local_id;
+        assert!(consumer
+            .raw_mut()
+            .replace_nested_artboard_artboard_instance(host_local, source.raw().clone()));
+        consumer
+            .raw_mut()
+            .try_visit_artboard_tree_instances_mut(&mut |_, _, nested| {
+                nested.bind_script_artboard_data_context(source_file.runtime(), &context);
+                let resolved = source_file
+                    .runtime()
+                    .objects
+                    .iter()
+                    .filter_map(Option::as_ref)
+                    .filter(|object| object.type_name == "ScriptInputNumber")
+                    .map(|input| {
+                        nested
+                            .bound_script_input_value_for_occurrence(
+                                source_file.runtime(),
+                                input,
+                                None,
+                            )
+                            .expect("replacement binding resolves")
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    resolved,
+                    [
+                        Some(ScriptValue::Number(11.0)),
+                        Some(ScriptValue::Number(22.0)),
+                    ]
+                );
+                Ok::<(), ScriptError>(())
+            })
+            .expect("replacement retains exact occurrence context");
+        (source_file, consumer_file, consumer)
+    }
+
+    #[cfg(feature = "scripting")]
+    fn block_on_mount<F: std::future::Future>(future: F) -> F::Output {
+        use std::task::{Context, Poll, Waker};
+
+        let mut future = std::pin::pin!(future);
+        let mut context = Context::from_waker(Waker::noop());
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(output) => return output,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn cold_nested_mount_uses_concrete_local_then_parent_occurrence_context() {
+        let (source_file, consumer_file, mut consumer) =
+            cold_nested_occurrence_context_scenario();
+        let mut factory = script_factory();
+        let root = retained_artboard_root_view_model(consumer.raw());
+        let mounted = mount_scripted_artboard_tree(
+            &consumer_file,
+            &consumer_file.graph.artboards[0],
+            consumer.raw_mut(),
+            &mut factory,
+            root.as_ref(),
+        )
+        .expect("sync cold mount hydrates from the concrete occurrence");
+        assert!(mounted.mounted);
+        assert!(source_file.scripting_runtime_is_ready());
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn detached_cold_nested_mount_retains_concrete_occurrence_context_snapshot() {
+        let (source_file, _consumer_file, mut consumer) =
+            cold_nested_occurrence_context_scenario();
+        let mut factory = script_factory();
+        let plan = consumer
+            .plan_scripted_drawable_mounts()
+            .expect("detached plan")
+            .expect("scripted nested occurrence is pending");
+        let prepared = block_on_mount(plan.prepare(&mut factory))
+            .expect("detached preparation hydrates from captured occurrence context");
+        assert!(consumer
+            .install_prepared_scripted_drawable_mounts(prepared)
+            .expect("prepared detached mount attaches"));
+        assert!(source_file.scripting_runtime_is_ready());
     }
 
     #[cfg(feature = "scripting")]

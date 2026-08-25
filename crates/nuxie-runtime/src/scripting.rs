@@ -2763,6 +2763,28 @@ impl ScriptArtboardParentContext {
     ) -> Option<Option<ScriptViewModel>> {
         self.inner.bound_script_view_model(file, path)
     }
+
+    /// Resolve one primitive ScriptInput through this exact retained
+    /// local-plus-parent occurrence context.
+    #[doc(hidden)]
+    pub fn resolve_script_input_value(
+        &self,
+        file: &RuntimeFile,
+        input: &RuntimeObject,
+    ) -> Result<Option<ScriptValue>, ScriptError> {
+        bound_script_input_value_from_data_context(file, &self.inner, input)
+    }
+
+    /// Resolve one ScriptInputArtboard id through this exact retained
+    /// local-plus-parent occurrence context.
+    #[doc(hidden)]
+    pub fn resolve_script_artboard_input(
+        &self,
+        file: &RuntimeFile,
+        input: &RuntimeObject,
+    ) -> Result<Option<u64>, ScriptError> {
+        bound_script_artboard_input_from_data_context(file, &self.inner, input)
+    }
 }
 
 /// Opaque complete context bound to a projected child artboard and its

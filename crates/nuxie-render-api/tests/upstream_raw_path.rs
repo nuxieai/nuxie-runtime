@@ -433,16 +433,7 @@ fn rawpath_iter() {
     }
 }
 
-fn upstream_add_oval(_path: &mut RawPath, _bounds: Aabb) {
-    // No production RawPath::addOval owner exists yet.
-}
-
-fn upstream_add_poly(_path: &mut RawPath, _points: &[Vec2D], _closed: bool) {
-    // No production RawPath::addPoly owner exists yet.
-}
-
 #[test]
-#[ignore = "expected-red: production RawPath has no addOval or addPoly owners"]
 fn rawpath_add_helpers() {
     let mut path = RawPath::new();
 
@@ -453,7 +444,7 @@ fn rawpath_add_helpers() {
     assert_eq!(path.verbs().len(), 5);
 
     path = RawPath::new();
-    upstream_add_oval(&mut path, Aabb::new(0.0, 0.0, 3.0, 6.0));
+    path.add_oval(Aabb::new(0.0, 0.0, 3.0, 6.0));
     assert!(!path.verbs().is_empty());
     assert_eq!(cpp_bounds(&path), Aabb::new(0.0, 0.0, 3.0, 6.0));
     assert_eq!(path.points().len(), 13);
@@ -467,7 +458,7 @@ fn rawpath_add_helpers() {
     ];
     for closed in [false, true] {
         path = RawPath::new();
-        upstream_add_poly(&mut path, &points, closed);
+        path.add_poly(&points, closed);
         assert_eq!(cpp_bounds(&path), Aabb::new(1.0, -100.0, 100.0, 5.0));
         assert_eq!(path.points().len(), points.len());
         assert_eq!(path.verbs().len(), points.len() + usize::from(closed));

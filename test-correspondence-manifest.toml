@@ -570,7 +570,7 @@ upstream = "tests/unit_tests/runtime/raw_path_test.cpp"
 test_case_count = 7
 status = "ported-direct"
 evidence = ["crates/nuxie-render-api/tests/upstream_raw_path.rs"]
-note = "All seven cases are complete direct ports. Six are green against the production RawPath owner, preserving every command stream, iterator view, 4x4 append matrix, exponential bounds workload, pruning boundary, and reversal sequence. add-helpers is honestly expected-red at the absent addOval/addPoly owners while retaining the active addRect assertions and every exact oval/poly expectation."
+note = "All seven cases are active direct ports against the production RawPath owner, preserving every command stream, iterator view, 4x4 append matrix, exponential bounds workload, pruning boundary, reversal sequence, and the exact addRect/addOval/addPoly assertions."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/raw_text_input_test.cpp"

@@ -884,20 +884,6 @@ fn inverse(m: Mat2D) -> Option<Mat2D> {
         (b * tx - a * ty) * inv,
     ]))
 }
-fn map_bounds(m: Mat2D, b: Aabb) -> Aabb {
-    let p = [
-        m.transform_point(Vec2D::new(b.min_x, b.min_y)),
-        m.transform_point(Vec2D::new(b.max_x, b.min_y)),
-        m.transform_point(Vec2D::new(b.max_x, b.max_y)),
-        m.transform_point(Vec2D::new(b.min_x, b.max_y)),
-    ];
-    Aabb::new(
-        p.iter().map(|v| v.x).fold(f32::INFINITY, f32::min),
-        p.iter().map(|v| v.y).fold(f32::INFINITY, f32::min),
-        p.iter().map(|v| v.x).fold(f32::NEG_INFINITY, f32::max),
-        p.iter().map(|v| v.y).fold(f32::NEG_INFINITY, f32::max),
-    )
-}
 fn max_scale(m: Mat2D) -> f32 {
     let [xx, xy, yx, yy, _, _] = m.0;
     if xy == 0.0 && yx == 0.0 {
@@ -921,20 +907,6 @@ fn max_scale(m: Mat2D) -> f32 {
     result.max(0.0).sqrt()
 }
 const MATH_EPSILON: f32 = 1.0 / 4096.0;
-fn map_path_bounds(m: Mat2D, path: &RawPath) -> Option<Aabb> {
-    let mut iter = path.points().iter().copied();
-    let first = iter.next()?;
-    let first = m.transform_point(first);
-    let mut out = Aabb::new(first.x, first.y, first.x, first.y);
-    for point in iter {
-        let p = m.transform_point(point);
-        out.min_x = out.min_x.min(p.x);
-        out.min_y = out.min_y.min(p.y);
-        out.max_x = out.max_x.max(p.x);
-        out.max_y = out.max_y.max(p.y);
-    }
-    Some(out)
-}
 fn own_path(
     mut owner: Box<crate::mechanical_port::source::renderer::src::draw_cpp::PathDrawAllocation>,
 ) -> DrawUniquePtr {
@@ -1019,7 +991,7 @@ impl RiveRenderer {
                 unsafe { self.clipPathImplSource(original_path) };
                 return;
             }
-            rect = map_bounds(to_new, rect);
+            rect = to_new.map_bounds(rect);
         }
         let matrix = if state.clipRectInverseMatrix.is_null() {
             state.matrix
@@ -1036,7 +1008,7 @@ impl RiveRenderer {
                 state.clipRect.max_y.min(rect.max_y),
             )
         };
-        let pixel = map_bounds(matrix, combined).round_out();
+        let pixel = matrix.map_bounds(combined).round_out();
         let inverse_ptr = unsafe {
             (&mut *self.m_context).make(gpu::ClipRectInverseMatrix::default())
                 as *const gpu::ClipRectInverseMatrix
@@ -1057,13 +1029,12 @@ impl RiveRenderer {
             return;
         }
         let state = self.current_state().clone();
-        let Some(mapped) = map_path_bounds(state.matrix, path.getRawPath()) else {
-            self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
-            return;
-        };
+        let mapped = state
+            .matrix
+            .map_bounding_box(path.getRawPath().points());
         let pixel = mapped.round_out();
         let combined = state.overallClipPixelBounds.intersect(pixel);
-        if combined.left >= combined.right || combined.top >= combined.bottom {
+        if combined.empty() {
             self.current_state_mut().overallClipPixelBounds = combined;
             return;
         }
@@ -1278,10 +1249,7 @@ impl RendererContract for RiveRenderer {
         }
         if q.getIsStroked() && !(q.getThickness() > 0.0)
             || !(q.getFeather() >= 0.0)
-            || self.current_state().overallClipPixelBounds.left
-                >= self.current_state().overallClipPixelBounds.right
-            || self.current_state().overallClipPixelBounds.top
-                >= self.current_state().overallClipPixelBounds.bottom
+            || self.current_state().overallClipPixelBounds.empty()
         {
             return;
         }
@@ -1330,11 +1298,7 @@ impl RendererContract for RiveRenderer {
             return;
         }
         let p = unsafe { &*(path.cast::<RiveRenderPath>()) };
-        if self.current_state().overallClipPixelBounds.left
-            >= self.current_state().overallClipPixelBounds.right
-            || self.current_state().overallClipPixelBounds.top
-                >= self.current_state().overallClipPixelBounds.bottom
-        {
+        if self.current_state().overallClipPixelBounds.empty() {
             return;
         }
         if p.getRawPath().points().is_empty() {
@@ -1377,14 +1341,14 @@ impl RendererContract for RiveRenderer {
         ]));
         if !unsafe { (&*self.m_context).frameSupportsImagePaintForPathsExecutable() } {
             let clip_bounds = self.current_state().overallClipPixelBounds;
-            if clip_bounds.left >= clip_bounds.right || clip_bounds.top >= clip_bounds.bottom {
+            if clip_bounds.empty() {
                 self.restore();
                 return;
             }
-            let b = map_bounds(
-                self.current_state().matrix,
-                Aabb::new(0.0, 0.0, 1.0, 1.0),
-            )
+            let b = self
+                .current_state()
+                .matrix
+                .map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0))
             .round_out();
             self.clipAndPushDrawSource(own_image_rect(unsafe {
                 make_image_rect_draw(
@@ -1438,10 +1402,7 @@ impl RendererContract for RiveRenderer {
             || vertices.get().is_null()
             || uv.get().is_null()
             || indices.get().is_null()
-            || self.current_state().overallClipPixelBounds.left
-                >= self.current_state().overallClipPixelBounds.right
-            || self.current_state().overallClipPixelBounds.top
-                >= self.current_state().overallClipPixelBounds.bottom
+            || self.current_state().overallClipPixelBounds.empty()
         {
             return;
         }

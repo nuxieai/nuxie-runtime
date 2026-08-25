@@ -1,4 +1,5 @@
 use crate::Vec2D;
+use std::mem::{align_of, offset_of, size_of};
 
 // Direct source-correspondence owner for pinned `include/rive/math/aabb.hpp`
 // and `src/math/aabb.cpp`.
@@ -248,6 +249,7 @@ impl<T: AabbScalarBounds> TypedAabb<T> {
 }
 
 /// Exact shared owner for pinned float `AABB` geometry.
+#[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Aabb {
     pub min_x: f32,
@@ -255,6 +257,16 @@ pub struct Aabb {
     pub max_x: f32,
     pub max_y: f32,
 }
+
+// Pinned `AABB` is a standard-layout sequence of four contiguous floats. Keep
+// this as compile-time evidence because renderer code is allowed to pass the
+// value through four-float ABI and SIMD boundaries.
+const _: [(); 4 * size_of::<f32>()] = [(); size_of::<Aabb>()];
+const _: [(); align_of::<f32>()] = [(); align_of::<Aabb>()];
+const _: [(); 0] = [(); offset_of!(Aabb, min_x)];
+const _: [(); 4] = [(); offset_of!(Aabb, min_y)];
+const _: [(); 8] = [(); offset_of!(Aabb, max_x)];
+const _: [(); 12] = [(); offset_of!(Aabb, max_y)];
 
 impl Aabb {
     pub const fn new(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> Self {
@@ -461,4 +473,39 @@ fn cpp_ordered_min(first: f32, second: f32) -> f32 {
 
 fn cpp_ordered_max(first: f32, second: f32) -> f32 {
     if first < second { second } else { first }
+}
+
+/// Scalar spelling of pinned `simd::min` for one floating-point lane.
+///
+/// This is intentionally distinct from the `std::min` contract used by
+/// `AABB(Span<Vec2D>)`: it selects the numeric operand when exactly one input
+/// is NaN, chooses negative zero for `min`, and chooses positive zero for
+/// `max`. When both operands are NaN, the second payload is retained.
+pub(crate) fn simd_min_f32(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() | second.to_bits())
+    } else if second < first {
+        second
+    } else {
+        first
+    }
+}
+
+/// Scalar spelling of pinned `simd::max` for one floating-point lane.
+pub(crate) fn simd_max_f32(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() & second.to_bits())
+    } else if first < second {
+        second
+    } else {
+        first
+    }
 }

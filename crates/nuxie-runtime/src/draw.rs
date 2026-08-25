@@ -25476,6 +25476,38 @@ mod tests {
     use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
 
     #[test]
+    fn inner_feather_uses_raw_path_simd_bounds_for_first_nan_points() {
+        let feather = FeatherNode {
+            local_id: 0,
+            global_id: 0,
+            type_name: "Feather",
+            space_value: 1,
+            strength: 1.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            inner: true,
+        };
+        let source = [
+            RuntimePathCommand::Move {
+                x: f32::from_bits(0x7fc0_1111),
+                y: f32::from_bits(0x7fc0_2222),
+            },
+            RuntimePathCommand::Line { x: 2.0, y: 3.0 },
+        ];
+        let commands = inner_feather_path_commands(&feather, &source, Mat2D::IDENTITY);
+        assert_eq!(
+            &commands[..5],
+            &[
+                RuntimePathCommand::Move { x: 0.5, y: 1.5 },
+                RuntimePathCommand::Line { x: 3.5, y: 1.5 },
+                RuntimePathCommand::Line { x: 3.5, y: 4.5 },
+                RuntimePathCommand::Line { x: 0.5, y: 4.5 },
+                RuntimePathCommand::Close,
+            ]
+        );
+    }
+
+    #[test]
     fn zero_length_dashes_do_not_cause_a_crash() {
         let file = RuntimeFile::from_fixture_records(vec![
             fixture_record("Backboard", Vec::new()),

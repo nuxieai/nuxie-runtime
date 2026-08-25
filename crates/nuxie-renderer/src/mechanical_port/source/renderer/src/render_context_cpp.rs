@@ -6784,10 +6784,7 @@ impl LogicalFlush {
                         self.frameDescriptor().renderTargetWidth,
                         self.frameDescriptor().renderTargetHeight,
                     ));
-                    let needs_scissor = !(clip.left <= visible_draw_bounds.left
-                        && clip.top <= visible_draw_bounds.top
-                        && clip.right >= visible_draw_bounds.right
-                        && clip.bottom >= visible_draw_bounds.bottom);
+                    let needs_scissor = !clip.contains(visible_draw_bounds);
                     if needs_scissor {
                         draw_bounds = clip;
                         let clip_u16 = clip.clamp_cast::<u16>();
@@ -7360,11 +7357,7 @@ impl LogicalFlush {
         } else {
             target_bounds.intersect(self.m_combined_draw_bounds)
         };
-        if self.m_flush_desc.renderTargetUpdateBounds.left
-            >= self.m_flush_desc.renderTargetUpdateBounds.right
-            || self.m_flush_desc.renderTargetUpdateBounds.top
-                >= self.m_flush_desc.renderTargetUpdateBounds.bottom
-        {
+        if self.m_flush_desc.renderTargetUpdateBounds.empty() {
             self.m_flush_desc.renderTargetUpdateBounds = gpu::IAABB::default();
         }
         self.m_flush_desc.virtualTileWidth = frame.virtualTileWidth;
@@ -7500,12 +7493,7 @@ impl LogicalFlush {
                 let tightened = clip.tightenedBounds;
                 let parent_id = clip.parentClipID;
                 if supports_scissor {
-                    debug_assert!(
-                        combined_bounds.left <= tightened.left as i32
-                            && combined_bounds.top <= tightened.top as i32
-                            && combined_bounds.right >= tightened.right as i32
-                            && combined_bounds.bottom >= tightened.bottom as i32
-                    );
+                    debug_assert!(combined_bounds.contains(tightened));
                     combined_bounds = tightened
                         .lossless_numeric_cast::<i32>()
                         .expect("pinned lossless_numeric_cast requires u16 to fit i32");

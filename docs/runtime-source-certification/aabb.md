@@ -1,7 +1,8 @@
 # AABB source certification
 
-> **First fresh independent correction review: REJECTED. Certification remains
-> blocked until the call-chain and single-owner findings below are corrected.**
+> **The four findings from the fresh independent review at `19896b470` are
+> corrected. Certification is PENDING two new independent reviews of the
+> corrected commit. Earlier rejections remain below as process evidence.**
 
 ## Authority and scope
 
@@ -277,3 +278,58 @@ owner; route renderer bounding-box transforms through one exact
 expansions with shared typed-AABB calls while leaving true platform rectangle
 conversion local; and settle float-AABB representation with explicit evidence.
 Then restart both independent AABB reviews from the corrected commit.
+
+## Correction after review `19896b470`
+
+All four blockers were corrected at their source owners instead of being
+patched at their witnesses:
+
+1. `RawPath::bounds` now reproduces the pinned odd/even pair-lane setup,
+   pairwise `simd::min`/`simd::max` folds, and final XY/ZW reduction. Its SIMD
+   scalar primitive selects the numeric operand when exactly one lane is NaN,
+   retains the second NaN payload when both are NaN, chooses negative zero for
+   `min`, and positive zero for `max`. This remains deliberately distinct from
+   the source-ordered `std::min`/`std::max` behavior of
+   `AABB(Span<Vec2D>)`. First-NaN, second-NaN, odd/even counts, signed-zero raw
+   bits, and infinity raw bits are covered. The live inner-Feather caller now
+   turns a first-NaN/two-point raw path into the same finite padded rectangle
+   as the source without tripping the debug assertions in `AABB::inset`.
+
+2. The renderer-local `map_bounds` and `map_path_bounds` substitutes are gone.
+   Both rectangle and raw-path call sites reach the render API's single exact
+   `Mat2D::map_bounding_box`/`map_bounds` owner. That owner preserves the
+   pinned pair-lane ordering, affine FMA grouping, extrema-before-translation,
+   and inverse non-negative-extent normalization. A positive-infinity X scale
+   over a finite unit rectangle now returns four positive-zero bits before any
+   renderer rounding, matching pinned `Mat2D::mapBoundingBox`. The separate
+   Mat2D certification receipt owns `mapPoints`; exceptional-value findings in
+   that method are intentionally not hidden or modified by this AABB
+   correction.
+
+3. Live `needsScissor`, flush closeout, tightened-clip assertions, and the
+   clip/path/image/image-mesh gates now call shared `TypedAabb::contains` or
+   `TypedAabb::empty`. The source-shaped SIMD boundary test in
+   `isOutsideCurrentFrame` remains local because it is not a spelling of a
+   `TAABB` member call.
+
+4. Float `Aabb` is now `#[repr(C)]`. Compile-time size, alignment, and all four
+   field-offset assertions prove its four-contiguous-float layout; a runtime
+   raw-float view proves the same ordering with nontrivial values.
+
+Correction gates:
+
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-render-api`: 42/42 package tests
+  passed (29 unit, three canonical-recording, three side-channel, seven
+  upstream RawPath).
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --test upstream_aabb`:
+  12/12 passed.
+- The focused live inner-Feather first-NaN test passed.
+- Independent `CARGO_INCREMENTAL=0 cargo check -p nuxie-renderer --features`
+  runs passed for `renderer-vulkan`, `renderer-webgpu`, `renderer-webgl2`, and
+  `renderer-metal`.
+- Source correspondence reports 456 applicable owners and zero pending rows.
+- The generated source-symbol denominator replays 7,818 authority units across
+  1,105 owners.
+
+Implementation status: **CORRECTED CANDIDATE**. Certification status:
+**PENDING TWO FRESH INDEPENDENT REVIEWS**.

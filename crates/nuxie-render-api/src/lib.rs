@@ -14,9 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 mod aabb;
 mod serializing;
-pub use aabb::{
-    AABBi16, AABBu16, Aabb, AabbInteger, AabbScalarBounds, IntegerAabb, TypedAabb,
-};
+pub use aabb::{AABBi16, AABBu16, Aabb, AabbInteger, AabbScalarBounds, IntegerAabb, TypedAabb};
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
 pub use serializing::{SerializingFactory, SerializingRenderer};
 
@@ -93,6 +91,81 @@ impl Mat2D {
             x: tx + xx.mul_add(point.x, xy * point.y),
             y: ty + yx.mul_add(point.x, yy * point.y),
         }
+    }
+
+    /// Exact scalar translation of pinned
+    /// `Mat2D::mapBoundingBox(const Vec2D[], size_t)`.
+    ///
+    /// Pair-lane initialization/reduction, NaN selection, fused affine
+    /// grouping, and translation-after-extrema are all observable parts of
+    /// the source algorithm.
+    pub fn map_bounding_box(self, points: &[Vec2D]) -> Aabb {
+        let [xx, yx, xy, yy, tx, ty] = self.0;
+        let no_skew = yx == 0.0 && xy == 0.0;
+        let mut mins = [f32::INFINITY; 4];
+        let mut maxes = [f32::NEG_INFINITY; 4];
+        let mut index = 0;
+
+        if points.len() & 1 != 0 {
+            let point = points[0];
+            let mapped = if no_skew {
+                [xx * point.x, yy * point.y]
+            } else {
+                [
+                    xx.mul_add(point.x, xy * point.y),
+                    yy.mul_add(point.y, yx * point.x),
+                ]
+            };
+            mins[0] = mapped[0];
+            mins[1] = mapped[1];
+            maxes[0] = mapped[0];
+            maxes[1] = mapped[1];
+            index = 1;
+        }
+
+        while index < points.len() {
+            let first = points[index];
+            let second = points[index + 1];
+            let mapped = if no_skew {
+                [xx * first.x, yy * first.y, xx * second.x, yy * second.y]
+            } else {
+                [
+                    xx.mul_add(first.x, xy * first.y),
+                    yy.mul_add(first.y, yx * first.x),
+                    xx.mul_add(second.x, xy * second.y),
+                    yy.mul_add(second.y, yx * second.x),
+                ]
+            };
+            for lane in 0..4 {
+                // Source order is `simd::min(p, mins)`/`max(p, maxes)`.
+                mins[lane] = aabb::simd_min_f32(mapped[lane], mins[lane]);
+                maxes[lane] = aabb::simd_max_f32(mapped[lane], maxes[lane]);
+            }
+            index += 2;
+        }
+
+        let min_x = aabb::simd_min_f32(mins[0], mins[2]);
+        let min_y = aabb::simd_min_f32(mins[1], mins[3]);
+        let max_x = aabb::simd_max_f32(maxes[0], maxes[2]);
+        let max_y = aabb::simd_max_f32(maxes[1], maxes[3]);
+
+        // Source deliberately uses extent subtraction so equal infinities and
+        // every remaining NaN take the nonfinite/empty normalization branch.
+        if !(max_x - min_x >= 0.0 && max_y - min_y >= 0.0) {
+            Aabb::default()
+        } else {
+            Aabb::new(min_x + tx, min_y + ty, max_x + tx, max_y + ty)
+        }
+    }
+
+    /// Four-corner overload of pinned `Mat2D::mapBoundingBox(const AABB&)`.
+    pub fn map_bounds(self, bounds: Aabb) -> Aabb {
+        self.map_bounding_box(&[
+            Vec2D::new(bounds.min_x, bounds.min_y),
+            Vec2D::new(bounds.max_x, bounds.min_y),
+            Vec2D::new(bounds.max_x, bounds.max_y),
+            Vec2D::new(bounds.min_x, bounds.max_y),
+        ])
     }
 }
 
@@ -363,6 +436,40 @@ impl PartialEq for RawPath {
     }
 }
 
+fn raw_path_simd_bounds(points: &[Vec2D]) -> Aabb {
+    let (mut mins, mut maxes, mut index) = if points.len() & 1 != 0 {
+        let first = points[0];
+        let lanes = [first.x, first.y, first.x, first.y];
+        (lanes, lanes, 1)
+    } else {
+        let lanes = [points[0].x, points[0].y, points[1].x, points[1].y];
+        (lanes, lanes, 2)
+    };
+
+    while index < points.len() {
+        let lanes = [
+            points[index].x,
+            points[index].y,
+            points[index + 1].x,
+            points[index + 1].y,
+        ];
+        for lane in 0..4 {
+            // RawPath's source order is `simd::min(mins, pts)` (the opposite
+            // argument order from Mat2D::mapBoundingBox's pair fold).
+            mins[lane] = aabb::simd_min_f32(mins[lane], lanes[lane]);
+            maxes[lane] = aabb::simd_max_f32(maxes[lane], lanes[lane]);
+        }
+        index += 2;
+    }
+
+    Aabb::new(
+        aabb::simd_min_f32(mins[0], mins[2]),
+        aabb::simd_min_f32(mins[1], mins[3]),
+        aabb::simd_max_f32(maxes[0], maxes[2]),
+        aabb::simd_max_f32(maxes[1], maxes[3]),
+    )
+}
+
 impl RawPath {
     pub fn new() -> Self {
         Self {
@@ -392,7 +499,7 @@ impl RawPath {
 
     /// Coarse control-point bounds, matching C++ `RawPath::bounds()`.
     pub fn bounds(&self) -> Option<Aabb> {
-        (!self.points.is_empty()).then(|| Aabb::from_points(&self.points))
+        (!self.points.is_empty()).then(|| raw_path_simd_bounds(&self.points))
     }
 
     /// Exact Bézier extrema bounds, matching C++ `RawPath::preciseBounds()`.
@@ -4587,8 +4694,8 @@ mod tests {
         signed_zero.move_to(0.0, 0.0);
         signed_zero.line_to(-0.0, -0.0);
         let bounds = signed_zero.bounds().expect("nonempty path has bounds");
-        assert_eq!(bounds.min_x.to_bits(), 0.0_f32.to_bits());
-        assert_eq!(bounds.min_y.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(bounds.min_x.to_bits(), (-0.0_f32).to_bits());
+        assert_eq!(bounds.min_y.to_bits(), (-0.0_f32).to_bits());
         assert_eq!(bounds.max_x.to_bits(), 0.0_f32.to_bits());
         assert_eq!(bounds.max_y.to_bits(), 0.0_f32.to_bits());
 
@@ -4596,14 +4703,141 @@ mod tests {
         first_nan.move_to(f32::NAN, f32::NAN);
         first_nan.line_to(2.0, 3.0);
         let bounds = first_nan.bounds().expect("nonempty path has bounds");
-        assert!(bounds.min_x.is_nan());
-        assert!(bounds.min_y.is_nan());
-        assert!(bounds.max_x.is_nan());
-        assert!(bounds.max_y.is_nan());
+        assert_eq!(bounds, Aabb::new(2.0, 3.0, 2.0, 3.0));
+
+        let mut second_nan = RawPath::new();
+        second_nan.move_to(2.0, 3.0);
+        second_nan.line_to(f32::NAN, f32::NAN);
+        assert_eq!(second_nan.bounds(), Some(Aabb::new(2.0, 3.0, 2.0, 3.0)));
+
+        // Odd point counts seed duplicated lanes from point zero, then fold
+        // pairs. This catches replacing the source lane algorithm with a
+        // scalar point-at-a-time reduction.
+        let mut odd = RawPath::new();
+        odd.move_to(f32::from_bits(0x7fc0_1111), -0.0);
+        odd.line_to(4.0, 0.0);
+        odd.line_to(2.0, 8.0);
+        let bounds = odd.bounds().expect("odd path bounds");
+        assert_eq!(
+            [
+                bounds.min_x.to_bits(),
+                bounds.min_y.to_bits(),
+                bounds.max_x.to_bits(),
+                bounds.max_y.to_bits(),
+            ],
+            [
+                2.0_f32.to_bits(),
+                (-0.0_f32).to_bits(),
+                4.0_f32.to_bits(),
+                8.0_f32.to_bits()
+            ]
+        );
+
+        let mut reversed_zero = RawPath::new();
+        reversed_zero.move_to(-0.0, -0.0);
+        reversed_zero.line_to(0.0, 0.0);
+        let bounds = reversed_zero.bounds().expect("two-point zero bounds");
+        assert_eq!(
+            [
+                bounds.min_x.to_bits(),
+                bounds.min_y.to_bits(),
+                bounds.max_x.to_bits(),
+                bounds.max_y.to_bits(),
+            ],
+            [
+                (-0.0_f32).to_bits(),
+                (-0.0_f32).to_bits(),
+                0.0_f32.to_bits(),
+                0.0_f32.to_bits(),
+            ]
+        );
+
+        let mut infinities = RawPath::new();
+        infinities.move_to(f32::NEG_INFINITY, f32::INFINITY);
+        infinities.line_to(f32::INFINITY, f32::NEG_INFINITY);
+        let bounds = infinities.bounds().expect("infinite bounds");
+        assert_eq!(
+            [
+                bounds.min_x.to_bits(),
+                bounds.min_y.to_bits(),
+                bounds.max_x.to_bits(),
+                bounds.max_y.to_bits(),
+            ],
+            [
+                f32::NEG_INFINITY.to_bits(),
+                f32::NEG_INFINITY.to_bits(),
+                f32::INFINITY.to_bits(),
+                f32::INFINITY.to_bits(),
+            ]
+        );
 
         let mut precise_nan = RawPath::new();
         precise_nan.move_to(f32::NAN, f32::NAN);
         assert_eq!(precise_nan.precise_bounds(), Some(Aabb::for_expansion()),);
+    }
+
+    #[test]
+    fn map_bounding_box_preserves_pinned_pair_lanes_and_nonfinite_normalization() {
+        let signed_zero_translation = Mat2D([1.0, 0.0, 0.0, 1.0, -0.0, -0.0]);
+        let forward = signed_zero_translation
+            .map_bounding_box(&[Vec2D::new(0.0, 0.0), Vec2D::new(-0.0, -0.0)]);
+        assert_eq!(
+            [
+                forward.min_x.to_bits(),
+                forward.min_y.to_bits(),
+                forward.max_x.to_bits(),
+                forward.max_y.to_bits(),
+            ],
+            [
+                (-0.0_f32).to_bits(),
+                (-0.0_f32).to_bits(),
+                0.0_f32.to_bits(),
+                0.0_f32.to_bits(),
+            ]
+        );
+
+        let reverse = signed_zero_translation
+            .map_bounding_box(&[Vec2D::new(-0.0, -0.0), Vec2D::new(0.0, 0.0)]);
+        assert_eq!(
+            [
+                reverse.min_x.to_bits(),
+                reverse.min_y.to_bits(),
+                reverse.max_x.to_bits(),
+                reverse.max_y.to_bits(),
+            ],
+            [
+                (-0.0_f32).to_bits(),
+                (-0.0_f32).to_bits(),
+                0.0_f32.to_bits(),
+                0.0_f32.to_bits(),
+            ]
+        );
+
+        let infinite_x = Mat2D([f32::INFINITY, 0.0, 0.0, 1.0, 19.0, 23.0])
+            .map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0));
+        assert_eq!(
+            [
+                infinite_x.min_x.to_bits(),
+                infinite_x.min_y.to_bits(),
+                infinite_x.max_x.to_bits(),
+                infinite_x.max_y.to_bits(),
+            ],
+            [0; 4],
+            "pinned source normalizes the nonfinite linear result before translation"
+        );
+    }
+
+    #[test]
+    fn float_aabb_repr_c_runtime_layout_matches_four_contiguous_floats() {
+        let bounds = Aabb::new(1.25, -2.5, 3.75, -4.5);
+        assert_eq!(std::mem::size_of::<Aabb>(), 4 * std::mem::size_of::<f32>());
+        assert_eq!(std::mem::align_of::<Aabb>(), std::mem::align_of::<f32>());
+        assert_eq!(std::mem::offset_of!(Aabb, min_x), 0);
+        assert_eq!(std::mem::offset_of!(Aabb, min_y), 4);
+        assert_eq!(std::mem::offset_of!(Aabb, max_x), 8);
+        assert_eq!(std::mem::offset_of!(Aabb, max_y), 12);
+        let floats = unsafe { std::slice::from_raw_parts((&raw const bounds).cast::<f32>(), 4) };
+        assert_eq!(floats, &[1.25, -2.5, 3.75, -4.5]);
     }
 
     #[test]

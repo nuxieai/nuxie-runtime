@@ -566,10 +566,9 @@ note = "Explicit Rust-native container adaptation: all four action/assertion seq
 [[file]]
 upstream = "tests/unit_tests/runtime/path_test.cpp"
 test_case_count = 13
-status = "partial"
-evidence = ["silver-corpus.toml::{fill_trim_path,group_effect-main-missing-targets,path_effect_with_feathers,stacked_path_effects}"]
-covered_test_cases = ["Apply trim path effect to fill", "Apply group effect with missing items", "Path effects with inner & outer feathers", "Apply stacked path effects to paths"]
-note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+status = "ported-direct"
+evidence = ["silver-corpus.toml (all path_test.cpp provenance rows)", "crates/nuxie-runtime/src/draw.rs::{upstream_rectangle_path_builds_expected_commands,upstream_rounded_rectangle_path_builds_expected_commands,upstream_ellipse_path_builds_expected_commands_and_points}", "crates/nuxie-runtime/tests/cpp_probe.rs::{upstream_nested_solo_shape_expanded_path_collapsed,upstream_nested_solo_clip_shape_collapsed_path_expanded,upstream_nested_solo_clipping_animation_contours,upstream_double_nested_solo_clipping_animation_contours}"]
+note = "All 13 cases are represented. The three parametric-path ports preserve exact verb counts/order and every ellipse control/end point. Five renderer cases preserve their literal silver outcomes. The four solo cases load the exact artboards, assert names/types/children/collapse state, and preserve every animation delta and expected contour/cache assertion as honest red at the unavailable external PathComposer/ClippingShape contour and render-cache queries."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/raw_path_test.cpp"

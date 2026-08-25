@@ -21401,6 +21401,136 @@ fn upstream_trigger_is_consumed_only_by_allowed_state_changes() {
     assert_current_layer_state_is_animation_state(&machine, animation_states[0]);
 }
 
+fn upstream_solo_path_fixture(
+    artboard_name: &str,
+) -> (RuntimeFile, GraphFile, usize, ArtboardInstance) {
+    let fixture = cpp_runtime_fixture("solos_collapse_tests.riv");
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
+    let runtime = read_runtime_file(&bytes).expect("import solos_collapse_tests.riv");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("graph solos_collapse_tests.riv");
+    let artboard_index = graph
+        .artboards
+        .iter()
+        .position(|artboard| artboard.name.as_deref() == Some(artboard_name))
+        .unwrap_or_else(|| panic!("missing artboard {artboard_name:?}"));
+    let mut artboard = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        &graph.artboards[artboard_index],
+        &graph.artboards,
+    )
+    .expect("instantiate solo fixture");
+    artboard.update_components();
+    (runtime, graph, artboard_index, artboard)
+}
+
+fn assert_clipping_contour_count_unavailable(_artboard: &ArtboardInstance, expected: usize) {
+    panic!("path_test.cpp requires ClippingShape::path()->numContours() == {expected}");
+}
+
+fn assert_render_path_cache_unavailable(_artboard: &ArtboardInstance, expected: bool) {
+    panic!("path_test.cpp requires ClippingShape::path()->hasRenderPath() == {expected}");
+}
+
+#[test]
+#[ignore = "expected-red: external Rust API has no PathComposer contour query"]
+fn upstream_nested_solo_shape_expanded_path_collapsed() {
+    let (_, graph, artboard_index, artboard) =
+        upstream_solo_path_fixture("test-1-shape-with-shape-and-path");
+    let graph = &graph.artboards[artboard_index];
+    let root = graph.component_named("Root-Shape").expect("Root-Shape");
+    assert_eq!(root.type_name, "Shape");
+    let solo = graph.component_named("Solo-1").expect("Solo-1");
+    assert_eq!(solo.children.len(), 2);
+    let rectangle = graph.component_named("Rectangle-shape").expect("Rectangle-shape");
+    let path = graph.component_named("Path-2").expect("Path-2");
+    assert_eq!(rectangle.type_name, "Shape");
+    assert_eq!(path.type_name, "Rectangle");
+    assert!(!artboard.component(rectangle.local_id).unwrap().is_collapsed());
+    assert!(artboard.component(path.local_id).unwrap().is_collapsed());
+    assert_clipping_contour_count_unavailable(&artboard, 0);
+}
+
+#[test]
+#[ignore = "expected-red: external Rust API has no ClippingShape contour query"]
+fn upstream_nested_solo_clip_shape_collapsed_path_expanded() {
+    let (_, graph, artboard_index, artboard) =
+        upstream_solo_path_fixture("test-2-clip-with-shape-and-path");
+    let graph = &graph.artboards[artboard_index];
+    assert_eq!(
+        graph.component_named("Rectangle-clipped").unwrap().type_name,
+        "Shape"
+    );
+    let solo = graph.component_named("Solo-name").expect("Solo-name");
+    assert_eq!(solo.children.len(), 2);
+    let rectangle = graph.component_named("Rectangle-shape").expect("Rectangle-shape");
+    let path = graph.component_named("Path-2").expect("Path-2");
+    assert!(artboard.component(rectangle.local_id).unwrap().is_collapsed());
+    assert!(!artboard.component(path.local_id).unwrap().is_collapsed());
+    assert_clipping_contour_count_unavailable(&artboard, 1);
+}
+
+#[test]
+#[ignore = "expected-red: external Rust API has no ClippingShape contour/cache query"]
+fn upstream_nested_solo_clipping_animation_contours() {
+    let (_, graph, artboard_index, mut artboard) =
+        upstream_solo_path_fixture("test-5-clip-with-group-and-path-and-shape");
+    let graph = &graph.artboards[artboard_index];
+    assert_eq!(
+        graph.component_named("Rectangle-clipped").unwrap().type_name,
+        "Shape"
+    );
+    let mut animation = artboard.linear_animation_instance(0).expect("animation 0");
+    assert_clipping_contour_count_unavailable(&artboard, 1);
+    for (seconds, expected_contours, expected_cached) in [
+        (2.5, 1, Some(false)),
+        (2.5, 0, None),
+        (2.5, 1, None),
+        (1.0, 0, None),
+        (2.5, 1, None),
+    ] {
+        artboard.advance_linear_animation_instance(&mut animation, seconds);
+        artboard.apply_linear_animation_instance(&animation, 1.0);
+        artboard.update_components();
+        assert_clipping_contour_count_unavailable(&artboard, expected_contours);
+        if let Some(expected_cached) = expected_cached {
+            assert_render_path_cache_unavailable(&artboard, expected_cached);
+        }
+    }
+}
+
+#[test]
+#[ignore = "expected-red: external Rust API has no ClippingShape contour/cache query"]
+fn upstream_double_nested_solo_clipping_animation_contours() {
+    let (_, graph, artboard_index, mut artboard) =
+        upstream_solo_path_fixture("test-6-clip-with-nested-solos");
+    let graph = &graph.artboards[artboard_index];
+    assert_eq!(
+        graph.component_named("Rectangle-clipped").unwrap().type_name,
+        "Shape"
+    );
+    let mut animation = artboard.linear_animation_instance(0).expect("animation 0");
+    assert_clipping_contour_count_unavailable(&artboard, 1);
+    for (seconds, expected_contours, expected_cached) in [
+        (1.5, 1, Some(false)),
+        (1.0, 0, None),
+        (1.0, 0, None),
+        (1.0, 0, None),
+        (1.0, 1, None),
+        (1.0, 0, None),
+        (2.0, 1, None),
+        (2.0, 1, Some(false)),
+    ] {
+        artboard.advance_linear_animation_instance(&mut animation, seconds);
+        artboard.apply_linear_animation_instance(&animation, 1.0);
+        artboard.update_components();
+        assert_clipping_contour_count_unavailable(&artboard, expected_contours);
+        if let Some(expected_cached) = expected_cached {
+            assert_render_path_cache_unavailable(&artboard, expected_cached);
+        }
+    }
+}
+
 #[test]
 fn upstream_click_event_fixture_initial_and_first_click_contract() {
     let (runtime, mut artboard, mut machine, artboard_index, machine_index) =

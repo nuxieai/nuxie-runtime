@@ -123,12 +123,13 @@ impl UserData for ScriptedArtboard {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("instance", |lua, this, view_model: Option<Table>| {
             let view_model = view_model.as_ref().map(model_from_table).transpose()?;
-            let instance = this
-                .owner
-                .artboard
-                .borrow()
-                .instance(view_model)
-                .map_err(|error| Error::runtime(error.to_string()))?;
+            let instance = this.bindings.with_factory(|factory| {
+                this.owner
+                    .artboard
+                    .borrow()
+                    .instance_with_factory(view_model, factory)
+                    .map_err(|error| Error::runtime(error.to_string()))
+            })?;
             lua.create_userdata(ScriptedArtboard::new(instance, this.bindings.clone()))
         });
         methods.add_method_mut("advance", |_, this, seconds: f32| {

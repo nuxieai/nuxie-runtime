@@ -184,7 +184,15 @@ fn scripted_interpolator_file(protocol: &[u8]) -> Vec<u8> {
 }
 
 fn data_bound_scripted_interpolator_file(protocol: &[u8]) -> Vec<u8> {
+    data_bound_scripted_interpolator_file_with_converter(protocol, None)
+}
+
+fn data_bound_scripted_interpolator_file_with_converter(
+    protocol: &[u8],
+    converter_protocol: Option<&[u8]>,
+) -> Vec<u8> {
     let payload = compile_protocol(protocol);
+    let converter_payload = converter_protocol.map(compile_protocol);
     let mut bytes = b"RIVE".to_vec();
     push_var_uint(&mut bytes, 7);
     push_var_uint(&mut bytes, 0);
@@ -204,12 +212,25 @@ fn data_bound_scripted_interpolator_file(protocol: &[u8]) -> Vec<u8> {
     push_object(&mut bytes, "FileAssetContents", |bytes| {
         push_blob(bytes, "FileAssetContents", "bytes", &payload);
     });
-    push_object(&mut bytes, "DataConverterRangeMapper", |bytes| {
-        push_f32(bytes, "DataConverterRangeMapper", "minInput", 0.0);
-        push_f32(bytes, "DataConverterRangeMapper", "maxInput", 1.0);
-        push_f32(bytes, "DataConverterRangeMapper", "minOutput", 0.0);
-        push_f32(bytes, "DataConverterRangeMapper", "maxOutput", 4.0);
-    });
+    if let Some(converter_payload) = converter_payload.as_ref() {
+        push_object(&mut bytes, "ScriptAsset", |bytes| {
+            push_uint(bytes, "ScriptAsset", "assetId", 1);
+            push_string(bytes, "ScriptAsset", "name", "ScaleConverter");
+        });
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_blob(bytes, "FileAssetContents", "bytes", converter_payload);
+        });
+        push_object(&mut bytes, "ScriptedDataConverter", |bytes| {
+            push_uint(bytes, "ScriptedDataConverter", "scriptAssetId", 1);
+        });
+    } else {
+        push_object(&mut bytes, "DataConverterRangeMapper", |bytes| {
+            push_f32(bytes, "DataConverterRangeMapper", "minInput", 0.0);
+            push_f32(bytes, "DataConverterRangeMapper", "maxInput", 1.0);
+            push_f32(bytes, "DataConverterRangeMapper", "minOutput", 0.0);
+            push_f32(bytes, "DataConverterRangeMapper", "maxOutput", 4.0);
+        });
+    }
     push_object(&mut bytes, "ViewModelInstance", |bytes| {
         push_string(bytes, "ViewModelInstance", "name", "Root default");
         push_uint(bytes, "ViewModelInstance", "viewModelId", 0);
@@ -447,6 +468,92 @@ fn cloned_interpolator_hydrates_its_data_bind_and_converter_occurrence() {
         "teardown unbinds the old occurrence and a replacement clone reads the current source"
     );
     assert!(replacement.scripted_interpolator_diagnostics().is_empty());
+}
+
+#[test]
+fn cloned_interpolator_instantiates_its_scripted_data_converter_occurrence() {
+    let bytes = data_bound_scripted_interpolator_file_with_converter(
+        br#"
+            return function(_context)
+                return {
+                    init = function(self)
+                        assert(self.scale == 3)
+                        return true
+                    end,
+                    transformValue = function(self, from, to, factor)
+                        return from + (to - from) * factor * self.scale
+                    end,
+                }
+            end
+        "#,
+        Some(
+            br#"
+                return function(_context)
+                    return {
+                        init = function(self)
+                            self.ready = true
+                            self.factor = 6
+                            return true
+                        end,
+                        advance = function(self, elapsed)
+                            self.factor += elapsed * 2
+                            return true
+                        end,
+                        convert = function(self, input)
+                            assert(self.ready)
+                            local output = DataValue.number()
+                            output.value = input.value * self.factor
+                            return output
+                        end,
+                    }
+                end
+            "#,
+        ),
+    );
+    let file = Arc::new(File::import_with_unsigned_scripts(&bytes).expect("fixture imports"));
+    let mut artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("artboard instantiates");
+    let root = artboard
+        .instantiate_default_view_model_instance()
+        .expect("authored default view model instantiates");
+    artboard.bind_view_model(&root);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    artboard
+        .try_advance_with_factory(&mut factory, 0.0)
+        .expect("script factories mount");
+    let mut animation = artboard
+        .linear_animation_instance_named("Bound")
+        .expect("animation instantiates");
+    artboard
+        .raw()
+        .advance_linear_animation_instance(&mut animation, 0.5);
+    artboard
+        .raw_mut()
+        .apply_linear_animation_instance(&animation, 1.0);
+
+    assert_eq!(
+        artboard
+            .raw()
+            .transform_property(1, nuxie_runtime::TransformProperty::X),
+        Some(40.0),
+        "the clone owns a live ScriptedDataConverter table and applies its converted scale"
+    );
+    assert!(animation.scripted_interpolator_diagnostics().is_empty());
+
+    artboard
+        .raw()
+        .advance_linear_animation_instance(&mut animation, 0.1);
+    artboard
+        .raw_mut()
+        .apply_linear_animation_instance(&animation, 1.0);
+    let x = artboard
+        .raw()
+        .transform_property(1, nuxie_runtime::TransformProperty::X)
+        .expect("animated x exists");
+    assert!(
+        (x - 52.0).abs() < 0.001,
+        "the clone consumes the converter advancement from the prior apply before refreshing the interpolation input: {x}"
+    );
 }
 
 #[test]

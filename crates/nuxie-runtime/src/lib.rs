@@ -267,7 +267,8 @@ pub use scripted_data_converter::{
 };
 pub use scripted_interpolator::{
     RuntimeScriptedInterpolatorBindingDefinition, RuntimeScriptedInterpolatorBindingOccurrence,
-    RuntimeScriptedInterpolatorDiagnostic, RuntimeScriptedInterpolatorFactory,
+    RuntimeScriptedInterpolatorDataConverterBindStep, RuntimeScriptedInterpolatorDiagnostic,
+    RuntimeScriptedInterpolatorFactory,
 };
 pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,

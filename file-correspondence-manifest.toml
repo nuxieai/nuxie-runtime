@@ -4009,15 +4009,15 @@ note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32
 
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
-status = "partial"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/scripted_interpolator.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie/src/lib.rs; tools/rust-golden-runner/src/main.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0323"
-b6_verdict = "TRACKED-GAP"
+b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
-audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FTAIL partial promotion at pinned 4ac7b327 (`scripted_interpolator.cpp:108-150`; `linear_animation_instance.cpp:109-183`): each lazy keyframe owns a fresh ScriptInput/DataBind/converter occurrence; hydration and later refresh resolve against the complete parent-scoped Artboard DataContext; stateful converters advance in authored clone order after lazy apply with each owning LinearAnimationInstance; teardown drops binds before their Lua targets. Existing fixture-shaped tests cover converted hydration, source refresh, teardown/replacement, and per-keyframe table identity; a focused runtime test covers per-clone advancement. Honest named remainders: cloneProperties-created ScriptedDataConverter operands are cloned structurally but their clone-specific Lua converter tables are not yet instantiated and attached; no imported binary fixture yet exercises parent-scope fallback with a real stateful scripted converter. Pinned upstream has no direct ScriptedInterpolator TEST_CASE row, so no test-correspondence count changes. Runtime, VM adapter, public facade, and golden-runner shim intentionally remain split across crate/tool boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/scripted_interpolator.rs`; `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie/src/lib.rs`; `tools/rust-golden-runner/src/main.rs`; consolidating further would cross a crate or tool boundary or move public integration API."
+audit_record = "docs/parity-audits/scripted-interpolator.md"
+note = "Phase 3 current-pin paired audit supersedes FTAIL: each lazy keyframe owns a fresh script table plus ScriptInput/DataBind/converter occurrence; transform fallbacks, asset identity, complete parent-scoped DataContext resolution, live refresh, authored-order stateful advancement, and teardown match the pin. The audit corrected the omitted clone-specific ScriptedDataConverter Luau table lifecycle by driving the shared source-derived bind/rehydrate/rebind walk before interpolator hydration. An imported two-protocol fixture proves real converter generator/init/convert ordering and output delivery; shared owner tests prove parent-chain resolution, per-occurrence table identity, and stateful advancement. Pinned upstream has no direct ScriptedInterpolator TEST_CASE row, so no test-correspondence count changes. Runtime, VM adapter, public facade, and golden-runner shim intentionally remain split across crate/tool boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/scripted_interpolator.rs`; `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie/src/lib.rs`; `tools/rust-golden-runner/src/main.rs`; consolidating further would cross a crate or tool boundary or move public integration API."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"

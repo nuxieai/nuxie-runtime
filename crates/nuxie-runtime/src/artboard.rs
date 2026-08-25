@@ -78,8 +78,8 @@ use crate::scene::select_default_state_machine;
 use crate::script_asset::{RuntimeScriptImplementedMethods, RuntimeScriptedObjectOccurrence};
 use crate::scripted_interpolator::RuntimeScriptedInterpolatorState;
 use crate::scripting::{
-    NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptHost,
-    ScriptInstance, ScriptMethod, ScriptValue, ScriptViewModel,
+    NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptArtboardParentContext,
+    ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue, ScriptViewModel,
 };
 use crate::state_machine::{
     RuntimeFileStateMachineActionCatalog, RuntimeNestedStateMachineInstance, RuntimeStateMachine,
@@ -4624,6 +4624,73 @@ impl ArtboardInstance {
             return context.main_handle().cloned();
         }
         fallback_root.cloned()
+    }
+
+    /// Retain the exact Artboard DataContext chain for ScriptInputArtboard
+    /// values owned by a lazy ScriptedInterpolator or one of its cloned
+    /// ScriptedDataConverters.
+    #[doc(hidden)]
+    pub fn scripted_interpolator_artboard_parent_context(
+        &self,
+        fallback_root: Option<&RuntimeOwnedViewModelContextHandle>,
+    ) -> Option<ScriptArtboardParentContext> {
+        self.artboard_owned_data_context
+            .clone()
+            .map(ScriptArtboardParentContext::from_runtime)
+            .or_else(|| {
+                self.artboard_owned_view_model_handle
+                    .as_ref()
+                    .map(|context| {
+                        ScriptArtboardParentContext::from_runtime(
+                            RuntimeOwnedDataContext::from_context_handle(context),
+                        )
+                    })
+            })
+            .or_else(|| {
+                self.artboard_owned_view_model_context
+                    .as_ref()
+                    .map(|context| {
+                        ScriptArtboardParentContext::from_runtime(
+                            RuntimeOwnedDataContext::from_owned_context(context),
+                        )
+                    })
+            })
+            .or_else(|| {
+                fallback_root.map(|context| {
+                    ScriptArtboardParentContext::from_runtime(
+                        RuntimeOwnedDataContext::from_context_handle(context),
+                    )
+                })
+            })
+    }
+
+    /// Resolve a ScriptInputViewModelProperty through the same complete
+    /// Artboard DataContext chain used by the interpolator's scalar binds.
+    #[doc(hidden)]
+    pub fn scripted_interpolator_bound_view_model(
+        &self,
+        file: &RuntimeFile,
+        path: &crate::ScriptInputViewModelPropertyPath,
+        fallback_root: Option<&RuntimeOwnedViewModelContextHandle>,
+    ) -> Option<Option<ScriptViewModel>> {
+        if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
+            return data_context.bound_script_view_model(file, path);
+        }
+        if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
+            return crate::script_input_viewmodel_property::
+                bound_script_view_model_property_from_owned_path(file, context, path);
+        }
+        if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
+            return context.main_handle().and_then(|main| {
+                let context = RuntimeOwnedViewModelContextHandle::root(file, main.clone());
+                crate::script_input_viewmodel_property::
+                    bound_script_view_model_property_from_owned_path(file, &context, path)
+            });
+        }
+        fallback_root.and_then(|context| {
+            crate::script_input_viewmodel_property::
+                bound_script_view_model_property_from_owned_path(file, context, path)
+        })
     }
 
     pub(crate) fn scripted_interpolator_owned_data_context(

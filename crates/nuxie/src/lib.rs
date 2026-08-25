@@ -2694,12 +2694,28 @@ fn prepare_script_listener_data_converter_hydration(
     let owner = format!(
         "ScriptedListenerAction global {action_global_id} input global {input_global_id} ScriptedDataConverter occurrence {converter_path:?}",
     );
+    let runtime = file.runtime();
+    let root_context = root_view_model.map(|view_model| {
+        nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
+            runtime,
+            view_model.handle().clone(),
+        )
+    });
+    let (context_view_model, context_parent_view_models) = machine
+        .scripted_listener_data_context_view_models(
+            runtime,
+            root_view_model.map(ViewModelInstance::handle),
+        );
+    let artboard_parent_context =
+        machine.scripted_listener_artboard_parent_context(root_context.as_ref());
     prepare_scripted_data_converter_hydration_from_snapshots(
         file,
-        machine,
         snapshots,
         &owner,
-        root_view_model,
+        context_view_model,
+        context_parent_view_models,
+        artboard_parent_context,
+        |path| machine.scripted_listener_bound_view_model(runtime, path, root_context.as_ref()),
     )
 }
 
@@ -2721,23 +2737,6 @@ fn prepare_state_machine_data_converter_hydration(
     let owner = format!(
         "state-machine DataBind {parent_data_bind_index} ScriptedDataConverter occurrence {converter_path:?}",
     );
-    prepare_scripted_data_converter_hydration_from_snapshots(
-        file,
-        machine,
-        snapshots,
-        &owner,
-        root_view_model,
-    )
-}
-
-#[cfg(feature = "scripting")]
-fn prepare_scripted_data_converter_hydration_from_snapshots(
-    file: &Arc<File>,
-    machine: &StateMachineInstance,
-    snapshots: Vec<nuxie_runtime::ScriptListenerInputSnapshot>,
-    owner: &str,
-    root_view_model: Option<&ViewModelInstance>,
-) -> std::result::Result<nuxie_runtime::ScriptListenerActionHydration, nuxie_runtime::ScriptError> {
     let runtime = file.runtime();
     let root_context = root_view_model.map(|view_model| {
         nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
@@ -2752,6 +2751,70 @@ fn prepare_scripted_data_converter_hydration_from_snapshots(
         );
     let artboard_parent_context =
         machine.scripted_listener_artboard_parent_context(root_context.as_ref());
+    prepare_scripted_data_converter_hydration_from_snapshots(
+        file,
+        snapshots,
+        &owner,
+        context_view_model,
+        context_parent_view_models,
+        artboard_parent_context,
+        |path| machine.scripted_listener_bound_view_model(runtime, path, root_context.as_ref()),
+    )
+}
+
+#[cfg(feature = "scripting")]
+fn prepare_scripted_interpolator_data_converter_hydration(
+    file: &Arc<File>,
+    artboard: &RuntimeArtboardInstance,
+    bindings: &nuxie_runtime::RuntimeScriptedInterpolatorBindingOccurrence,
+    input_global_id: u32,
+    converter_path: &[usize],
+    fallback_root: Option<&nuxie_runtime::RuntimeOwnedViewModelHandle>,
+) -> std::result::Result<nuxie_runtime::ScriptListenerActionHydration, nuxie_runtime::ScriptError> {
+    let snapshots = bindings
+        .scripted_data_converter_input_snapshots(input_global_id, converter_path)
+        .ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "ScriptedInterpolator input global {input_global_id} has no ScriptedDataConverter occurrence {converter_path:?}",
+            ))
+        })?;
+    let runtime = file.runtime();
+    let (context_view_model, context_parent_view_models) =
+        artboard.scripted_interpolator_data_context_view_models(runtime, fallback_root);
+    let root_context = fallback_root
+        .cloned()
+        .map(|root| nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(runtime, root));
+    let artboard_parent_context =
+        artboard.scripted_interpolator_artboard_parent_context(root_context.as_ref());
+    let owner = format!(
+        "ScriptedInterpolator input global {input_global_id} ScriptedDataConverter occurrence {converter_path:?}",
+    );
+    prepare_scripted_data_converter_hydration_from_snapshots(
+        file,
+        snapshots,
+        &owner,
+        context_view_model,
+        context_parent_view_models,
+        artboard_parent_context,
+        |path| {
+            artboard.scripted_interpolator_bound_view_model(runtime, path, root_context.as_ref())
+        },
+    )
+}
+
+#[cfg(feature = "scripting")]
+fn prepare_scripted_data_converter_hydration_from_snapshots(
+    file: &Arc<File>,
+    snapshots: Vec<nuxie_runtime::ScriptListenerInputSnapshot>,
+    owner: &str,
+    context_view_model: Option<nuxie_runtime::ScriptViewModel>,
+    context_parent_view_models: Vec<Option<nuxie_runtime::ScriptViewModel>>,
+    artboard_parent_context: Option<nuxie_runtime::ScriptArtboardParentContext>,
+    mut bound_view_model: impl FnMut(
+        &nuxie_runtime::ScriptInputViewModelPropertyPath,
+    ) -> Option<Option<nuxie_runtime::ScriptViewModel>>,
+) -> std::result::Result<nuxie_runtime::ScriptListenerActionHydration, nuxie_runtime::ScriptError> {
+    let runtime = file.runtime();
     // C++ validates every ScriptInput before hydrating any of them. In
     // particular, constructing an earlier ScriptInputArtboard must not leave
     // a child occurrence behind when a later input is malformed
@@ -2840,15 +2903,13 @@ fn prepare_scripted_data_converter_hydration_from_snapshots(
                         "cloned view-model property path is absent",
                     )
                 })?;
-                machine
-                    .scripted_listener_bound_view_model(runtime, &path, root_context.as_ref())
-                    .ok_or_else(|| {
-                        scripted_data_converter_hydration_error(
-                            owner,
-                            input.id,
-                            "view-model property path is unresolved",
-                        )
-                    })?;
+                bound_view_model(&path).ok_or_else(|| {
+                    scripted_data_converter_hydration_error(
+                        owner,
+                        input.id,
+                        "view-model property path is unresolved",
+                    )
+                })?;
                 prepared_inputs.push(PreparedScriptListenerInput::ViewModel {
                     input_global_id: input.id,
                     name,
@@ -4008,8 +4069,7 @@ fn validate_prepared_script_mount_topology(
 fn attach_prepared_script_mounts(
     instance: &mut RuntimeArtboardInstance,
     prepared: Vec<PreparedScriptMountGroup>,
-    file_scripts: &Rc<RefCell<FileScriptRuntime>>,
-    runtime: &Arc<RuntimeFile>,
+    file: &Arc<File>,
 ) {
     fn attach(
         instance: &mut RuntimeArtboardInstance,
@@ -4046,8 +4106,7 @@ fn attach_prepared_script_mounts(
     fn attach_interpolators(
         instance: &mut RuntimeArtboardInstance,
         interpolators: Vec<PreparedScriptedInterpolator>,
-        file_scripts: &Rc<RefCell<FileScriptRuntime>>,
-        runtime: &Arc<RuntimeFile>,
+        file: &Arc<File>,
     ) {
         for interpolator in interpolators {
             let PreparedScriptedInterpolator {
@@ -4059,8 +4118,9 @@ fn attach_prepared_script_mounts(
                 serialized_implemented_methods,
                 fallback_root,
             } = interpolator;
-            let scripts = Rc::clone(file_scripts);
-            let runtime = Arc::clone(runtime);
+            let scripts = Rc::clone(&file.scripts);
+            let runtime = Arc::clone(&file.runtime);
+            let file = Arc::clone(file);
             let binding_definition =
                 nuxie_runtime::RuntimeScriptedInterpolatorBindingDefinition::from_imported(
                     &runtime,
@@ -4087,6 +4147,145 @@ fn attach_prepared_script_mounts(
                             "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' has no live file VM"
                         ))
                     })?;
+                    let mut bindings = binding_definition
+                        .as_ref()
+                        .ok_or_else(|| {
+                            nuxie_runtime::ScriptError::new(format!(
+                                "ScriptedInterpolator global {global_id} has no imported clone binding definition"
+                            ))
+                        })?
+                        .instantiate();
+                    bindings.install_data_context(artboard, hydration_root.as_ref());
+                    for step in bindings.scripted_data_converter_bind_steps() {
+                        let (
+                            input_global_id,
+                            converter_path,
+                            converter_global_id,
+                            inits,
+                        ) = match step {
+                            nuxie_runtime::RuntimeScriptedInterpolatorDataConverterBindStep::BindInput {
+                                input_global_id,
+                            } => {
+                                let _ = bindings.bind_input_source(&runtime, input_global_id);
+                                continue;
+                            }
+                            nuxie_runtime::RuntimeScriptedInterpolatorDataConverterBindStep::BindConverter {
+                                input_global_id,
+                                converter_path,
+                            } => {
+                                let _ = bindings.bind_converter_own_sources(
+                                    &runtime,
+                                    input_global_id,
+                                    &converter_path,
+                                );
+                                continue;
+                            }
+                            nuxie_runtime::RuntimeScriptedInterpolatorDataConverterBindStep::Rehydrate {
+                                input_global_id,
+                                converter_path,
+                                converter_global_id,
+                                inits,
+                            } => (
+                                input_global_id,
+                                converter_path,
+                                converter_global_id,
+                                inits,
+                            ),
+                            nuxie_runtime::RuntimeScriptedInterpolatorDataConverterBindStep::RebindFinalInput {
+                                input_global_id,
+                                converter_path,
+                                converter_input_index,
+                                data_bind_index,
+                            } => {
+                                let _ = bindings.rebind_scripted_converter_final_input(
+                                    &runtime,
+                                    input_global_id,
+                                    &converter_path,
+                                    converter_input_index,
+                                    data_bind_index,
+                                );
+                                continue;
+                            }
+                            nuxie_runtime::RuntimeScriptedInterpolatorDataConverterBindStep::FinalizeInput {
+                                input_global_id,
+                            } => {
+                                let _ = bindings.finalize_input_sources(input_global_id);
+                                continue;
+                            }
+                        };
+
+                        if !bindings.has_scripted_data_converter_instance(
+                            input_global_id,
+                            &converter_path,
+                        ) {
+                            let Some(converter) = runtime.object(converter_global_id as usize)
+                            else {
+                                continue;
+                            };
+                            let target = match script_mount_target(
+                                &runtime,
+                                &scripts,
+                                converter,
+                                ScriptMountTargetKind::DataConverter,
+                                &format!(
+                                    "ScriptedInterpolator global {global_id} input global {input_global_id}",
+                                ),
+                            ) {
+                                Ok(target) => target,
+                                Err(error) if error.resource_code().is_some() => return Err(error),
+                                Err(_) => continue,
+                            };
+                            let Some(converter_program) =
+                                ready.programs.get(&target.asset_ordinal)
+                            else {
+                                continue;
+                            };
+                            let converter_script = ready
+                                .vm
+                                .instantiate_registered_script_with_context(
+                                    converter_program,
+                                    context.clone(),
+                                    parents.clone(),
+                                );
+                            let Some(converter_script) =
+                                scripted_listener_action_or_inert(converter_script)?
+                            else {
+                                continue;
+                            };
+                            bindings.set_scripted_data_converter_instance(
+                                input_global_id,
+                                &converter_path,
+                                converter_global_id,
+                                converter_script,
+                            )?;
+                        }
+
+                        let converter_context =
+                            nuxie_runtime::ScriptListenerActionHydration::new_with_context_chain(
+                                context.clone(),
+                                parents.clone(),
+                                Vec::new(),
+                            );
+                        let hydrated = bindings
+                            .hydrate_and_initialize_scripted_data_converter_instance(
+                                input_global_id,
+                                &converter_path,
+                                converter_context,
+                                inits,
+                                |bindings| {
+                                    prepare_scripted_interpolator_data_converter_hydration(
+                                        &file,
+                                        artboard,
+                                        bindings,
+                                        input_global_id,
+                                        &converter_path,
+                                        hydration_root.as_ref(),
+                                    )
+                                },
+                            );
+                        let _ = scripted_listener_action_or_inert(hydrated)?;
+                    }
+
                     let program = ready.programs.get(&asset_ordinal).ok_or_else(|| {
                         nuxie_runtime::ScriptError::new(format!(
                             "ScriptedInterpolator global {global_id} references unregistered protocol ordinal {asset_ordinal} name '{asset_name}'"
@@ -4100,21 +4299,8 @@ fn attach_prepared_script_mounts(
                             "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase generator failed"
                         ))
                         })?;
-                    let mut bindings = binding_definition
-                        .as_ref()
-                        .ok_or_else(|| {
-                            nuxie_runtime::ScriptError::new(format!(
-                                "ScriptedInterpolator global {global_id} has no imported clone binding definition"
-                            ))
-                        })?
-                        .instantiate();
                     bindings
-                        .hydrate_inputs(
-                            &runtime,
-                            artboard,
-                            hydration_root.as_ref(),
-                            script.as_mut(),
-                        )
+                        .hydrate_bound_inputs(&runtime, script.as_mut())
                         .map_err(|error| {
                             error.with_context(format!(
                                 "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase cloned ScriptInput/DataBind hydration failed"
@@ -4147,7 +4333,7 @@ fn attach_prepared_script_mounts(
 
     let mut groups = VecDeque::from(prepared);
     if let Some(root) = groups.pop_front() {
-        attach_interpolators(instance, root.interpolators, file_scripts, runtime);
+        attach_interpolators(instance, root.interpolators, file);
         for (kind, global_id, serialized_implemented_methods, script) in root.scripts {
             attach(
                 instance,
@@ -4160,7 +4346,7 @@ fn attach_prepared_script_mounts(
     }
     let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
         if let Some(group) = groups.pop_front() {
-            attach_interpolators(nested, group.interpolators, file_scripts, runtime);
+            attach_interpolators(nested, group.interpolators, file);
             for (kind, global_id, serialized_implemented_methods, script) in group.scripts {
                 attach(
                     nested,
@@ -4249,7 +4435,7 @@ fn mount_scripted_artboard_tree(
     if let Some(candidate) = prepared.candidate.take() {
         file.scripts.borrow_mut().ready = Some(candidate);
     }
-    attach_prepared_script_mounts(instance, prepared.groups, &file.scripts, &file.runtime);
+    attach_prepared_script_mounts(instance, prepared.groups, file);
 
     // Facade execution fails closed: every concrete scripted target must
     // have an attached table before entering the lower runtime draw path.
@@ -4315,7 +4501,7 @@ async fn mount_scripted_artboard_tree_async(
     if let Some(candidate) = prepared.candidate.take() {
         file.scripts.borrow_mut().ready = Some(candidate);
     }
-    attach_prepared_script_mounts(instance, prepared.groups, &file.scripts, &file.runtime);
+    attach_prepared_script_mounts(instance, prepared.groups, file);
     let (_, verified) = collect_script_mount_groups(file, root_graph, instance)?;
     if let Some(group) = verified.iter().find(|group| !group.targets.is_empty()) {
         return Err(nuxie_runtime::ScriptError::new(format!(

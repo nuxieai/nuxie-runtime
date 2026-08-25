@@ -1,10 +1,11 @@
 //! Direct ports of the two upstream `LuauDirectFieldGet` test files.
 //!
-//! luaur does not currently expose the pinned fork's process-global FFlag, so
-//! both tests remain honest expected-red tests until source correspondence
-//! supplies that control seam.
+//! The GC regression executes through luaur's pinned process-global FFlag.
+//! The benchmark remains expected-red until the high-level userdata adapter
+//! exposes Rive's native direct-field registrations for Paint and Mat2D.
 #![cfg(feature = "luau")]
 
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use nuxie_scripting::vm::ScriptVm;
@@ -18,8 +19,22 @@ fn rive_vm() -> ScriptVm {
     vm
 }
 
-fn set_luau_direct_field_get(_: bool) {
-    panic!("luaur does not expose the pinned LuauDirectFieldGet FFlag")
+static FLAG_LOCK: Mutex<()> = Mutex::new(());
+
+struct ScopedDirectFieldFlag(bool);
+
+impl ScopedDirectFieldFlag {
+    fn new(value: bool) -> Self {
+        let saved = luaur_rt::luau_direct_field_get();
+        luaur_rt::set_luau_direct_field_get(value);
+        Self(saved)
+    }
+}
+
+impl Drop for ScopedDirectFieldFlag {
+    fn drop(&mut self) {
+        luaur_rt::set_luau_direct_field_get(self.0);
+    }
 }
 
 fn best_run(source: &str) -> Duration {
@@ -38,13 +53,14 @@ fn best_run(source: &str) -> Duration {
 }
 
 fn benchmark_with_flag(source: &str, enabled: bool) -> Duration {
-    set_luau_direct_field_get(enabled);
+    let _flag = ScopedDirectFieldFlag::new(enabled);
     best_run(source)
 }
 
 #[test]
 #[ignore = "expected red: luaur does not expose the pinned LuauDirectFieldGet FFlag"]
 fn userdata_direct_field_get_benchmark() {
+    let _lock = FLAG_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     const N: usize = 1_000_000;
     let operations = [
         (
@@ -96,19 +112,19 @@ fn userdata_direct_field_get_benchmark() {
 }
 
 #[test]
-#[ignore = "expected red: luaur does not expose the pinned LuauDirectFieldGet FFlag"]
 fn scripting_vm_survives_direct_field_flag_flip_after_newstate() {
-    set_luau_direct_field_get(false);
+    let _lock = FLAG_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+    let _flag = ScopedDirectFieldFlag::new(false);
     let vm = rive_vm();
     let value: f64 = vm.eval("return 1").unwrap();
     assert_eq!(value, 1.0);
 
-    set_luau_direct_field_get(true);
+    luaur_rt::set_luau_direct_field_get(true);
     vm.eval::<()>(
         "for i = 0, 63 do\n\
              local table = {}\n\
-         end\n\
-         collectgarbage('collect')",
+         end",
     )
     .unwrap();
+    vm.lua().gc_collect().unwrap();
 }

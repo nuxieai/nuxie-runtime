@@ -724,7 +724,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_gc_fflag_init_test.cpp"
 test_case_count = 1
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/tests/upstream_scripting_direct_field_flag.rs"]
-note = "The flip-after-newstate sequence, return-one script, 64 temporary tables, forced full collection, and no-crash outcome are ported. It is honestly ignored expected-red because luaur does not expose the pinned process-global LuauDirectFieldGet FFlag seam."
+note = "The flip-after-newstate sequence, return-one script, 64 temporary tables, forced full collection, and no-crash outcome execute through luaur's existing process-global LuauDirectFieldGet flag and unconditional udatadirectfields initialization. The scoped guard restores the process-global flag exactly as upstream; fixed luaur exposes the same full-collection action through Lua::gc_collect because its base library intentionally omits collectgarbage."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_gradient_test.cpp"

@@ -148,6 +148,18 @@ pub use table::{Table, TablePairs, TableSequence};
 pub use thread::{Thread, ThreadStatus};
 pub use traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 
+/// Process-global `FFlag::LuauDirectFieldGet` control used by pinned Rive.
+///
+/// Like Luau's C++ `FValue`, this must only be changed while VM execution is
+/// externally serialized.
+pub fn set_luau_direct_field_get(value: bool) {
+    luaur_common::FFlag::LuauDirectFieldGet.set(value);
+}
+
+pub fn luau_direct_field_get() -> bool {
+    luaur_common::FFlag::LuauDirectFieldGet.get()
+}
+
 /// Static type-checking surface (the `typecheck` feature): the structured
 /// [`TypeDiagnostic`] type plus the free [`check`] / [`check_with_definitions`]
 /// helpers. The `Lua`/`Chunk` objects gain `check` / `add_definitions` methods
@@ -155,7 +167,7 @@ pub use traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 /// [`Error::TypeError`](crate::Error::TypeError).
 #[cfg(feature = "typecheck")]
 #[cfg_attr(docsrs, doc(cfg(feature = "typecheck")))]
-pub use typecheck::{check, check_with_definitions, Checker, TypeDiagnostic};
+pub use typecheck::{Checker, TypeDiagnostic, check, check_with_definitions};
 
 pub use app_data::{AppDataRef, AppDataRefMut};
 /// The [`AsyncThread`] driver — a coroutine being run to completion as a Rust

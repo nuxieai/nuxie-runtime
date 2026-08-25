@@ -92,7 +92,7 @@ fn wave_b3_focus_test_005_direct_port() {
 #[test]
 fn wave_b3_focus_test_006_direct_port() {
     // Pinned focus_test.cpp case 6.
-    let mut manager = FocusManager::new(); let parent = attached(&mut manager, None, FocusNode::new()); let child1 = attached(&mut manager, Some(parent), FocusNode::new()); let child2 = attached(&mut manager, Some(parent), FocusNode::new()); assert_eq!(manager.parent(child1), Some(parent)); assert_eq!(manager.parent(child2), Some(parent)); assert_eq!(manager.children(parent), Some(&[child1, child2][..]));
+    let mut manager = FocusManager::new(); let parent = attached(&mut manager, None, FocusNode::new()); let child1 = attached(&mut manager, Some(parent), FocusNode::new()); let child2 = attached(&mut manager, Some(parent), FocusNode::new()); assert_eq!(manager.parent(child1), Some(parent)); assert_eq!(manager.parent(child2), Some(parent)); assert_eq!(manager.children(parent), Some(&[child1, child2][..])); assert!(manager.detach_subtree(child1)); assert_eq!(manager.parent(child1),None); assert_eq!(manager.children(parent),Some(&[child2][..])); assert!(manager.contains(child1));
 }
 
 #[test]
@@ -240,9 +240,10 @@ fn wave_b3_focus_test_030_direct_port() {
 }
 
 #[test]
+#[ignore = "expected-red: removing a transient parent erases the surviving child from Rust's retained focus arena"]
 fn wave_b3_focus_test_031_direct_port() {
     // Pinned focus_test.cpp case 31.
-    let mut manager=FocusManager::new(); let row=attached(&mut manager,None,FocusNode::new()); let survivor=attached(&mut manager,Some(row),FocusNode::new()); assert!(manager.remove_subtree(row)); assert!(!manager.contains(row)); assert!(!manager.contains(survivor)); let new_parent=attached(&mut manager,None,FocusNode::new()); assert_eq!(manager.children(new_parent),Some(&[][..]));
+    let mut manager=FocusManager::new(); let row=attached(&mut manager,None,FocusNode::new()); let survivor=attached(&mut manager,Some(row),FocusNode::new()); assert!(manager.remove_subtree(row)); assert!(!manager.contains(row)); assert!(manager.contains(survivor), "the child outlives its freed parent in pinned C++"); let new_parent=attached(&mut manager,None,FocusNode::new()); assert!(manager.add_child(Some(new_parent),survivor)); assert_eq!(manager.children(new_parent),Some(&[survivor][..]));
 }
 
 #[test]

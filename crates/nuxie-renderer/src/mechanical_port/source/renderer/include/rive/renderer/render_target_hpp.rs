@@ -19,24 +19,12 @@
 #![allow(non_upper_case_globals)]
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCnt, RefCntTarget};
+pub use nuxie_render_api::IntegerAabb as IAABB;
 #[cfg(any(
     feature = "native-webgpu-experimental",
     feature = "ore-gl"
 ))]
 use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalReleaseRoute};
-
-// `IAABB` is the `TAABB<int32_t>` value returned by the pinned source.  The
-// source-shaped declaration is kept local to this header translation because
-// the upstream `rive/math/aabb.hpp` owner is not otherwise part of this
-// mechanical source set.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct IAABB {
-    pub left: i32,
-    pub top: i32,
-    pub right: i32,
-    pub bottom: i32,
-}
 
 // `uint2` is `rive::simd::uvec<2>` in the pinned SIMD header.  A fixed-width
 // array retains its two uint32 lanes and aggregate return shape without

@@ -1084,26 +1084,7 @@ pub type float4 = [f32; 4];
 pub type Vec2D = [f32; 2];
 pub type AABB = [f32; 4];
 pub use gpu::IAABB;
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct AABBu16 {
-    pub left: u16,
-    pub top: u16,
-    pub right: u16,
-    pub bottom: u16,
-}
-
-impl AABBu16 {
-    pub const fn makeMaximallyNegative() -> Self {
-        Self {
-            left: u16::MAX,
-            top: u16::MAX,
-            right: 0,
-            bottom: 0,
-        }
-    }
-}
+pub use gpu::AABBu16;
 
 pub use gpu::LoadAction;
 // The concrete Gradient owner is declared by the pinned renderer/src/gradient.hpp

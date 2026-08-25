@@ -2,7 +2,8 @@ use crate::Vec2D;
 
 // Direct source-correspondence owner for pinned `include/rive/math/aabb.hpp`
 // and `src/math/aabb.cpp`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct TypedAabb<T> {
     pub left: T,
     pub top: T,
@@ -214,6 +215,16 @@ impl<T: AabbInteger> TypedAabb<T> {
             T::from_i128(height.to_i128())?,
         ))
     }
+
+    #[allow(non_snake_case)]
+    pub fn intersectOrEmpty<U: AabbInteger>(self, other: TypedAabb<U>) -> Self {
+        self.intersect_or_empty(other)
+    }
+
+    #[allow(non_snake_case)]
+    pub fn MakeWH<U: AabbInteger>(width: U, height: U) -> Self {
+        Self::make_wh(width, height).expect("pinned TAABB::MakeWH requires a lossless cast")
+    }
 }
 
 impl<T: AabbScalarBounds> TypedAabb<T> {
@@ -223,6 +234,16 @@ impl<T: AabbScalarBounds> TypedAabb<T> {
 
     pub const fn make_maximally_negative() -> Self {
         Self::new(T::MAX, T::MAX, T::MIN, T::MIN)
+    }
+
+    #[allow(non_snake_case)]
+    pub const fn makeMaximal() -> Self {
+        Self::make_maximal()
+    }
+
+    #[allow(non_snake_case)]
+    pub const fn makeMaximallyNegative() -> Self {
+        Self::make_maximally_negative()
     }
 }
 

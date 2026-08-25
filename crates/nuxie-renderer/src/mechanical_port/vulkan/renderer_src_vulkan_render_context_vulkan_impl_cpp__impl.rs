@@ -35,7 +35,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
     RenderContextImpl, RenderContextImplContract,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::{
-    RenderTarget, IAABB as TargetIAABB,
+    RenderTarget,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
@@ -77,81 +77,6 @@ const MSAA_RESOLVE_IDX: usize = 2;
 const MSAA_COLOR_SEED_IDX: usize = 3;
 
 const K_MAX_IMAGE_TEXTURE_UPDATES: u32 = 256;
-
-trait IAABBSourceOps {
-    fn width(&self) -> i32;
-    fn height(&self) -> i32;
-    fn contains(&self, other: &IAABB) -> bool;
-    fn offset(self, x: i32, y: i32) -> IAABB;
-    fn intersect(self, other: &IAABB) -> IAABB;
-    fn intersectOrEmpty(self, other: &IAABB) -> IAABB;
-}
-
-impl IAABBSourceOps for IAABB {
-    fn width(&self) -> i32 {
-        self.right - self.left
-    }
-    fn height(&self) -> i32 {
-        self.bottom - self.top
-    }
-    fn contains(&self, other: &IAABB) -> bool {
-        self.left <= other.left
-            && self.top <= other.top
-            && self.right >= other.right
-            && self.bottom >= other.bottom
-    }
-    fn offset(self, x: i32, y: i32) -> IAABB {
-        IAABB {
-            left: self.left + x,
-            top: self.top + y,
-            right: self.right + x,
-            bottom: self.bottom + y,
-        }
-    }
-    fn intersect(self, other: &IAABB) -> IAABB {
-        IAABB {
-            left: self.left.max(other.left),
-            top: self.top.max(other.top),
-            right: self.right.min(other.right),
-            bottom: self.bottom.min(other.bottom),
-        }
-    }
-    fn intersectOrEmpty(self, other: &IAABB) -> IAABB {
-        let result = self.intersect(other);
-        if result.empty() {
-            IAABB::default()
-        } else {
-            result
-        }
-    }
-}
-
-fn make_wh(width: i32, height: i32) -> IAABB {
-    IAABB {
-        left: 0,
-        top: 0,
-        right: width,
-        bottom: height,
-    }
-}
-
-fn to_gpu_bounds(value: TargetIAABB) -> IAABB {
-    IAABB {
-        left: value.left,
-        top: value.top,
-        right: value.right,
-        bottom: value.bottom,
-    }
-}
-
-fn to_target_bounds(value: &IAABB) -> TargetIAABB {
-    TargetIAABB {
-        left: value.left,
-        top: value.top,
-        right: value.right,
-        bottom: value.bottom,
-    }
-}
 
 fn product_sampler(
     value: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
@@ -1948,7 +1873,7 @@ pub(crate) unsafe fn wantsManualRenderPassResolve(
         && !implementation.m_workarounds.avoidManualMSAAResolves
     {
         let target = unsafe { &*render_target };
-        if !update_bounds.contains(&to_gpu_bounds(target.bounds())) {
+        if !update_bounds.contains(target.bounds()) {
             return true;
         }
         if implementation
@@ -2350,7 +2275,7 @@ impl DrawRenderPass {
                     .has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer)
                 {
                     debug_assert_eq!(views.len(), COALESCED_ATOMIC_RESOLVE_IDX);
-                    let full = self.m_drawBounds.contains(&IAABB {
+                    let full = self.m_drawBounds.contains(IAABB {
                         left: 0,
                         top: 0,
                         right: target.base().width() as i32,
@@ -2535,12 +2460,12 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     if desc.manuallyResolved {
         options |= RenderPassOptionsVulkan::manuallyResolved;
     } else if desc.interlockMode == InterlockMode::msaa {
-        draw_bounds = to_gpu_bounds(target.base().bounds());
+        draw_bounds = target.base().bounds();
     }
     debug_assert!(
         desc.interlockMode != InterlockMode::msaa
             || desc.manuallyResolved
-            || draw_bounds == to_gpu_bounds(target.base().bounds())
+            || draw_bounds == target.base().bounds()
     );
     let command = vk::CommandBuffer::from_raw(
         desc.externalCommandBuffer
@@ -2911,7 +2836,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                 vk::ImageLayout::GENERAL,
                 workaround.vkImage(),
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &make_wh(workaround.width() as i32, workaround.height() as i32),
+                &IAABB::MakeWH(workaround.width() as i32, workaround.height() as i32),
             );
         }
     }
@@ -3126,7 +3051,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             vk::ImageLayout::GENERAL
         },
     };
-    let full_target = draw_bounds.contains(&IAABB {
+    let full_target = draw_bounds.contains(IAABB {
         left: 0,
         top: 0,
         right: target.base().width() as i32,
@@ -3159,7 +3084,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                     accessMask: vk::AccessFlags::INPUT_ATTACHMENT_READ,
                     layout: vk::ImageLayout::GENERAL,
                 },
-                &to_target_bounds(&draw_bounds),
+                &draw_bounds,
             );
             msaa_seed_view = unsafe { (&*copied).vkImageView() };
             options |= RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture;
@@ -3248,7 +3173,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                     &mut target,
                     command,
                     color_load_access,
-                    &to_target_bounds(&draw_bounds),
+                    &draw_bounds,
                 ))
                     .vkImageView()
             }
@@ -3403,9 +3328,9 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
         tile_width = desc.virtualTileWidth as i32;
         tile_height = desc.virtualTileHeight as i32;
     }
-    let initial_scissor = make_wh(tile_width, tile_height)
+    let initial_scissor = IAABB::MakeWH(tile_width, tile_height)
         .offset(draw_bounds.left, draw_bounds.top)
-        .intersect(&draw_bounds);
+        .intersect(draw_bounds);
     let mut draw_pass = DrawRenderPass::new(
         implementation,
         desc,
@@ -3546,9 +3471,9 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
         let mut x = draw_bounds.left;
         while x < draw_bounds.right {
             if x > draw_bounds.left || y > draw_bounds.top {
-                let scissor = make_wh(tile_width, tile_height)
+                let scissor = IAABB::MakeWH(tile_width, tile_height)
                     .offset(x, y)
-                    .intersect(&draw_bounds);
+                    .intersect(draw_bounds);
                 draw_pass.restart(
                     if desc.colorLoadAction == LoadAction::dontCare {
                         LoadAction::dontCare
@@ -3847,7 +3772,7 @@ fn submitDrawList(
                     bottom: render_pass_scissor.top + 1,
                 }
             } else if let Some(scissor) = batch_scissor(batch) {
-                render_pass_scissor.intersectOrEmpty(&scissor)
+                render_pass_scissor.intersectOrEmpty(scissor)
             } else {
                 render_pass_scissor
             };

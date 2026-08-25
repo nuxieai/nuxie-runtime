@@ -431,6 +431,17 @@ def _git_head(upstream_root: pathlib.Path) -> str:
     return result.stdout.strip()
 
 
+def _require_clean_tracked_sources(upstream_root: pathlib.Path) -> None:
+    result = subprocess.run(
+        ["git", "-C", str(upstream_root), "diff", "--quiet", "HEAD", "--", "src"],
+        check=False,
+    )
+    if result.returncode == 1:
+        raise ValueError("upstream src has tracked changes; denominator must use pinned bytes")
+    if result.returncode != 0:
+        raise ValueError("cannot verify the pinned upstream src worktree")
+
+
 def build_denominator(
     upstream_root: pathlib.Path, manifest_path: pathlib.Path
 ) -> dict[str, object]:
@@ -441,6 +452,7 @@ def build_denominator(
         raise ValueError(
             f"upstream checkout is {actual_ref}, manifest pins {upstream_ref}"
         )
+    _require_clean_tracked_sources(upstream_root)
     source_glob = str(manifest["source_glob"])
     exclude_glob = str(manifest["exclude_glob"])
     if source_glob != "src/**/*.cpp" or exclude_glob != "src/generated/**":

@@ -70,8 +70,23 @@ pub fn bound_script_view_model_from_owned_context(
     context: &RuntimeOwnedViewModelContextHandle,
     input: &RuntimeObject,
 ) -> Option<ScriptViewModel> {
+    bound_script_view_model_property_from_owned_context(file, context, input).flatten()
+}
+
+/// Resolve the prerequisite property separately from its nullable selected
+/// child occurrence.
+///
+/// The outer `Option` is the pinned hydration-validation result. The inner
+/// `Option` is the property's current `referenceViewModelInstance`, which may
+/// legitimately be null without invalidating the property itself.
+#[doc(hidden)]
+pub fn bound_script_view_model_property_from_owned_context(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelContextHandle,
+    input: &RuntimeObject,
+) -> Option<Option<ScriptViewModel>> {
     let path = ScriptInputViewModelPropertyPath::from_imported(file, input)?;
-    bound_script_view_model_from_owned_path(file, context, &path)
+    bound_script_view_model_property_from_owned_path(file, context, &path)
 }
 
 /// Resolve one concrete cloned `ScriptInputViewModelProperty` path.

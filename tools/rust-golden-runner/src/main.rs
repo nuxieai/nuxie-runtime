@@ -1236,9 +1236,13 @@ fn refresh_bound_script_artboard_inputs(
         }
         let artboard_index = usize::try_from(bound_artboard_id)
             .context("bound script artboard id does not fit usize")?;
-        let mut script_artboard =
-            RunnerScriptArtboard::new(runtime, artboards, artboard_index, Rc::clone(render_state))?;
-        script_artboard.bind_view_model();
+        let script_artboard = new_refreshed_runner_script_artboard(
+            runtime,
+            artboards,
+            artboard_index,
+            Rc::clone(render_state),
+            context,
+        )?;
         let name = input.string_property("name").unwrap_or_default();
         instance
             .set_script_artboard_input_for_global(
@@ -3142,6 +3146,241 @@ mod tests {
 
     #[cfg(feature = "scripting")]
     #[test]
+    fn rehydration_preflight_is_atomic_for_late_artboard_and_unresolved_view_model() {
+        use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
+
+        fn property(type_name: &str, property_name: &str, value: FixtureValue) -> FixtureProperty {
+            let definition = nuxie_schema::definition_by_name(type_name)
+                .expect("rehydration preflight fixture type exists");
+            let key = std::iter::once(definition)
+                .chain(
+                    definition
+                        .ancestors
+                        .iter()
+                        .filter_map(|ancestor| nuxie_schema::definition_by_name(ancestor)),
+                )
+                .flat_map(|owner| owner.properties)
+                .find(|property| property.name == property_name)
+                .expect("rehydration preflight fixture property exists")
+                .key
+                .int;
+            FixtureProperty { key, value }
+        }
+
+        fn record(type_name: &str, properties: Vec<(&str, FixtureValue)>) -> FixtureRecord {
+            FixtureRecord {
+                type_key: nuxie_schema::definition_by_name(type_name)
+                    .expect("rehydration preflight fixture type exists")
+                    .type_key
+                    .int,
+                properties: properties
+                    .into_iter()
+                    .map(|(name, value)| property(type_name, name, value))
+                    .collect(),
+            }
+        }
+
+        let late_invalid_artboard = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("ScriptedDrawable", Vec::new()),
+            record(
+                "ScriptInputNumber",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("first".to_owned())),
+                    ("propertyValue", FixtureValue::Double(3.0)),
+                ],
+            ),
+            record(
+                "ScriptInputArtboard",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("missing".to_owned())),
+                    ("artboardId", FixtureValue::Uint(99)),
+                ],
+            ),
+        ])
+        .expect("mixed rehydration fixture imports");
+        let applied = Rc::new(RefCell::new(Vec::new()));
+        let apply_trace = Rc::clone(&applied);
+        assert!(
+            !rehydrate_script_inputs_in_range(
+                &late_invalid_artboard,
+                &[],
+                0..late_invalid_artboard.object_count(),
+                1,
+                None,
+                move |object, _| {
+                    apply_trace.borrow_mut().push(object.type_name.to_owned());
+                    Ok(true)
+                },
+            )
+            .expect("late invalid Artboard is an inert hydration miss")
+        );
+        assert!(
+            applied.borrow().is_empty(),
+            "the first scalar must not publish before the later Artboard fails preflight"
+        );
+
+        let unresolved_view_model = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Root".to_owned()))],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![("viewModelId", FixtureValue::Uint(0))],
+            ),
+            record("Artboard", Vec::new()),
+            record("ScriptedDrawable", Vec::new()),
+            // No preceding DataBindPath: pinned validation rejects this input
+            // even though a concrete owner context exists.
+            record(
+                "ScriptInputViewModelProperty",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("name", FixtureValue::String("child".to_owned())),
+                ],
+            ),
+        ])
+        .expect("unresolved ViewModel input fixture imports");
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&unresolved_view_model, 0, 0)
+                .expect("fixture owner context builds"),
+        );
+        let context = RuntimeOwnedViewModelContextHandle::root(&unresolved_view_model, root);
+        let applied = Rc::new(std::cell::Cell::new(0));
+        let apply_count = Rc::clone(&applied);
+        assert!(
+            !rehydrate_script_inputs_in_range(
+                &unresolved_view_model,
+                &[],
+                0..unresolved_view_model.object_count(),
+                1,
+                Some(&context),
+                move |_, _| {
+                    apply_count.set(apply_count.get() + 1);
+                    Ok(true)
+                },
+            )
+            .expect("unresolved ViewModel property is an inert hydration miss")
+        );
+        assert_eq!(applied.get(), 0);
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn refreshed_script_artboard_preserves_parent_only_value_resolution() {
+        use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
+
+        fn property(type_name: &str, property_name: &str, value: FixtureValue) -> FixtureProperty {
+            let definition = nuxie_schema::definition_by_name(type_name)
+                .expect("refresh parent fixture type exists");
+            let key = std::iter::once(definition)
+                .chain(
+                    definition
+                        .ancestors
+                        .iter()
+                        .filter_map(|ancestor| nuxie_schema::definition_by_name(ancestor)),
+                )
+                .flat_map(|owner| owner.properties)
+                .find(|property| property.name == property_name)
+                .expect("refresh parent fixture property exists")
+                .key
+                .int;
+            FixtureProperty { key, value }
+        }
+
+        fn record(type_name: &str, properties: Vec<(&str, FixtureValue)>) -> FixtureRecord {
+            FixtureRecord {
+                type_key: nuxie_schema::definition_by_name(type_name)
+                    .expect("refresh parent fixture type exists")
+                    .type_key
+                    .int,
+                properties: properties
+                    .into_iter()
+                    .map(|(name, value)| property(type_name, name, value))
+                    .collect(),
+            }
+        }
+
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![("name", FixtureValue::String("Shared".to_owned()))],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![("name", FixtureValue::String("local".to_owned()))],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![("name", FixtureValue::String("parentOnly".to_owned()))],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![("viewModelId", FixtureValue::Uint(0))],
+            ),
+            record(
+                "ViewModelInstanceNumber",
+                vec![
+                    ("parentId", FixtureValue::Uint(0)),
+                    ("viewModelPropertyId", FixtureValue::Uint(0)),
+                    ("propertyValue", FixtureValue::Double(1.0)),
+                ],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![("viewModelId", FixtureValue::Uint(0))],
+            ),
+            record(
+                "ViewModelInstanceNumber",
+                vec![
+                    ("parentId", FixtureValue::Uint(1)),
+                    ("viewModelPropertyId", FixtureValue::Uint(1)),
+                    ("propertyValue", FixtureValue::Double(35.0)),
+                ],
+            ),
+            record(
+                "Artboard",
+                vec![
+                    ("viewModelId", FixtureValue::Uint(0)),
+                    ("defaultStateMachineId", FixtureValue::Uint(0)),
+                ],
+            ),
+            record("StateMachine", Vec::new()),
+        ])
+        .expect("refresh parent fixture imports");
+        let graph = GraphFile::from_runtime_file(&runtime).expect("refresh parent graph builds");
+        let parent = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 1)
+                .expect("partial parent instance builds"),
+        );
+        let artboard = new_refreshed_runner_script_artboard(
+            &runtime,
+            &graph.artboards,
+            0,
+            Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default())),
+            &parent,
+        )
+        .expect("refreshed ScriptInputArtboard constructs");
+
+        assert!(artboard.parent_context.is_some());
+        assert_eq!(
+            artboard
+                ._data_context
+                .as_ref()
+                .and_then(|context| context.resolve_number_source_path(&[0, 1])),
+            Some(35.0),
+            "the refreshed child must fall through its partial local model to the owning parent DataContext"
+        );
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
     fn nested_script_initialization_gate_closes_after_interpolators_are_registered() {
         let bytes = include_bytes!("../../../fixtures/p2d/scripted_interpolator.riv");
         let runtime = read_runtime_file(bytes).expect("scripted interpolator fixture imports");
@@ -3746,23 +3985,6 @@ impl RootScriptFrameTail for Rc<RefCell<RunnerScriptArtboardRenderState>> {
 
 #[cfg(feature = "scripting")]
 impl RunnerScriptArtboard {
-    fn new(
-        runtime: &RuntimeFile,
-        artboards: &[ArtboardGraph],
-        artboard_index: usize,
-        render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
-    ) -> Result<Self> {
-        Self::new_with_parent_context(
-            runtime,
-            artboards,
-            artboard_index,
-            render_state,
-            None,
-            None,
-            None,
-        )
-    }
-
     fn new_with_parent_context(
         runtime: &RuntimeFile,
         artboards: &[ArtboardGraph],
@@ -3897,6 +4119,29 @@ fn new_rehydrated_runner_script_artboard(
     // publication: the constructor has already created the default state
     // machine, and the selected consumer/parent context is then bound once.
     // DataContext advancement remains owned by the registered File host tail.
+    artboard.bind_view_model();
+    Ok(artboard)
+}
+
+#[cfg(feature = "scripting")]
+fn new_refreshed_runner_script_artboard(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    artboard_index: usize,
+    render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    owner_context: &RuntimeOwnedViewModelHandle,
+) -> Result<RunnerScriptArtboard> {
+    let owner_context = RuntimeOwnedViewModelContextHandle::root(runtime, owner_context.clone());
+    let parent_context = nuxie_runtime::ScriptArtboardParentContext::root(&owner_context);
+    let mut artboard = RunnerScriptArtboard::new_with_parent_context(
+        runtime,
+        artboards,
+        artboard_index,
+        render_state,
+        Some(&parent_context),
+        None,
+        None,
+    )?;
     artboard.bind_view_model();
     Ok(artboard)
 }
@@ -6075,7 +6320,7 @@ fn bind_scripted_drawable_context(
                 .prepare_script_init_retry_with_factory(local_object.global_id, factory)
                 .context("failed to recreate deferred scripted drawable")?;
         }
-        rehydrate_script_inputs(
+        let hydrated = rehydrate_script_inputs(
             runtime,
             artboard,
             artboards,
@@ -6085,6 +6330,14 @@ fn bind_scripted_drawable_context(
             Rc::clone(render_state),
             owned_view_model_context.as_ref(),
         )?;
+        if !hydrated {
+            if init_pending {
+                render_state
+                    .borrow_mut()
+                    .defer_script_init(local_object.global_id);
+            }
+            continue;
+        }
         if local_object.type_name == Some("ScriptedPathEffect") {
             instance.did_hydrate_script_inputs_for_global(local_object.global_id);
         }
@@ -6136,8 +6389,98 @@ fn rehydrate_script_inputs(
     instance: &mut ArtboardInstance,
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     owned_view_model_context: Option<&RuntimeOwnedViewModelContextHandle>,
-) -> Result<()> {
-    for global_id in artboard_object_range(runtime, artboard, artboards) {
+) -> Result<bool> {
+    rehydrate_script_inputs_in_range(
+        runtime,
+        artboards,
+        artboard_object_range(runtime, artboard, artboards),
+        scripted_local_id,
+        owned_view_model_context,
+        |object, name| {
+            let type_name = object.type_name;
+            if type_name == "ScriptInputArtboard" {
+                let artboard_index = object
+                    .uint_property("artboardId")
+                    .and_then(|index| usize::try_from(index).ok())
+                    .expect("validated ScriptInputArtboard keeps its referenced index");
+                let parent_context =
+                    owned_view_model_context.map(nuxie_runtime::ScriptArtboardParentContext::root);
+                let artboard = new_rehydrated_runner_script_artboard(
+                    runtime,
+                    artboards,
+                    artboard_index,
+                    Rc::clone(&render_state),
+                    parent_context.as_ref(),
+                )?;
+                instance
+                    .set_script_artboard_input_for_global(
+                        scripted_global_id,
+                        name,
+                        Box::new(artboard),
+                    )
+                    .with_context(|| format!("failed to rebind artboard script input '{name}'"))?;
+                return Ok(true);
+            }
+            if type_name == "ScriptInputViewModelProperty" {
+                let Some(view_model) = owned_view_model_context.and_then(|context| {
+                    nuxie_runtime::bound_script_view_model_property_from_owned_context(
+                        runtime, context, object,
+                    )
+                }) else {
+                    // Pinned phase two resolves the property again and fails
+                    // this hydration if it became unavailable after preflight.
+                    return Ok(false);
+                };
+                let Some(view_model) = view_model else {
+                    // A valid ViewModel property may currently hold a null
+                    // child reference. Pinned hydration succeeds without
+                    // publishing a replacement table field in that case.
+                    return Ok(true);
+                };
+                instance
+                    .set_script_view_model_input_for_global(scripted_global_id, name, view_model)
+                    .with_context(|| {
+                        format!("failed to rebind view-model script input '{name}'")
+                    })?;
+                return Ok(true);
+            }
+            let bound_value = match owned_view_model_context {
+                Some(context) => {
+                    let root = context.root_handle();
+                    nuxie_runtime::bound_script_input_value(runtime, &root.borrow(), object)
+                        .map_err(|error| anyhow!(error))?
+                }
+                None => None,
+            };
+            // C++ `ScriptedObject::hydrateScriptInputs` replays every generated
+            // ScriptInput cell on each bind, while `m_userLuaInitDone` prevents
+            // user `init` from replaying (`scripted_object.cpp:399-436`). This
+            // second hydration therefore restores omitted generated defaults
+            // after an `init` callback has mutated the public input field.
+            let value = bound_value.or_else(|| default_script_input_value(object));
+            if let Some(value) = value {
+                instance
+                    .set_script_input_for_global(scripted_global_id, name, value)
+                    .with_context(|| format!("failed to rebind script input '{name}'"))?;
+            }
+            Ok(true)
+        },
+    )
+}
+
+#[cfg(feature = "scripting")]
+fn rehydrate_script_inputs_in_range(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    object_range: std::ops::Range<usize>,
+    scripted_local_id: usize,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelContextHandle>,
+    mut apply: impl FnMut(&RuntimeObject, &str) -> Result<bool>,
+) -> Result<bool> {
+    // Pinned `hydrateScriptInputs` validates the entire authored input list
+    // before its first setter. Keep this as a distinct, allocation-free pass:
+    // no Artboard construction or table publication is retained here.
+    for global_id in object_range.clone() {
         let Some(object) = runtime.object(global_id) else {
             continue;
         };
@@ -6147,59 +6490,45 @@ fn rehydrate_script_inputs(
         {
             continue;
         }
-        let Some(name) = object.string_property("name") else {
-            continue;
-        };
         if type_name == "ScriptInputArtboard" {
-            let Some(artboard_index) = object.uint_property("artboardId") else {
-                continue;
+            let Some(artboard_index) = object
+                .uint_property("artboardId")
+                .and_then(|index| usize::try_from(index).ok())
+            else {
+                return Ok(false);
             };
-            let parent_context =
-                owned_view_model_context.map(nuxie_runtime::ScriptArtboardParentContext::root);
-            let artboard = new_rehydrated_runner_script_artboard(
-                runtime,
-                artboards,
-                artboard_index as usize,
-                Rc::clone(&render_state),
-                parent_context.as_ref(),
-            )?;
-            instance
-                .set_script_artboard_input_for_global(scripted_global_id, name, Box::new(artboard))
-                .with_context(|| format!("failed to rebind artboard script input '{name}'"))?;
+            if artboards.get(artboard_index).is_none() {
+                return Ok(false);
+            }
             continue;
         }
         if type_name == "ScriptInputViewModelProperty" {
-            let Some(view_model) = owned_view_model_context.and_then(|context| {
-                nuxie_runtime::bound_script_view_model_from_owned_context(runtime, context, object)
-            }) else {
-                continue;
-            };
-            instance
-                .set_script_view_model_input_for_global(scripted_global_id, name, view_model)
-                .with_context(|| format!("failed to rebind view-model script input '{name}'"))?;
-            continue;
-        }
-        let bound_value = match owned_view_model_context {
-            Some(context) => {
-                let root = context.root_handle();
-                nuxie_runtime::bound_script_input_value(runtime, &root.borrow(), object)
-                    .map_err(|error| anyhow!(error))?
+            let prerequisite = owned_view_model_context.and_then(|context| {
+                nuxie_runtime::bound_script_view_model_property_from_owned_context(
+                    runtime, context, object,
+                )
+            });
+            if prerequisite.is_none() {
+                return Ok(false);
             }
-            None => None,
-        };
-        // C++ `ScriptedObject::hydrateScriptInputs` replays every generated
-        // ScriptInput cell on each bind, while `m_userLuaInitDone` prevents
-        // user `init` from replaying (`scripted_object.cpp:399-436`). This
-        // second hydration therefore restores omitted generated defaults
-        // after an `init` callback has mutated the public input field.
-        let value = bound_value.or_else(|| default_script_input_value(object));
-        if let Some(value) = value {
-            instance
-                .set_script_input_for_global(scripted_global_id, name, value)
-                .with_context(|| format!("failed to rebind script input '{name}'"))?;
         }
     }
-    Ok(())
+
+    for global_id in object_range {
+        let Some(object) = runtime.object(global_id) else {
+            continue;
+        };
+        if !object.type_name.starts_with("ScriptInput")
+            || object.uint_property("parentId") != Some(scripted_local_id as u64)
+        {
+            continue;
+        }
+        let name = object.string_property("name").unwrap_or_default();
+        if !apply(object, name)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 #[cfg(feature = "scripting")]

@@ -2021,6 +2021,14 @@ pub(super) fn apply_scripted_input_update(
                 .call_input_trigger_core(input_name, host)
         }
         super::scripted_listener_action::RuntimeScriptedListenerBoundValue::Artboard(source) => {
+            // Pinned `ScriptedObject::setArtboardInput` checks `state()` and
+            // `scriptAsset()` before it looks up or instances the referenced
+            // Artboard. Keep that backend-owned guard ahead of even resolver
+            // preparation: an inert occurrence cannot surface resolver
+            // errors, publish a projection, or acquire construction state.
+            if !instance.borrow_mut().script_artboard_input_context_live() {
+                return Ok(false);
+            }
             let Some(artboard_resolver) = artboard_resolver else {
                 return Ok(false);
             };

@@ -1279,3 +1279,95 @@ constructor guard, scalar/trigger/Artboard projection policy, concrete Luau
 ScriptAsset guard, and golden rehydration/default-state-machine/frame-tail
 witnesses all passed. They establish the accepted local properties but do not
 enter any of the three rejected paths above.
+
+## Correction after review `8449eee45`
+
+Status: **PENDING — TWO FRESH INDEPENDENT REVIEWS REQUIRED.** This correction
+addresses only the three rejected operative paths. It does not self-certify
+the ScriptInput authority.
+
+### The live backend guard now precedes resolver preparation
+
+`apply_scripted_input_update` now asks the concrete ScriptInstance for
+`script_artboard_input_context_live()` at the start of the Artboard branch,
+before resolver lookup or `prepare_script_artboard`. A missing state/table/
+ScriptAsset therefore returns `Ok(false)`: no typed preparation error escapes,
+no deferred constructor authority is acquired, no setter/dirt path runs, and
+the caller receives no table-projection success. The setter repeats the guard
+before construction so a backend lifetime change between those two authored
+boundaries remains inert.
+
+`live_artboard_update_checks_script_asset_before_deferred_construction` now
+uses a resolver whose `prepare_script_artboard` both increments a counter and
+returns a typed resource error. Against an instance with a live general
+lifetime but absent Artboard table/ScriptAsset context, the actual update path
+returns false, the preparation count remains zero, and the setter/projection
+trace remains empty.
+
+### Golden rehydration now preserves the pinned two-loop transaction
+
+`rehydrate_script_inputs_in_range` is the operative golden owner for both the
+production rehydration call and its witnesses. Its first, allocation-free loop
+validates every matching input without invoking the supplied application
+owner. An Artboard must retain a representable, present referenced graph. A
+ViewModel input must retain a DataContext, claimed path, and concrete
+ViewModel-property cell. Only after every input passes does the second loop
+invoke setters in authored order.
+
+The validation API now preserves the pinned distinction between an unresolved
+ViewModel property (`None`, whole hydration returns false) and a valid
+ViewModel property whose selected child occurrence is currently null
+(`Some(None)`, hydration succeeds without replacing the table field). The
+caller skips `didHydrateScriptInputs`, layout/path-effect hydration completion,
+and user init when the first loop returns false; a cold pending init stays
+deferred. The authored application loop re-resolves the ViewModel property and
+also returns false, rather than panicking or continuing, if an earlier authored
+setter made that prerequisite unavailable after preflight.
+
+`rehydration_preflight_is_atomic_for_late_artboard_and_unresolved_view_model`
+enters this operative owner twice. A valid scalar followed by a missing
+Artboard produces zero application callbacks, and an actual retained owner
+context plus an unclaimed ViewModel path also produces zero application
+callbacks. Neither former partial-publish/continue route remains.
+
+The cold `hydrate_script_inputs` sibling was inspected separately. Pinned
+`validateForColdScriptInit` returns true for Artboard and ViewModel inputs, and
+the generated scalar/trigger inputs have no failing cold prerequisite, so
+moving its authored construction/application work behind a new live-hydration
+preflight would not reproduce an upstream gate.
+
+### Bound-Artboard refresh now retains the owner as parent
+
+`refresh_bound_script_artboard_inputs` now calls
+`new_refreshed_runner_script_artboard`. That owner creates a
+`ScriptArtboardParentContext` from the retained owning handle, constructs the
+child through `new_with_parent_context`, creates its authored default state
+machine, and only then binds the selected child ViewModel across the Artboard
+and state machine. The unparented `RunnerScriptArtboard::new` bypass was
+removed because no remaining caller had the authority to discard the parent.
+
+`refreshed_script_artboard_preserves_parent_only_value_resolution` uses two
+partial occurrences of the same ViewModel schema: the child local occurrence
+contains only property zero, while the retained owner contains only property
+one with value `35`. After the actual refresh constructor, the child's bound
+DataContext resolves source path `[0, 1]` to `35` through its parent. A root-
+only context returns no value for that path, so this witness distinguishes the
+corrected chain from the rejected implementation.
+
+Focused correction evidence, all with `CARGO_INCREMENTAL=0`:
+
+- `live_artboard_update_checks_script_asset_before_deferred_construction`:
+  passed;
+- `rehydration_preflight_is_atomic_for_late_artboard_and_unresolved_view_model`:
+  passed;
+- `refreshed_script_artboard_preserves_parent_only_value_resolution`: passed;
+- `rehydrated_script_artboard_binds_after_default_machine_and_keeps_host_frame_tail`:
+  passed;
+- complete `scripted_listener_action_tests`: 101 passed;
+- complete golden-runner scripting unit suite: 17 passed;
+- concrete Luau
+  `artboard_setter_checks_script_asset_before_running_prepared_constructor`:
+  passed.
+
+Receipt status remains pending until two fresh reviewers independently inspect
+the corrected production/golden call chains and the operative witnesses.

@@ -404,6 +404,25 @@ impl ScriptArtboardResolver for HydrationArtboardResolver {
 }
 
 #[derive(Debug)]
+struct GuardProbeArtboardResolver {
+    prepare_calls: Rc<Cell<usize>>,
+}
+
+impl ScriptArtboardResolver for GuardProbeArtboardResolver {
+    fn prepare_script_artboard(
+        &self,
+        _source: &crate::ScriptArtboardSource,
+        _parent_context: Option<&crate::ScriptArtboardParentContext>,
+    ) -> Result<Box<dyn crate::PreparedScriptArtboard>, ScriptError> {
+        self.prepare_calls.set(self.prepare_calls.get() + 1);
+        Err(ScriptError::with_resource_code(
+            "guarded resolver must remain unreachable",
+            "script.resource.guarded-prepare",
+        ))
+    }
+}
+
+#[derive(Debug)]
 struct AfterArtboardViewModelResolver {
     trace: Rc<RefCell<Vec<String>>>,
     artboard_applied: Rc<Cell<bool>>,
@@ -1034,22 +1053,23 @@ fn scripted_input_scalar_trigger_and_artboard_projection_failures_match_cpp() {
 
 #[test]
 fn live_artboard_update_checks_script_asset_before_deferred_construction() {
-    let trace = Rc::new(RefCell::new(Vec::new()));
+    let prepare_calls = Rc::new(Cell::new(0));
+    let artboard_widths = Rc::new(RefCell::new(Vec::new()));
     let instance = RuntimeScriptInstanceHandle::new(Box::new(InputProjectionScript {
         scalar_values: Rc::new(RefCell::new(Vec::new())),
         trigger_calls: Rc::new(Cell::new(0)),
         trigger_failure: ProjectionFailure::Ordinary,
-        artboard_widths: Rc::new(RefCell::new(Vec::new())),
+        artboard_widths: Rc::clone(&artboard_widths),
         lifetime_valid: true,
         artboard_context_live: false,
     }));
-    let resolver = HydrationArtboardResolver {
-        trace: Rc::clone(&trace),
+    let resolver = GuardProbeArtboardResolver {
+        prepare_calls: Rc::clone(&prepare_calls),
     };
     let mut host = NoopScriptHost;
 
     assert!(
-        apply_scripted_input_update(
+        !apply_scripted_input_update(
             &instance,
             &ScriptCoreString::from("panel"),
             crate::state_machine::RuntimeScriptedListenerBoundValue::Artboard(
@@ -1060,12 +1080,14 @@ fn live_artboard_update_checks_script_asset_before_deferred_construction() {
             &mut host,
         )
         .unwrap(),
-        "the pinned setter is an accepted inert update after prerequisite preparation"
+        "the pinned setter reports no table projection when its ScriptAsset/table context is absent"
     );
-    assert!(
-        trace.borrow().is_empty(),
-        "the backend ScriptAsset/live-table guard must run before Artboard construction"
+    assert_eq!(
+        prepare_calls.get(),
+        0,
+        "the backend ScriptAsset/live-table guard must run before resolver preparation, including typed resource errors"
     );
+    assert!(artboard_widths.borrow().is_empty());
 }
 
 #[test]

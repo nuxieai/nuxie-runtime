@@ -2644,6 +2644,17 @@ impl ScriptArtboardDataContext {
     pub(crate) fn runtime_context(&self) -> &RuntimeOwnedDataContext {
         &self.inner
     }
+
+    /// Resolve one numeric source path through the child's complete local and
+    /// retained-parent chain. This is exposed for facade conformance checks;
+    /// ordinary script access continues through the bound state machine.
+    #[doc(hidden)]
+    pub fn resolve_number_source_path(&self, path: &[u32]) -> Option<f32> {
+        let (context, property_path) = self.inner.resolved_property_path(path)?;
+        context
+            .borrow()
+            .number_value_by_property_path(&property_path)
+    }
 }
 
 /// Occurrence-owned resolver used by a live ScriptInputArtboard DataBind.

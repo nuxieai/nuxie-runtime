@@ -259,8 +259,8 @@ pub use script_asset::scripted_object_inits;
 pub use script_input_artboard::ScriptArtboardSource;
 pub use script_input_viewmodel_property::{
     ScriptInputViewModelPropertyPath, bound_script_view_model_from_owned_context,
-    bound_script_view_model_from_owned_path, bound_script_view_model_snapshot,
-    bound_script_view_model_snapshot_from_path,
+    bound_script_view_model_from_owned_path, bound_script_view_model_property_from_owned_context,
+    bound_script_view_model_snapshot, bound_script_view_model_snapshot_from_path,
 };
 #[doc(hidden)]
 pub use scripted_data_converter::{

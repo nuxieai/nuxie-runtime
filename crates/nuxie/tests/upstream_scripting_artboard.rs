@@ -41,17 +41,32 @@ fn sixty_frame_artboard_silver(fixture: &str, silver_name: &str) {
     let artboard = file.artboard_named("Artboard").expect("Artboard artboard");
     let mut artboard = artboard.instantiate().expect("Artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("Artboard renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
-    artboard.advance_with_state_machines(std::slice::from_mut(&mut machine), 0.1);
+    artboard
+        .try_advance_with_state_machines_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.1,
+            &mut silver,
+        )
+        .expect("initial scripted Artboard frame advances");
     let mut renderer = silver.borrow().make_renderer();
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("initial draw");
     for _ in 0..60 {
         silver.borrow_mut().add_frame();
-        artboard.advance_with_state_machines(std::slice::from_mut(&mut machine), 0.016);
+        artboard
+            .try_advance_with_state_machines_and_factory(
+                std::slice::from_mut(&mut machine),
+                0.016,
+                &mut silver,
+            )
+            .expect("scripted Artboard frame advances");
         artboard
             .draw(&mut silver, &mut renderer)
             .expect("frame draw");
@@ -60,19 +75,19 @@ fn sixty_frame_artboard_silver(fixture: &str, silver_name: &str) {
 }
 
 #[test]
-#[ignore = "expected-red: exact scripted Artboard-input silver awaits renderer stream parity"]
+#[ignore = "expected-red: ArtboardGrid init indexes nil Artboard input instance at line 43"]
 fn script_instances_artboard_input() {
     sixty_frame_artboard_silver("script_artboard_test.riv", "script_artboards");
 }
 
 #[test]
-#[ignore = "expected-red: exact scripted Artboard-origin silver awaits renderer stream parity"]
+#[ignore = "expected-red: CircleOfArtboards init indexes nil Artboard input instance at line 15"]
 fn script_instances_artboard_input_with_proper_origin() {
     sixty_frame_artboard_silver("script_artboard_origin_test.riv", "script_artboards_origin");
 }
 
 #[test]
-#[ignore = "expected-red: exact didChange scripted dirt sequence is not yet parity-green"]
+#[ignore = "expected-red: MainScript init indexes nil Artboard input instance at line 11"]
 fn script_node_advance_affects_did_change_via_dirt() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("script_affects_has_changed.riv"))
@@ -80,6 +95,9 @@ fn script_node_advance_affects_did_change_via_dirt() {
     let artboard = file.artboard_named("Main").expect("Main artboard");
     let mut artboard = artboard.instantiate().expect("Main instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("Main renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -87,43 +105,55 @@ fn script_node_advance_affects_did_change_via_dirt() {
         .instantiate_view_model()
         .expect("view-model instance");
     artboard.bind_view_model(&view_model);
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.1,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.1,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("initial didChange frame advances");
     let mut renderer = silver.borrow().make_renderer();
     assert!(artboard.raw().did_change());
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("first draw");
     silver.borrow_mut().add_frame();
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        1.0,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            1.0,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("stationary didChange frame advances");
     assert!(!artboard.raw().did_change());
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("second draw");
     assert!(view_model.set_bool("toLeft", true));
     silver.borrow_mut().add_frame();
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.1,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.1,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("dirty didChange frame advances");
     assert!(artboard.raw().did_change());
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("third draw");
     silver.borrow_mut().add_frame();
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.1,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.1,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("settled didChange frame advances");
     assert!(!artboard.raw().did_change());
     artboard
         .draw(&mut silver, &mut renderer)
@@ -132,7 +162,7 @@ fn script_node_advance_affects_did_change_via_dirt() {
 }
 
 #[test]
-#[ignore = "expected-red: exact scripted linear-animation silver awaits renderer stream parity"]
+#[ignore = "expected-red: JumpToAnimations init indexes nil Artboard input instance at line 12"]
 fn script_instance_linear_animations() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("scripting_linear_animation.riv"))
@@ -140,6 +170,9 @@ fn script_instance_linear_animations() {
     let artboard = file.artboard_named("Main").expect("Main artboard");
     let mut artboard = artboard.instantiate().expect("Main instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("Main renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -150,41 +183,47 @@ fn script_instance_linear_animations() {
     }
     .expect("view-model instance");
     artboard.bind_view_model(&view_model);
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.1,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.1,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("initial scripted animation frame advances");
     let mut renderer = silver.borrow().make_renderer();
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("initial draw");
     for _ in 0..60 {
         silver.borrow_mut().add_frame();
-        artboard.advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut machine),
-            0.064,
-            &mut view_model,
-        );
+        artboard
+            .try_advance_with_state_machines_and_view_model_and_factory(
+                std::slice::from_mut(&mut machine),
+                0.064,
+                &mut view_model,
+                &mut silver,
+            )
+            .expect("scripted animation frame advances");
         artboard
             .draw(&mut silver, &mut renderer)
             .expect("animation draw");
     }
     for time in [0.55, -1.0, 3.8, 40.0] {
         assert!(view_model.set_number("time", time));
-        double_advance(&mut artboard, &mut machine, &mut view_model);
+        double_advance(&mut artboard, &mut machine, &mut view_model, &mut silver);
         silver.borrow_mut().add_frame();
         artboard
             .draw(&mut silver, &mut renderer)
             .expect("seconds draw");
         assert!(view_model.set_string("mode", "frames"));
-        double_advance(&mut artboard, &mut machine, &mut view_model);
+        double_advance(&mut artboard, &mut machine, &mut view_model, &mut silver);
         silver.borrow_mut().add_frame();
         artboard
             .draw(&mut silver, &mut renderer)
             .expect("frames draw");
         assert!(view_model.set_string("mode", "percentage"));
-        double_advance(&mut artboard, &mut machine, &mut view_model);
+        double_advance(&mut artboard, &mut machine, &mut view_model, &mut silver);
         silver.borrow_mut().add_frame();
         artboard
             .draw(&mut silver, &mut renderer)
@@ -197,18 +236,22 @@ fn double_advance(
     artboard: &mut nuxie::ArtboardInstance<'_>,
     machine: &mut nuxie::StateMachineInstance,
     view_model: &mut nuxie::ViewModelInstance,
+    factory: &mut dyn nuxie_render_api::Factory,
 ) {
     for _ in 0..2 {
-        artboard.advance_with_state_machines_and_view_model(
-            std::slice::from_mut(machine),
-            0.016,
-            view_model,
-        );
+        artboard
+            .try_advance_with_state_machines_and_view_model_and_factory(
+                std::slice::from_mut(machine),
+                0.016,
+                view_model,
+                factory,
+            )
+            .expect("scripted animation mutation frame advances");
     }
 }
 
 #[test]
-#[ignore = "expected-red: exact scripted Artboard-opacity silver awaits renderer stream parity"]
+#[ignore = "expected-red: CircleOfArtboards init indexes nil Artboard input instance at line 15"]
 fn script_instances_artboard_with_opacity_applied() {
     sixty_frame_artboard_silver(
         "script_artboard_opacity_test.riv",
@@ -217,7 +260,7 @@ fn script_instances_artboard_with_opacity_applied() {
 }
 
 #[test]
-#[ignore = "expected-red: exact scripted view-model source-cache silver awaits parity closure"]
+#[ignore = "expected-red: frame 0 op 22 expects another retained paint before frameSize"]
 fn view_model_source_cache_is_cleared_when_instance_changes() {
     let file = File::import_with_unsigned_scripts(&pinned_fixture("scripted_viewmodel_cache.riv"))
         .expect("scripted_viewmodel_cache imports with trusted scripts");
@@ -226,6 +269,9 @@ fn view_model_source_cache_is_cleared_when_instance_changes() {
         .instantiate()
         .expect("default artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("default renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -234,11 +280,14 @@ fn view_model_source_cache_is_cleared_when_instance_changes() {
         .expect("default view-model instance");
     let mut renderer = silver.borrow().make_renderer();
     artboard.bind_view_model(&view_model);
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.016,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("initial source-cache frame advances");
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("initial draw");
@@ -246,17 +295,23 @@ fn view_model_source_cache_is_cleared_when_instance_changes() {
 
     machine.pointer_down(artboard.raw_mut(), 450.0, 50.0, 0);
     machine.pointer_up(artboard.raw_mut(), 450.0, 50.0, 0);
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.016,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("first source selection advances");
     assert!(view_model.fire_trigger("createInstance"));
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.016,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("first instance creation advances");
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("source-1 draw");
@@ -264,21 +319,27 @@ fn view_model_source_cache_is_cleared_when_instance_changes() {
 
     machine.pointer_down(artboard.raw_mut(), 450.0, 150.0, 0);
     machine.pointer_up(artboard.raw_mut(), 450.0, 150.0, 0);
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.016,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("second source selection advances");
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("source-2 draw");
     silver.borrow_mut().add_frame();
     assert!(view_model.fire_trigger("createInstance"));
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.016,
-        &mut view_model,
-    );
+    artboard
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut silver,
+        )
+        .expect("second instance creation advances");
     artboard
         .draw(&mut silver, &mut renderer)
         .expect("final draw");

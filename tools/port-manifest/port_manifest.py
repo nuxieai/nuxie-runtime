@@ -60,9 +60,9 @@ FEATURE_ROWS = {
         "FL-E4: direct occurrence-owned joystick runtime and parity fixtures.",
     ),
     "src/shapes/list_path.cpp": (
-        "partial",
-        "crates/nuxie-runtime/src/draw.rs",
-        "F10: generic handling exists but still needs a parity fixture.",
+        "ported",
+        "crates/nuxie-runtime/src/shapes/list_path.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/data_bind/data_bind_context.rs; crates/nuxie-runtime/src/draw.rs",
+        "Phase 3 paired owner audit: occurrence-local listener and synthetic CubicDetachedVertex ownership, all 12 symbol mappings and precedence, live subscriptions, positional list remap, teardown, cold clone, path invalidation, and draw projection match the pin. The live D-LP-INIT/XY/EDGE differential supersedes stale F10.",
     ),
     "src/async/work_pool.cpp": ("absent", "", "F12: async work pool is absent."),
     "src/listener_group.cpp": (

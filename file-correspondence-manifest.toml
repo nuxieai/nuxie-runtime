@@ -4208,8 +4208,8 @@ legacy_port_status = "ported"
 b6_row_id = "B6-0339"
 b6_verdict = "ADAPTED"
 b6_cluster = "layout-shapes-paint"
-audit_record = "docs/b6-audit/results/post-b6-port-reviews.md"
-note = "FL-E8 WP2 faithful: occurrence-local listener/vertex ownership, positional remap and teardown, exact 12-symbol precedence/live subscriptions, safe invalid boundaries, and retained path/composer invalidation are proven by D-LP-INIT/XY/RD/DETACHED/POINT/INVALID/PARTIAL/LIVE/EDGE, G-LP, S-LP, and R-LP-OWNER."
+audit_record = "docs/parity-audits/list-path.md"
+note = "Phase 3 current-pin paired audit confirms FL-E8 WP2: occurrence-local listener/vertex ownership, positional remap and teardown, exact 12-symbol precedence/live subscriptions, safe invalid boundaries, and retained path/composer invalidation are proven by D-LP-INIT/XY/RD/DETACHED/POINT/INVALID/PARTIAL/LIVE/EDGE, G-LP, S-LP, and R-LP-OWNER."
 
 [[file]]
 upstream = "src/shapes/mesh.cpp"

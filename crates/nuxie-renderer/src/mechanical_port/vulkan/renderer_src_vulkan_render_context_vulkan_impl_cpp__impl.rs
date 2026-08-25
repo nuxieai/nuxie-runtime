@@ -3637,15 +3637,6 @@ impl<'a> PipelineBinder<'a> {
     }
 }
 
-fn batch_scissor(batch: &DrawBatch) -> Option<IAABB> {
-    batch.scissorRect.map(|value| IAABB {
-        left: value.left as i32,
-        top: value.top as i32,
-        right: value.right as i32,
-        bottom: value.bottom as i32,
-    })
-}
-
 fn submitDrawList(
     implementation: &mut RenderContextVulkanImpl,
     desc: &FlushDescriptor,
@@ -3771,7 +3762,7 @@ fn submitDrawList(
                     right: render_pass_scissor.left + 1,
                     bottom: render_pass_scissor.top + 1,
                 }
-            } else if let Some(scissor) = batch_scissor(batch) {
+            } else if let Some(scissor) = batch.scissorRect {
                 render_pass_scissor.intersectOrEmpty(scissor)
             } else {
                 render_pass_scissor

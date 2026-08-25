@@ -2634,18 +2634,6 @@ impl Drop for MSAADrawRenderPass {
     }
 }
 
-fn intersectDstReadBounds(
-    update: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::IAABB,
-    draw: &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::IAABB,
-) -> IAABB {
-    IAABB {
-        left: update.left.max(draw.left),
-        top: update.top.max(draw.top),
-        right: update.right.min(draw.right),
-        bottom: update.bottom.min(draw.bottom),
-    }
-}
-
 impl DrawRenderPassApi for MSAADrawRenderPass {
     fn encoder(&self) -> &super::webgpu_cpp_decl::RenderPassEncoder {
         &self.base.m_encoder
@@ -2682,7 +2670,8 @@ impl DrawRenderPassApi for MSAADrawRenderPass {
                 copyTargetToDstColorTexture(
                     target,
                     &self.base.m_commandEncoder,
-                    intersectDstReadBounds(desc.renderTargetUpdateBounds, drawRef.pixelBounds()),
+                    desc.renderTargetUpdateBounds
+                        .intersect(*drawRef.pixelBounds()),
                 );
                 draw = drawRef.nextDstRead();
             }

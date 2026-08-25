@@ -4658,47 +4658,6 @@ fn padding_to_align_up(value: usize, alignment: usize) -> usize {
     (alignment - value % alignment) % alignment
 }
 
-fn intersect_gpu_bounds(a: gpu::IAABB, b: IAABB) -> gpu::IAABB {
-    gpu::IAABB {
-        left: a.left.max(b.left),
-        top: a.top.max(b.top),
-        right: a.right.min(b.right),
-        bottom: a.bottom.min(b.bottom),
-    }
-}
-fn intersect_u16(a: AABBu16, b: AABBu16) -> AABBu16 {
-    AABBu16 {
-        left: a.left.max(b.left),
-        top: a.top.max(b.top),
-        right: a.right.min(b.right),
-        bottom: a.bottom.min(b.bottom),
-    }
-}
-fn join_u16(a: AABBu16, b: AABBu16) -> AABBu16 {
-    AABBu16 {
-        left: a.left.min(b.left),
-        top: a.top.min(b.top),
-        right: a.right.max(b.right),
-        bottom: a.bottom.max(b.bottom),
-    }
-}
-fn clamp_bounds_u16(a: IAABB) -> AABBu16 {
-    AABBu16 {
-        left: a.left.clamp(0, u16::MAX as i32) as u16,
-        top: a.top.clamp(0, u16::MAX as i32) as u16,
-        right: a.right.clamp(0, u16::MAX as i32) as u16,
-        bottom: a.bottom.clamp(0, u16::MAX as i32) as u16,
-    }
-}
-fn join_i32(a: IAABB, b: IAABB) -> IAABB {
-    IAABB {
-        left: a.left.min(b.left),
-        top: a.top.min(b.top),
-        right: a.right.max(b.right),
-        bottom: a.bottom.max(b.bottom),
-    }
-}
-
 fn gradient_data_height(simple_ramp_count: usize, complex_ramp_count: usize) -> usize {
     resource_texture_height(
         simple_ramp_count,
@@ -4798,15 +4757,6 @@ fn empty_flush_descriptor() -> gpu::FlushDescriptor {
         drawList: None,
         firstDstBlendBarrier: None,
         unresolvedBarriers: gpu::BarrierFlags::none,
-    }
-}
-
-fn maximally_negative_i32() -> IAABB {
-    IAABB {
-        left: i32::MAX,
-        top: i32::MAX,
-        right: i32::MIN,
-        bottom: i32::MIN,
     }
 }
 
@@ -5747,7 +5697,7 @@ impl LogicalFlush {
             m_pending_grad_span_count: 0,
             m_clips: Vec::new(),
             m_draws: Vec::new(),
-            m_combined_draw_bounds: maximally_negative_i32(),
+            m_combined_draw_bounds: IAABB::makeMaximallyNegative(),
             m_combined_draw_contents: gpu::DrawContents::none,
             m_path_padding_count: 0,
             m_paint_padding_count: 0,
@@ -5791,7 +5741,7 @@ impl LogicalFlush {
         self.m_pending_grad_span_count = 0;
         self.m_clips.clear();
         self.m_draws.clear();
-        self.m_combined_draw_bounds = maximally_negative_i32();
+        self.m_combined_draw_bounds = IAABB::makeMaximallyNegative();
         self.m_combined_draw_contents = gpu::DrawContents::none;
         self.m_path_padding_count = 0;
         self.m_paint_padding_count = 0;
@@ -6823,36 +6773,24 @@ impl LogicalFlush {
                 if features.supportsClipScissor
                     && (draw.clipID() != 0 || draw.clippingPixelBounds().is_some())
                 {
-                    let mut clip = draw.clippingPixelBounds().unwrap_or(IAABB {
-                        left: i32::MIN,
-                        top: i32::MIN,
-                        right: i32::MAX,
-                        bottom: i32::MAX,
-                    });
+                    let mut clip = draw
+                        .clippingPixelBounds()
+                        .unwrap_or(IAABB::makeMaximal());
                     if draw.clipID() != 0 {
                         let tight = self.getClipInfo(draw.clipID()).tightenedBounds;
-                        clip = IAABB {
-                            left: clip.left.max(tight.left as i32),
-                            top: clip.top.max(tight.top as i32),
-                            right: clip.right.min(tight.right as i32),
-                            bottom: clip.bottom.min(tight.bottom as i32),
-                        };
+                        clip = clip.intersect(tight);
                     }
-                    let target_w = self.frameDescriptor().renderTargetWidth as i32;
-                    let target_h = self.frameDescriptor().renderTargetHeight as i32;
-                    let visible_draw_bounds = IAABB {
-                        left: draw_bounds.left.max(0),
-                        top: draw_bounds.top.max(0),
-                        right: draw_bounds.right.min(target_w),
-                        bottom: draw_bounds.bottom.min(target_h),
-                    };
+                    let visible_draw_bounds = draw_bounds.intersect(IAABB::MakeWH(
+                        self.frameDescriptor().renderTargetWidth,
+                        self.frameDescriptor().renderTargetHeight,
+                    ));
                     let needs_scissor = !(clip.left <= visible_draw_bounds.left
                         && clip.top <= visible_draw_bounds.top
                         && clip.right >= visible_draw_bounds.right
                         && clip.bottom >= visible_draw_bounds.bottom);
                     if needs_scissor {
                         draw_bounds = clip;
-                        let clip_u16 = clamp_bounds_u16(clip);
+                        let clip_u16 = clip.clamp_cast::<u16>();
                         if let Some(existing) = context.m_scissor_id_lookup.get(&clip_u16) {
                             scissor_id = *existing;
                         } else {
@@ -6863,14 +6801,7 @@ impl LogicalFlush {
                         draw.setScissorRect(clip_u16);
                     }
                 }
-                if draw_bounds
-                    != (IAABB {
-                        left: i32::MIN,
-                        top: i32::MIN,
-                        right: i32::MAX,
-                        bottom: i32::MAX,
-                    })
-                {
+                if draw_bounds != IAABB::makeMaximal() {
                     draw_bounds = IAABB {
                         left: draw_bounds.left.saturating_sub(1),
                         top: draw_bounds.top.saturating_sub(1),
@@ -6881,12 +6812,10 @@ impl LogicalFlush {
                 if context.frameInterlockMode() == gpu::InterlockMode::clockwiseAtomic
                     && draw.isClipUpdate()
                 {
-                    draw_bounds = IAABB {
-                        left: 0,
-                        top: 0,
-                        right: context.frameDescriptor().renderTargetWidth as i32,
-                        bottom: context.frameDescriptor().renderTargetHeight as i32,
-                    };
+                    draw_bounds = IAABB::MakeWH(
+                        context.frameDescriptor().renderTargetWidth,
+                        context.frameDescriptor().renderTargetHeight,
+                    );
                 }
                 let all_same_group = context.frameInterlockMode() == gpu::InterlockMode::msaa
                     && !features.supportsBlendAdvancedKHR
@@ -7423,19 +7352,13 @@ impl LogicalFlush {
             0
         };
         self.tightenClipBoundsExecutable();
-        let source_target_bounds = unsafe { (&*flush_resources.renderTarget).bounds() };
-        let target_bounds = gpu::IAABB {
-            left: source_target_bounds.left,
-            top: source_target_bounds.top,
-            right: source_target_bounds.right,
-            bottom: source_target_bounds.bottom,
-        };
+        let target_bounds = unsafe { (&*flush_resources.renderTarget).bounds() };
         self.m_flush_desc.renderTargetUpdateBounds = if clear_during_atomic_resolve
             || self.m_flush_desc.colorLoadAction == gpu::LoadAction::clear
         {
             target_bounds
         } else {
-            intersect_gpu_bounds(target_bounds, self.m_combined_draw_bounds)
+            target_bounds.intersect(self.m_combined_draw_bounds)
         };
         if self.m_flush_desc.renderTargetUpdateBounds.left
             >= self.m_flush_desc.renderTargetUpdateBounds.right
@@ -7559,7 +7482,7 @@ impl LogicalFlush {
     }
 
     pub fn tightenClipBoundsExecutable(&mut self) {
-        debug_assert_eq!(self.m_combined_draw_bounds, maximally_negative_i32());
+        debug_assert_eq!(self.m_combined_draw_bounds, IAABB::makeMaximallyNegative());
         let supports_scissor = self.platformFeatures().supportsClipScissor;
         for index in (0..self.m_draws.len()).rev() {
             let draw = unsafe { &*self.m_draws[index].0 };
@@ -7573,7 +7496,7 @@ impl LogicalFlush {
                 let clip_id = draw.clipID();
                 let active = draw.hasActiveClip();
                 let clip = self.getWritableClipInfoExecutable(clip_id);
-                clip.tightenedBounds = intersect_u16(clip.tightenedBounds, clip.readBounds);
+                clip.tightenedBounds = clip.tightenedBounds.intersect(clip.readBounds);
                 let tightened = clip.tightenedBounds;
                 let parent_id = clip.parentClipID;
                 if supports_scissor {
@@ -7583,28 +7506,24 @@ impl LogicalFlush {
                             && combined_bounds.right >= tightened.right as i32
                             && combined_bounds.bottom >= tightened.bottom as i32
                     );
-                    combined_bounds = IAABB {
-                        left: tightened.left as i32,
-                        top: tightened.top as i32,
-                        right: tightened.right as i32,
-                        bottom: tightened.bottom as i32,
-                    };
+                    combined_bounds = tightened
+                        .lossless_numeric_cast::<i32>()
+                        .expect("pinned lossless_numeric_cast requires u16 to fit i32");
                 }
                 if active {
                     debug_assert_ne!(parent_id, 0);
                     let parent = self.getWritableClipInfoExecutable(parent_id);
-                    parent.readBounds = join_u16(parent.readBounds, tightened);
+                    parent.readBounds = parent.readBounds.join(tightened);
                 } else {
                     debug_assert_eq!(parent_id, 0);
                 }
             } else if draw.hasActiveClip() {
                 let clip = self.getWritableClipInfoExecutable(draw.clipID());
-                clip.readBounds = join_u16(
-                    clip.readBounds,
-                    clamp_bounds_u16(*draw.clippedPixelBounds()),
-                );
+                clip.readBounds = clip
+                    .readBounds
+                    .join(draw.clippedPixelBounds().clamp_cast::<u16>());
             }
-            self.m_combined_draw_bounds = join_i32(self.m_combined_draw_bounds, combined_bounds);
+            self.m_combined_draw_bounds = self.m_combined_draw_bounds.join(combined_bounds);
         }
     }
 }

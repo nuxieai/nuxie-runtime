@@ -898,14 +898,6 @@ fn map_bounds(m: Mat2D, b: Aabb) -> Aabb {
         p.iter().map(|v| v.y).fold(f32::NEG_INFINITY, f32::max),
     )
 }
-fn round_bounds(b: Aabb) -> gpu::IAABB {
-    gpu::IAABB {
-        left: b.min_x.floor() as i32,
-        top: b.min_y.floor() as i32,
-        right: b.max_x.ceil() as i32,
-        bottom: b.max_y.ceil() as i32,
-    }
-}
 fn max_scale(m: Mat2D) -> f32 {
     let [xx, xy, yx, yy, _, _] = m.0;
     if xy == 0.0 && yx == 0.0 {
@@ -928,31 +920,7 @@ fn max_scale(m: Mat2D) -> f32 {
     }
     result.max(0.0).sqrt()
 }
-fn intersect(a: gpu::IAABB, b: gpu::IAABB) -> gpu::IAABB {
-    gpu::IAABB {
-        left: a.left.max(b.left),
-        top: a.top.max(b.top),
-        right: a.right.min(b.right),
-        bottom: a.bottom.min(b.bottom),
-    }
-}
-fn intersect_u16(a: AABBu16, b: gpu::IAABB) -> AABBu16 {
-    AABBu16 {
-        left: (a.left as i32).max(b.left).max(0) as u16,
-        top: (a.top as i32).max(b.top).max(0) as u16,
-        right: (a.right as i32).min(b.right).max(0) as u16,
-        bottom: (a.bottom as i32).min(b.bottom).max(0) as u16,
-    }
-}
 const MATH_EPSILON: f32 = 1.0 / 4096.0;
-fn aabb_empty_or_nan(b: Aabb) -> bool {
-    b.min_x >= b.max_x
-        || b.min_y >= b.max_y
-        || !b.min_x.is_finite()
-        || !b.min_y.is_finite()
-        || !b.max_x.is_finite()
-        || !b.max_y.is_finite()
-}
 fn map_path_bounds(m: Mat2D, path: &RawPath) -> Option<Aabb> {
     let mut iter = path.points().iter().copied();
     let first = iter.next()?;
@@ -1036,7 +1004,7 @@ impl RiveRenderer {
     }
     pub unsafe fn clipRectImplSource(&mut self, mut rect: Aabb, original_path: &RiveRenderPath) {
         let state = self.current_state().clone();
-        if aabb_empty_or_nan(rect) {
+        if rect.is_empty_or_nan() {
             self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
             return;
         }
@@ -1068,7 +1036,7 @@ impl RiveRenderer {
                 state.clipRect.max_y.min(rect.max_y),
             )
         };
-        let pixel = round_bounds(map_bounds(matrix, combined));
+        let pixel = map_bounds(matrix, combined).round_out();
         let inverse_ptr = unsafe {
             (&mut *self.m_context).make(gpu::ClipRectInverseMatrix::default())
                 as *const gpu::ClipRectInverseMatrix
@@ -1080,11 +1048,11 @@ impl RiveRenderer {
         current.clipRect = combined;
         current.clipRectMatrix = matrix;
         current.clipRectPixelBounds = pixel;
-        current.overallClipPixelBounds = intersect(current.overallClipPixelBounds, pixel);
+        current.overallClipPixelBounds = current.overallClipPixelBounds.intersect(pixel);
         current.clipRectInverseMatrix = inverse_ptr;
     }
     pub unsafe fn clipPathImplSource(&mut self, path: &RiveRenderPath) {
-        if aabb_empty_or_nan(path.getBounds()) {
+        if path.getBounds().is_empty_or_nan() {
             self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
             return;
         }
@@ -1093,8 +1061,8 @@ impl RiveRenderer {
             self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
             return;
         };
-        let pixel = round_bounds(mapped);
-        let combined = intersect(state.overallClipPixelBounds, pixel);
+        let pixel = mapped.round_out();
+        let combined = state.overallClipPixelBounds.intersect(pixel);
         if combined.left >= combined.right || combined.top >= combined.bottom {
             self.current_state_mut().overallClipPixelBounds = combined;
             return;
@@ -1240,7 +1208,7 @@ impl RiveRenderer {
                     },
                 }
             };
-            let tightened = intersect_u16(outer, draw_bounds);
+            let tightened = outer.intersect(draw_bounds);
             let id = unsafe {
                 (&mut *self.m_context).generateClipIDExecutable(draw_bounds, current, tightened)
             };
@@ -1413,10 +1381,11 @@ impl RendererContract for RiveRenderer {
                 self.restore();
                 return;
             }
-            let b = round_bounds(map_bounds(
+            let b = map_bounds(
                 self.current_state().matrix,
                 Aabb::new(0.0, 0.0, 1.0, 1.0),
-            ));
+            )
+            .round_out();
             self.clipAndPushDrawSource(own_image_rect(unsafe {
                 make_image_rect_draw(
                     b,

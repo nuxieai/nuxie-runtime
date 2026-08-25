@@ -1272,8 +1272,7 @@ impl Draw {
     ) {
         self.clip_rect_inverse_matrix = inverse_matrix;
         self.clipping_pixel_bounds = Some(clipping_pixel_bounds);
-        self.clipped_pixel_bounds =
-            intersect_iaabb(self.clipped_pixel_bounds, clipping_pixel_bounds);
+        self.clipped_pixel_bounds = self.clipped_pixel_bounds.intersect(clipping_pixel_bounds);
     }
     pub fn nextDstRead(&self) -> *const Draw {
         self.next_dst_read
@@ -1295,15 +1294,6 @@ impl Draw {
         subpass: i32,
     ) -> *mut gpu::DrawBatch {
         unsafe { (self.push_to_render_context)(self, flush, subpass) }
-    }
-}
-
-fn intersect_iaabb(a: IAABB, b: IAABB) -> IAABB {
-    IAABB {
-        left: a.left.max(b.left),
-        top: a.top.max(b.top),
-        right: a.right.min(b.right),
-        bottom: a.bottom.min(b.bottom),
     }
 }
 

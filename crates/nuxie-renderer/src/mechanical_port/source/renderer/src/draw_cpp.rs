@@ -924,22 +924,8 @@ unsafe fn allocate_path_resources(draw: *mut Draw, flush: *mut LogicalFlush) -> 
 
     const PADDING: i32 = 2;
     let frame = flush_ref.frameDescriptor();
-    let visible = IAABB {
-        left: owner.draw.base.pixel_bounds.left.max(0),
-        top: owner.draw.base.pixel_bounds.top.max(0),
-        right: owner
-            .draw
-            .base
-            .pixel_bounds
-            .right
-            .min(frame.renderTargetWidth as i32),
-        bottom: owner
-            .draw
-            .base
-            .pixel_bounds
-            .bottom
-            .min(frame.renderTargetHeight as i32),
-    };
+    let visible = IAABB::MakeWH(frame.renderTargetWidth, frame.renderTargetHeight)
+        .intersect(owner.draw.base.pixel_bounds);
     let width = (visible.right - visible.left).max(0) as u32;
     let height = (visible.bottom - visible.top).max(0) as u32;
     if owner.coverage_type == PathCoverageType::featherAtlas {

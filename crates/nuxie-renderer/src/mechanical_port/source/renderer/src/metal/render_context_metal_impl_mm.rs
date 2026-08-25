@@ -679,42 +679,7 @@ pub mod source_execution {
         pub alpha: f64,
     }
 
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub struct Rect {
-        pub left: u32,
-        pub top: u32,
-        pub right: u32,
-        pub bottom: u32,
-    }
-    impl Rect {
-        pub fn width(self) -> u32 {
-            self.right - self.left
-        }
-        pub fn height(self) -> u32 {
-            self.bottom - self.top
-        }
-        pub fn intersect_or_empty(self, other: Self) -> Self {
-            let left = self.left.max(other.left);
-            let top = self.top.max(other.top);
-            let right = self.right.min(other.right);
-            let bottom = self.bottom.min(other.bottom);
-            if right < left || bottom < top {
-                Self {
-                    left,
-                    top,
-                    right: left,
-                    bottom: top,
-                }
-            } else {
-                Self {
-                    left,
-                    top,
-                    right,
-                    bottom,
-                }
-            }
-        }
-    }
+    pub type Rect = nuxie_render_api::AABBu16;
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct SelectorCall {
@@ -3560,22 +3525,14 @@ pub mod source_execution {
 
     #[inline]
     fn source_scissor(value: gpu::AABBu16) -> Rect {
-        Rect {
-            left: value.left.into(),
-            top: value.top.into(),
-            right: value.right.into(),
-            bottom: value.bottom.into(),
-        }
+        value
     }
 
     #[inline]
     fn source_bounds(value: gpu::IAABB) -> Rect {
-        Rect {
-            left: value.left as u32,
-            top: value.top as u32,
-            right: value.right as u32,
-            bottom: value.bottom as u32,
-        }
+        value
+            .lossless_numeric_cast::<u16>()
+            .expect("pinned lossless_numeric_cast requires update bounds to fit u16")
     }
 
     #[inline]

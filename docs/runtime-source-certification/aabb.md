@@ -1,7 +1,7 @@
 # AABB source certification
 
-> **First independent correction review: REJECTED. Correction and two fresh
-> accepted adversarial reviews are still required.**
+> **Rejected findings corrected. Certification is PENDING two fresh,
+> independent accepted adversarial reviews from the corrected commit.**
 
 ## Authority and scope
 
@@ -153,10 +153,43 @@ bounds plus `pad` for Feather), and make the shared typed AABB the operative
 renderer dependency instead of retaining local type/algorithm substitutes.
 Then repeat both independent reviews from the corrected commit.
 
+## Rejected-finding correction
+
+The rejected actual-call-path findings are now corrected rather than waived:
+
+- `SemanticProvider::rootTransformAABB` reaches `for_expansion` and four
+  source-ordered `expand_to` calls instead of the span constructor.
+- inner Feather reaches the shared `RawPath::bounds().pad(...)` authority
+  instead of `PathBounds` extrema and manual padding.
+- `IAABB`, `AABBi16`, and `AABBu16` are aliases of the shared `TypedAabb`
+  owner throughout the renderer. The duplicate header structs and Vulkan
+  extension trait are gone.
+- shared renderer, RiveRenderer, WebGL2, WebGPU, Vulkan, and Metal call the
+  shared `intersect`, `intersectOrEmpty`, `join`, `clamp_cast`,
+  `lossless_numeric_cast`, `MakeWH`, maximal-sentinel, `round_out`, and
+  `is_empty_or_nan` operations. This also fixes the WebGL2 substitute that
+  returned a nonzero-origin degenerate rectangle where pinned
+  `intersectOrEmpty` returns four zeroes.
+
+The remaining rectangle-shaped helpers are separate pinned caller authority,
+not duplicate AABB geometry. `map_bounds` and `map_path_bounds` translate
+`Mat2D::mapBoundingBox`; backend scissor helpers only convert a source AABB to
+the platform API's coordinate/extent representation. They do not choose AABB
+extrema, intersections, unions, normalization, or cast policy.
+
+Correction gates:
+
+- `cargo test -p nuxie-render-api`: 40/40 package tests passed (27 unit, three
+  canonical-recording, three side-channel, seven upstream RawPath).
+- `cargo test -p nuxie-runtime --test upstream_aabb`: 12/12 passed.
+- individual `cargo check -p nuxie-renderer --features renderer-vulkan`,
+  `renderer-webgpu`, `renderer-webgl2`, and `renderer-metal`: passed. The
+  combined four-feature check is not a valid product configuration and fails
+  an unrelated mutually-exclusive `makeOreContext` cfg contract; it is not
+  used as evidence.
+
 ## Provisional result
 
-Implementation status: **CORRECTION REQUIRED**. Certification status:
-**REJECTED BY FIRST INDEPENDENT CORRECTION REVIEW**. Neither green tests nor the
-direct 58-unit implementation can promote the family while operative callers
-select different source units and production renderer paths retain substitute
-owners.
+Implementation status: **CORRECTED CANDIDATE**. Certification status:
+**PENDING TWO FRESH INDEPENDENT REVIEWS**. The rejected review remains recorded
+above as process evidence, but cannot certify or reject this newer candidate.

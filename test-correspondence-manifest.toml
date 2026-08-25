@@ -506,7 +506,7 @@ upstream = "tests/unit_tests/runtime/mat2d_test.cpp"
 test_case_count = 3
 status = "ported-direct"
 evidence = ["crates/nuxie-runtime/src/math/mat2d.rs::tests::{upstream_map_points_complete_sequence,upstream_map_bounding_box_complete_sequence}", "crates/nuxie-runtime/src/math/mat2d_find_max_scale.rs::tests::upstream_find_max_scale_complete_randomized_sequence"]
-note = "All three cases are complete safe-Rust ports. mapPoints preserves 105 points, the single/even/odd spans, eight matrices, and scalar cross-checks. findMaxScale preserves every fixed matrix, inverse set, 1000 matrix trials, 1000 normalized vectors per trial, and both tolerances; a deterministic Rust-local stream replaces platform-global C rand. mapBoundingBox preserves every overload-equivalent sequence, eight matrices, and all NaN/infinity assertions as an honest expected-red contract because Rust Mat2D has no paired production owner for that API."
+note = "All three cases are complete safe-Rust ports. mapPoints preserves 105 points, the single/even/odd spans, eight matrices, and scalar cross-checks. findMaxScale preserves every fixed matrix, inverse set, 1000 matrix trials, 1000 normalized vectors per trial, and both tolerances; a deterministic Rust-local stream replaces platform-global C rand. mapBoundingBox now executes against the production Mat2D owner and preserves every overload-equivalent sequence, eight matrices, translation-after-extrema ordering, and all empty/NaN/infinity assertions."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/math_test.cpp"

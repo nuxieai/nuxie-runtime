@@ -6,6 +6,23 @@ pub struct Mat2D(pub [f32; 6]);
 impl Mat2D {
     pub const IDENTITY: Self = Self([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 
+    pub const fn from_scale(scale_x: f32, scale_y: f32) -> Self {
+        Self([scale_x, 0.0, 0.0, scale_y, 0.0, 0.0])
+    }
+
+    pub const fn from_translation(translation_x: f32, translation_y: f32) -> Self {
+        Self([1.0, 0.0, 0.0, 1.0, translation_x, translation_y])
+    }
+
+    pub const fn from_scale_and_translation(
+        scale_x: f32,
+        scale_y: f32,
+        translation_x: f32,
+        translation_y: f32,
+    ) -> Self {
+        Self([scale_x, 0.0, 0.0, scale_y, translation_x, translation_y])
+    }
+
     pub fn from_rotation(radians: f32) -> Self {
         let (sin, cos) = if radians == 0.0 {
             (0.0, 1.0)
@@ -26,6 +43,72 @@ impl Mat2D {
             a[0].mul_add(b[4], a[2] * b[5]) + a[4],
             a[1].mul_add(b[4], a[3] * b[5]) + a[5],
         ])
+    }
+
+    pub const fn values(&self) -> &[f32; 6] {
+        &self.0
+    }
+
+    pub const fn xx(self) -> f32 {
+        self.0[0]
+    }
+
+    pub const fn xy(self) -> f32 {
+        self.0[1]
+    }
+
+    pub const fn yx(self) -> f32 {
+        self.0[2]
+    }
+
+    pub const fn yy(self) -> f32 {
+        self.0[3]
+    }
+
+    pub const fn tx(self) -> f32 {
+        self.0[4]
+    }
+
+    pub const fn ty(self) -> f32 {
+        self.0[5]
+    }
+
+    pub const fn translation(self) -> (f32, f32) {
+        (self.0[4], self.0[5])
+    }
+
+    pub fn set_xx(&mut self, value: f32) {
+        self.0[0] = value;
+    }
+
+    pub fn set_xy(&mut self, value: f32) {
+        self.0[1] = value;
+    }
+
+    pub fn set_yx(&mut self, value: f32) {
+        self.0[2] = value;
+    }
+
+    pub fn set_yy(&mut self, value: f32) {
+        self.0[3] = value;
+    }
+
+    pub fn set_tx(&mut self, value: f32) {
+        self.0[4] = value;
+    }
+
+    pub fn set_ty(&mut self, value: f32) {
+        self.0[5] = value;
+    }
+
+    pub fn scale(self, vector: (f32, f32)) -> Self {
+        let [a, b, c, d, e, f] = self.0;
+        Self([a * vector.0, b * vector.0, c * vector.1, d * vector.1, e, f])
+    }
+
+    pub fn translate(self, vector: (f32, f32)) -> Self {
+        let [a, b, c, d, e, f] = self.0;
+        Self([a, b, c, d, e + vector.0, f + vector.1])
     }
 
     pub fn scale_by_values(&mut self, scale_x: f32, scale_y: f32) {
@@ -75,22 +158,28 @@ impl Mat2D {
         self.0[0].mul_add(self.0[3], -(self.0[1] * self.0[2]))
     }
 
-    pub fn invert_or_identity(self) -> Self {
+    /// Safe-Rust form of pinned `Mat2D::invert(Mat2D*)`: `None` represents
+    /// the source's false return while leaving its output parameter unchanged.
+    pub fn invert(self) -> Option<Self> {
         let determinant = self.determinant();
         if determinant == 0.0 {
-            return Self::IDENTITY;
+            return None;
         }
 
         let [a, b, c, d, e, f] = self.0;
         let determinant = 1.0 / determinant;
-        Self([
+        Some(Self([
             d * determinant,
             -b * determinant,
             -c * determinant,
             a * determinant,
             c.mul_add(f, -(d * e)) * determinant,
             b.mul_add(e, -(a * f)) * determinant,
-        ])
+        ]))
+    }
+
+    pub fn invert_or_identity(self) -> Self {
+        self.invert().unwrap_or(Self::IDENTITY)
     }
 
     pub fn transform_point(self, x: f32, y: f32) -> (f32, f32) {
@@ -146,6 +235,57 @@ impl Mat2D {
         }
     }
 
+    /// Return the tight transformed bounds of `points` as
+    /// `(left, top, right, bottom)`.
+    ///
+    /// This is the scalar Rust translation of pinned
+    /// `Mat2D::mapBoundingBox(const Vec2D[], size_t)`. In particular, the
+    /// translation is added only after the per-axis extrema are selected,
+    /// individual NaN coordinates are ignored by `f32::min`/`f32::max`, and
+    /// an empty, all-NaN, or infinite result collapses to the zero box.
+    pub fn map_bounding_box(self, points: &[(f32, f32)]) -> (f32, f32, f32, f32) {
+        let [a, b, c, d, e, f] = self.0;
+        let mut left = f32::INFINITY;
+        let mut top = f32::INFINITY;
+        let mut right = f32::NEG_INFINITY;
+        let mut bottom = f32::NEG_INFINITY;
+
+        if b == 0.0 && c == 0.0 {
+            for &(x, y) in points {
+                let mapped_x = a * x;
+                let mapped_y = d * y;
+                left = left.min(mapped_x);
+                top = top.min(mapped_y);
+                right = right.max(mapped_x);
+                bottom = bottom.max(mapped_y);
+            }
+        } else {
+            for &(x, y) in points {
+                let mapped_x = a.mul_add(x, c * y);
+                let mapped_y = d.mul_add(y, b * x);
+                left = left.min(mapped_x);
+                top = top.min(mapped_y);
+                right = right.max(mapped_x);
+                bottom = bottom.max(mapped_y);
+            }
+        }
+
+        // Match the source's inverse non-negative extent test. Writing the
+        // comparison this way deliberately rejects `inf - inf` and every
+        // remaining NaN instead of accidentally accepting equal infinities.
+        if !(right - left >= 0.0 && bottom - top >= 0.0) {
+            return (0.0, 0.0, 0.0, 0.0);
+        }
+        (left + e, top + f, right + e, bottom + f)
+    }
+
+    /// Four-corner overload corresponding to pinned
+    /// `Mat2D::mapBoundingBox(const AABB&)`.
+    pub fn map_bounds(self, bounds: (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
+        let (left, top, right, bottom) = bounds;
+        self.map_bounding_box(&[(left, top), (right, top), (right, bottom), (left, bottom)])
+    }
+
     pub fn transform_direction(self, x: f32, y: f32) -> (f32, f32) {
         (self.0[0] * x + self.0[2] * y, self.0[1] * x + self.0[3] * y)
     }
@@ -154,6 +294,42 @@ impl Mat2D {
 impl Default for Mat2D {
     fn default() -> Self {
         Self::IDENTITY
+    }
+}
+
+impl std::ops::Index<usize> for Mat2D {
+    type Output = f32;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::IndexMut<usize> for Mat2D {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
+
+impl std::ops::Mul for Mat2D {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        self.multiply(rhs)
+    }
+}
+
+impl std::ops::MulAssign for Mat2D {
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = self.multiply(rhs);
+    }
+}
+
+impl std::ops::Mul<(f32, f32)> for Mat2D {
+    type Output = (f32, f32);
+
+    fn mul(self, rhs: (f32, f32)) -> Self::Output {
+        self.transform_point(rhs.0, rhs.1)
     }
 }
 
@@ -210,22 +386,25 @@ mod tests {
         }
     }
 
-    fn upstream_map_bounding_box(_matrix: Mat2D, _points: &[(f32, f32)]) -> UpstreamAabb {
-        // Mat2D has no production mapBoundingBox owner yet. The default result
-        // makes the complete upstream contract executable and observably red.
-        UpstreamAabb::default()
+    fn upstream_map_bounding_box(matrix: Mat2D, points: &[(f32, f32)]) -> UpstreamAabb {
+        let (left, top, right, bottom) = matrix.map_bounding_box(points);
+        UpstreamAabb {
+            left,
+            top,
+            right,
+            bottom,
+        }
     }
 
     fn upstream_map_aabb(matrix: Mat2D, bounds: UpstreamAabb) -> UpstreamAabb {
-        upstream_map_bounding_box(
-            matrix,
-            &[
-                (bounds.left, bounds.top),
-                (bounds.left, bounds.bottom),
-                (bounds.right, bounds.bottom),
-                (bounds.right, bounds.top),
-            ],
-        )
+        let (left, top, right, bottom) =
+            matrix.map_bounds((bounds.left, bounds.top, bounds.right, bounds.bottom));
+        UpstreamAabb {
+            left,
+            top,
+            right,
+            bottom,
+        }
     }
 
     fn assert_close(actual: f32, expected: f32) {
@@ -283,7 +462,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "expected-red: Rust Mat2D has no production mapBoundingBox owner"]
     fn upstream_map_bounding_box_complete_sequence() {
         let test_points = [
             (0.0, 0.0),
@@ -575,6 +753,91 @@ mod tests {
 
         matrix.map_points_in_place(&mut destination);
         assert_eq!(destination, expected.map(|(x, y)| matrix.map_point(x, y)));
+    }
+
+    #[test]
+    fn constructors_scale_translate_invert_and_operators_match_cpp_contracts() {
+        assert_eq!(Mat2D::default(), Mat2D::IDENTITY);
+        assert_eq!(
+            Mat2D::from_scale(2.0, 3.0),
+            Mat2D([2.0, 0.0, 0.0, 3.0, 0.0, 0.0])
+        );
+        assert_eq!(
+            Mat2D::from_translation(4.0, 5.0),
+            Mat2D([1.0, 0.0, 0.0, 1.0, 4.0, 5.0])
+        );
+        assert_eq!(
+            Mat2D::from_scale_and_translation(2.0, 3.0, 4.0, 5.0),
+            Mat2D([2.0, 0.0, 0.0, 3.0, 4.0, 5.0])
+        );
+
+        let matrix = Mat2D([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(matrix.values(), &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(
+            (
+                matrix.xx(),
+                matrix.xy(),
+                matrix.yx(),
+                matrix.yy(),
+                matrix.tx(),
+                matrix.ty(),
+            ),
+            (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+        );
+        assert_eq!(matrix.translation(), (5.0, 6.0));
+        assert_eq!(matrix[2], 3.0);
+        let mut fields = matrix;
+        fields.set_xx(7.0);
+        fields.set_xy(8.0);
+        fields.set_yx(9.0);
+        fields.set_yy(10.0);
+        fields.set_tx(11.0);
+        fields.set_ty(12.0);
+        fields[0] = 13.0;
+        assert_eq!(fields, Mat2D([13.0, 8.0, 9.0, 10.0, 11.0, 12.0]));
+        assert_eq!(
+            matrix.scale((7.0, 8.0)),
+            Mat2D([7.0, 14.0, 24.0, 32.0, 5.0, 6.0])
+        );
+        let mut scaled_in_place = matrix;
+        scaled_in_place.scale_by_values(7.0, 8.0);
+        assert_eq!(scaled_in_place, matrix.scale((7.0, 8.0)));
+        assert_eq!(
+            matrix.translate((7.0, 8.0)),
+            Mat2D([1.0, 2.0, 3.0, 4.0, 12.0, 14.0])
+        );
+        assert_eq!(matrix * (7.0, 8.0), matrix.transform_point(7.0, 8.0));
+
+        let rhs = Mat2D([2.0, 0.0, 0.0, 3.0, 4.0, 5.0]);
+        assert_eq!(matrix * rhs, matrix.multiply(rhs));
+        let mut assigned = matrix;
+        assigned *= rhs;
+        assert_eq!(assigned, matrix.multiply(rhs));
+
+        assert_eq!(Mat2D([0.0; 6]).invert(), None);
+        assert_eq!(Mat2D([0.0; 6]).invert_or_identity(), Mat2D::IDENTITY);
+        let invertible = Mat2D([2.0, 0.0, 0.0, 4.0, 6.0, 8.0]);
+        assert_eq!(
+            invertible.invert(),
+            Some(Mat2D([0.5, -0.0, -0.0, 0.25, -3.0, -2.0]))
+        );
+
+        let components = Mat2D::from_scale_and_translation(2.0, 3.0, 4.0, 5.0).decompose();
+        assert_eq!(
+            (
+                components.x,
+                components.y,
+                components.scale_x,
+                components.scale_y,
+                components.rotation,
+                components.skew,
+            ),
+            (4.0, 5.0, 2.0, 3.0, 0.0, 0.0)
+        );
+        assert_eq!(
+            Mat2D::compose(components),
+            Mat2D::from_scale_and_translation(2.0, 3.0, 4.0, 5.0)
+        );
     }
 
     #[test]

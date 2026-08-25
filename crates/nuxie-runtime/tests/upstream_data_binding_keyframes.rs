@@ -125,6 +125,10 @@ fn first_text_run(fixture: &Fixture) -> Option<Vec<u8>> {
         .map(<[u8]>::to_vec)
 }
 
+fn catch_approx_eq(actual: f32, expected: f32) -> bool {
+    (actual - expected).abs() <= f32::EPSILON * 100.0 * expected.abs()
+}
+
 fn any_node_has_x(fixture: &Fixture, expected: f32) -> bool {
     let x_key = property_key("Node", "x");
     graph(fixture).local_objects.iter().any(|object| {
@@ -135,7 +139,7 @@ fn any_node_has_x(fixture: &Fixture, expected: f32) -> bool {
             && fixture
                 .artboard
                 .double_property(object.local_id, x_key)
-                .is_some_and(|actual| (actual - expected).abs() <= 0.0001)
+                .is_some_and(|actual| catch_approx_eq(actual, expected))
     })
 }
 

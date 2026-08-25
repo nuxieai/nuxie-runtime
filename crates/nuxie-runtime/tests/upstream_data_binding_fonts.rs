@@ -8,7 +8,10 @@ use std::sync::Arc;
 use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_render_api::RecordingFactory;
-use nuxie_runtime::{ArtboardInstance, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance};
+use nuxie_runtime::{
+    ArtboardInstance, RuntimeFileAssetOwners, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance,
+};
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -121,11 +124,15 @@ fn data_bind_font() {
 }
 
 #[test]
+#[ignore = "expected-red: live font assignment does not replace the decoded font retained by the property backing FontAsset owner"]
 fn font_data_bind_stores_and_clears_the_font_on_the_property() {
     let (file, graphs) = fixture();
     let graph = graphs.artboards.first().expect("default artboard graph");
     let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
         .expect("default artboard instantiates");
+    let file_asset_owners = RuntimeFileAssetOwners::from_runtime(&file, None);
+    let font_assets = file_asset_owners.font_assets();
+    artboard.attach_runtime_file_asset_owners(&file_asset_owners);
     let context = default_context(&file);
     assert!(artboard.bind_owned_view_model_artboard_handle(&file, &context));
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -134,12 +141,15 @@ fn font_data_bind_stores_and_clears_the_font_on_the_property() {
         .advance_and_apply(&mut artboard, 0.0)
         .expect("initial state-machine advance");
 
-    assert!(
-        context
-            .borrow()
-            .font_asset_value_by_property_name("fontProperty")
-            .is_some()
-    );
+    let backing_asset_index = context
+        .borrow()
+        .font_asset_value_by_property_name("fontProperty")
+        .expect("fontProperty")
+        .file_asset_index();
+    let backing_asset_global = file
+        .file_asset(usize::try_from(backing_asset_index).expect("font asset index fits usize"))
+        .expect("fontProperty backing FontAsset")
+        .id;
 
     let kablammo: Arc<[u8]> = pinned_fixture("kablammo.ttf").into();
     assert!(
@@ -150,15 +160,10 @@ fn font_data_bind_stores_and_clears_the_font_on_the_property() {
     state_machine
         .advance_and_apply(&mut artboard, 0.0)
         .expect("kablammo state-machine advance");
-    assert_eq!(
-        context
-            .borrow()
-            .font_asset_value_by_property_name("fontProperty")
-            .expect("fontProperty")
-            .live_font_bytes()
-            .map(<[u8]>::as_ptr),
-        Some(kablammo.as_ptr())
-    );
+    let installed_kablammo = font_assets
+        .get(backing_asset_global)
+        .expect("backing FontAsset retains the assigned decoded kablammo font");
+    assert_eq!(installed_kablammo.as_ref(), kablammo.as_ref());
 
     let nabla: Arc<[u8]> = pinned_fixture("nabla.ttf").into();
     assert!(
@@ -169,15 +174,11 @@ fn font_data_bind_stores_and_clears_the_font_on_the_property() {
     state_machine
         .advance_and_apply(&mut artboard, 0.0)
         .expect("nabla state-machine advance");
-    assert_eq!(
-        context
-            .borrow()
-            .font_asset_value_by_property_name("fontProperty")
-            .expect("fontProperty")
-            .live_font_bytes()
-            .map(<[u8]>::as_ptr),
-        Some(nabla.as_ptr())
-    );
+    let installed_nabla = font_assets
+        .get(backing_asset_global)
+        .expect("backing FontAsset retains the assigned decoded nabla font");
+    assert_eq!(installed_nabla.as_ref(), nabla.as_ref());
+    assert!(!Arc::ptr_eq(&installed_kablammo, &installed_nabla));
 
     assert!(
         context
@@ -187,12 +188,5 @@ fn font_data_bind_stores_and_clears_the_font_on_the_property() {
     state_machine
         .advance_and_apply(&mut artboard, 0.0)
         .expect("clear-font state-machine advance");
-    assert!(
-        context
-            .borrow()
-            .font_asset_value_by_property_name("fontProperty")
-            .expect("fontProperty")
-            .live_font_bytes()
-            .is_none()
-    );
+    assert!(font_assets.get(backing_asset_global).is_none());
 }

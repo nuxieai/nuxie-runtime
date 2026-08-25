@@ -1,8 +1,20 @@
 //! Exact value-level ports for Wave B1 `data_binding_test.cpp` cases not in SRIV corpus.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, rc::Rc};
 
 use nuxie::File;
+use nuxie_runtime::{ViewModelRuntime, ViewModelRuntimeDataType};
+
+fn catch_approx_eq(actual: f32, expected: f32) -> bool {
+    (actual - expected).abs() <= f32::EPSILON * 100.0 * expected.abs()
+}
+
+fn assert_catch_approx(actual: f32, expected: f32) {
+    assert!(
+        catch_approx_eq(actual, expected),
+        "{actual} is not Catch Approx({expected})"
+    );
+}
 
 fn pinned(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -400,19 +412,42 @@ fn range_mapper() {
             .collect::<Vec<_>>()
     };
     assert_eq!(read(&artboard), [6.0, 3.0, 2.0, 2.0, 2.0]);
-    for (input, expected) in [
-        (-1.0, [1.0, 2.0, 2.0, 3.0, 2.0]),
-        (0.0, [2.0, 2.0, 2.0, 3.0, 2.0]),
-        (0.25, [2.12916, 2.12916, 2.12916, 2.87084, 2.0]),
-        (2.0, [4.0, 3.0, 2.0, 2.0, 2.0]),
-        (2.25, [4.25, 3.0, 2.12916, 2.0, 2.0]),
-    ] {
-        set_number(&mut view_model, "map-range-num", input);
-        advance(&mut artboard, &mut machine, &mut view_model, 0.0);
-        for (actual, expected) in read(&artboard).into_iter().zip(expected) {
-            assert!((actual - expected).abs() < 0.0001);
-        }
-    }
+    assert_eq!(
+        view_model
+            .raw()
+            .number_value_by_property_name("map-range-num"),
+        Some(4.0)
+    );
+
+    set_number(&mut view_model, "map-range-num", -1.0);
+    advance(&mut artboard, &mut machine, &mut view_model, 0.0);
+    assert_eq!(read(&artboard), [1.0, 2.0, 2.0, 3.0, 2.0]);
+
+    set_number(&mut view_model, "map-range-num", 0.0);
+    advance(&mut artboard, &mut machine, &mut view_model, 0.0);
+    assert_eq!(read(&artboard), [2.0, 2.0, 2.0, 3.0, 2.0]);
+
+    set_number(&mut view_model, "map-range-num", 0.25);
+    advance(&mut artboard, &mut machine, &mut view_model, 0.0);
+    let values = read(&artboard);
+    assert_catch_approx(values[0], 2.12916);
+    assert_catch_approx(values[1], 2.12916);
+    assert_catch_approx(values[2], 2.12916);
+    assert_catch_approx(values[3], 2.87084);
+    assert_eq!(values[4], 2.0);
+
+    set_number(&mut view_model, "map-range-num", 2.0);
+    advance(&mut artboard, &mut machine, &mut view_model, 0.0);
+    assert_eq!(read(&artboard), [4.0, 3.0, 2.0, 2.0, 2.0]);
+
+    set_number(&mut view_model, "map-range-num", 2.25);
+    advance(&mut artboard, &mut machine, &mut view_model, 0.0);
+    let values = read(&artboard);
+    assert_eq!(values[0], 4.25);
+    assert_eq!(values[1], 3.0);
+    assert_catch_approx(values[2], 2.12916);
+    assert_eq!(values[3], 2.0);
+    assert_eq!(values[4], 2.0);
 }
 
 #[test]
@@ -488,38 +523,82 @@ fn advance_and_apply_can_skip_view_model_reset() {
 #[test]
 fn view_model_runtime_properties() {
     let file = File::import(&pinned("viewmodel_runtime_file.riv")).expect("fixture imports");
-    let vm = file.view_model_named("vm").expect("vm");
-    let instance = vm.instantiate_default().expect("default vm instance");
-    let properties = vm
-        .properties()
-        .map(|property| (property.name().unwrap_or_default(), property.type_name()))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    for (name, ty) in [
-        ("num", "ViewModelPropertyNumber"),
-        ("str", "ViewModelPropertyString"),
-        ("boo", "ViewModelPropertyBoolean"),
-        ("col", "ViewModelPropertyColor"),
-        ("tri", "ViewModelPropertyTrigger"),
-        ("enu", "ViewModelPropertyEnumCustom"),
-        ("ima", "ViewModelPropertyAssetImage"),
-        ("art", "ViewModelPropertyArtboard"),
-        ("lis", "ViewModelPropertyList"),
-    ] {
-        assert_eq!(properties.get(name), Some(&ty));
-    }
-    assert!(
-        instance
-            .raw()
-            .number_value_by_property_name_path("chi/chi-num")
-            .is_some()
-    );
+    let runtime =
+        ViewModelRuntime::named(Rc::new(file.runtime().clone()), "vm").expect("vm runtime");
+    let instance = runtime
+        .create_default_instance()
+        .expect("default vm instance");
+    assert_eq!(instance.view_model_name(), "vm");
+    let _ = instance.property_number("num").expect("num");
     assert_eq!(
-        vm.property_named("enu")
-            .expect("enu")
-            .descriptor()
-            .uint_property("enumId"),
-        Some(0)
+        instance.property("num").expect("cached num").data_type(),
+        ViewModelRuntimeDataType::Number
     );
+    let _ = instance.property_string("str").expect("str");
+    assert_eq!(
+        instance.property("str").expect("cached str").data_type(),
+        ViewModelRuntimeDataType::String
+    );
+    assert!(instance.property_number("str").is_none());
+    let _ = instance.property_boolean("boo").expect("boo");
+    assert_eq!(
+        instance.property("boo").expect("cached boo").data_type(),
+        ViewModelRuntimeDataType::Boolean
+    );
+    let _ = instance.property_color("col").expect("col");
+    assert_eq!(
+        instance.property("col").expect("cached col").data_type(),
+        ViewModelRuntimeDataType::Color
+    );
+    let _ = instance.property_trigger("tri").expect("tri");
+    assert_eq!(
+        instance.property("tri").expect("cached tri").data_type(),
+        ViewModelRuntimeDataType::Trigger
+    );
+    let _ = instance.property_enum("enu").expect("enu");
+    assert_eq!(
+        instance.property("enu").expect("cached enu").data_type(),
+        ViewModelRuntimeDataType::Enum
+    );
+    let _ = instance.property_image("ima").expect("ima");
+    assert_eq!(
+        instance.property("ima").expect("cached ima").data_type(),
+        ViewModelRuntimeDataType::AssetImage
+    );
+    let _ = instance.property_artboard("art").expect("art");
+    assert_eq!(
+        instance.property("art").expect("cached art").data_type(),
+        ViewModelRuntimeDataType::Artboard
+    );
+    let _ = instance.property_list("lis").expect("lis");
+    assert_eq!(
+        instance.property("lis").expect("cached lis").data_type(),
+        ViewModelRuntimeDataType::List
+    );
+    let _ = instance
+        .property_number("chi/chi-num")
+        .expect("chi/chi-num");
+    assert_eq!(
+        instance
+            .property("chi/chi-num")
+            .expect("cached chi/chi-num")
+            .data_type(),
+        ViewModelRuntimeDataType::Number
+    );
+
+    let properties = instance.properties();
+    let enu = properties
+        .iter()
+        .find(|property| property.name == "enu")
+        .expect("enu property data");
+    assert_eq!(enu.data_type, ViewModelRuntimeDataType::Enum);
+    assert_eq!(enu.enum_name, "Horizontal Align");
+    let num = properties
+        .iter()
+        .find(|property| property.name == "num")
+        .expect("num property data");
+    assert_eq!(num.data_type, ViewModelRuntimeDataType::Number);
+    assert!(num.enum_name.is_empty());
 }
 
 fn two_way_fixture(
@@ -569,6 +648,14 @@ fn two_way_source_change_reaches_target_under_target_first_precedence() {
     for _ in 0..20 {
         advance(&mut artboard, &mut machine, &mut view_model, 0.016);
     }
+    assert_eq!(
+        view_model.raw().number_value_by_property_name("x"),
+        Some(500.0)
+    );
+    assert_eq!(
+        view_model.raw().number_value_by_property_name("y"),
+        Some(600.0)
+    );
     assert_eq!(
         artboard.raw().double_property(target, key("Node", "x")),
         Some(500.0)
@@ -661,7 +748,10 @@ fn different_view_model_instances_are_not_shared_by_two_properties() {
 fn newly_created_view_model_instances_do_not_share_nested_instances() {
     let (mut artboard, mut machine, mut view_model) = shared_fixture("main_2", false);
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
-    assert_eq!(nested_texts(&mut artboard), [Vec::new(), Vec::new()]);
+    assert_eq!(
+        nested_texts(&mut artboard),
+        [Vec::<u8>::new(), Vec::<u8>::new()]
+    );
 
     let child = view_model
         .handle()
@@ -711,9 +801,62 @@ fn triggers_updated_by_events_update_parent_state() {
 }
 
 #[test]
-fn state_machine_is_led_by_bound_enum_and_trigger() {
+fn custom_property_trigger_binding_has_exact_initial_owners() {
     let (mut artboard, mut machine, mut view_model) =
-        fixture("data_binding_test.riv", "artboard-2");
+        fixture("custom_property_trigger.riv", "Main");
+    advance(&mut artboard, &mut machine, &mut view_model, 0.0);
+
+    let circle = artboard
+        .artboard()
+        .graph()
+        .component_named("MainCircle")
+        .expect("MainCircle owner");
+    assert!(
+        nuxie_schema::definition_by_name(circle.type_name)
+            .is_some_and(|definition| definition.is_a("Shape"))
+    );
+    assert_eq!(
+        artboard
+            .raw()
+            .double_property(circle.local_id, key("Node", "scaleX")),
+        Some(1.0)
+    );
+    assert_eq!(
+        artboard
+            .raw()
+            .double_property(circle.local_id, key("Node", "scaleY")),
+        Some(1.0)
+    );
+
+    let trigger = artboard
+        .artboard()
+        .graph()
+        .component_named("Trig")
+        .expect("Trig owner");
+    assert!(
+        nuxie_schema::definition_by_name(trigger.type_name)
+            .is_some_and(|definition| definition.is_a("CustomPropertyTrigger"))
+    );
+}
+
+#[test]
+fn state_machine_is_led_by_bound_enum_and_trigger() {
+    let file = Box::leak(Box::new(
+        File::import(&pinned("data_binding_test.riv")).expect("fixture imports"),
+    ));
+    let mut artboard = file
+        .artboard_named("artboard-2")
+        .expect("artboard-2")
+        .instantiate()
+        .expect("artboard instantiates");
+    let mut view_model = artboard
+        .instantiate_default_view_model_instance()
+        .expect("default view model");
+    let mut machine = artboard
+        .default_state_machine_instance()
+        .expect("default machine");
+    assert!(machine.bind_owned_view_model_handle(view_model.handle()));
+    let _ = artboard.bind_view_model(&view_model);
     let color = descendant_of_type(&artboard, "color_rectangle", "SolidColor");
     let read_color = |artboard: &nuxie::ArtboardInstance<'_>| {
         artboard
@@ -738,8 +881,10 @@ fn state_machine_is_led_by_bound_enum_and_trigger() {
     assert_eq!(read_color(&artboard), 0xff00_ff00);
     assert_eq!(read_position(&artboard), (150.0, 250.0));
 
-    // The pinned enum member named `state-blue` is the third member (index 2).
-    assert!(view_model.set_enum("state", 2));
+    let script_view_model =
+        nuxie_runtime::script_view_model_from_owned(file.runtime(), view_model.handle())
+            .expect("bound script view model");
+    assert!(script_view_model.set_enum_value("state", "state-blue"));
     assert!(view_model.fire_trigger("trigger-prop"));
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_eq!(read_color(&artboard), 0xff00_00ff);
@@ -777,14 +922,12 @@ fn artboard_has_bound_properties() {
             .double_property(rectangle, key("Rectangle", "width")),
         Some(100.0)
     );
-    assert!(
-        (artboard
+    assert_catch_approx(
+        artboard
             .raw()
             .double_property(shape, key("Node", "rotation"))
-            .expect("bound_rect_shape rotation")
-            - 1.5708)
-            .abs()
-            < 0.0001
+            .expect("bound_rect_shape rotation"),
+        1.5708,
     );
     assert_eq!(
         artboard
@@ -818,14 +961,12 @@ fn artboard_has_bound_properties() {
             .double_property(rectangle, key("Rectangle", "width")),
         Some(200.0)
     );
-    assert!(
-        (artboard
+    assert_catch_approx(
+        artboard
             .raw()
             .double_property(shape, key("Node", "rotation"))
-            .expect("bound_rect_shape rotation")
-            - std::f32::consts::PI)
-            .abs()
-            < 0.0001
+            .expect("bound_rect_shape rotation"),
+        3.14159,
     );
     assert_eq!(
         artboard

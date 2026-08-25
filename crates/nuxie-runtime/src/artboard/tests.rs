@@ -13766,3 +13766,5 @@
             global_names.len() + 1,
         );
     }
+
+    include!("wave_b1_image_owner_tests.rs");

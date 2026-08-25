@@ -137,9 +137,21 @@ impl RuntimePathMeasure {
 }
 
 impl RuntimePathMeasure {
-    pub fn segment(&self, start: f32, end: f32, start_with_move: bool) -> RawPath {
+    pub fn append_segment(
+        &self,
+        start: f32,
+        end: f32,
+        destination: &mut RawPath,
+        start_with_move: bool,
+    ) {
         let mut commands = Vec::new();
         self.get_segment(start, end, &mut commands, start_with_move);
-        runtime_raw_path_from_commands(&commands)
+        runtime_append_path_commands(destination, &commands);
+    }
+
+    pub fn segment(&self, start: f32, end: f32, start_with_move: bool) -> RawPath {
+        let mut destination = RawPath::new();
+        self.append_segment(start, end, &mut destination, start_with_move);
+        destination
     }
 }

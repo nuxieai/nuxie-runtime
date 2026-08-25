@@ -98,7 +98,11 @@ fn external_image_artboard() -> Vec<u8> {
 }
 
 const ENCODED_IMAGE: &[u8] = include_bytes!("fixtures/external-image.png");
-const DECODED_PIXELS: &[u8] = &[0xff; 4 * 2 * 4];
+const STUB_PIXEL: [u8; 4] = [0x12, 0x34, 0x56, 0xff];
+const DECODED_PIXELS: &[u8] = &[
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x12, 0x34, 0x56, 0xff, 0xff, 0xff, 0xff, 0xff,
+];
 
 #[derive(Default)]
 struct AssetHookProbe {
@@ -169,6 +173,12 @@ unsafe extern "C" fn decode_external_image(
     NUX_ASSET_CALLBACK_STATUS_OK
 }
 
+unsafe fn frame_contains_pixel(frame: *const NuxAndroidVulkanFrame, expected: [u8; 4]) -> bool {
+    let len = unsafe { nux_android_vulkan_frame_len(frame) };
+    let pixels = unsafe { std::slice::from_raw_parts(nux_android_vulkan_frame_data(frame), len) };
+    pixels.chunks_exact(4).any(|pixel| pixel == expected)
+}
+
 #[test]
 fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
     let rive = external_image_artboard();
@@ -230,6 +240,45 @@ fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
         assert_eq!(probe.lookups.load(Ordering::Relaxed), 1);
         assert_eq!(probe.decodes.load(Ordering::Relaxed), 1);
         assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+
+        // This is the original pixel sanity check. The PNG's white texel is
+        // sampled by this tiny fixture while its red texel is not, so this
+        // observation intentionally does not claim to prove the wrapper.
+        assert!(frame_contains_pixel(frame, [0xff, 0xff, 0xff, 0xff]));
+        assert!(!frame_contains_pixel(frame, [0xff, 0x00, 0x00, 0xff]));
+        assert_eq!(nux_android_vulkan_frame_free(frame), NuxStatus::Ok);
+
+        result = ptr::null_mut();
+        assert_eq!(
+            nux_renderer_android_vulkan_reset_player_domain(renderer, player, &mut result),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+
+        frame = ptr::null_mut();
+        result = ptr::null_mut();
+        assert_eq!(
+            nux_renderer_android_vulkan_render_player(
+                renderer,
+                player,
+                0xff00_0000,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER,
+                &mut frame,
+                &mut result,
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(probe.lookups.load(Ordering::Relaxed), 1);
+        assert_eq!(probe.decodes.load(Ordering::Relaxed), 1);
+        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+        assert!(
+            frame_contains_pixel(frame, STUB_PIXEL),
+            "render after domain reset did not upload host-decoded pixels"
+        );
+        assert!(
+            !frame_contains_pixel(frame, [0xff, 0x80, 0x00, 0xff]),
+            "render after domain reset used the fixture PNG's native orange texel"
+        );
         assert_eq!(nux_android_vulkan_frame_free(frame), NuxStatus::Ok);
         assert_eq!(nux_renderer_android_vulkan_free(renderer), NuxStatus::Ok);
         assert_eq!(nux_player_free(player), NuxStatus::Ok);

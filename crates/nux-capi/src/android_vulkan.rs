@@ -413,6 +413,12 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                             (state.pixel_width, state.pixel_height),
                         )?);
                     }
+                    // Asset hooks retain canonical CPU pixels at import, not a
+                    // backend RenderImage. This wrapper is consulted when draw
+                    // lazily realizes an occurrence's images: on its first draw
+                    // and after reset_player_domain drops its backend resources.
+                    // Ordinary draws and resize reuse the retained image. This
+                    // mirrors Metal re-realization after migration or reattach.
                     if let Some(assets) = player.artboard.asset_hooks.as_ref() {
                         let mut factory = assets.wrap_factory(&mut state.factory);
                         artboard.draw(&mut factory, &mut frame).map_err(|error| {

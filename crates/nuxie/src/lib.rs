@@ -821,6 +821,7 @@ impl FileScriptRuntime {
             nuxie_runtime::ScriptError::new("script host extension is unavailable")
         })?;
         let host = capability.extension.install(&vm)?;
+        vm.set_image_assets(nuxie_runtime::script_image_assets(runtime));
         vm.set_view_models(nuxie_runtime::script_view_models(runtime));
         for asset in self
             .assets

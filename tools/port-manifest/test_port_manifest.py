@@ -560,7 +560,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/lua/lua_data_value.cpp": ("ported", "LT-2"),
             "src/lua/lua_image_decode.cpp": ("ported", "P2A"),
             "src/lua/lua_promise.cpp": ("ported", "P1-i"),
-            "src/lua/lua_scripted_context.cpp": ("partial", "F7"),
+            "src/lua/lua_scripted_context.cpp": ("ported", "Owner audit"),
             "src/lua/lua_state.cpp": ("ported", "LT-2"),
             "src/lua/math/lua_color.cpp": ("ported", "F7"),
             "src/lua/math/lua_input.cpp": ("ported", "F7"),

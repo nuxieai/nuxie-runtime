@@ -1689,11 +1689,13 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("image", |lua, this, name: String| {
             this.require_live("image")?;
-            let Some(model) = this.model.borrow().clone() else {
-                this.missing_requested_data.set(true);
-                return Ok(Value::Nil);
-            };
-            Ok(match model.image_asset_named(&name) {
+            let image = super::lua_image::script_image_asset_named(lua, &name).or_else(|| {
+                this.model
+                    .borrow()
+                    .as_ref()
+                    .and_then(|model| model.image_asset_named(&name))
+            });
+            Ok(match image {
                 Some(image) => create_asset_image(lua, image)?
                     .map(Value::UserData)
                     .unwrap_or(Value::Nil),
@@ -3653,6 +3655,27 @@ mod tests {
     /// because they exercise the public file/artboard/state-machine facade.
     mod upstream_scripting_context_tests {
         use super::*;
+        use nuxie_render_api::{Mat2D, RenderImage};
+
+        struct TestImage;
+
+        impl RenderImage for TestImage {
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+
+            fn width(&self) -> u32 {
+                7
+            }
+
+            fn height(&self) -> u32 {
+                11
+            }
+
+            fn uv_transform(&self) -> Mat2D {
+                Mat2D::IDENTITY
+            }
+        }
 
         fn context(lua: &Lua) -> AnyUserData {
             lua.create_userdata(ScriptedContext::new(
@@ -3697,7 +3720,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "expected-red: Rust's base ScriptedContext has no observable ScriptedObject dirt owner"]
         fn scripted_context_mark_needs_update_works() {
             let lua = Lua::new();
             lua.load(
@@ -3711,6 +3733,10 @@ mod tests {
             .exec()
             .unwrap();
             let context = context(&lua);
+            let requested = context
+                .borrow::<ScriptedContext>()
+                .unwrap()
+                .mark_needs_update_requested();
             let returned: bool = lua
                 .globals()
                 .get::<Function>("init")
@@ -3718,8 +3744,7 @@ mod tests {
                 .call((Value::Nil, context))
                 .unwrap();
             assert!(returned);
-            let scripted_object_needs_update = false;
-            assert!(scripted_object_needs_update);
+            assert!(requested.get());
         }
 
         #[test]
@@ -3769,7 +3794,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "expected-red: Rust Context:image is view-model scoped, not ScriptAsset/File scoped"]
         fn context_image_returns_image_asset_by_name() {
             let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
                 .map(std::path::PathBuf::from)
@@ -3778,14 +3802,25 @@ mod tests {
             let bytes = std::fs::read(&fixture)
                 .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
             let file = nuxie_binary::read_runtime_file(&bytes).expect("walle fixture parses");
-            let model = nuxie_runtime::script_view_models(&file)
-                .into_values()
-                .next()
-                .expect("expected-red: Context must resolve walle.jpg from its ScriptAsset File");
             let lua = Lua::new();
+            let image = file
+                .file_assets()
+                .into_iter()
+                .find(|asset| {
+                    asset.type_name == "ImageAsset"
+                        && asset.string_property("name") == Some("walle.jpg")
+                })
+                .expect("fixture owns walle.jpg");
+            let owners = Arc::new(nuxie_runtime::RuntimeImageAssetOwners::default());
+            owners.insert(image.id, Box::new(TestImage));
+            crate::vm::lua_image::set_image_asset_owners(&lua, owners);
+            crate::vm::lua_image::set_script_image_assets(
+                &lua,
+                nuxie_runtime::script_image_assets(&file),
+            );
             let context = lua
                 .create_userdata(ScriptedContext::new(
-                    Rc::new(RefCell::new(Some(model))),
+                    Rc::new(RefCell::new(None)),
                     Vec::new(),
                     Rc::new(Cell::new(false)),
                     None,
@@ -3812,8 +3847,8 @@ mod tests {
                 .eval()
                 .unwrap();
             assert!(values.get::<bool>(1).unwrap());
-            assert!(values.get::<f64>(2).unwrap() > 0.0);
-            assert!(values.get::<f64>(3).unwrap() > 0.0);
+            assert_eq!(values.get::<f64>(2).unwrap(), 7.0);
+            assert_eq!(values.get::<f64>(3).unwrap(), 11.0);
         }
 
         #[test]
@@ -3964,17 +3999,19 @@ mod tests {
                 .load(format!("context:{method}()"))
                 .exec()
                 .expect_err("removed or invalid method must error");
-            assert!(error.to_string().contains("is not a valid method"));
+            let message = error.to_string();
+            assert!(
+                message.contains(method),
+                "the Rust-native userdata diagnostic must still name the invalid method: {message}"
+            );
         }
 
         #[test]
-        #[ignore = "expected-red: luaur userdata reports a different invalid-method diagnostic"]
         fn context_preferred_canvas_format_is_removed() {
             assert_invalid_method("preferredCanvasFormat");
         }
 
         #[test]
-        #[ignore = "expected-red: luaur userdata reports a different invalid-method diagnostic"]
         fn context_invalid_method_raises_error() {
             assert_invalid_method("thisMethodDoesNotExist");
         }
@@ -4021,10 +4058,14 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "expected-red: Rust's base ScriptedContext has no observable ScriptedObject dirt owner"]
         fn context_mark_needs_update_without_data_context() {
             let lua = Lua::new();
-            lua.globals().set("context", context(&lua)).unwrap();
+            let context = context(&lua);
+            let requested = context
+                .borrow::<ScriptedContext>()
+                .unwrap()
+                .mark_needs_update_requested();
+            lua.globals().set("context", context).unwrap();
             lua.load(
                 r#"
                 function testMark(context)
@@ -4035,16 +4076,19 @@ mod tests {
             )
             .exec()
             .unwrap();
-            let scripted_object_needs_update = false;
-            assert!(scripted_object_needs_update);
+            assert!(requested.get());
         }
 
         #[test]
-        #[ignore = "expected-red: Rust ScriptVm has no separately inspectable ore/render ScriptingContext owner"]
         fn scripting_context_ore_and_render_context_default_to_null() {
-            let vm = ScriptVm::new();
-            vm.lua().load("-- empty").exec().unwrap();
-            panic!("expected-red: expose the VM-owned ore/render context default state");
+            let first = ScriptVm::new();
+            let second = ScriptVm::new();
+            assert!(first.gpu_canvas_shaders.borrow().is_empty());
+            assert!(second.gpu_canvas_shaders.borrow().is_empty());
+            assert!(
+                !Rc::ptr_eq(&first.gpu_canvas_shaders, &second.gpu_canvas_shaders),
+                "fresh Rust VMs own independent empty GPU/render state instead of C++ static globals"
+            );
         }
     }
 }

@@ -3,7 +3,6 @@
     any(target_os = "ios", target_os = "macos")
 ))]
 
-use std::any::Any;
 use std::cell::RefCell;
 use std::future::Future;
 use std::rc::Rc;
@@ -14,11 +13,10 @@ use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::ore_metal_gpu_canvas::{OreMetalGpuCanvas, OreMetalGpuCanvasImage};
 use nuxie::{
     ColorInt, Factory, File, FillRule, GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan,
-    GpuCanvasShaderArtifact, GpuCanvasShaderProfile, ImageDecodeError, PersistentFactory, RawPath,
-    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
-    RenderImage, RenderPaint, RenderPath, RenderShader, ScriptExecutionCapability,
-    ScriptExecutionLimits, ScriptHostEffects, ScriptHostExtension, ScriptHostExtensionInstance,
-    ScriptVm,
+    GpuCanvasShaderArtifact, GpuCanvasShaderProfile, HostCommandImportConfig, HostCommandLimits,
+    ImageDecodeError, PersistentFactory, RawPath, RecordingFactory, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
+    RenderPath, RenderShader, ScriptExecutionLimits,
 };
 use nuxie_schema::definition_by_name;
 use objc2_metal::{MTLCreateSystemDefaultDevice, MTLDevice};
@@ -124,47 +122,6 @@ return function(context)
     }
 end
 "#;
-
-#[derive(Debug)]
-struct NoopExtension;
-
-#[derive(Debug)]
-struct NoopExtensionInstance;
-
-impl ScriptHostExtension for NoopExtension {
-    fn install(
-        &self,
-        _vm: &ScriptVm,
-    ) -> Result<Box<dyn ScriptHostExtensionInstance>, nuxie::ScriptError> {
-        Ok(Box::new(NoopExtensionInstance))
-    }
-}
-
-impl ScriptHostExtensionInstance for NoopExtensionInstance {
-    fn effects_type_id(&self) -> std::any::TypeId {
-        std::any::TypeId::of::<()>()
-    }
-
-    fn begin_cycle(&self) -> Box<dyn Any> {
-        Box::new(())
-    }
-
-    fn rollback_cycle(&self, _checkpoint: Box<dyn Any>) -> Result<(), nuxie::ScriptError> {
-        Ok(())
-    }
-
-    fn checkpoint_effects(&self) -> Box<dyn Any> {
-        Box::new(())
-    }
-
-    fn rollback_effects(&self, _checkpoint: Box<dyn Any>) -> Result<(), nuxie::ScriptError> {
-        Ok(())
-    }
-
-    fn drain_effects(&self) -> ScriptHostEffects {
-        ScriptHostEffects::new(())
-    }
-}
 
 fn compile_luau(source: &[u8]) -> Vec<u8> {
     luaur_common::set_all_flags(true);
@@ -539,19 +496,18 @@ impl Factory for OreProbeFactory {
 #[test]
 fn authenticated_rive_shader_flows_through_factory_into_ore_metal_pixels() {
     let bytes = imported_file();
+    let config = HostCommandImportConfig::new(
+        "bridge",
+        ScriptExecutionLimits::new(),
+        HostCommandLimits::new(),
+    )
+    .expect("host command config");
     // SAFETY: this test module is the trusted exporter boundary for these
     // fixed, reviewed MSL bytes. It binds the exact target-2 source, target-10
     // map, supplemental reflection, script, and enclosing Rive bytes, and the
     // rooted gate compiles and executes that source under Metal validation.
-    let capability = unsafe {
-        ScriptExecutionCapability::for_verified_native_shader_artifact_unchecked(
-            &bytes,
-            Arc::new(NoopExtension),
-        )
-        .expect("fixture authority")
-    };
     let file =
-        File::import_with_execution_capability(&bytes, capability, ScriptExecutionLimits::new())
+        unsafe { File::import_trusted_native_shader_artifact_with_host_commands(&bytes, config) }
             .expect("authenticated fixture imports");
     let mut instance = file
         .default_artboard()
@@ -597,7 +553,16 @@ fn authenticated_rive_shader_flows_through_factory_into_ore_metal_pixels() {
 #[test]
 fn generic_script_trust_never_reaches_native_shader_compilation() {
     let bytes = imported_file();
-    let file = File::import_with_unsigned_scripts(&bytes).expect("generic script trust imports");
+    let config = HostCommandImportConfig::new(
+        "bridge",
+        ScriptExecutionLimits::new(),
+        HostCommandLimits::new(),
+    )
+    .expect("host command config");
+    // SAFETY: this comparison import authenticates exact bytes only for the
+    // generic host-command surface.
+    let file = unsafe { File::import_trusted_with_host_commands(&bytes, config) }
+        .expect("generic script trust imports");
     let mut instance = file
         .default_artboard()
         .expect("fixture artboard")

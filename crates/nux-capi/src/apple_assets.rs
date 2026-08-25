@@ -767,13 +767,13 @@ unsafe fn read_file_import_config(
     Ok(value)
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_file_import_configured(
+unsafe fn nux_file_import_configured_with_authority(
     bytes: *const u8,
     len: usize,
     config: *const NuxFileImportConfig,
     out_file: *mut *mut NuxFile,
     out_result: *mut *mut NuxCapiResult,
+    native_shader_authority: super::NativeShaderImportAuthority,
 ) -> NuxStatus {
     ffi_guard_with_handle_result(out_file, out_result, HandleKind::File, || {
         if out_file.is_null() || out_result.is_null() || config.is_null() {
@@ -839,7 +839,11 @@ pub unsafe extern "C" fn nux_file_import_configured(
         } else {
             unsafe { std::slice::from_raw_parts(bytes, len) }
         };
-        let mut file = match super::import_file_with_prepared_host_commands(bytes, host_commands) {
+        let mut file = match super::import_file_with_prepared_host_commands(
+            bytes,
+            host_commands,
+            native_shader_authority,
+        ) {
             Ok(file) => file,
             Err(error) => {
                 publish_result(out_result, NuxStatus::ImportError, error.to_string());
@@ -884,6 +888,56 @@ pub unsafe extern "C" fn nux_file_import_configured(
         publish_result(out_result, NuxStatus::Ok, "");
         NuxStatus::Ok
     })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_file_import_configured(
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    unsafe {
+        nux_file_import_configured_with_authority(
+            bytes,
+            len,
+            config,
+            out_file,
+            out_result,
+            super::NativeShaderImportAuthority::Denied,
+        )
+    }
+}
+
+/// Rust-only trust seam for the upper-leaf product adapter. This is kept out
+/// of the product-neutral C ABI so a generic embedding cannot toggle native
+/// shader authority with a forgeable field.
+///
+/// # Safety
+///
+/// In addition to the configured-import pointer contract, the caller must
+/// establish that every native shader payload in the exact artifact was
+/// emitted by the trusted native-shader exporter.
+#[cfg(feature = "apple-authored-msl")]
+#[doc(hidden)]
+pub unsafe fn nux_file_import_configured_with_trusted_native_shaders(
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    unsafe {
+        nux_file_import_configured_with_authority(
+            bytes,
+            len,
+            config,
+            out_file,
+            out_result,
+            super::NativeShaderImportAuthority::TrustedExporter,
+        )
+    }
 }
 
 /// Compatibility wrapper for the Apple-only import added in ABI v3.

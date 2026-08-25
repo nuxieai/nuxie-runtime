@@ -12,7 +12,10 @@ prefix_with_name = true
 rename_variants = "ScreamingSnakeCase"
 
 [export]
-exclude = ["__nuxie_size_report_renderer_roots"]
+exclude = [
+    "__nuxie_size_report_renderer_roots",
+    "nux_file_import_configured_with_trusted_native_shaders",
+]
 
 [parse]
 parse_deps = false

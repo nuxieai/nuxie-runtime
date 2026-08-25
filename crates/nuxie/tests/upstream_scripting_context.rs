@@ -36,7 +36,7 @@ fn compare_silver(name: &str, actual: &[u8]) {
 }
 
 #[test]
-#[ignore = "expected-red: exact scripted Data list silver awaits renderer stream parity"]
+#[ignore = "expected-red: Node Script 1 init indexes nil lis input"]
 fn script_has_access_to_user_created_view_models_via_data() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("script_create_viewmodel_instance.riv"))
@@ -44,6 +44,9 @@ fn script_has_access_to_user_created_view_models_via_data() {
     let artboard = file.artboard_named("main").expect("main artboard");
     let mut artboard = artboard.instantiate().expect("main artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("main renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -96,7 +99,6 @@ fn script_has_access_to_user_created_view_models_via_data() {
 }
 
 #[test]
-#[ignore = "expected-red: exact context-bound view-model silver awaits renderer stream parity"]
 fn script_has_access_to_the_data_bound_view_model() {
     two_frame_context_silver(
         "viewmodel_from_context.riv",
@@ -107,7 +109,6 @@ fn script_has_access_to_the_data_bound_view_model() {
 }
 
 #[test]
-#[ignore = "expected-red: exact root-view-model silver awaits renderer stream parity"]
 fn script_has_access_to_the_data_root_view_model() {
     two_frame_context_silver(
         "scripting_root_viewmodel.riv",
@@ -127,6 +128,9 @@ fn two_frame_context_silver(fixture: &str, artboard_name: &str, dt: f32, silver_
         .instantiate()
         .unwrap_or_else(|_| panic!("{artboard_name} artboard instantiates"));
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .unwrap_or_else(|error| panic!("{artboard_name} renderer initializes: {error:#}"));
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -164,13 +168,16 @@ fn two_frame_context_silver(fixture: &str, artboard_name: &str, dt: f32, silver_
 }
 
 #[test]
-#[ignore = "expected-red: exact scripted data-context silver awaits renderer stream parity"]
+#[ignore = "expected-red: scripted data-context silver differs at frame 0 addRawPath geometry"]
 fn expose_data_context_to_scripts_through_context() {
     let file = File::import_with_unsigned_scripts(&pinned_fixture("scripted_data_context.riv"))
         .expect("scripted_data_context.riv imports with trusted scripts");
     let artboard = file.artboard_named("Main").expect("Main artboard");
     let mut artboard = artboard.instantiate().expect("Main artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("Main renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -193,7 +200,7 @@ fn expose_data_context_to_scripts_through_context() {
 }
 
 #[test]
-#[ignore = "expected-red: exact artboard data-context silver awaits renderer stream parity"]
+#[ignore = "expected-red: Node Script 1 init indexes nil instance input"]
 fn provide_data_context_and_view_model_instance_to_artboard() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("viewmodel_instance_to_artboard.riv"))
@@ -203,6 +210,9 @@ fn provide_data_context_and_view_model_instance_to_artboard() {
         .instantiate()
         .expect("default artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("default renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");

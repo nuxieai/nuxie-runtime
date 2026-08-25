@@ -221,6 +221,20 @@ impl DerefMut for AppleMetalFactory {
     }
 }
 
+impl crate::asset_hooks::AssetUploadFactory for AppleMetalFactory {
+    fn upload_rgba8_premul_srgb(
+        &mut self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.inner
+            .upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
+            .map_err(|_| ImageDecodeError)
+    }
+}
+
 impl Factory for AppleMetalFactory {
     fn make_render_buffer(
         &mut self,
@@ -1184,7 +1198,7 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     (state.pixel_width, state.pixel_height),
                 )?);
             }
-            if let Some(assets) = player.artboard.apple_assets.as_ref() {
+            if let Some(assets) = player.artboard.asset_hooks.as_ref() {
                 let mut factory = assets.wrap_factory(&mut state.factory);
                 artboard.draw(&mut factory, &mut *frame).map_err(|error| {
                     ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
@@ -1297,7 +1311,7 @@ mod tests {
             pixel_height: 8,
             attached: true,
         };
-        let assets = crate::apple_assets::AppleAssetCatalog::default();
+        let assets = crate::asset_hooks::AssetCatalog::default();
         let wrapped = assets.wrap_factory(&mut state.factory);
 
         assert_eq!(

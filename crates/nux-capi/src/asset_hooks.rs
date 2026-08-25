@@ -1,6 +1,5 @@
-//! Bounded, product-neutral Apple asset hooks for the native C distribution.
+//! Bounded, product-neutral asset hooks for the native C distribution.
 
-use super::apple_metal::AppleMetalFactory;
 use super::{
     HandleKind, NuxByteView, NuxCapiResult, NuxFile, NuxStatus, PendingHandlePublication,
     ffi_guard_with_handle_result, publish_result, register_handle, struct_size_supports,
@@ -160,28 +159,38 @@ pub(crate) struct CanonicalImage {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct AppleAssetCatalog {
+pub(crate) struct AssetCatalog {
     pub(crate) decoded_images: HashMap<Vec<u8>, CanonicalImage>,
 }
 
-pub(crate) struct AppleAssetFactory<'a> {
-    inner: &'a mut PersistentFactory<AppleMetalFactory>,
-    catalog: &'a AppleAssetCatalog,
+pub(crate) trait AssetUploadFactory: Factory + 'static {
+    fn upload_rgba8_premul_srgb(
+        &mut self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
 }
 
-impl AppleAssetCatalog {
-    pub(crate) fn wrap_factory<'a>(
+pub(crate) struct AssetFactory<'a, F> {
+    inner: &'a mut PersistentFactory<F>,
+    catalog: &'a AssetCatalog,
+}
+
+impl AssetCatalog {
+    pub(crate) fn wrap_factory<'a, F: AssetUploadFactory>(
         &'a self,
-        inner: &'a mut PersistentFactory<AppleMetalFactory>,
-    ) -> AppleAssetFactory<'a> {
-        AppleAssetFactory {
+        inner: &'a mut PersistentFactory<F>,
+    ) -> AssetFactory<'a, F> {
+        AssetFactory {
             inner,
             catalog: self,
         }
     }
 }
 
-impl Factory for AppleAssetFactory<'_> {
+impl<F: AssetUploadFactory> Factory for AssetFactory<'_, F> {
     fn persistent_context(&self) -> Option<PersistentFactoryContext> {
         self.inner.persistent_context()
     }
@@ -237,10 +246,12 @@ impl Factory for AppleAssetFactory<'_> {
         let Some(image) = self.catalog.decoded_images.get(data) else {
             return self.inner.decode_image(data);
         };
-        self.inner
-            .borrow_mut()
-            .upload_rgba8_premul_srgb(image.width, image.height, image.row_bytes, &image.pixels)
-            .map_err(|_| ImageDecodeError)
+        self.inner.borrow_mut().upload_rgba8_premul_srgb(
+            image.width,
+            image.height,
+            image.row_bytes,
+            &image.pixels,
+        )
     }
 
     fn make_render_canvas(
@@ -377,12 +388,12 @@ pub type NuxDecodeImageCallback = unsafe extern "C" fn(
     out_image: *mut NuxDecodedImage,
 ) -> NuxAssetCallbackStatus;
 
-/// One synchronous, versioned Apple asset import surface. The table and all
-/// request views are borrowed only until `nux_file_import_with_apple_assets`
+/// One synchronous, versioned asset import surface. The table and all
+/// request views are borrowed only until `nux_file_import_with_assets`
 /// returns; callback-owned outputs use `NuxRetainedBytes` instead.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxAppleAssetHooks {
+pub struct NuxAssetHooks {
     pub struct_size: u32,
     pub context: *mut c_void,
     pub lookup_external_asset: Option<
@@ -406,11 +417,11 @@ pub struct NuxAppleAssetHooks {
     pub maximum_total_decoded_image_bytes: usize,
 }
 
-pub const NUX_APPLE_ASSET_HOOKS_V3_MIN_SIZE: usize =
-    std::mem::offset_of!(NuxAppleAssetHooks, maximum_total_decoded_image_bytes)
+pub const NUX_ASSET_HOOKS_V3_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxAssetHooks, maximum_total_decoded_image_bytes)
         + std::mem::size_of::<usize>();
 
-impl Default for NuxAppleAssetHooks {
+impl Default for NuxAssetHooks {
     fn default() -> Self {
         Self {
             struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
@@ -429,24 +440,22 @@ impl Default for NuxAppleAssetHooks {
 /// Reads only the caller-provided prefix. Reading `struct_size` first avoids
 /// forming a reference to the runtime's larger current table when an older or
 /// malformed caller supplied a shorter allocation.
-unsafe fn read_apple_asset_hooks(
-    hooks: *const NuxAppleAssetHooks,
-) -> Result<NuxAppleAssetHooks, NuxStatus> {
+unsafe fn read_asset_hooks(hooks: *const NuxAssetHooks) -> Result<NuxAssetHooks, NuxStatus> {
     if hooks.is_null() {
         return Err(NuxStatus::NullArgument);
     }
     let caller_size = unsafe { hooks.cast::<u32>().read() };
-    if !struct_size_supports(caller_size, NUX_APPLE_ASSET_HOOKS_V3_MIN_SIZE) {
+    if !struct_size_supports(caller_size, NUX_ASSET_HOOKS_V3_MIN_SIZE) {
         return Err(NuxStatus::InvalidStructSize);
     }
-    let mut value = NuxAppleAssetHooks::default();
+    let mut value = NuxAssetHooks::default();
     let read_len = usize::try_from(caller_size)
         .unwrap_or(usize::MAX)
-        .min(std::mem::size_of::<NuxAppleAssetHooks>());
+        .min(std::mem::size_of::<NuxAssetHooks>());
     unsafe {
         ptr::copy_nonoverlapping(
             hooks.cast::<u8>(),
-            (&mut value as *mut NuxAppleAssetHooks).cast::<u8>(),
+            (&mut value as *mut NuxAssetHooks).cast::<u8>(),
             read_len,
         );
     }
@@ -454,7 +463,7 @@ unsafe fn read_apple_asset_hooks(
 }
 
 #[derive(Debug)]
-enum AppleAssetImportError {
+enum AssetImportError {
     InvalidHooks,
     DecodeCallbackFailed,
     Decode(DecodedImageError),
@@ -463,7 +472,7 @@ enum AppleAssetImportError {
     InvalidExternalAsset,
 }
 
-impl AppleAssetImportError {
+impl AssetImportError {
     fn status(&self) -> NuxStatus {
         match self {
             Self::InvalidHooks => NuxStatus::InvalidStructSize,
@@ -494,26 +503,21 @@ fn asset_kind(kind: FileAssetKind) -> Option<NuxAssetKind> {
     }
 }
 
-fn validate_apple_asset_hook_policy(
-    hooks: NuxAppleAssetHooks,
-) -> Result<NuxAppleAssetHooks, AppleAssetImportError> {
-    if !struct_size_supports(hooks.struct_size, NUX_APPLE_ASSET_HOOKS_V3_MIN_SIZE)
+fn validate_asset_hook_policy(hooks: NuxAssetHooks) -> Result<NuxAssetHooks, AssetImportError> {
+    if !struct_size_supports(hooks.struct_size, NUX_ASSET_HOOKS_V3_MIN_SIZE)
         || hooks.maximum_image_dimension == 0
         || hooks.maximum_external_asset_bytes == 0
         || hooks.maximum_total_external_asset_bytes == 0
         || hooks.maximum_decoded_image_bytes == 0
         || hooks.maximum_total_decoded_image_bytes == 0
     {
-        return Err(AppleAssetImportError::InvalidHooks);
+        return Err(AssetImportError::InvalidHooks);
     }
     Ok(hooks)
 }
 
-fn prepare_assets(
-    file: &mut File,
-    hooks: NuxAppleAssetHooks,
-) -> Result<AppleAssetCatalog, AppleAssetImportError> {
-    debug_assert!(validate_apple_asset_hook_policy(hooks).is_ok());
+fn prepare_assets(file: &mut File, hooks: NuxAssetHooks) -> Result<AssetCatalog, AssetImportError> {
+    debug_assert!(validate_asset_hook_policy(hooks).is_ok());
     let assets = file
         .assets()
         .filter_map(|asset| {
@@ -553,20 +557,20 @@ fn prepare_assets(
                     let remaining = hooks
                         .maximum_total_external_asset_bytes
                         .checked_sub(external_total)
-                        .ok_or(AppleAssetImportError::TotalLimitExceeded)?;
+                        .ok_or(AssetImportError::TotalLimitExceeded)?;
                     let item_budget = hooks.maximum_external_asset_bytes.min(remaining);
                     let copied =
                         copy_retained_bytes(returned, item_budget).map_err(
                             |error| match error {
                                 RetainedBytesError::LimitExceeded => {
-                                    AppleAssetImportError::TotalLimitExceeded
+                                    AssetImportError::TotalLimitExceeded
                                 }
-                                _ => AppleAssetImportError::InvalidExternalAsset,
+                                _ => AssetImportError::InvalidExternalAsset,
                             },
                         )?;
                     external_total = external_total
                         .checked_add(copied.len())
-                        .ok_or(AppleAssetImportError::TotalLimitExceeded)?;
+                        .ok_or(AssetImportError::TotalLimitExceeded)?;
                     debug_assert!(external_total <= hooks.maximum_total_external_asset_bytes);
                     Some(copied)
                 }
@@ -580,7 +584,7 @@ fn prepare_assets(
                     if complete_owner {
                         let _ = retain_bytes(returned, hooks.maximum_external_asset_bytes);
                     }
-                    return Err(AppleAssetImportError::LookupCallbackFailed);
+                    return Err(AssetImportError::LookupCallbackFailed);
                 }
             }
         } else {
@@ -590,27 +594,27 @@ fn prepare_assets(
         match kind {
             NUX_ASSET_KIND_IMAGE => {
                 if is_external {
-                    let id = asset_id.ok_or(AppleAssetImportError::InvalidExternalAsset)?;
+                    let id = asset_id.ok_or(AssetImportError::InvalidExternalAsset)?;
                     file.attach_external_image_asset_bytes(id, bytes.clone())
-                        .map_err(|_| AppleAssetImportError::InvalidExternalAsset)?;
+                        .map_err(|_| AssetImportError::InvalidExternalAsset)?;
                 }
                 image_sources.push(bytes);
             }
             NUX_ASSET_KIND_FONT if is_external => {
-                let id = asset_id.ok_or(AppleAssetImportError::InvalidExternalAsset)?;
+                let id = asset_id.ok_or(AssetImportError::InvalidExternalAsset)?;
                 file.attach_external_font_asset_bytes(id, bytes)
-                    .map_err(|_| AppleAssetImportError::InvalidExternalAsset)?;
+                    .map_err(|_| AssetImportError::InvalidExternalAsset)?;
             }
             NUX_ASSET_KIND_AUDIO if is_external => {
-                let id = asset_id.ok_or(AppleAssetImportError::InvalidExternalAsset)?;
+                let id = asset_id.ok_or(AssetImportError::InvalidExternalAsset)?;
                 file.attach_external_audio_asset_bytes(id, bytes)
-                    .map_err(|_| AppleAssetImportError::InvalidExternalAsset)?;
+                    .map_err(|_| AssetImportError::InvalidExternalAsset)?;
             }
             _ => {}
         }
     }
 
-    let mut catalog = AppleAssetCatalog::default();
+    let mut catalog = AssetCatalog::default();
     let mut total = 0usize;
     let Some(decode_image) = hooks.decode_image else {
         return Ok(catalog);
@@ -619,11 +623,11 @@ fn prepare_assets(
         let remaining = hooks
             .maximum_total_decoded_image_bytes
             .checked_sub(total)
-            .ok_or(AppleAssetImportError::TotalLimitExceeded)?;
+            .ok_or(AssetImportError::TotalLimitExceeded)?;
         let item_budget = hooks.maximum_decoded_image_bytes.min(remaining);
         let (_, _, packed_len) =
             preflight_encoded_image(&encoded, hooks.maximum_image_dimension, item_budget)
-                .map_err(AppleAssetImportError::Decode)?;
+                .map_err(AssetImportError::Decode)?;
         let request = NuxImageDecodeRequest {
             encoded: NuxByteView {
                 data: encoded.as_ptr(),
@@ -643,7 +647,7 @@ fn prepare_assets(
             if decoded.pixels.retain.is_some() && decoded.pixels.release.is_some() {
                 let _ = retain_bytes(decoded.pixels, hooks.maximum_decoded_image_bytes);
             }
-            return Err(AppleAssetImportError::DecodeCallbackFailed);
+            return Err(AssetImportError::DecodeCallbackFailed);
         }
         let canonical = validate_decoded_image(
             &encoded,
@@ -651,11 +655,11 @@ fn prepare_assets(
             hooks.maximum_image_dimension,
             item_budget,
         )
-        .map_err(AppleAssetImportError::Decode)?;
+        .map_err(AssetImportError::Decode)?;
         debug_assert_eq!(canonical.pixels.len(), packed_len);
         total = total
             .checked_add(canonical.pixels.len())
-            .ok_or(AppleAssetImportError::TotalLimitExceeded)?;
+            .ok_or(AssetImportError::TotalLimitExceeded)?;
         debug_assert!(total <= hooks.maximum_total_decoded_image_bytes);
         catalog.decoded_images.insert(encoded, canonical);
     }
@@ -670,7 +674,7 @@ fn prepare_assets(
 pub struct NuxFileImportConfig {
     pub struct_size: u32,
     pub host_commands: *const super::NuxHostCommandImportConfig,
-    pub apple_assets: *const NuxAppleAssetHooks,
+    pub asset_hooks: *const NuxAssetHooks,
     pub expected_assets: *const super::NuxExpectedFileAssetDescriptor,
     pub expected_asset_count: usize,
 }
@@ -680,7 +684,7 @@ impl Default for NuxFileImportConfig {
         Self {
             struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
             host_commands: ptr::null(),
-            apple_assets: ptr::null(),
+            asset_hooks: ptr::null(),
             expected_assets: ptr::null(),
             expected_asset_count: 0,
         }
@@ -752,14 +756,14 @@ unsafe fn nux_file_import_configured_with_authority(
                     return status;
                 }
             };
-        let hooks = if config.apple_assets.is_null() {
+        let hooks = if config.asset_hooks.is_null() {
             None
         } else {
-            match unsafe { read_apple_asset_hooks(config.apple_assets) }
-                .map_err(|status| (status, "Apple asset hook prefix is invalid"))
+            match unsafe { read_asset_hooks(config.asset_hooks) }
+                .map_err(|status| (status, "asset hook prefix is invalid"))
                 .and_then(|hooks| {
-                    validate_apple_asset_hook_policy(hooks)
-                        .map_err(|error| (error.status(), "Apple asset hook policy is invalid"))
+                    validate_asset_hook_policy(hooks)
+                        .map_err(|error| (error.status(), "asset hook policy is invalid"))
                 }) {
                 Ok(hooks) => Some(hooks),
                 Err((status, message)) => {
@@ -812,7 +816,7 @@ unsafe fn nux_file_import_configured_with_authority(
                     publish_result(
                         out_result,
                         status,
-                        format!("Apple asset import failed: {error:?}"),
+                        format!("asset import failed: {error:?}"),
                     );
                     return status;
                 }
@@ -825,7 +829,7 @@ unsafe fn nux_file_import_configured_with_authority(
                 owner_thread: thread::current().id(),
                 data_binding_provenance: Arc::new(()),
                 script_callback_factory_domain: std::rc::Rc::new(std::cell::RefCell::new(None)),
-                apple_assets: assets,
+                asset_hooks: assets,
             },
             HandleKind::File,
         );
@@ -887,17 +891,17 @@ pub unsafe fn nux_file_import_configured_with_trusted_native_shaders(
     }
 }
 
-/// Compatibility wrapper for the Apple-only import added in ABI v3.
+/// Convenience wrapper for importing a file with portable asset hooks.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_file_import_with_apple_assets(
+pub unsafe extern "C" fn nux_file_import_with_assets(
     bytes: *const u8,
     len: usize,
-    hooks: *const NuxAppleAssetHooks,
+    hooks: *const NuxAssetHooks,
     out_file: *mut *mut NuxFile,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
     let config = NuxFileImportConfig {
-        apple_assets: hooks,
+        asset_hooks: hooks,
         ..NuxFileImportConfig::default()
     };
     unsafe { nux_file_import_configured(bytes, len, &config, out_file, out_result) }
@@ -1167,10 +1171,10 @@ mod tests {
         let mut result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_file_import_with_apple_assets(
+                nux_file_import_with_assets(
                     ptr::null(),
                     0,
-                    hooks.cast::<NuxAppleAssetHooks>(),
+                    hooks.cast::<NuxAssetHooks>(),
                     &mut file,
                     &mut result,
                 )
@@ -1381,10 +1385,10 @@ mod tests {
             maximum_decoded_bytes: 0,
             pixels: RefCell::new(Vec::new()),
         };
-        let hooks = NuxAppleAssetHooks {
+        let hooks = NuxAssetHooks {
             context: std::ptr::from_mut(&mut probe).cast(),
             decode_image: Some(decode_fixture_image),
-            ..NuxAppleAssetHooks::default()
+            ..NuxAssetHooks::default()
         };
         let module = b"bridge";
         let host = super::super::NuxHostCommandImportConfig {
@@ -1416,7 +1420,7 @@ mod tests {
         };
         let config = NuxFileImportConfig {
             host_commands: &host,
-            apple_assets: &hooks,
+            asset_hooks: &hooks,
             expected_assets: &expected,
             expected_asset_count: 1,
             ..NuxFileImportConfig::default()
@@ -1521,14 +1525,14 @@ mod tests {
             maximum_decoded_bytes: 0,
             pixels: RefCell::new(Vec::new()),
         };
-        let invalid_hooks = NuxAppleAssetHooks {
+        let invalid_hooks = NuxAssetHooks {
             context: std::ptr::from_mut(&mut probe).cast(),
             decode_image: Some(decode_fixture_image),
             maximum_decoded_image_bytes: 0,
-            ..NuxAppleAssetHooks::default()
+            ..NuxAssetHooks::default()
         };
         let config = NuxFileImportConfig {
-            apple_assets: &invalid_hooks,
+            asset_hooks: &invalid_hooks,
             ..NuxFileImportConfig::default()
         };
         let mut file = ptr::dangling_mut();
@@ -1558,7 +1562,7 @@ mod tests {
         let invalid_host = super::super::NuxHostCommandImportConfig::default();
         let config = NuxFileImportConfig {
             host_commands: &invalid_host,
-            apple_assets: &invalid_hooks,
+            asset_hooks: &invalid_hooks,
             ..NuxFileImportConfig::default()
         };
         file = ptr::dangling_mut();
@@ -1587,7 +1591,7 @@ mod tests {
     }
 
     #[test]
-    fn apple_asset_import_decodes_embedded_image_and_owns_pixels() {
+    fn asset_hook_import_decodes_embedded_image_and_owns_pixels() {
         let root = std::path::PathBuf::from(
             std::env::var_os("RIVE_RUNTIME_DIR")
                 .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
@@ -1601,16 +1605,16 @@ mod tests {
             maximum_decoded_bytes: 0,
             pixels: RefCell::new(Vec::new()),
         };
-        let hooks = NuxAppleAssetHooks {
+        let hooks = NuxAssetHooks {
             context: std::ptr::from_mut(&mut probe).cast(),
             decode_image: Some(decode_fixture_image),
-            ..NuxAppleAssetHooks::default()
+            ..NuxAssetHooks::default()
         };
         let mut file = std::ptr::null_mut();
         let mut result = std::ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_file_import_with_apple_assets(
+                nux_file_import_with_assets(
                     bytes.as_ptr(),
                     bytes.len(),
                     &hooks,
@@ -1625,14 +1629,14 @@ mod tests {
         assert_eq!(probe.ownership.retains.load(Ordering::Relaxed), 1);
         assert_eq!(probe.ownership.releases.load(Ordering::Relaxed), 1);
         let canonical_before = unsafe { file.as_ref() }
-            .and_then(|file| file.apple_assets.as_ref())
+            .and_then(|file| file.asset_hooks.as_ref())
             .and_then(|assets| assets.decoded_images.values().next())
             .map(|image| Arc::clone(&image.pixels))
             .expect("canonical pixels");
         probe.pixels.borrow_mut().fill(0);
         let assets = unsafe { file.as_ref() }
-            .and_then(|file| file.apple_assets.as_ref())
-            .expect("file retains canonical Apple assets");
+            .and_then(|file| file.asset_hooks.as_ref())
+            .expect("file retains canonical assets");
         assert_eq!(assets.decoded_images.len(), 1);
         assert_eq!(
             assets
@@ -1681,18 +1685,18 @@ mod tests {
             maximum_decoded_bytes: 0,
             pixels: RefCell::new(Vec::new()),
         };
-        let rejected_hooks = NuxAppleAssetHooks {
+        let rejected_hooks = NuxAssetHooks {
             context: std::ptr::from_mut(&mut rejected).cast(),
             decode_image: Some(decode_fixture_image),
             maximum_decoded_image_bytes: packed_len,
             maximum_total_decoded_image_bytes: packed_len - 1,
-            ..NuxAppleAssetHooks::default()
+            ..NuxAssetHooks::default()
         };
         let mut file = ptr::dangling_mut();
         let mut result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_file_import_with_apple_assets(
+                nux_file_import_with_assets(
                     bytes.as_ptr(),
                     bytes.len(),
                     &rejected_hooks,
@@ -1718,18 +1722,18 @@ mod tests {
             maximum_decoded_bytes: 0,
             pixels: RefCell::new(Vec::new()),
         };
-        let accepted_hooks = NuxAppleAssetHooks {
+        let accepted_hooks = NuxAssetHooks {
             context: std::ptr::from_mut(&mut accepted).cast(),
             decode_image: Some(decode_fixture_image),
             maximum_decoded_image_bytes: packed_len,
             maximum_total_decoded_image_bytes: packed_len,
-            ..NuxAppleAssetHooks::default()
+            ..NuxAssetHooks::default()
         };
         let mut file = ptr::null_mut();
         let mut result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_file_import_with_apple_assets(
+                nux_file_import_with_assets(
                     bytes.as_ptr(),
                     bytes.len(),
                     &accepted_hooks,
@@ -1775,10 +1779,10 @@ mod tests {
                 maximum_decoded_bytes: 0,
                 pixels: RefCell::new(Vec::new()),
             };
-            let hooks = NuxAppleAssetHooks {
+            let hooks = NuxAssetHooks {
                 context: std::ptr::from_mut(&mut probe).cast(),
                 decode_image: Some(callback),
-                ..NuxAppleAssetHooks::default()
+                ..NuxAssetHooks::default()
             };
             if expected == NuxStatus::RuntimeError {
                 super::super::panic_after_next_result_publication();
@@ -1787,7 +1791,7 @@ mod tests {
             let mut result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_file_import_with_apple_assets(
+                    nux_file_import_with_assets(
                         bytes.as_ptr(),
                         bytes.len(),
                         &hooks,
@@ -1926,18 +1930,18 @@ mod tests {
                 calls: 0,
                 nested_status: NuxStatus::Ok,
             };
-            let rejected_hooks = NuxAppleAssetHooks {
+            let rejected_hooks = NuxAssetHooks {
                 context: std::ptr::from_mut(&mut probe).cast(),
                 lookup_external_asset: Some(lookup_fixture_asset),
                 maximum_external_asset_bytes: probe.bytes.len(),
                 maximum_total_external_asset_bytes: probe.bytes.len() - 1,
-                ..NuxAppleAssetHooks::default()
+                ..NuxAssetHooks::default()
             };
             let mut file = ptr::dangling_mut();
             let mut result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_file_import_with_apple_assets(
+                    nux_file_import_with_assets(
                         rive.as_ptr(),
                         rive.len(),
                         &rejected_hooks,
@@ -1958,16 +1962,16 @@ mod tests {
             );
 
             for _ in 0..3 {
-                let hooks = NuxAppleAssetHooks {
+                let hooks = NuxAssetHooks {
                     context: std::ptr::from_mut(&mut probe).cast(),
                     lookup_external_asset: Some(lookup_fixture_asset),
-                    ..NuxAppleAssetHooks::default()
+                    ..NuxAssetHooks::default()
                 };
                 let mut file = ptr::null_mut();
                 let mut result = ptr::null_mut();
                 assert_eq!(
                     unsafe {
-                        nux_file_import_with_apple_assets(
+                        nux_file_import_with_assets(
                             rive.as_ptr(),
                             rive.len(),
                             &hooks,

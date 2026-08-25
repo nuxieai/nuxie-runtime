@@ -3,7 +3,7 @@
   "dataModel": "apple-lp64",
   "types": [
     {
-      "name": "NuxAppleAssetHooks",
+      "name": "NuxAssetHooks",
       "size": 72,
       "alignment": 8,
       "fields": [
@@ -253,7 +253,7 @@
           "offset": 8
         },
         {
-          "name": "apple_assets",
+          "name": "asset_hooks",
           "offset": 16
         },
         {

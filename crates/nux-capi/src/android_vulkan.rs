@@ -8,7 +8,7 @@ use super::{
     RendererDomainBinding, enter_handle, enter_occurrence, ffi_guard, ffi_guard_with_handle_result,
     ffi_guard_with_result, publish_result, register_handle, remove_handle,
 };
-use nuxie::{Mat2D, PersistentFactory, Renderer};
+use nuxie::{ImageDecodeError, Mat2D, PersistentFactory, RenderImage, Renderer};
 use nuxie_renderer::{NativeVulkanFactory, RenderMode, RendererError};
 use std::cell::RefCell;
 use std::ptr;
@@ -30,6 +30,19 @@ struct AndroidVulkanRendererState {
     factory: PersistentFactory<NativeVulkanFactory>,
     pixel_width: u32,
     pixel_height: u32,
+}
+
+impl crate::asset_hooks::AssetUploadFactory for NativeVulkanFactory {
+    fn upload_rgba8_premul_srgb(
+        &mut self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.upload_canonical_rgba8_premul_srgb(width, height, row_bytes, pixels)
+            .map_err(|_| ImageDecodeError)
+    }
 }
 
 /// Product-neutral headless Vulkan renderer. The handle and every frame it
@@ -400,11 +413,18 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                             (state.pixel_width, state.pixel_height),
                         )?);
                     }
-                    artboard
-                        .draw(&mut state.factory, &mut frame)
-                        .map_err(|error| {
+                    if let Some(assets) = player.artboard.asset_hooks.as_ref() {
+                        let mut factory = assets.wrap_factory(&mut state.factory);
+                        artboard.draw(&mut factory, &mut frame).map_err(|error| {
                             ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
                         })?;
+                    } else {
+                        artboard
+                            .draw(&mut state.factory, &mut frame)
+                            .map_err(|error| {
+                                ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
+                            })?;
+                    }
                 }
                 let pixels = frame.finish().map_err(renderer_failure)?;
                 let row_stride_bytes = state.pixel_width.checked_mul(4).ok_or_else(|| {

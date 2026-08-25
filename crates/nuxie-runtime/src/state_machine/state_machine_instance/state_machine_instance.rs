@@ -253,6 +253,32 @@ impl RuntimeHitResult {
 // C++ when the local name matches C++'s `HitResult`.
 pub(super) use self::RuntimeHitResult as HitResult;
 
+/// A component-provided draggable re-enters the complete state-machine hit
+/// traversal from inside its current hit target. Keep the recursive call
+/// explicit so the temporarily taken Rust owner vectors can be restored
+/// before the recursion and the interrupted outer target can then resume.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum ComponentProvidedDragRecursion {
+    Start {
+        proxy_index: usize,
+        position: (f32, f32),
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    },
+    End {
+        proxy_index: usize,
+        position: (f32, f32),
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ComponentProvidedDragResume {
+    event: ComponentProvidedDragRecursion,
+    after_group_index: usize,
+}
+
 pub(super) trait HitComponent: std::fmt::Debug {
     fn clone_box(&self) -> Box<dyn HitComponent>;
     fn component(&self) -> Option<ComponentHandle>;
@@ -278,6 +304,8 @@ pub(super) trait HitComponent: std::fmt::Debug {
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
+        resume_after_group_index: Option<usize>,
+        component_drag_recursion: &mut Option<ComponentProvidedDragResume>,
     ) -> Result<HitResult, ScriptError>;
     fn process_gamepad_invocation(
         &mut self,
@@ -392,19 +420,28 @@ impl HitDrawable {
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
+        resume_after_group_index: Option<usize>,
+        component_drag_recursion: &mut Option<ComponentProvidedDragResume>,
     ) -> Result<HitResult, ScriptError> {
         if !self.event_is_required(hit_type) {
             return Ok(HitResult::None);
         }
         let mut blocking = false;
+        let mut resume_reached = resume_after_group_index.is_none();
         for &group_index in &self.listeners {
+            if !resume_reached {
+                if resume_after_group_index == Some(group_index) {
+                    resume_reached = true;
+                }
+                continue;
+            }
             let Some(group) = groups.get_mut(group_index) else {
                 continue;
             };
             if group.is_consumed {
                 continue;
             }
-            blocking |= instance.process_listener_group_event(
+            let (group_blocking, recursion) = instance.process_listener_group_event(
                 group,
                 artboard,
                 position,
@@ -416,6 +453,14 @@ impl HitDrawable {
                 event_context,
                 host,
             )?;
+            blocking |= group_blocking;
+            if let Some(event) = recursion {
+                *component_drag_recursion = Some(ComponentProvidedDragResume {
+                    event,
+                    after_group_index: group_index,
+                });
+                break;
+            }
         }
         if !(self.is_hovered && can_hit) {
             return Ok(HitResult::None);
@@ -565,6 +610,8 @@ impl HitComponent for HitScriptedDrawable {
         _owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         _event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
+        _resume_after_group_index: Option<usize>,
+        _component_drag_recursion: &mut Option<ComponentProvidedDragResume>,
     ) -> Result<HitResult, ScriptError> {
         let Some(method) = self.method_for_event(can_hit, hit_type) else {
             return Ok(HitResult::None);
@@ -673,6 +720,8 @@ impl HitComponent for HitDrawable {
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
+        resume_after_group_index: Option<usize>,
+        component_drag_recursion: &mut Option<ComponentProvidedDragResume>,
     ) -> Result<HitResult, ScriptError> {
         self.process_with(
             instance,
@@ -686,6 +735,8 @@ impl HitComponent for HitDrawable {
             owned_context,
             event_context,
             host,
+            resume_after_group_index,
+            component_drag_recursion,
         )
     }
 
@@ -765,6 +816,8 @@ impl HitComponent for HitExpandable {
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
+        resume_after_group_index: Option<usize>,
+        component_drag_recursion: &mut Option<ComponentProvidedDragResume>,
     ) -> Result<HitResult, ScriptError> {
         self.drawable.process_with(
             instance,
@@ -778,6 +831,8 @@ impl HitComponent for HitExpandable {
             owned_context,
             event_context,
             host,
+            resume_after_group_index,
+            component_drag_recursion,
         )
     }
 
@@ -849,6 +904,8 @@ impl HitComponent for HitTextRun {
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
+        resume_after_group_index: Option<usize>,
+        component_drag_recursion: &mut Option<ComponentProvidedDragResume>,
     ) -> Result<HitResult, ScriptError> {
         self.expandable.process_event(
             instance,
@@ -862,6 +919,8 @@ impl HitComponent for HitTextRun {
             owned_context,
             event_context,
             host,
+            resume_after_group_index,
+            component_drag_recursion,
         )
     }
 
@@ -937,6 +996,8 @@ impl HitComponent for HitLayout {
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
+        resume_after_group_index: Option<usize>,
+        component_drag_recursion: &mut Option<ComponentProvidedDragResume>,
     ) -> Result<HitResult, ScriptError> {
         self.drawable.process_with(
             instance,
@@ -950,6 +1011,8 @@ impl HitComponent for HitLayout {
             owned_context,
             event_context,
             host,
+            resume_after_group_index,
+            component_drag_recursion,
         )
     }
 
@@ -1019,6 +1082,8 @@ impl HitComponent for HitNestedArtboard {
         _owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         _event_context: Option<&StateMachineEventContext>,
         _host: &mut dyn ScriptHost,
+        _resume_after_group_index: Option<usize>,
+        _component_drag_recursion: &mut Option<ComponentProvidedDragResume>,
     ) -> Result<HitResult, ScriptError> {
         Ok(instance.process_nested_artboard_event(
             artboard,
@@ -1105,6 +1170,8 @@ impl HitComponent for HitComponentList {
         _owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         _event_context: Option<&StateMachineEventContext>,
         _host: &mut dyn ScriptHost,
+        _resume_after_group_index: Option<usize>,
+        _component_drag_recursion: &mut Option<ComponentProvidedDragResume>,
     ) -> Result<HitResult, ScriptError> {
         Ok(instance.process_component_list_event(
             artboard,
@@ -4471,9 +4538,9 @@ impl StateMachineInstance {
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
-    ) -> Result<bool, ScriptError> {
+    ) -> Result<(bool, Option<ComponentProvidedDragRecursion>), ScriptError> {
         if group.disabled(pointer_id) {
-            return Ok(false);
+            return Ok((false, None));
         }
         match group.kind {
             ListenerGroupKind::Draggable { proxy_index } => {
@@ -4485,10 +4552,11 @@ impl StateMachineInstance {
                     hit_type == RuntimeListenerType::Up,
                 );
                 let Some(proxy) = self.draggable_proxies.get_mut(proxy_index) else {
-                    return Ok(false);
+                    return Ok((false, None));
                 };
                 let hovered = pointer_state.current_hovered;
                 let mut blocking = false;
+                let mut recursion = None;
                 match hit_type {
                     RuntimeListenerType::Down if hovered => {
                         if !proxy.active_pointers.contains(&pointer_id) {
@@ -4504,8 +4572,14 @@ impl StateMachineInstance {
                             position,
                             timestamp_seconds,
                         ) {
-                            proxy.has_scrolled = true;
-                            group.mark_dragged();
+                            if !proxy.has_scrolled {
+                                recursion = Some(ComponentProvidedDragRecursion::Start {
+                                    proxy_index,
+                                    position,
+                                    timestamp_seconds,
+                                    pointer_id,
+                                });
+                            }
                             blocking = true;
                             group.is_consumed = true;
                         }
@@ -4518,7 +4592,17 @@ impl StateMachineInstance {
                         {
                             proxy.active_pointers.remove(index);
                             runtime_draggable_proxy_end(artboard, proxy);
-                            proxy.has_scrolled = false;
+                            if proxy.has_scrolled {
+                                blocking = true;
+                                recursion = Some(ComponentProvidedDragRecursion::End {
+                                    proxy_index,
+                                    position,
+                                    timestamp_seconds,
+                                    pointer_id,
+                                });
+                            } else {
+                                proxy.has_scrolled = false;
+                            }
                             group.is_consumed = true;
                         }
                     }
@@ -4528,11 +4612,11 @@ impl StateMachineInstance {
                     }
                     _ => {}
                 }
-                return Ok(blocking);
+                return Ok((blocking, recursion));
             }
             ListenerGroupKind::Authored { listener_index } => {
                 let Some(listener) = self.listener_definitions.get(listener_index).cloned() else {
-                    return Ok(false);
+                    return Ok((false, None));
                 };
                 let pointer_state = group.process(
                     pointer_id,
@@ -4634,7 +4718,7 @@ impl StateMachineInstance {
                     );
                 }
                 group.record_position(pointer_id, position);
-                Ok(captured_drag || pointer_state.drag_ended)
+                Ok((captured_drag || pointer_state.drag_ended, None))
             }
             ListenerGroupKind::TextInput => {
                 let pointer_state = group.process(
@@ -4645,7 +4729,7 @@ impl StateMachineInstance {
                     hit_type == RuntimeListenerType::Up,
                 );
                 let Some(mut text_input) = group.text_input.take() else {
-                    return Ok(false);
+                    return Ok((false, None));
                 };
                 let result = text_input.process_event(
                     artboard,
@@ -4676,7 +4760,7 @@ impl StateMachineInstance {
                 group.text_input = Some(text_input);
                 group.record_position(pointer_id, position);
                 group.is_consumed |= result.blocks;
-                Ok(result.blocks)
+                Ok((result.blocks, None))
             }
         }
     }
@@ -4711,22 +4795,6 @@ impl StateMachineInstance {
         for hit in &mut hit_components {
             hit.prepare_event(artboard, &mut groups, position, hit_type, pointer_id);
         }
-        if hit_type == RuntimeListenerType::Up
-            && groups
-                .iter()
-                .any(|group| group.phase_is_down(pointer_id) && group.has_dragged())
-        {
-            // C++ ListenerGroup::processEvent calls StateMachineInstance::dragEnd
-            // before it evaluates Clicked. dragEnd recursively resets every
-            // listener group and its pointerMove turns the clicked phases back
-            // to Out (`listener_group.cpp:171-210`;
-            // `state_machine_instance.cpp:1598-1607`). The direct FL-D owner
-            // avoids that recursive traversal, so retain its one observable
-            // effect explicitly for every group participating in this up.
-            for group in &mut groups {
-                group.suppress_click_once(pointer_id);
-            }
-        }
         let mut result = HitResult::None;
         if hit_type == RuntimeListenerType::Move
             && groups.iter().any(|group| {
@@ -4738,19 +4806,25 @@ impl StateMachineInstance {
         }
 
         let mut callback_error = None;
-        for hit in &mut hit_components {
-            let item = hit.process_event(
+        let mut hit_index = 0;
+        let mut hit_can_hit = result != HitResult::HitOpaque;
+        let mut resume_after_group_index = None;
+        while hit_index < hit_components.len() {
+            let mut component_drag_recursion = None;
+            let item = hit_components[hit_index].process_event(
                 self,
                 artboard,
                 &mut groups,
                 position,
                 hit_type,
-                result != HitResult::HitOpaque,
+                hit_can_hit,
                 timestamp_seconds,
                 pointer_id,
                 owned_context.as_deref_mut(),
                 event_context,
                 host,
+                resume_after_group_index.take(),
+                &mut component_drag_recursion,
             );
             match item {
                 Ok(item) => result = result.strongest(item),
@@ -4759,6 +4833,60 @@ impl StateMachineInstance {
                     break;
                 }
             }
+            let Some(resume) = component_drag_recursion else {
+                hit_index += 1;
+                hit_can_hit = result != HitResult::HitOpaque;
+                continue;
+            };
+
+            // C++ recurses into `StateMachineInstance::dragStart/dragEnd`
+            // before the component-provided listener returns `scroll`. Rust
+            // temporarily moves these vectors out to satisfy mutable aliasing,
+            // so restore them for the recursive traversal, then take back the
+            // recursively mutated owners and resume immediately after the
+            // draggable group in the interrupted hit target.
+            self.hit_components = hit_components;
+            self.listener_groups = groups;
+            match resume.event {
+                ComponentProvidedDragRecursion::Start {
+                    proxy_index,
+                    position,
+                    timestamp_seconds,
+                    pointer_id,
+                } => {
+                    let _ = self.drag_start_with_pointer_disable(
+                        artboard,
+                        position.0,
+                        position.1,
+                        timestamp_seconds,
+                        false,
+                        pointer_id,
+                    );
+                    if let Some(proxy) = self.draggable_proxies.get_mut(proxy_index) {
+                        proxy.has_scrolled = true;
+                    }
+                }
+                ComponentProvidedDragRecursion::End {
+                    proxy_index,
+                    position,
+                    timestamp_seconds,
+                    pointer_id,
+                } => {
+                    let _ = self.drag_end(
+                        artboard,
+                        position.0,
+                        position.1,
+                        timestamp_seconds,
+                        pointer_id,
+                    );
+                    if let Some(proxy) = self.draggable_proxies.get_mut(proxy_index) {
+                        proxy.has_scrolled = false;
+                    }
+                }
+            }
+            groups = std::mem::take(&mut self.listener_groups);
+            hit_components = std::mem::take(&mut self.hit_components);
+            resume_after_group_index = Some(resume.after_group_index);
         }
         self.hit_components = hit_components;
         self.listener_groups = groups;
@@ -5562,8 +5690,22 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
+        self.drag_start_with_pointer_disable(artboard, x, y, timestamp_seconds, true, pointer_id)
+    }
+
+    fn drag_start_with_pointer_disable(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        disable_pointer: bool,
+        pointer_id: i32,
+    ) -> bool {
         let _ = timestamp_seconds;
-        self.disable_pointer_events(pointer_id);
+        if disable_pointer {
+            self.disable_pointer_events(pointer_id);
+        }
         let result = self
             .update_listeners(
                 artboard,

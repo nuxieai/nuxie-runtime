@@ -1211,6 +1211,10 @@ impl HitComponent for RecordingHitComponent {
         _owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         _event_context: Option<&StateMachineEventContext>,
         _host: &mut dyn ScriptHost,
+        _resume_after_group_index: Option<usize>,
+        _component_drag_recursion: &mut Option<
+            super::state_machine_instance::ComponentProvidedDragResume,
+        >,
     ) -> Result<HitResult, ScriptError> {
         self.trace.borrow_mut().push(format!(
             "process:{}:{can_hit}:{hit_type:?}:{timestamp_seconds:?}",
@@ -1385,6 +1389,138 @@ fn fl_c5_pointer_drag_discards_event_timestamps_then_follows_with_move() {
             "prepare:drag",
             "process:drag:true:Move:-3.25",
         ]
+    );
+}
+
+#[test]
+fn component_provided_scroll_recurses_drag_events_at_the_pinned_call_site() {
+    let fixture = PathBuf::from(
+        std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+    )
+    .join("tests/unit_tests/assets/scroll_threshold.riv");
+    let file = read_runtime_file(&std::fs::read(fixture).expect("read scroll threshold fixture"))
+        .expect("import scroll threshold fixture");
+    let graph = GraphFile::from_runtime_file(&file).expect("build scroll threshold graph");
+    let vertical = graph
+        .artboards
+        .iter()
+        .find(|artboard| artboard.name.as_deref() == Some("vertical-scroll"))
+        .expect("vertical scroll artboard");
+    let mut artboard = ArtboardInstance::from_graph_with_artboards(
+        &file,
+        vertical,
+        &graph.artboards,
+    )
+    .expect("instantiate vertical scroll artboard");
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("vertical scroll state machine");
+    let _ = machine.advance_on_artboard(&mut artboard, 0.1, true, None);
+    artboard.update_components();
+    assert!(!machine.draggable_proxies.is_empty());
+
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    machine.hit_components.push(Box::new(RecordingHitComponent {
+        label: "after-draggable",
+        result: HitResult::None,
+        trace: Rc::clone(&trace),
+        component: None,
+    }));
+
+    let x = artboard.width / 2.0;
+    let pointer_id = 41;
+    machine
+        .update_listeners(
+            &mut artboard,
+            RuntimeListenerType::Down,
+            x,
+            70.0,
+            pointer_id,
+            0.0,
+            None,
+            None,
+            &mut NoopScriptHost,
+        )
+        .expect("pointer down");
+
+    let mut dragged_y = None;
+    for y in [62.0, 54.0, 46.0, 38.0, 30.0, 22.0, 14.0] {
+        trace.borrow_mut().clear();
+        machine
+            .update_listeners(
+                &mut artboard,
+                RuntimeListenerType::Move,
+                x,
+                y,
+                pointer_id,
+                1.25,
+                None,
+                None,
+                &mut NoopScriptHost,
+            )
+            .expect("pointer move");
+        if machine
+            .draggable_proxies
+            .iter()
+            .any(|proxy| proxy.has_scrolled)
+        {
+            dragged_y = Some(y);
+            break;
+        }
+    }
+    let dragged_y = dragged_y.expect("fixture crosses the draggable threshold");
+    let move_trace = trace.borrow().clone();
+    let drag_start = move_trace
+        .iter()
+        .position(|item| item.contains("process:after-draggable:true:DragStart:0.0"))
+        .unwrap_or_else(|| {
+            panic!("component drag recursively dispatches DragStart: {move_trace:?}")
+        });
+    let outer_move = move_trace
+        .iter()
+        .position(|item| item.contains("process:after-draggable:false:Move:1.25"))
+        .unwrap_or_else(|| panic!("outer pointer move resumes after recursion: {move_trace:?}"));
+    assert!(drag_start < outer_move, "{move_trace:?}");
+    assert!(
+        move_trace.iter().all(|item| !item.starts_with("disable:")),
+        "component-provided dragStart passes disablePointer=false: {move_trace:?}"
+    );
+
+    trace.borrow_mut().clear();
+    let up = machine
+        .update_listeners(
+            &mut artboard,
+            RuntimeListenerType::Up,
+            x,
+            dragged_y,
+            pointer_id,
+            2.5,
+            None,
+            None,
+            &mut NoopScriptHost,
+        )
+        .expect("pointer up");
+    assert_eq!(up, HitResult::HitOpaque, "a scrolled completion returns scroll");
+    let up_trace = trace.borrow().clone();
+    let drag_end = up_trace
+        .iter()
+        .position(|item| item.contains("process:after-draggable:true:DragEnd:0.0"))
+        .expect("component drag recursively dispatches DragEnd");
+    let final_move = up_trace
+        .iter()
+        .position(|item| item.contains("process:after-draggable:true:Move:2.5"))
+        .expect("dragEnd performs the pinned final pointerMove");
+    let outer_up = up_trace
+        .iter()
+        .position(|item| item.contains("process:after-draggable:false:Up:2.5"))
+        .expect("outer pointer up resumes after recursion");
+    assert!(drag_end < final_move && final_move < outer_up, "{up_trace:?}");
+    assert!(
+        machine
+            .draggable_proxies
+            .iter()
+            .all(|proxy| !proxy.has_scrolled)
     );
 }
 

@@ -95,6 +95,17 @@ use crate::{
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance,
 };
+
+#[derive(Default)]
+struct ScriptUpdateRequestHost {
+    requested: bool,
+}
+
+impl ScriptHost for ScriptUpdateRequestHost {
+    fn mark_script_update(&mut self) {
+        self.requested = true;
+    }
+}
 use crate::{
     RuntimeScriptedInterpolatorDiagnostic, RuntimeScriptedInterpolatorFactory,
     ScriptInterpolatorMethod,
@@ -3153,7 +3164,6 @@ impl ArtboardInstance {
             })
             .collect::<Vec<_>>();
         let mut did_update = false;
-        let mut host = NoopScriptHost;
         for (index, (component, global_id)) in pending.iter().copied().enumerate() {
             if self
                 .objects
@@ -3187,7 +3197,14 @@ impl ArtboardInstance {
             if !has_update {
                 continue;
             }
-            if let Err(error) = call_update(instance.as_mut(), &mut host) {
+            self.set_script_owner_update_phase(component, true);
+            let mut host = ScriptUpdateRequestHost::default();
+            let result = call_update(instance.as_mut(), &mut host);
+            if host.requested {
+                self.mark_script_update_for_global(global_id);
+            }
+            self.set_script_owner_update_phase(component, false);
+            if let Err(error) = result {
                 for (component, _) in &pending[index..] {
                     self.set_script_owner_update_pending(*component, true);
                 }
@@ -3432,6 +3449,22 @@ impl ArtboardInstance {
             return false;
         };
         scripted.update_pending = pending;
+        true
+    }
+
+    fn set_script_owner_update_phase(
+        &mut self,
+        component: ComponentHandle,
+        in_update_phase: bool,
+    ) -> bool {
+        let Some(scripted) = self
+            .objects
+            .component_mut(component)
+            .and_then(|component| component.concrete.scripted.as_mut())
+        else {
+            return false;
+        };
+        scripted.in_update_phase = in_update_phase;
         true
     }
 
@@ -3709,7 +3742,20 @@ impl ArtboardInstance {
         if !self.script_instances_by_global.contains_key(&global_id) {
             return false;
         }
-        self.mark_script_owner_update_pending(global_id)
+        let Some(component) = self.script_component_handle_for_global(global_id) else {
+            return false;
+        };
+        if self
+            .objects
+            .component(component)
+            .and_then(|component| component.concrete.scripted.as_ref())
+            .is_some_and(|scripted| scripted.in_update_phase)
+        {
+            return false;
+        }
+        self.set_script_owner_update_pending(component, true);
+        self.add_component_dirt(component, ComponentDirt::SCRIPT_UPDATE, false);
+        true
     }
 
     pub(crate) fn script_instance_for_global(
@@ -8972,14 +9018,20 @@ impl ArtboardInstance {
             return;
         };
         let mut instance = handle.borrow_mut();
-        let result = instance
-            .has_method(ScriptMethod::Update)
-            .and_then(|has_update| {
-                if !has_update {
-                    return Ok(ScriptValue::Nil);
+        let result = match instance.has_method(ScriptMethod::Update) {
+            Ok(false) => Ok(ScriptValue::Nil),
+            Ok(true) => {
+                self.set_script_owner_update_phase(component, true);
+                let mut host = ScriptUpdateRequestHost::default();
+                let result = script_mode.call(instance.as_mut(), &mut host);
+                if host.requested {
+                    self.mark_script_update_for_global(global_id);
                 }
-                script_mode.call(instance.as_mut(), &mut NoopScriptHost)
-            });
+                self.set_script_owner_update_phase(component, false);
+                result
+            }
+            Err(error) => Err(error),
+        };
         self.set_script_owner_advance_active_handle(component, true);
         if let Err(error) = result {
             self.set_script_owner_update_pending(component, true);

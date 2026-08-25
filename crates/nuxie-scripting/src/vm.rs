@@ -624,6 +624,7 @@ pub struct LuaScriptInstance {
     context: Option<AnyUserData>,
     context_alive: Option<Rc<Cell<bool>>>,
     context_missing_requested_data: Rc<Cell<bool>>,
+    context_mark_needs_update_requested: Rc<Cell<bool>>,
     context_view_model_is_resolved: bool,
     context_parent_view_models: Vec<Option<ScriptViewModel>>,
     generator: Option<Function>,
@@ -649,6 +650,7 @@ impl LuaScriptInstance {
             context: None,
             context_alive: None,
             context_missing_requested_data: Rc::new(Cell::new(false)),
+            context_mark_needs_update_requested: Rc::new(Cell::new(false)),
             context_view_model_is_resolved: false,
             context_parent_view_models: Vec::new(),
             generator: None,
@@ -679,6 +681,11 @@ impl LuaScriptInstance {
         script_cycle_active: Option<Rc<Cell<bool>>>,
         logging: LoggingScriptingContext,
     ) -> Self {
+        let context_mark_needs_update_requested = context
+            .as_ref()
+            .and_then(|context| context.borrow::<ScriptedContext>().ok())
+            .map(|context| context.mark_needs_update_requested())
+            .unwrap_or_else(|| Rc::new(Cell::new(false)));
         Self {
             table: Some(table),
             execution_budget,
@@ -690,6 +697,7 @@ impl LuaScriptInstance {
             context,
             context_alive,
             context_missing_requested_data,
+            context_mark_needs_update_requested,
             context_view_model_is_resolved: false,
             context_parent_view_models,
             generator,
@@ -904,6 +912,12 @@ impl LuaScriptInstance {
 
         self.table = Some(table);
         self.context = Some(context);
+        self.context_mark_needs_update_requested = self
+            .context
+            .as_ref()
+            .and_then(|context| context.borrow::<ScriptedContext>().ok())
+            .map(|context| context.mark_needs_update_requested())
+            .unwrap_or_else(|| Rc::new(Cell::new(false)));
         self.context_alive = Some(context_alive);
         self.context_missing_requested_data = missing_requested_data;
         self.user_init_done = false;
@@ -2140,10 +2154,17 @@ impl ScriptInstance for LuaScriptInstance {
         &mut self,
         method: ScriptMethod,
         args: &[ScriptValue],
-        _host: &mut dyn ScriptHost,
+        host: &mut dyn ScriptHost,
     ) -> std::result::Result<ScriptValue, ScriptError> {
-        let value = self.call_method_value(method, args)?;
-        script_value_from_lua(value).map_err(|error| self.script_error(error))
+        self.context_mark_needs_update_requested.set(false);
+        let result = self.call_method_value(method, args).and_then(|value| {
+            script_value_from_lua(value).map_err(|error| self.script_error(error))
+        });
+        let requested = self.context_mark_needs_update_requested.replace(false);
+        if requested && (result.is_ok() || !host.requires_atomic_script_callbacks()) {
+            host.mark_script_update();
+        }
+        result
     }
 
     fn call_optional_method(

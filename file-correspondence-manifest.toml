@@ -3999,13 +3999,13 @@ note = "P1-n faithful closure at d788e8ec: occurrence teardown/input disposal (s
 upstream = "src/scripted/scripted_drawable.cpp"
 status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie/src/lib.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/components.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0322"
 b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/results/post-b6-port-reviews.md"
-note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes scripted-drawable lifecycle parity: protected-call failure preserves pinned C++ clear-before-call parking, while Rust additionally surfaces typed ScriptError to the host without rearming the owner. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/draw.rs`; `crates/nuxie-runtime/src/scripting.rs`; `crates/nuxie/src/lib.rs`; the planned scripted-drawable owner does not exist, and live behavior remains embedded in Artboard scheduling, draw replay, shared scripting traits, and the facade host; extracting it would split shared methods or change APIs."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. The paired-source audit restores the omitted per-occurrence update-phase guard and ScriptedDrawable::markNeedsUpdate path: RuntimeScriptedComponentState defaults out of phase, Artboard brackets only the actual update callback, and an owner-bound ScriptHost request is rejected during that phase but publishes ScriptUpdate outside it. Active upstream_scripting_update_phase_guard tests plus artboard::tests::scripted_drawable_update_phase_suppresses_context_redirt bind the correction. Protected-call failure preserves pinned C++ clear-before-call parking, while Rust additionally surfaces typed ScriptError to the host without rearming the owner. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/components.rs`; `crates/nuxie-runtime/src/draw.rs`; `crates/nuxie-runtime/src/scripting.rs`; `crates/nuxie/src/lib.rs`; live behavior spans retained component state, Artboard dirt scheduling, draw replay, shared scripting traits, and the facade host."
 
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
@@ -4035,13 +4035,13 @@ note = "F7 closure via P2C: ScriptedLayout's direct parent-layout lookup, post-h
 upstream = "src/scripted/scripted_object.cpp"
 status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/scripted_object.rs; crates/nuxie/src/lib.rs"
+rust_module = "crates/nuxie-runtime/src/scripted_object.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0325"
 b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/results/post-b6-port-reviews.md"
-note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes the remaining scripted-object error lifecycle: failed protected calls park the owner exactly like C++ false, while Rust's typed ScriptError remains only an additive host signal and performs no automatic rearm. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/scripted_object.rs`; `crates/nuxie/src/lib.rs`; these are the final live owners after same-boundary aggregate fragments were regrouped; consolidating further would cross a crate or tool boundary or move public integration API."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. The paired-source audit restores ScriptedContext::markNeedsUpdate forwarding through the safe-Rust VM callback boundary, preserving the C++ ScriptedContext-to-ScriptedObject ownership path without exposing raw pointers or the Lua self table. Active upstream_scripting_update_phase_guard tests exercise the exact typed Luau update body. Failed protected calls still park the owner exactly like C++ false, while Rust's typed ScriptError remains only an additive host signal and performs no automatic rearm. C17 exception: retained modules are `crates/nuxie-runtime/src/scripted_object.rs`; `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie-scripting/src/vm/view_model.rs`; `crates/nuxie/src/lib.rs`; Core occurrence state, safe Lua adapter state, Context userdata, and the public facade necessarily cross crate boundaries."
 
 [[file]]
 upstream = "src/scripted/scripted_path_effect.cpp"

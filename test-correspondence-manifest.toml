@@ -864,7 +864,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_update_phase_guard_test
 test_case_count = 3
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/tests/upstream_scripting_update_phase_guard.rs"]
-note = "All three exact action/assertion bodies and the complete typed Luau source are translated as honest expected-red tests. Rust exposes neither the pinned per-object inUpdatePhase state nor the ScriptedDrawable markNeedsUpdate dirt owner; Context.markNeedsUpdate is currently a base no-op, so the absent correspondence remains explicit rather than being replaced by locally invented behavior."
+note = "All three exact action/assertion bodies and the complete typed Luau source are active and green. The safe-Rust fixture wrapper performs the upstream test's post-generator Context attachment without exposing the Lua self table. Production evidence additionally exercises the retained Artboard owner: the per-occurrence phase defaults false, is true only across the actual update callback, suppresses Context.markNeedsUpdate during that callback, restores false afterward, and publishes ScriptUpdate for the same request outside the phase."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_vector_test.cpp"

@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **REJECTED BY THE FIRST FRESH REVIEW AFTER `edb32c9ec`**
+Adversarial review: **REJECTED BY THE FIRST FRESH REVIEW AFTER `4c8daea99`**
 
 This receipt deliberately includes executable methods defined inline in the
 handwritten `include/rive/script_input_*.hpp` headers. Those methods exposed
@@ -1775,3 +1775,107 @@ This evidence establishes only a scoped correction and falsifying witnesses.
 The ScriptInput receipt remains pending until two fresh independent reviewers
 inspect the correction commit and independently accept both previously
 rejected edges.
+
+## First fresh independent review after `4c8daea99`
+
+Status: **REJECTED.** The complete five-owner retry census and the ordinary
+nested-Artboard rehydrate correction are sound, but the public mount-tree
+sibling still has two reachable source-authority failures. Neither current
+cross-File witness enters that mount path, and neither covers a component-list
+child created after the facade File was attached.
+
+### Accepted correction edges
+
+All five retry owners were traced independently from their public facade call
+sites through the retained `ScriptInstance`: the StateMachine owner, its
+after-context-install sibling, state-machine DataBind converter,
+listener-owned converter, and ScriptedInterpolator converter all call
+`install_context_recreate_and_guard_script_lifetime` before invoking their
+fallible hydration factory. The shared boundary installs only the selected
+Context chain, recreates the generator/table, checks the concrete table
+lifetime, and returns inert before Artboard or ViewModel preparation. The
+focused trace observes `context -> recreate -> guard`, and the source census
+finds exactly five shared-boundary calls and no direct retry calls in the
+three owner files.
+
+The ordinary nested-Artboard live rehydrate path is also corrected. It
+recovers the concrete child's source File, selects the graph and ScriptInput
+catalogue from that File, selects the child occurrence's ViewModel/DataContext,
+and preserves local-then-parent resolution. The distinct-manifest cross-File
+witness, the local-plus-parent witness, and the separate source-File retention
+witness all pass. The consumer/source split used by `FileScriptArtboard`
+remains correct, as do deferred live snapshotting, mutable `viewModelId`,
+default-state-machine-before-bind, exactly-once binding, and File-owned frame
+tail advancement. The reviewed public, runtime, and golden cold/live/refresh
+guards retain a validation loop before authored setters and construct no
+Artboard behind an inert table.
+
+### A cold cross-File child cannot bootstrap its own script runtime
+
+The corrected mount walker carries `ScriptMountGroup.file`, but entry and VM
+preparation are still rooted in the outer File:
+
+- `mount_scripted_artboard_tree` and its async sibling return before tree
+  collection when the root File has no authenticated executable ScriptAsset;
+- `collect_script_mount_groups` independently returns an empty collection when
+  the root File is unauthenticated, without inspecting a retained child source
+  File;
+- if the root happens to have scripts and collection reaches the child,
+  `instantiate_script_mounts` requires every non-root `group.file` to already
+  have `scripts.ready`; `prepare_mounts` prepares only the root File candidate.
+
+A public cold clone intentionally has no mounted script tables. Mounting that
+clone as a cross-File nested child of a nonscripted consumer therefore reports
+no script target at all; putting an unrelated script in the consumer only
+changes the failure to "source File has no prepared scripting runtime" unless
+the source File happened to have been initialized elsewhere. Pinned ownership
+is per concrete source File and does not depend on unrelated root assets or on
+process history. Exact correction requires the mount transaction to discover
+and prepare every distinct retained source File before attaching any group.
+
+The existing
+`nested_tree_rehydrate_uses_cross_file_source_catalog_and_occurrence_context`
+witness attaches a probe table directly and invokes rehydration. It proves the
+post-mount catalogue/context path, but cannot falsify this cold mount failure.
+
+### Dynamically created component-list children lose File authority
+
+`OwnedArtboardInstance::instantiate_default` attaches source-File authority to
+the occurrence tree that exists at construction time, and ordinary nested
+replacement preserves a non-null child authority. A component-list row is a
+different creation owner. `create_component_list_item_instance` constructs its
+child later with `ArtboardInstance::from_graph_inner`; that constructor sets
+`script_source_file_authority` to `None`, and the row owner never inherits the
+parent's authority before publication or pool restoration.
+
+Both corrected public walkers visit component-list children. Their visitor
+unconditionally calls `script_source_file_authority::<Arc<File>>()` before it
+can determine whether the row has a scripted target. Consequently the first
+mount or bound-input refresh after a row is materialized fails with "no
+retained source File", even for a same-File row with no scripts. A cross-File
+row additionally loses the exact catalogue the correction intended to retain.
+The current nested witness exercises only `NestedArtboard` replacement, not
+the `ArtboardComponentList` creation/pool owner.
+
+### Independent evidence
+
+All Cargo commands used `CARGO_INCREMENTAL=0` and ran from a clean detached
+worktree at `4c8daea99`:
+
+- the complete five-owner retry trace/census passed;
+- the operative ordinary nested distinct-manifest, local-plus-parent, retained
+  source-File, and cross-File child-DataBind witnesses passed;
+- golden default-state-machine/frame-tail, two-loop Artboard/ViewModel
+  preflight, cold atomicity, inert rehydrate/refresh, and parent-context refresh
+  witnesses passed;
+- combined checks for `nuxie-runtime`, `nuxie-scripting`, scripting-enabled
+  `nuxie`, `silver-corpus`, and scripting-enabled `rust-golden-runner` passed;
+- source correspondence remained 456 applicable rows with zero pending;
+- symbol correspondence remained 1,105 owners / 7,818 authority units with
+  generated authority replayed, and all 33 checker tests passed.
+
+Those green witnesses accept the corrected retry and ordinary nested
+rehydration edges. Complete ScriptInput certification remains rejected until
+mount preparation is source-File-complete and every late-created component-list
+child inherits its exact File authority, with operative cold-mount and dynamic
+row witnesses, followed by two fresh independent reviews.

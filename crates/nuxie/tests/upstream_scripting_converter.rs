@@ -36,7 +36,6 @@ fn compare_silver(name: &str, actual: &[u8]) {
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
 fn scripted_string_converter() {
     let file =
         File::import_with_unsigned_scripts(&pinned_fixture("script_string_converter_test.riv"))
@@ -46,6 +45,9 @@ fn scripted_string_converter() {
         .expect("Converter artboard");
     let mut artboard = artboard.instantiate().expect("Converter instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("Converter renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
@@ -129,7 +131,7 @@ fn scripted_string_converter() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust serializes frameSize while pinned C++ starts at makeRenderPaint"]
+#[ignore = "expected-red: bound-input silver differs at frame 0 addRawPath geometry"]
 fn data_converter_with_bound_inputs_in_artboard_and_state_machine() {
     let file = File::import_with_unsigned_scripts(&pinned_fixture(
         "scripted_data_converter_bound_input.riv",
@@ -140,6 +142,9 @@ fn data_converter_with_bound_inputs_in_artboard_and_state_machine() {
         .instantiate()
         .expect("default artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
+    artboard
+        .initialize_renderer(&mut silver)
+        .expect("default renderer initializes at the import boundary");
     let (width, height) = artboard.artboard_dimensions();
     silver.borrow_mut().frame_size(width as u32, height as u32);
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");

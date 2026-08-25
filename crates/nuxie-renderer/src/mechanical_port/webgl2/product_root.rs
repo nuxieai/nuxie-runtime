@@ -266,27 +266,31 @@ impl ExactSourceBackend for WebGl2ProductBackend {
         plan: &GpuCanvasPlan,
         execution_anchor: Rc<dyn Any>,
     ) -> Result<RiveRenderImageHandle, GpuCanvasError> {
-        if self.active_frame {
-            return Err(GpuCanvasError::new(
-                "exact WebGL2 GPU-canvas submission overlaps the presentation frame",
-            ));
-        }
+        // Scripted drawables materialize their offscreen image during the
+        // outer presentation traversal. Both ORE contexts share the exact GL
+        // execution domain, but the GPU canvas owns its own framebuffer and
+        // frame lifecycle. Invalidate the outer context afterwards so its
+        // deferred presentation flush restores every GL binding it needs.
         let canvas = self.implementation_mut().makeRenderCanvas(plan.width, plan.height);
         if !canvas.operator_bool() {
             return Err(GpuCanvasError::new(
                 "exact WebGL2 failed to create a GPU-canvas render target",
             ));
         }
-        let gpu_canvas = self.gpu_canvas_mut()?;
-        let frame_number = gpu_canvas.next_frame_number();
-        gpu_canvas.begin_frame(frame_number);
-        let result = gpu_canvas.execute_current_frame(
-            &canvas,
-            pipelines,
-            plan,
-            &execution_anchor,
-        );
-        gpu_canvas.end_frame();
+        let result = {
+            let gpu_canvas = self.gpu_canvas_mut()?;
+            let frame_number = gpu_canvas.next_frame_number();
+            gpu_canvas.begin_frame(frame_number);
+            let result = gpu_canvas.execute_current_frame(
+                &canvas,
+                pipelines,
+                plan,
+                &execution_anchor,
+            );
+            gpu_canvas.end_frame();
+            result
+        };
+        self.implementation_mut().invalidateGLState();
         result
     }
 }

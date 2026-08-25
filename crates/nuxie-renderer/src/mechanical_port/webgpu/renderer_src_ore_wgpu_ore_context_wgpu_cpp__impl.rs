@@ -44,6 +44,9 @@ use super::webgpu_wagyu_decl::{
     WGPUSType_WagyuShaderModuleDescriptor, WGPUWagyuShaderLanguage, WGPUWagyuShaderLanguage_GLSL,
     WGPUWagyuShaderLanguage_GLSLRAW, WGPUWagyuShaderLanguage_WGSL, WGPUWagyuShaderModuleDescriptor,
 };
+use nuxie_ore_metal::bind_group_layout::{
+    BindGroupLayout, validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,
+};
 use nuxie_ore_metal::context::{ActiveRenderPass, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
@@ -682,14 +685,38 @@ pub(crate) fn makePipeline(
         };
     }
 
+    // A C++ BindGroupLayoutWGPU* implicitly projects to its BindGroupLayout*
+    // base before the shared validator runs. Rust resource handles retain the
+    // concrete payload, so make that projection explicitly at this backend
+    // boundary, as the GL and Vulkan implementations do.
+    let layoutHandles = desc.bindGroupLayouts.unwrap_or_default();
+    let layoutHandles = layoutHandles.get(..bindGroupLayoutCount)?;
+    let mut layoutBases = Vec::with_capacity(bindGroupLayoutCount);
+    for layout in layoutHandles {
+        let Some(layoutOwner) = layout else {
+            layoutBases.push(None);
+            continue;
+        };
+        let Some(layout) = layoutOwner.downcast_ref::<BindGroupLayoutWGPU>() else {
+            let error = "bind-group layout does not belong to the WebGPU backend".to_owned();
+            if let Some(output) = outError.as_deref_mut() {
+                *output = error;
+            } else {
+                context.setLastError(&format!("makePipeline: {error}"));
+            }
+            return None;
+        };
+        layoutBases.push(Some(&**layout as &BindGroupLayout));
+    }
+
     let mut error = String::new();
-    let layoutsValid = nuxie_ore_metal::bind_group_layout::validateLayoutsAgainstBindingMap(
+    let layoutsValid = validateLayoutBasesAgainstBindingMap(
         &pipeline.m_bindingMap,
-        desc.bindGroupLayouts,
+        desc.bindGroupLayouts.map(|_| layoutBases.as_slice()),
         desc.bindGroupLayoutCount,
         Some(&mut error),
     );
-    let colorsValid = nuxie_ore_metal::bind_group_layout::validateColorRequiresFragment(
+    let colorsValid = validateColorRequiresFragment(
         desc.colorCount,
         desc.fragmentModule.is_some(),
         Some(&mut error),

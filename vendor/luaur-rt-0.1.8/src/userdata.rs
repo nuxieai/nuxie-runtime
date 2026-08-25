@@ -176,8 +176,20 @@ pub trait UserDataFields<T> {
         M: Fn(&Lua, &T) -> Result<R> + MaybeSend + 'static,
         R: IntoLua;
 
+    /// Register an integer-indexed field whose getter receives `&T`.
+    fn add_field_index_method_get<M, R>(&mut self, index: i64, method: M)
+    where
+        M: Fn(&Lua, &T) -> Result<R> + MaybeSend + 'static,
+        R: IntoLua;
+
     /// Register a field whose setter receives `&mut T` and the assigned value.
     fn add_field_method_set<M, A>(&mut self, name: impl Into<String>, method: M)
+    where
+        M: Fn(&Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
+        A: FromLua;
+
+    /// Register an integer-indexed field whose setter receives `&mut T`.
+    fn add_field_index_method_set<M, A>(&mut self, index: i64, method: M)
     where
         M: Fn(&Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
         A: FromLua;
@@ -517,6 +529,7 @@ struct Registered {
 /// A registered field getter or setter.
 struct FieldEntry {
     name: String,
+    numeric_key: Option<i64>,
     /// `true` if a getter, `false` if a setter.
     is_get: bool,
     callback: BoxedCallback,
@@ -671,6 +684,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
             is_get: true,
             callback,
         });
@@ -694,6 +708,31 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
+            is_get: true,
+            callback,
+        });
+    }
+
+    fn add_field_index_method_get<M, R>(&mut self, index: i64, method: M)
+    where
+        M: Fn(&Lua, &T) -> Result<R> + MaybeSend + 'static,
+        R: IntoLua,
+    {
+        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+            let this = args.pop_front().unwrap_or(Value::Nil);
+            let cell = recover_cell::<T>(lua, &this)?;
+            let borrowed = cell
+                .cell
+                .try_borrow()
+                .map_err(|_| Error::UserDataBorrowError)?;
+            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let r = method(lua, data)?;
+            r.into_lua_multi(lua)
+        });
+        self.fields.push(FieldEntry {
+            name: String::new(),
+            numeric_key: Some(index),
             is_get: true,
             callback,
         });
@@ -718,6 +757,32 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
+            is_get: false,
+            callback,
+        });
+    }
+
+    fn add_field_index_method_set<M, A>(&mut self, index: i64, method: M)
+    where
+        M: Fn(&Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
+        A: FromLua,
+    {
+        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+            let this = args.pop_front().unwrap_or(Value::Nil);
+            let cell = recover_cell::<T>(lua, &this)?;
+            let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;
+            let mut borrowed = cell
+                .cell
+                .try_borrow_mut()
+                .map_err(|_| Error::UserDataBorrowMutError)?;
+            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            method(lua, data, val)?;
+            ().into_lua_multi(lua)
+        });
+        self.fields.push(FieldEntry {
+            name: String::new(),
+            numeric_key: Some(index),
             is_get: false,
             callback,
         });
@@ -736,6 +801,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
             is_get: true,
             callback,
         });
@@ -755,6 +821,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
             is_get: false,
             callback,
         });
@@ -1012,6 +1079,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
             is_get: true,
             callback,
         });
@@ -1036,6 +1104,32 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
+            is_get: true,
+            callback,
+        });
+    }
+
+    fn add_field_index_method_get<M, R>(&mut self, index: i64, method: M)
+    where
+        M: Fn(&Lua, &T) -> Result<R> + MaybeSend + 'static,
+        R: IntoLua,
+    {
+        let marker = self.marker;
+        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+            let this = args.pop_front().unwrap_or(Value::Nil);
+            let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
+            let borrowed = cell
+                .cell
+                .try_borrow()
+                .map_err(|_| Error::UserDataBorrowError)?;
+            let data = borrowed.as_ref().ok_or(Error::UserDataDestructed)?;
+            let r = method(lua, data)?;
+            r.into_lua_multi(lua)
+        });
+        self.fields.push(FieldEntry {
+            name: String::new(),
+            numeric_key: Some(index),
             is_get: true,
             callback,
         });
@@ -1061,6 +1155,33 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
+            is_get: false,
+            callback,
+        });
+    }
+
+    fn add_field_index_method_set<M, A>(&mut self, index: i64, method: M)
+    where
+        M: Fn(&Lua, &mut T, A) -> Result<()> + MaybeSend + 'static,
+        A: FromLua,
+    {
+        let marker = self.marker;
+        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+            let this = args.pop_front().unwrap_or(Value::Nil);
+            let cell = unsafe { recover_scoped_cell::<T>(lua, &this, marker)? };
+            let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;
+            let mut borrowed = cell
+                .cell
+                .try_borrow_mut()
+                .map_err(|_| Error::UserDataBorrowMutError)?;
+            let data = borrowed.as_mut().ok_or(Error::UserDataDestructed)?;
+            method(lua, data, val)?;
+            ().into_lua_multi(lua)
+        });
+        self.fields.push(FieldEntry {
+            name: String::new(),
+            numeric_key: Some(index),
             is_get: false,
             callback,
         });
@@ -1079,6 +1200,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
             is_get: true,
             callback,
         });
@@ -1098,6 +1220,7 @@ impl<T> UserDataFields<T> for ScopedCollector<T> {
         });
         self.fields.push(FieldEntry {
             name: name.into(),
+            numeric_key: None,
             is_get: false,
             callback,
         });
@@ -1174,9 +1297,17 @@ pub(crate) fn create_scoped_userdata<T: UserData>(
     for field in collector.fields {
         let func = create_callback_function(lua, field.callback)?;
         if field.is_get {
-            getters.set(field.name, func)?;
+            if let Some(index) = field.numeric_key {
+                getters.set(index, func)?;
+            } else {
+                getters.set(field.name, func)?;
+            }
         } else {
-            setters.set(field.name, func)?;
+            if let Some(index) = field.numeric_key {
+                setters.set(index, func)?;
+            } else {
+                setters.set(field.name, func)?;
+            }
         }
     }
 
@@ -1271,9 +1402,17 @@ fn userdata_metatable<T: UserData + MaybeSend + MaybeSync + 'static>(lua: &Lua) 
     for field in collector.fields {
         let func = create_callback_function(lua, field.callback)?;
         if field.is_get {
-            getters.set(field.name, func)?;
+            if let Some(index) = field.numeric_key {
+                getters.set(index, func)?;
+            } else {
+                getters.set(field.name, func)?;
+            }
         } else {
-            setters.set(field.name, func)?;
+            if let Some(index) = field.numeric_key {
+                setters.set(index, func)?;
+            } else {
+                setters.set(field.name, func)?;
+            }
         }
     }
 

@@ -1,7 +1,7 @@
 // Translated from:
 // /Users/levi/dev/oss/rive-runtime/src/lua/math/lua_mat2d.cpp
 use luaur_rt::{
-    Error, Lua, MultiValue, Result, UserData, UserDataFields, UserDataMethods, Value,
+    AnyUserData, Error, Lua, MultiValue, Result, UserData, UserDataFields, UserDataMethods, Value,
     Vector as LuaVector,
 };
 use nuxie_render_api::Mat2D;
@@ -13,21 +13,35 @@ impl UserData for ScriptedMat2D {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         for (name, index) in [
             ("xx", 0usize),
-            ("yx", 1),
-            ("xy", 2),
+            ("xy", 1),
+            ("yx", 2),
             ("yy", 3),
             ("tx", 4),
             ("ty", 5),
         ] {
-            fields.add_field_method_get(name, move |_, this| Ok(this.0.0[index]));
+            fields.add_field_method_get(name, move |_, this| Ok(this.0 .0[index]));
             fields.add_field_method_set(name, move |_, this, value: f32| {
-                this.0.0[index] = value;
+                this.0 .0[index] = value;
+                Ok(())
+            });
+        }
+        for (lua_index, matrix_index) in (1i64..=6).zip(0usize..6) {
+            fields
+                .add_field_index_method_get(lua_index, move |_, this| Ok(this.0 .0[matrix_index]));
+            fields.add_field_index_method_set(lua_index, move |_, this, value: f32| {
+                this.0 .0[matrix_index] = value;
                 Ok(())
             });
         }
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("invert", |lua, this, ()| {
+            invert_mat2d(this.0)
+                .map(|matrix| lua.create_userdata(ScriptedMat2D(matrix)))
+                .transpose()
+        });
+        methods.add_method("isIdentity", |_, this, ()| Ok(this.0 == Mat2D::IDENTITY));
         methods.add_meta_method("__mul", |lua, this, rhs: Value| {
             Ok(match rhs {
                 Value::Vector(vector) => {
@@ -45,7 +59,27 @@ impl UserData for ScriptedMat2D {
                 _ => return Err(Error::runtime("Mat2D can multiply a Vector or Mat2D")),
             })
         });
+        methods.add_meta_method("__eq", |_, this, rhs: AnyUserData| {
+            Ok(this.0 == rhs.borrow::<ScriptedMat2D>()?.0)
+        });
     }
+}
+
+fn invert_mat2d(matrix: Mat2D) -> Option<Mat2D> {
+    let [aa, ab, ac, ad, atx, aty] = matrix.0;
+    let determinant = aa * ad - ab * ac;
+    if determinant == 0.0 {
+        return None;
+    }
+    let inverse_determinant = 1.0 / determinant;
+    Some(Mat2D([
+        ad * inverse_determinant,
+        -ab * inverse_determinant,
+        -ac * inverse_determinant,
+        aa * inverse_determinant,
+        (ac * aty - ad * atx) * inverse_determinant,
+        (ab * atx - aa * aty) * inverse_determinant,
+    ]))
 }
 
 fn multiply_mat2d(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
@@ -70,10 +104,21 @@ pub(super) fn install_mat2d_global(lua: &Lua) -> Result<()> {
     table.set(
         "values",
         lua.create_function(
-            |lua, (xx, yx, xy, yy, tx, ty): (f32, f32, f32, f32, f32, f32)| {
-                lua.create_userdata(ScriptedMat2D(Mat2D([xx, yx, xy, yy, tx, ty])))
+            |lua, (xx, xy, yx, yy, tx, ty): (f32, f32, f32, f32, f32, f32)| {
+                lua.create_userdata(ScriptedMat2D(Mat2D([xx, xy, yx, yy, tx, ty])))
             },
         )?,
+    )?;
+    table.set(
+        "invert",
+        lua.create_function(|_, (output, input): (AnyUserData, AnyUserData)| {
+            let input = input.borrow::<ScriptedMat2D>()?.0;
+            let Some(inverse) = invert_mat2d(input) else {
+                return Ok(false);
+            };
+            output.borrow_mut::<ScriptedMat2D>()?.0 = inverse;
+            Ok(true)
+        })?,
     )?;
     table.set(
         "withTranslation",
@@ -192,7 +237,6 @@ mod upstream_tests {
     }
 
     #[test]
-    #[ignore = "expected red: Mat2D.values currently swaps the pinned xy/yx constructor order"]
     fn mat2d_can_be_constructed_direct_port() {
         let lua = mat2d_lua();
         let result: Table = lua
@@ -274,7 +318,6 @@ mod upstream_tests {
     }
 
     #[test]
-    #[ignore = "expected red: Mat2D invert and isIdentity methods are not ported"]
     fn mat2d_methods_work_direct_port() {
         let lua = mat2d_lua();
         assert_eq!(
@@ -283,29 +326,25 @@ mod upstream_tests {
                 .expect("invert identity"),
             1.0
         );
-        assert!(
-            lua.load("return Mat2D.values(0,0,0,0,0,0):invert()")
-                .eval::<Value>()
-                .expect("invert singular")
-                .is_nil()
-        );
-        assert!(
-            !lua.load("return Mat2D.values(0,0,0,0,0,0):isIdentity()")
-                .eval::<bool>()
-                .expect("zero identity query")
-        );
-        assert!(
-            lua.load("return Mat2D.values(1,0,0,1,0,0):isIdentity()")
-                .eval::<bool>()
-                .expect("literal identity query")
-        );
-        assert!(
-            lua.load("return Mat2D.identity():isIdentity()")
-                .eval::<bool>()
-                .expect("identity query")
-        );
-        assert!(
-            lua.load(
+        assert!(lua
+            .load("return Mat2D.values(0,0,0,0,0,0):invert()")
+            .eval::<Value>()
+            .expect("invert singular")
+            .is_nil());
+        assert!(!lua
+            .load("return Mat2D.values(0,0,0,0,0,0):isIdentity()")
+            .eval::<bool>()
+            .expect("zero identity query"));
+        assert!(lua
+            .load("return Mat2D.values(1,0,0,1,0,0):isIdentity()")
+            .eval::<bool>()
+            .expect("literal identity query"));
+        assert!(lua
+            .load("return Mat2D.identity():isIdentity()")
+            .eval::<bool>()
+            .expect("identity query"));
+        assert!(lua
+            .load(
                 r#"
                 local mat = Mat2D.identity()
                 mat.tx = 23
@@ -315,12 +354,10 @@ mod upstream_tests {
                 "#,
             )
             .eval::<bool>()
-            .expect("static invert")
-        );
+            .expect("static invert"));
     }
 
     #[test]
-    #[ignore = "expected red: Mat2D equality metamethod is not ported"]
     fn mat2d_meta_methods_work_direct_port() {
         let lua = mat2d_lua();
         for (source, expected) in [
@@ -352,7 +389,6 @@ mod upstream_tests {
     }
 
     #[test]
-    #[ignore = "expected red: Mat2D numeric indexed setters are not ported"]
     fn mat2d_setters_work_direct_port() {
         let lua = mat2d_lua();
         for (field, index, value, expected) in [

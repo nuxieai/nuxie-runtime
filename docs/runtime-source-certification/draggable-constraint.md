@@ -14,10 +14,14 @@ completely rather than inheriting the stale B6-0127 verdict:
 - the component-provided event owner in
   `crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs`
 
-The pinned pair contains two out-of-line definitions and 16 executable inline
-definitions. Pure-virtual declarations (`draggables`, `startDrag`, `drag`, and
-`endDrag`) and the out-of-line `processEvent` declaration are not counted as
-inline definitions.
+The corrected 7,818-unit denominator assigns 19 authority units to this pinned
+pair: two out-of-line functions in the `.cpp`, 16 executable inline functions
+in the handwritten header, and the header's include-guard macro. The guard
+(`include/rive/constraints/draggable_constraint.hpp::c7a31d185f145f5e:1`) is
+preprocessor/build structure with no runtime side effect to translate. The 18
+function rows are adjudicated below. Pure-virtual declarations (`draggables`,
+`startDrag`, `drag`, and `endDrag`) and the out-of-line `processEvent`
+declaration are not executable denominator units.
 
 ## Out-of-line definitions
 
@@ -97,7 +101,33 @@ clears the group-global bit.
 The proxy constructor no longer sorts by draw/hit order. It retains the
 pinned artboard-object provider order and each concrete provider's
 `draggables()` order. The existing state-machine hit-sort pass still orders
-the separately registered hit components afterward.
+the separately registered hit components afterward. This claim is specifically
+the relative order of draggable providers: the other pinned
+`ListenerGroupProvider` implementation, `ScriptedDrawable`, returns no listener
+groups and contributes only a hit component, so it cannot interleave a
+listener group into this owner vector.
+
+### Recursive script execution context is not preserved
+
+The restored recursion still differs at the Rust execution boundary. The outer
+`update_listeners` call receives the caller's `ScriptHost`, optional owned view
+model context, and event context. On the first successful proxy drag it calls
+`drag_start_with_pointer_disable`; on scrolled completion it calls `drag_end`.
+Both helpers recursively call `update_listeners` with `NoopScriptHost` and
+`None` contexts. `drag_end` then performs its required final pointer Move via
+the public `pointer_move` path, which also uses the no-op host/context path.
+
+That is observable, not just a Rust ownership detail. An authored DragStart,
+DragEnd, or final-Move scripted listener reached by component-provided
+recursion can call `ScriptHost::mark_script_update`; the mark is delivered to a
+temporary no-op host instead of the host supplied to
+`try_pointer_move_with_timestamp_and_script_host` or the corresponding Up
+entry point. If the supplied host requires atomic callbacks, an ordinary inner
+script error is also swallowed under the no-op host's non-atomic policy rather
+than being returned by the outer fallible pointer call. Pinned C++ re-enters
+the same `StateMachineInstance` synchronously and does not replace the active
+script execution environment between the interrupted event and nested
+DragStart/DragEnd traversal.
 
 ## Direct regression evidence
 
@@ -125,18 +155,26 @@ the separately registered hit components afterward.
 
 ## Certification boundary and verdict
 
-**Correction implemented; independent adversarial re-review pending.** The
-three counterexamples from the rejected review now have literal source
-corrections and direct evidence: previous/current phase predicates replace
-event-name heuristics, Exit retains group-global scroll state, and proxy/group
-construction retains provider order until the later hit sort. The earlier
-first-drag and completion recursion, draggable-only no-op enable/disable, and
-concrete proxy behavior are unchanged and remain covered by their existing
-tests.
+**Independent adversarial re-review: rejected.** Commit `90cfcde3a` correctly
+repairs all three counterexamples it set out to repair: decisions now use the
+pinned previous/current phases, Exit preserves group-global scroll state, and
+group construction retains draggable-provider order until hit sorting. The
+draggable-only no-op enable/disable overrides, proxy start/drag/end order,
+scroll blocking result, recursive traversal position, and final pointer Move
+also match for the no-script-host path exercised by the focused tests.
 
-This implementing lane does not self-certify the receipt. Concrete proxy
-algorithms owned by `ScrollConstraint` and `ScrollBarConstraint` remain
-dependencies and are not silently certified by this translation-unit audit.
-The malformed constructor machine ID noted by the rejected review was fixed
-generically in the denominator parser and regenerated snapshot before this
-correction.
+Certification remains red because the recursive helpers replace the caller's
+script host and supplied contexts, including on `drag_end`'s final Move. The
+current end-to-end fixture installs `NoopScriptHost` and observes a synthetic
+`RecordingHitComponent`, so it cannot detect the lost scripted side effects or
+atomic error policy. The repair must thread the active host/context through the
+nested DragStart/DragEnd calls and through the final Move, then prove the
+production component-provided path with an authored scripted listener and a
+non-no-op host. This is a state-machine invocation-owner correction, not a
+local draggable-proxy workaround.
+
+Concrete proxy algorithms owned by `ScrollConstraint` and
+`ScrollBarConstraint` remain dependencies and are not silently certified by
+this translation-unit audit. The formerly malformed constructor machine ID is
+now the valid denominator row
+`include/rive/constraints/draggable_constraint.hpp::35b4670e57c27261:1`.

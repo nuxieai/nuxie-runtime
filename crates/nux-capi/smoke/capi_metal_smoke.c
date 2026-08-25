@@ -220,8 +220,8 @@ int main(int argc, char** argv)
     size_t len = 0;
     uint8_t* bytes = read_file(argv[1], &len);
     DecodeProbe decoder = {0};
-    NuxAppleAssetHooks hooks = {
-        .struct_size = sizeof(NuxAppleAssetHooks),
+    NuxAssetHooks hooks = {
+        .struct_size = sizeof(NuxAssetHooks),
         .context = &decoder,
         .decode_image = decode_image,
         .maximum_external_asset_bytes = 64 * 1024 * 1024,
@@ -271,7 +271,7 @@ int main(int argc, char** argv)
     NuxFileImportConfig import_config = {
         .struct_size = sizeof(NuxFileImportConfig),
         .host_commands = composed ? &host : NULL,
-        .apple_assets = &hooks,
+        .asset_hooks = &hooks,
         .expected_assets = composed ? expected : NULL,
         .expected_asset_count = composed ? 2 : 0,
     };

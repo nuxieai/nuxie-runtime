@@ -161,7 +161,7 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
     },
 }
 PORTABLE_ABI_FACADE_FILE_SYMBOLS = {
-    "crates/nux-capi/src/apple_assets.rs": {
+    "crates/nux-capi/src/asset_hooks.rs": {
         "RenderCanvas",
         "RenderCanvasError",
     },
@@ -203,9 +203,9 @@ PORTABLE_ABI_CONTRACT_SUFFIXES = {
     ".toml",
 }
 # Apple vocabulary is allowed only in the exact files that declare, implement,
-# or exercise the product-neutral Apple platform extension. Product vocabulary
-# remains forbidden even in these files, and Apple terms in any new portable
-# ABI file still fail closed.
+# or exercise the Apple platform extension. Product vocabulary remains
+# forbidden even in these files, and Apple terms in portable ABI files still
+# fail closed.
 APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES = {
     "crates/nux-capi/Cargo.toml",
     "crates/nux-capi/build.rs",
@@ -218,7 +218,6 @@ APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES = {
     "crates/nux-capi/smoke/capi_metal_smoke.swift",
     "crates/nux-capi/smoke/distribution_consumer.c",
     "crates/nux-capi/src/apple_metal.rs",
-    "crates/nux-capi/src/apple_assets.rs",
     "crates/nux-capi/src/lib.rs",
     "crates/nux-capi/tests/apple_metal.rs",
 }

@@ -131,7 +131,7 @@ fn player_retaining_released_import_owners(fixture: &str, artboard_index: usize)
     player
 }
 
-fn apple_asset_player(fixture: &str) -> (*mut NuxPlayer, Box<AppleDecodeProbe>) {
+fn asset_hook_player(fixture: &str) -> (*mut NuxPlayer, Box<AppleDecodeProbe>) {
     let bytes = fixture_bytes(fixture);
     let mut probe = Box::new(AppleDecodeProbe {
         pixels: Vec::new(),
@@ -140,16 +140,16 @@ fn apple_asset_player(fixture: &str) -> (*mut NuxPlayer, Box<AppleDecodeProbe>) 
         releases: 0,
         nested_abi: NUX_CAPI_ABI_VERSION,
     });
-    let hooks = NuxAppleAssetHooks {
+    let hooks = NuxAssetHooks {
         context: std::ptr::from_mut(probe.as_mut()).cast(),
         decode_image: Some(decode_apple_image),
-        ..NuxAppleAssetHooks::default()
+        ..NuxAssetHooks::default()
     };
     let mut file = ptr::null_mut();
     let mut result = ptr::null_mut();
     assert_eq!(
         unsafe {
-            nux_file_import_with_apple_assets(
+            nux_file_import_with_assets(
                 bytes.as_ptr(),
                 bytes.len(),
                 &hooks,
@@ -578,7 +578,7 @@ fn embedded_images_redecode_after_renderer_migration_and_reattach() {
 #[test]
 fn apple_decoded_cpu_pixels_survive_file_release_domain_reset_and_reattach() {
     autoreleasepool(|_| {
-        let (player, probe) = apple_asset_player("in_band_asset.riv");
+        let (player, probe) = asset_hook_player("in_band_asset.riv");
         assert_eq!(probe.calls, 1);
         assert_eq!((probe.retains, probe.releases), (1, 1));
         assert_eq!(
@@ -588,9 +588,7 @@ fn apple_decoded_cpu_pixels_survive_file_release_domain_reset_and_reattach() {
 
         let first = renderer(64, 64);
         let first_layer = layer(first, 64, 64);
-        let drawable = first_layer
-            .nextDrawable()
-            .expect("first Apple asset drawable");
+        let drawable = first_layer.nextDrawable().expect("first asset drawable");
         let pointer = Retained::as_ptr(&drawable).cast_mut().cast();
         let first_outcome = unsafe {
             render(
@@ -718,10 +716,10 @@ fn scripted_asset_import(
     host: &NuxHostCommandImportConfig,
     probe: &mut AppleDecodeProbe,
 ) -> *mut NuxFile {
-    let hooks = NuxAppleAssetHooks {
+    let hooks = NuxAssetHooks {
         context: std::ptr::from_mut(probe).cast(),
         decode_image: Some(decode_apple_image),
-        ..NuxAppleAssetHooks::default()
+        ..NuxAssetHooks::default()
     };
     let expected = [
         NuxExpectedFileAssetDescriptor {
@@ -750,7 +748,7 @@ fn scripted_asset_import(
     ];
     let config = NuxFileImportConfig {
         host_commands: host,
-        apple_assets: &hooks,
+        asset_hooks: &hooks,
         expected_assets: expected.as_ptr(),
         expected_asset_count: expected.len(),
         ..NuxFileImportConfig::default()

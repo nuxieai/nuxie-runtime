@@ -65,7 +65,8 @@ grep -Eo 'nux_[A-Za-z0-9_]+[[:space:]]*\(' \
 # cbindgen retains every feature-gated declaration in the generated header.
 # Compare only the selected extension while keeping each family exact enough
 # that a new symbol fails its own feature inventory closed.
-apple_extension='^(nux_file_import_(configured|with_apple_assets)|nux_renderer_(copy_metal_device|detach|free|info|new_metal|reattach|render_player|reset_player_domain|resize))$'
+asset_hooks_extension='^nux_file_import_(configured|with_assets)$'
+apple_extension='^nux_renderer_(copy_metal_device|detach|free|info|new_metal|reattach|render_player|reset_player_domain|resize)$'
 android_extension='^(nux_android_vulkan_frame_|nux_renderer_(android_vulkan_|new_android_vulkan$))'
 case "$features" in
     apple-metal|apple-metal,scripting)
@@ -75,7 +76,7 @@ case "$features" in
         grep -Ev "$apple_extension" "$header_actual" > "$work_dir/header-selected.txt"
         ;;
     *)
-        grep -Ev "$apple_extension|$android_extension" \
+        grep -Ev "$asset_hooks_extension|$apple_extension|$android_extension" \
             "$header_actual" > "$work_dir/header-selected.txt"
         ;;
 esac

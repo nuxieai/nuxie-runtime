@@ -18,8 +18,11 @@ mod apple_metal;
 #[cfg(feature = "android-vulkan")]
 mod android_vulkan;
 
-#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
-mod apple_assets;
+#[cfg(any(
+    all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+    feature = "android-vulkan"
+))]
+mod asset_hooks;
 
 #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
 pub use apple_metal::*;
@@ -27,8 +30,11 @@ pub use apple_metal::*;
 #[cfg(feature = "android-vulkan")]
 pub use android_vulkan::*;
 
-#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
-pub use apple_assets::*;
+#[cfg(any(
+    all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+    feature = "android-vulkan"
+))]
+pub use asset_hooks::*;
 
 pub use render_callbacks::{
     NUX_RENDER_CALLBACKS_V3_MIN_SIZE, NuxImageSampler, NuxRawPathView, NuxRenderCallbacks,
@@ -192,8 +198,11 @@ pub struct NuxFile {
     owner_thread: ThreadId,
     data_binding_provenance: Arc<()>,
     script_callback_factory_domain: Rc<RefCell<Option<CallbackRendererDomain>>>,
-    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
-    apple_assets: Option<Arc<apple_assets::AppleAssetCatalog>>,
+    #[cfg(any(
+        all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+        feature = "android-vulkan"
+    ))]
+    asset_hooks: Option<Arc<asset_hooks::AssetCatalog>>,
 }
 
 struct ArtboardOccurrence {
@@ -202,8 +211,11 @@ struct ArtboardOccurrence {
     observed_bound_view_model_generation: Cell<u64>,
     has_script_assets: bool,
     script_callback_factory_domain: Rc<RefCell<Option<CallbackRendererDomain>>>,
-    #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
-    apple_assets: Option<Arc<apple_assets::AppleAssetCatalog>>,
+    #[cfg(any(
+        all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+        feature = "android-vulkan"
+    ))]
+    asset_hooks: Option<Arc<asset_hooks::AssetCatalog>>,
     renderer_domain: RefCell<Option<RendererDomainBinding>>,
     /// Monotonic occurrence-local revision of the observable runtime snapshot.
     /// Revision zero is reserved so a new occurrence requires presentation.
@@ -1691,11 +1703,11 @@ pub unsafe extern "C" fn nux_file_import(
                     owner_thread: thread::current().id(),
                     data_binding_provenance: Arc::new(()),
                     script_callback_factory_domain: Rc::new(RefCell::new(None)),
-                    #[cfg(all(
-                        feature = "apple-metal",
-                        any(target_os = "ios", target_os = "macos")
+                    #[cfg(any(
+                        all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+                        feature = "android-vulkan"
                     ))]
-                    apple_assets: None,
+                    asset_hooks: None,
                 });
                 unsafe {
                     let handle = Box::into_raw(handle);
@@ -1752,11 +1764,11 @@ pub unsafe extern "C" fn nux_file_import_with_result(
                     owner_thread: thread::current().id(),
                     data_binding_provenance: Arc::new(()),
                     script_callback_factory_domain: Rc::new(RefCell::new(None)),
-                    #[cfg(all(
-                        feature = "apple-metal",
-                        any(target_os = "ios", target_os = "macos")
+                    #[cfg(any(
+                        all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+                        feature = "android-vulkan"
                     ))]
-                    apple_assets: None,
+                    asset_hooks: None,
                 }));
                 register_handle(handle, HandleKind::File, thread::current().id());
                 unsafe { *out_file = handle };
@@ -2021,11 +2033,11 @@ pub unsafe extern "C" fn nux_file_import_trusted_with_host_commands(
                     owner_thread: thread::current().id(),
                     data_binding_provenance: Arc::new(()),
                     script_callback_factory_domain: Rc::new(RefCell::new(None)),
-                    #[cfg(all(
-                        feature = "apple-metal",
-                        any(target_os = "ios", target_os = "macos")
+                    #[cfg(any(
+                        all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+                        feature = "android-vulkan"
                     ))]
-                    apple_assets: None,
+                    asset_hooks: None,
                 }));
                 register_handle(handle, HandleKind::File, thread::current().id());
                 unsafe { *out_file = handle };
@@ -2340,11 +2352,14 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                         script_callback_factory_domain: Rc::clone(
                             &file.script_callback_factory_domain,
                         ),
-                        #[cfg(all(
-                            feature = "apple-metal",
-                            any(target_os = "ios", target_os = "macos")
+                        #[cfg(any(
+                            all(
+                                feature = "apple-metal",
+                                any(target_os = "ios", target_os = "macos")
+                            ),
+                            feature = "android-vulkan"
                         ))]
-                        apple_assets: file.apple_assets.clone(),
+                        asset_hooks: file.asset_hooks.clone(),
                         renderer_domain: RefCell::new(None),
                         render_revision: Cell::new(1),
                         presented_render_revision: Cell::new(0),
@@ -5368,7 +5383,7 @@ mod firewall_tests {
                 let mut nested_result = ptr::dangling_mut();
                 assert_eq!(
                     unsafe {
-                        nux_file_import_with_apple_assets(
+                        nux_file_import_with_assets(
                             ptr::dangling(),
                             1,
                             ptr::dangling(),
@@ -5385,7 +5400,7 @@ mod firewall_tests {
                 let shared_slot = ptr::from_mut(&mut shared);
                 assert_eq!(
                     unsafe {
-                        nux_file_import_with_apple_assets(
+                        nux_file_import_with_assets(
                             ptr::dangling(),
                             1,
                             ptr::dangling(),
@@ -5398,7 +5413,7 @@ mod firewall_tests {
                 assert!(shared.is_null());
                 assert_eq!(
                     unsafe {
-                        nux_file_import_with_apple_assets(
+                        nux_file_import_with_assets(
                             ptr::dangling(),
                             1,
                             ptr::dangling(),
@@ -5440,8 +5455,11 @@ mod firewall_tests {
             owner_thread: thread::current().id(),
             data_binding_provenance: Arc::new(()),
             script_callback_factory_domain: Rc::new(RefCell::new(None)),
-            #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
-            apple_assets: None,
+            #[cfg(any(
+                all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+                feature = "android-vulkan"
+            ))]
+            asset_hooks: None,
         }));
         register_handle(handle, HandleKind::File, thread::current().id());
         handle

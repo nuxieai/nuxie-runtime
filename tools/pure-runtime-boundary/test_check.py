@@ -1155,9 +1155,6 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         (package / "src/apple_metal.rs").write_text(
             "struct AppleSurface; // CAMetalDrawable is caller-borrowed.\n"
         )
-        (package / "src/apple_assets.rs").write_text(
-            "struct AppleAssetHooks; // Apple-only asset admission.\n"
-        )
         (package / "cbindgen.toml").write_text(
             '"apple-metal" = "NUX_CAPI_APPLE_METAL"\n'
         )
@@ -1212,7 +1209,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
     def test_allows_product_neutral_host_command_vocabulary(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/lib.rs").write_text("fn host_commands() {}\n")
-        (package / "src/apple_assets.rs").write_text(
+        (package / "src/asset_hooks.rs").write_text(
             "fn host_commands() {}\n"
         )
         tests = package / "tests"
@@ -2089,7 +2086,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
     def test_allows_exact_apple_render_canvas_symbols(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
-        (package / "src/apple_assets.rs").write_text(
+        (package / "src/asset_hooks.rs").write_text(
             "use nuxie::{RenderCanvas, RenderCanvasError};\n"
         )
 
@@ -2099,7 +2096,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
     def test_rejects_apple_render_canvas_symbols_outside_exact_file(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
-        (package / "src/not_apple_assets.rs").write_text(
+        (package / "src/not_asset_hooks.rs").write_text(
             "use nuxie::{RenderCanvas, RenderCanvasError};\n"
         )
 
@@ -2608,7 +2605,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         scripting_tests = scripting / "tests"
         scripting_tests.mkdir()
         owners = (
-            capi / "src/apple_assets.rs",
+            capi / "src/asset_hooks.rs",
             capi / "src/lib.rs",
             capi_tests / "apple_metal.rs",
             facade / "src/lib.rs",

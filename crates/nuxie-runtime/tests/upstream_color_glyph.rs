@@ -137,6 +137,7 @@ fn get_color_layers_returns_empty_for_non_color_glyph() {
 }
 
 #[test]
+#[ignore = "expected-red: RawTextFont has no retained getColorLayers cache owner"]
 fn color_glyph_layers_are_cached() {
     let bytes = emoji_bytes();
     let _font = font(&bytes);
@@ -149,6 +150,9 @@ fn color_glyph_layers_are_cached() {
     let second_count = append_layers(&bytes, color_glyph, 0xff00_0000, &mut second);
     assert_eq!(first_count, second_count);
     assert_eq!(first.len(), second.len());
+    panic!(
+        "both exact getColorLayers calls completed, but Rust reparsed the font and cannot assert the pinned second-call cache path"
+    );
 }
 
 #[test]
@@ -173,26 +177,21 @@ fn foreground_color_is_applied_for_ffff_color_index() {
 }
 
 #[test]
+#[ignore = "expected-red: RawTextFont has no withOptions variation/feature derivation owner"]
 fn with_options_preserves_color_glyph_support() {
     let bytes = emoji_bytes();
     let font = font(&bytes);
+    assert_eq!(font.face_index(), 0);
     assert!(has_color(&bytes));
-    let sub_font = font.clone();
-    let _ = sub_font;
-    assert!(has_color(&bytes));
+    panic!(
+        "the decoded font has color glyphs, but cloning it is not the pinned withOptions({{}}, {{}}) action"
+    );
 }
 
 #[test]
 fn raw_text_renders_with_color_glyph_font_without_crashing() {
     let emoji = font(&emoji_bytes());
     let _ = render("A", &emoji, 32.0, 200.0);
-}
-
-#[test]
-fn shaping_emoji_font_produces_glyphs() {
-    let emoji = font(&emoji_bytes());
-    let commands = render("A", &emoji, 32.0, 200.0);
-    assert!(!commands.is_empty());
 }
 
 #[test]

@@ -1032,3 +1032,37 @@ pub(crate) fn static_text_value(
     let runs = slice.resolved_runs(runtime, instance).ok()?;
     Some(runs.into_iter().map(|run| run.text).collect())
 }
+
+#[cfg(test)]
+mod upstream_color_glyph_tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    #[test]
+    fn shaping_emoji_font_produces_a_paragraph_run_and_glyph() {
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
+        let bytes = std::fs::read(
+            root.join("tests/unit_tests/assets/TwemojiMozilla.subset.ttf"),
+        )
+        .expect("read pinned emoji font");
+        let font = RawTextFont::decode(Arc::<[u8]>::from(bytes)).expect("emoji font decodes");
+        let run = StandaloneTextRun {
+            text: "A".to_owned(),
+            font,
+            size: 32.0,
+            line_height: -1.0,
+            letter_spacing: 0.0,
+            style_index: 0,
+            char_start: 0,
+        };
+
+        let glyphs = shape_standalone_run(&run);
+        let lines = standalone_break_lines("A", &glyphs, TextSizing::AutoHeight, 200.0);
+
+        assert_eq!(lines.len(), 1, "one pinned paragraph is shaped");
+        assert!(!lines[0].glyphs.is_empty(), "the first run produces a glyph");
+    }
+}

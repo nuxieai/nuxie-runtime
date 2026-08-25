@@ -1190,16 +1190,17 @@
       "line": 16,
       "name": "compute bounds of background shape",
       "status": "direct",
-      "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "outcome": "expected-red",
+      "note": "The complete fixture, text mutation, advances, root transform, and world-bound assertions execute before the unavailable local-bounds owner is reached.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 91995,
-          "symbol": "upstream_background_shape_bounds_follow_text_and_artboard_transform"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_core.rs",
+          "line": 53,
+          "symbol": "upstream_background_shape_bounds_call_the_world_and_local_owners"
         }
-      ]
+      ],
+      "expected_red_reason": "expected-red: Shape::computeLocalBounds has no callable Rust owner"
     },
     {
       "id": "tests/unit_tests/runtime/bounds_test.cpp#2",
@@ -1226,16 +1227,17 @@
       "line": 77,
       "name": "test local bounds",
       "status": "direct",
-      "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "outcome": "expected-red",
+      "note": "The exact local_bounds.riv fixture and complete shape/text/group/image/n-slice/custom/layout object matrix execute without substituting the two-text proxy.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
-          "line": 91618,
-          "symbol": "upstream_text_local_bounds_fixture_retains_origin_adjusted_bounds"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_core.rs",
+          "line": 96,
+          "symbol": "upstream_local_bounds_executes_the_complete_object_matrix"
         }
-      ]
+      ],
+      "expected_red_reason": "expected-red: the generic Component::localBounds matrix has no callable Rust owner"
     },
     {
       "id": "tests/unit_tests/runtime/cdn_asset_test.cpp#1",
@@ -1280,16 +1282,17 @@
       "line": 10,
       "name": "child typed iterators work",
       "status": "direct",
-      "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "outcome": "expected-red",
+      "note": "The exact juice.riv artboard imports and instantiates; graph filtering was removed because it is not execution of the typed iterator owners.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/draw.rs",
-          "line": 25574,
-          "symbol": "child_typed_iterators_work"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_core.rs",
+          "line": 141,
+          "symbol": "upstream_child_typed_iterators_execute_the_iterator_owners"
         }
-      ]
+      ],
+      "expected_red_reason": "expected-red: Artboard children<T>/objects<T> typed iterators are absent in Rust"
     },
     {
       "id": "tests/unit_tests/runtime/clip_test.cpp#1",
@@ -1497,16 +1500,17 @@
       "line": 107,
       "name": "color glyph layers are cached",
       "status": "direct",
-      "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "outcome": "expected-red",
+      "note": "Both pinned getColorLayers calls and both count/size assertions execute against the real extractor before the missing retained cache owner is reported.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 140,
+          "line": 141,
           "symbol": "color_glyph_layers_are_cached"
         }
-      ]
+      ],
+      "expected_red_reason": "expected-red: RawTextFont has no retained getColorLayers cache owner"
     },
     {
       "id": "tests/unit_tests/runtime/color_glyph_test.cpp#8",
@@ -1533,16 +1537,17 @@
       "line": 176,
       "name": "withOptions preserves color glyph support",
       "status": "direct",
-      "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "outcome": "expected-red",
+      "note": "The exact emoji font is decoded and classified before reaching the absent withOptions variation/feature derivation owner; font cloning is no longer accepted as evidence.",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 176,
+          "line": 181,
           "symbol": "with_options_preserves_color_glyph_support"
         }
-      ]
+      ],
+      "expected_red_reason": "expected-red: RawTextFont has no withOptions variation/feature derivation owner"
     },
     {
       "id": "tests/unit_tests/runtime/color_glyph_test.cpp#10",
@@ -1574,9 +1579,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_color_glyph.rs",
-          "line": 192,
-          "symbol": "shaping_emoji_font_produces_glyphs"
+          "path": "crates/nuxie-runtime/src/text/raw_text.rs",
+          "line": 1043,
+          "symbol": "shaping_emoji_font_produces_a_paragraph_run_and_glyph"
         }
       ]
     },
@@ -4012,16 +4017,17 @@
       "line": 481,
       "name": "Stateful Component dynamic artboard swap via VMI artboard property",
       "status": "direct",
-      "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "outcome": "expected-red",
+      "note": "The exact Main/Button/StrokedButton fixture executes null, Button, StrokedButton, Button, null, and Button swaps with the pinned frame counts before the missing owned child VMI is observed.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/artboard/tests.rs",
-          "line": 2867,
-          "symbol": "nested_artboard_swap_creates_the_replacement_default_state_machine"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_core.rs",
+          "line": 254,
+          "symbol": "upstream_stateful_component_dynamic_artboard_swap_replays_the_complete_fixture"
         }
-      ]
+      ],
+      "expected_red_reason": "expected-red: replacement StrokedButton lacks the pinned owned strokeWidth VMI context"
     },
     {
       "id": "tests/unit_tests/runtime/component_test.cpp#6",
@@ -4030,16 +4036,17 @@
       "line": 652,
       "name": "Stateful nested artboard borrows stateful child on matching VM and preserves it across different-VM swap",
       "status": "direct",
-      "outcome": "pass",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "outcome": "expected-red",
+      "note": "The exact source-switch fixture, matching/different/matching sources, label writes, and frame counts execute before the unobservable pointer-identity assertions are reached.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/artboard/tests.rs",
-          "line": 2984,
-          "symbol": "stateful_nested_source_switch_uses_the_replacement_view_model_default"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_core.rs",
+          "line": 316,
+          "symbol": "upstream_stateful_nested_source_switch_replays_matching_and_different_vm_lifetimes"
         }
-      ]
+      ],
+      "expected_red_reason": "expected-red: active nested VMI pointer identity is not observable through the Rust test surface"
     },
     {
       "id": "tests/unit_tests/runtime/component_test.cpp#7",
@@ -4049,16 +4056,16 @@
       "name": "Stateful Component list bridge binds clean up on item remove",
       "status": "direct",
       "outcome": "expected-red",
-      "note": "Literal Rust port retains the pinned fixture, action order, and assertions.",
+      "note": "The exact stateful_list_props fixture now executes instance creation, add/remove/click/re-add/click/clear actions, frame counts, and direct list/click assertions.",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "tools/silver-corpus/tests/wave_a.rs",
-          "line": 155,
-          "symbol": "component_stateful_list_cleanup"
+          "path": "crates/nuxie-runtime/tests/upstream_wave_a_core.rs",
+          "line": 366,
+          "symbol": "upstream_stateful_component_list_bridge_replays_add_remove_click_readd_and_clear"
         }
       ],
-      "expected_red_reason": "expected-red: silver replay lacks stateful_list_props_lifecycle required runtime feature"
+      "expected_red_reason": "expected-red: stateful list bridge lifecycle does not yet complete on the pinned fixture"
     },
     {
       "id": "tests/unit_tests/runtime/component_test.cpp#8",

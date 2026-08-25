@@ -14506,7 +14506,7 @@
         "basis": "owner proof audit pin",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 20,
+        "recent_touch_count": 21,
         "state": "stale"
       },
       "cluster_id": "cluster:scripted:ownership",
@@ -19795,7 +19795,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 81,
+        "recent_touch_count": 80,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",
@@ -19826,7 +19826,7 @@
         "basis": "checked-in ledger",
         "churn": "high",
         "churn_basis": "mapped Rust and evidence paths in the last 100 changes",
-        "recent_touch_count": 81,
+        "recent_touch_count": 80,
         "state": "manifest-current"
       },
       "cluster_id": "cluster:runtime-tests:unsupported-observable",

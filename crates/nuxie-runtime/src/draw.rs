@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use nuxie_binary::{RuntimeFile, RuntimeObject};
+use nuxie_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use nuxie_graph::{
     ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, DrawableOrderNode, FeatherNode,
     GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, NSlicerDetailsNode,
@@ -16433,13 +16433,6 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     // embedded payload independently for every image rescans the complete
     // object stream for each asset and turns a large valid file quadratic.
     let image_assets = RuntimeImageAssetCatalog::from_runtime(runtime);
-    let pre_source_image_assets = pre_source_image_asset_globals(
-        runtime,
-        graph,
-        artboards,
-        &image_assets,
-        scripting_file_assets,
-    );
     let images = instance
         .runtime_image_assets
         .borrow()
@@ -16451,42 +16444,34 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
             ))
         });
     let mut image_decode_error = None;
-    for asset_global in image_assets
-        .globals
-        .iter()
-        .copied()
-        .filter(|asset_global| pre_source_image_assets.contains(asset_global))
-    {
-        if image_decode_error.is_none() {
-            image_decode_error = predecode_render_image(
-                runtime,
-                &image_assets,
-                asset_global,
-                external_images,
-                factory,
-                images.as_ref(),
-            )
-            .err();
-        }
-    }
-    let _source_artboard_paints =
-        allocate_source_paints.then(|| preallocate_render_paint_batch(runtime, factory));
-    for asset_global in image_assets
-        .globals
-        .iter()
-        .copied()
-        .filter(|asset_global| !pre_source_image_assets.contains(asset_global))
-    {
-        if image_decode_error.is_none() {
-            image_decode_error = predecode_render_image(
-                runtime,
-                &image_assets,
-                asset_global,
-                external_images,
-                factory,
-                images.as_ref(),
-            )
-            .err();
+    let mut source_artboard_paints = allocate_source_paints.then(RuntimeRenderPaints::default);
+    let mut allocated_source_paints = BTreeSet::new();
+    for event in source_resource_import_events(runtime, scripting_file_assets) {
+        match event {
+            RuntimeSourceImportEvent::ImageAsset(asset_global) => {
+                if image_decode_error.is_none() {
+                    image_decode_error = predecode_render_image(
+                        runtime,
+                        &image_assets,
+                        asset_global,
+                        external_images,
+                        factory,
+                        images.as_ref(),
+                    )
+                    .err();
+                }
+            }
+            RuntimeSourceImportEvent::Artboard(artboard_index) => {
+                if let Some(paints) = source_artboard_paints.as_mut() {
+                    preallocate_source_artboard_render_paints_into(
+                        runtime,
+                        artboard_index,
+                        factory,
+                        paints,
+                        &mut allocated_source_paints,
+                    );
+                }
+            }
         }
     }
     // C++ resolves every source-artboard Mesh against the file-owned
@@ -16662,50 +16647,88 @@ fn runtime_artboard_set_paint_preparation_is_solid_only(artboards: &[ArtboardGra
     })
 }
 
-fn pre_source_image_asset_globals(
-    runtime: &RuntimeFile,
-    graph: &ArtboardGraph,
-    artboards: &[ArtboardGraph],
-    image_assets: &RuntimeImageAssetCatalog<'_>,
-    scripting_file_assets: bool,
-) -> BTreeSet<u32> {
-    let mut pre_source_assets =
-        import_stack_pre_source_image_asset_globals(runtime, image_assets, scripting_file_assets)
-            .into_iter()
-            .collect::<BTreeSet<_>>();
-    let heuristic_count =
-        heuristic_pre_source_image_decode_count(graph, artboards, image_assets.globals.len());
-    pre_source_assets.extend(image_assets.globals.iter().copied().take(heuristic_count));
-    pre_source_assets
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeSourceImportEvent {
+    ImageAsset(u32),
+    Artboard(usize),
 }
 
-fn import_stack_pre_source_image_asset_globals(
-    runtime: &RuntimeFile,
-    image_assets: &RuntimeImageAssetCatalog<'_>,
-    scripting_file_assets: bool,
-) -> Vec<u32> {
-    let mut pre_source_assets = Vec::new();
-    let mut latest_image_asset = None;
+#[derive(Debug, Clone, Copy)]
+enum RuntimeSourceImportStackOwner {
+    FileAsset(Option<u32>),
+    Artboard(usize),
+}
 
-    for object in runtime.objects.iter().flatten() {
-        if object.type_name == "Artboard" {
-            break;
+/// Replays the renderer-visible portion of pinned C++ `ImportStack` ordering.
+///
+/// `File::read` keeps one latest importer per stack type. Installing another
+/// FileAsset or Artboard resolves the displaced owner immediately; at EOF the
+/// surviving owners resolve in reverse insertion order (`file.cpp:300-662`,
+/// `import_stack.hpp:33-85`). Image decoding belongs to FileAsset resolution,
+/// while source paint construction belongs to Artboard resolution. Keeping
+/// those two owners in one event stream avoids approximating their order from
+/// corpus features.
+fn source_resource_import_events(
+    runtime: &RuntimeFile,
+    scripting_file_assets: bool,
+) -> Vec<RuntimeSourceImportEvent> {
+    let mut events = Vec::new();
+    let mut latest_file_asset = None;
+    let mut latest_artboard = None;
+    let mut insertion_order = 0usize;
+    let mut next_artboard_index = 0usize;
+
+    let resolve = |owner: RuntimeSourceImportStackOwner,
+                   events: &mut Vec<RuntimeSourceImportEvent>| match owner {
+        RuntimeSourceImportStackOwner::FileAsset(Some(global_id)) => {
+            events.push(RuntimeSourceImportEvent::ImageAsset(global_id));
         }
-        if !runtime_object_uses_golden_file_asset_stack(object, scripting_file_assets) {
+        RuntimeSourceImportStackOwner::FileAsset(None) => {}
+        RuntimeSourceImportStackOwner::Artboard(index) => {
+            events.push(RuntimeSourceImportEvent::Artboard(index));
+        }
+    };
+
+    for (object_index, object) in runtime.objects.iter().enumerate() {
+        if runtime.import_status(object_index) != Some(RuntimeImportStatus::Imported) {
             continue;
         }
-
-        if let Some(asset_global) = latest_image_asset.take()
-            && image_assets.embedded_bytes(asset_global).is_some()
-        {
-            pre_source_assets.push(asset_global);
-        }
-        if object.type_name == "ImageAsset" {
-            latest_image_asset = Some(object.id);
+        let Some(object) = object.as_ref() else {
+            continue;
+        };
+        if object.type_name == "Artboard" {
+            if let Some((_, owner)) = latest_artboard.take() {
+                resolve(owner, &mut events);
+            }
+            latest_artboard = Some((
+                insertion_order,
+                RuntimeSourceImportStackOwner::Artboard(next_artboard_index),
+            ));
+            next_artboard_index += 1;
+            insertion_order += 1;
+        } else if runtime_object_uses_golden_file_asset_stack(object, scripting_file_assets) {
+            if let Some((_, owner)) = latest_file_asset.take() {
+                resolve(owner, &mut events);
+            }
+            latest_file_asset = Some((
+                insertion_order,
+                RuntimeSourceImportStackOwner::FileAsset(
+                    (object.type_name == "ImageAsset").then_some(object.id),
+                ),
+            ));
+            insertion_order += 1;
         }
     }
 
-    pre_source_assets
+    let mut surviving = [latest_file_asset, latest_artboard]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    surviving.sort_by_key(|(order, _)| std::cmp::Reverse(*order));
+    for (_, owner) in surviving {
+        resolve(owner, &mut events);
+    }
+    events
 }
 
 fn runtime_object_uses_golden_file_asset_stack(
@@ -16716,89 +16739,6 @@ fn runtime_object_uses_golden_file_asset_stack(
         object.type_name,
         "ImageAsset" | "FontAsset" | "AudioAsset" | "BlobAsset" | "ManifestAsset"
     ) || scripting_file_assets && matches!(object.type_name, "ScriptAsset" | "ShaderAsset")
-}
-
-fn heuristic_pre_source_image_decode_count(
-    graph: &ArtboardGraph,
-    artboards: &[ArtboardGraph],
-    image_asset_count: usize,
-) -> usize {
-    if image_asset_count == 0 {
-        return 0;
-    }
-
-    if image_asset_count == 1 {
-        // Mirrors the focused C++ ordering observed in spotify_kids_demo:
-        // a text-bearing selected root with one image only in a sibling
-        // artboard decodes before source paints, while feather_render_test
-        // remains source-paint-first.
-        let selected_has_direct_image = graph
-            .sorted_drawable_order
-            .iter()
-            .any(|drawable| drawable.type_name == "Image");
-        let selected_has_text = graph
-            .local_objects
-            .iter()
-            .any(|object| object.type_name == Some("Text"));
-        let image_is_only_in_non_selected_artboard = !selected_has_direct_image
-            && selected_has_text
-            && artboards.iter().any(|artboard| {
-                artboard.global_id != graph.global_id
-                    && artboard
-                        .sorted_drawable_order
-                        .iter()
-                        .any(|drawable| drawable.type_name == "Image")
-            });
-        return usize::from(image_is_only_in_non_selected_artboard);
-    }
-
-    let has_asset_image_bind = artboards.iter().any(|artboard| {
-        artboard.data_binds.iter().any(|data_bind| {
-            data_bind.target_type_name == Some("Image")
-                && runtime_draw_property_key_for_name("Image", "assetId")
-                    .is_some_and(|key| data_bind.property_key == u64::from(key))
-        })
-    });
-    let has_layout_component = artboards.iter().any(|artboard| {
-        artboard
-            .components
-            .iter()
-            .any(|component| component.type_name == "LayoutComponent")
-    });
-    if has_asset_image_bind && !has_layout_component {
-        // Mirrors the C++ `FileAssetImporter` ordering for no-layout
-        // asset-image data-context files: most embedded images resolve before
-        // source paint allocation, while the final generated/private asset
-        // resolution happens after source paints. The current corpus exposes
-        // both plain scripted-property and nested-artboard variants.
-        return image_asset_count.saturating_sub(1);
-    }
-
-    // Mirrors the C++ `src/importers/file_asset_importer.cpp` resolution
-    // surface observed in asset-image-bound image/layout fixtures.
-    let has_asset_image_layout = artboards.iter().any(|artboard| {
-        let has_artboard_layout_component = artboard
-            .components
-            .iter()
-            .any(|component| component.type_name == "LayoutComponent");
-        if !has_artboard_layout_component {
-            return false;
-        }
-
-        artboard.data_binds.iter().any(|data_bind| {
-            data_bind.target_type_name == Some("Image")
-                && runtime_draw_property_key_for_name("Image", "assetId")
-                    .is_some_and(|key| data_bind.property_key == u64::from(key))
-        })
-    });
-    if has_asset_image_layout {
-        return image_asset_count.min(2);
-    }
-
-    // Ported from C++ `src/importers/file_asset_importer.cpp`: consecutive
-    // embedded file assets resolve as each importer is displaced, while the
-    // final file-asset importer resolves later when the import stack unwinds.
-    image_asset_count.saturating_sub(1)
 }
 
 fn write_render_buffer_bytes(buffer: &mut dyn RenderBuffer, bytes: &[u8]) {
@@ -16891,48 +16831,64 @@ fn preallocate_render_paint_batch(
     let mut paints = RuntimeRenderPaints::default();
     let mut allocated = BTreeSet::new();
     for artboard_index in 0..runtime.artboards().len() {
-        let Some(local_objects) = runtime.artboard_local_object_slots(artboard_index) else {
-            continue;
-        };
-        for object in local_objects.iter().flatten() {
-            if !matches!(
-                object.type_name,
-                "SolidColor" | "LinearGradient" | "RadialGradient"
-            ) {
-                continue;
-            }
-            let Some(paint_object) = object
-                .uint_property("parentId")
-                .and_then(|parent_local_id| usize::try_from(parent_local_id).ok())
-                .and_then(|parent_local_id| local_objects.get(parent_local_id))
-                .copied()
-                .flatten()
-            else {
-                continue;
-            };
-            if !matches!(paint_object.type_name, "Fill" | "Stroke")
-                || !allocated.insert(paint_object.id)
-            {
-                continue;
-            }
-
-            // Direct port of the source Artboard's onAddedDirty traversal. The
-            // concrete mutator initializes its parent ShapePaint in object order:
-            // ShapePaint allocates, Fill/Stroke applies constructor fields, and
-            // SolidColor immediately applies color
-            // (`artboard.cpp:264-288`, `shape_paint_mutator.cpp:7-25`,
-            // `shape_paint.cpp:50-57`, `fill.cpp:13-17`,
-            // `stroke.cpp:12-19`, `solid_color.cpp:9-21`).
-            let mut render_paint = factory.make_render_paint();
-            initialize_authored_shape_render_paint(
-                render_paint.as_mut(),
-                paint_object,
-                Some(object),
-            );
-            paints.insert(paint_object.id, render_paint);
-        }
+        preallocate_source_artboard_render_paints_into(
+            runtime,
+            artboard_index,
+            factory,
+            &mut paints,
+            &mut allocated,
+        );
     }
     paints
+}
+
+fn preallocate_source_artboard_render_paints_into(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+    factory: &mut dyn RenderFactory,
+    paints: &mut RuntimeRenderPaints,
+    allocated: &mut BTreeSet<u32>,
+) {
+    let Some(local_objects) = runtime.artboard_local_object_slots(artboard_index) else {
+        return;
+    };
+    for object in local_objects.iter().flatten() {
+        if !matches!(
+            object.type_name,
+            "SolidColor" | "LinearGradient" | "RadialGradient"
+        ) {
+            continue;
+        }
+        let Some(paint_object) = object
+            .uint_property("parentId")
+            .and_then(|parent_local_id| usize::try_from(parent_local_id).ok())
+            .and_then(|parent_local_id| local_objects.get(parent_local_id))
+            .copied()
+            .flatten()
+        else {
+            continue;
+        };
+        if !matches!(paint_object.type_name, "Fill" | "Stroke")
+            || !allocated.insert(paint_object.id)
+        {
+            continue;
+        }
+
+        // Direct port of the source Artboard's onAddedDirty traversal. The
+        // concrete mutator initializes its parent ShapePaint in object order:
+        // ShapePaint allocates, Fill/Stroke applies constructor fields, and
+        // SolidColor immediately applies color
+        // (`artboard.cpp:264-288`, `shape_paint_mutator.cpp:7-25`,
+        // `shape_paint.cpp:50-57`, `fill.cpp:13-17`,
+        // `stroke.cpp:12-19`, `solid_color.cpp:9-21`).
+        let mut render_paint = factory.make_render_paint();
+        initialize_authored_shape_render_paint(
+            render_paint.as_mut(),
+            paint_object,
+            Some(object),
+        );
+        paints.insert(paint_object.id, render_paint);
+    }
 }
 
 fn initialize_authored_shape_render_paint(
@@ -26166,17 +26122,23 @@ mod tests {
             .filter(|asset| asset.type_name == "ImageAsset")
             .map(|asset| asset.id)
             .collect::<Vec<_>>();
-        let image_assets = RuntimeImageAssetCatalog::from_runtime(&file);
-
         assert_eq!(image_globals.len(), 2);
         assert_eq!(
-            import_stack_pre_source_image_asset_globals(&file, &image_assets, false),
-            vec![image_globals[0]],
-            "a non-scripting importer leaves the final image pending"
+            source_resource_import_events(&file, false),
+            vec![
+                RuntimeSourceImportEvent::ImageAsset(image_globals[0]),
+                RuntimeSourceImportEvent::Artboard(0),
+                RuntimeSourceImportEvent::ImageAsset(image_globals[1]),
+            ],
+            "a non-scripting importer leaves the final image to unwind after the Artboard"
         );
         assert_eq!(
-            import_stack_pre_source_image_asset_globals(&file, &image_assets, true),
-            image_globals,
+            source_resource_import_events(&file, true),
+            vec![
+                RuntimeSourceImportEvent::ImageAsset(image_globals[0]),
+                RuntimeSourceImportEvent::ImageAsset(image_globals[1]),
+                RuntimeSourceImportEvent::Artboard(0),
+            ],
             "WITH_RIVE_SCRIPTING treats ScriptAsset as the next FileAsset importer"
         );
     }
@@ -35561,6 +35523,44 @@ mod tests {
             push_color(bytes, "SolidColor", "colorValue", 0xffaa_6633);
         });
         bytes
+    }
+
+    fn synthetic_interleaved_image_artboard_import_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9642);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "ImageAsset", |_| {});
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_bytes(bytes, "FileAssetContents", "bytes", &[1]);
+        });
+        push_object(&mut bytes, "ImageAsset", |_| {});
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_bytes(bytes, "FileAssetContents", "bytes", &[2]);
+        });
+        push_object(&mut bytes, "Artboard", |_| {});
+        bytes
+    }
+
+    #[test]
+    fn source_resource_import_events_follow_cpp_displacement_and_final_unwind() {
+        let bytes = synthetic_interleaved_image_artboard_import_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic source resources import");
+
+        assert_eq!(
+            source_resource_import_events(&file, false),
+            vec![
+                // Installing the second FileAsset importer resolves the first.
+                RuntimeSourceImportEvent::ImageAsset(1),
+                // At EOF the later Artboard owner resolves before the surviving
+                // second FileAsset owner.
+                RuntimeSourceImportEvent::Artboard(0),
+                RuntimeSourceImportEvent::ImageAsset(3),
+            ]
+        );
     }
 
     #[test]

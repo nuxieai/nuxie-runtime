@@ -1137,7 +1137,7 @@ Exact ratchet: 90/89 (met)
 ## Golden corpus
 
 Entries: 364
-Status counts: `diverges`: 5; `exact`: 355; `not-yet`: 4
+Status counts: `diverges`: 5; `exact`: 356; `not-yet`: 3
 
 ## Runtime frame-loop ledger
 

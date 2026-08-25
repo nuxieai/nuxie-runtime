@@ -4230,6 +4230,33 @@ impl RuntimeDataBindGraphConverterState {
         }
     }
 
+    pub(crate) fn set_scripted_artboard_ancestor_sources(
+        &mut self,
+        sources: crate::artboard::RuntimeArtboardAncestorSources,
+    ) {
+        match self {
+            Self::Scripted(state) => state.set_artboard_ancestor_sources(sources),
+            Self::Group(states) => {
+                for state in states {
+                    state.set_scripted_artboard_ancestor_sources(sources.clone());
+                }
+            }
+            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::External { .. } => {}
+        }
+    }
+
+    fn scripted_artboard_ancestor_sources(
+        &self,
+    ) -> Option<crate::artboard::RuntimeArtboardAncestorSources> {
+        match self {
+            Self::Scripted(state) => state.artboard_ancestor_sources(),
+            Self::Group(states) => states
+                .iter()
+                .find_map(Self::scripted_artboard_ancestor_sources),
+            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::External { .. } => None,
+        }
+    }
+
     /// A fresh Rust state-machine snapshot cannot copy a Lua table. Reset only
     /// scripted occurrence state while preserving unrelated Formula,
     /// Interpolator, and External converter state in the snapshot.
@@ -4239,10 +4266,14 @@ impl RuntimeDataBindGraphConverterState {
     ) {
         match (self, converter) {
             (Self::Scripted(state), RuntimeDataBindGraphConverter::Scripted { definition, .. }) => {
+                let ancestor_sources = state.artboard_ancestor_sources();
                 *state =
                     crate::scripted_data_converter::RuntimeScriptedDataConverterState::from_definition(
                         definition,
                     );
+                if let Some(ancestor_sources) = ancestor_sources {
+                    state.set_artboard_ancestor_sources(ancestor_sources);
+                }
             }
             (Self::Group(states), RuntimeDataBindGraphConverter::Group(converters))
                 if states.len() == converters.len() =>
@@ -5600,6 +5631,20 @@ impl RuntimeDataBindGraphValue {
 }
 
 impl RuntimeDataBindGraph {
+    pub(crate) fn set_scripted_artboard_ancestor_sources(
+        &mut self,
+        sources: crate::artboard::RuntimeArtboardAncestorSources,
+    ) {
+        for source in &mut self.sources {
+            source
+                .converter_state
+                .set_scripted_artboard_ancestor_sources(sources.clone());
+            source
+                .converter_data_binds
+                .set_scripted_artboard_ancestor_sources(sources.clone());
+        }
+    }
+
     pub(crate) fn has_scripted_converter_occurrence(&self) -> bool {
         self.sources.iter().any(|source| {
             source
@@ -11123,9 +11168,16 @@ impl RuntimeDataBindGraphSourceNode {
     }
 
     fn reset_converter_state(&mut self) {
+        let ancestor_sources = self.converter_state.scripted_artboard_ancestor_sources();
         self.converter_data_binds = self.converter_data_binds.fresh_clone();
         self.converter_state =
             RuntimeDataBindGraphConverterState::for_converter(self.converter.as_ref());
+        if let Some(ancestor_sources) = ancestor_sources {
+            self.converter_state
+                .set_scripted_artboard_ancestor_sources(ancestor_sources.clone());
+            self.converter_data_binds
+                .set_scripted_artboard_ancestor_sources(ancestor_sources);
+        }
         self.attach_converter_parent();
     }
 
@@ -13733,5 +13785,32 @@ mod tests {
             0.75,
             "replacing the deterministic random stream invalidates every cached Formula mode"
         );
+    }
+
+    #[test]
+    fn nested_scripted_converter_reset_preserves_artboard_ancestor_authority() {
+        let definition = crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition {
+            inputs: Vec::new(),
+            data_bind_order: Vec::new(),
+        };
+        let converter = RuntimeDataBindGraphConverter::Group(vec![
+            RuntimeDataBindGraphConverter::PassThrough,
+            RuntimeDataBindGraphConverter::Group(vec![RuntimeDataBindGraphConverter::Scripted {
+                global_id: 17,
+                serialized_implemented_methods: 0,
+                definition,
+                instance: None,
+            }]),
+        ]);
+        let expected = crate::artboard::RuntimeArtboardAncestorSources::default();
+        let mut state = RuntimeDataBindGraphConverterState::for_converter(Some(&converter));
+
+        state.set_scripted_artboard_ancestor_sources(expected.clone());
+        assert_eq!(
+            state.scripted_artboard_ancestor_sources(),
+            Some(expected.clone())
+        );
+        state.reset_scripted_occurrences_for_fresh_clone(&converter);
+        assert_eq!(state.scripted_artboard_ancestor_sources(), Some(expected));
     }
 }

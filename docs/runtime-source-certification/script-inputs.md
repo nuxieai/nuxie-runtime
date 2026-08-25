@@ -4,7 +4,7 @@ Pinned upstream: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
 
 Implementing auditor: root campaign lane
 
-Adversarial review: **REJECTED**
+Adversarial review: **PENDING RE-REVIEW AFTER CORRECTION**
 
 This receipt deliberately includes executable methods defined inline in the
 handwritten `include/rive/script_input_*.hpp` headers. Those methods exposed
@@ -101,17 +101,17 @@ every nonzero changed Core value invokes the named table callback.
 |---|---|---|---|
 | `ScriptInputArtboard::~ScriptInputArtboard` | owning occurrence drop; `RuntimeScriptInputArtboardOccurrence` drop | adapted | occurrence replacement/disposal tests |
 | `ScriptInputArtboard::import` | binary Backboard + scripted-object context validation; runtime definition builders | exact | `runtime_import_status_tracks_scripted_object_input_contexts`; C++/Rust import comparison |
-| `ScriptInputArtboard::initScriptedValue` | artboard branch of `prepare_script_listener_hydration`; `ScriptListenerActionHydration::apply_inputs` | missing | same-File authored hydration passes, but a valid live cross-File source fails in the facade |
+| `ScriptInputArtboard::initScriptedValue` | artboard branch of `prepare_script_listener_hydration`; `ScriptListenerActionHydration::preflight_artboards`; `apply_inputs` | corrected; pending review | cross-File collision and facade-preflight tests |
 | `ScriptInputArtboard::validateForScriptInit` (inline) | resolved-reference preflight | exact | typed-artboard validation failure tests |
 | `ScriptInputArtboard::validateForColdScriptInit` | cold phase accepts the unresolved live context | exact | cold/live hydration lifecycle tests |
 | `ScriptInputArtboard::validateHydrationPrerequisites` | snapshot/reference preflight before any writes | exact | `scripted_hydration_validation_failure_applies_no_inputs_or_init` |
-| `ScriptInputArtboard::hydrateScriptInput` | authored phase-two artboard resolution and projection | missing | same-File authored hydration passes, but a valid live cross-File source fails in the facade |
-| `ScriptInputArtboard::syncReferencedArtboard` | `set_artboard_input_core`; live `apply_scripted_input_update` | missing | converter-owned live replacement retains the source internally but does not update an existing script table |
+| `ScriptInputArtboard::hydrateScriptInput` | authored phase-two artboard resolution and projection | corrected; pending review | cross-File collision and facade-preflight tests |
+| `ScriptInputArtboard::syncReferencedArtboard` | `set_artboard_input_core`; live `apply_scripted_input_update` | corrected; pending review | `converter_owned_live_artboard_projects_to_the_hydrated_table_expected_red` |
 | `ScriptInputArtboard::onAddedClean` | ordered input/binding-definition construction | exact | imported input order/count comparison |
 | `ScriptInputArtboard::clone` | `RuntimeScriptInputArtboardOccurrence::clone_for_scripted_object` | exact | `fresh_clone_preserves_the_exact_live_bindable_identity` |
 | `ScriptInputArtboard::file` (inline) | `RuntimeScriptInputArtboardOccurrence::file_attached` | exact | resolved/unresolved clone authority test |
 | `ScriptInputArtboard::artboardIdChanged` | `RuntimeScriptInputProperties::apply_target`; `apply_artboard_id_changed` | exact | missing-id clear and generated-id separation tests |
-| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | missing | direct-owner tests pass, but converter-owned occurrences have no owner-ancestor authority and live replacement does not reach the hydrated table |
+| `ScriptInputArtboard::updateArtboard` | `RuntimeScriptInputProperties::apply_artboard_source`; `RuntimeScriptInputArtboardOccurrence::apply_artboard_source` | corrected; pending review | converter live-projection and owner-rejection regressions |
 | `ScriptInputArtboard::referencedArtboardId` | generated value in `RuntimeScriptInputProperties::value`; binary `cpp_artboard_referencer_index` | exact | import resolver and generated-id tests |
 
 The generated `artboardId` and retained referenced Artboard remain separate.
@@ -331,3 +331,38 @@ The historical scalar RB4 gap is stale: scalar Core values,
 occurrence-local scalar cloning, converter ownership, callback projection, and
 file-index source/target reconciliation are live and directly exercised. That
 does not close the retained Artboard-pointer branch described above.
+
+## Implementing correction after rejection
+
+The four rejected Artboard rows now have an implementation correction, but
+this receipt deliberately remains pending until a different auditor repeats
+the complete adversarial review.
+
+- converter projection now passes the retained `ScriptArtboardSource::Live`
+  directly to the already-hydrated table, matching the direct-listener path;
+- ancestor authority is retained on `RuntimeScriptedDataConverterState` and
+  recursively installed through Group, detached, listener-owned,
+  state-machine graph, keyframe graph, and Artboard-level converter owners;
+  fresh scripted occurrence resets preserve or reinstall that authority;
+- `RuntimeBindableArtboard` now retains its source facade `File` opaquely
+  alongside the exact `ArtboardInstance`; `FileScriptArtboard::new_from_live`
+  uses that File and derives the default state machine from the retained
+  instance rather than the consumer File's colliding numeric graph id;
+- artboard facades are resolved by `preflight_artboards` before the hydration
+  object receives a `ScriptInstance`, so a later artboard failure cannot leave
+  an earlier scalar or context write behind.
+
+Focused correction evidence with `CARGO_INCREMENTAL=0` and isolated target
+directories:
+
+- `converter_owned_`: 7 passed, including both former expected-red tests with
+  their ignores removed;
+- `artboard_facade_failure_precedes_every_hydration_write`: passed;
+- `live_scripted_artboard_uses_its_source_file_despite_global_id_collision`
+  was added with two distinct Files that deliberately reuse the same graph id;
+  its `nuxie` unit target is currently blocked before execution because the
+  pre-existing `silver-corpus` dev dependency still implements the obsolete
+  numeric ScriptArtboard API;
+- `cargo check -p nuxie-runtime -p nuxie --features nuxie/scripting`: passed.
+
+These results are implementing-lane claims, not an independent acceptance.

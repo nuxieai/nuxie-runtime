@@ -423,11 +423,11 @@ impl CommandServer {
                         artboard.index(),
                     ) {
                         Ok(instance) => {
-                            let bindable =
-                                nuxie_runtime::RuntimeBindableArtboard::new_with_artboard_instance(
-                                    artboard_name,
-                                    instance.raw(),
-                                );
+                            let bindable = nuxie_runtime::RuntimeBindableArtboard::new_with_artboard_instance_and_file_authority(
+                                artboard_name,
+                                instance.raw(),
+                                Rc::new(Arc::clone(&file_value)),
+                            );
                             self.artboards.insert(
                                 handle,
                                 ArtboardEntry {

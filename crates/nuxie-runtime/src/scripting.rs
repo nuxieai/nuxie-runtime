@@ -338,6 +338,31 @@ impl ScriptListenerActionHydration {
         }
     }
 
+    /// Resolve every facade-owned artboard before the hydration transaction
+    /// can touch `Context` or any authored table field. Pinned C++ constructs
+    /// the exact `ScriptedArtboard` before `setArtboardInput`; keeping that
+    /// prerequisite outside `apply` prevents a later facade error from
+    /// leaving preceding scalar inputs partially installed.
+    pub fn preflight_artboards(mut self) -> Result<Self, ScriptError> {
+        let mut inputs = Vec::with_capacity(self.inputs.len());
+        for input in self.inputs {
+            match input {
+                ScriptListenerInputHydration::Artboard {
+                    name,
+                    source,
+                    resolver,
+                    parent_context,
+                } => inputs.push(ScriptListenerInputHydration::PreparedArtboard {
+                    name,
+                    artboard: resolver.resolve_script_artboard(&source, parent_context.as_ref())?,
+                }),
+                input => inputs.push(input),
+            }
+        }
+        self.inputs = inputs;
+        Ok(self)
+    }
+
     pub fn apply(
         self,
         instance: &mut dyn ScriptInstance,
@@ -385,6 +410,9 @@ impl ScriptListenerActionHydration {
                         resolver.resolve_script_artboard(&source, parent_context.as_ref())?;
                     instance.set_artboard_input_core(&name, artboard)?;
                 }
+                ScriptListenerInputHydration::PreparedArtboard { name, artboard } => {
+                    instance.set_artboard_input_core(&name, artboard)?;
+                }
                 ScriptListenerInputHydration::ViewModel {
                     name,
                     input_global_id,
@@ -419,6 +447,11 @@ pub enum ScriptListenerInputHydration {
         source: crate::script_input_artboard::ScriptArtboardSource,
         resolver: Rc<dyn ScriptArtboardResolver>,
         parent_context: Option<ScriptArtboardParentContext>,
+    },
+    #[doc(hidden)]
+    PreparedArtboard {
+        name: ScriptCoreString,
+        artboard: Box<dyn ScriptArtboard>,
     },
     ViewModel {
         name: ScriptCoreString,
@@ -3107,5 +3140,57 @@ pub trait ScriptingVm {
             }
             pending = failures.into_iter().map(|(index, _)| index).collect();
         }
+    }
+}
+
+#[cfg(test)]
+mod hydration_atomicity_tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct FailingArtboardResolver {
+        calls: Rc<Cell<usize>>,
+    }
+
+    impl ScriptArtboardResolver for FailingArtboardResolver {
+        fn resolve_script_artboard(
+            &self,
+            _source: &crate::ScriptArtboardSource,
+            _parent_context: Option<&ScriptArtboardParentContext>,
+        ) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
+            self.calls.set(self.calls.get() + 1);
+            Err(ScriptError::new("facade rejected the live artboard"))
+        }
+    }
+
+    #[test]
+    fn artboard_facade_failure_precedes_every_hydration_write() {
+        let calls = Rc::new(Cell::new(0));
+        let hydration = ScriptListenerActionHydration::new(
+            None,
+            vec![
+                ScriptListenerInputHydration::Value {
+                    name: ScriptCoreString::from("before"),
+                    value: ScriptValue::Number(7.0),
+                },
+                ScriptListenerInputHydration::Artboard {
+                    name: ScriptCoreString::from("panel"),
+                    source: crate::ScriptArtboardSource::File(0),
+                    resolver: Rc::new(FailingArtboardResolver {
+                        calls: Rc::clone(&calls),
+                    }),
+                    parent_context: None,
+                },
+            ],
+        );
+
+        let error = match hydration.preflight_artboards() {
+            Ok(_) => panic!("facade failure must reject the complete batch"),
+            Err(error) => error,
+        };
+        assert_eq!(error.message(), "facade rejected the live artboard");
+        assert_eq!(calls.get(), 1);
+        // Preflight owns no ScriptInstance parameter. Therefore the staged
+        // scalar preceding the failed artboard cannot have reached a table.
     }
 }

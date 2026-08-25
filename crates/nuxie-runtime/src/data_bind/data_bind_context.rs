@@ -807,6 +807,44 @@ pub(super) fn reunite_artboard_shared_data_bind_converter_states(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn set_artboard_data_bind_scripted_ancestor_sources(
+    authored: &mut [RuntimeArtboardAuthoredDataBindState],
+    property_bindings: &mut [RuntimeArtboardPropertyBindingInstance],
+    custom_property_bindings: &mut [RuntimeArtboardCustomPropertyBindingInstance],
+    formula_token_bindings: &mut RuntimeArtboardFormulaTokenBindingStates,
+    converter_property_bindings: &mut [RuntimeArtboardConverterPropertyBindingInstance],
+    sources: crate::artboard::RuntimeArtboardAncestorSources,
+) {
+    for binding in authored {
+        if let Some(converter) = binding.shared_converter.as_mut() {
+            converter
+                .converter_state
+                .set_scripted_artboard_ancestor_sources(sources.clone());
+        }
+    }
+    for binding in property_bindings {
+        binding
+            .converter_state
+            .set_scripted_artboard_ancestor_sources(sources.clone());
+    }
+    for binding in custom_property_bindings {
+        binding
+            .converter_state
+            .set_scripted_artboard_ancestor_sources(sources.clone());
+    }
+    for binding in formula_token_bindings.iter_mut() {
+        binding
+            .converter_state
+            .set_scripted_artboard_ancestor_sources(sources.clone());
+    }
+    for binding in converter_property_bindings {
+        binding
+            .converter_state
+            .set_scripted_artboard_ancestor_sources(sources.clone());
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeArtboardAssetBindingTarget {
     Image(usize),

@@ -38,6 +38,7 @@ use crate::artboard_data_bind::{
     build_nested_host_data_bind_source_local_slots, build_nested_host_data_bind_source_locals,
     build_nested_host_view_model_instance_locals, build_nested_host_view_model_publications,
     reunite_artboard_shared_data_bind_converter_states,
+    set_artboard_data_bind_scripted_ancestor_sources,
 };
 use crate::audio_event::RuntimeAudioEventPlayback;
 use crate::components::{
@@ -783,6 +784,7 @@ impl Clone for ArtboardInstance {
             cloned.initialize_component_data_bind_collapsables(&file, &graph);
         }
         cloned.initialize_root_layout_bounds();
+        cloned.install_artboard_data_bind_scripted_ancestor_sources();
         cloned.initialize_text_inputs();
 
         // Generated C++ clones start with `ComponentDirt::Filthy` and clear
@@ -919,7 +921,7 @@ struct RuntimeArtboardSourceIdentity {
 /// Snapshot of the C++ parent Artboard chain used by ArtboardReferencer.
 /// Identity includes the source File so equal global ids from different files
 /// do not become false ancestors.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct RuntimeArtboardAncestorSources {
     sources: Vec<RuntimeArtboardSourceIdentity>,
 }
@@ -2772,6 +2774,7 @@ impl ArtboardInstance {
             layout_constraint_bounds: None,
             solved_layout_bounds: None,
         };
+        instance.install_artboard_data_bind_scripted_ancestor_sources();
         instance.initialize_root_layout_bounds();
         instance
             .runtime_shapes
@@ -2792,6 +2795,18 @@ impl ArtboardInstance {
         }
 
         Ok(instance)
+    }
+
+    fn install_artboard_data_bind_scripted_ancestor_sources(&mut self) {
+        let ancestor_sources = self.artboard_referencer_ancestor_sources();
+        set_artboard_data_bind_scripted_ancestor_sources(
+            &mut self.artboard_authored_data_bind_states,
+            &mut self.artboard_property_bindings,
+            &mut self.artboard_custom_property_bindings,
+            &mut self.artboard_formula_token_bindings,
+            &mut self.artboard_converter_property_bindings,
+            ancestor_sources,
+        );
     }
 
     fn initialize_root_layout_bounds(&mut self) {

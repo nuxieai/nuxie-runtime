@@ -3036,13 +3036,12 @@ fn prepare_scripted_data_converter_hydration_from_snapshots(
             }
         }
     }
-    Ok(
-        nuxie_runtime::ScriptListenerActionHydration::new_with_context_chain(
-            context_view_model,
-            context_parent_view_models,
-            inputs,
-        ),
+    nuxie_runtime::ScriptListenerActionHydration::new_with_context_chain(
+        context_view_model,
+        context_parent_view_models,
+        inputs,
     )
+    .preflight_artboards()
 }
 
 #[cfg(feature = "scripting")]
@@ -3492,7 +3491,7 @@ fn prepare_script_listener_hydration(
             }
         }
     }
-    Ok(if context_resolved {
+    (if context_resolved {
         nuxie_runtime::ScriptListenerActionHydration::new_with_context_chain(
             context_view_model,
             context_parent_view_models,
@@ -3501,6 +3500,7 @@ fn prepare_script_listener_hydration(
     } else {
         nuxie_runtime::ScriptListenerActionHydration::unresolved(inputs)
     })
+    .preflight_artboards()
 }
 
 #[cfg(feature = "scripting")]
@@ -3614,14 +3614,18 @@ impl nuxie_runtime::ScriptArtboardResolver for FileScriptArtboardResolver {
 #[cfg(feature = "scripting")]
 impl FileScriptArtboard {
     fn new_from_live(
-        file: Arc<File>,
+        resolver_file: Arc<File>,
         bindable: &nuxie_runtime::RuntimeBindableArtboard,
         parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
     ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
         let source = bindable.artboard_instance().ok_or_else(|| {
             nuxie_runtime::ScriptError::new("live scripted artboard source is unavailable")
         })?;
-        let artboard_index = file
+        let source_file = bindable
+            .source_file_authority::<Arc<File>>()
+            .map(|authority| Arc::clone(authority.as_ref()))
+            .unwrap_or(resolver_file);
+        let artboard_index = source_file
             .graph
             .artboards
             .iter()
@@ -3632,18 +3636,18 @@ impl FileScriptArtboard {
                     source.graph_global_id(),
                 ))
             })?;
-        let mut scripted = Self::new(file, artboard_index, parent_context)?;
+        let mut scripted = Self::new(source_file, artboard_index, parent_context)?;
         scripted.instance = source;
         scripted.instance.set_frame_origin(false);
-        scripted.state_machine = scripted
-            .file
-            .artboard(artboard_index)
-            .and_then(|artboard| artboard.default_state_machine_index())
-            .and_then(|state_machine_index| {
-                scripted
-                    .instance
-                    .state_machine_instance(state_machine_index)
-            });
+        scripted.state_machine =
+            scripted
+                .instance
+                .default_state_machine_index()
+                .and_then(|state_machine_index| {
+                    scripted
+                        .instance
+                        .state_machine_instance(state_machine_index)
+                });
         if let (Some(state_machine), Some(context)) = (
             scripted.state_machine.as_mut(),
             scripted._data_context.as_ref(),
@@ -10221,6 +10225,34 @@ mod owned_instance_tests {
         assert!(cloned.data().is_some());
         drop(cloned);
         assert!(weak_file.upgrade().is_none());
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn live_scripted_artboard_uses_its_source_file_despite_global_id_collision() {
+        let source_file = Arc::new(facade_view_model_file());
+        let resolver_file = Arc::new(facade_view_model_file());
+        assert!(!Arc::ptr_eq(&source_file, &resolver_file));
+        assert_eq!(
+            source_file.graph.artboards[0].global_id, resolver_file.graph.artboards[0].global_id,
+            "the fixture deliberately collides across Files",
+        );
+        let source = OwnedArtboardInstance::instantiate_default(Arc::clone(&source_file))
+            .expect("instantiate the live source");
+        let bindable =
+            nuxie_runtime::RuntimeBindableArtboard::new_with_artboard_instance_and_file_authority(
+                "source",
+                source.raw(),
+                Rc::new(Arc::clone(&source_file)),
+            );
+
+        let scripted = FileScriptArtboard::new_from_live(resolver_file, &bindable, None)
+            .expect("the source File owns the live scripted artboard");
+        assert!(Arc::ptr_eq(&scripted.file, &source_file));
+        assert_eq!(
+            scripted.instance.graph_global_id(),
+            source.raw().graph_global_id()
+        );
     }
 
     #[cfg(feature = "scripting")]

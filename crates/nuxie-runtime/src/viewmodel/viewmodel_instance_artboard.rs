@@ -3,13 +3,30 @@
 
 use crate::ArtboardInstance;
 
-#[derive(Debug)]
 struct RuntimeBindableArtboardInner {
     name: String,
     // C++ `BindableArtboard` retains the concrete source ArtboardInstance, not
     // a file-local index. Keeping the cold-clone source here preserves both
     // cross-file identity and live generated properties such as resized bounds.
     source: RefCell<Option<ArtboardInstance>>,
+    // `BindableArtboard` is File-owned in pinned C++. The low-level runtime is
+    // intentionally File-agnostic, so retain the facade's concrete authority
+    // opaquely instead of trying to rediscover it from a non-unique numeric id.
+    source_file_authority: Option<Rc<dyn std::any::Any>>,
+}
+
+impl std::fmt::Debug for RuntimeBindableArtboardInner {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeBindableArtboardInner")
+            .field("name", &self.name)
+            .field("source", &self.source)
+            .field(
+                "has_source_file_authority",
+                &self.source_file_authority.is_some(),
+            )
+            .finish()
+    }
 }
 
 /// Retained safe-Rust analogue of one runtime `BindableArtboard`.
@@ -47,6 +64,7 @@ impl RuntimeBindableArtboard {
             inner: Rc::new(RuntimeBindableArtboardInner {
                 name: name.into(),
                 source: RefCell::new(None),
+                source_file_authority: None,
             }),
         }
     }
@@ -60,6 +78,22 @@ impl RuntimeBindableArtboard {
             inner: Rc::new(RuntimeBindableArtboardInner {
                 name: name.into(),
                 source: RefCell::new(Some(artboard.clone())),
+                source_file_authority: None,
+            }),
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn new_with_artboard_instance_and_file_authority(
+        name: impl Into<String>,
+        artboard: &ArtboardInstance,
+        source_file_authority: Rc<dyn std::any::Any>,
+    ) -> Self {
+        Self {
+            inner: Rc::new(RuntimeBindableArtboardInner {
+                name: name.into(),
+                source: RefCell::new(Some(artboard.clone())),
+                source_file_authority: Some(source_file_authority),
             }),
         }
     }
@@ -82,6 +116,16 @@ impl RuntimeBindableArtboard {
     #[doc(hidden)]
     pub fn artboard_instance(&self) -> Option<ArtboardInstance> {
         self.inner.source.borrow().clone()
+    }
+
+    #[doc(hidden)]
+    pub fn source_file_authority<T: 'static>(&self) -> Option<Rc<T>> {
+        self.inner
+            .source_file_authority
+            .as_ref()
+            .cloned()?
+            .downcast::<T>()
+            .ok()
     }
 }
 

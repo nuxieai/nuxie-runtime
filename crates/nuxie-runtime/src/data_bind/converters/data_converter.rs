@@ -326,6 +326,20 @@ impl RuntimeDataConverterDataBindDefinition {
 }
 
 impl RuntimeDataConverterDataBindState {
+    pub(crate) fn set_scripted_artboard_ancestor_sources(
+        &mut self,
+        sources: crate::artboard::RuntimeArtboardAncestorSources,
+    ) {
+        if let Some(detached) = self.detached_scripted.as_mut() {
+            detached
+                .state
+                .set_artboard_ancestor_sources(sources.clone());
+        }
+        for child in &mut self.children {
+            child.set_scripted_artboard_ancestor_sources(sources.clone());
+        }
+    }
+
     /// Install the outer occurrence retained by this exact converter clone.
     ///
     /// C++ assigns `m_parentDataBind` before binding any inner DataBind, and
@@ -414,11 +428,15 @@ impl RuntimeDataConverterDataBindState {
             bindings,
             children: self.children.iter().map(Self::fresh_clone).collect(),
             detached_scripted: self.detached_scripted.as_ref().map(|detached| {
+                let mut state =
+                    crate::scripted_data_converter::RuntimeScriptedDataConverterState::from_definition(
+                        &detached.definition,
+                    );
+                if let Some(sources) = detached.state.artboard_ancestor_sources() {
+                    state.set_artboard_ancestor_sources(sources);
+                }
                 RuntimeDetachedScriptedDataConverterState {
-                    state:
-                        crate::scripted_data_converter::RuntimeScriptedDataConverterState::from_definition(
-                            &detached.definition,
-                        ),
+                    state,
                     definition: detached.definition.clone(),
                 }
             }),

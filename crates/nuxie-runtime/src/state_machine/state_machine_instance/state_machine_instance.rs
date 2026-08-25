@@ -2589,6 +2589,11 @@ impl StateMachineInstance {
         for binding in &mut self.scripted_object_bindings {
             binding.set_artboard_ancestor_sources(ancestor_sources.clone());
         }
+        self.data_bind_graph
+            .set_scripted_artboard_ancestor_sources(ancestor_sources.clone());
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            graph.set_scripted_artboard_ancestor_sources(ancestor_sources.clone());
+        }
         // Scripted-object binds join only after listener/hit/TextInput
         // facilities, matching cloneScriptedObject's C++ constructor phase.
         self.append_scripted_data_binds_to_container();

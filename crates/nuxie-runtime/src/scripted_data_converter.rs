@@ -170,6 +170,7 @@ enum RuntimeScriptedDataConverterDataBindOccurrence {
 pub(crate) struct RuntimeScriptedDataConverterState {
     cached_value: Option<RuntimeDataBindGraphValue>,
     inputs: Vec<RuntimeScriptedDataConverterInputOccurrence>,
+    artboard_ancestor_sources: Option<crate::artboard::RuntimeArtboardAncestorSources>,
     /// `DataConverter::m_dataBinds` is one authored-order collection shared
     /// by all custom inputs. Keeping the input-local storage plus this exact
     /// traversal index preserves C++ interleaving without aliasing mutable
@@ -181,6 +182,7 @@ impl RuntimeScriptedDataConverterState {
     pub(crate) fn from_definition(definition: &RuntimeScriptedDataConverterDefinition) -> Self {
         Self {
             cached_value: None,
+            artboard_ancestor_sources: None,
             inputs: definition
                 .inputs
                 .iter()
@@ -232,6 +234,24 @@ impl RuntimeScriptedDataConverterState {
                 .collect(),
             data_bind_order: definition.data_bind_order.clone(),
         }
+    }
+
+    pub(crate) fn set_artboard_ancestor_sources(
+        &mut self,
+        sources: crate::artboard::RuntimeArtboardAncestorSources,
+    ) {
+        self.artboard_ancestor_sources = Some(sources.clone());
+        for input in &mut self.inputs {
+            input
+                .properties
+                .set_artboard_ancestor_sources(sources.clone());
+        }
+    }
+
+    pub(crate) fn artboard_ancestor_sources(
+        &self,
+    ) -> Option<crate::artboard::RuntimeArtboardAncestorSources> {
+        self.artboard_ancestor_sources.clone()
     }
 
     pub(crate) fn input_snapshots(&self) -> Vec<ScriptListenerInputSnapshot> {
@@ -1202,10 +1222,17 @@ where
     let Some(owner_instance) = owner_instance else {
         return Ok(target_changed);
     };
-    let Some(projected_target) = properties.projection_value(kind) else {
-        return Ok(target_changed);
+    let value = if kind == ScriptListenerInputKind::Artboard {
+        let Some(source) = properties.artboard_source().cloned() else {
+            return Ok(target_changed);
+        };
+        RuntimeScriptedListenerBoundValue::Artboard(source)
+    } else {
+        let Some(projected_target) = properties.projection_value(kind) else {
+            return Ok(target_changed);
+        };
+        scripted_input_bound_value(kind, projected_target)?
     };
-    let value = scripted_input_bound_value(kind, projected_target)?;
     apply(owner_instance, properties.name(), value)?;
     Ok(target_changed)
 }
@@ -1781,7 +1808,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "expected red: converter-owned live Artboard updates do not project to a hydrated script table"]
     fn converter_owned_live_artboard_projects_to_the_hydrated_table_expected_red() {
         let file = artboard_input_fixture();
         let graphs = GraphFile::from_runtime_file(&file).expect("fixture graph builds");
@@ -1842,7 +1868,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "expected red: converter-owned ScriptInputArtboard occurrences lack owner-ancestor authority"]
     fn converter_owned_artboard_input_rejects_its_owner_source_expected_red() {
         let file = artboard_input_fixture();
         let graphs = GraphFile::from_runtime_file(&file).expect("fixture graph builds");
@@ -1859,6 +1884,7 @@ mod tests {
             definitions.clone(),
         );
         let mut state = RuntimeScriptedDataConverterState::from_definition(&definition);
+        state.set_artboard_ancestor_sources(owner.artboard_referencer_ancestor_sources());
         state.bind_sources(&mut definitions, &file, &context, true);
         let mut no_apply = |_: &RuntimeScriptInstanceHandle,
                             _: &ScriptCoreString,

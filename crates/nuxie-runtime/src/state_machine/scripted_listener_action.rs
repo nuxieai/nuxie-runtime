@@ -453,6 +453,14 @@ impl RuntimeScriptedListenerActionBindingOccurrence {
             input
                 .properties
                 .set_artboard_ancestor_sources(sources.clone());
+            if let Some(binding) = input.binding.as_mut() {
+                binding
+                    .converter_state
+                    .set_scripted_artboard_ancestor_sources(sources.clone());
+                binding
+                    .converter_data_binds
+                    .set_scripted_artboard_ancestor_sources(sources.clone());
+            }
         }
     }
 

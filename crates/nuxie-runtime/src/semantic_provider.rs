@@ -112,6 +112,19 @@ impl SemanticProvider {
                 let Some(child_local) = artboard.component_local_id(child) else {
                     continue;
                 };
+                // C++ asks each descendant Node for its already-retained
+                // `localBounds`. Collapsed Shape paths do not participate in
+                // those bounds (`shape.cpp:374-405`), and a collapsed Solo
+                // branch therefore contributes nothing. Rust's geometry
+                // query can rebuild a deferred path on demand, so preserve
+                // the C++ observation boundary explicitly and prune the
+                // collapsed subtree before querying it.
+                if artboard
+                    .component(child_local)
+                    .is_some_and(|component| component.is_collapsed())
+                {
+                    continue;
+                }
                 if let Some(component) = artboard.component(child_local) {
                     stack.extend(component.children.iter().rev().copied());
                 }

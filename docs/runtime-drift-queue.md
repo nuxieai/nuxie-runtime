@@ -3,7 +3,7 @@
 Generated from the checked-in parity ledgers. JSON is authoritative; this view highlights clusters and the highest-discovery candidates.
 
 - Upstream ref: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`
-- Candidates: 690
+- Candidates: 689
 - Clusters: 32
 
 ## Dispositions
@@ -13,7 +13,7 @@ Generated from the checked-in parity ledgers. JSON is authoritative; this view h
 | extension | 3 |
 | intentional-decision | 14 |
 | known-divergence | 102 |
-| pending-proof | 84 |
+| pending-proof | 83 |
 | stale-proof | 449 |
 | unknown | 4 |
 | unsupported | 34 |
@@ -26,7 +26,7 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 
 | cluster | boundary | owner family | candidates | max discovery value |
 |---|---|---|---:|---:|
-| `cluster:unresolved:ownership` | ownership | unresolved | 39 | 130 |
+| `cluster:unresolved:ownership` | ownership | unresolved | 38 | 130 |
 | `cluster:layout:ownership` | ownership | layout | 14 | 128 |
 | `cluster:runtime-tests:lifecycle` | lifecycle | runtime-tests | 73 | 120 |
 | `cluster:runtime-tests:ordering` | ordering | runtime-tests | 20 | 120 |
@@ -67,10 +67,10 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 | 128 | `owner:src/layout/grid_item_placement.cpp` | known-divergence | `src/layout/grid_item_placement.cpp` | structural proof is divergent; behavioral proof is unverified |
 | 128 | `owner:src/layout/grid_track.cpp` | known-divergence | `src/layout/grid_track.cpp` | structural proof is divergent; behavioral proof is unverified |
 | 128 | `owner:src/layout/layout_participant.cpp` | known-divergence | `src/layout/layout_participant.cpp` | structural proof is divergent; behavioral proof is unverified |
-| 120 | `golden:editor_scripted_vector_v7` | known-divergence | `unresolved-owner` | line 4: rust `makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}` vs c++ `source file="fixtures/editor/editor_scripted_vect… |
-| 120 | `golden:group_effect` | known-divergence | `unresolved-owner` | line 86: rust `drawPath path={id=2,fillRule=2,path={verbs=[move,line,line,line,line,move,line,line,line,line,move,line,line,line,line,move,line,line,line,line,move,line,line,line,… |
-| 120 | `golden:path_effect_with_feathers` | known-divergence | `unresolved-owner` | line 82: rust `drawPath path={id=5,fillRule=2,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,… |
-| 120 | `golden:superbowl` | known-divergence | `unresolved-owner` | line 2156: rust `makeEmptyRenderPath {id=101,fillRule=0,path={verbs=[],points=[]}}` vs c++ `drawPath path={id=61,fillRule=2,path={verbs=[move,cubic,cubic,cubic,cubic,cubic,cubic,c… |
+| 125 | `golden:editor_scripted_vector_v7` | known-divergence | `unresolved-owner` | line 4: rust `makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}` vs c++ `source file="fixtures/editor/editor_scripted_vect… |
+| 125 | `golden:group_effect` | known-divergence | `unresolved-owner` | line 86: rust `drawPath path={id=2,fillRule=2,path={verbs=[move,line,line,line,line,move,line,line,line,line,move,line,line,line,line,move,line,line,line,line,move,line,line,line,… |
+| 125 | `golden:path_effect_with_feathers` | known-divergence | `unresolved-owner` | line 82: rust `drawPath path={id=5,fillRule=2,path={verbs=[move,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,line,… |
+| 125 | `golden:superbowl` | known-divergence | `unresolved-owner` | line 2156: rust `makeEmptyRenderPath {id=101,fillRule=0,path={verbs=[],points=[]}}` vs c++ `drawPath path={id=61,fillRule=2,path={verbs=[move,cubic,cubic,cubic,cubic,cubic,cubic,c… |
 | 120 | `silver:artboard_list_overrides_horizontal` | known-divergence | `tests/unit_tests/runtime/component_list_test.cpp` | Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 303 (rewind): expected rewind, got drawPath. |
 | 120 | `silver:artboard_list_overrides_vertical` | known-divergence | `tests/unit_tests/runtime/component_list_test.cpp` | Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 303 (rewind): expected rewind, got drawPath. |
 | 120 | `silver:clear_viewmodel_list` | known-divergence | `tests/unit_tests/runtime/data_bind_lists_test.cpp` | Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 10 (makeRenderPaint): expected makeRenderPaint, got save. |
@@ -159,7 +159,7 @@ Filter the JSON `candidates` array by `owner_family`, `subsystem`, `evidence_sta
 | 110 | `gap:V31` | pending-proof | `unresolved-owner` | **PARTIAL 2026-08-04 — retained-gradient rematerialization and root-gradient construction order are closed; a weighted rounded-path gap remains.** Gradient 51 is not recreated at … |
 | 110 | `gap:V9` | pending-proof | `unresolved-owner` | **Rust-only diagnostics never differentially compared**: `--layout-bounds` Taffy report has no C++ counterpart. \| rust-golden-runner \| Optional: C++ layout-bounds flag; else not… |
 | 110 | `gap:W3` | pending-proof | `unresolved-owner` | **Upstream semantic UAF on nested-artboard swap** — `NestedArtboard::nest()` destroys the outgoing `ArtboardInstance` without evicting its `SemanticManager` nodes; next `drainDiff… |
+| 105 | `golden:echo_show_demo` | known-divergence | `unresolved-owner` | line 1726: rust `makeLinearGradient id=94 start=(1.12104976,216.207947) end=(2.85846734,-198.985016) stops=[{color=0x00efd2b7,stop=0},{color=0x00393939,stop=0.467431664}]` vs c++ … |
+| 105 | `golden:rewards_demo` | known-divergence | `unresolved-owner` | line 423: rust `makeLinearGradient id=33 start=(804,0) end=(804,63.7807465) stops=[{color=0x3cffffff,stop=0},{color=0x00ffffff,stop=1}]` vs c++ `makeLinearGradient id=33 start=(14… |
 | 105 | `silver:interpolator` | unknown | `unresolved-owner` | No producer/reference exists in the pinned upstream runtime tests. |
 | 105 | `silver:listener_action_inputs` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_listener_action_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |
-| 105 | `silver:multitouch_debug` | unknown | `unresolved-owner` | No producer/reference exists in the pinned upstream runtime tests. |
-| 105 | `silver:script_affects_has_changed` | pending-proof | `tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp` | Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step. |

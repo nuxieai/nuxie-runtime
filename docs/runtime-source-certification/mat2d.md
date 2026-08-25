@@ -976,3 +976,99 @@ Focused evidence with `CARGO_INCREMENTAL=0`:
 The workspace fat-LTO/single-codegen-unit run covers the same finite and
 control witnesses. This implementing lane does not self-certify any corrected
 owner. Verdict: **PENDING TWO FRESH INDEPENDENT COMPLETE REVIEWS.**
+
+## First fresh independent complete review after `1510a6263` — REJECTED
+
+This review restarted from pinned Rive authority
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`, rather than accepting the prior
+census. It independently enumerated the shared runtime and render-API Mat2D
+owners, renderer-local matrix/vector substitutes, graph and scripting owners,
+and their operative runtime, renderer, listener, N-slicer, clip,
+triangulator, winding, and threshold consumers.
+
+The corrected core is accepted in isolation. Runtime and render-API
+`multiply`, `determinant`, `invert`, scalar mapping, bulk `mapPoints`, and
+`mapBoundingBox` preserve pinned contraction and operand order, zero-skew
+control, odd-first and pair traversal, load-before-store aliasing, SIMD lane
+order, nonfinite normalization, translation placement, signed-zero behavior,
+and debug assertions. The corrected `gpu_cpp` and `rive_renderer_cpp` local
+owners are exact. N-slicer uses scalar mapping and the corrected captured
+inverse; listener and Lua reach the exact shared inverse; winding consumers
+reach the corrected determinant owner; and transformed-area reaches the
+strict pinned `512 * 512` branch. Only compiler-specific NaN payload selection
+without a classification or control change was treated as latitude.
+
+The complete claim nevertheless fails at five independently reproduced
+source-owner discrepancies:
+
+- Two of the three `findMaxScale` owners lose pinned `std::max` NaN control.
+  Runtime `mat2d_find_max_scale.rs` and live renderer
+  `draw.rs::max_matrix_scale` spell the axis-aligned return as
+  `xx.abs().max(yy.abs())`. Pinned `std::max(fabsf(xx()), fabsf(yy()))` is
+  left-biased: for linear bits `[7fc01234, 0, 0, 3f800000]`, actual pinned
+  clang/AArch64 returns NaN `0x7fc01234`, while both Rust owners return finite
+  `0x3f800000`. This changes classification and downstream control, so it is
+  outside the payload ceiling. The independently enumerated
+  `rive_renderer_cpp.rs::max_scale` copy already uses the correct left-biased
+  comparison and is accepted.
+- Both live renderer substitutes for pinned Wang cubic measurement remain
+  algebraically ordinary rather than preserving `VectorXform`, second-
+  difference, square, and sum contraction. These are
+  `draw.rs::max_transformed_cubic_second_difference`, reached by the interior,
+  fill, stroke, and feather subdivision paths, and
+  `draw_cpp.rs::transformed_cubic_segment_count`, reached by source path-draw
+  tessellation. For point bits
+  `[[be604e00, bdaf2ef0], [401d9080, 40b182c0],
+  [4155e0d0, ba6dd000], [3e16a200, 400456c0]]` and linear matrix bits
+  `[be05c750, 3d5705f0, bec18200, 401bf700]`, actual pinned
+  clang/AArch64 produces exactly `0x41100000` and nine segments. Both Rust
+  substitutes produce `0x41100001` and ten segments in debug and fat LTO.
+- Live renderer `draw.rs::dot` and `draw.rs::vector_cross` remain ordinary
+  Vec2D substitutes. They drive softened-cubic turn fallback/sign,
+  angle/chop count, cusp/discriminant roots, and chop ordering. For
+  `a=(26cd29b3,d01ad4bb)` and `b=(2533fdc2,ce87d5a9)`, actual pinned
+  `Vec2D::cross` returns negative `0xa7eec560`; the Rust expression returns
+  positive zero even under fat LTO. A cubic can directly realize
+  `p2-p0=a` and `p3-p1=b`, changing `turn == 0` fallback and sign control.
+  The corresponding sign-swapped construction reaches the same residue in
+  `dot`, changing angle and ordering control. A corrected mechanical-port
+  cross owner does not repair these operative callers.
+- Runtime `TextModifierGroup::transform` collapses the pinned origin sequence
+  (`ctm += origin`, exact matrix multiply, `ctm -= origin`) into a reordered
+  algebraic translation shortcut. With finite bits `m0=3729f1aa`,
+  `m2=3d73f501`, `originX=b989ca6c`, `originY=b2a142db`, and modifier
+  translation x `3ea59a7e`, actual pinned clang/AArch64 emits resulting x
+  translation `0x3ea5bcf1`; Rust fat LTO emits `0x3ea5bcf0`. This is live in
+  origin-modifying text glyph transforms and is not authorized algebraic
+  latitude.
+- Graph `invert_mat2d_or_identity`, reached while constructing each public
+  `SkeletalTendonNode.inverse_bind`, still computes ordinary `a*d-c*b`
+  instead of pinned `Mat2D::invert`. For matrix bits
+  `[26cd29b3, 2533fdc2, d01ad4bb, ce87d5a9, 0, 0]`, the pinned determinant is
+  negative `0xa7eec560` and inversion succeeds; the graph substitute rounds
+  to positive zero and returns identity. Runtime artboard hydration separately
+  recomputes an exact inverse, but that does not make the graph/source owner
+  or its public output exact.
+
+Focused gate evidence, always with `CARGO_INCREMENTAL=0`:
+
+- debug runtime Mat2D 15, adversarial Mat2D 2, render-API 30, scripting Mat2D
+  7, and renderer Mat2D 5 passed;
+- fat LTO with one codegen unit: runtime Mat2D 14 and renderer Mat2D 5
+  passed (the fifteenth debug runtime case is debug-assertion-only);
+- renderer Metal, Vulkan, WebGPU, and WebGL2 feature checks passed;
+- source correspondence passed with 456 applicable owners and no pending
+  absent rows;
+- source-symbol correspondence passed with 7,818 authority units across
+  1,105 owners and generated authority replayed;
+- source-symbol checker unit tests passed, 33 tests;
+- independent frozen witnesses compared actual pinned clang/AArch64
+  `-O3 -ffp-contract=on` with actual Rust debug and fat-LTO results.
+
+The previously tracked IK skew-write discrepancy remains in its own source
+owner review and was not silently absorbed into this receipt. Verdict:
+**REJECTED while accepting the corrected core Mat2D, GPU/Rive-renderer local
+owners, scalar/bulk/bounding-box routing, N-slicer, listener, Lua, winding,
+transformed-area, and threshold portions.** Restore the five source owners
+above, add direct witnesses at their live consumers, and obtain two fresh
+complete reviews.

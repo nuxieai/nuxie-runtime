@@ -317,3 +317,48 @@ static process-wide frame-counter ownership and the cross-owner
 1,105-owner/7,818-unit campaign denominator is accepted; it is no longer an
 open Artboard finding. Neither remaining gap is silently credited to this
 family.
+
+## Second independent adversarial re-review of `d3df628c7`: corrections accepted
+
+This second review was performed independently of `e8642fce4` and accepts the
+two corrections in `d3df628c7`. It read the pinned `Artboard::instance<T>`,
+`m_didChange`, `onComponentDirty`, `changed`, `draw`, and `drawInternal` paths;
+the complete `NestedArtboard` source and header; C++ layout measure-function
+registration and solve entry; and the corresponding Rust clone, nested-host,
+layout-build, measure-callback, and draw/change paths. It found no counterexample
+to either corrected behavior.
+
+For clone/change semantics, pinned public instancing default-constructs the new
+Artboard before copying authored Core fields, so `m_didChange` starts `true` and
+is not inherited from a clean source. Pinned `drawInternal` clears the source
+bit before its opacity early return, while subsequent component dirt or
+`changed()` restores it. Rust now makes the same distinction: public `Clone`
+starts a new occurrence at `true`; both production same-occurrence layout/draw
+views enter through `clone_for_transient_layout`, which restores the source bit;
+and a normal `RuntimeNestedArtboardInstance::clone` deliberately creates a new
+mounted occurrence. The focused clone test isolates the bit transition, and
+source inspection additionally confirms that the real Rust draw path clears
+the bit before its matching opacity early return. Changing the public default
+therefore does not leak into either transient call site or alter the source.
+
+For ordinary nested measurement, pinned `LayoutComponent::syncStyle` registers
+its measure callback only when the style is intrinsically sized and the node is
+a layout leaf. That callback walks non-layout intrinsically-sizeable children
+and reaches `NestedArtboard::measureLayout`, which returns the mounted
+occurrence's dimensions with an independent finite-mode clamp on each axis.
+The corrected fixture creates exactly that production topology: the ordinary
+`NestedArtboard` is measured content rather than a transferred layout-provider
+node, its parent has an authored intrinsically-sized Hug style, and
+`compute_bounds` builds and solves the Taffy tree. Without registration the Hug
+leaf cannot produce the asserted `80 x 60`; the second fixture's distinct
+`50 x 40` maximums exercise both finite axes through the same solve. The Rust
+callback reads the live mounted child dimensions and applies the same two
+axis-local minima as the pinned body.
+
+All three focused commands listed in Evidence passed from an isolated detached
+worktree at exact commit `d3df628c7` with `CARGO_INCREMENTAL=0` (the repository's
+ignored fixture files were mirrored into that worktree solely so the lib-test
+target could compile). This second acceptance is limited to the two corrected
+rows. The Artboard family remains **REJECTED / UNCERTIFIED** for the independent
+static-frame-counter and cross-owner `ParticipatesInLayout` gaps already
+recorded above.

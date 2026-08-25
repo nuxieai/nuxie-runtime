@@ -21269,6 +21269,228 @@ fn current_animation_name<'a>(
         .as_deref()
 }
 
+fn upstream_event_fixture_instance(
+    fixture_name: &str,
+    artboard_name: Option<&str>,
+) -> (RuntimeFile, GraphFile, usize, ArtboardInstance, StateMachineInstance) {
+    let fixture = cpp_runtime_fixture(fixture_name);
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("import {fixture_name}: {error}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("graph {fixture_name}: {error}"));
+    let artboard_index = artboard_name
+        .map(|name| {
+            graph
+                .artboards
+                .iter()
+                .position(|artboard| artboard.name.as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("missing artboard {name:?} in {fixture_name}"))
+        })
+        .unwrap_or(0);
+    let artboard_graph = &graph.artboards[artboard_index];
+    assert_eq!(artboard_graph.state_machines.len(), 1);
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .unwrap_or_else(|error| panic!("instantiate {fixture_name}: {error}"));
+    let machine = artboard
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("instantiate state machine in {fixture_name}"));
+    (runtime, graph, artboard_index, artboard, machine)
+}
+
+#[test]
+fn upstream_state_machine_event_definition_contracts() {
+    let (bullet, bullet_graph, bullet_artboard, _, _) =
+        upstream_event_fixture_instance("bullet_man.riv", Some("Bullet Man"));
+    let bullet_definition = &bullet.artboard_state_machine_graphs(bullet_artboard)[0];
+    assert_eq!(bullet_definition.listeners.len(), 3);
+    assert_eq!(bullet_definition.inputs.len(), 4);
+    for (listener_index, (target_name, input_id)) in
+        [("HandWickHit", 0), ("HandCannonHit", 1), ("HandHelmetHit", 2)]
+            .into_iter()
+            .enumerate()
+    {
+        let listener = &bullet_definition.listeners[listener_index];
+        let target_id = usize::try_from(
+            listener
+                .object
+                .uint_property("targetId")
+                .expect("listener targetId"),
+        )
+        .expect("targetId fits usize");
+        let target = &bullet_graph.artboards[bullet_artboard].components[target_id];
+        assert!(definition_by_name(target.type_name).is_some_and(|definition| definition.is_a("Node")));
+        assert_eq!(target.name.as_deref(), Some(target_name));
+        assert_eq!(listener.actions.len(), 1);
+        let action = listener.actions[0].object;
+        assert!(definition_by_name(action.type_name)
+            .is_some_and(|definition| definition.is_a("ListenerInputChange")));
+        assert_eq!(action.uint_property("inputId"), Some(input_id));
+    }
+
+    let (events, events_graph, events_artboard, _, _) =
+        upstream_event_fixture_instance("event_on_listener.riv", None);
+    let event_components = events_graph.artboards[events_artboard]
+        .components
+        .iter()
+        .filter(|component| {
+            definition_by_name(component.type_name)
+                .is_some_and(|definition| definition.is_a("Event"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(event_components.len(), 4);
+    assert_eq!(event_components[0].name.as_deref(), Some("Somewhere.com"));
+    let event_definition = &events.artboard_state_machine_graphs(events_artboard)[0];
+    assert_eq!(event_definition.listeners.len(), 1);
+    assert_eq!(event_definition.listeners[0].actions.len(), 2);
+    let fire = &event_definition.listeners[0].actions[0];
+    assert_eq!(fire.object.type_name, "ListenerFireEvent");
+    assert_eq!(fire.event.and_then(|event| event.string_property("name")), Some("Footstep"));
+
+    let (states, _, states_artboard, _, _) =
+        upstream_event_fixture_instance("events_on_states.riv", None);
+    let states_definition = &states.artboard_state_machine_graphs(states_artboard)[0];
+    assert_eq!(states_definition.layers.len(), 1);
+    assert_eq!(states_definition.layers[0].states.len(), 5);
+    let first_animation = states_definition.layers[0]
+        .states
+        .iter()
+        .find(|state| state.fire_actions.len() == 2)
+        .expect("first animation state has two events");
+    assert_eq!(first_animation.transitions.len(), 1);
+    assert_eq!(first_animation.transitions[0].fire_actions.len(), 2);
+}
+
+#[test]
+fn upstream_state_machine_event_pointer_input_contracts() {
+    let (_, _, _, mut bullet_artboard, mut bullet_machine) =
+        upstream_event_fixture_instance("bullet_man.riv", Some("Bullet Man"));
+    bullet_artboard.update_components();
+    bullet_artboard.advance_state_machine_instance(&mut bullet_machine, 0.0);
+    let light = bullet_machine.input_index_named("Light").expect("Light trigger");
+    bullet_machine.pointer_down(&mut bullet_artboard, 71.0, 263.0, 1);
+    assert_eq!(bullet_machine.input(light).and_then(|input| input.trigger_fired()), Some(true));
+
+    let (_, _, _, mut switch_artboard, mut switch_machine) =
+        upstream_event_fixture_instance("light_switch.riv", None);
+    switch_artboard.update_components();
+    switch_artboard.advance_state_machine_instance(&mut switch_machine, 0.0);
+    let on = switch_machine.input_index_named("On").expect("On boolean");
+    assert_eq!(switch_machine.input(on).and_then(|input| input.bool_value()), Some(true));
+    switch_machine.pointer_down(&mut switch_artboard, 150.0, 258.0, 1);
+    switch_machine.pointer_up(&mut switch_artboard, 150.0, 258.0, 1);
+    assert_eq!(switch_machine.input(on).and_then(|input| input.bool_value()), Some(false));
+    switch_machine.pointer_down(&mut switch_artboard, 150.0, 258.0, 1);
+    switch_machine.pointer_up(&mut switch_artboard, 150.0, 258.0, 1);
+    assert_eq!(switch_machine.input(on).and_then(|input| input.bool_value()), Some(true));
+}
+
+#[test]
+fn upstream_state_machine_event_reporting_contracts() {
+    let (_, _, _, mut listener_artboard, mut listener_machine) =
+        upstream_event_fixture_instance("event_on_listener.riv", None);
+    listener_artboard.update_components();
+    listener_artboard.advance_state_machine_instance(&mut listener_machine, 0.0);
+    assert_eq!(listener_machine.reported_event_count(), 0);
+    listener_machine.pointer_down(&mut listener_artboard, 343.0, 116.0, 1);
+    listener_machine.pointer_up(&mut listener_artboard, 343.0, 116.0, 1);
+    assert_eq!(listener_machine.reported_event_count(), 2);
+    assert_eq!(listener_machine.reported_event(&listener_artboard, 0).and_then(|event| event.name()), Some("Footstep"));
+    assert_eq!(listener_machine.reported_event(&listener_artboard, 1).and_then(|event| event.name()), Some("Event 3"));
+    listener_artboard.advance_state_machine_instance(&mut listener_machine, 0.0);
+    assert_eq!(listener_machine.reported_event_count(), 0);
+
+    let (_, _, _, mut states_artboard, mut states_machine) =
+        upstream_event_fixture_instance("events_on_states.riv", None);
+    states_artboard.update_components();
+    states_artboard.advance_state_machine_instance(&mut states_machine, 0.0);
+    assert_eq!(states_machine.reported_event_count(), 1);
+    assert_eq!(states_machine.reported_event(&states_artboard, 0).and_then(|event| event.name()), Some("First"));
+    states_artboard.advance_state_machine_instance(&mut states_machine, 1.0);
+    assert_eq!(states_machine.reported_event_count(), 0);
+    states_artboard.advance_state_machine_instance(&mut states_machine, 1.0);
+    assert_eq!(states_machine.reported_event_count(), 2);
+    assert_eq!(states_machine.reported_event(&states_artboard, 0).and_then(|event| event.name()), Some("Second"));
+    assert_eq!(states_machine.reported_event(&states_artboard, 1).and_then(|event| event.name()), Some("Third"));
+    states_artboard.advance_state_machine_instance(&mut states_machine, 1.0);
+    assert_eq!(states_machine.reported_event_count(), 1);
+    assert_eq!(states_machine.reported_event(&states_artboard, 0).and_then(|event| event.name()), Some("Fourth"));
+
+    let (_, _, _, mut timeline_artboard, mut timeline_machine) =
+        upstream_event_fixture_instance("timeline_event_test.riv", None);
+    timeline_artboard.update_components();
+    timeline_artboard.advance_state_machine_instance(&mut timeline_machine, 0.0);
+    assert_eq!(timeline_machine.reported_event_count(), 0);
+    timeline_artboard.advance_state_machine_instance(&mut timeline_machine, 0.4);
+    assert_eq!(timeline_machine.reported_event_count(), 0);
+    timeline_artboard.advance_state_machine_instance(&mut timeline_machine, 0.2);
+    assert_eq!(timeline_machine.reported_event_count(), 1);
+    let half = timeline_machine
+        .reported_event(&timeline_artboard, 0)
+        .expect("Half event");
+    assert_eq!(half.name(), Some("Half"));
+    assert!((half.seconds_delay() - 0.1).abs() < f32::EPSILON);
+}
+
+#[test]
+#[ignore = "expected-red: nested_event_test.riv leaves the parent Boolean 1 input false after the nested event pointer/advance sequence"]
+fn upstream_nested_state_machine_event_reaches_parent_listener() {
+    let (_, graph, artboard_index, mut artboard, mut machine) =
+        upstream_event_fixture_instance("nested_event_test.riv", None);
+    assert_eq!(machine.input_count(), 1);
+    let boolean = machine.input_index_named("Boolean 1").expect("Boolean 1");
+    assert_eq!(machine.input(boolean).and_then(|input| input.bool_value()), Some(false));
+    let nested_count = graph.artboards[artboard_index]
+        .components
+        .iter()
+        .filter(|component| component.type_name == "NestedArtboard")
+        .count();
+    assert_eq!(nested_count, 1);
+    artboard.update_components();
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    machine.pointer_down(&mut artboard, 250.0, 100.0, 1);
+    artboard.advance_state_machine_instances_with_nested(
+        std::slice::from_mut(&mut machine),
+        0.0,
+    );
+    assert_eq!(machine.input(boolean).and_then(|input| input.bool_value()), Some(true));
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    assert_eq!(machine.reported_event_count(), 0);
+}
+
+#[test]
+#[ignore = "expected-red: vm_listener_fire_event.riv reports no host event after the bound go trigger fires"]
+fn upstream_view_model_listener_event_is_visible_to_host() {
+    let (runtime, _, _, mut artboard, mut machine) =
+        upstream_event_fixture_instance("vm_listener_fire_event.riv", None);
+    assert!(machine.bind_default_view_model_context_on_artboard(&mut artboard));
+    machine
+        .advance_and_apply(&mut artboard, 0.0)
+        .expect("initial advance");
+    assert_eq!(machine.reported_event_count(), 0);
+    assert!(machine.set_default_view_model_trigger_source_by_property_name(
+        &runtime,
+        "go",
+        1,
+    ));
+    machine
+        .advance_and_apply(&mut artboard, 0.016)
+        .expect("listener event advance");
+    assert_eq!(machine.reported_event_count(), 1);
+    assert_eq!(
+        machine
+            .reported_event(&artboard, 0)
+            .and_then(|event| event.name()),
+        Some("ding")
+    );
+    machine
+        .advance_and_apply(&mut artboard, 0.016)
+        .expect("event reset advance");
+    assert_eq!(machine.reported_event_count(), 0);
+}
+
 #[test]
 fn upstream_animation_state_without_animation_advances_without_crashing() {
     let (runtime, graph, artboard_index, machine_index, mut artboard, mut machine) =

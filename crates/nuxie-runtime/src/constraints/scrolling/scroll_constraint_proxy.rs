@@ -7,11 +7,11 @@ pub(in crate::constraints) fn start(
     proxy: &mut RuntimeDraggableProxy,
     position: (f32, f32),
 ) {
-    proxy.viewport_is_dragging = false;
     let local = artboard.component_at(proxy.constraint).local_id;
     if !constraint_bool(artboard, local, "ScrollConstraint", "interactive", true) {
         return;
     }
+    proxy.viewport_is_dragging = false;
     proxy.last_position = position;
     let direction = constraint_uint(artboard, local, "DraggableConstraint", "directionValue", 1);
     if let Some(scroll) = artboard
@@ -116,8 +116,8 @@ fn drag_view(
         {
             // Without physics no later owner pulls the stored offset back
             // into range. Clamp now so overscroll cannot eat the next drag.
-            offset_x = offset_x.clamp(metrics.max_offset(RuntimeScrollAxis::X), 0.0);
-            offset_y = offset_y.clamp(metrics.max_offset(RuntimeScrollAxis::Y), 0.0);
+            offset_x = rive_math_clamp(offset_x, metrics.max_offset(RuntimeScrollAxis::X), 0.0);
+            offset_y = rive_math_clamp(offset_y, metrics.max_offset(RuntimeScrollAxis::Y), 0.0);
         }
     }
     set_scroll_offset(artboard, constraint, RuntimeScrollAxis::X, offset_x);

@@ -142,8 +142,8 @@ impl RuntimeScrollPhysicsState {
     ) -> (f32, f32) {
         match &self.kind {
             crate::components::RuntimeScrollPhysicsKind::Clamped { .. } => (
-                value.0.clamp(range_min.0, range_max.0),
-                value.1.clamp(range_min.1, range_max.1),
+                rive_math_clamp(value.0, range_min.0, range_max.0),
+                rive_math_clamp(value.1, range_min.1, range_max.1),
             ),
             crate::components::RuntimeScrollPhysicsKind::Elastic { x, y } => (
                 x.as_ref().map_or(0.0, |helper| {
@@ -169,8 +169,8 @@ impl RuntimeScrollPhysicsState {
         match &mut self.kind {
             crate::components::RuntimeScrollPhysicsKind::Clamped { value: retained } => {
                 *retained = (
-                    value.0.clamp(range_min.0, range_max.0),
-                    value.1.clamp(range_min.1, range_max.1),
+                    rive_math_clamp(value.0, range_min.0, range_max.0),
+                    rive_math_clamp(value.1, range_min.1, range_max.1),
                 );
             }
             crate::components::RuntimeScrollPhysicsKind::Elastic { x, y } => {

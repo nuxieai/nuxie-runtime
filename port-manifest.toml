@@ -565,7 +565,7 @@ note = "Consolidated Rust port for animation."
 
 [[file]]
 upstream = "src/artboard.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-runtime/src/artboard.rs"
 note = "P2F2: core Artboard behavior includes retained volume/audio-engine configuration, recursive propagation to nested and component-list occurrences, and Artboard-scoped sound teardown. Additive host extensions X1 semantic-geometry cache authority and X2 scripted-global occurrence broadcast are recorded separately and do not replace baseline Artboard behavior. Other historical Artboard ceilings keep this legacy row partial."
 
@@ -806,8 +806,8 @@ note = "Consolidated Rust port for constraints."
 [[file]]
 upstream = "src/constraints/scrolling/clamped_scroll_physics.cpp"
 status = "partial"
-rust_module = "crates/nuxie-runtime/src/constraints.rs"
-note = "F4/F10: clamped scrolling is partial and still needs its parity fixture."
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"
+note = "Phase 3 paired audit: advance/run/clamp match the pin, including fminf/fmaxf math::clamp float-edge semantics; the variant remains in the shared ScrollPhysics lifecycle."
 
 [[file]]
 upstream = "src/constraints/scrolling/elastic_scroll_physics.cpp"
@@ -835,15 +835,15 @@ note = "F4: core scrolling is ported; interactive momentum remains partial."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint_proxy.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/constraints.rs"
-note = "F4: core scrolling is ported; interactive proxy behavior remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_constraint_proxy.rs"
+note = "Phase 3 paired audit: viewport proxy threshold, drag, physics, and interactive lifecycle match the pin; noninteractive start preserves retained drag state exactly."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_physics.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/constraints.rs"
-note = "F4: the scroll physics seam is only partially ported."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"
+note = "Phase 3 paired audit: base accumulate/reset/prepare/run/stop lifecycle matches the deterministic pinned oracle; supplied host timestamps are the explicit Rust host-clock adaptation."
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_virtualizer.cpp"

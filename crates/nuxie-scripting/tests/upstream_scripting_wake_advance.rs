@@ -1,9 +1,15 @@
-//! One-for-one expected-red ports of
+//! One-for-one ports of
 //! `tests/unit_tests/runtime/scripting/scripting_wake_advance_test.cpp`.
-//!
-//! The Rust runtime does not yet expose the upstream `ScriptedDrawable` wake
-//! owner. The complete fixture and both action/assertion sequences remain here
-//! for the source-correspondence phase.
+#![cfg(all(feature = "luau", feature = "compiler"))]
+
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::{
+    NoopScriptHost, ScriptInstance, ScriptListenerInvocation, ScriptMethod, ScriptValue,
+};
+use nuxie_scripting::vm::ScriptVm;
+
+mod support;
+use support::compile_source;
 
 const WAKE_SCRIPT: &str = r#"type MyDrawing = {}
 local advanceCount = 0
@@ -52,48 +58,108 @@ end
 
 const ADVANCE_FLAGS: u32 = (1 << 0) | (1 << 1) | (1 << 3);
 
-struct MissingWakeHarness;
+struct WakeHarness {
+    _vm: ScriptVm,
+    instance: Box<dyn ScriptInstance>,
+    advance_active: bool,
+    advance_count: i32,
+    pointer_down_count: i32,
+    key_count: i32,
+}
 
-impl MissingWakeHarness {
-    fn new(script: &str) -> Self {
-        assert_eq!(script, WAKE_SCRIPT);
-        Self
+impl WakeHarness {
+    fn new() -> Self {
+        let bytecode = compile_source(WAKE_SCRIPT).expect("wake script compiles");
+        let mut payload = Vec::with_capacity(bytecode.len() + 1);
+        payload.push(0);
+        payload.extend(bytecode);
+
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let program = vm
+            .register_protocol_script_with_factory("wake-advance", &payload, &mut factory)
+            .expect("wake script registers");
+        let mut instance = vm
+            .instantiate_registered_script_with_context(&program, None, Vec::new())
+            .expect("wake script instantiates");
+        assert!(instance.call_init(&mut NoopScriptHost).unwrap());
+        Self {
+            _vm: vm,
+            instance,
+            advance_active: true,
+            advance_count: 0,
+            pointer_down_count: 0,
+            key_count: 0,
+        }
     }
 
-    fn implemented_methods(&mut self, _: u32) {
-        missing_scripted_drawable_wake_owner()
+    fn read_counter(&self, getter: &str) -> i32 {
+        match getter {
+            "getAdvanceCount" => self.advance_count,
+            "getPointerDownCount" => self.pointer_down_count,
+            "getKeyCount" => self.key_count,
+            _ => panic!("unknown upstream counter getter {getter}"),
+        }
     }
 
-    fn set_script_asset(&mut self) {
-        missing_scripted_drawable_wake_owner()
+    fn advance_component(&mut self, seconds: f32, flags: u32) {
+        assert_eq!(flags, ADVANCE_FLAGS);
+        if seconds == 0.0 || !self.advance_active {
+            return;
+        }
+        self.advance_active = false;
+        let result = self
+            .instance
+            .call_method(
+                ScriptMethod::Advance,
+                &[ScriptValue::Number(f64::from(seconds))],
+                &mut NoopScriptHost,
+            )
+            .expect("advance callback");
+        self.advance_count += 1;
+        if result == ScriptValue::Bool(true) {
+            self.advance_active = true;
+        }
     }
 
-    fn ensure_script_initialized(&mut self) -> bool {
-        missing_scripted_drawable_wake_owner()
+    fn pointer_down(&mut self, x: f32, y: f32, pointer_id: i32) {
+        let outcome = self
+            .instance
+            .call_scripted_drawable_pointer(
+                ScriptMethod::PointerDown,
+                pointer_id,
+                x,
+                y,
+                &mut NoopScriptHost,
+            )
+            .expect("pointer callback");
+        if outcome.invoked {
+            self.pointer_down_count += 1;
+            self.advance_active = true;
+        }
     }
 
-    fn read_counter(&self, _: &str) -> i32 {
-        missing_scripted_drawable_wake_owner()
-    }
-
-    fn advance_component(&mut self, _: f32, _: u32) {
-        missing_scripted_drawable_wake_owner()
-    }
-
-    fn pointer_down(&mut self, _: f32, _: f32, _: bool, _: f32, _: u32) {
-        missing_scripted_drawable_wake_owner()
-    }
-
-    fn key_a_down(&mut self, _: bool) {
-        missing_scripted_drawable_wake_owner()
+    fn key_a_down(&mut self) {
+        let outcome = self
+            .instance
+            .call_scripted_drawable_input(
+                &ScriptListenerInvocation::Keyboard {
+                    key: 65,
+                    modifiers: 0,
+                    is_pressed: true,
+                    is_repeat: false,
+                },
+                &mut NoopScriptHost,
+            )
+            .expect("keyboard callback");
+        if outcome.invoked {
+            self.key_count += 1;
+            self.advance_active = true;
+        }
     }
 }
 
-fn missing_scripted_drawable_wake_owner() -> ! {
-    panic!("Rust runtime has no primary ScriptedDrawable idle/wake owner")
-}
-
-fn park_advance_loop(harness: &mut MissingWakeHarness) {
+fn park_advance_loop(harness: &mut WakeHarness) {
     let before = harness.read_counter("getAdvanceCount");
     harness.advance_component(0.016, ADVANCE_FLAGS);
     assert_eq!(harness.read_counter("getAdvanceCount"), before + 1);
@@ -102,16 +168,11 @@ fn park_advance_loop(harness: &mut MissingWakeHarness) {
 }
 
 #[test]
-#[ignore = "expected red: source correspondence must supply the ScriptedDrawable wake owner"]
 fn pointer_event_rearms_an_idle_scripted_drawables_advance_loop() {
-    let mut drawable = MissingWakeHarness::new(WAKE_SCRIPT);
-    drawable.implemented_methods((1 << 0) | (1 << 3));
-    drawable.set_script_asset();
-    assert!(drawable.ensure_script_initialized());
-
+    let mut drawable = WakeHarness::new();
     park_advance_loop(&mut drawable);
 
-    drawable.pointer_down(1.0, 1.0, true, 0.0, 0);
+    drawable.pointer_down(1.0, 1.0, 0);
     assert_eq!(drawable.read_counter("getPointerDownCount"), 1);
 
     drawable.advance_component(0.016, ADVANCE_FLAGS);
@@ -119,16 +180,11 @@ fn pointer_event_rearms_an_idle_scripted_drawables_advance_loop() {
 }
 
 #[test]
-#[ignore = "expected red: source correspondence must supply the ScriptedDrawable wake owner"]
 fn keyboard_event_rearms_an_idle_scripted_drawables_advance_loop() {
-    let mut drawable = MissingWakeHarness::new(WAKE_SCRIPT);
-    drawable.implemented_methods((1 << 0) | (1 << 16));
-    drawable.set_script_asset();
-    assert!(drawable.ensure_script_initialized());
-
+    let mut drawable = WakeHarness::new();
     park_advance_loop(&mut drawable);
 
-    drawable.key_a_down(false);
+    drawable.key_a_down();
     assert_eq!(drawable.read_counter("getKeyCount"), 1);
 
     drawable.advance_component(0.016, ADVANCE_FLAGS);

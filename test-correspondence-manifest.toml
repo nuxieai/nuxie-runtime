@@ -843,7 +843,7 @@ upstream = "tests/unit_tests/runtime/scripting/scripting_scope_test.cpp"
 test_case_count = 5
 status = "ported-direct"
 evidence = ["crates/nuxie-scripting/tests/upstream_scripting_scope.rs", "crates/nuxie-scripting/src/vm/lua_blob.rs"]
-note = "All five cases preserve module names and sources, registration order, cached field reads, error attribution checks, every scoped-reference candidate, the scope_probe fixture, qualified/cache fields, and the bare leak probe. The first, second, third, and fifth cases use the safe ScriptVm registration/cache APIs; the fourth exercises the private ScopedAssetReference owner directly. The exported-file case is expected-red because scope_probe is absent from the registered module cache; its three literal cached-field expectations and leak probe remain intact."
+note = "All five cases are active and preserve module names and sources, registration order, cached field reads, error attribution checks, every scoped-reference candidate, the scope_probe fixture, qualified/cache fields, and the bare leak probe. The first, second, third, and fifth cases use the safe ScriptVm registration/cache APIs; the fourth exercises the private ScopedAssetReference owner directly. The exported-file port now retains serialized folderPath and isModule during extraction, matching the file bootstrap instead of incorrectly registering bare library names and protocol scripts as modules."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_text_runs.cpp"

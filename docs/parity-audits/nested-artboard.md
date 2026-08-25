@@ -19,6 +19,8 @@ Rust owners:
 
 Verdict: adapted and behaviorally equivalent under Rust ownership.
 
+row_id: "B6-0303"; upstream: "src/nested_artboard.cpp"; verdict: ADAPTED;
+
 The paired audit covered constructor/destructor and animation teardown order;
 clone/nest/replacement and authored origin behavior; stateful and ordinary data
 context binding; focus registration; draw, `willDraw`, host transforms, geometry

@@ -8,6 +8,8 @@ Rust owner: `crates/nuxie-runtime/src/listener_group.rs`, with orchestration in
 
 Verdict: adapted and behaviorally equivalent under Rust ownership.
 
+row_id: "B6-0259"; upstream: "src/listener_group.cpp"; verdict: ADAPTED;
+
 - Each group owns pointer records keyed by pointer id plus a reuse pool.
   Release clears hover, phase, position, and Rust-only capture state before
   pooling without changing group-global consumption or drag state.

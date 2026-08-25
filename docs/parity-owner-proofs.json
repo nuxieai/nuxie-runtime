@@ -103,29 +103,27 @@
       }
     },
     "silver": {
-      "min_exact": 87,
+      "min_exact": 89,
       "ratchet_met": true,
       "status_counts": {
-        "divergent": 92,
-        "exact": 87,
-        "pending-scripted": 41,
+        "divergent": 93,
+        "exact": 90,
+        "pending-scripted": 38,
         "provenance-unknown": 3,
-        "unsupported": 29
+        "unsupported": 28
       },
       "total": 252
     },
     "tests": {
-      "covered_test_cases": 655,
+      "covered_test_cases": 1404,
       "file_status_counts": {
         "n-a": 2,
-        "partial": 29,
-        "pending": 78,
-        "ported-differential": 5,
-        "ported-direct": 43
+        "ported-differential": 6,
+        "ported-direct": 149
       },
       "files": 157,
       "test_cases": 1404,
-      "uncovered_test_cases": 749
+      "uncovered_test_cases": 0
     }
   },
   "owners": [
@@ -2010,7 +2008,7 @@
       "verification": "orchestrator-verified"
     },
     {
-      "audit_record": "docs/b6-audit/results/artboard.md",
+      "audit_record": "docs/parity-audits/artboard.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
@@ -2027,7 +2025,7 @@
       "reviewed_rust_source_sha256": null,
       "structural": "divergent",
       "structural_evidence": [
-        "docs/b6-audit/results/artboard.md"
+        "docs/parity-audits/artboard.md"
       ],
       "upstream": "src/artboard.cpp",
       "verification": "orchestrator-verified"
@@ -2837,7 +2835,7 @@
       "verification": "orchestrator-verified"
     },
     {
-      "audit_record": "docs/b6-audit/SECOND_PASS.md",
+      "audit_record": "docs/parity-audits/clamped-scroll-physics.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
@@ -2849,9 +2847,9 @@
       "freshness_reason": "structural audit upstream ref differs from owner upstream ref",
       "mapping": "mapped",
       "reviewed_rust_source_sha256": null,
-      "structural": "tracked-gap",
+      "structural": "adapted",
       "structural_evidence": [
-        "docs/b6-audit/SECOND_PASS.md"
+        "docs/parity-audits/clamped-scroll-physics.md"
       ],
       "upstream": "src/constraints/scrolling/clamped_scroll_physics.cpp",
       "verification": "orchestrator-verified"
@@ -2867,7 +2865,7 @@
       "freshness": "stale",
       "freshness_basis": "manifest-audit-pin",
       "freshness_reason": "structural audit upstream ref differs from owner upstream ref",
-      "mapping": "pending",
+      "mapping": "mapped",
       "reviewed_rust_source_sha256": null,
       "structural": "not-applicable",
       "structural_evidence": [
@@ -2887,7 +2885,7 @@
       "freshness": "stale",
       "freshness_basis": "manifest-audit-pin",
       "freshness_reason": "structural audit upstream ref differs from owner upstream ref",
-      "mapping": "pending",
+      "mapping": "mapped",
       "reviewed_rust_source_sha256": null,
       "structural": "not-applicable",
       "structural_evidence": [
@@ -2907,7 +2905,7 @@
       "freshness": "stale",
       "freshness_basis": "manifest-audit-pin",
       "freshness_reason": "structural audit upstream ref differs from owner upstream ref",
-      "mapping": "pending",
+      "mapping": "mapped",
       "reviewed_rust_source_sha256": null,
       "structural": "not-applicable",
       "structural_evidence": [
@@ -3377,7 +3375,7 @@
       "verification": "orchestrator-verified"
     },
     {
-      "audit_record": "docs/b6-audit/results/data-bind-view-model.md",
+      "audit_record": "docs/parity-audits/context-value-artboard.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
@@ -3389,9 +3387,9 @@
       "freshness_reason": "structural audit upstream ref differs from owner upstream ref",
       "mapping": "mapped",
       "reviewed_rust_source_sha256": null,
-      "structural": "divergent",
+      "structural": "adapted",
       "structural_evidence": [
-        "docs/b6-audit/results/data-bind-view-model.md"
+        "docs/parity-audits/context-value-artboard.md"
       ],
       "upstream": "src/data_bind/context/context_value_artboard.cpp",
       "verification": "orchestrator-verified"
@@ -3401,12 +3399,12 @@
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
-      "effective_state": "unverified",
+      "effective_state": "stale",
       "exception": "none",
       "extensions": [],
-      "freshness": "current",
+      "freshness": "stale",
       "freshness_basis": "item-bound-parity-evidence",
-      "freshness_reason": "content-bound proof inputs match current sources",
+      "freshness_reason": "rust-item-changed:rust:crates/nuxie-runtime/src/view_model_cell.rs:844-885; rust-item-changed:rust:crates/nuxie-runtime/src/view_model_cell.rs:877-885",
       "mapping": "mapped",
       "reviewed_rust_source_sha256": "1996a4a2fd0877f24a7147edc0f5dcd7ccde7ef98cb002c60091f612539e2363",
       "structural": "adapted",
@@ -5351,12 +5349,12 @@
       "decisions": [
         "D3"
       ],
-      "effective_state": "unverified",
+      "effective_state": "stale",
       "exception": "none",
       "extensions": [],
-      "freshness": "current",
+      "freshness": "stale",
       "freshness_basis": "item-bound-parity-evidence",
-      "freshness_reason": "content-bound proof inputs match current sources",
+      "freshness_reason": "rust-owner-mapping-changed",
       "mapping": "mapped",
       "reviewed_rust_source_sha256": "3fc7b1b14d34726c0b35b732d5124e8cbd4c1e5c92e9e80be3070b3e4d74c901",
       "structural": "adapted",
@@ -5467,7 +5465,7 @@
       "verification": "orchestrator-verified"
     },
     {
-      "audit_record": "docs/b6-audit/results/state-machine.md",
+      "audit_record": "docs/parity-audits/listener-group.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
@@ -5481,7 +5479,7 @@
       "reviewed_rust_source_sha256": null,
       "structural": "adapted",
       "structural_evidence": [
-        "docs/b6-audit/results/state-machine.md"
+        "docs/parity-audits/listener-group.md"
       ],
       "upstream": "src/listener_group.cpp",
       "verification": "orchestrator-verified"
@@ -5707,7 +5705,7 @@
       "verification": "pending-verification"
     },
     {
-      "audit_record": "docs/b6-audit/results/post-b6-port-reviews.md",
+      "audit_record": "docs/parity-audits/lua-scripted-context.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
@@ -5717,14 +5715,14 @@
       "freshness": "stale",
       "freshness_basis": "manifest-audit-pin",
       "freshness_reason": "structural audit upstream ref differs from owner upstream ref",
-      "mapping": "partial",
+      "mapping": "mapped",
       "reviewed_rust_source_sha256": null,
-      "structural": "tracked-gap",
+      "structural": "adapted",
       "structural_evidence": [
-        "docs/b6-audit/results/post-b6-port-reviews.md"
+        "docs/parity-audits/lua-scripted-context.md"
       ],
       "upstream": "src/lua/lua_scripted_context.cpp",
-      "verification": "pending-verification"
+      "verification": "orchestrator-verified"
     },
     {
       "audit_record": "docs/b6-audit/results/post-b6-port-reviews.md",
@@ -5887,7 +5885,7 @@
       "verification": "pending-verification"
     },
     {
-      "audit_record": "docs/b6-audit/results/post-b6-port-reviews.md",
+      "audit_record": "docs/parity-audits/lua-gpu.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [
@@ -5905,7 +5903,7 @@
       "reviewed_rust_source_sha256": null,
       "structural": "adapted",
       "structural_evidence": [
-        "docs/b6-audit/results/post-b6-port-reviews.md"
+        "docs/parity-audits/lua-gpu.md"
       ],
       "upstream": "src/lua/renderer/lua_gpu.cpp",
       "verification": "pending-verification"
@@ -6351,7 +6349,7 @@
       "verification": "orchestrator-verified"
     },
     {
-      "audit_record": "docs/b6-audit/results/artboard.md",
+      "audit_record": "docs/parity-audits/nested-artboard.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
@@ -6363,9 +6361,9 @@
       "freshness_reason": "structural audit upstream ref differs from owner upstream ref",
       "mapping": "mapped",
       "reviewed_rust_source_sha256": null,
-      "structural": "divergent",
+      "structural": "adapted",
       "structural_evidence": [
-        "docs/b6-audit/results/artboard.md"
+        "docs/parity-audits/nested-artboard.md"
       ],
       "upstream": "src/nested_artboard.cpp",
       "verification": "orchestrator-verified"
@@ -6733,7 +6731,7 @@
       "verification": "pending-verification"
     },
     {
-      "audit_record": "docs/b6-audit/SECOND_PASS.md",
+      "audit_record": "docs/parity-audits/scripted-interpolator.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
@@ -6743,14 +6741,14 @@
       "freshness": "stale",
       "freshness_basis": "manifest-audit-pin",
       "freshness_reason": "structural audit upstream ref differs from owner upstream ref",
-      "mapping": "partial",
+      "mapping": "mapped",
       "reviewed_rust_source_sha256": null,
-      "structural": "tracked-gap",
+      "structural": "adapted",
       "structural_evidence": [
-        "docs/b6-audit/SECOND_PASS.md"
+        "docs/parity-audits/scripted-interpolator.md"
       ],
       "upstream": "src/scripted/scripted_interpolator.cpp",
-      "verification": "pending-verification"
+      "verification": "orchestrator-verified"
     },
     {
       "audit_record": "docs/b6-audit/SECOND_PASS.md",
@@ -7053,7 +7051,7 @@
       "verification": "orchestrator-verified"
     },
     {
-      "audit_record": "docs/b6-audit/results/post-b6-port-reviews.md",
+      "audit_record": "docs/parity-audits/list-path.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
@@ -7067,7 +7065,7 @@
       "reviewed_rust_source_sha256": null,
       "structural": "adapted",
       "structural_evidence": [
-        "docs/b6-audit/results/post-b6-port-reviews.md"
+        "docs/parity-audits/list-path.md"
       ],
       "upstream": "src/shapes/list_path.cpp",
       "verification": "orchestrator-verified"
@@ -8173,7 +8171,7 @@
       "verification": "orchestrator-verified"
     },
     {
-      "audit_record": "docs/b6-audit/results/text.md",
+      "audit_record": "docs/parity-audits/text-modifier.md",
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
@@ -8187,7 +8185,7 @@
       "reviewed_rust_source_sha256": null,
       "structural": "adapted",
       "structural_evidence": [
-        "docs/b6-audit/results/text.md"
+        "docs/parity-audits/text-modifier.md"
       ],
       "upstream": "src/text/text_modifier.cpp",
       "verification": "orchestrator-verified"
@@ -8897,12 +8895,12 @@
       "behavioral": "unverified",
       "behavioral_evidence": [],
       "decisions": [],
-      "effective_state": "unverified",
+      "effective_state": "stale",
       "exception": "none",
       "extensions": [],
-      "freshness": "current",
+      "freshness": "stale",
       "freshness_basis": "item-bound-parity-evidence",
-      "freshness_reason": "content-bound proof inputs match current sources",
+      "freshness_reason": "rust-item-changed:rust:crates/nuxie-runtime/src/view_model_cell.rs:844-885",
       "mapping": "mapped",
       "reviewed_rust_source_sha256": "fdd95160a780769eeb213f52ea13faa09fe35bb8e62529e0376f2aa4e2034954",
       "structural": "adapted",
@@ -9285,30 +9283,28 @@
         "none": 450
       },
       "freshness": {
-        "current": 10,
-        "stale": 446
+        "current": 7,
+        "stale": 449
       },
       "mapping": {
-        "mapped": 451,
-        "partial": 2,
-        "pending": 3
+        "mapped": 456
       },
       "structural": {
-        "adapted": 211,
-        "divergent": 156,
+        "adapted": 216,
+        "divergent": 154,
         "isomorphic": 22,
         "not-applicable": 37,
-        "tracked-gap": 30
+        "tracked-gap": 27
       },
       "verification": {
-        "orchestrator-verified": 367,
-        "pending-verification": 89
+        "orchestrator-verified": 369,
+        "pending-verification": 87
       }
     },
     "effective_state_counts": {
       "known-divergent": 3,
-      "stale": 446,
-      "unverified": 7
+      "stale": 449,
+      "unverified": 4
     },
     "non_proven_by_dimension": {
       "behaviorally-unverified": [
@@ -9769,13 +9765,7 @@
         "src/virtualizing_component.cpp",
         "src/world_transform_component.cpp"
       ],
-      "incomplete-mapping": [
-        "src/constraints/scrolling/elastic_scroll_physics.cpp",
-        "src/constraints/scrolling/scroll_bar_constraint.cpp",
-        "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp",
-        "src/lua/lua_scripted_context.cpp",
-        "src/scripted/scripted_interpolator.cpp"
-      ],
+      "incomplete-mapping": [],
       "known-divergent": [
         "src/animation/blend_state_1d_viewmodel.cpp",
         "src/animation/focus_listener_group.cpp",
@@ -9816,7 +9806,6 @@
         "src/constraints/list_follow_path_constraint.cpp",
         "src/constraints/rotation_constraint.cpp",
         "src/constraints/scale_constraint.cpp",
-        "src/constraints/scrolling/clamped_scroll_physics.cpp",
         "src/constraints/scrolling/scroll_constraint.cpp",
         "src/constraints/scrolling/scroll_constraint_proxy.cpp",
         "src/constraints/scrolling/scroll_physics.cpp",
@@ -9826,7 +9815,6 @@
         "src/data_bind/context/context_target_value.cpp",
         "src/data_bind/context/context_value.cpp",
         "src/data_bind/context/context_value_any.cpp",
-        "src/data_bind/context/context_value_artboard.cpp",
         "src/data_bind/context/context_value_asset_font.cpp",
         "src/data_bind/context/context_value_asset_image.cpp",
         "src/data_bind/context/context_value_boolean.cpp",
@@ -9860,12 +9848,10 @@
         "src/layout_component.cpp",
         "src/lua/lua_data_value.cpp",
         "src/lua/lua_properties.cpp",
-        "src/lua/lua_scripted_context.cpp",
         "src/lua/lua_state.cpp",
         "src/lua/renderer/lua_gradient.cpp",
         "src/lua/rive_lua_libs.cpp",
         "src/math/rectangles_to_contour.cpp",
-        "src/nested_artboard.cpp",
         "src/nested_artboard_layout.cpp",
         "src/script_input_artboard.cpp",
         "src/script_input_boolean.cpp",
@@ -9874,7 +9860,6 @@
         "src/script_input_string.cpp",
         "src/script_input_trigger.cpp",
         "src/script_input_viewmodel_property.cpp",
-        "src/scripted/scripted_interpolator.cpp",
         "src/scripted/scripted_layout.cpp",
         "src/shapes/clipping_shape.cpp",
         "src/shapes/cubic_asymmetric_vertex.cpp",
@@ -10125,6 +10110,7 @@
         "src/data_bind/context/context_value.cpp",
         "src/data_bind/context/context_value_any.cpp",
         "src/data_bind/context/context_value_artboard.cpp",
+        "src/data_bind/context/context_value_asset_blob.cpp",
         "src/data_bind/context/context_value_asset_font.cpp",
         "src/data_bind/context/context_value_asset_image.cpp",
         "src/data_bind/context/context_value_boolean.cpp",
@@ -10218,6 +10204,7 @@
         "src/layout/axis_y.cpp",
         "src/layout/layout_component_style.cpp",
         "src/layout/layout_node_provider.cpp",
+        "src/layout/layout_sizing_style.cpp",
         "src/layout/n_sliced_node.cpp",
         "src/layout/n_slicer.cpp",
         "src/layout/n_slicer_details.cpp",
@@ -10393,6 +10380,7 @@
         "src/viewmodel/viewmodel_instance.cpp",
         "src/viewmodel/viewmodel_instance_artboard.cpp",
         "src/viewmodel/viewmodel_instance_asset.cpp",
+        "src/viewmodel/viewmodel_instance_asset_blob.cpp",
         "src/viewmodel/viewmodel_instance_asset_font.cpp",
         "src/viewmodel/viewmodel_instance_asset_image.cpp",
         "src/viewmodel/viewmodel_instance_boolean.cpp",
@@ -10580,6 +10568,7 @@
         "src/data_bind/context/context_value.cpp",
         "src/data_bind/context/context_value_any.cpp",
         "src/data_bind/context/context_value_artboard.cpp",
+        "src/data_bind/context/context_value_asset_blob.cpp",
         "src/data_bind/context/context_value_asset_font.cpp",
         "src/data_bind/context/context_value_asset_image.cpp",
         "src/data_bind/context/context_value_boolean.cpp",
@@ -10673,6 +10662,7 @@
         "src/layout/axis_y.cpp",
         "src/layout/layout_component_style.cpp",
         "src/layout/layout_node_provider.cpp",
+        "src/layout/layout_sizing_style.cpp",
         "src/layout/n_sliced_node.cpp",
         "src/layout/n_slicer.cpp",
         "src/layout/n_slicer_details.cpp",
@@ -10848,6 +10838,7 @@
         "src/viewmodel/viewmodel_instance.cpp",
         "src/viewmodel/viewmodel_instance_artboard.cpp",
         "src/viewmodel/viewmodel_instance_asset.cpp",
+        "src/viewmodel/viewmodel_instance_asset_blob.cpp",
         "src/viewmodel/viewmodel_instance_asset_font.cpp",
         "src/viewmodel/viewmodel_instance_asset_image.cpp",
         "src/viewmodel/viewmodel_instance_boolean.cpp",
@@ -10871,10 +10862,7 @@
         "src/animation/keyframe_int.cpp",
         "src/component_origin.cpp",
         "src/core/field_types/core_int_type.cpp",
-        "src/data_bind/context/context_value_asset_blob.cpp",
-        "src/layout/layout_sizing_style.cpp",
-        "src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.cpp",
-        "src/viewmodel/viewmodel_instance_asset_blob.cpp"
+        "src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.cpp"
       ]
     }
   },

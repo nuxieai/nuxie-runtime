@@ -18,6 +18,8 @@ Rust owners:
 Verdict: adapted and behaviorally equivalent under the fixed Rust ownership,
 Taffy, audio, and scripting ceilings.
 
+row_id: "B6-0094"; upstream: "src/artboard.cpp"; verdict: DIVERGENT;
+
 The paired audit covered import and object attachment; clone/instance/drop;
 component dependency construction and dirt callbacks; data-bind, joystick,
 layout, and component update ordering; root and nested advance settlement;

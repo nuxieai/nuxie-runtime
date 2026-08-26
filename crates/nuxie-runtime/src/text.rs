@@ -982,6 +982,11 @@ struct StaticResolvedRun {
     local_id: usize,
     global_id: u32,
     style_local: Option<usize>,
+    /// Whether pinned `Text::makeStyled` appended this source run. The raw
+    /// source text and style remain retained even when the StyledText run is
+    /// omitted, matching the separate `m_allRuns` and `StyledText::m_runs`
+    /// ownership in C++.
+    styled_text_included: bool,
     char_start: usize,
     char_len: usize,
     text: String,
@@ -989,12 +994,23 @@ struct StaticResolvedRun {
 
 impl StaticResolvedRun {
     fn participates_in_styled_text(&self) -> bool {
-        self.style_local.is_some() && !self.text.is_empty()
+        self.styled_text_included
     }
 
     fn styled_text(&self) -> &str {
-        self.style_local.map(|_| self.text.as_str()).unwrap_or("")
+        if self.styled_text_included {
+            cxx_styled_text_prefix(&self.text)
+        } else {
+            ""
+        }
     }
+}
+
+/// `StyledText::append` decodes from `std::string::c_str()` while `*ptr`, so
+/// an embedded NUL terminates the appended Unicode span even though the source
+/// `TextValueRun::text()` itself is nonempty.
+fn cxx_styled_text_prefix(text: &str) -> &str {
+    text.split_once('\0').map_or(text, |(prefix, _)| prefix)
 }
 
 #[derive(Debug, Clone)]
@@ -3062,25 +3078,38 @@ impl StaticTextSlice {
                     .with_context(|| format!("{}.text is not UTF-8", run.text_property_owner))?
                     .to_owned()
             };
-            let char_len = text.chars().count();
+            let style_index = self.style_index_for_local(run.style_local)?;
+            let styled_text_included = !text.is_empty()
+                && self.styles[style_index]
+                    .font_bytes(runtime, instance)
+                    .is_some();
+            let char_len = styled_text_included
+                .then(|| cxx_styled_text_prefix(&text).chars().count())
+                .unwrap_or(0);
             runs.push(StaticResolvedRun {
                 local_id: run.local_id,
                 global_id: run.global_id,
                 style_local: Some(run.style_local),
+                styled_text_included,
                 char_start,
                 char_len,
                 text,
             });
             char_start += char_len;
         }
-        runs.extend(
-            self.resolved_dynamic_runs(instance.text_list_runs(self.text_local), char_start)?,
-        );
+        runs.extend(self.resolved_dynamic_runs(
+            runtime,
+            instance,
+            instance.text_list_runs(self.text_local),
+            char_start,
+        )?);
         Ok(runs)
     }
 
     fn resolved_dynamic_runs(
         &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
         list_runs: Vec<crate::view_model::RuntimeTextListRun>,
         mut char_start: usize,
     ) -> Result<Vec<StaticResolvedRun>> {
@@ -3106,11 +3135,23 @@ impl StaticTextSlice {
                     .or_else(|| self.styles.first())
                     .map(|style| style.local_id)
             });
-            let char_len = style_local.map_or(0, |_| text.chars().count());
+            let styled_text_included = if let Some(style_local) = style_local {
+                let style_index = self.style_index_for_local(style_local)?;
+                !text.is_empty()
+                    && self.styles[style_index]
+                        .font_bytes(runtime, instance)
+                        .is_some()
+            } else {
+                false
+            };
+            let char_len = styled_text_included
+                .then(|| cxx_styled_text_prefix(&text).chars().count())
+                .unwrap_or(0);
             runs.push(StaticResolvedRun {
                 local_id: self.text_local,
                 global_id: self.text_global,
                 style_local,
+                styled_text_included,
                 char_start,
                 char_len,
                 text,
@@ -3654,7 +3695,7 @@ impl StaticTextSlice {
                 continue;
             };
             let style_index = self.style_index_for_local(style_local)?;
-            for paragraph in split_static_text_lines(&run.text) {
+            for paragraph in split_static_text_lines(run.styled_text()) {
                 // C++ shapes each paragraph before `BreakLines` and keeps the
                 // resulting advances when a soft wrap slices the glyph run.
                 // In particular, a line-ending glyph retains kerning against
@@ -3717,7 +3758,7 @@ impl StaticTextSlice {
                 continue;
             };
             let style_index = self.style_index_for_local(style_local)?;
-            for paragraph in split_static_text_lines(&run.text) {
+            for paragraph in split_static_text_lines(run.styled_text()) {
                 glyphs.extend(self.styled_text_glyphs_for_style_bidi(
                     runtime,
                     instance,
@@ -5885,18 +5926,27 @@ mod tests {
     }
 
     #[test]
-    fn cxx_dynamic_text_runs_retain_all_indices_and_skip_only_null_style_or_empty_runs() {
+    fn cxx_dynamic_text_runs_retain_all_indices_and_make_styled_omissions() {
         let (runtime, graphs) = baseline_origin_text_runtime();
         let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
         let mut slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
         slice.styles[0].name = Some("first".to_owned());
         let mut second_style = slice.styles[0].clone();
         second_style.local_id = 99;
         second_style.name = Some("second".to_owned());
         slice.styles.push(second_style);
+        let mut font_null_style = slice.styles[0].clone();
+        font_null_style.local_id = 100;
+        font_null_style.name = Some("font-null".to_owned());
+        font_null_style.font_asset_global = None;
+        font_null_style.font_asset_id = None;
+        slice.styles.push(font_null_style);
 
         let runs = slice
             .resolved_dynamic_runs(
+                &runtime,
+                &instance,
                 vec![
                     crate::view_model::RuntimeTextListRun {
                         text: None,
@@ -5907,11 +5957,15 @@ mod tests {
                         style: None,
                     },
                     crate::view_model::RuntimeTextListRun {
+                        text: Some(b"fontless".to_vec()),
+                        style: Some(b"font-null".to_vec()),
+                    },
+                    crate::view_model::RuntimeTextListRun {
                         text: Some(b"fallback".to_vec()),
                         style: Some(b"unknown".to_vec()),
                     },
                     crate::view_model::RuntimeTextListRun {
-                        text: Some(b"named".to_vec()),
+                        text: Some(b"named\0ignored".to_vec()),
                         style: Some(b"second".to_vec()),
                     },
                 ],
@@ -5919,17 +5973,20 @@ mod tests {
             )
             .expect("dynamic runs resolve");
 
-        assert_eq!(runs.len(), 4, "every valid list instance retains a run");
+        assert_eq!(runs.len(), 5, "every valid list instance retains a run");
         assert_eq!(runs[0].text, "");
         assert_eq!(runs[0].style_local, Some(99));
         assert_eq!((runs[0].char_start, runs[0].char_len), (0, 0));
         assert_eq!(runs[1].text, "hidden");
         assert_eq!(runs[1].style_local, None);
         assert_eq!((runs[1].char_start, runs[1].char_len), (0, 0));
-        assert_eq!(runs[2].style_local, Some(slice.styles[0].local_id));
-        assert_eq!((runs[2].char_start, runs[2].char_len), (0, 8));
-        assert_eq!(runs[3].style_local, Some(99));
-        assert_eq!((runs[3].char_start, runs[3].char_len), (8, 5));
+        assert_eq!(runs[2].style_local, Some(100));
+        assert_eq!((runs[2].char_start, runs[2].char_len), (0, 0));
+        assert!(!runs[2].participates_in_styled_text());
+        assert_eq!(runs[3].style_local, Some(slice.styles[0].local_id));
+        assert_eq!((runs[3].char_start, runs[3].char_len), (0, 8));
+        assert_eq!(runs[4].style_local, Some(99));
+        assert_eq!((runs[4].char_start, runs[4].char_len), (8, 5));
         assert_eq!(
             runs.iter()
                 .map(StaticResolvedRun::styled_text)
@@ -5940,6 +5997,8 @@ mod tests {
         slice.styles.clear();
         let no_paints = slice
             .resolved_dynamic_runs(
+                &runtime,
+                &instance,
                 vec![crate::view_model::RuntimeTextListRun {
                     text: Some(b"unpainted".to_vec()),
                     style: Some(b"first".to_vec()),
@@ -5988,6 +6047,47 @@ mod tests {
     }
 
     #[test]
+    fn cxx_styled_text_append_decodes_to_nul_and_rebuild_clears_prior_topology() {
+        let (runtime, graphs) = baseline_origin_text_runtime_with_sizing_line_height_font_and_text(
+            TEXT_SIZING_FIXED,
+            Some(40.0),
+            fixture_font_bytes(),
+            "AB\0ignored",
+        );
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+
+        let first_runs = slice
+            .resolved_runs(&runtime, &instance)
+            .expect("initial StyledText runs resolve");
+        assert_eq!(first_runs.len(), 1);
+        assert_eq!(first_runs[0].text, "AB\0ignored");
+        assert_eq!((first_runs[0].char_start, first_runs[0].char_len), (0, 2));
+        assert_eq!(first_runs[0].styled_text(), "AB");
+        let first = slice
+            .render_topology(&runtime, &instance, None, Mat2D::IDENTITY)
+            .expect("initial StyledText topology builds")
+            .expect("initial StyledText is nonempty");
+        assert_eq!(first.text, "AB");
+
+        let text_key = property_key_for_name("TextValueRun", "text").expect("TextValueRun key");
+        assert!(instance.set_string_property(3, text_key, b"C\0tail".to_vec()));
+        let rebuilt = slice
+            .render_topology(&runtime, &instance, None, Mat2D::IDENTITY)
+            .expect("rebuilt StyledText topology builds")
+            .expect("rebuilt StyledText is nonempty");
+        assert_eq!(rebuilt.text, "C");
+        assert_eq!(rebuilt.resolved_runs.len(), 1);
+        assert_eq!(rebuilt.resolved_runs[0].styled_text(), "C");
+        assert_eq!(rebuilt.resolved_runs[0].char_len, 1);
+        assert_ne!(
+            rebuilt.text, first.text,
+            "the prior Unicode buffer is not retained"
+        );
+    }
+
+    #[test]
     fn cxx_empty_line_metrics_ignore_runs_omitted_by_make_styled() {
         let (runtime, graphs) = dynamic_two_style_text_runtime();
         let graph = graphs.artboards.first().expect("fixture has an artboard");
@@ -6006,6 +6106,8 @@ mod tests {
 
         let runs = slice
             .resolved_dynamic_runs(
+                &runtime,
+                &instance,
                 vec![
                     crate::view_model::RuntimeTextListRun {
                         text: Some(b"hidden".to_vec()),
@@ -6051,6 +6153,8 @@ mod tests {
         // metric, and the result must differ from the first-paint control.
         let second_only = slice
             .resolved_dynamic_runs(
+                &runtime,
+                &instance,
                 vec![crate::view_model::RuntimeTextListRun {
                     text: Some(b"\nA".to_vec()),
                     style: Some(b"second".to_vec()),
@@ -6063,6 +6167,8 @@ mod tests {
             .expect("second-style control metrics compute");
         let first_only = slice
             .resolved_dynamic_runs(
+                &runtime,
+                &instance,
                 vec![crate::view_model::RuntimeTextListRun {
                     text: Some(b"\nA".to_vec()),
                     style: Some(b"first".to_vec()),

@@ -10,7 +10,7 @@ anyhow = "1"
 nuxie-binary = { path = "../../crates/nuxie-binary" }
 nuxie-graph = { path = "../../crates/nuxie-graph" }
 nuxie-render-api = { path = "../../crates/nuxie-render-api" }
-nuxie-runtime = { path = "../../crates/nuxie-runtime" }
+nuxie-runtime = { path = "../../crates/nuxie-runtime", features = ["tools"] }
 nuxie-scripting = { path = "../../crates/nuxie-scripting", features = ["upstream-test-seams"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"

@@ -10,8 +10,8 @@ use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_render_api::{Factory as RenderFactory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::{
     ArtboardInstance, GAMEPAD_BATCH_WIRE_VERSION, LinearAnimationInstance,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance, StateMachineInstance,
-    set_runtime_deterministic_mode,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    StateMachineInstance, set_runtime_deterministic_mode,
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -118,6 +118,24 @@ pub enum Action {
     },
     CreateDefaultViewModel,
     BindPreparedViewModel,
+    CreateDefaultMainViewModel,
+    CreateDefaultGlobalViewModel {
+        global: String,
+    },
+    SetStagedMainString {
+        property: String,
+        value: String,
+    },
+    SetStagedGlobalColor {
+        global: String,
+        property: String,
+        value: u32,
+    },
+    SetStateMachineMainViewModel,
+    SetStateMachineGlobalViewModel {
+        global: String,
+    },
+    BindStateMachineViewModels,
     SetViewModelNumber {
         property: String,
         value: f32,
@@ -334,6 +352,8 @@ impl Execution {
         }
         let mut animation = select_animation(&instance, artboard, &case.animation)?;
         let mut owned_context = None;
+        let mut staged_main: Option<RuntimeOwnedViewModelHandle> = None;
+        let mut staged_globals = BTreeMap::<String, RuntimeOwnedViewModelHandle>::new();
         for action in actions {
             match action {
                 Action::BindDefaultViewModel => {
@@ -417,6 +437,77 @@ impl Execution {
                             context,
                             registered_script_file.as_ref(),
                         )?;
+                    }
+                }
+                Action::CreateDefaultMainViewModel => {
+                    staged_main = Some(
+                        selected_artboard_default_view_model_handle(&runtime, artboard_index)
+                            .context("selected artboard has no default main view-model instance")?,
+                    );
+                }
+                Action::CreateDefaultGlobalViewModel { global } => {
+                    let handle = named_default_view_model_handle(&runtime, global)
+                        .with_context(|| format!("missing default global view model {global}"))?;
+                    staged_globals.insert(global.clone(), handle);
+                }
+                Action::SetStagedMainString { property, value } => {
+                    let handle = staged_main
+                        .as_ref()
+                        .context("no staged main view-model instance")?;
+                    if !handle
+                        .borrow_mut()
+                        .set_string_by_property_name_path(property, value.as_bytes())
+                    {
+                        bail!("missing staged main string property {property}");
+                    }
+                }
+                Action::SetStagedGlobalColor {
+                    global,
+                    property,
+                    value,
+                } => {
+                    let handle = staged_globals
+                        .get(global)
+                        .with_context(|| format!("no staged global view model {global}"))?;
+                    if !handle
+                        .borrow_mut()
+                        .set_color_by_property_name_path(property, *value)
+                    {
+                        bail!("missing staged global color property {global}.{property}");
+                    }
+                }
+                Action::SetStateMachineMainViewModel => {
+                    let machine = state_machine
+                        .as_mut()
+                        .context("no selected state machine")?;
+                    let handle = staged_main
+                        .as_ref()
+                        .context("no staged main view-model instance")?;
+                    if !machine.set_view_model_instance_for_command_queue(Some(handle.clone())) {
+                        bail!("state machine rejected staged main view-model instance");
+                    }
+                }
+                Action::SetStateMachineGlobalViewModel { global } => {
+                    let machine = state_machine
+                        .as_mut()
+                        .context("no selected state machine")?;
+                    let handle = staged_globals
+                        .get(global)
+                        .with_context(|| format!("no staged global view model {global}"))?;
+                    if !machine.set_global_view_model_instance(
+                        Some(&runtime),
+                        global,
+                        Some(handle.clone()),
+                    ) {
+                        bail!("state machine rejected staged global view model {global}");
+                    }
+                }
+                Action::BindStateMachineViewModels => {
+                    let machine = state_machine
+                        .as_mut()
+                        .context("no selected state machine")?;
+                    if !machine.bind_for_command_queue(Some(&runtime), &mut instance) {
+                        bail!("state-machine view-model bind failed");
                     }
                 }
                 Action::SetViewModelNumber { property, value } => {
@@ -1226,6 +1317,32 @@ fn selected_artboard_owned_view_model_context(
     let mut context = RuntimeOwnedViewModelContext::from_main(main);
     context.complete_for_artboard(runtime, artboard_index);
     Some(context)
+}
+
+fn selected_artboard_default_view_model_handle(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+) -> Option<RuntimeOwnedViewModelHandle> {
+    let view_model_index = runtime
+        .artboard(artboard_index)?
+        .uint_property("viewModelId")
+        .and_then(|index| usize::try_from(index).ok())?;
+    RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)
+        .or_else(|| RuntimeOwnedViewModelInstance::new(runtime, view_model_index))
+        .map(RuntimeOwnedViewModelHandle::new)
+}
+
+fn named_default_view_model_handle(
+    runtime: &RuntimeFile,
+    view_model: &str,
+) -> Option<RuntimeOwnedViewModelHandle> {
+    let view_model_index = runtime
+        .view_models()
+        .iter()
+        .position(|candidate| candidate.object.string_property("name") == Some(view_model))?;
+    RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)
+        .or_else(|| RuntimeOwnedViewModelInstance::new(runtime, view_model_index))
+        .map(RuntimeOwnedViewModelHandle::new)
 }
 
 fn selected_artboard_fresh_view_model_context(

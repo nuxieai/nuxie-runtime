@@ -29,6 +29,19 @@ fn wave_b4_context_names(file: &RuntimeFile, indices: &[usize]) -> Vec<String> {
         .collect()
 }
 
+// Narrow test-only representation of the missing Artboard owner. Keeping the
+// seam on ArtboardInstance makes expected-red cases 4 and 5 fail at the exact
+// `Artboard::setViewModelInstance` action instead of misusing the unrelated
+// global-slot setter as a proxy.
+impl ArtboardInstance {
+    fn set_view_model_instance(
+        &mut self,
+        _view_model_instance: RuntimeOwnedViewModelHandle,
+    ) -> Result<bool, &'static str> {
+        Err("Artboard::setViewModelInstance owner is not implemented")
+    }
+}
+
 #[test]
 fn wave_b4_global_binding_case_001_file_names_are_globals_in_file_order() {
     let (file, _, _) = upstream_global_binding_fixture();
@@ -79,17 +92,8 @@ fn wave_b4_global_binding_case_003_getter_is_null_until_set() {
     );
 }
 
-fn wave_b4_set_artboard_main_without_binding(
-    file: &RuntimeFile,
-    artboard: &mut ArtboardInstance,
-    main: RuntimeOwnedViewModelHandle,
-) -> bool {
-    let main_name = wave_b4_view_model_name(file, main.borrow().view_model_index());
-    artboard.set_global_view_model_instance(file, &main_name, Some(main))
-}
-
 #[test]
-#[ignore = "expected-red: Artboard has no setViewModelInstance owner distinct from binding"]
+#[ignore = "expected-red: exact Artboard::setViewModelInstance owner is absent"]
 fn wave_b4_global_binding_case_004_set_without_bind_mutates_order() {
     let (file, mut artboard, artboard_index) = upstream_global_binding_fixture();
     let global_names = crate::runtime_global_view_model_names(&file);
@@ -101,10 +105,9 @@ fn wave_b4_global_binding_case_004_set_without_bind_mutates_order() {
             .and_then(|view_model| { view_model.object.uint_property("viewModelType") }),
         Some(2)
     );
-    assert!(
-        wave_b4_set_artboard_main_without_binding(&file, &mut artboard, main,),
-        "Artboard's retained setter rejects the main instance because only the global-instance owner exists"
-    );
+    artboard
+        .set_view_model_instance(main)
+        .expect("exact Artboard::setViewModelInstance owner");
     for name in &global_names {
         assert!(artboard.set_global_view_model_instance(
             &file,
@@ -125,7 +128,7 @@ fn wave_b4_global_binding_case_004_set_without_bind_mutates_order() {
 }
 
 #[test]
-#[ignore = "expected-red: Artboard has no setViewModelInstance owner distinct from binding"]
+#[ignore = "expected-red: exact Artboard::setViewModelInstance owner is absent"]
 fn wave_b4_global_binding_case_005_globals_keep_file_order_when_main_is_set_later() {
     let (file, mut artboard, artboard_index) = upstream_global_binding_fixture();
     let global_names = crate::runtime_global_view_model_names(&file);
@@ -150,10 +153,9 @@ fn wave_b4_global_binding_case_005_globals_keep_file_order_when_main_is_set_late
     );
     let main = upstream_global_binding_main_handle(&file, artboard_index);
     let main_name = wave_b4_view_model_name(&file, main.borrow().view_model_index());
-    assert!(
-        wave_b4_set_artboard_main_without_binding(&file, &mut artboard, main,),
-        "Artboard's retained setter rejects the main instance because only the global-instance owner exists"
-    );
+    artboard
+        .set_view_model_instance(main)
+        .expect("exact Artboard::setViewModelInstance owner");
     let mut expected = vec![main_name];
     expected.extend(global_names);
     assert_eq!(
@@ -176,8 +178,9 @@ fn wave_b4_global_binding_case_006_bind_completes_missing_global_slots() {
     assert!(!global_names.is_empty());
     let mut machine = artboard.state_machine_instance(0).expect("state machine");
     let main = upstream_global_binding_main_handle(&file, artboard_index);
-    assert!(machine.set_view_model_instance(Some(main)));
-    machine.bind(Some(&file), &mut artboard).expect("bind");
+    machine
+        .bind_view_model_instance(Some(&file), &mut artboard, Some(main))
+        .expect("StateMachineInstance::bindViewModelInstance");
     for name in &global_names {
         assert!(
             machine
@@ -370,18 +373,18 @@ fn wave_b4_global_binding_case_012_bind_adds_main_when_only_global_is_set() {
         &global_names[0],
         Some(upstream_global_binding_handle(&file, &global_names[0])),
     ));
-    assert!(
-        machine
-            .data_context()
-            .expect("global creates context")
-            .main_handle()
-            .is_none()
-    );
-    machine.bind(Some(&file), &mut artboard).expect("bind");
-    let snapshot = machine
+    let retained_context = machine
         .data_context()
-        .expect("completed context")
-        .snapshot();
+        .expect("global creates context")
+        .clone();
+    assert!(retained_context.main_handle().is_none());
+    machine.bind(Some(&file), &mut artboard).expect("bind");
+    let completed_context = machine.data_context().expect("completed context");
+    assert!(
+        retained_context.ptr_eq(completed_context),
+        "bind mutates the retained DataContext instead of replacing it"
+    );
+    let snapshot = completed_context.snapshot();
     assert!(snapshot.main_handle().is_some());
     let names = wave_b4_context_names(&file, &wave_b4_context_indices(&snapshot));
     assert_eq!(names.len(), global_names.len() + 1);

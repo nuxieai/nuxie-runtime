@@ -46,12 +46,12 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_follow_path_wave_b4.rs",
-          "line": 52,
-          "symbol": "wave_b4_follow_path_case_001_updates_world_transform"
+          "path": "crates/nuxie-runtime/src/artboard/wave_b4_follow_path_owner_tests.rs",
+          "line": 58,
+          "symbol": "wave_b4_follow_path_case_001_exact_owner_flow"
         }
       ],
-      "note": "The executable test imports the exact fixture, advances the real ArtboardInstance owner, and asserts the pinned target and rectangle world translations."
+      "note": "The executable test imports the exact fixture, asserts both named objects are TransformComponents, advances the root Artboard owner, decomposes the internal Mat2D world transforms, and compares the pinned x/y values."
     },
     {
       "id": "tests/unit_tests/runtime/follow_path_constraint_test.cpp#2",
@@ -64,12 +64,12 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_follow_path_wave_b4.rs",
-          "line": 57,
-          "symbol": "wave_b4_follow_path_case_002_zero_constraint_opacity_updates_world_transform"
+          "path": "crates/nuxie-runtime/src/artboard/wave_b4_follow_path_owner_tests.rs",
+          "line": 63,
+          "symbol": "wave_b4_follow_path_case_002_exact_owner_flow"
         }
       ],
-      "note": "The executable test imports the exact fixture, advances the real ArtboardInstance owner, and asserts the pinned target and rectangle world translations."
+      "note": "The executable test imports the exact fixture, asserts both named objects are TransformComponents, advances the root Artboard owner, decomposes the internal Mat2D world transforms, and compares the pinned x/y values."
     },
     {
       "id": "tests/unit_tests/runtime/follow_path_constraint_test.cpp#3",
@@ -82,12 +82,12 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_follow_path_wave_b4.rs",
-          "line": 62,
-          "symbol": "wave_b4_follow_path_case_003_zero_path_opacity_updates_world_transform"
+          "path": "crates/nuxie-runtime/src/artboard/wave_b4_follow_path_owner_tests.rs",
+          "line": 68,
+          "symbol": "wave_b4_follow_path_case_003_exact_owner_flow"
         }
       ],
-      "note": "The executable test imports the exact fixture, advances the real ArtboardInstance owner, and asserts the pinned target and rectangle world translations."
+      "note": "The executable test imports the exact fixture, asserts both named objects are TransformComponents, advances the root Artboard owner, decomposes the internal Mat2D world transforms, and compares the pinned x/y values."
     },
     {
       "id": "tests/unit_tests/runtime/follow_path_constraint_test.cpp#4",
@@ -191,11 +191,11 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 31,
+          "line": 168,
           "symbol": "wave_b4_font_test_001_inspect_font_styles"
         }
       ],
-      "note": "The executable test decodes the pinned font bytes through RawTextFont and asserts the upstream observations at the actual Skrifa/Harf runtime owner."
+      "note": "The executable test decodes each pinned face and asserts weight and italic through the RawTextFont owner methods."
     },
     {
       "id": "tests/unit_tests/runtime/font_test.cpp#2",
@@ -209,11 +209,11 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 57,
+          "line": 188,
           "symbol": "wave_b4_font_test_002_cap_and_x_height_for_vertical_trim"
         }
       ],
-      "note": "The executable test decodes the pinned font bytes through RawTextFont and asserts the upstream observations at the actual Skrifa/Harf runtime owner."
+      "note": "The executable test reads RawTextFont lineMetrics/capHeight/xHeight owner values and uses Catch's double-valued, float-epsilon, expected-magnitude Approx oracle."
     },
     {
       "id": "tests/unit_tests/runtime/font_test.cpp#3",
@@ -227,11 +227,11 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 93,
+          "line": 211,
           "symbol": "wave_b4_font_test_003_fallback_glyphs_are_found"
         }
       ],
-      "note": "The executable test decodes the pinned font bytes through RawTextFont and asserts the upstream observations at the actual Skrifa/Harf runtime owner.",
+      "note": "The executable test installs the fallback on RawTextFont, proves fallback glyph ownership during the exact shaping flow, clears paragraphs, drops retained shaping owners, clears the fallback chain, and proves it is empty.",
       "adaptation": {
         "kind": "rust-safety",
         "rationale": "RawTextFont keeps the fallback chain occurrence-local rather than mutating C++ process-global fallback state while shaping the same pinned text with the same decoded faces.",
@@ -250,14 +250,14 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 123,
+          "line": 246,
           "symbol": "wave_b4_font_test_004_variable_axis_values_can_be_read"
         }
       ],
-      "note": "The executable test decodes the pinned font bytes through RawTextFont and asserts the upstream observations at the actual Skrifa/Harf runtime owner.",
+      "note": "The executable test enumerates axes and reads defaults through RawTextFont owner methods, then clones at weight and width coordinates and proves the first coordinate survives the second clone.",
       "adaptation": {
         "kind": "rust-safety",
-        "rationale": "Skrifa retains immutable filtered variation settings rather than cloning a mutable C++ Font, while preserving the same default and cumulative axis values.",
+        "rationale": "RawTextFont retains immutable variation-coordinate state on each Rust clone rather than exposing a mutable C++ Font allocation, while preserving the same default and cumulative axis values.",
         "inapplicable_observable": "The identity of intermediate C++ Font clone objects; axis defaults and retained cumulative coordinate values remain asserted."
       }
     },
@@ -273,11 +273,11 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 154,
+          "line": 272,
           "symbol": "wave_b4_font_test_005_font_features_load_as_expected"
         }
       ],
-      "note": "The executable test decodes the pinned font bytes through RawTextFont and asserts the upstream observations at the actual Skrifa/Harf runtime owner."
+      "note": "The executable test calls RawTextFont's feature owner flow and asserts the exact count plus all seven pinned OpenType tags."
     },
     {
       "id": "tests/unit_tests/runtime/gamepad_test.cpp#1",
@@ -418,7 +418,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 33,
+          "line": 46,
           "symbol": "wave_b4_global_binding_case_001_file_names_are_globals_in_file_order"
         }
       ],
@@ -436,7 +436,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 55,
+          "line": 68,
           "symbol": "wave_b4_global_binding_case_002_artboard_does_not_auto_create_globals"
         }
       ],
@@ -454,7 +454,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 61,
+          "line": 74,
           "symbol": "wave_b4_global_binding_case_003_getter_is_null_until_set"
         }
       ],
@@ -472,12 +472,12 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 93,
+          "line": 97,
           "symbol": "wave_b4_global_binding_case_004_set_without_bind_mutates_order"
         }
       ],
       "note": "The executable test builds the exact pinned context and action prefix, then reaches the absent Artboard main-instance setter seam before later assertions.",
-      "expected_red_reason": "expected-red: Artboard has no setViewModelInstance owner distinct from binding"
+      "expected_red_reason": "expected-red: exact Artboard::setViewModelInstance owner is absent"
     },
     {
       "id": "tests/unit_tests/runtime/global_view_model_binding_test.cpp#5",
@@ -491,12 +491,12 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 129,
+          "line": 132,
           "symbol": "wave_b4_global_binding_case_005_globals_keep_file_order_when_main_is_set_later"
         }
       ],
       "note": "The executable test builds the exact pinned context and action prefix, then reaches the absent Artboard main-instance setter seam before later assertions.",
-      "expected_red_reason": "expected-red: Artboard has no setViewModelInstance owner distinct from binding"
+      "expected_red_reason": "expected-red: exact Artboard::setViewModelInstance owner is absent"
     },
     {
       "id": "tests/unit_tests/runtime/global_view_model_binding_test.cpp#6",
@@ -510,7 +510,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 173,
+          "line": 175,
           "symbol": "wave_b4_global_binding_case_006_bind_completes_missing_global_slots"
         }
       ],
@@ -528,7 +528,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 195,
+          "line": 198,
           "symbol": "wave_b4_global_binding_case_007_slot_accepts_other_view_model_instance"
         }
       ],
@@ -546,7 +546,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 220,
+          "line": 223,
           "symbol": "wave_b4_global_binding_case_008_state_machine_set_bind_get_and_replace"
         }
       ],
@@ -564,7 +564,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 273,
+          "line": 276,
           "symbol": "wave_b4_global_binding_case_009_rejects_non_global_name"
         }
       ],
@@ -582,7 +582,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 301,
+          "line": 304,
           "symbol": "wave_b4_global_binding_case_010_bind_creates_context_when_none_is_set"
         }
       ],
@@ -600,7 +600,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 322,
+          "line": 325,
           "symbol": "wave_b4_global_binding_case_011_machine_null_empties_only_selected_slot"
         }
       ],
@@ -618,7 +618,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 363,
+          "line": 366,
           "symbol": "wave_b4_global_binding_case_012_bind_adds_main_when_only_global_is_set"
         }
       ],
@@ -636,7 +636,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 402,
+          "line": 405,
           "symbol": "wave_b4_global_binding_case_013_machine_null_on_empty_context_is_noop"
         }
       ],
@@ -654,7 +654,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 414,
+          "line": 417,
           "symbol": "wave_b4_global_binding_case_014_artboard_null_empties_only_selected_slot"
         }
       ],
@@ -672,7 +672,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_b4_global_owner_tests.rs",
-          "line": 455,
+          "line": 458,
           "symbol": "wave_b4_global_binding_case_015_artboard_null_on_empty_context_is_noop"
         }
       ],

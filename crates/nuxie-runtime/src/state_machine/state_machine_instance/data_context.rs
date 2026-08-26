@@ -133,6 +133,15 @@ impl StateMachineInstance {
         context.set_main(view_model_instance);
         true
     }
+    /// Tool-only forwarding seam for replaying the exact C++ command order.
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn set_view_model_instance_for_command_queue(
+        &mut self,
+        view_model_instance: Option<RuntimeOwnedViewModelHandle>,
+    ) -> bool {
+        self.set_view_model_instance(view_model_instance)
+    }
     /// C++ `setGlobalViewModelInstance`: validate the named file slot, then
     /// replace or empty exactly that slot. The occupying instance may belong
     /// to a different ViewModel; slot identity comes from `name`.

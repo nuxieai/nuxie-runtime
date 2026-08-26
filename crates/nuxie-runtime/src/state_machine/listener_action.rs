@@ -1143,3 +1143,7 @@ mod tests {
         assert_eq!(executor.direct_input_changes, 3);
     }
 }
+
+#[cfg(test)]
+#[path = "listener_action/wave_c2_listener_flags_owner_tests.rs"]
+mod wave_c2_listener_flags_owner_tests;

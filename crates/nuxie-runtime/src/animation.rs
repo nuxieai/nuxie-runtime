@@ -1807,3 +1807,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "animation/wave_c2_animation_owner_tests.rs"]
+mod wave_c2_animation_owner_tests;

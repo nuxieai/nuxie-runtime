@@ -1069,3 +1069,6 @@ mod upstream_color_glyph_tests {
 
 #[cfg(test)]
 include!("wave_b4_font_owner_tests.rs");
+
+#[cfg(test)]
+include!("wave_c2_line_break_owner_tests.rs");

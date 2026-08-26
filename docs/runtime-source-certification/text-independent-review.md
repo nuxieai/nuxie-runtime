@@ -374,3 +374,54 @@ Row 25 now says **exact enabled-path candidate; disabled path missing**, keeping
 the pinned disabled body red. The complete consumer section is unchanged at
 **4 pass, 3 executable expected-red, 11 pending**. This rereview changed
 documentation only; pre-existing user dirt remains unstaged.
+
+## Text row 10 `controlSize` production-correction review of `b54bedf4a`
+
+Verdict: **RESIDUAL REJECTION — direct LayoutComponent animation omits the
+Text callback**
+
+The occurrence owner itself is source-shaped. `RuntimeTextState` clones cold,
+compares all five fields (including the C++-equivalent floating-point `!=`
+behavior), publishes the complete tuple before calling the existing
+`markShapeDirty(false)` owner, and makes an identical call inert. The callback
+adds Path/range-clear/group-coverage/World dirt without layout dirt. The real
+direct-child solve and LayoutParticipant solve/animated-advance seams use the
+owner; participant scale values come from its inherited sizing properties,
+direction resolves from the owning layout, and retained constraints and
+`effectiveSizing` consume the tuple. The focused owner and direct-child tests
+both pass. The disabled body remains honestly red, and the consumer topology
+remains **4 pass, 3 executable expected-red, 11 pending**.
+
+One enabled caller is still absent. Pinned
+`LayoutComponent::applyInterpolation` writes each changed interpolated layout
+and calls `propagateSize()` when its width or height changed, and calls it again
+after writing the terminal layout (`layout_component.cpp:1384-1407,1422-1432`).
+Rust `RuntimeLayoutComponentState::advance_interpolation` reports those exact
+`size_changed`/completion transitions, but
+`ArtboardInstance::advance_layout_component_entry` only dirties controlled
+parametric paths and forwards scripted layout size; it never invokes
+`text_owner::control_size` for a direct non-participating Text child
+(`components.rs:1449-1520`; `artboard.rs:6782-6825`). Because
+`runtime_text_layout_constraint` prefers the retained tuple, the Text keeps its
+pre-animation width and height while its owning LayoutComponent visibly
+interpolates. The candidate therefore cannot classify row 10's enabled path as
+exact.
+
+Narrow correction request:
+
+1. At the existing direct `LayoutComponent` animation boundary, propagate the
+   current retained layout width/height plus the component style's two scale
+   enums and actual direction to the same eligible direct, non-participating
+   Text children as solve-time propagation. Preserve upstream intermediate
+   size-change and terminal-call semantics; do not route through a map-derived
+   constraint or duplicate the five-field algorithm.
+2. Add real-caller evidence that advances one animated direct LayoutComponent
+   through an intermediate size and completion and observes the Text's retained
+   tuple and no-layout shape dirt. Keep the accepted owner, participant paths,
+   disabled red, and **4/3/11** consumer topology frozen.
+
+Checks: both focused candidate tests pass (one passed each, zero failed/ignored)
+and the candidate delta passes `git diff --check`. Its committed `draw.rs`
+changes are confined to the intended control-size seams/evidence. The separate
+pre-existing formatting hunk in `draw.rs` remains unstaged, along with all
+other user dirt. This review changed documentation only.

@@ -106,6 +106,11 @@ mod wave_b5_hittest_tests {
 }
 
 #[cfg(test)]
+mod wave_c15_semantic_artboard_tests {
+    include!("state_machine_instance/tests/wave_c15_semantic_artboard.rs");
+}
+
+#[cfg(test)]
 pub(crate) fn component_list_wave_a_hit_components_count(
     instance: &StateMachineInstance,
 ) -> usize {

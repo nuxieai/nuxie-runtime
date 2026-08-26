@@ -32,7 +32,7 @@
   "wave": "c15",
   "case_count": 19,
   "ratchet": {
-    "max_pending": 6
+    "max_pending": 0
   },
   "cases": [
     {
@@ -41,10 +41,17 @@
       "ordinal": 1,
       "line": 159,
       "name": "ArtboardComponentList items populate the parent artboard's semantic manager",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": [],
-      "pending_reason": "The selected internal SemanticManager and its authoritative node_by_id lookup are not exposed by StateMachineInstance; diff presence cannot prove node lookup identity."
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 188,
+          "symbol": "wave_c15_001_component_list_items_populate_parent_semantic_manager"
+        }
+      ],
+      "note": "The exact retained-owner test binds the default ViewModel to the Artboard and StateMachine, settles ten frames, asserts all four mounted labels, and resolves each emitted id through semantic_tree.manager.node_by_id."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_artboard_test.cpp#2",
@@ -53,17 +60,16 @@
       "line": 181,
       "name": "Dropdown button starts expanded with the Expandable trait authored",
       "status": "direct",
-      "outcome": "expected-red",
+      "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_semantic_artboard.rs",
-          "line": 195,
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 199,
           "symbol": "wave_c15_002_dropdown_button_starts_expanded_with_expandable_trait"
         }
       ],
-      "note": "The ignored executable port loads and settles the exact pinned fixture, reaches the live owner seam, and preserves the complete callable assertion stream.",
-      "expected_red_reason": "expected-red: Rust does not retain the upstream initial Expanded semantic state"
+      "note": "The exact retained-owner test uses the pinned dual binding and settle order before asserting the button role, Expandable trait, and initial Expanded state."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_artboard_test.cpp#3",
@@ -72,17 +78,16 @@
       "line": 193,
       "name": "List-item SDs have non-empty bounds in the unified coordinate space",
       "status": "direct",
-      "outcome": "expected-red",
+      "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_semantic_artboard.rs",
-          "line": 213,
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 216,
           "symbol": "wave_c15_003_list_item_semantic_data_have_non_empty_unified_bounds"
         }
       ],
-      "note": "The ignored executable port loads and settles the exact pinned fixture, reaches the live owner seam, and preserves the complete callable assertion stream.",
-      "expected_red_reason": "expected-red: Rust omits mounted ArtboardComponentList semantic items before bounds assertions"
+      "note": "The exact retained-owner test uses the pinned dual binding and settle order and preserves every nonempty, positive-width, and positive-height bounds assertion for all four labels."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_artboard_test.cpp#4",
@@ -90,10 +95,17 @@
       "ordinal": 4,
       "line": 219,
       "name": "Collapsing the dropdown removes list-item SDs from the unified tree",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": [],
-      "pending_reason": "The selected internal SemanticManager node_by_id lookup is unavailable, so the exact post-collapse absence assertions for all four captured ids cannot be executed."
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 227,
+          "symbol": "wave_c15_004_collapse_removes_list_items_from_unified_tree"
+        }
+      ],
+      "note": "The exact retained-owner test captures all four ids, executes the pointer collapse and settle stream, asserts label/state removal, and checks each id is absent from semantic_tree.manager.node_by_id."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_artboard_test.cpp#5",
@@ -101,10 +113,17 @@
       "ordinal": 5,
       "line": 254,
       "name": "Re-expanding the dropdown re-registers list-item SDs",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": [],
-      "pending_reason": "The selected internal SemanticManager node_by_id lookup is unavailable, so the exact post-reexpand existence assertions for all four label-derived ids cannot be executed."
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 257,
+          "symbol": "wave_c15_005_reexpand_reregisters_list_item_semantic_data"
+        }
+      ],
+      "note": "The exact retained-owner test executes collapse and re-expansion with the pinned settles, restores all four labels, and resolves every re-registered id through semantic_tree.manager.node_by_id."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_artboard_test.cpp#6",
@@ -113,17 +132,16 @@
       "line": 276,
       "name": "Multiple collapse / uncollapse cycles maintain exactly 4 fandoms",
       "status": "direct",
-      "outcome": "expected-red",
+      "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_semantic_artboard.rs",
-          "line": 225,
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 271,
           "symbol": "wave_c15_006_multiple_cycles_maintain_exactly_four_fandoms"
         }
       ],
-      "note": "The ignored executable port loads and settles the exact pinned fixture, reaches the live owner seam, and preserves the complete callable assertion stream.",
-      "expected_red_reason": "expected-red: Rust omits mounted ArtboardComponentList semantic items"
+      "note": "The exact retained-owner test preserves the initial set and all three collapse/re-expand cycles, including empty, exact-label-set, and exact-count assertions per cycle."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_artboard_test.cpp#7",
@@ -132,17 +150,16 @@
       "line": 314,
       "name": "fireSemanticAction(tap) on the dropdown button collapses the list",
       "status": "direct",
-      "outcome": "expected-red",
+      "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_semantic_artboard.rs",
-          "line": 251,
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 296,
           "symbol": "wave_c15_007_fire_semantic_action_tap_collapses_the_list"
         }
       ],
-      "note": "The ignored executable port loads and settles the exact pinned fixture, reaches the live owner seam, and preserves the complete callable assertion stream.",
-      "expected_red_reason": "expected-red: Rust does not retain the upstream initial Expanded semantic state"
+      "note": "The exact retained-owner test preserves initial state/labels, routes Tap through the retained manager id, settles, and asserts the Expanded bit and mounted labels are cleared."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_artboard_test.cpp#8",
@@ -150,22 +167,17 @@
       "ordinal": 8,
       "line": 334,
       "name": "fireSemanticAction(tap) via pointerDown/Up converge on the same state",
-      "status": "adapted",
+      "status": "direct",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_semantic_artboard.rs",
-          "line": 278,
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 323,
           "symbol": "wave_c15_008_semantic_tap_and_pointer_converge_on_the_same_state"
         }
       ],
-      "note": "The executable Rust test preserves the exact fixture or owner construction, settle/action order, constants, identity, and individual assertion stream.",
-      "adaptation": {
-        "kind": "rust-safety",
-        "rationale": "Pinned C++ owns raw File/Artboard/StateMachine/ViewModel pointers in its shared fixture; Rust retains the same live owners through owned handles and explicit mutable Artboard borrows while preserving the pointer and semantic action streams.",
-        "inapplicable_observable": "Raw C++ fixture pointer ownership and implicit Artboard access during advance; both live Rust instances execute the same pointer and semantic action paths and compare their resulting state."
-      }
+      "note": "The exact retained-owner test performs the pinned pointer and semantic Tap streams on separately dual-bound fixtures and compares their collapsed label sets and final Expanded states."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_artboard_test.cpp#9",
@@ -173,10 +185,17 @@
       "ordinal": 9,
       "line": 398,
       "name": "Dynamic list item artboards parent listItem nodes under the enclosing list role",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": [],
-      "pending_reason": "StateMachineInstance does not expose the selected SemanticManager node lookup or authoritative retained parent/ancestor chain required after the flattened parent-id assertions."
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 351,
+          "symbol": "wave_c15_009_dynamic_list_items_parent_under_enclosing_list_role"
+        }
+      ],
+      "note": "The exact retained-owner test preserves flattened list/listItem counts and parent ids, then uses authoritative manager node_by_id plus real parent_id links to find the retained list-role ancestor."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_artboard_test.cpp#10",
@@ -185,17 +204,16 @@
       "line": 457,
       "name": "enableSemantics called twice doesn't duplicate list-item SD entries",
       "status": "direct",
-      "outcome": "expected-red",
+      "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_semantic_artboard.rs",
-          "line": 307,
+          "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_c15_semantic_artboard.rs",
+          "line": 400,
           "symbol": "wave_c15_010_enabling_semantics_twice_does_not_duplicate_list_items"
         }
       ],
-      "note": "The ignored executable port loads and settles the exact pinned fixture, reaches the live owner seam, and preserves the complete callable assertion stream.",
-      "expected_red_reason": "expected-red: Rust omits mounted ArtboardComponentList semantic items"
+      "note": "The exact retained-owner test calls enable_semantics twice before the pinned dual binding and settle, then asserts exactly four unique fandom ids in the initial added diff."
     },
     {
       "id": "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp#1",
@@ -326,10 +344,18 @@
       "ordinal": 7,
       "line": 164,
       "name": "destroying a registered SD removes its node from the manager",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": [],
-      "pending_reason": "RuntimeSemanticData has no Drop teardown that unregisters its retained node from an independently owned SemanticManager; explicit detach is not equivalent to scope destruction."
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/semantic_data/wave_c15_lifecycle_tests.rs",
+          "line": 129,
+          "symbol": "wave_c15_017_destroying_registered_semantic_data_removes_node_from_manager"
+        }
+      ],
+      "note": "The executable test constructs and registers the live RuntimeSemanticData node, verifies the initial manager state, lets the real owner leave scope, and preserves the exact post-drop assertion stream without explicit detach.",
+      "expected_red_reason": "expected-red: RuntimeSemanticData scope destruction leaves the retained node indexed in SemanticManager"
     },
     {
       "id": "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp#8",
@@ -337,10 +363,18 @@
       "ordinal": 8,
       "line": 180,
       "name": "destroying a registered SD emits a removed entry on the next diff",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": [],
-      "pending_reason": "RuntimeSemanticData has no Drop teardown that unregisters its retained node and queues the exact removed diff entry; explicit detach is not equivalent to scope destruction."
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/semantic_data/wave_c15_lifecycle_tests.rs",
+          "line": 144,
+          "symbol": "wave_c15_018_destroying_registered_semantic_data_emits_removed_diff"
+        }
+      ],
+      "note": "The executable test constructs and registers the live RuntimeSemanticData node, verifies the initial manager state, lets the real owner leave scope, and preserves the exact post-drop assertion stream without explicit detach.",
+      "expected_red_reason": "expected-red: RuntimeSemanticData scope destruction does not enqueue the retained node id in the next removed diff"
     },
     {
       "id": "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp#9",

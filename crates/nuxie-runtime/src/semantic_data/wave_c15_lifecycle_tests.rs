@@ -123,3 +123,35 @@ fn wave_c15_016_mutating_a_property_does_not_recreate_the_semantic_node() {
     let second = data.semantic_node(&mut artboard);
     assert!(first.ptr_eq(&second));
 }
+
+#[test]
+#[ignore = "expected-red: dropping RuntimeSemanticData does not remove its retained node from SemanticManager"]
+fn wave_c15_017_destroying_registered_semantic_data_removes_node_from_manager() {
+    let mut manager = SemanticManager::new();
+    let captured_id;
+    {
+        let (mut artboard, mut data) = fixture_data();
+        author_properties(&mut data, &mut artboard);
+        let node = data.semantic_node(&mut artboard);
+        captured_id = manager.add_child(None, node);
+        assert!(manager.node_by_id(captured_id).is_some());
+    }
+    assert!(manager.node_by_id(captured_id).is_none());
+}
+
+#[test]
+#[ignore = "expected-red: dropping RuntimeSemanticData does not enqueue its retained node in the next removed diff"]
+fn wave_c15_018_destroying_registered_semantic_data_emits_removed_diff() {
+    let mut manager = SemanticManager::new();
+    let captured_id;
+    {
+        let (mut artboard, mut data) = fixture_data();
+        author_properties(&mut data, &mut artboard);
+        let node = data.semantic_node(&mut artboard);
+        captured_id = manager.add_child(None, node);
+        let _ = manager.drain_diff().expect("initial semantic diff");
+    }
+    let diff = manager.drain_diff().expect("post-drop semantic diff");
+    assert_eq!(diff.removed.len(), 1);
+    assert_eq!(diff.removed[0], captured_id);
+}

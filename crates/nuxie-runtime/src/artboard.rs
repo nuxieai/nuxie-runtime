@@ -8052,6 +8052,7 @@ impl ArtboardInstance {
                         accumulated,
                         runtime,
                         graph,
+                        self,
                     )
                 })
             });

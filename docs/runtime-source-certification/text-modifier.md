@@ -22,7 +22,7 @@ not self-accept the candidate.
 
 | # | Pinned body | Required behavior and ordering | Concrete Rust owner | Candidate disposition |
 |---:|---|---|---|---|
-| 1 | `TextModifier::onAddedDirty` (cpp 7-21) | Call Component Super first and immediately propagate non-Ok. After successful parent linkage, append the modifier to its direct parent only when that parent is-a `TextModifierGroup`, preserving authored callback order, then return Ok. Any other valid Container parent returns `MissingObject`: retain the Component Super linkage, do not register, and do not run registration-dependent subclass continuation. Artboard initialization continues on MissingObject. | Component validation/link and authored traversal: `artboard.rs:1362::ArtboardInstance::build_component_occurrence_relations`, especially `:1384-1411`. Direct is-a group registration: `:1412-1430`. Occurrence-owned all/shape/follow vectors: `components.rs:1007::RuntimeTextModifierGroupState`; fresh clone state and reconstruction at `components.rs:1018`, `:1938` and `artboard.rs:1366-1374`. Immutable rendering descriptors consume the same authored group order at `text/text_modifier_group.rs:49::StaticTextModifierGroup::from_graph` and `text/text_modifier.rs:15::StaticTextModifier::from_group_child`. | **corrected exact under retained-local-ID/immutable-descriptor adaptations**. A real occurrence now owns the three vectors populated by the successful callback boundary; cold and already-materialized clones start empty and rebuild them once in authored order. Wrong-parent concrete subclasses retain their Component parent but leave all group vectors untouched and Artboard construction continues. The former late `StaticTextSlice::from_graph` hard rejection is removed. |
+| 1 | `TextModifier::onAddedDirty` (cpp 7-21) | Call Component Super first and immediately propagate non-Ok. After successful parent linkage, append the modifier to its direct parent only when that parent is-a `TextModifierGroup`, preserving authored callback order, then return Ok. Any other valid Container parent returns `MissingObject`: retain the Component Super linkage, do not register, and do not run registration-dependent subclass continuation. Artboard initialization continues on MissingObject. | Component validation/link and authored traversal: `artboard.rs:1362::ArtboardInstance::build_component_occurrence_relations`, especially `:1384-1430`. Occurrence-owned all/shape/follow vectors: `components.rs:1007::RuntimeTextModifierGroupState`; fresh clone state and reconstruction at `components.rs:1018`, `:1938` and `artboard.rs:1366-1374`. Causal static/render descriptor construction: `text.rs:1800::StaticTextSlice::from_instance` and `text/text_modifier_group.rs:93::StaticTextModifierGroup::from_instance`, with all/shape/follow traversal assembled only from the occurrence vectors at `:115::from_registered_locals`. Live layout, geometry, retained draw, on-dirty, and semantic paths call `from_instance` (`text.rs:145-626`, `text/text_engine.rs:22-67`, `text/raw_text.rs:1031`, `draw.rs:11160-11180`, `:18055`, `:18363-18381`). | **corrected exact under retained-local-ID/immutable-descriptor adaptations**. A real occurrence owns the three vectors populated by the successful callback boundary, and those vectors now causally own production modifier traversal. Live parent-property writes leave the source's registration/topology frozen; cold and already-materialized clones rebuild from copied generated fields. Wrong-parent concrete subclasses retain their Component parent but leave all group vectors and production topology untouched, and Artboard construction continues. The former late `StaticTextSlice::from_graph` hard rejection is removed. |
 
 ## Super status, subclass, and clone adjudication
 
@@ -44,19 +44,24 @@ paths take the same base owner without duplicating subclass algorithms.
 `RuntimeTextModifierGroupState` retains local IDs instead of raw pointers.
 Its all-modifier, shape-modifier, and follow-path-modifier vectors are cleared
 before reconstruction, appended only once in authored order, and initialized
-fresh during occurrence clone. `StaticTextModifierGroup` remains the immutable
-rendering descriptor for the same imported topology; this is the accepted
-graph/occurrence ownership adaptation rather than a test-local vector proxy.
+fresh during occurrence clone. `StaticTextModifierGroup::from_instance`
+materializes the immutable rendering descriptor from those three vectors, so
+coverage, shaping, variation, follow-path transform, and draw traversal share
+the occurrence owner. `StaticTextSlice::from_graph` remains only the explicitly
+named imported-graph bootstrap/support path for callers that have no live
+occurrence; it is not used by live production consumers.
 
 ## Source-proven correction and supporting evidence
 
-- `text.rs:8252::cxx_text_modifier_registers_valid_children_in_authored_order_across_clone`
-  constructs interleaved FollowPath -> Variation -> FollowPath children. It
-  observes the real occurrence owner as all `[5, 6, 7]`, shape `[6]`, and
-  follow-path `[5, 7]` on the source occurrence, a cold clone, and a clone after
-  static Text materialization. The immutable consumer descriptor has the same
-  all-modifier order.
-- `text.rs:8351::cxx_text_modifier_missing_group_omits_concrete_subclasses_without_late_rejection`
+- `text.rs:8272::cxx_text_modifier_registers_valid_children_in_authored_order_across_clone`
+  constructs two groups and interleaved FollowPath -> Variation -> FollowPath
+  children authored in group A. It writes all three generated `parentId`
+  properties to group B. The source occurrence and its actual static/render
+  topology stay frozen in A with all `[6, 7, 8]`, shape index `[1]`, and
+  follow-path `[6, 8]`; a cold clone and a clone after retained source topology
+  materialization reconstruct all three occurrence vectors and production
+  consumers in B.
+- `text.rs:8419::cxx_text_modifier_missing_group_omits_concrete_subclasses_without_late_rejection`
   constructs both instantiable subclass paths under a non-group Shape. For
   each, Artboard construction succeeds, Component parent linkage remains, the
   real sibling TextModifierGroup registration vectors stay empty, and static
@@ -94,6 +99,15 @@ Synthetic lifecycle evidence above is not promoted as additional consumers.
   3 passed.
 - Exact Wave B4 sole consumer: 1 passed.
 - `cargo check -p nuxie-runtime --lib`: passed with pre-existing warnings.
+
+## Correction after independent rejection `5ef496593`
+
+The rejected candidate retained correct occurrence vectors but left immutable
+graph children as the causal production owner. This correction routes every
+live `StaticTextSlice` construction through the occurrence vectors and keeps
+graph membership only as a bootstrap/support fallback. The two-group lifecycle
+evidence now distinguishes frozen source ownership from clone reconstruction
+through the same topology consumed by shaping and rendering.
 
 ## Honest adjacent residual
 

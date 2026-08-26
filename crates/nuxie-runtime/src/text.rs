@@ -142,18 +142,15 @@ pub(crate) fn static_text_target_debug_report(
     instance: &ArtboardInstance,
     text_local: usize,
 ) -> Vec<RuntimeTextTargetModifierDebugReport> {
-    let Some(text) =
-        component_for_local(graph, text_local).filter(|component| component.type_name == "Text")
-    else {
+    let Ok(slice) = StaticTextSlice::from_instance(runtime, graph, instance, text_local) else {
         return Vec::new();
     };
-    text.children
+    slice
+        .modifiers
         .iter()
-        .copied()
-        .filter(|local| type_for_local(graph, *local) == Some("TextModifierGroup"))
-        .filter_map(|group_local| component_for_local(graph, group_local))
         .flat_map(|group| {
-            group.children.iter().copied().filter_map(move |local| {
+            group.modifiers.iter().filter_map(move |modifier| {
+                let local = modifier.local_id();
                 let type_name = type_for_local(graph, local)?;
                 if !nuxie_schema::definition_by_name(type_name)
                     .is_some_and(|definition| definition.is_a("TextTargetModifier"))
@@ -191,7 +188,7 @@ pub(crate) fn static_text_layout_debug_report(
     text_local: usize,
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Option<RuntimeTextLayoutDebugReport> {
-    let slice = StaticTextSlice::from_graph(runtime, graph, text_local).ok()?;
+    let slice = StaticTextSlice::from_instance(runtime, graph, instance, text_local).ok()?;
     let resolved = slice.resolved_runs(runtime, instance).ok()?;
     let text = resolved
         .iter()
@@ -378,7 +375,7 @@ pub(crate) fn static_text_clip_bounds(
     text_local: usize,
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Result<Option<StaticTextClipBounds>> {
-    StaticTextSlice::from_graph(runtime, graph, text_local)?.clip_bounds(
+    StaticTextSlice::from_instance(runtime, graph, instance, text_local)?.clip_bounds(
         runtime,
         instance,
         layout_constraint,
@@ -394,7 +391,7 @@ pub(crate) fn static_text_caret_geometry(
     text_world: Mat2D,
     byte_offset: usize,
 ) -> Option<(RenderVec2D, RenderVec2D)> {
-    let slice = StaticTextSlice::from_graph(runtime, graph, text_local).ok()?;
+    let slice = StaticTextSlice::from_instance(runtime, graph, instance, text_local).ok()?;
     if !slice.text_geometry_supported(runtime, instance).ok()? {
         return None;
     }
@@ -413,7 +410,7 @@ pub(crate) fn static_text_hit(
     text_world: Mat2D,
     point: RenderVec2D,
 ) -> Option<usize> {
-    let slice = StaticTextSlice::from_graph(runtime, graph, text_local).ok()?;
+    let slice = StaticTextSlice::from_instance(runtime, graph, instance, text_local).ok()?;
     if !slice.text_geometry_supported(runtime, instance).ok()? {
         return None;
     }
@@ -432,7 +429,7 @@ pub(crate) fn static_text_selection_rects(
     text_world: Mat2D,
     range: std::ops::Range<usize>,
 ) -> Vec<RenderAabb> {
-    let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local) else {
+    let Ok(slice) = StaticTextSlice::from_instance(runtime, graph, instance, text_local) else {
         return Vec::new();
     };
     if !slice
@@ -461,7 +458,7 @@ pub(crate) fn static_text_value_run_hit(
     point: RenderVec2D,
     hit_radius: f32,
 ) -> bool {
-    let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local) else {
+    let Ok(slice) = StaticTextSlice::from_instance(runtime, graph, instance, text_local) else {
         return false;
     };
     if !slice
@@ -533,7 +530,7 @@ pub(crate) fn static_fixed_text_constraint_bounds(
     if !has_authored_run && !has_run_list_source {
         return Some((0.0, 0.0, 0.0, 0.0));
     }
-    if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
+    if let Ok(slice) = StaticTextSlice::from_instance(runtime, graph, instance, text_local)
         && matches!(slice.has_styled_text(runtime, instance), Ok(false))
     {
         return Some((0.0, 0.0, 0.0, 0.0));
@@ -626,7 +623,7 @@ pub(crate) fn runtime_text_draw_data(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Result<RuntimeTextDrawData> {
-    let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
+    let slice = StaticTextSlice::from_instance(runtime, graph, instance, text_local)?;
     runtime_text_draw_data_from_slice(
         &slice,
         runtime,
@@ -1797,6 +1794,24 @@ impl StaticTextSlice {
         graph: &ArtboardGraph,
         text_local: usize,
     ) -> Result<Self> {
+        Self::from_graph_with_occurrence(runtime, graph, None, text_local)
+    }
+
+    pub(crate) fn from_instance(
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        instance: &ArtboardInstance,
+        text_local: usize,
+    ) -> Result<Self> {
+        Self::from_graph_with_occurrence(runtime, graph, Some(instance), text_local)
+    }
+
+    fn from_graph_with_occurrence(
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        instance: Option<&ArtboardInstance>,
+        text_local: usize,
+    ) -> Result<Self> {
         let text_object = graph
             .local_objects
             .iter()
@@ -2086,7 +2101,12 @@ impl StaticTextSlice {
             .iter()
             .copied()
             .filter(|local| child_type(*local) == Some("TextModifierGroup"))
-            .map(|group_local| StaticTextModifierGroup::from_graph(runtime, graph, group_local))
+            .map(|group_local| match instance {
+                Some(instance) => {
+                    StaticTextModifierGroup::from_instance(runtime, graph, instance, group_local)
+                }
+                None => StaticTextModifierGroup::from_graph(runtime, graph, group_local),
+            })
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
@@ -8283,10 +8303,18 @@ mod tests {
                 )],
             ),
             fixture_record(
+                "TextModifierGroup",
+                vec![property(
+                    "TextModifierGroup",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
                 "TextFollowPathModifier",
                 vec![
                     property("TextFollowPathModifier", "parentId", FixtureValue::Uint(4)),
-                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(8)),
+                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(9)),
                 ],
             ),
             fixture_record(
@@ -8301,7 +8329,7 @@ mod tests {
                 "TextFollowPathModifier",
                 vec![
                     property("TextFollowPathModifier", "parentId", FixtureValue::Uint(4)),
-                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(8)),
+                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(9)),
                 ],
             ),
             fixture_record(
@@ -8312,24 +8340,12 @@ mod tests {
         .expect("valid TextModifier records import");
         let graphs = GraphFile::from_runtime_file(&runtime).expect("valid modifier graph builds");
         let graph = &graphs.artboards[0];
-        let instance = ArtboardInstance::from_graph(&runtime, graph)
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph)
             .expect("valid modifier occurrence constructs");
-        let cold_clone = instance.clone();
-        let slice = StaticTextSlice::from_graph(&runtime, graph, 1)
-            .expect("valid modifier Text materializes");
-        assert_eq!(slice.modifiers.len(), 1);
-        assert_eq!(
-            slice.modifiers[0]
-                .modifiers
-                .iter()
-                .map(StaticTextModifier::local_id)
-                .collect::<Vec<_>>(),
-            vec![5, 6, 7]
-        );
 
-        let registered_modifiers = |owner: &ArtboardInstance| {
+        let registered_modifiers = |owner: &ArtboardInstance, group_local| {
             let group = owner
-                .component(4)
+                .component(group_local)
                 .expect("modifier group occurrence")
                 .concrete
                 .text_modifier_group
@@ -8341,10 +8357,65 @@ mod tests {
                 group.follow_path_modifier_locals(),
             )
         };
-        let expected = (vec![5, 6, 7], vec![6], vec![5, 7]);
-        assert_eq!(registered_modifiers(&instance), expected);
-        assert_eq!(registered_modifiers(&cold_clone), expected);
-        assert_eq!(registered_modifiers(&instance.clone()), expected);
+        let production_topology = |owner: &ArtboardInstance| {
+            StaticTextSlice::from_instance(&runtime, graph, owner, 1)
+                .expect("occurrence Text topology materializes")
+                .modifiers
+                .iter()
+                .map(|group| {
+                    (
+                        group
+                            .modifiers
+                            .iter()
+                            .map(StaticTextModifier::local_id)
+                            .collect::<Vec<_>>(),
+                        group.shape_modifier_indices.clone(),
+                        group
+                            .follow_path_modifiers
+                            .iter()
+                            .map(|modifier| modifier.local_id)
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let source_a = (vec![6, 7, 8], vec![7], vec![6, 8]);
+        let empty = (Vec::new(), Vec::new(), Vec::new());
+        let source_topology = vec![(vec![6, 7, 8], vec![1], vec![6, 8]), empty.clone()];
+        assert_eq!(registered_modifiers(&instance, 4), source_a);
+        assert_eq!(registered_modifiers(&instance, 5), empty);
+        assert_eq!(production_topology(&instance), source_topology);
+
+        let parent_key = property_key_for_name("Component", "parentId")
+            .expect("Component.parentId property key");
+        for modifier_local in [6, 7, 8] {
+            assert!(instance.set_uint_property(modifier_local, parent_key, 5));
+        }
+
+        // Generated parentId writes do not rerun onAddedDirty on the source.
+        assert_eq!(registered_modifiers(&instance, 4), source_a);
+        assert_eq!(registered_modifiers(&instance, 5), empty);
+        assert_eq!(production_topology(&instance), source_topology);
+
+        // A cold clone copies generated fields and reconstructs occurrence
+        // registration, so all three production lists now belong to group B.
+        let cold_clone = instance.clone();
+        let clone_b = (vec![6, 7, 8], vec![7], vec![6, 8]);
+        let clone_topology = vec![
+            (Vec::new(), Vec::new(), Vec::new()),
+            (vec![6, 7, 8], vec![1], vec![6, 8]),
+        ];
+        assert_eq!(registered_modifiers(&cold_clone, 4), empty);
+        assert_eq!(registered_modifiers(&cold_clone, 5), clone_b);
+        assert_eq!(production_topology(&cold_clone), clone_topology);
+
+        instance
+            .retained_static_text_topology(&runtime, graph, 1)
+            .expect("source retained render topology materializes");
+        let materialized_clone = instance.clone();
+        assert_eq!(registered_modifiers(&materialized_clone, 4), empty);
+        assert_eq!(registered_modifiers(&materialized_clone, 5), clone_b);
+        assert_eq!(production_topology(&materialized_clone), clone_topology);
     }
 
     #[test]
@@ -8422,7 +8493,7 @@ mod tests {
                     .is_empty(),
                 "{modifier_type}"
             );
-            let slice = StaticTextSlice::from_graph(&runtime, graph, 1)
+            let slice = StaticTextSlice::from_instance(&runtime, graph, &instance, 1)
                 .unwrap_or_else(|error| panic!("{modifier_type} has no late rejection: {error:#}"));
             assert_eq!(slice.modifiers.len(), 1, "{modifier_type}");
             assert!(slice.modifiers[0].modifiers.is_empty(), "{modifier_type}");

@@ -19,7 +19,7 @@ pub(crate) fn build_static_text_constraint_bounds(
     text_local: usize,
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Option<(f32, f32, f32, f32)> {
-    if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local) {
+    if let Ok(slice) = StaticTextSlice::from_instance(runtime, graph, instance, text_local) {
         return build_static_text_constraint_bounds_from_slice(
             &slice,
             runtime,
@@ -64,7 +64,7 @@ pub(crate) fn static_text_layout_measure_bounds(
     {
         return Some(bounds);
     }
-    if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
+    if let Ok(slice) = StaticTextSlice::from_instance(runtime, graph, instance, text_local)
         && let Ok(Some(bounds)) =
             slice.measure_bounds_with_layout_constraint(runtime, instance, layout_constraint)
     {

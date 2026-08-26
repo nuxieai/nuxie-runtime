@@ -46,7 +46,78 @@ fn text_modifier_group_inverted_opacity(current: f32, amount: f32, opacity: f32)
 }
 
 impl StaticTextModifierGroup {
+    /// Imported-graph bootstrap used when no live occurrence exists. Live
+    /// shaping and rendering must use `from_instance`, whose membership is
+    /// retained by `TextModifier::onAddedDirty` on that occurrence.
     fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
+        let component = component_for_local(graph, local_id)
+            .with_context(|| format!("TextModifierGroup local {local_id} component is missing"))?;
+        let modifier_locals = component
+            .children
+            .iter()
+            .copied()
+            .filter(|child_local| type_for_local(graph, *child_local) != Some("TextModifierRange"))
+            .collect::<Vec<_>>();
+        let shape_modifier_locals = modifier_locals
+            .iter()
+            .copied()
+            .filter(|child_local| {
+                type_for_local(graph, *child_local).is_some_and(|type_name| {
+                    nuxie_schema::definition_by_name(type_name)
+                        .is_some_and(|definition| definition.is_a("TextShapeModifier"))
+                })
+            })
+            .collect::<Vec<_>>();
+        let follow_path_modifier_locals = modifier_locals
+            .iter()
+            .copied()
+            .filter(|child_local| {
+                type_for_local(graph, *child_local).is_some_and(|type_name| {
+                    nuxie_schema::definition_by_name(type_name)
+                        .is_some_and(|definition| definition.is_a("TextFollowPathModifier"))
+                })
+            })
+            .collect::<Vec<_>>();
+        Self::from_registered_locals(
+            runtime,
+            graph,
+            local_id,
+            &modifier_locals,
+            &shape_modifier_locals,
+            &follow_path_modifier_locals,
+        )
+    }
+
+    fn from_instance(
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        instance: &ArtboardInstance,
+        local_id: usize,
+    ) -> Result<Self> {
+        let state = instance
+            .component(local_id)
+            .and_then(|component| component.concrete.text_modifier_group.as_ref())
+            .with_context(|| {
+                format!("TextModifierGroup local {local_id} occurrence state is missing")
+            })?;
+        Self::from_registered_locals(
+            runtime,
+            graph,
+            local_id,
+            &state.modifier_locals(),
+            &state.shape_modifier_locals(),
+            &state.follow_path_modifier_locals(),
+        )
+    }
+
+    fn from_registered_locals(
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        modifier_locals: &[usize],
+        shape_modifier_locals: &[usize],
+        follow_path_modifier_locals: &[usize],
+    ) -> Result<Self> {
         let global_id = global_for_local(graph, local_id)?;
         let object = runtime
             .object(global_id as usize)
@@ -67,50 +138,60 @@ impl StaticTextModifierGroup {
                 | INVERT_OPACITY)
             != 0
         {
-            bail!(
-                "TextModifierGroup has unsupported modifier flags {flags}"
-            );
+            bail!("TextModifierGroup has unsupported modifier flags {flags}");
         }
 
         let component = component_for_local(graph, local_id)
             .with_context(|| format!("TextModifierGroup local {local_id} component is missing"))?;
         let mut ranges = Vec::new();
         let mut modifiers = Vec::new();
-        let mut shape_modifier_indices = Vec::new();
-        let mut follow_path_modifiers = Vec::new();
         for child_local in &component.children {
-            match type_for_local(graph, *child_local) {
-                Some("TextModifierRange") => {
-                    ranges.push(StaticTextModifierRange::from_graph(
-                        runtime,
-                        graph,
-                        *child_local,
-                    )?);
-                }
-                Some(type_name) => {
-                    let modifier = StaticTextModifier::from_group_child(
-                        runtime,
-                        graph,
-                        *child_local,
-                    )?
-                    .with_context(|| {
-                        format!(
-                            "static text subset does not support TextModifierGroup child {type_name}"
-                        )
-                    })?;
-                    if modifier.is_shape_modifier() {
-                        shape_modifier_indices.push(modifiers.len());
-                    }
-                    if let Some(follow_path) = modifier.follow_path() {
-                        follow_path_modifiers.push(follow_path.clone());
-                    }
-                    modifiers.push(modifier);
-                }
-                None => bail!(
-                    "static text subset does not support unknown TextModifierGroup child local {child_local}"
-                ),
+            if type_for_local(graph, *child_local) == Some("TextModifierRange") {
+                ranges.push(StaticTextModifierRange::from_graph(
+                    runtime,
+                    graph,
+                    *child_local,
+                )?);
             }
         }
+        for modifier_local in modifier_locals {
+            let type_name = type_for_local(graph, *modifier_local).with_context(|| {
+                format!("registered TextModifier local {modifier_local} has no type")
+            })?;
+            let modifier = StaticTextModifier::from_group_child(runtime, graph, *modifier_local)?
+                .with_context(|| {
+                    format!("static text subset does not support registered {type_name}")
+                })?;
+            modifiers.push(modifier);
+        }
+        let shape_modifier_indices = shape_modifier_locals
+            .iter()
+            .map(|shape_local| {
+                modifiers
+                    .iter()
+                    .position(|modifier| modifier.local_id() == *shape_local)
+                    .with_context(|| {
+                        format!(
+                            "shape TextModifier local {shape_local} is absent from occurrence registration"
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let follow_path_modifiers = follow_path_modifier_locals
+            .iter()
+            .map(|follow_local| {
+                modifiers
+                    .iter()
+                    .find(|modifier| modifier.local_id() == *follow_local)
+                    .and_then(StaticTextModifier::follow_path)
+                    .cloned()
+                    .with_context(|| {
+                        format!(
+                            "follow-path TextModifier local {follow_local} is absent from occurrence registration"
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             local_id,

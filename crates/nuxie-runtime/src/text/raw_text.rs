@@ -1028,7 +1028,7 @@ pub(crate) fn static_text_value(
     instance: &ArtboardInstance,
     text_local: usize,
 ) -> Option<String> {
-    let slice = StaticTextSlice::from_graph(runtime, graph, text_local).ok()?;
+    let slice = StaticTextSlice::from_instance(runtime, graph, instance, text_local).ok()?;
     let runs = slice.resolved_runs(runtime, instance).ok()?;
     Some(runs.into_iter().map(|run| run.text).collect())
 }

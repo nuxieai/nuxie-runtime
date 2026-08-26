@@ -11163,6 +11163,7 @@ impl RuntimeDrawableList {
         dirt: ComponentDirt,
         runtime: &RuntimeFile,
         graph: &ArtboardGraph,
+        instance: &ArtboardInstance,
     ) -> Option<RuntimeTextOnDirtyTargets> {
         let drawable_index = self.drawable_by_local.get(&local_id).copied()?;
         let drawable = self.drawables.get(drawable_index)?;
@@ -11172,7 +11173,9 @@ impl RuntimeDrawableList {
         let owner = drawable.text_draw_owner.as_ref()?;
         if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
             owner
-                .topology_or_build(|| StaticTextSlice::from_graph(runtime, graph, local_id))
+                .topology_or_build(|| {
+                    StaticTextSlice::from_instance(runtime, graph, instance, local_id)
+                })
                 .ok()?;
         }
         Some(owner.on_dirty_targets(dirt))
@@ -18049,7 +18052,7 @@ fn runtime_build_text_draw_frame(
                 .as_ref()
                 .context("live Text is missing its retained owner")?
                 .topology_or_build(|| {
-                    StaticTextSlice::from_graph(runtime, graph, drawable_local)
+                    StaticTextSlice::from_instance(runtime, graph, instance, drawable_local)
                 })?,
         )
     } else {
@@ -18372,7 +18375,9 @@ impl ArtboardInstance {
             .text_draw_owner
             .as_ref()?;
         owner
-            .topology_or_build(|| StaticTextSlice::from_graph(runtime, graph, text_local))
+            .topology_or_build(|| {
+                StaticTextSlice::from_instance(runtime, graph, self, text_local)
+            })
             .ok()
     }
 }

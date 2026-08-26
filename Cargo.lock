@@ -1800,6 +1800,8 @@ name = "silver-corpus"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "luaur-common",
+ "luaur-compiler",
  "luaur-rt",
  "luaur-vm",
  "nuxie",

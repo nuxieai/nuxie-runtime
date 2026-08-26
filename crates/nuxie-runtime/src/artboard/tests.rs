@@ -3567,6 +3567,25 @@
     }
 
     #[test]
+    fn upstream_in_update_phase_defaults_to_false() {
+        let instance = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
+            vec![0],
+        );
+        let component = instance
+            .script_component_handle_for_global(0)
+            .expect("production ScriptedDrawable owner");
+        assert!(
+            !instance
+                .objects
+                .component(component)
+                .and_then(|owner| owner.concrete.scripted.as_ref())
+                .expect("scripted component state")
+                .in_update_phase,
+        );
+    }
+
+    #[test]
     fn script_input_broadcast_updates_root_and_nested_occurrences() {
         let root_value = Rc::new(RefCell::new(ScriptValue::Number(1.0)));
         let nested_value = Rc::new(RefCell::new(ScriptValue::Number(1.0)));

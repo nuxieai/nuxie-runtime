@@ -979,6 +979,7 @@ pub(crate) struct RuntimeTextInputState {
 pub(crate) struct RuntimeTextState {
     bounds: Cell<Option<(f32, f32, f32, f32)>>,
     control_size: Cell<Option<(f32, f32, u64, u64, u64)>>,
+    modifier_group_locals: RefCell<Vec<usize>>,
     modifier_range_maps: RefCell<BTreeMap<usize, Vec<(usize, usize)>>>,
     modifier_range_indices: RefCell<BTreeMap<usize, [f32; 4]>>,
     #[cfg(test)]
@@ -1103,6 +1104,7 @@ impl RuntimeTextState {
         Self {
             bounds: Cell::new(None),
             control_size: Cell::new(None),
+            modifier_group_locals: RefCell::new(Vec::new()),
             modifier_range_maps: RefCell::new(BTreeMap::new()),
             modifier_range_indices: RefCell::new(BTreeMap::new()),
             #[cfg(test)]
@@ -1114,6 +1116,18 @@ impl RuntimeTextState {
 
     fn clone_for_occurrence(&self) -> Self {
         Self::new()
+    }
+
+    pub(crate) fn register_modifier_group(&self, group_local: usize) {
+        self.modifier_group_locals.borrow_mut().push(group_local);
+    }
+
+    pub(crate) fn clear_modifier_groups(&self) {
+        self.modifier_group_locals.borrow_mut().clear();
+    }
+
+    pub(crate) fn modifier_group_locals(&self) -> Vec<usize> {
+        self.modifier_group_locals.borrow().clone()
     }
 
     pub(crate) fn bounds(&self) -> Option<(f32, f32, f32, f32)> {

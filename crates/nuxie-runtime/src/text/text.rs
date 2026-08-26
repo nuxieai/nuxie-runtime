@@ -109,16 +109,13 @@ fn mark_shape_dirty_with_layout(
     ) {
         return false;
     }
-    let modifier_ranges = instance
+    let modifier_group_locals = instance
         .component(text_local_id)
+        .and_then(|component| component.concrete.text.as_ref())
+        .map(|text| text.modifier_group_locals())
+        .unwrap_or_default();
+    let modifier_ranges = modifier_group_locals
         .into_iter()
-        .flat_map(|text| text.children.iter())
-        .filter_map(|group| instance.component_local_id(*group))
-        .filter(|group_local| {
-            instance
-                .component(*group_local)
-                .is_some_and(|group| group.type_name == "TextModifierGroup")
-        })
         .map(|group_local| {
             let ranges = instance
                 .component(group_local)

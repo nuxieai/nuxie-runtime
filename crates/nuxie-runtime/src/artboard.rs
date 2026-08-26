@@ -1365,6 +1365,12 @@ impl ArtboardInstance {
     ) -> Result<()> {
         objects.reset_component_relations();
         for handle in objects.component_handles() {
+            if let Some(text) = objects
+                .component(*handle)
+                .and_then(|component| component.concrete.text.as_ref())
+            {
+                text.clear_modifier_groups();
+            }
             if let Some(group) = objects
                 .component(*handle)
                 .and_then(|component| component.concrete.text_modifier_group.as_ref())
@@ -1428,19 +1434,22 @@ impl ArtboardInstance {
                             modifier_definition.is_a("TextFollowPathModifier"),
                         );
                 }
-                // TextModifierGroup::onAddedDirty runs its Component base
-                // callback before requiring the direct parent to be a Text.
-                // Keep that validation at this authored construction boundary
-                // so a malformed occurrence never becomes usable.
+                // `TextModifierGroup::onAddedDirty` runs after Component Super.
+                // A direct Text parent owns the successful registration;
+                // MissingObject otherwise preserves the generic parent link
+                // and Artboard construction continues.
                 if definition_by_name(component.type_name)
                     .is_some_and(|definition| definition.is_a("TextModifierGroup"))
-                    && !definition_by_name(parent_type)
-                        .is_some_and(|definition| definition.is_a("Text"))
                 {
-                    anyhow::bail!(
-                        "TextModifierGroup local {} requires a direct Text parent",
-                        component.local_id
-                    );
+                    if definition_by_name(parent_type)
+                        .is_some_and(|definition| definition.is_a("Text"))
+                    {
+                        objects
+                            .component_mut(parent)
+                            .and_then(|parent| parent.concrete.text.as_ref())
+                            .expect("Text occurrence state")
+                            .register_modifier_group(component.local_id);
+                    }
                 }
                 if definition_by_name(component.type_name)
                     .is_some_and(|definition| definition.is_a("TextModifierRange"))
@@ -2186,6 +2195,29 @@ impl ArtboardInstance {
                 objects.add_dependent(target, handle);
             }
 
+            // `TextFollowPathModifier::buildDependencies` resolves its Text
+            // through the occurrence-owned modifier -> group -> Text chain.
+            // Rebuild this edge rather than consuming the immutable graph
+            // projection so clone construction observes copied parentId
+            // fields, including edges that are newly valid or newly absent.
+            if definition_by_name(component.type_name)
+                .is_some_and(|definition| definition.is_a("TextFollowPathModifier"))
+                && let Some(group) = objects
+                    .component(handle)
+                    .and_then(|modifier| modifier.parent)
+                && objects
+                    .component(group)
+                    .and_then(|group| definition_by_name(group.type_name))
+                    .is_some_and(|definition| definition.is_a("TextModifierGroup"))
+                && let Some(text) = objects.component(group).and_then(|group| group.parent)
+                && objects
+                    .component(text)
+                    .and_then(|text| definition_by_name(text.type_name))
+                    .is_some_and(|definition| definition.is_a("Text"))
+            {
+                objects.add_dependent(handle, text);
+            }
+
             // Mesh::buildDependencies adds Skin before its explicit parent
             // edge (`src/shapes/mesh.cpp:152-160`).
             if component.type_name == "Mesh" {
@@ -2256,6 +2288,7 @@ impl ArtboardInstance {
                     | nuxie_graph::DependencyKind::FollowPathConstraintParent
                     | nuxie_graph::DependencyKind::FollowPathConstraintTargetPathComposer
                     | nuxie_graph::DependencyKind::FollowPathConstraintTargetPath
+                    | nuxie_graph::DependencyKind::TextFollowPathModifierText
             ) {
                 continue;
             }

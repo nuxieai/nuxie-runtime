@@ -475,18 +475,10 @@ fn modifier_group_text(instance: &ArtboardInstance, group_local: usize) -> Optio
 }
 
 fn group_has_shape_modifier(instance: &ArtboardInstance, group_local: usize) -> bool {
-    let Some(group) = instance.component(group_local) else {
-        return false;
-    };
-    group.children.iter().any(|child| {
-        instance
-            .component_local_id(*child)
-            .and_then(|local| instance.component(local))
-            .is_some_and(|component| {
-                nuxie_schema::definition_by_name(component.type_name)
-                    .is_some_and(|definition| definition.is_a("TextShapeModifier"))
-            })
-    })
+    instance
+        .component(group_local)
+        .and_then(|component| component.concrete.text_modifier_group.as_ref())
+        .is_some_and(|group| !group.shape_modifier_locals().is_empty())
 }
 
 fn range_changed(instance: &mut ArtboardInstance, range_local: usize, path_only: bool) -> bool {

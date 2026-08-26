@@ -61,3 +61,26 @@ topology remains 4 / 3 / 11. `cargo test -p nuxie-runtime --lib
 cxx_text_modifier_group_requires_a_direct_text_parent -- --nocapture` passed
 (1 test), and correction-range `git diff --check` was clean. Pre-existing user
 worktree changes remained unstaged.
+
+## Acceptance reopened by later lifecycle authority
+
+The acceptance above is superseded. The later complete `TextModifier` audit
+read the pinned Artboard continuation owner and established that
+`MissingObject` continues construction; only `InvalidObject` aborts. Therefore
+the hard failure accepted in `cbe97cab6` was itself a mistranslation.
+
+The reopened author candidate removes that hard failure, gives each Text
+occurrence a fresh authored-order modifier-group registration vector, and makes
+live Text topology and follow-path dependencies consume occurrence relations.
+Its evidence covers valid A-to-B live `parentId` freeze plus clone
+re-registration, valid-to-malformed dependency removal, malformed-to-valid
+dependency creation, and malformed `Text -> Shape -> TextModifierGroup`
+continuation with generic linkage and child modifier registration retained but
+no Text membership or callback dirt. The historical review above remains as an
+audit trail, not current acceptance; the reopened correction requires
+independent review.
+
+The consumer denominator is also corrected from 13 to 12: `text_test.cpp` #9
+contains no TextModifierGroup and was previously included by mistake. Outcomes
+do not move; the pair topology is four pass, two executable expected-red, and
+six pending.

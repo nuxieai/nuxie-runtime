@@ -5,6 +5,12 @@ Authority is pinned at
 `docs/runtime-exact-parity-workflow-correction.md`; it does not inherit a
 file-level mapped/faithful label and is not independently accepted.
 
+This pair was reopened after the later complete `TextModifier` lifecycle audit
+proved that the earlier accepted hard failure for `MissingObject` contradicted
+the pinned Artboard continuation rule. The lifecycle correction below replaces
+that false acceptance; the source-pair denominator and consumer outcomes are
+unchanged.
+
 ## Frozen denominator
 
 - `src/text/text_modifier_group.cpp`: 412 lines, 10,780 bytes, SHA-256
@@ -38,13 +44,13 @@ means a concrete source discrepancy remains.
 | # | Pinned body | Source contract | Concrete Rust owner | Candidate disposition |
 |---:|---|---|---|---|
 | 1 | `textComponent` (13) | Return the parent only when it is a `Text`; otherwise null. | `text/text_modifier_group.rs:368::modifier_group_text` | **exact value under occurrence adaptation** |
-| 2 | `onAddedDirty` (22) | Run `Super`; on success register with a direct `Text` parent, otherwise `MissingObject`. | construction validation after the base parent link `artboard.rs:1361::ArtboardInstance::build_component_occurrence_relations`, specifically 1400-1416; authored collection `text.rs:2099-2105::StaticTextSlice::from_graph` | **adapted correction candidate**: runtime construction replaces pointer registration and rejects a non-Text parent immediately after the Component base relation is retained, before a usable `ArtboardInstance` exists. |
+| 2 | `onAddedDirty` (22) | Run `Super`; on success register with a direct `Text` parent, otherwise `MissingObject`. | `artboard.rs::ArtboardInstance::build_component_occurrence_relations`; occurrence owner `components.rs::RuntimeTextState::modifier_group_locals`; live consumer `text.rs::StaticTextSlice::from_graph_with_occurrence` | **adapted correction candidate**: Component Super always retains a valid generic parent. A direct Text parent then appends the group to that Text occurrence; a non-Text parent returns the equivalent of `MissingObject`, omits Text registration, and Artboard construction continues. Live `parentId` writes freeze source registration; clone construction rebuilds it from copied generated fields. |
 | 3 | `addModifierRange` (39) | Append range in callback/child order. | `text/text_modifier_group.rs:49::StaticTextModifierGroup::from_graph`, range branch 84-90 | **exact order under immutable descriptor adaptation** |
-| 4 | `addModifier` (44) | Append every modifier; additionally append shape and follow-path subtypes in the same order. | Occurrence owner `components.rs:1007::RuntimeTextModifierGroupState`; authored construction at `artboard.rs:1412-1430`; immutable rendering descriptor at `text/text_modifier_group.rs:79-105::StaticTextModifierGroup::from_graph`; subtype owner `text/text_modifier.rs:12::StaticTextModifier` | **corrected exact under retained-local-ID/immutable-descriptor adaptation**: all three occurrence vectors are fresh and rebuilt in authored order on clone; rendering consumes the equivalent frozen descriptor topology. |
+| 4 | `addModifier` (44) | Append every modifier; additionally append shape and follow-path subtypes in the same order. | occurrence owner `components.rs::RuntimeTextModifierGroupState`; construction `artboard.rs::ArtboardInstance::build_component_occurrence_relations`; consumer `text/text_modifier_group.rs::StaticTextModifierGroup::from_instance`; shape query `text/text_modifier_group.rs::group_has_shape_modifier` | **corrected exact under retained-local-ID/immutable-descriptor adaptation**: all three occurrence vectors are fresh and rebuilt in authored order on clone; every live rendering/callback consumer reads the occurrence vectors. |
 | 5 | `rangeTypeChanged` (57) | `Text::modifierShapeDirty`, then add group `TextCoverage`. | `text/text_modifier_group.rs:394::range_changed(path_only=true)`; dispatch `449::text_modifier_group_uint_property_changed` | **exact supported callback/order** |
 | 6 | `shapeModifierChanged` (63) | Invoke `Text::markShapeDirty()` only. | `text/text_variation_modifier.rs:60::text_variation_modifier_double_property_changed` -> `text/text.rs:57::mark_shape_dirty` | **exact correction candidate**: removed the prior premature group-coverage publication. |
 | 7 | `rangeChanged` (68) | Shape group -> `modifierShapeDirty`; paint-only group -> paint dirt; then group `TextCoverage`. | `text/text_modifier_group.rs:379::group_has_shape_modifier`, `394::range_changed`; double/bool/uint dispatch at 417/438/449 | **exact supported callback/order** |
-| 8 | `clearRangeMaps` (86) | Clear every range map in order, then add group `TextCoverage`. | occurrence state `components.rs:1076::RuntimeTextState::clear_modifier_range_map`; ordered owner `text/text.rs:99::mark_shape_dirty_with_layout` | **adapted/exact retained state and order** |
+| 8 | `clearRangeMaps` (86) | Clear every range map in order, then add group `TextCoverage`. | occurrence state `components.rs::RuntimeTextState::clear_modifier_range_map`; ordered owner `text/text.rs::mark_shape_dirty_with_layout`, whose group order comes from `RuntimeTextState::modifier_group_locals` | **adapted/exact retained state and order** |
 | 9 | `computeRangeMap` (95) | Visit every range in order with current text, shape, lines, and glyph lookup. | `text/text_modifier_group.rs:332::coverage_by_character` -> `text/text_modifier_range.rs:96::apply_coverage` and `195::range_units` | **adapted/incomplete**: lazy range materialization replaces the explicit phase; line-unit ranges do not receive the pinned pre-shape wrapped-line stream (see row 28). |
 | 10 | `computeCoverage` (107) | Dirt guard; clear own dirt; resize/zero retained coverage; apply every range in order. | `text/text_modifier_group.rs:332::coverage_by_character` | **adapted**: returns a freshly zeroed occurrence value on each consumer rebuild rather than retaining `m_coverage`/self-clearing non-DAG dirt; range application order is preserved. |
 | 11 | `glyphCoverage` (127) | Assert at least one code point, sum retained per-character coverage, divide by count. | `text/glyph_lookup.rs:13::glyph_coverage`; call `text.rs:2600` | **exact on the live valid glyph domain under checked-slice adaptation** |
@@ -89,14 +95,20 @@ rotation `0`; opacity and both scales `1`. Runtime property reads in
 those same defaults. Generic setters retain the pinned no-op-on-equal contract
 before dispatching the callbacks in rows 16-24.
 
-The C++ vectors `m_ranges`, `m_modifiers`, `m_shapeModifiers`, and
-`m_followPathModifiers` map to the four authored-order vectors on
-`StaticTextModifierGroup`. `m_coverage` is reconstructed as an occurrence
-value by `coverage_by_character`; range-map identity remains occurrence-owned
-in `components.rs:982::RuntimeTextState::modifier_range_maps`. The variable
-font, coordinate, and next-run scratch vectors map to the immutable shaping
-stream in rows 26-27. This representation is explicit adaptation, not literal
-pointer or allocation identity.
+The C++ `Text::m_modifierGroups` vector maps to the fresh per-occurrence
+`RuntimeTextState::modifier_group_locals`. The group vectors `m_modifiers`,
+`m_shapeModifiers`, and `m_followPathModifiers` map to the corresponding fresh
+per-occurrence vectors on `RuntimeTextModifierGroupState`; live slice,
+shape-dirt, range callback, and retained draw owners consume those occurrence
+registrations. The immutable graph-child scan in
+`StaticTextSlice::from_graph_with_occurrence` is bootstrap/support behavior only.
+`m_ranges` remains represented by the authored-order immutable range descriptors.
+`m_coverage` is reconstructed as an occurrence value by
+`coverage_by_character`; range-map identity remains occurrence-owned in
+`RuntimeTextState::modifier_range_maps`. The variable font, coordinate, and
+next-run scratch vectors map to the immutable shaping stream in rows 26-27.
+This representation is explicit adaptation, not literal pointer or allocation
+identity.
 
 ## Corrections and evidence
 
@@ -108,15 +120,21 @@ This candidate makes five source-proven corrections:
 3. inverted opacity retains its distinct pinned finite contraction;
 4. `TextVariationModifier::axisValueChanged` reaches the single pinned
    `markShapeDirty` sequence without premature group dirt; and
-5. a modifier group without a direct Text parent is rejected during
-   `ArtboardInstance` construction, immediately after the base Component parent
-   relation is retained and before a usable occurrence is returned.
+5. `Text::addModifierGroup` now has a fresh occurrence-owned authored-order
+   registration vector. A valid direct Text parent registers after Component
+   Super; a non-Text parent preserves generic linkage but omits Text
+   registration and continues as pinned `MissingObject`. Live `parentId`
+   writes freeze the source relation, while cold and materialized clones rebuild
+   from the copied field. Live Text topology, shape-dirt, and follow-path
+   dependency consumers now read occurrence relations rather than immutable
+   graph children/edges.
 
 Focused actual-owner evidence:
 
 - `text.rs::cxx_successive_modifier_groups_restart_from_the_authored_style_font`;
 - `text.rs::cxx_text_modifier_group_retains_pinned_scale_and_inverted_opacity_contractions`;
-- `text.rs::cxx_text_modifier_group_requires_a_direct_text_parent`;
+- `text.rs::cxx_text_modifier_group_missing_text_preserves_super_without_text_registration`;
+- `text.rs::cxx_text_modifier_group_live_parent_write_freezes_source_and_clone_reregisters`;
 - existing callback/state evidence
   `text.rs::d_st_variation_splits_coverage_and_applies_duplicate_unclamped_interpolation`;
 - retained range/order evidence
@@ -128,7 +146,7 @@ Focused actual-owner evidence:
 
 ## Upstream consumer topology
 
-Thirteen material upstream cases consume this pair. They remain separated from
+Twelve material upstream cases consume this pair. They remain separated from
 the focused source evidence above:
 
 - four executable pass: `listener_align_target_test.cpp` #1/#2 incidentally,
@@ -137,12 +155,14 @@ the focused source evidence above:
 - two executable expected-red: `serialized_rendering_test.cpp` #12 (rewards)
   and #15 (hunter). Both freeze at earlier blend-mode differences, so the scale
   correction does not move their first divergence;
-- seven pending: `serialized_rendering_test.cpp` #11,
-  `text_modifier_test.cpp` #1/#2, and `text_test.cpp` #9/#10/#11/#13. The
+- six pending: `serialized_rendering_test.cpp` #11,
+  `text_modifier_test.cpp` #1/#2, and `text_test.cpp` #10/#11/#13. The
   inverted-opacity correction is consumed by pending modifier #2 and Text #13;
   range cases remain blocked by H27 rather than promoted through a proxy.
 
-The complete pair remains **not exact** because row 28 is red. No
-upstream consumer moved in this atomic unit. The broader Text topology likewise
-remains five pass, three executable expected-red, and 10 pending. Focused
-source evidence is not counted as consumer promotion.
+`text_test.cpp` #9 was removed from the previous denominator because its
+fixture contains no TextModifierGroup. This is a denominator correction, not a
+consumer outcome movement. The complete pair remains **not exact** because row
+28 is red. No upstream consumer moved in this atomic unit. The broader Text
+topology likewise remains five pass, three executable expected-red, and 10
+pending. Focused source evidence is not counted as consumer promotion.

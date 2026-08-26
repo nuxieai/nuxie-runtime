@@ -2096,11 +2096,21 @@ impl StaticTextSlice {
         for style_local in style_locals {
             styles.push(StaticTextStyle::from_graph(runtime, graph, style_local)?);
         }
-        let modifiers = text_component
-            .children
-            .iter()
-            .copied()
-            .filter(|local| child_type(*local) == Some("TextModifierGroup"))
+        let modifier_group_locals = match instance {
+            Some(instance) => instance
+                .component(text_local)
+                .and_then(|component| component.concrete.text.as_ref())
+                .context("Text occurrence state is missing")?
+                .modifier_group_locals(),
+            None => text_component
+                .children
+                .iter()
+                .copied()
+                .filter(|local| child_type(*local) == Some("TextModifierGroup"))
+                .collect(),
+        };
+        let modifiers = modifier_group_locals
+            .into_iter()
             .map(|group_local| match instance {
                 Some(instance) => {
                     StaticTextModifierGroup::from_instance(runtime, graph, instance, group_local)
@@ -8246,26 +8256,333 @@ mod tests {
     }
 
     #[test]
-    fn cxx_text_modifier_group_requires_a_direct_text_parent() {
+    fn cxx_text_modifier_group_missing_text_preserves_super_without_text_registration() {
         let runtime = RuntimeFile::from_fixture_records(vec![
             fixture_record("Backboard", Vec::new()),
             fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("malformed group".to_owned()),
+                    ),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                ],
+            ),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(1))],
+            ),
             fixture_record(
                 "TextModifierGroup",
                 vec![property(
                     "TextModifierGroup",
                     "parentId",
-                    FixtureValue::Uint(0),
+                    FixtureValue::Uint(4),
                 )],
+            ),
+            fixture_record(
+                "TextVariationModifier",
+                vec![property(
+                    "TextVariationModifier",
+                    "parentId",
+                    FixtureValue::Uint(5),
+                )],
+            ),
+            fixture_record(
+                "TextFollowPathModifier",
+                vec![
+                    property("TextFollowPathModifier", "parentId", FixtureValue::Uint(5)),
+                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(4)),
+                ],
             ),
         ])
         .expect("malformed modifier-group records import");
         let graphs = GraphFile::from_runtime_file(&runtime).expect("malformed graph builds");
-        let error = match ArtboardInstance::from_graph(&runtime, &graphs.artboards[0]) {
-            Ok(_) => panic!("malformed TextModifierGroup must fail runtime construction"),
-            Err(error) => error,
+        let graph = &graphs.artboards[0];
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph)
+            .expect("TextModifierGroup MissingObject permits construction");
+
+        assert_eq!(instance.component_parent_local(5), Some(4));
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text occurrence state")
+                .modifier_group_locals(),
+            Vec::<usize>::new()
+        );
+        let malformed_group = instance
+            .component(5)
+            .and_then(|component| component.concrete.text_modifier_group.as_ref())
+            .expect("group occurrence state remains available");
+        assert_eq!(malformed_group.modifier_locals(), vec![6, 7]);
+        assert_eq!(malformed_group.shape_modifier_locals(), vec![6]);
+        assert_eq!(malformed_group.follow_path_modifier_locals(), vec![7]);
+        assert_eq!(text_target_modifier_text_component(&instance, 7), None);
+        assert!(
+            instance
+                .retained_static_text_topology(&runtime, graph, 1)
+                .expect("Text retained topology")
+                .modifiers
+                .is_empty()
+        );
+
+        instance.clear_component_dirt(1);
+        let flags = property_key_for_name("TextModifierGroup", "modifierFlags")
+            .expect("TextModifierGroup.modifierFlags property key");
+        assert!(instance.set_uint_property(5, flags, 1 << 4));
+        assert_eq!(
+            instance.debug_component_dirt(1),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+
+        let clone = instance.clone();
+        assert_eq!(
+            clone
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("clone Text occurrence state")
+                .modifier_group_locals(),
+            Vec::<usize>::new()
+        );
+        let clone_group = clone
+            .component(5)
+            .and_then(|component| component.concrete.text_modifier_group.as_ref())
+            .expect("clone group occurrence state");
+        assert_eq!(clone_group.modifier_locals(), vec![6, 7]);
+        assert_eq!(clone_group.shape_modifier_locals(), vec![6]);
+        assert_eq!(clone_group.follow_path_modifier_locals(), vec![7]);
+
+        let parent_key = property_key_for_name("Component", "parentId")
+            .expect("Component.parentId property key");
+        assert!(instance.set_uint_property(5, parent_key, 1));
+        assert_eq!(instance.component_parent_local(5), Some(4));
+        assert_eq!(text_target_modifier_text_component(&instance, 7), None);
+        let mut recovered_clone = instance.clone();
+        assert_eq!(recovered_clone.component_parent_local(5), Some(1));
+        assert_eq!(
+            recovered_clone
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("recovered clone Text occurrence")
+                .modifier_group_locals(),
+            vec![5]
+        );
+        assert_eq!(
+            text_target_modifier_text_component(&recovered_clone, 7),
+            Some(1)
+        );
+        for local in [1, 7] {
+            recovered_clone.clear_component_dirt(local);
+        }
+        assert!(recovered_clone.add_dirt(7, crate::components::ComponentDirt::PATH, true));
+        assert!(
+            recovered_clone
+                .debug_component_dirt(1)
+                .is_some_and(|dirt| dirt.contains(crate::components::ComponentDirt::PATH))
+        );
+    }
+
+    #[test]
+    fn cxx_text_modifier_group_live_parent_write_freezes_source_and_clone_reregisters() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property("TextValueRun", "text", FixtureValue::String("A".to_owned())),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                ],
+            ),
+            fixture_record(
+                "TextModifierGroup",
+                vec![property(
+                    "TextModifierGroup",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
+                "TextVariationModifier",
+                vec![property(
+                    "TextVariationModifier",
+                    "parentId",
+                    FixtureValue::Uint(4),
+                )],
+            ),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(6),
+                )],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(6)),
+                    property("TextValueRun", "text", FixtureValue::String("B".to_owned())),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(7)),
+                ],
+            ),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(0))],
+            ),
+            fixture_record(
+                "TextFollowPathModifier",
+                vec![
+                    property("TextFollowPathModifier", "parentId", FixtureValue::Uint(4)),
+                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(9)),
+                ],
+            ),
+        ])
+        .expect("two-Text modifier-group records import");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("two-Text graph builds");
+        let graph = &graphs.artboards[0];
+        let mut source = ArtboardInstance::from_graph(&runtime, graph)
+            .expect("source modifier-group occurrence constructs");
+        let registered_groups = |owner: &ArtboardInstance, text_local| {
+            owner
+                .component(text_local)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text occurrence state")
+                .modifier_group_locals()
         };
-        assert!(error.to_string().contains("requires a direct Text parent"));
+        let retained_groups = |owner: &ArtboardInstance, text_local| {
+            owner
+                .retained_static_text_topology(&runtime, graph, text_local)
+                .expect("retained Text topology")
+                .modifiers
+                .iter()
+                .map(|group| group.local_id)
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(registered_groups(&source, 1), vec![4]);
+        assert_eq!(registered_groups(&source, 6), Vec::<usize>::new());
+        let parent_key = property_key_for_name("Component", "parentId")
+            .expect("Component.parentId property key");
+        assert!(source.set_uint_property(4, parent_key, 6));
+
+        // Generated writes do not rerun onAddedDirty on the live source.
+        assert_eq!(source.component_parent_local(4), Some(1));
+        assert_eq!(registered_groups(&source, 1), vec![4]);
+        assert_eq!(registered_groups(&source, 6), Vec::<usize>::new());
+        for local in [1, 6, 10] {
+            source.clear_component_dirt(local);
+        }
+        assert!(source.add_dirt(10, crate::components::ComponentDirt::PATH, true));
+        assert!(
+            source
+                .debug_component_dirt(1)
+                .is_some_and(|dirt| dirt.contains(crate::components::ComponentDirt::PATH))
+        );
+        assert_eq!(
+            source.debug_component_dirt(6),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+
+        let cold_clone = source.clone();
+        assert_eq!(registered_groups(&cold_clone, 1), Vec::<usize>::new());
+        assert_eq!(registered_groups(&cold_clone, 6), vec![4]);
+        assert_eq!(retained_groups(&cold_clone, 1), Vec::<usize>::new());
+        assert_eq!(retained_groups(&cold_clone, 6), vec![4]);
+        let mut dependency_clone = cold_clone.clone();
+        for local in [1, 6, 10] {
+            dependency_clone.clear_component_dirt(local);
+        }
+        assert!(dependency_clone.add_dirt(10, crate::components::ComponentDirt::PATH, true));
+        assert_eq!(
+            dependency_clone.debug_component_dirt(1),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+        assert!(
+            dependency_clone
+                .debug_component_dirt(6)
+                .is_some_and(|dirt| dirt.contains(crate::components::ComponentDirt::PATH))
+        );
+
+        assert_eq!(retained_groups(&source, 1), vec![4]);
+        assert_eq!(retained_groups(&source, 6), Vec::<usize>::new());
+        let mut materialized_clone = source.clone();
+        materialized_clone.clear_component_dirt(6);
+        materialized_clone
+            .runtime_drawables
+            .clear_text_on_dirty_trace(6);
+        assert!(materialized_clone.add_dirt(
+            6,
+            crate::components::ComponentDirt::WORLD_TRANSFORM,
+            false,
+        ));
+        assert_eq!(retained_groups(&materialized_clone, 1), Vec::<usize>::new());
+        assert_eq!(retained_groups(&materialized_clone, 6), vec![4]);
+        assert!(
+            materialized_clone
+                .runtime_drawables
+                .text_on_dirty_trace(6)
+                .iter()
+                .all(|(_, action)| matches!(
+                    action,
+                    crate::draw::RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 4,
+                        follows_path: true
+                    }
+                ))
+        );
+        assert!(
+            !materialized_clone
+                .runtime_drawables
+                .text_on_dirty_trace(6)
+                .is_empty()
+        );
+
+        assert!(source.set_uint_property(4, parent_key, 9));
+        let mut removed_clone = source.clone();
+        assert_eq!(registered_groups(&removed_clone, 1), Vec::<usize>::new());
+        assert_eq!(registered_groups(&removed_clone, 6), Vec::<usize>::new());
+        assert_eq!(
+            text_target_modifier_text_component(&removed_clone, 10),
+            None
+        );
+        for local in [1, 6, 10] {
+            removed_clone.clear_component_dirt(local);
+        }
+        assert!(removed_clone.add_dirt(10, crate::components::ComponentDirt::PATH, true));
+        assert_eq!(
+            removed_clone.debug_component_dirt(1),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+        assert_eq!(
+            removed_clone.debug_component_dirt(6),
+            Some(crate::components::ComponentDirt::NONE)
+        );
     }
 
     #[test]

@@ -536,7 +536,7 @@ fn wave_c9_event_008_timeline_events_load_and_report() {
     assert_eq!(event.name(), Some("Half"));
     let actual = f64::from(event.seconds_delay());
     let expected = f64::from(0.1f32);
-    let relative_margin = f64::from(100.0 * f32::EPSILON * 0.1f32.abs());
+    let relative_margin = f64::from(f32::EPSILON) * 100.0 * expected.abs();
     assert!((actual - expected).abs() <= relative_margin);
 }
 

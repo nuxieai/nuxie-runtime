@@ -47,7 +47,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_b5_hittest.rs",
-          "line": 119,
+          "line": 165,
           "symbol": "wave_b5_hittest_basics"
         }
       ],
@@ -65,7 +65,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_b5_hittest.rs",
-          "line": 144,
+          "line": 190,
           "symbol": "wave_b5_hittest_mesh"
         }
       ],
@@ -83,7 +83,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_b5_hittest.rs",
-          "line": 153,
+          "line": 199,
           "symbol": "wave_b5_hit_test_on_opaque_target"
         }
       ],
@@ -101,11 +101,11 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_b5_hittest.rs",
-          "line": 175,
+          "line": 221,
           "symbol": "wave_b5_hit_test_on_opaque_nested_artboard"
         }
       ],
-      "note": "Imports the exact nested-artboard fixture, resolves the live parent and nested boolean inputs, and executes the pinned pointer sequence until the 301px boundary assertion exposes the incorrect owner hit.",
+      "note": "Imports the exact nested-artboard fixture, retains nestedAnimations()[0] as the exact nested state-machine owner, preserves outer artboard then state-machine initialization, asserts the nested bool false at the pinned post-initialization point, and executes the pointer sequence until the 301px boundary assertion exposes the incorrect owner hit.",
       "expected_red_reason": "expected-red: pointer down at x=301 toggles second-gray-toggle outside the 300px opaque nested-artboard bounds"
     },
     {
@@ -120,7 +120,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_b5_hittest.rs",
-          "line": 209,
+          "line": 246,
           "symbol": "wave_b5_early_out_on_listeners"
         }
       ],
@@ -139,7 +139,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_b5_hittest.rs",
-          "line": 218,
+          "line": 255,
           "symbol": "wave_b5_click_event"
         }
       ],
@@ -157,7 +157,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/state_machine_instance/tests/wave_b5_hittest.rs",
-          "line": 247,
+          "line": 284,
           "symbol": "wave_b5_multiple_shapes_with_mouse_movement_behavior"
         }
       ],

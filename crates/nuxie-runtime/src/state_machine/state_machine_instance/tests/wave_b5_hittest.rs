@@ -80,28 +80,74 @@ fn current_animation_name<'a>(
         .as_deref()
 }
 
-fn nested_bool_input(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NestedStateMachineOwner {
+    host_local_id: usize,
+    occurrence_local_id: usize,
+    animation_id: usize,
+    state_machine_index: usize,
+}
+
+fn first_nested_state_machine_owner(
     artboard: &ArtboardInstance,
     host_name: &str,
-    input_name: &str,
-) -> Option<bool> {
+) -> NestedStateMachineOwner {
     let host_local = artboard
         .slots()
         .iter()
-        .find(|slot| slot.name.as_deref() == Some(host_name))?
+        .find(|slot| slot.name.as_deref() == Some(host_name))
+        .unwrap_or_else(|| panic!("nested artboard slot {host_name}"))
         .local_id;
-    artboard
+    let nested = artboard
         .nested_artboards
-        .get(&host_local)?
-        .animations
-        .iter()
-        .find_map(|animation| match animation {
-            crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) => occurrence
-                .state_machine()
-                .and_then(|machine| machine.get_bool(input_name))
-                .and_then(|input| input.bool_value()),
-            _ => None,
-        })
+        .get(&host_local)
+        .unwrap_or_else(|| panic!("nested artboard {host_name}"));
+    let occurrence = match nested.animations.first().expect("nestedAnimations()[0]") {
+        crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) => occurrence,
+        _ => panic!("nestedAnimations()[0] is not a NestedStateMachine"),
+    };
+    let state_machine = occurrence
+        .state_machine()
+        .expect("nestedAnimations()[0] has a StateMachineInstance");
+    NestedStateMachineOwner {
+        host_local_id: host_local,
+        occurrence_local_id: occurrence.local_id(),
+        animation_id: occurrence.animation_id(),
+        state_machine_index: state_machine.state_machine_index(),
+    }
+}
+
+fn nested_bool_input(
+    artboard: &ArtboardInstance,
+    owner: NestedStateMachineOwner,
+    input_name: &str,
+) -> bool {
+    let nested = artboard
+        .nested_artboards
+        .get(&owner.host_local_id)
+        .expect("retained nested-artboard owner");
+    let occurrence = match nested.animations.first().expect("nestedAnimations()[0]") {
+        crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) => occurrence,
+        _ => panic!("retained nestedAnimations()[0] changed owner kind"),
+    };
+    let state_machine = occurrence
+        .state_machine()
+        .expect("retained nested StateMachineInstance");
+    assert_eq!(
+        NestedStateMachineOwner {
+            host_local_id: owner.host_local_id,
+            occurrence_local_id: occurrence.local_id(),
+            animation_id: occurrence.animation_id(),
+            state_machine_index: state_machine.state_machine_index(),
+        },
+        owner,
+        "nestedAnimations()[0] retains the exact selected owner",
+    );
+    state_machine
+        .get_bool(input_name)
+        .unwrap_or_else(|| panic!("nested bool input {input_name}"))
+        .bool_value()
+        .unwrap_or_else(|| panic!("nested bool input {input_name} value"))
 }
 
 fn retained_early_out_count(
@@ -175,13 +221,10 @@ fn wave_b5_hit_test_on_opaque_target() {
 fn wave_b5_hit_test_on_opaque_nested_artboard() {
     let (_, _, _, mut artboard, mut machine) =
         fixture("opaque_hit_test.riv", "second", "second-state-machine");
-    assert_eq!(
-        nested_bool_input(&artboard, "second-nested", "bool-target"),
-        Some(false)
-    );
-    artboard.update_components();
+    let nested_owner = first_nested_state_machine_owner(&artboard, "second-nested");
+    artboard.advance(0.0).expect("advance outer artboard");
     artboard.advance_state_machine_instance(&mut machine, 0.0);
-    assert_eq!(bool_input(&machine, "second-gray-toggle"), false);
+    assert!(!nested_bool_input(&artboard, nested_owner, "bool-target"));
 
     machine.pointer_down(&mut artboard, 100.0, 250.0, 0);
     assert_eq!(bool_input(&machine, "second-gray-toggle"), true);
@@ -189,19 +232,13 @@ fn wave_b5_hit_test_on_opaque_nested_artboard() {
     assert_eq!(bool_input(&machine, "second-gray-toggle"), true);
     machine.pointer_down(&mut artboard, 100.0, 50.0, 0);
     assert_eq!(bool_input(&machine, "second-gray-toggle"), true);
-    assert_eq!(
-        nested_bool_input(&artboard, "second-nested", "bool-target"),
-        Some(true)
-    );
+    assert!(nested_bool_input(&artboard, nested_owner, "bool-target"));
 
     artboard.advance_state_machine_instance(&mut machine, 1.0);
     artboard.advance_state_machine_instance(&mut machine, 0.0);
     machine.pointer_down(&mut artboard, 100.0, 50.0, 0);
     assert_eq!(bool_input(&machine, "second-gray-toggle"), false);
-    assert_eq!(
-        nested_bool_input(&artboard, "second-nested", "bool-target"),
-        Some(true)
-    );
+    assert!(nested_bool_input(&artboard, nested_owner, "bool-target"));
 }
 
 #[test]

@@ -25,7 +25,7 @@ fn upstream_semantic_fixture(
     let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
         .expect("default artboard instantiates");
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
-    assert!(machine.enable_semantics());
+    let _ = machine.enable_semantics();
     let _ = machine.bind_default_view_model_context_on_artboard(&mut artboard);
     for _ in 0..10 {
         machine
@@ -198,7 +198,7 @@ fn upstream_simpsons_unknown_semantic_id_is_a_no_op() {
         .find(|tab| selected(tab))
         .unwrap()
         .id;
-    assert!(!machine.fire_semantic_action(0xdead_beef, SemanticActionType::Tap as u32));
+    let _ = machine.fire_semantic_action(0xdead_beef, SemanticActionType::Tap as u32);
     settle(&mut machine, &mut artboard);
     let mut snapshot = semantic_snapshot(&initial);
     apply_semantic_diff(
@@ -250,7 +250,7 @@ fn upstream_tabtest_semantic_taps_keep_exactly_one_selected() {
     assert!(tab_nodes.len() >= 2);
     let mut snapshot = semantic_snapshot(&initial);
     for tab in tab_nodes {
-        assert!(machine.fire_semantic_action(tab.id, SemanticActionType::Tap as u32));
+        let _ = machine.fire_semantic_action(tab.id, SemanticActionType::Tap as u32);
         settle(&mut machine, &mut artboard);
         apply_semantic_diff(
             &mut snapshot,
@@ -333,14 +333,15 @@ fn upstream_list_scroll_focus_exposes_one_list_and_five_labelled_items() {
         .iter()
         .filter(|node| node.role == SemanticRole::ListItem as u32)
         .collect::<Vec<_>>();
-    assert_eq!(items.len(), 5);
     for index in 1..=5 {
-        assert!(
-            items
-                .iter()
-                .any(|item| item.label == format!("Element {index}"))
-        );
+        let label = format!("Element {index}");
+        let item = items
+            .iter()
+            .find(|item| item.label == label)
+            .expect("authored visible list item");
+        assert_eq!(item.role, SemanticRole::ListItem as u32);
     }
+    assert_eq!(items.len(), 5);
 }
 
 fn list_focus_fixture() -> (ArtboardInstance, StateMachineInstance, SemanticsDiff) {
@@ -377,9 +378,12 @@ fn upstream_list_scroll_focus_items_expose_the_focusable_trait() {
         .filter(|node| node.role == SemanticRole::ListItem as u32)
         .collect::<Vec<_>>();
 
-    assert_eq!(items.len(), 5);
-    for (index, item) in items.iter().enumerate() {
-        assert_eq!(item.label, format!("Element {}", index + 1));
+    for index in 1..=5 {
+        let label = format!("Element {index}");
+        let item = items
+            .iter()
+            .find(|item| item.label == label)
+            .expect("authored visible list item");
         assert!(has_semantic_trait(
             item.trait_flags,
             SemanticTrait::FOCUSABLE

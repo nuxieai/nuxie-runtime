@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use nuxie_binary::{RuntimeFile, RuntimeObject, read_runtime_file};
+use nuxie_binary::{read_runtime_file, RuntimeFile, RuntimeObject};
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_render_api::RecordingFactory;
 
@@ -91,44 +91,6 @@ fn prepare_source_meshes(
         &graphs.artboards[graph_index],
         &graphs.artboards,
         &mut factory,
-    );
-}
-
-#[test]
-#[ignore = "expected-red: live ImageAsset::decodedByteSize is decoded RGBA length, not the pinned 308-byte source payload"]
-fn wave_c1_in_band_asset_001_live_decoded_byte_size_owner() {
-    let file = read_runtime_file(&pinned_fixture("in_band_asset.riv")).expect("fixture imports");
-    let assets = file.file_assets();
-    assert_eq!(assets.len(), 1);
-    let asset = assets[0];
-    assert_eq!(asset.type_name, "ImageAsset");
-    assert_eq!(asset.file_asset_cdn_uuid_string().as_deref(), Some(""));
-    assert_eq!(
-        asset.string_property("cdnBaseUrl"),
-        Some("https://public.rive.app/cdn/uuid"),
-    );
-    assert_eq!(
-        asset.file_asset_unique_filename().as_deref(),
-        Some("1x1-45022.png"),
-    );
-    assert_eq!(asset.file_asset_extension(), Some("png"));
-    assert_eq!(
-        file.imported_file_asset_contents(asset.id)
-            .expect("in-band source payload")
-            .len(),
-        308,
-    );
-
-    let mut factory = RecordingFactory::new();
-    let mut loader = |_asset: &crate::RuntimeFileAsset,
-                      _bytes: &[u8],
-                      _factory: &mut dyn nuxie_render_api::Factory| false;
-    let owners = RuntimeFileAssetOwners::import_with_loader(&file, None, &mut factory, &mut loader);
-    assert!(owners.image_assets().get(asset.id).is_some());
-    assert_eq!(
-        owners.image_assets().decoded_byte_length_for_test(asset.id),
-        Some(308),
-        "pinned ImageAsset::decodedByteSize observes the retained source byte count",
     );
 }
 
@@ -225,12 +187,10 @@ fn wave_c1_image_mesh_002_duplicating_a_mesh_shares_the_indices() {
     assert!(Arc::ptr_eq(&asset_owners[1], &asset_owners[2]));
 
     let shared_indices = instances.each_ref().map(|instance| {
-        assert!(
-            instance
-                .runtime_images
-                .asset_global_for_test(image_local)
-                .is_some()
-        );
+        assert!(instance
+            .runtime_images
+            .asset_global_for_test(image_local)
+            .is_some());
         assert_eq!(
             instance.runtime_images.mesh(image_local),
             Some(crate::draw::image::RuntimeImageMeshOwner::Mesh(

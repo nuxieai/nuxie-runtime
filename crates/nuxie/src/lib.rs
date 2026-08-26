@@ -12983,3 +12983,6 @@ mod external_image_asset_tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod wave_c1_no_loader_owner_tests;

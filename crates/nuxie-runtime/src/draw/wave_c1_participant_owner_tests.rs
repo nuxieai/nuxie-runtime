@@ -1,7 +1,7 @@
 //! Exact occurrence-owner corrections for Wave C1 layout-participant rows.
 
 use super::*;
-use nuxie_binary::{RuntimeFile, read_runtime_file};
+use nuxie_binary::{read_runtime_file, RuntimeFile};
 use nuxie_graph::GraphFile;
 use std::path::PathBuf;
 
@@ -37,85 +37,6 @@ fn fixture(
     )
     .unwrap_or_else(|error| panic!("{name} instantiates: {error:#}"));
     (runtime, graphs, artboard_index, artboard)
-}
-
-fn active_solo_child_owner(
-    artboard: &ArtboardInstance,
-    solo_local: usize,
-) -> Option<(usize, usize)> {
-    let solo = artboard.component(solo_local)?.concrete.solo.as_ref()?;
-    let active_local =
-        usize::try_from(artboard.uint_property(solo_local, solo.active_component_property_key?)?)
-            .ok()?;
-    let active_index = solo
-        .cpp_local_ids
-        .iter()
-        .position(|candidate| *candidate == active_local)?;
-    Some((active_index, active_local))
-}
-
-#[test]
-fn wave_c1_participant_002_solo_and_active_child_keep_exact_provider_owners() {
-    let (_runtime, _graphs, _index, mut artboard) = fixture("layout/solo_participant.riv", None);
-    artboard.advance(0.0).expect("initial Artboard::advance(0)");
-    let solo_local = artboard
-        .components()
-        .iter()
-        .find(|component| component.type_name == "Solo")
-        .expect("exactly one Solo")
-        .local_id;
-    assert!(
-        artboard.layout_bounds(solo_local).is_none(),
-        "the Solo itself is not a retained LayoutNodeProvider"
-    );
-    let (active_index, active_local) =
-        active_solo_child_owner(&artboard, solo_local).expect("active child owner and index");
-    assert_eq!(active_index, 0);
-    let bounds = artboard
-        .layout_bounds(active_local)
-        .expect("active child is a retained LayoutNodeProvider");
-    assert_eq!((bounds.width, bounds.height), (200.0, 200.0));
-}
-
-#[test]
-fn wave_c1_participant_007_solo_active_child_index_helpers_use_exact_owner() {
-    let (_runtime, _graphs, _index, mut artboard) = fixture("layout/solo_participant.riv", None);
-    artboard.advance(0.0).expect("initial Artboard::advance(0)");
-    let solo_local = artboard
-        .components()
-        .iter()
-        .find(|component| component.type_name == "Solo")
-        .expect("exactly one Solo")
-        .local_id;
-    let (initial_index, initial_local) =
-        active_solo_child_owner(&artboard, solo_local).expect("initial active child owner");
-    assert_eq!(initial_index, 0);
-    assert_eq!(
-        artboard
-            .component(solo_local)
-            .unwrap()
-            .concrete
-            .solo
-            .as_ref()
-            .unwrap()
-            .cpp_local_ids[0],
-        initial_local,
-    );
-    assert!(artboard.set_solo_active_child_by_index(solo_local, 1.0));
-    let (updated_index, updated_local) =
-        active_solo_child_owner(&artboard, solo_local).expect("updated active child owner");
-    assert_eq!(updated_index, 1);
-    assert_eq!(
-        artboard
-            .component(solo_local)
-            .unwrap()
-            .concrete
-            .solo
-            .as_ref()
-            .unwrap()
-            .cpp_local_ids[1],
-        updated_local,
-    );
 }
 
 #[test]

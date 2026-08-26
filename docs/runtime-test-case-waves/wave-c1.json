@@ -32,7 +32,7 @@
   "wave": "c1",
   "case_count": 62,
   "ratchet": {
-    "max_pending": 4
+    "max_pending": 6
   },
   "cases": [
     {
@@ -47,7 +47,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
-          "line": 162,
+          "line": 124,
           "symbol": "wave_c1_image_mesh_001_image_with_mesh_loads_correctly"
         }
       ],
@@ -66,7 +66,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
-          "line": 210,
+          "line": 172,
           "symbol": "wave_c1_image_mesh_002_duplicating_a_mesh_shares_the_indices"
         }
       ],
@@ -88,13 +88,13 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
-          "line": 99,
-          "symbol": "wave_c1_in_band_asset_001_live_decoded_byte_size_owner"
+          "path": "crates/nuxie/src/wave_c1_no_loader_owner_tests.rs",
+          "line": 15,
+          "symbol": "wave_c1_in_band_asset_001_no_loader_import_flow"
         }
       ],
-      "note": "The ignored executable port preserves the exact metadata, import flow, and live ImageAsset owner; it fails only because that owner stores decoded RGBA length instead of the pinned 308-byte source decodedByteSize.",
-      "expected_red_reason": "expected-red: live ImageAsset decodedByteSize reports decoded RGBA length instead of the pinned 308-byte source payload"
+      "note": "The ignored executable port calls the distinct no-loader File::import production flow, preserves every pinned metadata and source-payload assertion, and fails at the concrete missing fallback-decode owner before a decoded byte-size observation is possible.",
+      "expected_red_reason": "expected-red: no-loader File::import leaves the in-band ImageAsset undecoded instead of retaining the pinned 308-byte source payload"
     },
     {
       "id": "tests/unit_tests/runtime/in_band_asset_load_test.cpp#2",
@@ -126,12 +126,12 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
-          "line": 137,
+          "line": 99,
           "symbol": "wave_c1_in_band_asset_003_fallback_live_decoded_byte_size_owner"
         }
       ],
       "note": "The ignored executable port proves loader rejection, fallback decode, and the live ImageAsset owner; it fails only at the exact 308-byte decodedByteSize assertion.",
-      "expected_red_reason": "expected-red: fallback ImageAsset decodedByteSize reports decoded RGBA length instead of the pinned 308-byte source payload"
+      "expected_red_reason": "expected-red: fallback ImageAsset::decodedByteSize is decoded RGBA length, not the pinned 308-byte source payload"
     },
     {
       "id": "tests/unit_tests/runtime/instancing_test.cpp#1",
@@ -168,7 +168,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
-          "line": 256,
+          "line": 216,
           "symbol": "wave_c1_instancing_002_artboard_clone_preserves_clipping_properties"
         }
       ],
@@ -191,7 +191,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
-          "line": 305,
+          "line": 265,
           "symbol": "wave_c1_instancing_003_artboard_instances_share_animation_definitions"
         }
       ],
@@ -214,7 +214,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
-          "line": 365,
+          "line": 325,
           "symbol": "wave_c1_joystick_flags_001_flags_and_inverted_axes_match"
         }
       ],
@@ -440,17 +440,10 @@
       "ordinal": 2,
       "line": 46,
       "name": "a Solo's active child is laid out through it from a .riv file",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
-          "line": 58,
-          "symbol": "wave_c1_participant_002_solo_and_active_child_keep_exact_provider_owners"
-        }
-      ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: the Rust Solo occurrence does not retain a callable activeComponent() getter. Reconstructing it from activeComponentId and cpp_local_ids is a forbidden test-local algorithm, so no exact executable evidence exists in Phase 1."
     },
     {
       "id": "tests/unit_tests/runtime/layout_participant_test.cpp#3",
@@ -530,17 +523,10 @@
       "ordinal": 7,
       "line": 180,
       "name": "a Solo's active-child index helpers work from a .riv file",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
-          "line": 81,
-          "symbol": "wave_c1_participant_007_solo_active_child_index_helpers_use_exact_owner"
-        }
-      ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: set_solo_active_child_by_index provides the exact write owner, but the Rust Solo occurrence has no callable getActiveChildIndex() getter for either pinned observation. Reconstructing the getter from activeComponentId and cpp_local_ids is forbidden."
     },
     {
       "id": "tests/unit_tests/runtime/layout_participant_test.cpp#8",
@@ -662,7 +648,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
-          "line": 122,
+          "line": 43,
           "symbol": "wave_c1_participant_014_plain_group_has_no_provider_owner"
         }
       ],
@@ -703,7 +689,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
-          "line": 169,
+          "line": 90,
           "symbol": "wave_c1_participant_016_component_list_keeps_artboard_leaf_after_advance"
         }
       ],
@@ -726,7 +712,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
-          "line": 177,
+          "line": 98,
           "symbol": "wave_c1_participant_017_flagged_component_list_makes_artboard_non_leaf"
         }
       ],

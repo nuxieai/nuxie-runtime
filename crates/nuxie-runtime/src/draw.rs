@@ -18382,6 +18382,47 @@ impl ArtboardInstance {
             })
             .ok()
     }
+
+    /// Read-only tools snapshot of the actual retained Text shaping/draw
+    /// owner. This never requests shaping or rebuilds an observation-side
+    /// layout; callers must drive the ordinary update boundary themselves.
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn debug_retained_text_variation_snapshot(
+        &self,
+        text_local: usize,
+    ) -> Option<(
+        usize,
+        Vec<u32>,
+        Vec<Vec<(u32, f32)>>,
+        bool,
+        u16,
+        bool,
+        bool,
+        bool,
+    )> {
+        let drawable_index = self
+            .runtime_drawables
+            .drawable_by_local
+            .get(&text_local)
+            .copied()?;
+        let owner = self.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()?;
+        let shaped = owner.shaped_topology.borrow();
+        let shaped = shaped.as_ref()?;
+        let (glyph_ids, glyph_variations) = shaped.debug_variation_glyph_snapshot();
+        Some((
+            Arc::as_ptr(shaped) as usize,
+            glyph_ids,
+            glyph_variations,
+            owner.dirty.get(),
+            owner.pending_update_dirt.get().0,
+            owner.render_styles_dirty.get(),
+            owner.shaped_topology_valid.get(),
+            owner.retained.borrow().is_some(),
+        ))
+    }
 }
 
 fn runtime_text_backend_path<'a>(

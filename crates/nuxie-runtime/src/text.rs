@@ -1045,6 +1045,22 @@ impl StaticShapedTextTopology {
     }
 }
 
+#[cfg(feature = "tools")]
+impl StaticShapedTextTopology {
+    pub(crate) fn debug_variation_glyph_snapshot(&self) -> (Vec<u32>, Vec<Vec<(u32, f32)>>) {
+        (
+            self.contextual_glyphs
+                .iter()
+                .map(|glyph| glyph.glyph_id)
+                .collect(),
+            self.contextual_glyphs
+                .iter()
+                .map(|glyph| glyph.variations.clone())
+                .collect(),
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 struct StaticTextStyle {
     local_id: usize,

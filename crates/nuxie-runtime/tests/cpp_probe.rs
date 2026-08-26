@@ -90349,6 +90349,33 @@ fn fl_e8_rust_variation_phase(
     (glyphs, values)
 }
 
+fn fl_e8_retained_variation_phase(
+    snapshot: &(
+        usize,
+        Vec<u32>,
+        Vec<Vec<(u32, f32)>>,
+        bool,
+        u16,
+        bool,
+        bool,
+        bool,
+    ),
+    axis_tag: u32,
+) -> (Vec<u32>, Vec<Option<f32>>) {
+    (
+        snapshot.1.clone(),
+        snapshot
+            .2
+            .iter()
+            .map(|axes| {
+                axes.iter()
+                    .find(|(tag, _)| *tag == axis_tag)
+                    .map(|(_, value)| *value)
+            })
+            .collect(),
+    )
+}
+
 #[test]
 fn d_st_variation_live_cpp_axis_value_mutation_matches_rust_update() {
     let axis_value = definition_by_name("TextVariationModifier")
@@ -90493,17 +90520,48 @@ fn d_st_variation_live_cpp_axis_value_mutation_matches_rust_update() {
         &cloned.debug_static_text_layout_report(text_local).unwrap(),
         wght,
     ));
+    artboard.update_components();
+    let retained_before_tag = artboard
+        .debug_retained_text_variation_snapshot(text_local)
+        .expect("ordinary update materializes retained Text variation owner");
+    assert!(retained_before_tag.6);
+    assert!(retained_before_tag.7);
+    assert!(!retained_before_tag.3);
+    assert_eq!(retained_before_tag.4, 0);
+    assert!(!retained_before_tag.5);
     assert!(artboard.set_uint_property(variation_local, axis_tag_key, u64::from(wdth)));
-    // Generated axisTagChanged is empty, so this phase observes the retained
-    // output from the preceding legitimate reshape. A later Range strength
-    // write requests the next reshape, whose concrete Variation::modify call
-    // must then read the live wdth tag.
-    rust_phases.push(rust_phases.last().unwrap().clone());
+    let retained_after_inert_tag = artboard
+        .debug_retained_text_variation_snapshot(text_local)
+        .expect("inert axisTag write preserves retained Text owner");
+    assert_eq!(retained_after_inert_tag, retained_before_tag);
+    rust_phases.push(fl_e8_retained_variation_phase(
+        &retained_after_inert_tag,
+        wght,
+    ));
     assert!(artboard.set_double_property(range_local, strength_key, 1.5));
-    rust_phases.push(fl_e8_rust_variation_phase(
-        &artboard
-            .debug_static_text_layout_report(text_local)
-            .unwrap(),
+    let retained_before_update = artboard
+        .debug_retained_text_variation_snapshot(text_local)
+        .expect("Range dirt does not rebuild outside the update boundary");
+    assert_eq!(retained_before_update.0, retained_after_inert_tag.0);
+    assert_eq!(retained_before_update.1, retained_after_inert_tag.1);
+    assert_eq!(retained_before_update.2, retained_after_inert_tag.2);
+    assert!(retained_before_update.3);
+    assert_ne!(retained_before_update.4, 0);
+    assert!(retained_before_update.5);
+    assert!(retained_before_update.6);
+    assert!(retained_before_update.7);
+    artboard.update_components();
+    let retained_after_range_update = artboard
+        .debug_retained_text_variation_snapshot(text_local)
+        .expect("ordinary Range update rebuilds retained Text owner");
+    assert_ne!(retained_after_range_update.2, retained_before_update.2);
+    assert!(!retained_after_range_update.3);
+    assert_eq!(retained_after_range_update.4, 0);
+    assert!(!retained_after_range_update.5);
+    assert!(retained_after_range_update.6);
+    assert!(retained_after_range_update.7);
+    rust_phases.push(fl_e8_retained_variation_phase(
+        &retained_after_range_update,
         wdth,
     ));
     assert_eq!(

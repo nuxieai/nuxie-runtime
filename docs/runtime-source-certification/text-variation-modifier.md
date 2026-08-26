@@ -7,7 +7,10 @@ incorrectly attributed the phase-6 differential to Range/group reshaping. The
 actual defect was the revision-keyed Variation tag cache. This correction
 removes that cache, restores a live tag read at every `modify`, and fixes the
 probe's phase-5 Rust observer to retain output when the empty callback requests
-no update.
+no update. Evidence correction after rereview `4ee75e197` replaces the
+test-local copied vector with a read-only snapshot of the real retained
+`RuntimeTextDrawOwner`; the probe now observes both inert phase 5 and the
+ordinary Range-driven production rebuild at phase 6.
 
 This receipt is governed by
 `docs/runtime-exact-parity-workflow-correction.md`. It does not self-accept the
@@ -79,10 +82,13 @@ fixture, direct owner tests, and cpp probe are support only.
   and cold-clone callback re-registration with copied tag/value.
 - `cpp_probe.rs:90357::d_st_variation_live_cpp_axis_value_mutation_matches_rust_update`
   executes the real C++ probe and the full seven-phase cycle. The immediate
-  axisTag phase retains the preceding output because its generated callback is
-  empty. The later legitimate Range strength reshape calls concrete
-  `Variation::modify`, reads live `wdth`, and matches the C++ phase-6
-  `[Some(1300.0), None, ...]` stream.
+  axisTag phase reads the same real retained shaped topology and proves its
+  identity, glyph/axis stream, and draw-owner dirty/invalidation state are
+  unchanged because the generated callback is empty. The later Range strength
+  write first proves the retained glyph snapshot is unchanged while the real
+  owner carries pending invalidation, then drives the ordinary component
+  update. The rebuilt retained owner calls concrete `Variation::modify`, reads
+  live `wdth`, and matches the C++ phase-6 `[Some(1300.0), None, ...]` stream.
 
 Focused gates:
 

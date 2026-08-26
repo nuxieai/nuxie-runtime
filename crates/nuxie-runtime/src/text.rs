@@ -3177,14 +3177,31 @@ impl StaticTextSlice {
             let mut style_indices = self.style_indices_for_line(line, runs)?;
             if style_indices.is_empty() {
                 // Empty paragraphs still have a shaped run in C++. Choose the
-                // run touching the insertion point, then fall back to the base
-                // style for the same observable line geometry.
-                if let Some(run) = runs.iter().find(|run| {
-                    line.char_start >= run.char_start
-                        && line.char_start <= run.char_start + run.char_len
-                }) && let Some(style_local) = run.style_local
+                // StyledText run touching the insertion point, then fall back
+                // to the base style for the same observable line geometry.
+                // `makeStyled` omits null-style, font-null, and empty source
+                // runs before `BreakLines`, so none can steal this position.
+                let mut insertion_style_index = None;
+                for run in runs
+                    .iter()
+                    .filter(|run| run.participates_in_styled_text())
+                    .filter(|run| {
+                        line.char_start >= run.char_start
+                            && line.char_start <= run.char_start + run.char_len
+                    })
                 {
-                    style_indices.push(self.style_index_for_local(style_local)?);
+                    let style_local = run
+                        .style_local
+                        .expect("participating StyledText run has a style");
+                    let style_index = self.style_index_for_local(style_local)?;
+                    let style = &self.styles[style_index];
+                    if style.font_bytes(runtime, instance).is_some() {
+                        insertion_style_index = Some(style_index);
+                        break;
+                    }
+                }
+                if let Some(style_index) = insertion_style_index {
+                    style_indices.push(style_index);
                 } else if !self.styles.is_empty() {
                     style_indices.push(0);
                 }
@@ -5505,6 +5522,59 @@ mod tests {
         baseline_origin_text_runtime_with_sizing(TEXT_SIZING_FIXED)
     }
 
+    fn dynamic_two_style_text_runtime() -> (RuntimeFile, GraphFile) {
+        let style = |font_size| {
+            fixture_record(
+                "TextStylePaint",
+                vec![
+                    property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                    property(
+                        "TextStylePaint",
+                        "fontSize",
+                        FixtureValue::Double(font_size),
+                    ),
+                    property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
+                ],
+            )
+        };
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(0))],
+            ),
+            fixture_record(
+                "FileAssetContents",
+                vec![property(
+                    "FileAssetContents",
+                    "bytes",
+                    FixtureValue::Bytes(fixture_font_bytes()),
+                )],
+            ),
+            fixture_record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", FixtureValue::Double(200.0)),
+                    property("Artboard", "height", FixtureValue::Double(100.0)),
+                ],
+            ),
+            fixture_record("Text", Vec::new()),
+            style(10.0),
+            style(40.0),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property("TextValueRun", "text", FixtureValue::String(String::new())),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                ],
+            ),
+        ])
+        .expect("two-style Text records import");
+        let graph = GraphFile::from_runtime_file(&runtime).expect("two-style Text graph builds");
+        (runtime, graph)
+    }
+
     fn synthetic_data_bind(
         target_local: usize,
         target_global: u32,
@@ -5790,6 +5860,102 @@ mod tests {
             .expect("list-driven Text legitimately retains an empty style-paint topology");
         assert!(list_only.runs.is_empty());
         assert!(list_only.styles.is_empty());
+    }
+
+    #[test]
+    fn cxx_empty_line_metrics_ignore_runs_omitted_by_make_styled() {
+        let (runtime, graphs) = dynamic_two_style_text_runtime();
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let mut slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        assert_eq!(
+            slice
+                .styles
+                .iter()
+                .map(|style| style.local_id)
+                .collect::<Vec<_>>(),
+            vec![2, 3]
+        );
+        slice.styles[0].name = Some("first".to_owned());
+        slice.styles[1].name = Some("second".to_owned());
+
+        let runs = slice
+            .resolved_dynamic_runs(
+                vec![
+                    crate::view_model::RuntimeTextListRun {
+                        text: Some(b"hidden".to_vec()),
+                        style: None,
+                    },
+                    crate::view_model::RuntimeTextListRun {
+                        text: None,
+                        style: Some(b"first".to_vec()),
+                    },
+                    crate::view_model::RuntimeTextListRun {
+                        text: Some(b"\nA".to_vec()),
+                        style: Some(b"second".to_vec()),
+                    },
+                ],
+                0,
+            )
+            .expect("dynamic runs resolve");
+        assert_eq!(runs.len(), 3);
+        assert_eq!((runs[0].char_start, runs[0].char_len), (0, 0));
+        assert_eq!((runs[1].char_start, runs[1].char_len), (0, 0));
+        assert_eq!((runs[2].char_start, runs[2].char_len), (0, 2));
+        assert_eq!(runs[2].style_local, Some(3));
+
+        let lines = split_static_text_lines(
+            &runs
+                .iter()
+                .map(StaticResolvedRun::styled_text)
+                .collect::<String>(),
+        );
+        assert_eq!(
+            lines
+                .iter()
+                .map(|line| (line.text.as_str(), line.char_start))
+                .collect::<Vec<_>>(),
+            vec![("", 0), ("A", 1)]
+        );
+        let metrics = slice
+            .static_line_metrics(&runtime, &instance, &lines, &runs, 1.0)
+            .expect("line metrics compute");
+
+        // Exercise the same production owner with the exact participating run
+        // alone. Excluded all-runs entries must not change either empty-line
+        // metric, and the result must differ from the first-paint control.
+        let second_only = slice
+            .resolved_dynamic_runs(
+                vec![crate::view_model::RuntimeTextListRun {
+                    text: Some(b"\nA".to_vec()),
+                    style: Some(b"second".to_vec()),
+                }],
+                0,
+            )
+            .expect("second-style control resolves");
+        let second_metrics = slice
+            .static_line_metrics(&runtime, &instance, &lines, &second_only, 1.0)
+            .expect("second-style control metrics compute");
+        let first_only = slice
+            .resolved_dynamic_runs(
+                vec![crate::view_model::RuntimeTextListRun {
+                    text: Some(b"\nA".to_vec()),
+                    style: Some(b"first".to_vec()),
+                }],
+                0,
+            )
+            .expect("first-style control resolves");
+        let first_metrics = slice
+            .static_line_metrics(&runtime, &instance, &lines, &first_only, 1.0)
+            .expect("first-style control metrics compute");
+
+        assert_close(metrics[0].top, second_metrics[0].top);
+        assert_close(metrics[0].baseline, second_metrics[0].baseline);
+        assert_close(metrics[0].bottom, second_metrics[0].bottom);
+        assert!(
+            (metrics[0].baseline - first_metrics[0].baseline).abs() > 1.0,
+            "empty paragraph must use the second-style metrics, not paint zero"
+        );
     }
 
     #[test]

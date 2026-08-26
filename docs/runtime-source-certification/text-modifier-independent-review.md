@@ -105,3 +105,30 @@ The focused lifecycle test still passes 1 test because of the bypass above.
 Correction-range `git diff --check` passed; the commit is contained to its
 seven declared paths. The pre-existing unstaged formatting-only hunk in
 `draw.rs` remains outside the commit, and all 17 user-dirty paths are preserved.
+
+## Final retained-owner correction rereview
+
+Correction `47dd86b9dd743a9e7608ff18cf01abea6e2171b7` **closes the residual
+finding and is accepted**.
+
+`RuntimeTextDrawOwner::clone` now returns the same wholly fresh default owner
+used for every other custom Text clone field; it no longer copies the source
+topology Arc. Exhaustive owner search finds no alternate Text topology-copy
+site. The earlier occurrence-driven constructor routing remains intact, with
+`from_graph` confined to the no-occurrence support query and tests.
+
+The revised A-to-B evidence no longer calls a direct slice constructor for the
+post-materialized assertion. It retains source A through the real draw owner,
+verifies a cold clone retains B, then clones the materialized source, drives
+`WORLD_TRANSFORM` through `add_dirt` and real onDirty reentrancy, observes the
+ordered group-A non-follow/group-B follow actions twice at the accumulated
+World then World-or-Path masks, and reads all/shape/follow topology B from
+`materialized_clone.retained_static_text_topology`. This closes both the stale
+Arc and bypassing-evidence defects.
+
+The consumer topology remains **1 direct pass / 0 red / 0 adapted / 0
+pending**. The focused lifecycle test passed 1 test and exact Wave B4 passed 1
+test. Correction-range `git diff --check` passed; the delta is exactly the
+declared three paths. The only committed `draw.rs` hunk is the cold clone owner
+change, while the pre-existing formatting-only hunk remains unstaged. All 17
+user-dirty paths are preserved.

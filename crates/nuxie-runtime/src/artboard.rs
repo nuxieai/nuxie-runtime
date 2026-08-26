@@ -6816,6 +6816,7 @@ impl ArtboardInstance {
             }
         }
         if advance.size_changed || (advance.layout_changed && !advance.keep_going) {
+            self.propagate_runtime_layout_text_control_size(entry.local_id);
             self.propagate_scripted_layout_size(entry.local_id);
         }
         if advance.layout_changed {

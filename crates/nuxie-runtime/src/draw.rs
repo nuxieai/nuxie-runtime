@@ -7130,7 +7130,6 @@ impl ArtboardInstance {
             let should_propagate_size = layout.should_force_update_layout_bounds()
                 || layout.target_bounds() != target_bounds;
             let size_changed = layout.retain_bounds(x, y, bounds.width, bounds.height);
-            let (_, _, control_width, control_height) = layout.current_bounds();
             if size_changed {
                 // Pinned LayoutComponent::updateLayoutBounds publishes Path
                 // before propagateSize/markWorldTransformDirty whenever the
@@ -7154,6 +7153,7 @@ impl ArtboardInstance {
                 // LayoutComponents retain the ordinary direct-child control
                 // path (`artboard.cpp:1017-1030`,
                 // `layout_component.cpp:981-1025`).
+                self.propagate_runtime_layout_text_control_size(local_id);
                 let controls_children = self
                     .component(local_id)
                     .is_none_or(|component| component.type_name != "Artboard");
@@ -7162,7 +7162,7 @@ impl ArtboardInstance {
                         self.components()
                             .iter()
                             .filter_map(|component| {
-                                (matches!(component.type_name, "Text" | "TextInput")
+                                (component.type_name == "TextInput"
                                     // `LayoutComponent::propagateSizeToChildren`
                                     // skips nested LayoutComponents and transparent
                                     // layout containers such as Group/Solo. Rust's
@@ -7186,38 +7186,6 @@ impl ArtboardInstance {
                     })
                     .unwrap_or_default();
                 for text_local in affected_text {
-                    if self
-                        .component(text_local)
-                        .is_some_and(|component| component.type_name == "Text")
-                    {
-                        let control = self.runtime_layout_component_style_local(local_id).map(
-                            |style_local| {
-                                (
-                                    self.runtime_layout_axis_scale(style_local, true),
-                                    self.runtime_layout_axis_scale(style_local, false),
-                                    self.debug_layout_actual_direction(local_id).unwrap_or(0),
-                                )
-                            },
-                        );
-                        let control_changed = control.is_some_and(
-                            |(width_scale_type, height_scale_type, layout_direction)| {
-                                crate::text_owner::control_size(
-                                    self,
-                                    text_local,
-                                    control_width,
-                                    control_height,
-                                    width_scale_type,
-                                    height_scale_type,
-                                    layout_direction,
-                                )
-                            },
-                        );
-                        if control_changed {
-                            self.runtime_drawables
-                                .mark_text_render_styles_dirty_for_local(text_local);
-                        }
-                        continue;
-                    }
                     if !size_changed {
                         continue;
                     }
@@ -7582,6 +7550,65 @@ impl ArtboardInstance {
                 .debug_layout_actual_direction(parent_local)
                 .unwrap_or(0),
         })
+    }
+
+    pub(crate) fn propagate_runtime_layout_text_control_size(
+        &mut self,
+        layout_local: usize,
+    ) -> bool {
+        if self
+            .component(layout_local)
+            .is_none_or(|component| component.type_name == "Artboard")
+        {
+            return false;
+        }
+        let (width, height, width_scale_type, height_scale_type, layout_direction) = {
+            let layout = self
+                .component(layout_local)
+                .and_then(|component| component.concrete.layout.as_ref());
+            let style_local = self.runtime_layout_component_style_local(layout_local);
+            let (Some(layout), Some(style_local)) = (layout, style_local) else {
+                return false;
+            };
+            let (_, _, width, height) = layout.current_bounds();
+            (
+                width,
+                height,
+                self.runtime_layout_axis_scale(style_local, true),
+                self.runtime_layout_axis_scale(style_local, false),
+                self.debug_layout_actual_direction(layout_local)
+                    .unwrap_or(0),
+            )
+        };
+        let text_locals = self
+            .components()
+            .iter()
+            .filter_map(|component| {
+                (component.type_name == "Text"
+                    && self.component_parent_local(component.local_id) == Some(layout_local)
+                    && self
+                        .runtime_layout_participant_local(component.local_id)
+                        .is_none())
+                .then_some(component.local_id)
+            })
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for text_local in text_locals {
+            if crate::text_owner::control_size(
+                self,
+                text_local,
+                width,
+                height,
+                width_scale_type,
+                height_scale_type,
+                layout_direction,
+            ) {
+                self.runtime_drawables
+                    .mark_text_render_styles_dirty_for_local(text_local);
+                changed = true;
+            }
+        }
+        changed
     }
 
     pub(crate) fn runtime_text_input_layout_constraint(
@@ -32143,6 +32170,129 @@ mod tests {
                 "the second Taffy width is retained before shape publication"
             );
         }
+    }
+
+    #[test]
+    fn animated_layout_control_size_reaches_text_at_intermediate_and_completion() {
+        let bytes = synthetic_layout_text_bounds_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout Text riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout Text graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let layout_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "LayoutComponent")
+            .expect("fixture has a layout")
+            .local_id;
+        let text_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let style_local = instance
+            .runtime_layout_component_style_local(layout_local)
+            .expect("controlled layout owns a style");
+        let width_scale_type = instance.runtime_layout_axis_scale(style_local, true);
+        let height_scale_type = instance.runtime_layout_axis_scale(style_local, false);
+        let layout_direction = instance
+            .debug_layout_actual_direction(layout_local)
+            .unwrap_or(0);
+        let bounds = |width, height| RuntimeLayoutBounds {
+            x: 0.0,
+            y: 0.0,
+            width,
+            height,
+        };
+
+        instance.retain_runtime_layout_component_bounds(
+            layout_local,
+            bounds(100.0, 50.0),
+            Some(&BTreeMap::from([(layout_local, bounds(100.0, 50.0))])),
+        );
+        let layout = instance
+            .component(layout_local)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout owns retained animation state");
+        layout.set_animation_style(2, 1, 1.0, None);
+        instance.retain_runtime_layout_component_bounds(
+            layout_local,
+            bounds(200.0, 90.0),
+            Some(&BTreeMap::from([(layout_local, bounds(200.0, 90.0))])),
+        );
+
+        let advance = |instance: &mut ArtboardInstance, elapsed| {
+            instance
+                .advance_components_after_root_state_machines(elapsed, &mut |_, _, _| false)
+                .expect("layout component advance succeeds");
+        };
+        advance(&mut instance, 0.5);
+        instance.clear_component_dirt(text_local);
+        advance(&mut instance, 0.5);
+        let intermediate = (
+            150.0,
+            70.0,
+            width_scale_type,
+            height_scale_type,
+            layout_direction,
+        );
+        assert_eq!(
+            instance
+                .component(text_local)
+                .and_then(|component| component.concrete.text.as_ref())
+                .and_then(|text| text.control_size()),
+            Some(intermediate)
+        );
+        assert_eq!(
+            instance
+                .runtime_text_layout_constraint(text_local, None)
+                .map(|constraint| {
+                    (
+                        constraint.width,
+                        constraint.height,
+                        constraint.width_scale_type,
+                        constraint.height_scale_type,
+                        constraint.layout_direction,
+                    )
+                }),
+            Some(intermediate),
+            "the preferred constraint must follow the live interpolated tuple"
+        );
+        let dirt = instance
+            .debug_component_dirt(text_local)
+            .expect("Text remains live");
+        assert!(dirt.contains(ComponentDirt::PATH));
+        assert!(dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+
+        instance.clear_component_dirt(text_local);
+        advance(&mut instance, 0.1);
+        let completed = (
+            200.0,
+            90.0,
+            width_scale_type,
+            height_scale_type,
+            layout_direction,
+        );
+        assert_eq!(
+            instance
+                .component(text_local)
+                .and_then(|component| component.concrete.text.as_ref())
+                .and_then(|text| text.control_size()),
+            Some(completed)
+        );
+        assert_eq!(
+            instance
+                .runtime_text_layout_constraint(text_local, None)
+                .map(|constraint| (constraint.width, constraint.height)),
+            Some((200.0, 90.0)),
+            "the terminal propagateSize call must replace the intermediate tuple"
+        );
+        let dirt = instance
+            .debug_component_dirt(text_local)
+            .expect("Text remains live");
+        assert!(dirt.contains(ComponentDirt::PATH));
+        assert!(dirt.contains(ComponentDirt::WORLD_TRANSFORM));
     }
 
     #[test]

@@ -71,7 +71,7 @@
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "viewmodel_from_instance reaches the exact SRIV comparator; at frame 0 operation 8 pinned expects makeRenderPaint while the live scripted Rust stream emits frameSize.",
+      "expected_red_reason": "expected-red: viewmodel_from_instance frame 0 op 8 expects makeRenderPaint, live scripted SRIV emits frameSize",
       "note": "The distinct test realizes and verifies the selected-artboard ScriptedDrawable with its retained authored-default ViewModel context before the exact 0.016 StateMachine advance, draw, and viewmodel_from_instance.sriv comparison."
     },
     {
@@ -91,7 +91,7 @@
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, replace_view_model reaches the exact SRIV comparator; at frame 1 operation 93 pinned expects color while Rust emits save.",
+      "expected_red_reason": "expected-red: realized replace_view_model frame 1 op 93 expects color, live scripted SRIV emits save",
       "note": "The distinct test preserves bind and realization, 0.016 advance, draw, addFrame, pointer down/up at (artboard width/2, 480), second 0.016 advance, draw, and exact replace_view_model.sriv comparison."
     },
     {
@@ -111,7 +111,7 @@
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, remove_from_list reaches the exact SRIV comparator; at frame 1 operation 195 pinned expects rewind while Rust emits drawPath.",
+      "expected_red_reason": "expected-red: realized remove_from_list frame 1 op 195 expects rewind, live scripted SRIV emits drawPath",
       "note": "The distinct test preserves bind and realization, initial 0.1 StateMachine advance and draw, then exactly ten addFrame/0.016 advance/draw iterations before comparing remove_from_list.sriv."
     },
     {
@@ -142,7 +142,7 @@
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, scripted_property_image reaches the exact SRIV comparator; at frame 0 operation 21 pinned expects save while Rust emits restore.",
+      "expected_red_reason": "expected-red: realized scripted_property_image frame 0 op 21 expects save, live scripted SRIV emits restore",
       "note": "The distinct test binds the exact default ViewModel, verifies live ScriptInstance attachment with that retained context, then performs the exact 0.016 StateMachine advance, draw, and scripted_property_image.sriv comparison."
     },
     {
@@ -162,7 +162,7 @@
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, image_scripting_property_value reaches the exact SRIV comparator; at frame 0 operation 1 pinned expects decodeImage while Rust emits makeRenderPaint.",
+      "expected_red_reason": "expected-red: realized image_scripting_property_value frame 0 op 1 expects decodeImage, live scripted SRIV emits makeRenderPaint",
       "note": "The distinct test preserves bind and realization, 0.0 StateMachine advance, draw, addFrame, 0.25 advance, draw, and exact image_scripting_property_value.sriv comparison."
     },
     {
@@ -182,7 +182,7 @@
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, reset_shared_viewmodel_instance_test reaches the exact SRIV comparator; at frame 0 operation 10 pinned expects makeRenderPaint while Rust emits frameSize.",
+      "expected_red_reason": "expected-red: reset_shared_viewmodel_instance_test frame 0 op 10 expects makeRenderPaint, live scripted SRIV emits frameSize",
       "note": "The distinct test preserves bind and realization, all six draws and timings (0 then five 0.016 advances), five frame boundaries, both tri1 host triggers, both exact pointer down/up pairs at (45,165), and exact reset_shared_viewmodel_instance_test.sriv comparison."
     }
   ]

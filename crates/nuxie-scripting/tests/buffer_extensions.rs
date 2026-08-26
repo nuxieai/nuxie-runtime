@@ -365,7 +365,7 @@ fn buffer_convert_u8norm_to_f32() {
 
 #[test]
 fn buffer_convert_f32_to_u8norm() {
-    let result: (i64, i64, i64) = rive_vm()
+    let result: (f64, f64, f64) = rive_vm()
         .eval(
             r#"
             local src = buffer.create(12)
@@ -379,14 +379,14 @@ fn buffer_convert_f32_to_u8norm() {
             "#,
         )
         .unwrap();
-    assert_eq!(result.0, 0);
-    assert_eq!(result.1, 128);
-    assert_eq!(result.2, 255);
+    assert_eq!(result.0, 0.0);
+    assert_eq!(result.1, 128.0);
+    assert_eq!(result.2, 255.0);
 }
 
 #[test]
 fn buffer_convert_u8norm_clamps_out_of_range_f32() {
-    let result: (i64, i64) = rive_vm()
+    let result: (f64, f64) = rive_vm()
         .eval(
             r#"
             local src = buffer.create(8)
@@ -398,8 +398,8 @@ fn buffer_convert_u8norm_clamps_out_of_range_f32() {
             "#,
         )
         .unwrap();
-    assert_eq!(result.0, 0);
-    assert_eq!(result.1, 255);
+    assert_eq!(result.0, 0.0);
+    assert_eq!(result.1, 255.0);
 }
 
 #[test]
@@ -456,7 +456,7 @@ fn buffer_convert_zero_count() {
 
 #[test]
 fn buffer_convert_u8_to_u16() {
-    let result: (i64, i64) = rive_vm()
+    let result: (f64, f64) = rive_vm()
         .eval(
             r#"
             local src = buffer.create(2)
@@ -468,8 +468,8 @@ fn buffer_convert_u8_to_u16() {
             "#,
         )
         .unwrap();
-    assert_eq!(result.0, 200);
-    assert_eq!(result.1, 0);
+    assert_eq!(result.0, 200.0);
+    assert_eq!(result.1, 0.0);
 }
 
 #[test]

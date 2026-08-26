@@ -2,6 +2,12 @@
 
 Status: **author candidate; independent review required**.
 
+Accounting correction after independent rejection `87fad2389`: the first
+candidate counted comment-only fixture strings as references and consequently
+overstated both the unique-case total and the pass/provenance totals. This
+docs-only correction replaces those figures; source mappings, behavior, tests,
+and the literal owner topology are unchanged.
+
 This receipt is governed by
 `docs/runtime-exact-parity-workflow-correction.md`. It maps the complete pair,
 records the source-proven occurrence correction, and does not self-accept the
@@ -92,14 +98,19 @@ in this receipt are supporting owner evidence, not consumer promotions.
 
 The independent recursive asset inventory found **133 assets / 1,039 axis
 occurrences**: 123 direct `tests/unit_tests/assets` entries with 979 axes, plus
-10 nested entries with 60 axes. Literal source parsing found 296 references,
-comprising 278 fixture-to-`TEST_CASE` pairs across 272 unique cases and 18
-helper/global sites. Those 272 cases currently classify as 134 pass, 61
-expected-red, 3 adapted, 52 pending, and 22 untouched/unmapped; evidence tiers
-are 208 accepted, 42 provisional B1, and 22 unmapped.
+10 nested entries with 60 axes. Of those assets, 131 are referenced and two
+are unreferenced (`scroll_snap.riv` and `library.riv`). Literal source parsing
+found 279 real string-literal references: 273 unique
+fixture-to-`TEST_CASE` edges, four unresolved helper/global sites, and two
+duplicate literals. The prior 296 figure included 17 comment-only false
+positives.
+
+The 273 edges span 271 unique cases. Those cases currently classify as 133
+pass, 61 expected-red, 3 adapted, 52 pending, and 22 untouched/unmapped;
+provenance tiers are 207 accepted, 42 provisional B1, and 22 untouched.
 
 That large set is an **incidental/unproven initial-shaping impact surface**, not
-272 consumers of any of the three handwritten Axis bodies. No case body
+271 consumers of any of the three handwritten Axis bodies. No case body
 exercises Axis registration, a live tag/value callback, or parent/clone
 lifecycle. Shared-helper expansion remains unresolved and is not used to infer
 materiality or change any case outcome.

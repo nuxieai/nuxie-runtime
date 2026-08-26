@@ -10767,7 +10767,6 @@ struct RuntimeTextBackendResources {
     pooled_paints: BTreeMap<(usize, usize), RuntimeTextPooledPaintBackend>,
     paths: BTreeMap<RuntimeTextPathOwnerKey, RuntimeTextPathBackend>,
     clip_path: Option<RuntimeTextPathBackend>,
-    color_paths: BTreeMap<(usize, usize), RuntimeTextPathBackend>,
     emoji_images: BTreeMap<(usize, u32), Option<Box<dyn RenderImage>>>,
 }
 
@@ -10779,7 +10778,6 @@ impl std::fmt::Debug for RuntimeTextBackendResources {
             .field("pooled_paints", &self.pooled_paints.len())
             .field("paths", &self.paths.len())
             .field("clip_path", &self.clip_path.is_some())
-            .field("color_paths", &self.color_paths.len())
             .field("emoji_images", &self.emoji_images.len())
             .finish()
     }
@@ -18309,17 +18307,18 @@ fn runtime_configure_text_pooled_paint(
 /// `src/text/text_input_drawable.cpp:24-41`). Each drawable owns its retained
 /// CPU draw frame; this path never constructs a `RuntimeDrawableDispatch`.
 fn runtime_draw_integrated_color_glyph(
-    glyph_index: usize,
     command: &RuntimeIntegratedColorGlyphCommand,
     shape_world: Mat2D,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
-    color_paths: &mut BTreeMap<(usize, usize), RuntimeTextPathBackend>,
     emoji_images: &mut BTreeMap<(usize, u32), Option<Box<dyn RenderImage>>>,
 ) {
+    if command.layers.is_empty() {
+        return;
+    }
     renderer.save();
     renderer.transform(runtime_render_mat(shape_world.multiply(command.transform)));
-    for (layer_index, layer) in command.layers.iter().enumerate() {
+    for layer in &command.layers {
         match &layer.paint {
             crate::text::RuntimeColorGlyphPaint::Image {
                 bytes,
@@ -18356,35 +18355,15 @@ fn runtime_draw_integrated_color_glyph(
             | crate::text::RuntimeColorGlyphPaint::LinearGradient { .. }
             | crate::text::RuntimeColorGlyphPaint::RadialGradient { .. }
             | crate::text::RuntimeColorGlyphPaint::SweepGradient { .. }) => {
-                if layer.path.verbs().is_empty() {
-                    continue;
-                }
                 let color = match paint_kind {
                     crate::text::RuntimeColorGlyphPaint::Solid { color } => *color,
                     _ => 0xff00_0000,
                 };
-                let path_backend = color_paths
-                    .entry((glyph_index, layer_index))
-                    .or_insert_with(|| RuntimeTextPathBackend {
-                        path: runtime_make_path_from_raw_path(
-                            factory,
-                            &layer.path,
-                            RenderFillRule::NonZero,
-                        ),
-                        raw_mutation_id: layer.path.mutation_id(),
-                    });
-                if path_backend.raw_mutation_id != layer.path.mutation_id() {
-                    runtime_rebuild_path_from_raw_path(
-                        path_backend.path.as_mut(),
-                        &layer.path,
-                        RenderFillRule::NonZero,
-                    );
-                    path_backend.raw_mutation_id = layer.path.mutation_id();
-                }
+                let path = factory.make_render_path(layer.path.clone(), RenderFillRule::NonZero);
                 let mut paint = factory.make_render_paint();
                 paint.style(RenderPaintStyle::Fill);
                 paint.color(color_modulate_opacity(color, command.opacity));
-                renderer.draw_path(path_backend.path.as_ref(), paint.as_ref());
+                renderer.draw_path(path.as_ref(), paint.as_ref());
             }
         }
     }
@@ -18459,18 +18438,12 @@ fn runtime_draw_live_text_family(
                     .glyphs
                     .get(index)
                     .context("retained Text replay references a missing color glyph")?;
-                let RuntimeTextBackendResources {
-                    color_paths,
-                    emoji_images,
-                    ..
-                } = &mut *backend;
+                let emoji_images = &mut backend.emoji_images;
                 runtime_draw_integrated_color_glyph(
-                    index,
                     glyph,
                     color.shape_world,
                     factory,
                     renderer,
-                    color_paths,
                     emoji_images,
                 );
                 continue;
@@ -37152,52 +37125,148 @@ mod tests {
     }
 
     #[test]
-    fn d_rt_engine_integrated_bitmap_replay_reuses_owner_cache() {
+    fn cxx_color_glyph_recreates_vector_factories_and_reuses_only_raster_cache() {
         let mut factory = nuxie_render_api::RecordingFactory::new();
         let mut renderer = factory.make_renderer();
+        let empty = RuntimeIntegratedColorGlyphCommand {
+            font_identity: 7,
+            glyph_id: 9,
+            transform: Mat2D::IDENTITY,
+            opacity: 0.5,
+            layers: Vec::new(),
+        };
+        let mut image_cache = BTreeMap::new();
+        let stream_before_empty = factory.stream();
+        runtime_draw_integrated_color_glyph(
+            &empty,
+            Mat2D::IDENTITY,
+            &mut factory,
+            &mut renderer,
+            &mut image_cache,
+        );
+        assert_eq!(
+            factory.stream(),
+            stream_before_empty,
+            "the pinned zero-layer return precedes the outer save"
+        );
+
+        let mut solid_path = RawPath::new();
+        solid_path.move_to(1.0, 2.0);
+        solid_path.line_to(3.0, 4.0);
         let command = RuntimeIntegratedColorGlyphCommand {
             font_identity: 7,
             glyph_id: 9,
             transform: Mat2D::IDENTITY,
             opacity: 0.5,
-            layers: vec![crate::text::RuntimeColorGlyphLayer {
-                path: RawPath::new(),
-                paint: crate::text::RuntimeColorGlyphPaint::Image {
-                    bytes: Arc::from(&b"not-a-real-image"[..]),
-                    width: 1,
-                    height: 1,
-                    bearing_x: 2.0,
-                    bearing_y: 3.0,
-                    extent_x: 4.0,
-                    extent_y: 5.0,
+            layers: vec![
+                crate::text::RuntimeColorGlyphLayer {
+                    path: solid_path,
+                    paint: crate::text::RuntimeColorGlyphPaint::Solid { color: 0xff12_3456 },
+                    uses_foreground: false,
                 },
-                uses_foreground: false,
-            }],
+                crate::text::RuntimeColorGlyphLayer {
+                    path: RawPath::new(),
+                    paint: crate::text::RuntimeColorGlyphPaint::LinearGradient {
+                        x0: 0.0,
+                        y0: 0.0,
+                        x1: 1.0,
+                        y1: 1.0,
+                        stops: Vec::new(),
+                    },
+                    uses_foreground: false,
+                },
+                crate::text::RuntimeColorGlyphLayer {
+                    path: RawPath::new(),
+                    paint: crate::text::RuntimeColorGlyphPaint::Image {
+                        bytes: Arc::from(&b"not-a-real-image"[..]),
+                        width: 1,
+                        height: 1,
+                        bearing_x: 2.0,
+                        bearing_y: 3.0,
+                        extent_x: 4.0,
+                        extent_y: 5.0,
+                    },
+                    uses_foreground: false,
+                },
+            ],
         };
-        let mut path_cache = BTreeMap::new();
-        let mut image_cache = BTreeMap::new();
         runtime_draw_integrated_color_glyph(
-            0,
             &command,
             Mat2D::IDENTITY,
             &mut factory,
             &mut renderer,
-            &mut path_cache,
             &mut image_cache,
         );
         runtime_draw_integrated_color_glyph(
-            0,
             &command,
             Mat2D::IDENTITY,
             &mut factory,
             &mut renderer,
-            &mut path_cache,
             &mut image_cache,
         );
         let stream = factory.stream();
+        assert_eq!(stream.matches("makeRenderPath").count(), 4);
+        assert_eq!(stream.matches("makeRenderPaint").count(), 4);
+        assert_eq!(stream.matches("drawPath").count(), 4);
         assert_eq!(stream.matches("decodeImage").count(), 1);
         assert_eq!(stream.matches("drawImage").count(), 2);
         assert_eq!(image_cache.len(), 1);
+
+        let operations: Vec<_> = stream
+            .lines()
+            .filter_map(|line| {
+                if line == "save" || line == "restore" {
+                    Some(line)
+                } else if line.starts_with("transform ") {
+                    Some("transform")
+                } else if line.starts_with("makeRenderPath ") {
+                    Some("makeRenderPath")
+                } else if line.starts_with("makeRenderPaint ") {
+                    Some("makeRenderPaint")
+                } else if line.starts_with("drawPath ") {
+                    Some("drawPath")
+                } else if line.starts_with("decodeImage ") {
+                    Some("decodeImage")
+                } else if line.starts_with("drawImage ") {
+                    Some("drawImage")
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            operations,
+            [
+                "save",
+                "transform",
+                "makeRenderPath",
+                "makeRenderPaint",
+                "drawPath",
+                "makeRenderPath",
+                "makeRenderPaint",
+                "drawPath",
+                "decodeImage",
+                "save",
+                "transform",
+                "drawImage",
+                "restore",
+                "restore",
+                "save",
+                "transform",
+                "makeRenderPath",
+                "makeRenderPaint",
+                "drawPath",
+                "makeRenderPath",
+                "makeRenderPaint",
+                "drawPath",
+                "save",
+                "transform",
+                "drawImage",
+                "restore",
+                "restore",
+            ],
+            "the factory and renderer stream must preserve layer and nested-image order"
+        );
     }
 
     fn upstream_parametric_path(parametric: ParametricPathNode) -> PathGeometryNode {

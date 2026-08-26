@@ -90,6 +90,20 @@ disabled empty body remains red.
 No consumer moved; topology remains four pass, three executable expected-red,
 and 11 pending.
 
+Color-glyph factory-stream correction candidate note: row 20's retained draw
+owner now returns before renderer state changes when the font supplies no
+layers. Every non-image layer, including an empty path and the broader Rust
+gradient variants, creates a fresh nonzero render path and fill paint on every
+draw in authored layer order. The bitmap branch still caches only decoded
+images by font identity and glyph ID and preserves its nested extent transform.
+Focused real-factory/renderer evidence is
+`draw.rs::cxx_color_glyph_recreates_vector_factories_and_reuses_only_raster_cache`;
+it records two complete draws and proves four distinct vector path/paint
+allocations, one bitmap decode, two bitmap draws, and the save/transform/draw/
+restore ordering. Gradient extraction remains a broader Rust adaptation, so
+this does not claim the whole row literal or move a consumer. Topology remains
+four pass, three executable expected-red, and 11 pending.
+
 This is an atomic source-pair audit under
 `docs/runtime-exact-parity-workflow-correction.md`. It does not inherit the
 older file-level `mapped` or `faithful` verdict. The later correction candidate
@@ -162,7 +176,7 @@ not surrounding module attribution, are the durable identity.
 | 17 | `buildRenderStyles` (558) | Eight ordered phases: clear; empty-shape bounds/return; bounds+ellipsis; modifier coverage; bounds/clip; ordered glyph paths/color commands/hit rects; fit/vertical transform plus layout dirt; hit contours. | `text.rs:2301::StaticTextSlice::layout_from_shaped_topology`; `2581::render_data_from_layout`; empty-shape owners `504::static_fixed_text_constraint_bounds`, `2125::render_layout`, `2706::local_bounds`, `2848::layout_bounds_with_constraint`, `3909::has_styled_text`, `4047::clip_bounds`; nonempty bounds/order `4518::static_layout_info`, `4641::static_render_transform`; retained owner `draw.rs:17772::runtime_build_text_draw_frame`; evidence `text.rs:6373::cxx_empty_shape_publishes_zero_before_controlled_box_and_render_work`, `text.rs::target_to_source_only_run_list_bind_keeps_retained_empty_text` | **adapted correction candidate/incomplete/packed**: paragraph spacing remains present in retained nonempty bounds/ellipsis/fit/render calculations. The clean owner now exactly publishes zero bounds for every no-`makeStyled`-run case before controlled sizing, render data, and clip work, including no-authored-run fallback and a target-to-source-only run-list bind. TextValueRun hit rectangles/contours still have no source-equivalent owner; retained path clearing, layout-dirt publication, and the complete phase order remain split across immutable reconstruction and the retained draw owner. |
 | 18 | `styleFromShaperId` (863; disabled 1429) | Assert ID in `m_runs`, return its style; disabled returns null. | `text.rs:4528::style_index_for_local` and indexed `styles` reads | **adapted/incomplete**: local-ID lookup replaces shaper index assertion; no disabled-feature counterpart. |
 | 19 | `draw` (869; disabled 1413) | Conditional outer save; optional clipped path; replay style/color commands in stored order; conditional restore. Disabled draw is inert. | `draw.rs:18306::runtime_draw_live_text_family`; `17948::runtime_text_replay_order` | **adapted candidate**: retained replay and save/clip/restore exist; exact renderer stream remains required. |
-| 20 | `drawColorGlyph` (901) | Get layers or return; save+transform; cache/decode bitmap and apply extent transform, or build nonzero path/paint; restore. | `draw.rs:18222::runtime_draw_integrated_color_glyph`; caches at `draw.rs:10677::RuntimeTextBackendResources::{color_paths,emoji_images}` | **incorrect/adapted**: pinned creates a new render path and paint for every non-image layer on every draw; Rust retains vector `color_paths` by `(glyph_index,layer_index)` across draws, changing the factory stream. The raster cache/order is adapted and gradient layer support is broader. |
+| 20 | `drawColorGlyph` (901) | Get layers or return; save+transform; cache/decode bitmap and apply extent transform, or build nonzero path/paint; restore. | `draw.rs::runtime_draw_integrated_color_glyph`; raster cache `draw.rs::RuntimeTextBackendResources::emoji_images`; evidence `draw.rs::cxx_color_glyph_recreates_vector_factories_and_reuses_only_raster_cache` | **adapted correction candidate**: the zero-layer return, outer transform, layer order, fresh per-layer/per-draw nonzero path and fill paint, opacity-modulated solid color, nested image extent transform, and raster-only cache now follow the pinned factory/renderer stream. Rust font identity and gradient extraction remain adaptations; gradient layer variants deliberately retain their existing broader product support and fallback-color behavior rather than being narrowed by this correction. |
 | 21 | `addRun` (964; disabled 1415) | Append the same pointer to authored runs and all runs; disabled is inert. | `text.rs:1670::StaticTextSlice::from_graph` run collection | **adapted**: immutable graph reconstruction retains one descriptor list, not two pointer vectors. |
 | 22 | `addModifierGroup` (970; disabled 1416) | Append group in child/import order; disabled is inert. | `text.rs:1670::StaticTextSlice::from_graph`, modifier collection branch at 1979 | **adapted candidate**, pending order evidence. |
 | 23 | `markShapeDirty()` (975; disabled 1418) | Delegate to `markShapeDirty(true)`; disabled is inert. | `text/text.rs:57::mark_shape_dirty` | **adapted**: wrapper exists, but Rust helper also publishes revision/world dirt and invalidates bounds. |

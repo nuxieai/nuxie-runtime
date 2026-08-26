@@ -10460,6 +10460,8 @@ struct RuntimeTextDrawOwner {
     shaped_topology: RefCell<Option<Arc<StaticShapedTextTopology>>>,
     retained: RefCell<Option<RuntimeCachedTextShapePaints>>,
     backend: RefCell<RuntimeTextBackendResources>,
+    #[cfg(test)]
+    on_dirty_trace: RefCell<Vec<(ComponentDirt, RuntimeTextOnDirtyAction)>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10530,6 +10532,8 @@ impl Default for RuntimeTextDrawOwner {
             shaped_topology: RefCell::new(None),
             retained: RefCell::new(None),
             backend: RefCell::new(RuntimeTextBackendResources::default()),
+            #[cfg(test)]
+            on_dirty_trace: RefCell::new(Vec::new()),
         }
     }
 }
@@ -11172,6 +11176,46 @@ impl RuntimeDrawableList {
                 .ok()?;
         }
         Some(owner.on_dirty_targets(dirt))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn record_text_on_dirty_action(
+        &self,
+        local_id: usize,
+        dirt: ComponentDirt,
+        action: RuntimeTextOnDirtyAction,
+    ) {
+        let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
+            return;
+        };
+        if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
+            owner.on_dirty_trace.borrow_mut().push((dirt, action));
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn text_on_dirty_trace(
+        &self,
+        local_id: usize,
+    ) -> Vec<(ComponentDirt, RuntimeTextOnDirtyAction)> {
+        let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
+            return Vec::new();
+        };
+        self.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .map(|owner| owner.on_dirty_trace.borrow().clone())
+            .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn clear_text_on_dirty_trace(&self, local_id: usize) {
+        let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
+            return;
+        };
+        if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
+            owner.on_dirty_trace.borrow_mut().clear();
+        }
     }
 
     /// Preserve backend sidecars when a virtualized component-list row is
@@ -27456,137 +27500,329 @@ mod tests {
 
     #[test]
     fn cxx_text_on_dirty_visits_current_modifiers_then_current_style_effects() {
-        fn effect(local_id: usize) -> StrokeEffectNode {
-            StrokeEffectNode {
-                local_id,
-                global_id: local_id as u32,
-                type_name: "DashPath",
-                trim_start: None,
-                trim_end: None,
-                trim_offset: None,
-                trim_mode_value: None,
-                dash_offset: Some(0.0),
-                dash_offset_is_percentage: Some(false),
-                dashes: Vec::new(),
-                target_group_effect_local: None,
-                target_group_effect_global: None,
-                target_group_effect_type_name: None,
-                group_effects: Vec::new(),
-            }
+        fn style_records(style_local: usize) -> Vec<FixtureRecord> {
+            vec![
+                fixture_record(
+                    "TextStylePaint",
+                    vec![
+                        fixture_property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                        fixture_property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
+                        fixture_property("TextStylePaint", "fontSize", FixtureValue::Double(20.0)),
+                    ],
+                ),
+                fixture_record(
+                    "Stroke",
+                    vec![
+                        fixture_property(
+                            "Stroke",
+                            "parentId",
+                            FixtureValue::Uint(style_local as u64),
+                        ),
+                        fixture_property("Stroke", "thickness", FixtureValue::Double(1.0)),
+                    ],
+                ),
+                fixture_record(
+                    "SolidColor",
+                    vec![
+                        fixture_property(
+                            "SolidColor",
+                            "parentId",
+                            FixtureValue::Uint((style_local + 1) as u64),
+                        ),
+                        fixture_property(
+                            "SolidColor",
+                            "colorValue",
+                            FixtureValue::Color(0xff33_6699),
+                        ),
+                    ],
+                ),
+                fixture_record(
+                    "DashPath",
+                    vec![fixture_property(
+                        "DashPath",
+                        "parentId",
+                        FixtureValue::Uint((style_local + 1) as u64),
+                    )],
+                ),
+            ]
         }
-        fn style(local_id: usize, paint_local: usize) -> ShapePaintContainerNode {
-            ShapePaintContainerNode {
-                local_id,
-                global_id: local_id as u32,
-                type_name: "TextStylePaint",
-                blend_mode_value: 3,
-                paints: vec![ShapePaintNode {
-                    local_id: paint_local,
-                    global_id: paint_local as u32,
-                    type_name: "Stroke",
-                    paint_type: ShapePaintKind::Stroke,
-                    is_visible: true,
-                    blend_mode_value: 3,
-                    fill_rule: 0,
-                    path_kind: Some(ShapePaintPathKind::LocalClockwise),
-                    paint_state: None,
-                    mutator_local: None,
-                    mutator_global: None,
-                    mutator_type_name: None,
-                    feather: None,
-                    feather_local: None,
-                    feather_global: None,
-                    feather_type_name: None,
-                    effects: vec![effect(paint_local + 100)],
-                    gradient_stops: Vec::new(),
-                }],
-            }
+        fn fixture() -> (RuntimeFile, GraphFile) {
+            let mut records = vec![
+                fixture_record("Backboard", Vec::new()),
+                fixture_record(
+                    "FontAsset",
+                    vec![fixture_property(
+                        "FontAsset",
+                        "assetId",
+                        FixtureValue::Uint(0),
+                    )],
+                ),
+                fixture_record(
+                    "FileAssetContents",
+                    vec![fixture_property(
+                        "FileAssetContents",
+                        "bytes",
+                        FixtureValue::Bytes(
+                            include_bytes!("../../../fixtures/fonts/roboto-a.ttf").to_vec(),
+                        ),
+                    )],
+                ),
+                fixture_record("Artboard", Vec::new()),
+                fixture_record("Text", Vec::new()),
+            ];
+            records.extend(style_records(2));
+            records.extend(style_records(6));
+            records.extend(style_records(10));
+            records.extend([
+                fixture_record(
+                    "TextValueRun",
+                    vec![
+                        fixture_property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                        fixture_property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                        fixture_property(
+                            "TextValueRun",
+                            "text",
+                            FixtureValue::String("a".to_owned()),
+                        ),
+                    ],
+                ),
+                fixture_record(
+                    "TextValueRun",
+                    vec![
+                        fixture_property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                        fixture_property("TextValueRun", "styleId", FixtureValue::Uint(6)),
+                        fixture_property(
+                            "TextValueRun",
+                            "text",
+                            FixtureValue::String("a".to_owned()),
+                        ),
+                    ],
+                ),
+                fixture_record(
+                    "TextModifierGroup",
+                    vec![fixture_property(
+                        "TextModifierGroup",
+                        "parentId",
+                        FixtureValue::Uint(1),
+                    )],
+                ),
+                fixture_record(
+                    "TextModifierGroup",
+                    vec![fixture_property(
+                        "TextModifierGroup",
+                        "parentId",
+                        FixtureValue::Uint(1),
+                    )],
+                ),
+                fixture_record(
+                    "TextFollowPathModifier",
+                    vec![
+                        fixture_property(
+                            "TextFollowPathModifier",
+                            "parentId",
+                            FixtureValue::Uint(17),
+                        ),
+                        fixture_property(
+                            "TextFollowPathModifier",
+                            "targetId",
+                            FixtureValue::Uint(21),
+                        ),
+                    ],
+                ),
+                fixture_record(
+                    "TextModifierGroup",
+                    vec![fixture_property(
+                        "TextModifierGroup",
+                        "parentId",
+                        FixtureValue::Uint(1),
+                    )],
+                ),
+                fixture_record(
+                    "Shape",
+                    vec![fixture_property("Shape", "parentId", FixtureValue::Uint(0))],
+                ),
+                fixture_record(
+                    "PointsPath",
+                    vec![fixture_property(
+                        "PointsPath",
+                        "parentId",
+                        FixtureValue::Uint(20),
+                    )],
+                ),
+                fixture_record(
+                    "StraightVertex",
+                    vec![
+                        fixture_property("StraightVertex", "parentId", FixtureValue::Uint(21)),
+                        fixture_property("StraightVertex", "x", FixtureValue::Double(0.0)),
+                        fixture_property("StraightVertex", "y", FixtureValue::Double(0.0)),
+                    ],
+                ),
+                fixture_record(
+                    "StraightVertex",
+                    vec![
+                        fixture_property("StraightVertex", "parentId", FixtureValue::Uint(21)),
+                        fixture_property("StraightVertex", "x", FixtureValue::Double(100.0)),
+                        fixture_property("StraightVertex", "y", FixtureValue::Double(0.0)),
+                    ],
+                ),
+            ]);
+            let runtime = RuntimeFile::from_fixture_records(records)
+                .expect("real Text onDirty fixture imports");
+            let graphs =
+                GraphFile::from_runtime_file(&runtime).expect("real Text onDirty graph builds");
+            (runtime, graphs)
         }
-
-        let targets = RuntimeTextOnDirtyTargets {
-            modifier_groups: vec![(11, false), (12, true), (13, false)],
-            render_styles: vec![20, 21],
-        };
-        let mut owners = RuntimeShapeList::default();
-        owners.retain_paint_containers(&[style(20, 30), style(21, 31)]);
-        let reset_effects = || {
-            for style_local in [20, 21] {
-                owners.get(style_local).unwrap().paint_owners[0]
-                    .effect_dirty_from
-                    .set(None);
-            }
-        };
-        let effect_state = || {
-            [20, 21].map(|style_local| {
-                owners.get(style_local).unwrap().paint_owners[0]
+        fn effect_state(instance: &ArtboardInstance) -> [Option<usize>; 3] {
+            [2, 6, 10].map(|style_local| {
+                instance
+                    .runtime_shapes
+                    .get(style_local)
+                    .unwrap()
+                    .paint_owners[0]
                     .effect_dirty_from
                     .get()
             })
-        };
-        let visit = |dirt: ComponentDirt| {
-            let mut trace = Vec::new();
-            targets.visit(dirt, |action| {
-                trace.push(action);
-                if let RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local } = action {
-                    owners.invalidate_container_stroke_effects(style_local);
-                }
-            });
-            trace
-        };
-
-        reset_effects();
-        assert_eq!(
-            visit(ComponentDirt::WORLD_TRANSFORM),
-            [
-                RuntimeTextOnDirtyAction::ModifierWorldTransform {
-                    group_local: 11,
-                    follows_path: false,
-                },
-                RuntimeTextOnDirtyAction::ModifierWorldTransform {
-                    group_local: 12,
-                    follows_path: true,
-                },
-                RuntimeTextOnDirtyAction::ModifierWorldTransform {
-                    group_local: 13,
-                    follows_path: false,
-                },
-            ]
-        );
-        assert_eq!(effect_state(), [None, None]);
-
-        for dirt in [ComponentDirt::PATH, ComponentDirt::PAINT] {
-            reset_effects();
-            assert_eq!(
-                visit(dirt),
-                [
-                    RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 20 },
-                    RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 21 },
-                ]
+        }
+        fn prepared_instance() -> (RuntimeFile, GraphFile, ArtboardInstance) {
+            let (runtime, graphs) = fixture();
+            let mut instance = ArtboardInstance::from_graph(&runtime, &graphs.artboards[0])
+                .expect("real Text occurrence builds");
+            assert!(instance.update_components().did_update);
+            for paint_local in [3, 7, 11] {
+                assert!(instance.add_dirt(paint_local, ComponentDirt::PATH, false));
+            }
+            assert!(instance.update_components().did_update);
+            assert!(
+                instance.runtime_drawables.drawables
+                    [instance.runtime_drawables.drawable_by_local[&1]]
+                    .text_draw_owner
+                    .as_ref()
+                    .unwrap()
+                    .retained
+                    .borrow()
+                    .is_some()
             );
-            assert_eq!(effect_state(), [Some(0), Some(0)]);
+            instance.runtime_drawables.clear_text_on_dirty_trace(1);
+            assert_eq!(effect_state(&instance), [None, None, None]);
+            (runtime, graphs, instance)
         }
 
-        reset_effects();
+        let (_runtime, _graphs, mut instance) = prepared_instance();
+        assert!(instance.add_dirt(1, ComponentDirt::WORLD_TRANSFORM, false));
         assert_eq!(
-            visit(ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH | ComponentDirt::PAINT),
+            instance.runtime_drawables.text_on_dirty_trace(1),
             [
-                RuntimeTextOnDirtyAction::ModifierWorldTransform {
-                    group_local: 11,
-                    follows_path: false,
-                },
-                RuntimeTextOnDirtyAction::ModifierWorldTransform {
-                    group_local: 12,
-                    follows_path: true,
-                },
-                RuntimeTextOnDirtyAction::ModifierWorldTransform {
-                    group_local: 13,
-                    follows_path: false,
-                },
-                RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 20 },
-                RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 21 },
+                (
+                    ComponentDirt::WORLD_TRANSFORM,
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 16,
+                        follows_path: false,
+                    },
+                ),
+                (
+                    ComponentDirt::WORLD_TRANSFORM,
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 17,
+                        follows_path: true,
+                    },
+                ),
+                (
+                    ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 16,
+                        follows_path: false,
+                    },
+                ),
+                (
+                    ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 17,
+                        follows_path: true,
+                    },
+                ),
+                (
+                    ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 19,
+                        follows_path: false,
+                    },
+                ),
+                (
+                    ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+                    RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 2 },
+                ),
+                (
+                    ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+                    RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 6 },
+                ),
+                (
+                    ComponentDirt::WORLD_TRANSFORM,
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 19,
+                        follows_path: false,
+                    },
+                ),
             ]
         );
-        assert_eq!(effect_state(), [Some(0), Some(0)]);
+        assert_eq!(effect_state(&instance), [Some(0), Some(0), None]);
+
+        for dirt in [ComponentDirt::PATH, ComponentDirt::PAINT] {
+            let (_runtime, _graphs, mut instance) = prepared_instance();
+            assert!(instance.add_dirt(1, dirt, false));
+            assert_eq!(
+                instance.runtime_drawables.text_on_dirty_trace(1),
+                [
+                    (
+                        dirt,
+                        RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 2 },
+                    ),
+                    (
+                        dirt,
+                        RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 6 },
+                    ),
+                ]
+            );
+            assert_eq!(effect_state(&instance), [Some(0), Some(0), None]);
+        }
+
+        let (_runtime, _graphs, mut instance) = prepared_instance();
+        let combined = ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH | ComponentDirt::PAINT;
+        assert!(instance.add_dirt(1, combined, false));
+        assert_eq!(
+            instance.runtime_drawables.text_on_dirty_trace(1),
+            [
+                (
+                    combined,
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 16,
+                        follows_path: false,
+                    },
+                ),
+                (
+                    combined,
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 17,
+                        follows_path: true,
+                    },
+                ),
+                (
+                    combined,
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 19,
+                        follows_path: false,
+                    },
+                ),
+                (
+                    combined,
+                    RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 2 },
+                ),
+                (
+                    combined,
+                    RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local: 6 },
+                ),
+            ]
+        );
+        assert_eq!(effect_state(&instance), [Some(0), Some(0), None]);
     }
 
     #[test]

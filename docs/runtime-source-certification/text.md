@@ -119,6 +119,21 @@ owners, WorldTransform, Path, Paint, and their combined source order. The
 disabled no-op body remains red. No consumer moved; topology remains four pass,
 three executable expected-red, and 11 pending.
 
+Text on-dirty residual evidence correction note: the proxy-only evidence
+rejected at `c16061c53bae875bc815d973bc2ec736cda775fc` is removed. The focused
+case now imports a real `RuntimeFile`, builds its `GraphFile` and
+`ArtboardInstance`, materializes the Text retained frame and current render
+styles, and drives WorldTransform, Path, Paint, and their combined mask only
+through `ArtboardInstance::add_dirt`. Three authored modifier groups include a
+live follow-path modifier targeting imported path geometry; two styles are
+used by current text runs, while a third imported style remains unused. A
+read-only test trace at the production callback boundary proves authored group
+order, recursive accumulated-mask reentry, group-before-style order, and one
+invalidation for each distinct current style. Concrete retained effect state
+proves both current styles invalidate and the imported-unused style remains
+untouched. No production mapping or consumer classification changed; topology
+remains four pass, three executable expected-red, and 11 pending.
+
 This is an atomic source-pair audit under
 `docs/runtime-exact-parity-workflow-correction.md`. It does not inherit the
 older file-level `mapped` or `faithful` verdict. The later correction candidate

@@ -7923,16 +7923,25 @@ impl ArtboardInstance {
                 })
             });
             if let Some(targets) = targets {
-                targets.visit(accumulated, |action| match action {
-                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
-                        follows_path: true, ..
-                    } => {
-                        self.add_component_dirt(handle, ComponentDirt::PATH, false);
-                    }
-                    RuntimeTextOnDirtyAction::ModifierWorldTransform { .. } => {}
-                    RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local } => {
-                        self.runtime_shapes
-                            .invalidate_container_stroke_effects(style_local);
+                targets.visit(accumulated, |action| {
+                    #[cfg(test)]
+                    self.runtime_drawables.record_text_on_dirty_action(
+                        local_id,
+                        accumulated,
+                        action,
+                    );
+                    match action {
+                        RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                            follows_path: true,
+                            ..
+                        } => {
+                            self.add_component_dirt(handle, ComponentDirt::PATH, false);
+                        }
+                        RuntimeTextOnDirtyAction::ModifierWorldTransform { .. } => {}
+                        RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local } => {
+                            self.runtime_shapes
+                                .invalidate_container_stroke_effects(style_local);
+                        }
                     }
                 });
             }

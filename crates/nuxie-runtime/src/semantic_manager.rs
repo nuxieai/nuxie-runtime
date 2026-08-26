@@ -10,6 +10,15 @@ use crate::semantic_data::{
     SemanticBounds, SemanticDirt, SemanticNode, SemanticNodeHandle, is_interactive_role,
 };
 
+#[cfg(test)]
+mod wave_c17_id_tests;
+#[cfg(test)]
+mod wave_c17_incremental_tests;
+#[cfg(test)]
+mod wave_c17_inference_tests;
+#[cfg(test)]
+mod wave_c17_ordering_tests;
+
 type ChildrenByParent = BTreeMap<i32, Vec<u32>>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

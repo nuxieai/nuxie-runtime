@@ -33,6 +33,18 @@ fn text_modifier_group_modifies_transform(flags: u64) -> bool {
     flags & (MODIFY_ORIGIN | MODIFY_TRANSLATION | MODIFY_ROTATION | MODIFY_SCALE) != 0
 }
 
+/// Pinned `TextModifierGroup::transform` contracts the authored scale product
+/// into the final addition on the supported clang/AArch64 build.
+fn text_modifier_group_scale_component(amount: f32, scale: f32) -> f32 {
+    scale.mul_add(amount, 1.0 - amount)
+}
+
+/// Pinned `TextModifierGroup::computeOpacity` computes the opacity product,
+/// then contracts the current-opacity product into that add.
+fn text_modifier_group_inverted_opacity(current: f32, amount: f32, opacity: f32) -> f32 {
+    current.mul_add(1.0 - amount, opacity * amount)
+}
+
 impl StaticTextModifierGroup {
     fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
         let global_id = global_for_local(graph, local_id)?;
@@ -214,9 +226,9 @@ impl StaticTextModifierGroup {
             )? * amount;
         }
         if flags & MODIFY_SCALE != 0 {
-            let inverse_amount = 1.0 - amount;
-            scale_x = inverse_amount
-                + runtime_double_property(
+            scale_x = text_modifier_group_scale_component(
+                amount,
+                runtime_double_property(
                     runtime,
                     instance,
                     "TextModifierGroup",
@@ -224,9 +236,11 @@ impl StaticTextModifierGroup {
                     self.global_id,
                     "scaleX",
                     1.0,
-                )? * amount;
-            scale_y = inverse_amount
-                + runtime_double_property(
+                )?,
+            );
+            scale_y = text_modifier_group_scale_component(
+                amount,
+                runtime_double_property(
                     runtime,
                     instance,
                     "TextModifierGroup",
@@ -234,7 +248,8 @@ impl StaticTextModifierGroup {
                     self.global_id,
                     "scaleY",
                     1.0,
-                )? * amount;
+                )?,
+            );
         }
         let mut transform = Mat2D::from_rotation(rotation);
         transform.0[4] = x;
@@ -308,7 +323,9 @@ impl StaticTextModifierGroup {
         )?;
         const INVERT_OPACITY: u64 = 1 << 6;
         if flags & INVERT_OPACITY != 0 {
-            Ok(current * (1.0 - amount) + opacity * amount)
+            Ok(text_modifier_group_inverted_opacity(
+                current, amount, opacity,
+            ))
         } else {
             Ok(current * opacity * amount)
         }
@@ -334,12 +351,12 @@ impl StaticTextModifierGroup {
         instance: &ArtboardInstance,
         font: &SkrifaFontRef<'_>,
         strength: f32,
-        inherited: &BTreeMap<u32, f32>,
+        font_axes: &BTreeMap<u32, f32>,
     ) -> BTreeMap<u32, f32> {
         let mut variations = BTreeMap::new();
         for index in &self.shape_modifier_indices {
             if let Some(StaticTextModifier::Variation(modifier)) = self.modifiers.get(*index) {
-                modifier.modify(instance, font, inherited, &mut variations, strength);
+                modifier.modify(instance, font, font_axes, &mut variations, strength);
             }
         }
         variations

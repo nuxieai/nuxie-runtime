@@ -65,12 +65,7 @@ pub(crate) fn text_variation_modifier_double_property_changed(
     .then(|| {
         let group = instance.component_parent_local(local_id)?;
         let text = instance.component_parent_local(group)?;
-        let coverage = instance.add_dirt(
-            group,
-            crate::components::ComponentDirt::TEXT_COVERAGE,
-            false,
-        );
-        Some(crate::text_owner::mark_shape_dirty(instance, text) | coverage)
+        Some(crate::text_owner::mark_shape_dirty(instance, text))
     })
     .flatten()
 }

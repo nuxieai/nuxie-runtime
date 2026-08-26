@@ -1995,6 +1995,19 @@ impl StaticTextSlice {
         }
 
         if let Some(component) = graph.components.iter().find(|component| {
+            component.type_name == "TextModifierGroup"
+                && !component
+                    .parent_local
+                    .and_then(|parent| type_for_local(graph, parent))
+                    .and_then(definition_by_name)
+                    .is_some_and(|definition| definition.is_a("Text"))
+        }) {
+            bail!(
+                "TextModifierGroup local {} requires a direct Text parent",
+                component.local_id
+            );
+        }
+        if let Some(component) = graph.components.iter().find(|component| {
             definition_by_name(component.type_name)
                 .is_some_and(|definition| definition.is_a("TextModifier"))
                 && component
@@ -3916,19 +3929,20 @@ impl StaticTextSlice {
         let letter_spacing = self.style_letter_spacing(runtime, instance, style);
         let skrifa_font =
             SkrifaFontRef::new(font_bytes).context("failed to parse localized variable font")?;
-        let mut localized = BTreeMap::<u32, f32>::new();
-        let mut effective = style
+        let font_axes = style
             .variation_values(instance)
             .into_iter()
             .collect::<BTreeMap<_, _>>();
+        let mut localized = BTreeMap::<u32, f32>::new();
         for (group, strength) in self.modifiers.iter().zip(strengths) {
             if *strength == 0.0 || !group.has_shape_modifiers() {
                 continue;
             }
-            let group_variations =
-                group.variation_map(instance, &skrifa_font, *strength, &effective);
-            effective.extend(group_variations.iter().map(|(tag, value)| (*tag, *value)));
-            localized.extend(group_variations);
+            // Pinned `applyShapeModifiers` calls `modifyShape` group by group.
+            // Each nonzero group starts from the authored style font and then
+            // swaps its replacement runs into `StyledText`; it never uses the
+            // preceding group's variable font as the next group's source.
+            localized = group.variation_map(instance, &skrifa_font, *strength, &font_axes);
         }
         let raw_glyphs = shape_text_glyphs_for_style_with_variations(
             font_bytes, style, instance, text, &localized,
@@ -7945,6 +7959,138 @@ mod tests {
             .unwrap();
         assert_eq!(actual, incoming);
         assert!(!text_modifier_group_modifies_transform(1 << 5));
+    }
+
+    #[test]
+    fn cxx_text_modifier_group_retains_pinned_scale_and_inverted_opacity_contractions() {
+        let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let graph = graphs.artboards.first().unwrap();
+        let mut slice = StaticTextSlice::from_graph(&runtime, graph, 1).unwrap();
+        let group = slice.modifiers.remove(0);
+        let modifier_flags = property_key_for_name("TextModifierGroup", "modifierFlags").unwrap();
+        let scale_x = property_key_for_name("TextModifierGroup", "scaleX").unwrap();
+        let scale_y = property_key_for_name("TextModifierGroup", "scaleY").unwrap();
+        let opacity = property_key_for_name("TextModifierGroup", "opacity").unwrap();
+
+        let amount = f32::from_bits(0x69bf_3df8);
+        let scale = f32::from_bits(0x4e0f_25f8);
+        assert!(instance.set_uint_property(group.local_id, modifier_flags, 1 << 4));
+        assert!(instance.set_double_property(group.local_id, scale_x, scale));
+        assert!(instance.set_double_property(group.local_id, scale_y, scale));
+        let glyph = StaticTextGlyphContext {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            line_index_in_paragraph: 0,
+            paragraph_baselines: &[],
+            text_world_inverse: Mat2D::IDENTITY,
+        };
+        let transformed = group
+            .transform(&runtime, &instance, amount, Mat2D::IDENTITY, &glyph)
+            .unwrap();
+        assert_eq!(transformed.0[0].to_bits(), 0x7855_dff5);
+        assert_eq!(transformed.0[3].to_bits(), 0x7855_dff5);
+
+        let current = f32::from_bits(0xc389_eceb);
+        let opacity_value = f32::from_bits(0xc321_b678);
+        let opacity_amount = f32::from_bits(0x3c8a_8fc1);
+        assert!(instance.set_uint_property(group.local_id, modifier_flags, (1 << 5) | (1 << 6)));
+        assert!(instance.set_double_property(group.local_id, opacity, opacity_value));
+        let actual = group
+            .opacity(&runtime, &instance, current, opacity_amount)
+            .unwrap();
+        assert_eq!(actual.to_bits(), 0xc388_f5ce);
+    }
+
+    #[test]
+    fn cxx_successive_modifier_groups_restart_from_the_authored_style_font() {
+        let (runtime, graphs, instance) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let graph = graphs.artboards.first().unwrap();
+        let mut slice = StaticTextSlice::from_graph(&runtime, graph, 1).unwrap();
+        let wght = u32::from_be_bytes(*b"wght");
+        let group = |local_id, axis_value| StaticTextModifierGroup {
+            local_id,
+            global_id: 0,
+            ranges: Vec::new(),
+            modifiers: vec![StaticTextModifier::Variation(StaticTextVariationModifier {
+                local_id: local_id + 1,
+                global_id: 0,
+                authored_tag: wght,
+                authored_value: axis_value,
+            })],
+            shape_modifier_indices: vec![0],
+            follow_path_modifiers: Vec::new(),
+        };
+        slice.modifiers = vec![group(usize::MAX - 3, 100.0), group(usize::MAX - 1, 800.0)];
+
+        let style = &slice.styles[0];
+        let font = SkrifaFontRef::new(style.font_bytes(&runtime, &instance).unwrap()).unwrap();
+        let authored = style
+            .variation_values(&instance)
+            .into_iter()
+            .find(|(tag, _)| *tag == wght)
+            .map(|(_, value)| value)
+            .or_else(|| {
+                font.axes()
+                    .iter()
+                    .find(|axis| u32::from_be_bytes(axis.tag().to_be_bytes()) == wght)
+                    .map(|axis| axis.default_value())
+            })
+            .unwrap();
+        let glyphs = slice
+            .styled_text_glyphs_for_style_with_strengths(
+                &runtime,
+                &instance,
+                "A",
+                0,
+                0,
+                0,
+                1.0,
+                &[0.5, 0.5],
+            )
+            .unwrap();
+        let actual = glyphs[0]
+            .variations
+            .iter()
+            .find(|(tag, _)| *tag == wght)
+            .map(|(_, value)| *value)
+            .unwrap();
+        let pinned = authored * 0.5 + 800.0 * 0.5;
+        let incorrectly_layered = (authored * 0.5 + 100.0 * 0.5) * 0.5 + 800.0 * 0.5;
+        assert_eq!(actual, pinned);
+        assert_ne!(actual, incorrectly_layered);
+    }
+
+    #[test]
+    fn cxx_text_modifier_group_requires_a_direct_text_parent() {
+        let (runtime, graphs, _) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let mut graph = graphs.artboards.first().unwrap().clone();
+        let group_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "TextModifierGroup")
+            .map(|component| component.local_id)
+            .unwrap();
+        let artboard_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Artboard")
+            .map(|component| component.local_id)
+            .unwrap();
+        graph
+            .components
+            .iter_mut()
+            .find(|component| component.local_id == group_local)
+            .unwrap()
+            .parent_local = Some(artboard_local);
+
+        let error = StaticTextSlice::from_graph(&runtime, &graph, 1).unwrap_err();
+        assert!(error.to_string().contains("requires a direct Text parent"));
     }
 
     #[test]

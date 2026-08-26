@@ -381,18 +381,19 @@ fn range_changed(instance: &mut ArtboardInstance, range_local: usize, path_only:
     let Some(text) = modifier_group_text(instance, group) else {
         return false;
     };
-    let mut changed = instance.add_dirt(
+    let mut changed = if path_only {
+        crate::text_owner::modifier_shape_dirty(instance, text)
+    } else if group_has_shape_modifier(instance, group) {
+        crate::text_owner::modifier_shape_dirty(instance, text)
+    } else {
+        instance.add_dirt(text, crate::components::ComponentDirt::PAINT, false)
+    };
+    // `rangeTypeChanged`/`rangeChanged` dirty Text first, then their group.
+    changed |= instance.add_dirt(
         group,
         crate::components::ComponentDirt::TEXT_COVERAGE,
         false,
     );
-    if path_only {
-        changed |= crate::text_owner::mark_shape_dirty_without_layout(instance, text);
-    } else if group_has_shape_modifier(instance, group) {
-        changed |= crate::text_owner::mark_shape_dirty(instance, text);
-    } else {
-        changed |= instance.add_dirt(text, crate::components::ComponentDirt::PAINT, false);
-    }
     changed
 }
 
@@ -433,7 +434,7 @@ pub(crate) fn text_modifier_group_uint_property_changed(
     if type_name != Some("TextModifierRange") {
         return None;
     }
-    let path_only = property_key_for_name("TextModifierRange", "typeValue") == Some(property_key);
+    let path_only = property_key_for_name("TextModifierRange", "unitsValue") == Some(property_key);
     Some(range_changed(instance, local_id, path_only))
 }
 

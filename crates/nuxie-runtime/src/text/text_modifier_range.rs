@@ -107,7 +107,7 @@ impl StaticTextModifierRange {
         }
         let (start, end) = self.character_range(runtime, instance, runs, coverage.len())?;
         let units_value = self.uint_property(runtime, instance, "unitsValue", 0)?;
-        let units = self.range_units(units_value, text, start, end, lines)?;
+        let units = self.range_units(instance, units_value, text, start, end, lines)?;
         if units.is_empty() {
             return Ok(());
         }
@@ -194,20 +194,24 @@ impl StaticTextModifierRange {
 
     fn range_units(
         &self,
+        instance: &ArtboardInstance,
         units_value: u64,
         text: &str,
         start: usize,
         end: usize,
         lines: &[StaticTextLine],
     ) -> Result<Vec<StaticRangeUnit>> {
-        match units_value {
-            0 => Ok((start..end)
+        if units_value > 3 {
+            bail!("static text subset does not support TextModifierRange units {units_value}");
+        }
+        let compute = || match units_value {
+            0 => (start..end)
                 .map(|index| StaticRangeUnit {
                     start: index,
                     len: 1,
                 })
-                .collect()),
-            1 => Ok(text
+                .collect(),
+            1 => text
                 .chars()
                 .enumerate()
                 .skip(start)
@@ -218,11 +222,29 @@ impl StaticTextModifierRange {
                         len: 1,
                     })
                 })
-                .collect()),
-            2 => Ok(Self::word_range_units(text, start, end)),
-            3 => Ok(Self::line_range_units(lines, start, end)),
-            other => bail!("static text subset does not support TextModifierRange units {other}"),
-        }
+                .collect(),
+            2 => Self::word_range_units(text, start, end),
+            3 => Self::line_range_units(lines, start, end),
+            _ => unreachable!("unitsValue was validated above"),
+        };
+        let Some(text_state) = instance
+            .component_parent_local(self.local_id)
+            .and_then(|group| instance.component_parent_local(group))
+            .and_then(|text| instance.component(text))
+            .and_then(|text| text.concrete.text.as_ref())
+        else {
+            return Ok(compute());
+        };
+        let units = text_state.modifier_range_units(self.local_id, || {
+            compute()
+                .into_iter()
+                .map(|unit| (unit.start, unit.len))
+                .collect()
+        });
+        Ok(units
+            .into_iter()
+            .map(|(start, len)| StaticRangeUnit { start, len })
+            .collect())
     }
 
     fn word_range_units(text: &str, start: usize, end: usize) -> Vec<StaticRangeUnit> {

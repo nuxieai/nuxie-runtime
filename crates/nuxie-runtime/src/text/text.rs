@@ -78,6 +78,48 @@ fn mark_shape_dirty_with_layout(
     ) {
         return false;
     }
+    let modifier_ranges = instance
+        .component(text_local_id)
+        .into_iter()
+        .flat_map(|text| text.children.iter())
+        .filter_map(|group| instance.component_local_id(*group))
+        .filter(|group_local| {
+            instance
+                .component(*group_local)
+                .is_some_and(|group| group.type_name == "TextModifierGroup")
+        })
+        .map(|group_local| {
+            let ranges = instance
+                .component(group_local)
+                .into_iter()
+                .flat_map(|group| group.children.iter())
+                .filter_map(|range| instance.component_local_id(*range))
+                .filter(|range_local| {
+                    instance
+                        .component(*range_local)
+                        .is_some_and(|range| range.type_name == "TextModifierRange")
+                })
+                .collect::<Vec<_>>();
+            (group_local, ranges)
+        })
+        .collect::<Vec<_>>();
+
+    // Pinned `Text::markShapeDirty(bool)` publishes Path first, then clears
+    // every modifier range map and publishes TextCoverage for each group in
+    // authored child order.
+    let mut changed = instance.add_dirt(text_local_id, ComponentDirt::PATH, false);
+    for (group_local, ranges) in modifier_ranges {
+        if let Some(text) = instance
+            .component(text_local_id)
+            .and_then(|component| component.concrete.text.as_ref())
+        {
+            for range_local in ranges {
+                text.clear_modifier_range_map(range_local);
+            }
+        }
+        changed |= instance.add_dirt(group_local, ComponentDirt::TEXT_COVERAGE, false);
+    }
+
     instance.mark_text_shape_changed();
     if let Some(text) = instance
         .component(text_local_id)
@@ -85,12 +127,25 @@ fn mark_shape_dirty_with_layout(
     {
         text.invalidate_bounds();
     }
-    let mut changed = instance.add_dirt(text_local_id, ComponentDirt::PATH, false);
     changed |= instance.add_dirt(text_local_id, ComponentDirt::WORLD_TRANSFORM, true);
     if send_to_layout {
         changed |= layout_node_provider::mark_layout_node_dirty(instance, text_local_id);
     }
     changed
+}
+
+/// Direct pinned `Text::modifierShapeDirty`: Path only. Range-map clearing,
+/// WorldTransform dirt, and layout publication belong to `markShapeDirty`.
+pub(crate) fn modifier_shape_dirty(instance: &mut ArtboardInstance, text_local_id: usize) -> bool {
+    if !matches!(
+        instance
+            .component(text_local_id)
+            .map(|component| component.type_name),
+        Some("Text" | "TextInput")
+    ) {
+        return false;
+    }
+    instance.add_dirt(text_local_id, ComponentDirt::PATH, false)
 }
 
 fn effective_sizing(instance: &ArtboardInstance, text_local_id: usize) -> u64 {

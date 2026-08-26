@@ -59,6 +59,16 @@ Focused evidence is
 Consumer topology remains four pass, three executable expected-red, and 11
 pending.
 
+Shape-dirt production-correction candidate note: rows 24 and 25 now have
+separate occurrence-owned callbacks. `markShapeDirty(bool)` publishes Path,
+clears retained modifier range maps and publishes each group's TextCoverage in
+authored order, then publishes WorldTransform and optional layout dirt.
+`modifierShapeDirty` publishes Path only, including the pinned range-type and
+shape-modifier range callbacks. Focused retained-state/dirt evidence is
+`text.rs::cxx_text_shape_dirty_clears_retained_range_maps_before_group_and_world_dirt`.
+No consumer moved; topology remains four pass, three executable expected-red,
+and 11 pending.
+
 This is an atomic source-pair audit under
 `docs/runtime-exact-parity-workflow-correction.md`. It does not inherit the
 older file-level `mapped` or `faithful` verdict. The later correction candidate
@@ -135,8 +145,8 @@ not surrounding module attribution, are the durable identity.
 | 21 | `addRun` (964; disabled 1415) | Append the same pointer to authored runs and all runs; disabled is inert. | `text.rs:1670::StaticTextSlice::from_graph` run collection | **adapted**: immutable graph reconstruction retains one descriptor list, not two pointer vectors. |
 | 22 | `addModifierGroup` (970; disabled 1416) | Append group in child/import order; disabled is inert. | `text.rs:1670::StaticTextSlice::from_graph`, modifier collection branch at 1979 | **adapted candidate**, pending order evidence. |
 | 23 | `markShapeDirty()` (975; disabled 1418) | Delegate to `markShapeDirty(true)`; disabled is inert. | `text/text.rs:57::mark_shape_dirty` | **adapted**: wrapper exists, but Rust helper also publishes revision/world dirt and invalidates bounds. |
-| 24 | `markShapeDirty(bool)` (977; disabled 1417) | Add Path; clear every modifier range map; mark world transform; optionally layout dirty, in order. Disabled is inert. | `text/text.rs:68::mark_shape_dirty_with_layout`; no direct Rust owner for per-group `clearRangeMaps`. | **incomplete/order difference**: Rust publishes revision, invalidates bounds, Path, WorldTransform, then layout; the range-map clear side effect is reconstructed during later shaping. |
-| 25 | `modifierShapeDirty` (993; disabled 1427) | Add Path only. | No direct Rust callback owner. | **missing direct callback**: generic draw-owner invalidation is not this Path-only Text method. |
+| 24 | `markShapeDirty(bool)` (977; disabled 1417) | Add Path; clear every modifier range map; mark world transform; optionally layout dirty, in order. Disabled is inert. | `text/text.rs:68::mark_shape_dirty_with_layout`; occurrence range-map owner `components.rs:1023::RuntimeTextState::modifier_range_units`; range consumer `text/text_modifier_range.rs:195::StaticTextModifierRange::range_units`; evidence `text.rs:7031::cxx_text_shape_dirty_clears_retained_range_maps_before_group_and_world_dirt` | **adapted correction candidate**: the occurrence owner now retains nonempty maps and clears each range in authored group/child order between Path and WorldTransform publication, adding TextCoverage to each group before optional layout dirt. Rust's global shape revision and bounds invalidation remain bookkeeping inside this ordered callback. |
+| 25 | `modifierShapeDirty` (993; disabled 1427) | Add Path only. | `text/text.rs:139::modifier_shape_dirty`; range dispatch `text/text_modifier_group.rs:377::range_changed`; evidence `text.rs:7031::cxx_text_shape_dirty_clears_retained_range_maps_before_group_and_world_dirt` | **exact callback candidate**: the distinct owner adds Path only and deliberately preserves retained range maps, group coverage dirt, WorldTransform, and layout state. `unitsValueChanged` and shape-modifier-backed range changes route here before group TextCoverage, matching pinned callback order. |
 | 26 | `markPaintDirty` (995; disabled 1426) | Add Paint only. | `text/text.rs:106::mark_paint_dirty` | **exact enabled-path candidate**; no disabled-feature counterpart. |
 | 27 | `alignValueChanged` (997; disabled 1421) | Shape dirty. | `text/text.rs:147::uint_property_changed` | **adapted through row 24**. |
 | 28 | `sizingValueChanged` (999; disabled 1422) | Shape dirty. | `text/text.rs:147::uint_property_changed` | **adapted through row 24**. |

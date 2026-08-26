@@ -979,6 +979,7 @@ pub(crate) struct RuntimeTextInputState {
 pub(crate) struct RuntimeTextState {
     bounds: Cell<Option<(f32, f32, f32, f32)>>,
     layout_scale_types: Cell<Option<(u64, u64)>>,
+    modifier_range_maps: RefCell<BTreeMap<usize, Vec<(usize, usize)>>>,
 }
 
 impl RuntimeTextState {
@@ -986,6 +987,7 @@ impl RuntimeTextState {
         Self {
             bounds: Cell::new(None),
             layout_scale_types: Cell::new(None),
+            modifier_range_maps: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -1016,6 +1018,34 @@ impl RuntimeTextState {
             }
             _ => authored,
         }
+    }
+
+    pub(crate) fn modifier_range_units(
+        &self,
+        range_local: usize,
+        compute: impl FnOnce() -> Vec<(usize, usize)>,
+    ) -> Vec<(usize, usize)> {
+        if let Some(units) = self.modifier_range_maps.borrow().get(&range_local) {
+            return units.clone();
+        }
+        let units = compute();
+        // Pinned `RangeMapper::empty()` is keyed by unit lengths, so an empty
+        // computation remains eligible for recomputation on the next call.
+        if !units.is_empty() {
+            self.modifier_range_maps
+                .borrow_mut()
+                .insert(range_local, units.clone());
+        }
+        units
+    }
+
+    pub(crate) fn clear_modifier_range_map(&self, range_local: usize) {
+        self.modifier_range_maps.borrow_mut().remove(&range_local);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn modifier_range_map_count(&self) -> usize {
+        self.modifier_range_maps.borrow().len()
     }
 }
 

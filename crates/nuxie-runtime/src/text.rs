@@ -7028,6 +7028,130 @@ mod tests {
     }
 
     #[test]
+    fn cxx_text_shape_dirty_clears_retained_range_maps_before_group_and_world_dirt() {
+        let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let group_local = slice.modifiers[0].local_id;
+        let range_local = slice.modifiers[0].ranges[0].local_id;
+
+        static_text_layout_debug_report(&runtime, graph, &instance, 1, None)
+            .expect("coverage materializes retained range maps");
+        let text_state = instance
+            .component(1)
+            .and_then(|component| component.concrete.text.as_ref())
+            .expect("Text owns retained state");
+        assert!(text_state.modifier_range_map_count() > 0);
+
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(group_local);
+        assert!(crate::text_owner::mark_shape_dirty(&mut instance, 1));
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .modifier_range_map_count(),
+            0
+        );
+        let text_dirt = instance.debug_component_dirt(1).expect("Text dirt");
+        assert!(text_dirt.contains(crate::components::ComponentDirt::PATH));
+        assert!(text_dirt.contains(crate::components::ComponentDirt::WORLD_TRANSFORM));
+        assert!(
+            instance
+                .debug_component_dirt(group_local)
+                .expect("modifier group dirt")
+                .contains(crate::components::ComponentDirt::TEXT_COVERAGE)
+        );
+
+        static_text_layout_debug_report(&runtime, graph, &instance, 1, None)
+            .expect("coverage rematerializes retained range maps");
+        assert!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .modifier_range_map_count()
+                > 0
+        );
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(group_local);
+        assert!(crate::text_owner::mark_shape_dirty_without_layout(
+            &mut instance,
+            1
+        ));
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .modifier_range_map_count(),
+            0
+        );
+        let text_dirt = instance.debug_component_dirt(1).expect("Text dirt");
+        assert!(text_dirt.contains(crate::components::ComponentDirt::PATH));
+        assert!(text_dirt.contains(crate::components::ComponentDirt::WORLD_TRANSFORM));
+
+        static_text_layout_debug_report(&runtime, graph, &instance, 1, None)
+            .expect("coverage rematerializes after markShapeDirty(false)");
+        let retained_count = instance
+            .component(1)
+            .and_then(|component| component.concrete.text.as_ref())
+            .expect("Text state remains")
+            .modifier_range_map_count();
+        assert!(retained_count > 0);
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(group_local);
+
+        assert!(crate::text_owner::modifier_shape_dirty(&mut instance, 1));
+        let text_dirt = instance.debug_component_dirt(1).expect("Text dirt");
+        assert!(text_dirt.contains(crate::components::ComponentDirt::PATH));
+        assert!(!text_dirt.contains(crate::components::ComponentDirt::WORLD_TRANSFORM));
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .modifier_range_map_count(),
+            retained_count,
+            "modifierShapeDirty must not clear range maps"
+        );
+        assert!(
+            !instance
+                .debug_component_dirt(group_local)
+                .expect("modifier group dirt")
+                .contains(crate::components::ComponentDirt::TEXT_COVERAGE)
+        );
+
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(group_local);
+        let units_key =
+            property_key_for_name("TextModifierRange", "unitsValue").expect("unitsValue key");
+        let current_units = instance.uint_property(range_local, units_key).unwrap_or(0);
+        assert!(instance.set_uint_property(range_local, units_key, (current_units + 1) % 4));
+        let text_dirt = instance.debug_component_dirt(1).expect("Text dirt");
+        assert!(text_dirt.contains(crate::components::ComponentDirt::PATH));
+        assert!(!text_dirt.contains(crate::components::ComponentDirt::WORLD_TRANSFORM));
+        assert!(
+            instance
+                .debug_component_dirt(group_local)
+                .expect("modifier group dirt")
+                .contains(crate::components::ComponentDirt::TEXT_COVERAGE)
+        );
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .modifier_range_map_count(),
+            retained_count,
+            "unitsValueChanged routes through modifierShapeDirty, not markShapeDirty"
+        );
+    }
+
+    #[test]
     fn d_st_feature_preserves_order_defaults_duplicates_and_live_callback_inaction() {
         let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
             "../../../fixtures/fl-e8/text_style_feature.riv"

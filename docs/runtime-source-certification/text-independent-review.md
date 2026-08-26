@@ -425,3 +425,33 @@ and the candidate delta passes `git diff --check`. Its committed `draw.rs`
 changes are confined to the intended control-size seams/evidence. The separate
 pre-existing formatting hunk in `draw.rs` remains unstaged, along with all
 other user dirt. This review changed documentation only.
+
+## Narrow Text row 10 animation residual rereview of `5a1173773`
+
+Verdict: **ACCEPTED**
+
+`ArtboardInstance::advance_layout_component_entry` now invokes the same
+`propagate_runtime_layout_text_control_size` owner after
+`RuntimeLayoutComponentState::advance_interpolation` has written its current
+layout. Its gate matches the pinned split: an intermediate write propagates
+only when width or height changed, while the terminal changed layout always
+propagates. The shared owner reads the retained current width/height, the
+LayoutComponent style's width/height scale enums, and its actual inherited
+direction, then visits only direct, non-participating Text children before
+calling the already accepted five-field `text_owner::control_size`. Solve-time
+propagation now uses that same owner. The separate LayoutParticipant solve and
+advance path is unchanged.
+
+The focused test drives the real advancing-component dispatcher rather than a
+test-local algorithm. It observes the retained tuple and preferred retained
+constraint at the intermediate **150 x 70** write, then the terminal **200 x
+90** write, with Text Path and WorldTransform dirt at both boundaries. The new
+focused test, the retained-owner test, and the direct-child/Solo boundary test
+each pass (one passed, zero failed or ignored).
+
+The correction commit changes only `artboard.rs`, `draw.rs`, and the Text source
+receipt, and passes `git diff --check`. The index contains no partially staged
+paths; the pre-existing `draw.rs` formatting hunk and all other user dirt remain
+unstaged. Row 10 still names the disabled no-op body as missing/red, and the
+consumer topology remains **4 pass, 3 executable expected-red, 11 pending**.
+This rereview changed documentation only.

@@ -1668,6 +1668,15 @@ impl StaticTextLayoutInfo {
 }
 
 impl StaticTextSlice {
+    /// Current authored-order targets for `Text::onDirty(WorldTransform)` ->
+    /// `TextModifierGroup::onTextWorldTransformDirty`.
+    pub(crate) fn world_dirty_modifier_groups(&self) -> Vec<(usize, bool)> {
+        self.modifiers
+            .iter()
+            .map(|group| (group.local_id, !group.follow_path_modifiers.is_empty()))
+            .collect()
+    }
+
     fn text_geometry_supported(
         &self,
         runtime: &RuntimeFile,

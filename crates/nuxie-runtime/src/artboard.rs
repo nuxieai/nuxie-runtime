@@ -63,9 +63,9 @@ use crate::data_bind_graph::{
 };
 use crate::draw::{
     RuntimeClippingShapeList, RuntimeDrawableList, RuntimeInitialNestedLayoutPaintFrame,
-    RuntimeLayoutBounds, RuntimeShapeList, retain_runtime_drawable_component_topology,
-    runtime_apply_component_list_item_layout_bounds, runtime_component_list_item_base_transforms,
-    runtime_component_list_item_layout_size,
+    RuntimeLayoutBounds, RuntimeShapeList, RuntimeTextOnDirtyAction,
+    retain_runtime_drawable_component_topology, runtime_apply_component_list_item_layout_bounds,
+    runtime_component_list_item_base_transforms, runtime_component_list_item_layout_size,
 };
 use crate::joystick::{RuntimeJoystick, build_runtime_joysticks};
 use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot};
@@ -7829,6 +7829,7 @@ impl ArtboardInstance {
             return;
         };
         let local_id = component.local_id;
+        let is_text = component.type_name == "Text";
         let constraint_parent = component
             .concrete
             .constraint
@@ -7899,6 +7900,42 @@ impl ArtboardInstance {
         // (`src/shapes/path.cpp:336-347`).
         if path_has_deferred_dirt {
             self.add_component_dirt(handle, ComponentDirt::PATH, false);
+        }
+
+        // Exact enabled `Text::onDirty` callback. This runs at addDirt time,
+        // before Artboard::onComponentDirty and before Text::update. A
+        // follow-path group may re-enter this callback by adding Path while
+        // WorldTransform is already retained, matching Component::addDirt's
+        // accumulated-mask behavior.
+        if is_text
+            && !(accumulated
+                & (ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH | ComponentDirt::PAINT))
+                .is_empty()
+        {
+            let targets = self.runtime_file().and_then(|runtime| {
+                self.runtime_graph().and_then(|graph| {
+                    self.runtime_drawables.text_on_dirty_targets(
+                        local_id,
+                        accumulated,
+                        runtime,
+                        graph,
+                    )
+                })
+            });
+            if let Some(targets) = targets {
+                targets.visit(accumulated, |action| match action {
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        follows_path: true, ..
+                    } => {
+                        self.add_component_dirt(handle, ComponentDirt::PATH, false);
+                    }
+                    RuntimeTextOnDirtyAction::ModifierWorldTransform { .. } => {}
+                    RuntimeTextOnDirtyAction::InvalidateRenderStyle { style_local } => {
+                        self.runtime_shapes
+                            .invalidate_container_stroke_effects(style_local);
+                    }
+                });
+            }
         }
 
         let text_variation_helper = accumulated

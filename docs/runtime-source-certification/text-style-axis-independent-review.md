@@ -55,3 +55,26 @@ the zero-consumer topology, or either explicit downstream red.
   contained.
 - All 17 pre-existing user-dirty paths remained unstaged and outside this
   receipt.
+
+## Accounting correction rereview
+
+Correction `215d43470d19823b28917ed841d8190b6f56073e` **closes the sole
+finding and is accepted**.
+
+The corrected paragraph mechanically reconciles: 131 referenced plus 2
+unreferenced assets equals the unchanged 133-asset inventory; 979 direct plus
+60 nested occurrences equals 1,039 axes; and 273 unique fixture-to-case edges
+plus 4 helper/global references plus 2 duplicate literals equals 279 real
+references. Adding the removed 17 comment-only false positives reproduces the
+candidate's former 296 count and explains the correction rather than hiding a
+second source change.
+
+The 273 edges cover 271 unique cases. Outcomes sum to 271 as **133 pass / 61
+red / 3 adapted / 52 pending / 22 unmapped**, and provenance independently
+sums to 271 as **207 accepted / 42 provisional / 22 untouched**. The literal
+Axis owner topology remains **0 / 0 / 0 / 0**; the accepted three-body
+semantics and the explicit downstream `TextStyle` cascade and
+`TextVariationHelper` lifecycle reds are unchanged.
+
+The correction is docs-only, correction-range `git diff --check` passes, and
+all 17 pre-existing user-dirty paths remain unstaged.

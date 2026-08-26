@@ -93067,6 +93067,161 @@ fn upstream_text_input_text_multiline_wrapper_and_radius_cases_are_ported() {
 }
 
 #[test]
+fn upstream_text_input_single_line_raw_sync_preserves_cursor_before_source_publication() {
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let text_key = property_key_for_name("TextInput", "text");
+    let multiline_key = property_key_for_name("TextInput", "multiline");
+
+    let _ = artboard.set_bool_property(text_input, multiline_key, false);
+    assert!(artboard.set_string_property(text_input, text_key, b"seed".to_vec()));
+    assert!(artboard.debug_set_text_input_raw_text(text_input, "a\nb"));
+    assert!(artboard.debug_set_text_input_cursor(text_input, 3, 3));
+
+    assert!(artboard.debug_sync_text_input_source_from_raw(text_input));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("a b")
+    );
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((3, 3)));
+    assert_eq!(
+        artboard.debug_string_property(text_input, text_key),
+        Some(&b"a b"[..])
+    );
+}
+
+#[test]
+fn upstream_text_input_callbacks_publish_pinned_dirt_even_without_raw_mutation() {
+    const ENTER: u32 = 257;
+    const BACKSPACE: u32 = 259;
+    const RIGHT: u32 = 262;
+
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let text_key = property_key_for_name("TextInput", "text");
+    let multiline_key = property_key_for_name("TextInput", "multiline");
+
+    assert!(artboard.set_string_property(text_input, text_key, b"hello".to_vec()));
+    assert!(artboard.debug_set_text_input_cursor(text_input, 5, 5));
+    artboard.clear_component_dirt(text_input);
+    assert!(artboard.debug_text_input_key_input(text_input, RIGHT, 0, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((5, 5)));
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::PAINT))
+    );
+
+    assert!(artboard.debug_set_text_input_cursor(text_input, 0, 0));
+    artboard.clear_component_dirt(text_input);
+    assert!(artboard.debug_text_input_key_input(text_input, BACKSPACE, 0, true, false));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("hello")
+    );
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::TEXT_SHAPE))
+    );
+
+    let _ = artboard.set_bool_property(text_input, multiline_key, true);
+    artboard.clear_component_dirt(text_input);
+    assert!(artboard.debug_text_input_key_input(text_input, ENTER, 0, true, false));
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::PAINT))
+    );
+
+    artboard.clear_component_dirt(text_input);
+    assert!(artboard.debug_text_input_selection_radius_changed(text_input));
+    artboard.clear_component_dirt(text_input);
+    assert!(artboard.debug_text_input_selection_radius_changed(text_input));
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::PATH))
+    );
+
+    assert!(artboard.debug_set_text_input_cursor(text_input, 0, 5));
+    artboard.clear_component_dirt(text_input);
+    assert!(artboard.debug_text_input_focus_callback(text_input, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((5, 5)));
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::PAINT))
+    );
+    artboard.clear_component_dirt(text_input);
+    assert!(artboard.debug_text_input_focus_callback(text_input, false));
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::PAINT))
+    );
+
+    assert!(artboard.debug_set_text_input_cursor(text_input, 2, 2));
+    assert!(artboard.debug_text_input_select_word(text_input));
+    artboard.clear_component_dirt(text_input);
+    assert!(!artboard.debug_text_input_select_word(text_input));
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::PAINT))
+    );
+    assert!(artboard.debug_set_text_input_cursor(text_input, 3, 3));
+    assert!(artboard.debug_text_input_select_line(text_input));
+    artboard.clear_component_dirt(text_input);
+    assert!(!artboard.debug_text_input_select_line(text_input));
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::PAINT))
+    );
+}
+
+#[test]
+fn upstream_text_input_drag_uses_conversion_success_and_zeros_velocity_before_failure() {
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    artboard.update_pass();
+    let world = artboard
+        .debug_text_input_world_point(text_input, 8.0, 8.0)
+        .expect("TextInput has a finite world point");
+
+    artboard.debug_text_input_start_drag(text_input, world.0, world.1);
+    let cursor = artboard.debug_text_input_cursor(text_input);
+    artboard.clear_component_dirt(text_input);
+    artboard.debug_text_input_start_drag(text_input, world.0, world.1);
+    assert_eq!(artboard.debug_text_input_cursor(text_input), cursor);
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::PAINT))
+    );
+
+    artboard.clear_component_dirt(text_input);
+    artboard.debug_text_input_drag(text_input, world.0, world.1);
+    assert!(
+        artboard
+            .debug_component_dirt(text_input)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::PAINT))
+    );
+
+    let scale_x = property_key_for_name("TransformComponent", "scaleX");
+    assert!(artboard.set_double_property(text_input, scale_x, 0.0));
+    artboard.update_pass();
+    assert!(artboard.debug_set_text_input_scroll_velocity(text_input, 45.0, -45.0));
+    assert!(!artboard.debug_text_input_move_cursor_to_local(text_input, 8.0, 8.0));
+    assert_eq!(
+        artboard.debug_text_input_scroll_velocity(text_input),
+        Some((0.0, 0.0))
+    );
+}
+
+#[test]
 fn upstream_text_input_vertical_cursor_retains_the_ideal_column() {
     const DOWN: u32 = 264;
     let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();

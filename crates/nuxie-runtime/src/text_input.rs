@@ -72,6 +72,31 @@ fn edge_activation_distance(position: f32, edge_start: f32) -> f32 {
 }
 
 impl ArtboardInstance {
+    fn text_input_focused(&mut self, local_id: usize) -> bool {
+        let Some(state) = self
+            .component_mut(local_id)
+            .and_then(|component| component.concrete.text_input.as_mut())
+        else {
+            return false;
+        };
+        state.is_focused = true;
+        self.add_dirt(local_id, ComponentDirt::PAINT, false);
+        true
+    }
+
+    fn text_input_blurred(&mut self, local_id: usize) -> bool {
+        let Some(state) = self
+            .component_mut(local_id)
+            .and_then(|component| component.concrete.text_input.as_mut())
+        else {
+            return false;
+        };
+        state.is_focused = false;
+        state.raw.borrow_mut().clear_selection();
+        self.add_dirt(local_id, ComponentDirt::PAINT, false);
+        true
+    }
+
     pub(crate) fn sync_text_input_focus(&mut self, focused_local_id: Option<usize>) -> bool {
         let locals = self
             .components()
@@ -82,23 +107,18 @@ impl ArtboardInstance {
         let mut changed = false;
         for local_id in locals {
             let is_focused = focused_local_id == Some(local_id);
-            let state_changed = self
-                .component_mut(local_id)
-                .and_then(|component| component.concrete.text_input.as_mut())
-                .is_some_and(|state| {
-                    if state.is_focused == is_focused {
-                        return false;
-                    }
-                    state.is_focused = is_focused;
-                    if !is_focused {
-                        state.raw.borrow_mut().clear_selection();
-                    }
-                    true
-                });
-            if state_changed {
-                self.add_dirt(local_id, ComponentDirt::PAINT, false);
-                changed = true;
+            let was_focused = self
+                .component(local_id)
+                .and_then(|component| component.concrete.text_input.as_ref())
+                .is_some_and(|state| state.is_focused);
+            if was_focused == is_focused {
+                continue;
             }
+            changed |= if is_focused {
+                self.text_input_focused(local_id)
+            } else {
+                self.text_input_blurred(local_id)
+            };
         }
         changed
     }
@@ -308,21 +328,30 @@ impl ArtboardInstance {
         else {
             return false;
         };
-        if !state.raw.borrow_mut().set_selection_corner_radius(radius) {
-            return false;
-        }
+        state.raw.borrow_mut().set_selection_corner_radius(radius);
         self.add_dirt(local_id, ComponentDirt::PATH, false)
     }
 
     fn sync_text_input_source_from_raw(&mut self, local_id: usize) -> bool {
-        let Some(display) = self.text_input_display_text(local_id) else {
+        let Some(mut source) = self.text_input_display_text(local_id) else {
             return false;
         };
-        let source = if self.text_input_multiline(local_id) {
-            display
-        } else {
-            strip_line_breaks(&display)
-        };
+        if !self.text_input_multiline(local_id) {
+            let single_line = strip_line_breaks(&source);
+            if single_line != source {
+                let Some(state) = self
+                    .component(local_id)
+                    .and_then(|component| component.concrete.text_input.as_ref())
+                else {
+                    return false;
+                };
+                state
+                    .raw
+                    .borrow_mut()
+                    .set_text_preserve_cursor(&single_line);
+                source = single_line;
+            }
+        }
         if let Some(state) = self
             .component(local_id)
             .and_then(|component| component.concrete.text_input.as_ref())
@@ -393,14 +422,18 @@ impl ArtboardInstance {
         let select = modifiers & MOD_SHIFT != 0;
         let system = system_modifier();
         let horizontal_boundary = Self::text_input_cursor_boundary(modifiers);
+        let multiline = self.text_input_multiline(local_id);
         let line_range = (matches!(key, KEY_HOME | KEY_END)
             || (matches!(key, KEY_LEFT | KEY_RIGHT)
                 && horizontal_boundary == CursorBoundary::Line))
             .then(|| self.text_input_line_range_for_cursor(local_id))
             .flatten();
-        let mut edits_text = false;
-        let mut moves_cursor = false;
-        {
+        enum Effect {
+            SyncShape,
+            SyncPaint,
+            Paint,
+        }
+        let effect = {
             let Some(state) = self
                 .component(local_id)
                 .and_then(|component| component.concrete.text_input.as_ref())
@@ -410,33 +443,50 @@ impl ArtboardInstance {
             let mut raw = state.raw.borrow_mut();
             match key {
                 KEY_Z if modifiers & (system | MOD_SHIFT) == system | MOD_SHIFT => {
-                    edits_text = raw.redo();
+                    raw.redo();
+                    Effect::SyncShape
                 }
-                KEY_Z if modifiers & system != 0 => edits_text = raw.undo(),
-                KEY_A if modifiers & system != 0 => moves_cursor = raw.select_all(),
+                KEY_Z if modifiers & system != 0 => {
+                    raw.undo();
+                    Effect::SyncShape
+                }
+                KEY_A if modifiers & system != 0 => {
+                    raw.select_all();
+                    Effect::Paint
+                }
                 KEY_HOME => {
-                    moves_cursor =
-                        raw.cursor_horizontal(-1, CursorBoundary::Line, select, line_range)
+                    raw.cursor_horizontal(-1, CursorBoundary::Line, select, line_range);
+                    Effect::Paint
                 }
                 KEY_END => {
-                    moves_cursor =
-                        raw.cursor_horizontal(1, CursorBoundary::Line, select, line_range)
+                    raw.cursor_horizontal(1, CursorBoundary::Line, select, line_range);
+                    Effect::Paint
                 }
-                KEY_BACKSPACE => edits_text = raw.backspace(-1),
-                KEY_DELETE => edits_text = raw.backspace(1),
+                KEY_BACKSPACE => {
+                    raw.backspace(-1);
+                    Effect::SyncShape
+                }
+                KEY_DELETE => {
+                    raw.backspace(1);
+                    Effect::SyncShape
+                }
                 KEY_LEFT => {
-                    moves_cursor =
-                        raw.cursor_horizontal(-1, horizontal_boundary, select, line_range)
+                    raw.cursor_horizontal(-1, horizontal_boundary, select, line_range);
+                    Effect::Paint
                 }
                 KEY_RIGHT => {
-                    moves_cursor = raw.cursor_horizontal(1, horizontal_boundary, select, line_range)
+                    raw.cursor_horizontal(1, horizontal_boundary, select, line_range);
+                    Effect::Paint
                 }
-                KEY_UP | KEY_DOWN => {}
-                KEY_ENTER if self.text_input_multiline(local_id) => edits_text = raw.insert("\n"),
+                KEY_UP | KEY_DOWN => Effect::Paint,
+                KEY_ENTER if multiline => {
+                    raw.insert("\n");
+                    Effect::SyncPaint
+                }
                 KEY_ENTER => return false,
                 _ => return false,
             }
-        }
+        };
         if matches!(key, KEY_UP | KEY_DOWN) {
             self.ensure_text_input_geometry(local_id);
             let direction = if key == KEY_UP { -1 } else { 1 };
@@ -471,16 +521,23 @@ impl ArtboardInstance {
             else {
                 return false;
             };
-            moves_cursor = state
+            state
                 .raw
                 .borrow_mut()
                 .move_cursor_vertical(target.0, select, target.1);
         }
-        if edits_text {
-            self.sync_text_input_source_from_raw(local_id);
-            crate::text_owner::mark_shape_dirty(self, local_id);
-        } else if moves_cursor {
-            self.add_dirt(local_id, ComponentDirt::PAINT, false);
+        match effect {
+            Effect::SyncShape => {
+                self.sync_text_input_source_from_raw(local_id);
+                crate::text_owner::mark_shape_dirty(self, local_id);
+            }
+            Effect::SyncPaint => {
+                self.sync_text_input_source_from_raw(local_id);
+                self.add_dirt(local_id, ComponentDirt::PAINT, false);
+            }
+            Effect::Paint => {
+                self.add_dirt(local_id, ComponentDirt::PAINT, false);
+            }
         }
         true
     }
@@ -616,6 +673,14 @@ impl ArtboardInstance {
         enable_auto_scroll: bool,
     ) -> bool {
         self.ensure_text_input_initialized(local_id);
+        let Some(state) = self
+            .component_mut(local_id)
+            .and_then(|component| component.concrete.text_input.as_mut())
+        else {
+            return false;
+        };
+        state.scroll_x = 0.0;
+        state.scroll_y = 0.0;
         let text_world = {
             let Some(graph) = self.runtime_graph() else {
                 return false;
@@ -697,14 +762,12 @@ impl ArtboardInstance {
             .map(str::chars)
             .map(Iterator::count)
             .unwrap_or(0);
-        let changed = self
-            .component(local_id)
+        self.component(local_id)
             .and_then(|component| component.concrete.text_input.as_ref())
-            .is_some_and(|state| state.raw.borrow_mut().move_cursor_to(codepoint, select));
-        if changed {
-            self.add_dirt(local_id, ComponentDirt::PAINT, false);
-        }
-        changed
+            .is_some_and(|state| {
+                state.raw.borrow_mut().move_cursor_to(codepoint, select);
+                true
+            })
     }
 
     pub(crate) fn text_input_start_drag(&mut self, local_id: usize, world: (f32, f32)) {
@@ -715,7 +778,9 @@ impl ArtboardInstance {
             state.is_dragging = true;
             state.last_drag_world_position = world;
         }
-        self.text_input_move_cursor_to_world(local_id, world, false);
+        if self.text_input_move_cursor_to_world(local_id, world, false) {
+            self.add_dirt(local_id, ComponentDirt::PAINT, false);
+        }
     }
 
     pub(crate) fn text_input_drag(&mut self, local_id: usize, world: (f32, f32)) {
@@ -725,7 +790,9 @@ impl ArtboardInstance {
         {
             state.last_drag_world_position = world;
         }
-        self.text_input_move_cursor_to_world_with_auto_scroll(local_id, world, true, true);
+        if self.text_input_move_cursor_to_world_with_auto_scroll(local_id, world, true, true) {
+            self.add_dirt(local_id, ComponentDirt::PAINT, false);
+        }
     }
 
     pub(crate) fn text_input_end_drag(&mut self, local_id: usize) {
@@ -742,13 +809,14 @@ impl ArtboardInstance {
 
     pub(crate) fn text_input_select_word(&mut self, local_id: usize) -> bool {
         self.ensure_text_input_initialized(local_id);
-        let changed = self
+        let Some(state) = self
             .component(local_id)
             .and_then(|component| component.concrete.text_input.as_ref())
-            .is_some_and(|state| state.raw.borrow_mut().select_word());
-        if changed {
-            self.add_dirt(local_id, ComponentDirt::PAINT, false);
-        }
+        else {
+            return false;
+        };
+        let changed = state.raw.borrow_mut().select_word();
+        self.add_dirt(local_id, ComponentDirt::PAINT, false);
         changed
     }
 
@@ -756,13 +824,14 @@ impl ArtboardInstance {
         let Some(range) = self.text_input_line_range_for_cursor(local_id) else {
             return false;
         };
-        let changed = self
+        let Some(state) = self
             .component(local_id)
             .and_then(|component| component.concrete.text_input.as_ref())
-            .is_some_and(|state| state.raw.borrow_mut().select_line(range));
-        if changed {
-            self.add_dirt(local_id, ComponentDirt::PAINT, false);
-        }
+        else {
+            return false;
+        };
+        let changed = state.raw.borrow_mut().select_line(range);
+        self.add_dirt(local_id, ComponentDirt::PAINT, false);
         changed
     }
 
@@ -805,6 +874,20 @@ impl ArtboardInstance {
     }
 
     #[cfg(any(test, feature = "tools"))]
+    pub fn debug_set_text_input_raw_text(&self, local_id: usize, text: &str) -> bool {
+        self.ensure_text_input_initialized(local_id)
+            && self
+                .component(local_id)
+                .and_then(|component| component.concrete.text_input.as_ref())
+                .is_some_and(|state| state.raw.borrow_mut().set_text(text))
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_sync_text_input_source_from_raw(&mut self, local_id: usize) -> bool {
+        self.sync_text_input_source_from_raw(local_id)
+    }
+
+    #[cfg(any(test, feature = "tools"))]
     pub fn debug_text_input_key_input(
         &mut self,
         local_id: usize,
@@ -829,6 +912,55 @@ impl ArtboardInstance {
     #[cfg(any(test, feature = "tools"))]
     pub fn debug_text_input_select_line(&mut self, local_id: usize) -> bool {
         self.text_input_select_line(local_id)
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_text_input_focus_callback(&mut self, local_id: usize, focused: bool) -> bool {
+        if focused {
+            self.text_input_focused(local_id)
+        } else {
+            self.text_input_blurred(local_id)
+        }
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_text_input_selection_radius_changed(&mut self, local_id: usize) -> bool {
+        self.text_input_selection_radius_changed(local_id)
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_set_text_input_scroll_velocity(
+        &mut self,
+        local_id: usize,
+        scroll_x: f32,
+        scroll_y: f32,
+    ) -> bool {
+        let Some(state) = self
+            .component_mut(local_id)
+            .and_then(|component| component.concrete.text_input.as_mut())
+        else {
+            return false;
+        };
+        state.scroll_x = scroll_x;
+        state.scroll_y = scroll_y;
+        true
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_text_input_scroll_velocity(&self, local_id: usize) -> Option<(f32, f32)> {
+        self.component(local_id)
+            .and_then(|component| component.concrete.text_input.as_ref())
+            .map(|state| (state.scroll_x, state.scroll_y))
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_text_input_start_drag(&mut self, local_id: usize, world_x: f32, world_y: f32) {
+        self.text_input_start_drag(local_id, (world_x, world_y));
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_text_input_drag(&mut self, local_id: usize, world_x: f32, world_y: f32) {
+        self.text_input_drag(local_id, (world_x, world_y));
     }
 
     #[cfg(any(test, feature = "tools"))]

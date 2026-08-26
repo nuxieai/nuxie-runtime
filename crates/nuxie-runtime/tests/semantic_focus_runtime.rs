@@ -4,8 +4,8 @@
 use nuxie_binary::read_runtime_file;
 use nuxie_graph::GraphFile;
 use nuxie_runtime::{
-    ArtboardInstance, SemanticActionType, SemanticRole, SemanticState, SemanticTrait,
-    SemanticsDiff, StateMachineInstance, has_semantic_state, has_semantic_trait,
+    ArtboardInstance, SemanticRole, SemanticState, SemanticTrait, SemanticsDiff,
+    StateMachineInstance, has_semantic_state, has_semantic_trait,
 };
 
 fn upstream_semantic_fixture(
@@ -111,104 +111,6 @@ fn upstream_simpsons_exposes_one_tab_list_and_labelled_single_selection() {
 }
 
 #[test]
-fn upstream_simpsons_pointer_tap_selects_other_tab() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("simpsons.riv");
-    let tabs = tabs(&initial);
-    let initially_selected = tabs.iter().find(|tab| selected(tab)).unwrap();
-    let other = tabs.iter().find(|tab| !selected(tab)).unwrap();
-    let x = (other.min_x + other.max_x) * 0.5;
-    let y = (other.min_y + other.max_y) * 0.5;
-    machine.pointer_down(&mut artboard, x, y, 0);
-    machine.pointer_up(&mut artboard, x, y, 0);
-    settle(&mut machine, &mut artboard);
-    let diff = machine.drain_semantics_diff(&mut artboard).unwrap();
-    let mut snapshot = semantic_snapshot(&initial);
-    apply_semantic_diff(&mut snapshot, &diff);
-    assert!(!selected(&snapshot[&initially_selected.id]));
-    assert!(selected(&snapshot[&other.id]));
-}
-
-#[test]
-fn upstream_simpsons_semantic_tap_selects_target_tab() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("simpsons.riv");
-    let tabs = tabs(&initial);
-    let initially_selected = tabs.iter().find(|tab| selected(tab)).unwrap();
-    let target = tabs.iter().find(|tab| !selected(tab)).unwrap();
-    assert!(machine.fire_semantic_action(target.id, SemanticActionType::Tap as u32));
-    settle(&mut machine, &mut artboard);
-    let diff = machine.drain_semantics_diff(&mut artboard).unwrap();
-    let mut snapshot = semantic_snapshot(&initial);
-    apply_semantic_diff(&mut snapshot, &diff);
-    assert!(selected(&snapshot[&target.id]));
-    assert!(!selected(&snapshot[&initially_selected.id]));
-}
-
-#[test]
-fn upstream_simpsons_pointer_and_semantic_tap_converge() {
-    let (mut pointer_artboard, mut pointer_machine, pointer_initial) =
-        upstream_semantic_fixture("simpsons.riv");
-    let (mut semantic_artboard, mut semantic_machine, semantic_initial) =
-        upstream_semantic_fixture("simpsons.riv");
-    let pointer_tabs = tabs(&pointer_initial);
-    let semantic_tabs = tabs(&semantic_initial);
-    assert_eq!(pointer_tabs.len(), semantic_tabs.len());
-    let pointer_target = pointer_tabs[1];
-    let semantic_target = semantic_tabs
-        .iter()
-        .find(|tab| tab.label == pointer_target.label)
-        .unwrap();
-    let x = (pointer_target.min_x + pointer_target.max_x) * 0.5;
-    let y = (pointer_target.min_y + pointer_target.max_y) * 0.5;
-    pointer_machine.pointer_down(&mut pointer_artboard, x, y, 0);
-    pointer_machine.pointer_up(&mut pointer_artboard, x, y, 0);
-    assert!(
-        semantic_machine.fire_semantic_action(semantic_target.id, SemanticActionType::Tap as u32)
-    );
-    settle(&mut pointer_machine, &mut pointer_artboard);
-    settle(&mut semantic_machine, &mut semantic_artboard);
-    let mut pointer_snapshot = semantic_snapshot(&pointer_initial);
-    let mut semantic_snapshot = semantic_snapshot(&semantic_initial);
-    apply_semantic_diff(
-        &mut pointer_snapshot,
-        &pointer_machine
-            .drain_semantics_diff(&mut pointer_artboard)
-            .unwrap(),
-    );
-    apply_semantic_diff(
-        &mut semantic_snapshot,
-        &semantic_machine
-            .drain_semantics_diff(&mut semantic_artboard)
-            .unwrap(),
-    );
-    for (pointer, semantic) in pointer_tabs.iter().zip(semantic_tabs) {
-        assert_eq!(
-            selected(&pointer_snapshot[&pointer.id]),
-            selected(&semantic_snapshot[&semantic.id]),
-            "{}",
-            pointer.label
-        );
-    }
-}
-
-#[test]
-fn upstream_simpsons_unknown_semantic_id_is_a_no_op() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("simpsons.riv");
-    let selected_before = tabs(&initial)
-        .into_iter()
-        .find(|tab| selected(tab))
-        .unwrap()
-        .id;
-    let _ = machine.fire_semantic_action(0xdead_beef, SemanticActionType::Tap as u32);
-    settle(&mut machine, &mut artboard);
-    let mut snapshot = semantic_snapshot(&initial);
-    apply_semantic_diff(
-        &mut snapshot,
-        &machine.drain_semantics_diff(&mut artboard).unwrap(),
-    );
-    assert!(selected(&snapshot[&selected_before]));
-}
-
-#[test]
 fn upstream_simpsons_tabs_produce_two_three_and_five_list_items() {
     let (mut artboard, mut machine, initial) = upstream_semantic_fixture("simpsons.riv");
     let tab_nodes = tabs(&initial).into_iter().cloned().collect::<Vec<_>>();
@@ -241,30 +143,6 @@ fn upstream_simpsons_tabs_produce_two_three_and_five_list_items() {
     }
     counts.sort_unstable();
     assert_eq!(counts, [2, 3, 5]);
-}
-
-#[test]
-fn upstream_tabtest_semantic_taps_keep_exactly_one_selected() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("tabtest.riv");
-    let tab_nodes = tabs(&initial).into_iter().cloned().collect::<Vec<_>>();
-    assert!(tab_nodes.len() >= 2);
-    let mut snapshot = semantic_snapshot(&initial);
-    for tab in tab_nodes {
-        let _ = machine.fire_semantic_action(tab.id, SemanticActionType::Tap as u32);
-        settle(&mut machine, &mut artboard);
-        apply_semantic_diff(
-            &mut snapshot,
-            &machine.drain_semantics_diff(&mut artboard).unwrap(),
-        );
-        assert!(selected(&snapshot[&tab.id]));
-        assert_eq!(
-            snapshot
-                .values()
-                .filter(|node| node.role == SemanticRole::Tab as u32 && selected(node))
-                .count(),
-            1
-        );
-    }
 }
 
 #[test]

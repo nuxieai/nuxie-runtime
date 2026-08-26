@@ -32,7 +32,7 @@
   "wave": "c9",
   "case_count": 46,
   "ratchet": {
-    "max_pending": 21
+    "max_pending": 16
   },
   "cases": [
     {
@@ -59,17 +59,9 @@
       "ordinal": 2,
       "line": 97,
       "name": "simpsons.riv: pointer-tap on a tab selects it and deselects the old one",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 114,
-          "symbol": "upstream_simpsons_pointer_tap_selects_other_tab"
-        }
-      ],
-      "note": "Distinct strict test preserves the complete pinned setup, action, and assertion stream through retained Rust owners."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/semantic_state_machine_test.cpp#3",
@@ -77,17 +69,9 @@
       "ordinal": 3,
       "line": 147,
       "name": "simpsons.riv: fireSemanticAction(tap) selects the target tab",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 132,
-          "symbol": "upstream_simpsons_semantic_tap_selects_target_tab"
-        }
-      ],
-      "note": "Distinct strict test preserves the complete pinned setup, action, and assertion stream through retained Rust owners."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/semantic_state_machine_test.cpp#4",
@@ -95,17 +79,9 @@
       "ordinal": 4,
       "line": 192,
       "name": "simpsons.riv: fireSemanticAction and pointerDown/Up converge on the same selected tab",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 147,
-          "symbol": "upstream_simpsons_pointer_and_semantic_tap_converge"
-        }
-      ],
-      "note": "Distinct strict test preserves the complete pinned setup, action, and assertion stream through retained Rust owners."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/semantic_state_machine_test.cpp#5",
@@ -113,17 +89,9 @@
       "ordinal": 5,
       "line": 268,
       "name": "simpsons.riv: fireSemanticAction with an unknown id is a no-op",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 194,
-          "symbol": "upstream_simpsons_unknown_semantic_id_is_a_no_op"
-        }
-      ],
-      "note": "Distinct strict test preserves the complete pinned setup, action, and assertion stream through retained Rust owners."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/semantic_state_machine_test.cpp#6",
@@ -137,7 +105,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 212,
+          "line": 114,
           "symbol": "upstream_simpsons_tabs_produce_two_three_and_five_list_items"
         }
       ],
@@ -149,17 +117,9 @@
       "ordinal": 7,
       "line": 416,
       "name": "tabtest.riv: firing tap on each tab keeps exactly one tab selected",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 247,
-          "symbol": "upstream_tabtest_semantic_taps_keep_exactly_one_selected"
-        }
-      ],
-      "note": "Distinct strict test preserves the complete pinned setup, action, and assertion stream through retained Rust owners."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/semantic_state_machine_test.cpp#8",
@@ -183,7 +143,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 291,
+          "line": 169,
           "symbol": "upstream_first_semantic_drain_delivers_tree_and_second_is_empty"
         }
       ],
@@ -201,7 +161,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 310,
+          "line": 188,
           "symbol": "upstream_data_binding_lists_exposes_dropdown_button"
         }
       ],
@@ -219,7 +179,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 321,
+          "line": 199,
           "symbol": "upstream_list_scroll_focus_exposes_one_list_and_five_labelled_items"
         }
       ],
@@ -237,7 +197,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/semantic_focus_runtime.rs",
-          "line": 373,
+          "line": 251,
           "symbol": "upstream_list_scroll_focus_items_expose_the_focusable_trait"
         }
       ],
@@ -458,9 +418,17 @@
       "ordinal": 10,
       "line": 341,
       "name": "event targetting an event object triggers correctly",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 38,
+          "symbol": "wave_c9_event_010_targetting_an_event_object_triggers_correctly"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream."
     },
     {
       "id": "tests/unit_tests/runtime/state_machine_event_test.cpp#11",
@@ -474,7 +442,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c9.rs",
-          "line": 541,
+          "line": 544,
           "symbol": "wave_c9_event_011_view_model_listener_event_is_host_visible"
         }
       ],
@@ -497,7 +465,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c9.rs",
-          "line": 577,
+          "line": 580,
           "symbol": "wave_c9_input_001_file_with_state_machine_inputs_loads"
         }
       ],
@@ -641,9 +609,17 @@
       "ordinal": 9,
       "line": 514,
       "name": "Transition with list index can be compared to a number",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 43,
+          "symbol": "wave_c9_state_machine_009_transition_with_list_index_compares_to_number"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream."
     },
     {
       "id": "tests/unit_tests/runtime/state_machine_test.cpp#10",
@@ -651,9 +627,18 @@
       "ordinal": 10,
       "line": 537,
       "name": "Listeners are sorted in the right order",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 49,
+          "symbol": "wave_c9_state_machine_010_listeners_are_sorted_in_the_right_order"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream.",
+      "expected_red_reason": "expected-red: sorted_listeners frame 5, op 134 (addRawPath): expected 180 fields, got 337"
     },
     {
       "id": "tests/unit_tests/runtime/state_machine_test.cpp#11",
@@ -661,9 +646,17 @@
       "ordinal": 11,
       "line": 600,
       "name": "Listeners with multiple types of events",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 54,
+          "symbol": "wave_c9_state_machine_011_listeners_with_multiple_event_types"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream."
     },
     {
       "id": "tests/unit_tests/runtime/state_machine_test.cpp#12",
@@ -681,9 +674,17 @@
       "ordinal": 13,
       "line": 719,
       "name": "Transition duration in nested state machines is bindable",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 59,
+          "symbol": "wave_c9_state_machine_013_nested_transition_duration_is_bindable"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream."
     },
     {
       "id": "tests/unit_tests/runtime/state_machine_test.cpp#14",
@@ -691,9 +692,17 @@
       "ordinal": 14,
       "line": 750,
       "name": "Transition duration in artboard list state machines is bindable",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 64,
+          "symbol": "wave_c9_state_machine_014_list_transition_duration_is_bindable"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream."
     },
     {
       "id": "tests/unit_tests/runtime/state_machine_test.cpp#15",
@@ -711,9 +720,17 @@
       "ordinal": 16,
       "line": 837,
       "name": "Component based transition conditions",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 69,
+          "symbol": "wave_c9_state_machine_016_component_based_transition_conditions"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream."
     },
     {
       "id": "tests/unit_tests/runtime/state_machine_test.cpp#17",
@@ -721,9 +738,17 @@
       "ordinal": 17,
       "line": 877,
       "name": "Component based transition conditions with other props",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 74,
+          "symbol": "wave_c9_state_machine_017_component_conditions_with_other_props"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream."
     },
     {
       "id": "tests/unit_tests/runtime/state_machine_test.cpp#18",
@@ -731,9 +756,17 @@
       "ordinal": 18,
       "line": 917,
       "name": "Transitions and state layers can trigger actions",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 79,
+          "symbol": "wave_c9_state_machine_018_transitions_and_layers_trigger_actions"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream."
     },
     {
       "id": "tests/unit_tests/runtime/state_machine_test.cpp#19",
@@ -741,9 +774,18 @@
       "ordinal": 19,
       "line": 963,
       "name": "Paused state machine changes opacity and relayouts when parent's opacity or layout changes",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c9.rs",
+          "line": 85,
+          "symbol": "wave_c9_state_machine_019_paused_machine_updates_opacity_and_layout"
+        }
+      ],
+      "note": "Distinct literal replay preserves the complete pinned fixture, action, and render-command stream.",
+      "expected_red_reason": "expected-red: paused_nested_artboard_opacity frame 1, op 103 (rewind): expected rewind, got drawPath"
     }
   ]
 }

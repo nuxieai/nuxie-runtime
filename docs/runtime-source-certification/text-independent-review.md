@@ -455,3 +455,41 @@ paths; the pre-existing `draw.rs` formatting hunk and all other user dirt remain
 unstaged. Row 10 still names the disabled no-op body as missing/red, and the
 consumer topology remains **4 pass, 3 executable expected-red, 11 pending**.
 This rereview changed documentation only.
+
+## Text row 20 color-glyph production-correction review of `fe86937c2`
+
+Verdict: **ACCEPTED AS THE NAMED ADAPTATION**
+
+The retained draw owner now matches the pinned `drawColorGlyph` stream. An
+empty layer vector returns before renderer state changes. A nonempty vector
+performs the outer save, applies `shapeWorld * glyphTransform`, visits layers
+in retained authored order, and restores once after the loop. Every vector
+layer — including an empty path — creates a fresh `make_render_path` with
+`NonZero`, creates a fresh paint, sets fill style and opacity-modulated color,
+and draws it on every invocation. The former `(glyph, layer)` vector-path cache
+is absent from both the backend resources and all call sites.
+
+The image branch remains source-shaped: its cache key contains both retained
+font identity and glyph ID, failed decodes remain cached as null, successful
+images use the nested save, bearing/extent transform, linear-clamp/src-over
+draw with glyph opacity, and nested restore. The outer restore remains balanced
+for empty vector paths and decode failure because neither branch exits the
+layer loop. Rust's pointer-derived font identity and Skrifa gradient extraction
+and fallback-color representation remain explicitly named adaptations; this
+correction does not overclaim them as literal.
+
+The focused evidence invokes the production owner twice with the real
+`RecordingFactory` and renderer. It proves zero layers emit no operation, two
+vector layers allocate four distinct paths and paints and produce four draws,
+the bitmap decodes once but draws twice, and the complete outer/vector/nested
+image operation order repeats correctly. It does not reconstruct the draw
+algorithm or inspect a proxy cache. The test passes (one passed, zero failed or
+ignored), and the candidate delta passes `git diff --check`.
+
+The correction commit changes only `draw.rs` and the Text source receipt. Its
+committed `draw.rs` hunks are limited to removing the vector cache, correcting
+the production stream, and replacing its focused evidence; the pre-existing
+formatting hunk remains unstaged with all other user dirt. Consumer topology is
+unchanged at **4 pass, 3 executable expected-red, 11 pending**, and the receipt
+continues to state the residual adaptations honestly. This review changed
+documentation only.

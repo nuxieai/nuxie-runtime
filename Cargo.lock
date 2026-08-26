@@ -1800,6 +1800,7 @@ dependencies = [
  "anyhow",
  "luaur-rt",
  "luaur-vm",
+ "nuxie",
  "nuxie-binary",
  "nuxie-graph",
  "nuxie-render-api",

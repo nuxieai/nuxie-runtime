@@ -32,7 +32,7 @@
   "wave": "c12-silver-fragment",
   "case_count": 8,
   "ratchet": {
-    "max_pending": 0
+    "max_pending": 1
   },
   "cases": [
     {
@@ -42,18 +42,17 @@
       "line": 683,
       "name": "Access view model properties and enum properties",
       "status": "adapted",
-      "outcome": "expected-red",
+      "outcome": "pass",
       "evidence": [
         {
           "kind": "live-differential",
           "path": "tools/silver-corpus/tests/upstream_scripting_properties.rs",
-          "line": 74,
+          "line": 183,
           "symbol": "wave_c12_silver_009_access_view_model_properties_and_enum_properties"
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "viewmodel_access reaches the exact SRIV comparator; at frame 0 operation 32 pinned expects transform while the live scripted Rust stream emits save.",
-      "note": "The distinct test imports viewmodel_access.riv with scripting enabled, binds the default ViewModel, advances the live default StateMachine by 0.016, draws through SerializingFactory, and compares viewmodel_access.sriv."
+      "note": "The distinct test imports viewmodel_access.riv with authenticated scripting, binds the exact index-zero ViewModel instance, proves every selected-artboard ScriptedDrawable global has an attached live ScriptInstance with that retained context, advances the real StateMachine by 0.016, draws through SerializingFactory, and exactly matches viewmodel_access.sriv."
     },
     {
       "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#10",
@@ -67,13 +66,13 @@
         {
           "kind": "live-differential",
           "path": "tools/silver-corpus/tests/upstream_scripting_properties.rs",
-          "line": 95,
+          "line": 204,
           "symbol": "wave_c12_silver_010_creates_view_models_from_specified_named_instances"
         }
       ],
       "adaptation_kind": "native-scripting",
       "expected_red_reason": "viewmodel_from_instance reaches the exact SRIV comparator; at frame 0 operation 8 pinned expects makeRenderPaint while the live scripted Rust stream emits frameSize.",
-      "note": "The distinct test imports viewmodel_from_instance.riv with scripting enabled, binds its default named ViewModel instance, advances the live default StateMachine by 0.016, draws through SerializingFactory, and compares viewmodel_from_instance.sriv."
+      "note": "The distinct test realizes and verifies the selected-artboard ScriptedDrawable with its retained authored-default ViewModel context before the exact 0.016 StateMachine advance, draw, and viewmodel_from_instance.sriv comparison."
     },
     {
       "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#11",
@@ -87,13 +86,13 @@
         {
           "kind": "live-differential",
           "path": "tools/silver-corpus/tests/upstream_scripting_properties.rs",
-          "line": 116,
+          "line": 225,
           "symbol": "wave_c12_silver_011_replace_a_view_model_property_value_from_a_script"
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "replace_view_model reaches the exact SRIV comparator; at frame 0 operation 42 transform tx pinned expects 0 while the live scripted Rust stream emits 250.",
-      "note": "The distinct test preserves bind, 0.016 advance, draw, addFrame, pointer down/up at (artboard width/2, 480), second 0.016 advance, draw, and exact replace_view_model.sriv comparison."
+      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, replace_view_model reaches the exact SRIV comparator; at frame 1 operation 93 pinned expects color while Rust emits save.",
+      "note": "The distinct test preserves bind and realization, 0.016 advance, draw, addFrame, pointer down/up at (artboard width/2, 480), second 0.016 advance, draw, and exact replace_view_model.sriv comparison."
     },
     {
       "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#12",
@@ -107,13 +106,13 @@
         {
           "kind": "live-differential",
           "path": "tools/silver-corpus/tests/upstream_scripting_properties.rs",
-          "line": 153,
+          "line": 262,
           "symbol": "wave_c12_silver_012_scripts_can_remove_items_from_lists"
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "remove_from_list reaches the exact SRIV comparator; at frame 0 operation 165 pinned expects save while the live scripted Rust stream emits restore.",
-      "note": "The distinct test preserves bind, initial 0.1 StateMachine advance and draw, then exactly ten addFrame/0.016 advance/draw iterations before comparing remove_from_list.sriv."
+      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, remove_from_list reaches the exact SRIV comparator; at frame 1 operation 195 pinned expects rewind while Rust emits drawPath.",
+      "note": "The distinct test preserves bind and realization, initial 0.1 StateMachine advance and draw, then exactly ten addFrame/0.016 advance/draw iterations before comparing remove_from_list.sriv."
     },
     {
       "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#13",
@@ -121,19 +120,10 @@
       "ordinal": 13,
       "line": 784,
       "name": "Expose list index to scripts and ensure the type is correct",
-      "status": "adapted",
-      "outcome": "expected-red",
-      "evidence": [
-        {
-          "kind": "live-differential",
-          "path": "tools/silver-corpus/tests/upstream_scripting_properties.rs",
-          "line": 187,
-          "symbol": "wave_c12_silver_013_expose_list_index_to_scripts_and_ensure_type_is_correct"
-        }
-      ],
-      "adaptation_kind": "native-scripting",
-      "expected_red_reason": "list_index_script_access reaches the exact SRIV comparator; at frame 0 operation 80 pinned addRawPath has 33 fields while the live scripted Rust stream has 808.",
-      "note": "The distinct test imports list_index_script_access.riv with scripting enabled, binds the default ViewModel, advances the live default StateMachine by 0.1, draws through SerializingFactory, and compares list_index_script_access.sriv."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED at the genuine owner seam: after importing list_index_script_access.riv, binding its authored-default ViewModel, and entering ScriptedDrawable mount, the selected tree reaches child occurrence graph 84 without a retained source File authority. Production behavior cannot be changed in this evidence wave, so the exact test at line 296 remains pending rather than preserving the prior inert-replay SRIV red."
     },
     {
       "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#14",
@@ -147,13 +137,13 @@
         {
           "kind": "live-differential",
           "path": "tools/silver-corpus/tests/upstream_scripting_properties.rs",
-          "line": 208,
+          "line": 317,
           "symbol": "wave_c12_silver_014_scripted_image_properties"
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "scripted_property_image reaches the exact SRIV comparator; at frame 0 operation 18 pinned expects save while the live scripted Rust stream emits restore.",
-      "note": "The distinct test imports scripted_property_image.riv with scripting enabled, binds the default ViewModel, advances the live default StateMachine by 0.016, draws through SerializingFactory, and compares scripted_property_image.sriv."
+      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, scripted_property_image reaches the exact SRIV comparator; at frame 0 operation 21 pinned expects save while Rust emits restore.",
+      "note": "The distinct test binds the exact default ViewModel, verifies live ScriptInstance attachment with that retained context, then performs the exact 0.016 StateMachine advance, draw, and scripted_property_image.sriv comparison."
     },
     {
       "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#15",
@@ -167,13 +157,13 @@
         {
           "kind": "live-differential",
           "path": "tools/silver-corpus/tests/upstream_scripting_properties.rs",
-          "line": 229,
+          "line": 338,
           "symbol": "wave_c12_silver_015_image_read_from_property_value"
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "image_scripting_property_value reaches the exact SRIV comparator; at frame 0 operation 23 transform tx pinned expects -702 while the live scripted Rust stream emits -139.",
-      "note": "The distinct test preserves bind, 0.0 StateMachine advance, draw, addFrame, 0.25 advance, draw, and exact image_scripting_property_value.sriv comparison."
+      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, image_scripting_property_value reaches the exact SRIV comparator; at frame 0 operation 1 pinned expects decodeImage while Rust emits makeRenderPaint.",
+      "note": "The distinct test preserves bind and realization, 0.0 StateMachine advance, draw, addFrame, 0.25 advance, draw, and exact image_scripting_property_value.sriv comparison."
     },
     {
       "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#16",
@@ -187,13 +177,13 @@
         {
           "kind": "live-differential",
           "path": "tools/silver-corpus/tests/upstream_scripting_properties.rs",
-          "line": 256,
+          "line": 365,
           "symbol": "wave_c12_silver_016_reset_detached_view_model_instances_at_end_of_frame"
         }
       ],
       "adaptation_kind": "native-scripting",
-      "expected_red_reason": "reset_shared_viewmodel_instance_test reaches the exact SRIV comparator; at frame 0 operation 10 pinned expects makeRenderPaint while the live scripted Rust stream emits frameSize.",
-      "note": "The distinct test preserves all six draws and timings (0 then five 0.016 advances), five frame boundaries, both tri1 host triggers, both exact pointer down/up pairs at (45,165), and exact reset_shared_viewmodel_instance_test.sriv comparison."
+      "expected_red_reason": "After the selected ScriptedDrawable is genuinely realized with its live context, reset_shared_viewmodel_instance_test reaches the exact SRIV comparator; at frame 0 operation 10 pinned expects makeRenderPaint while Rust emits frameSize.",
+      "note": "The distinct test preserves bind and realization, all six draws and timings (0 then five 0.016 advances), five frame boundaries, both tri1 host triggers, both exact pointer down/up pairs at (45,165), and exact reset_shared_viewmodel_instance_test.sriv comparison."
     }
   ]
 }

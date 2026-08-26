@@ -6515,6 +6515,100 @@ mod tests {
     }
 
     #[test]
+    fn target_to_source_only_run_list_bind_keeps_retained_empty_text() {
+        let authored_sizing = TEXT_SIZING_AUTO_WIDTH;
+        let (runtime, graphs) = baseline_origin_text_runtime_with_sizing_line_height_font_and_text(
+            authored_sizing,
+            Some(40.0),
+            fixture_font_bytes(),
+            "",
+        );
+        let mut graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has an artboard")
+            .clone();
+        graph.local_objects.retain(|object| object.local_id != 3);
+        graph.components.retain(|component| component.local_id != 3);
+        graph
+            .components
+            .iter_mut()
+            .find(|component| component.local_id == 1)
+            .expect("Text component remains")
+            .children
+            .retain(|local_id| *local_id != 3);
+        graph.data_binds.push(DataBindNode {
+            global_id: u32::MAX,
+            type_name: "DataBind",
+            property_key: u64::from(
+                property_key_for_name("Text", "textRunListSource")
+                    .expect("Text.textRunListSource key"),
+            ),
+            // Pinned `DataBindFlags::directionToSource`: this binding publishes
+            // Text state outward and cannot provide a dynamic run list.
+            flags: 1,
+            converter_id: 0,
+            converter_global: None,
+            converter_type_name: None,
+            converter_duration: None,
+            target_global: graph
+                .components
+                .iter()
+                .find(|component| component.local_id == 1)
+                .map(|component| component.global_id),
+            target_type_name: Some("Text"),
+            target_local: Some(1),
+        });
+
+        let mut instance = ArtboardInstance::from_graph(&runtime, &graph).expect("instance builds");
+        assert!(
+            instance.update_pass(),
+            "empty retained Text rebuilds successfully"
+        );
+        assert_eq!(
+            instance.debug_text_local_bounds(&runtime, &graph, 1),
+            Some((0.0, 0.0, 0.0, 0.0))
+        );
+        let text_dispatch = instance
+            .draw_commands(&graph)
+            .into_iter()
+            .find(|command| command.local_id == Some(1))
+            .expect("Text remains in retained draw order");
+        assert!(text_dispatch.shape_paints.is_empty());
+        assert_eq!(text_dispatch.clipping_shape_local, None);
+
+        let state = instance
+            .component(1)
+            .and_then(|component| component.concrete.text.as_ref())
+            .expect("Text retains runtime state");
+        assert_eq!(
+            state.effective_sizing(authored_sizing),
+            authored_sizing,
+            "the empty return must not retain controlled scale types"
+        );
+
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        instance
+            .draw_artboard(
+                &runtime,
+                &graph,
+                std::slice::from_ref(&graph),
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                false,
+            )
+            .expect("empty retained Text draws without reconstructing a run list");
+        let stream = factory.canonical_recording().stream().to_string();
+        assert!(
+            !stream.contains("drawPath"),
+            "unexpected path replay: {stream}"
+        );
+    }
+
+    #[test]
     fn soft_wrap_retains_contextual_advance_from_paragraph_shape() {
         let contextual_glyphs = vec![
             StyledTextGlyph {

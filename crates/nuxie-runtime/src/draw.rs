@@ -17796,6 +17796,7 @@ fn runtime_build_text_draw_frame(
             data_bind.target_local == Some(drawable_local)
                 && data_bind.target_type_name == Some("Text")
                 && u16::try_from(data_bind.property_key).ok() == text_run_list_source_key
+                && crate::data_bind_flags_apply_source_to_target(data_bind.flags)
         });
         if !has_authored_run && !has_run_list_source {
             // C++ `Text::buildRenderStyles` clears its retained styles and

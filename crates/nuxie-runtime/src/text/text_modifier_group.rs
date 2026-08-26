@@ -387,11 +387,11 @@ impl StaticTextModifierGroup {
 
 fn modifier_group_text(instance: &ArtboardInstance, group_local: usize) -> Option<usize> {
     let text = instance.component_parent_local(group_local)?;
-    matches!(
-        instance.component(text).map(|component| component.type_name),
-        Some("Text")
-    )
-    .then_some(text)
+    instance
+        .component(text)
+        .and_then(|component| nuxie_schema::definition_by_name(component.type_name))
+        .is_some_and(|definition| definition.is_a("Text"))
+        .then_some(text)
 }
 
 fn group_has_shape_modifier(instance: &ArtboardInstance, group_local: usize) -> bool {

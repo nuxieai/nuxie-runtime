@@ -139,6 +139,7 @@ pub struct RuntimeTextTargetModifierDebugReport {
 pub(crate) fn static_text_target_debug_report(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
     text_local: usize,
 ) -> Vec<RuntimeTextTargetModifierDebugReport> {
     let Some(text) =
@@ -159,20 +160,16 @@ pub(crate) fn static_text_target_debug_report(
                 {
                     return None;
                 }
-                let (target_id, resolved) = if type_name == "TextFollowPathModifier" {
-                    let target =
-                        StaticTextFollowPathModifier::from_graph(runtime, graph, local).ok()?;
-                    (target.target_id, target.resolved_transform_local.is_some())
+                if type_name == "TextFollowPathModifier" {
+                    StaticTextFollowPathModifier::from_graph(runtime, graph, local).ok()?;
                 } else {
-                    let target =
-                        StaticTextTargetModifier::from_graph(runtime, graph, local, group.local_id)
-                            .ok()?;
-                    (target.target_id, target.resolved_transform_local.is_some())
-                };
+                    StaticTextTargetModifier::from_graph(runtime, graph, local).ok()?;
+                }
                 Some(RuntimeTextTargetModifierDebugReport {
-                    target_id,
-                    resolved,
-                    has_text_component: true,
+                    target_id: text_target_modifier_target_id(instance, local),
+                    resolved: text_target_modifier_target_local(instance, local).is_some(),
+                    has_text_component: text_target_modifier_text_component(instance, local)
+                        .is_some(),
                 })
             })
         })
@@ -242,16 +239,38 @@ pub(crate) fn static_text_layout_debug_report(
                     .filter_map(|modifier| match modifier {
                         StaticTextModifier::Target(target) => {
                             Some(RuntimeTextTargetModifierDebugReport {
-                                target_id: target.target_id,
-                                resolved: target.resolved_transform_local.is_some(),
-                                has_text_component: true,
+                                target_id: text_target_modifier_target_id(
+                                    instance,
+                                    target.local_id,
+                                ),
+                                resolved: text_target_modifier_target_local(
+                                    instance,
+                                    target.local_id,
+                                )
+                                .is_some(),
+                                has_text_component: text_target_modifier_text_component(
+                                    instance,
+                                    target.local_id,
+                                )
+                                .is_some(),
                             })
                         }
                         StaticTextModifier::FollowPath(target) => {
                             Some(RuntimeTextTargetModifierDebugReport {
-                                target_id: target.target_id,
-                                resolved: target.resolved_transform_local.is_some(),
-                                has_text_component: true,
+                                target_id: text_target_modifier_target_id(
+                                    instance,
+                                    target.local_id,
+                                ),
+                                resolved: text_target_modifier_target_local(
+                                    instance,
+                                    target.local_id,
+                                )
+                                .is_some(),
+                                has_text_component: text_target_modifier_text_component(
+                                    instance,
+                                    target.local_id,
+                                )
+                                .is_some(),
                             })
                         }
                         _ => None,
@@ -1975,9 +1994,9 @@ impl StaticTextSlice {
         }
 
         if let Some(component) = graph.components.iter().find(|component| {
-            definition_by_name(component.type_name)
-                .is_some_and(|definition| definition.is_a("TextModifier"))
-                && component.type_name != "TextModifierRange"
+            definition_by_name(component.type_name).is_some_and(|definition| {
+                definition.is_a("TextModifier") && !definition.is_a("TextTargetModifier")
+            }) && component.type_name != "TextModifierRange"
                 && component
                     .parent_local
                     .and_then(|parent| type_for_local(graph, parent))
@@ -8348,18 +8367,18 @@ mod tests {
 
     #[test]
     fn d_st_target_missing_resolution_is_ok_and_retains_no_target() {
-        let (runtime, graphs, _) = fl_e8_fixture(include_bytes!(
+        let (runtime, graphs, instance) = fl_e8_fixture(include_bytes!(
             "../../../fixtures/fl-e8/text_variation_modifier.riv"
         ));
         let graph = graphs.artboards.first().unwrap();
-        let target = StaticTextTargetModifier::from_graph(&runtime, graph, 9, 7).unwrap();
-        assert_eq!(target.target_id, u32::MAX);
-        assert_eq!(target.resolved_transform_local, None);
-        assert_eq!(target.group_local, 7);
+        StaticTextTargetModifier::from_graph(&runtime, graph, 9).unwrap();
+        assert_eq!(text_target_modifier_target_id(&instance, 9), u32::MAX);
+        assert_eq!(text_target_modifier_target_local(&instance, 9), None);
+        assert_eq!(text_target_modifier_text_component(&instance, 9), Some(1));
     }
 
     #[test]
-    fn d_st_target_wrong_parent_is_rejected_before_occurrence_registration() {
+    fn d_st_target_wrong_parent_super_failure_skips_target_resolution() {
         let runtime = RuntimeFile::from_fixture_records(vec![
             fixture_record("Backboard", Vec::new()),
             fixture_record("Artboard", Vec::new()),
@@ -8385,24 +8404,71 @@ mod tests {
                 ],
             ),
             fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(0))],
+            ),
+            fixture_record(
                 "TextFollowPathModifier",
-                vec![property(
-                    "TextFollowPathModifier",
-                    "parentId",
-                    FixtureValue::Uint(1),
-                )],
+                vec![
+                    property("TextFollowPathModifier", "parentId", FixtureValue::Uint(1)),
+                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(4)),
+                ],
             ),
         ])
         .unwrap();
         let graphs = GraphFile::from_runtime_file(&runtime).unwrap();
-        let error = match StaticTextSlice::from_graph(&runtime, &graphs.artboards[0], 1) {
-            Ok(_) => panic!("wrong-parent TextTargetModifier must be rejected"),
-            Err(error) => error,
-        };
-        assert!(
-            error
-                .to_string()
-                .contains("direct TextModifierGroup parent")
+        let graph = &graphs.artboards[0];
+        let instance = ArtboardInstance::from_graph(&runtime, graph)
+            .expect("MissingObject does not abort Artboard construction");
+        assert_eq!(text_target_modifier_target_id(&instance, 5), 4);
+        assert_eq!(text_target_modifier_target_local(&instance, 5), None);
+        assert_eq!(text_target_modifier_text_component(&instance, 5), None);
+        StaticTextSlice::from_graph(&runtime, graph, 1)
+            .expect("failed target-modifier Super registration is omitted from Text");
+    }
+
+    #[test]
+    fn d_st_target_live_write_freezes_current_target_and_clone_reresolves() {
+        let (runtime, graphs, graph_index, _, modifier_local) = pinned_text_follow_path_fixture();
+        let graph = &graphs.artboards[graph_index];
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instantiate pinned TextTargetModifier occurrence");
+        let authored_target = text_target_modifier_target_local(&instance, modifier_local)
+            .expect("authored target resolves at construction");
+        let replacement_target = graph
+            .components
+            .iter()
+            .find(|component| {
+                component.local_id != authored_target
+                    && definition_by_name(component.type_name)
+                        .is_some_and(|definition| definition.is_a("TransformComponent"))
+            })
+            .map(|component| component.local_id)
+            .expect("fixture contains a second TransformComponent");
+        let target_key = property_key_for_name("TextTargetModifier", "targetId")
+            .expect("generated targetId key");
+
+        assert!(instance.set_uint_property(modifier_local, target_key, replacement_target as u64));
+        assert_eq!(
+            text_target_modifier_target_id(&instance, modifier_local),
+            replacement_target as u32
+        );
+        assert_eq!(
+            text_target_modifier_target_local(&instance, modifier_local),
+            Some(authored_target),
+            "live targetId write does not mutate the retained current target"
+        );
+
+        let cloned = instance.clone();
+        assert_eq!(
+            text_target_modifier_target_id(&cloned, modifier_local),
+            replacement_target as u32
+        );
+        assert_eq!(
+            text_target_modifier_target_local(&cloned, modifier_local),
+            Some(replacement_target),
+            "clone copies targetId and resolves its fresh retained target"
         );
     }
 

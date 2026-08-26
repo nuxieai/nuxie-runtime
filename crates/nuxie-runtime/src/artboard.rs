@@ -795,6 +795,7 @@ impl Clone for ArtboardInstance {
             cloned
                 .runtime_shapes
                 .rebuild_component_memberships(&cloned.objects);
+            cloned.initialize_text_target_modifiers();
             cloned.initialize_path_target_flags(&graph);
             cloned.initialize_component_data_bind_collapsables(&file, &graph);
         }
@@ -2843,6 +2844,7 @@ impl ArtboardInstance {
         instance
             .runtime_shapes
             .rebuild_component_memberships(&instance.objects);
+        instance.initialize_text_target_modifiers();
         instance.initialize_path_target_flags(graph);
         // C++ `DataBind::initialize` links every authored bind to its exact
         // Component target in import order before Solo/Layout can publish
@@ -2887,6 +2889,41 @@ impl ArtboardInstance {
         layout.retain_bounds(0.0, 0.0, self.width, self.height);
         layout.mark_layout_node_dirty();
         self.dirty_layout.insert(0);
+    }
+
+    fn initialize_text_target_modifiers(&self) {
+        let Some(target_key) = property_key_for_name("TextTargetModifier", "targetId") else {
+            return;
+        };
+        for handle in self.objects.component_handles() {
+            let Some(component) = self.objects.component(*handle) else {
+                continue;
+            };
+            let Some(state) = component.concrete.text_target.as_ref() else {
+                continue;
+            };
+            let super_succeeded = component.parent.is_some_and(|parent| {
+                self.objects
+                    .component(parent)
+                    .and_then(|parent| definition_by_name(parent.type_name))
+                    .is_some_and(|definition| definition.is_a("TextModifierGroup"))
+            });
+            if !super_succeeded {
+                state.resolve(None);
+                continue;
+            }
+            let target = self
+                .objects
+                .uint_property(component.local_id, target_key)
+                .and_then(|target| usize::try_from(target).ok())
+                .filter(|target| {
+                    self.objects
+                        .component_for_local(*target)
+                        .and_then(|target| definition_by_name(target.type_name))
+                        .is_some_and(|definition| definition.is_a("TransformComponent"))
+                });
+            state.resolve(target);
+        }
     }
 
     fn initialize_path_target_flags(&mut self, graph: &ArtboardGraph) {
@@ -2944,32 +2981,31 @@ impl ArtboardInstance {
         // FollowPathConstraint. Resolve its authored target once during the
         // concrete clean phase and mark the exact target occurrence
         // (`src/text/text_follow_path_modifier.cpp:34-49`).
-        if let Some(target_key) = property_key_for_name("TextFollowPathModifier", "targetId") {
-            for component in &graph.components {
-                if component.type_name != "TextFollowPathModifier" {
-                    continue;
-                }
-                let Some(target) = self
-                    .objects
-                    .uint_property(component.local_id, target_key)
-                    .and_then(|target| usize::try_from(target).ok())
-                    .and_then(|target| self.objects.component_handle(target))
-                else {
-                    continue;
-                };
-                if let Some(shape) = self
-                    .objects
-                    .component(target)
-                    .and_then(|component| component.concrete.shape.as_ref())
-                {
-                    shape.add_flags(crate::components::RuntimeShapeState::FOLLOW_PATH);
-                } else if let Some(path) = self
-                    .objects
-                    .component(target)
-                    .and_then(|component| component.concrete.path.as_ref())
-                {
-                    path.add_flags(crate::components::RuntimePathState::FOLLOW_PATH);
-                }
+        for component in &graph.components {
+            if component.type_name != "TextFollowPathModifier" {
+                continue;
+            }
+            let Some(target) = self
+                .objects
+                .component_for_local(component.local_id)
+                .and_then(|component| component.concrete.text_target.as_ref())
+                .and_then(|state| state.target_local())
+                .and_then(|target| self.objects.component_handle(target))
+            else {
+                continue;
+            };
+            if let Some(shape) = self
+                .objects
+                .component(target)
+                .and_then(|component| component.concrete.shape.as_ref())
+            {
+                shape.add_flags(crate::components::RuntimeShapeState::FOLLOW_PATH);
+            } else if let Some(path) = self
+                .objects
+                .component(target)
+                .and_then(|component| component.concrete.path.as_ref())
+            {
+                path.add_flags(crate::components::RuntimePathState::FOLLOW_PATH);
             }
         }
     }
@@ -4763,6 +4799,7 @@ impl ArtboardInstance {
         Some(crate::text::static_text_target_debug_report(
             self.runtime_file()?,
             self.runtime_graph()?,
+            self,
             text_local,
         ))
     }

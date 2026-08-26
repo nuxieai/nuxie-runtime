@@ -2,14 +2,6 @@
 struct StaticTextFollowPathModifier {
     local_id: usize,
     global_id: u32,
-    target_id: u32,
-    resolved_transform_local: Option<usize>,
-    paths: Vec<StaticTextFollowPathPath>,
-}
-#[derive(Debug, Clone)]
-struct StaticTextFollowPathPath {
-    local_id: usize,
-    geometry: PathGeometryNode,
 }
 #[derive(Debug, Clone, Copy)]
 struct StaticFollowPathGlyphTransform {
@@ -19,62 +11,10 @@ struct StaticFollowPathGlyphTransform {
 }
 impl StaticTextFollowPathModifier {
     fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
-        let global_id = global_for_local(graph, local_id)?;
-        let object = runtime
-            .object(global_id as usize)
-            .with_context(|| format!("missing TextFollowPathModifier global {global_id}"))?;
-        let target_id = object.uint_property("targetId").unwrap_or(u32::MAX as u64) as u32;
-        let target_local = usize::try_from(target_id).ok();
-        let resolved_transform_local = target_local.filter(|target| {
-            component_for_local(graph, *target).is_some_and(|component| {
-                nuxie_schema::definition_by_name(component.type_name)
-                    .is_some_and(|definition| definition.is_a("TransformComponent"))
-            })
-        });
-        let paths = match target_local {
-            Some(target_local) if type_for_local(graph, target_local) == Some("Shape") => graph
-                .path_composers
-                .iter()
-                .find(|composer| composer.shape_local == target_local)
-                .map(|composer| {
-                    composer
-                        .paths
-                        .iter()
-                        .filter_map(|path_ref| {
-                            graph
-                                .paths
-                                .iter()
-                                .find(|path| path.local_id == path_ref.local_id)
-                                .cloned()
-                                .map(|geometry| StaticTextFollowPathPath {
-                                    local_id: path_ref.local_id,
-                                    geometry,
-                                })
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            Some(target_local) => graph
-                .paths
-                .iter()
-                .find(|path| path.local_id == target_local)
-                .cloned()
-                .map(|geometry| {
-                    vec![StaticTextFollowPathPath {
-                        local_id: target_local,
-                        geometry,
-                    }]
-                })
-                .unwrap_or_default(),
-            None => Vec::new(),
-        };
-
+        let (global_id, _) = text_target_modifier_resolution(runtime, graph, local_id)?;
         Ok(Self {
             local_id,
             global_id,
-            target_id,
-            resolved_transform_local,
-            paths,
         })
     }
 
@@ -180,30 +120,20 @@ impl StaticTextFollowPathModifier {
         })
     }
 
-    fn world_path_commands(&self, instance: &ArtboardInstance) -> Vec<RuntimePathCommand> {
-        let mut commands = Vec::new();
-        for path in &self.paths {
-            let Some(path_world) = instance
-                .component(path.local_id)
-                .map(|component| component.transform.world_transform)
-            else {
-                continue;
-            };
-            let path_commands =
-                runtime_path_geometry_commands(instance, &path.geometry, path_world);
-            commands.extend(path_commands);
-        }
-        commands
-    }
-
     fn reset(&self, instance: &ArtboardInstance, inverse_text: Mat2D) {
-        let Some(state) = instance
-            .component(self.local_id)
-            .and_then(|component| component.concrete.text_follow_path.as_ref())
-        else {
+        let Some(component) = instance.component(self.local_id) else {
             return;
         };
-        if self.resolved_transform_local.is_none() {
+        let Some(state) = component.concrete.text_follow_path.as_ref() else {
+            return;
+        };
+        if component
+            .concrete
+            .text_target
+            .as_ref()
+            .and_then(|target| target.target_local())
+            .is_none()
+        {
             state.retain_local_measure(RuntimePathMeasure::from_commands(&[]));
             return;
         }
@@ -257,9 +187,41 @@ pub(crate) fn update_text_follow_path_world_path(
     instance: &ArtboardInstance,
     local_id: usize,
 ) -> Option<Vec<RuntimePathCommand>> {
-    StaticTextFollowPathModifier::from_graph(runtime, graph, local_id)
-        .ok()
-        .map(|modifier| modifier.world_path_commands(instance))
+    StaticTextFollowPathModifier::from_graph(runtime, graph, local_id).ok()?;
+    let target_local = instance
+        .component(local_id)?
+        .concrete
+        .text_target
+        .as_ref()?
+        .target_local()?;
+    let path_locals = if type_for_local(graph, target_local) == Some("Shape") {
+        graph
+            .path_composers
+            .iter()
+            .find(|composer| composer.shape_local == target_local)
+            .map(|composer| {
+                composer
+                    .paths
+                    .iter()
+                    .map(|path| path.local_id)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    } else if type_for_local(graph, target_local) == Some("Path") {
+        vec![target_local]
+    } else {
+        Vec::new()
+    };
+    let mut commands = Vec::new();
+    for path_local in path_locals {
+        let path = graph
+            .paths
+            .iter()
+            .find(|path| path.local_id == path_local)?;
+        let path_world = instance.component(path_local)?.transform.world_transform;
+        commands.extend(runtime_path_geometry_commands(instance, path, path_world));
+    }
+    Some(commands)
 }
 
 pub(crate) fn text_follow_path_modifier_double_property_changed(
@@ -291,9 +253,7 @@ pub(crate) fn text_follow_path_modifier_bool_property_changed(
 }
 
 fn text_follow_path_modifier_shape_dirty(instance: &mut ArtboardInstance, local_id: usize) -> bool {
-    instance
-        .component_parent_local(local_id)
-        .and_then(|group| modifier_group_text(instance, group))
+    text_target_modifier_text_component(instance, local_id)
         .is_some_and(|text| crate::text_owner::modifier_shape_dirty(instance, text))
 }
 

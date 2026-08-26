@@ -29,7 +29,6 @@ impl StaticTextModifier {
                 runtime,
                 graph,
                 child_local,
-                group_local,
             )?)),
             Some("TextModifier" | "TextShapeModifier") => Some(Self::Abstract {
                 local_id: child_local,

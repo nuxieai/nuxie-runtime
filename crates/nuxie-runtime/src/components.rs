@@ -996,6 +996,28 @@ pub(crate) struct RuntimeTextFollowPathState {
     local_measure: RefCell<RuntimePathMeasure>,
 }
 
+/// Occurrence-owned counterpart of pinned `TextTargetModifier::m_Target`.
+/// Live `targetId` writes do not mutate it; clone construction resolves the
+/// copied generated property into the new occurrence.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeTextTargetState {
+    target_local: Cell<Option<usize>>,
+}
+
+impl RuntimeTextTargetState {
+    fn clone_for_occurrence(&self) -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn resolve(&self, target_local: Option<usize>) {
+        self.target_local.set(target_local);
+    }
+
+    pub(crate) fn target_local(&self) -> Option<usize> {
+        self.target_local.get()
+    }
+}
+
 impl RuntimeTextFollowPathState {
     fn new() -> Self {
         Self {
@@ -1732,6 +1754,7 @@ pub(crate) struct RuntimeConcreteComponentState {
     pub(crate) vertex: Option<RuntimeVertexState>,
     pub(crate) scripted: Option<RuntimeScriptedComponentState>,
     pub(crate) text: Option<RuntimeTextState>,
+    pub(crate) text_target: Option<RuntimeTextTargetState>,
     pub(crate) text_follow_path: Option<RuntimeTextFollowPathState>,
     pub(crate) text_input: Option<RuntimeTextInputState>,
     pub(crate) drawable: Option<RuntimeDrawableComponentState>,
@@ -1780,6 +1803,8 @@ impl RuntimeConcreteComponentState {
             )
             .then(RuntimeScriptedComponentState::default),
             text: type_is_a(type_name, "Text").then(RuntimeTextState::new),
+            text_target: type_is_a(type_name, "TextTargetModifier")
+                .then(RuntimeTextTargetState::default),
             text_follow_path: (type_name == "TextFollowPathModifier")
                 .then(RuntimeTextFollowPathState::new),
             text_input: (type_name == "TextInput").then(RuntimeTextInputState::default),
@@ -1856,6 +1881,10 @@ impl RuntimeConcreteComponentState {
                 .text
                 .as_ref()
                 .map(RuntimeTextState::clone_for_occurrence),
+            text_target: self
+                .text_target
+                .as_ref()
+                .map(RuntimeTextTargetState::clone_for_occurrence),
             text_follow_path: self
                 .text_follow_path
                 .as_ref()

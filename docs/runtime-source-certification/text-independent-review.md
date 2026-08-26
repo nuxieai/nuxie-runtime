@@ -117,3 +117,45 @@ denominator remains 53 logical/79 physical definitions, 29 executable header
 methods, and eight defaults; the consumer topology remains **3 pass, 4
 expected-red, 11 pending**; and all three pinned hashes are unchanged. No
 production or test file was modified by this review.
+
+## Production-correction review of `a45c75a78`
+
+Verdict: **ACCEPTED**
+
+The mixed-axis correction is one production algorithm shared by
+`RuntimeTextLayoutConstraint` and retained `RuntimeTextState`; its complete
+fixed/fill/hug matrix matches pinned `Text::effectiveSizing`. Width, height,
+and overflow callbacks consume that retained result and preserve the pinned
+dirty/no-dirty returns. The still-missing complete `controlSize` owner remains
+the pre-existing row 10 gap and is not concealed by this acceptance.
+
+Paragraph boundaries are retained explicitly: authored and empty paragraphs
+end a paragraph, while soft-wrapped intermediate lines do not. Line metrics
+therefore carry spacing only into the next paragraph; measurement publishes the
+last line bottom (N-1 spaces), fit/fixed height adds the final space, auto bounds
+subtract it exactly once before trim, and ellipsis uses the pinned rule that
+only a chosen line after line zero replaces the full height. The same owners
+feed bounds, fit-font-size probes, render transforms, and measure; there is no
+parallel test-local layout algorithm.
+
+Evidence independently checked:
+
+- the sizing-matrix/callback and paragraph-spacing owner tests each pass
+  independently (one passed, zero failed, zero ignored);
+- the literal `fit_font_size_test` action stream is bind + initial
+  advance/draw followed by six frame/trigger/advance/draw cycles, matching all
+  seven pinned rendered frames, and its full SRIV comparison passes;
+- only `fit_font_size_test` changes from diverges to exact in the manifest and
+  generator; direct replay preserves the other three frozen differences:
+  `word_joiner_test` frame 2/op 262, `text_vertical_trim_test` frame 3/op 220,
+  and `layout_text_match` frame 0/op 61; and
+- the resulting consumer topology is **4 pass, 3 executable expected-red, 11
+  pending**. Candidate `git diff --check` passes.
+
+The normal filtered CLI could not reach case selection because the unchanged
+manifest has an unrelated `global_variables_test` validation defect. A
+read-only direct `Execution` harness was used to replay the three retained reds
+instead. One documentation-only cleanup remains: row 17's first two shifted
+locators should now read `text.rs:2263::layout_from_shaped_topology` and
+`text.rs:2543::render_data_from_layout`. This does not affect the accepted
+production behavior. No production or test file was changed by this review.

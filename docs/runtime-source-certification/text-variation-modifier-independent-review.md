@@ -83,3 +83,32 @@ Keep the now-passing phase-6 live-tag behavior unchanged.
 Focused results: the two direct owner tests passed, and the full unskipped
 seven-phase C++ differential passed after the correction. Correction-range
 `git diff --check` passed; its five paths exclude all 17 user-dirty paths.
+
+## Final evidence rereview
+
+Evidence correction `f0810d9e46050cc1406cfde37d07e910a3b98de3` **closes the
+remaining rejection and is accepted**. The tools-only snapshot reads the
+actual `RuntimeTextDrawOwner`'s retained shaped topology, retained frame, and
+dirty/invalidation cells. It performs no shaping, update, or parallel
+calculation.
+
+After ordinary update materializes the owner, the snapshot proves a live
+`axisTag` write leaves the same shaped-topology Arc identity, glyph and
+variation streams, `dirty=false`, pending dirt zero,
+`render_styles_dirty=false`, `shaped_topology_valid=true`, and an existing
+retained frame. The subsequent Range-strength write preserves that exact
+retained identity/output while publishing real dirty, pending, and render-style
+invalidation. Only the ordinary component update rebuilds the retained owner;
+its fresh snapshot supplies the phase-6 `wdth=1300.0` stream matched against
+the real C++ probe.
+
+The production live-tag correction is unchanged and the revision-keyed cache
+remains absent. The interpolation helper/call path is byte-unchanged from the
+reviewed correction, so its release `fmul` plus `llvm.fma` provenance is
+unchanged. Callback, malformed hierarchy, clone, and 0 / 0 / 0 / 0 consumer
+semantics did not move.
+
+Both direct owner tests passed, and the full unskipped seven-phase C++
+differential passed. Correction-range `git diff --check` passed. The correction
+contains four paths; the pre-existing `draw.rs` formatting hunk remains
+unstaged, as do all 17 user-dirty paths.

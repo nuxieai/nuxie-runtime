@@ -47,7 +47,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/tests/upstream_scripting_wake_advance.rs",
-          "line": 202,
+          "line": 223,
           "symbol": "pointer_event_rearms_an_idle_scripted_drawables_advance_loop"
         }
       ],
@@ -65,7 +65,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/tests/upstream_scripting_wake_advance.rs",
-          "line": 219,
+          "line": 240,
           "symbol": "keyboard_event_rearms_an_idle_scripted_drawables_advance_loop"
         }
       ],

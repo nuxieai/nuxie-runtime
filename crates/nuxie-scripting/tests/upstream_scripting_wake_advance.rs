@@ -73,7 +73,19 @@ struct WakeFixture {
 }
 
 impl WakeFixture {
-    fn new(implemented_methods: u32) -> Self {
+    fn pointer(implemented_methods: u32) -> Self {
+        Self::new(implemented_methods, scripted_drawable_file(), None)
+    }
+
+    fn keyboard(implemented_methods: u32) -> Self {
+        Self::new(
+            implemented_methods,
+            keyboard_scripted_drawable_file(),
+            Some(1),
+        )
+    }
+
+    fn new(implemented_methods: u32, file: RuntimeFile, focus_id: Option<usize>) -> Self {
         let bytecode = compile_source(WAKE_SCRIPT).expect("wake script compiles");
         let mut payload = Vec::with_capacity(bytecode.len() + 1);
         payload.push(0);
@@ -89,7 +101,6 @@ impl WakeFixture {
             .expect("wake script instantiates");
         assert!(instance.call_init(&mut NoopScriptHost).unwrap());
 
-        let file = scripted_drawable_file();
         let graph = GraphFile::from_runtime_file(&file).expect("scripted-input graph builds");
         let mut artboard = ArtboardInstance::from_graph_with_artboards(
             &file,
@@ -111,7 +122,9 @@ impl WakeFixture {
         let mut machine = artboard
             .state_machine_instance(0)
             .expect("scripted-input state machine");
-        assert!(machine.set_focus(Some(1)));
+        if let Some(focus_id) = focus_id {
+            machine.set_focus(Some(focus_id));
+        }
         machine.mark_scripted_object_initialization_complete(None);
 
         Self {
@@ -164,20 +177,28 @@ fn scripted_drawable_file() -> RuntimeFile {
                 fixture_property("ScriptedDrawable", "opacity", FixtureValue::Double(1.0)),
             ],
         ),
+        fixture_record("StateMachine", Vec::new()),
+    ])
+    .expect("scripted-input records import")
+}
+
+fn keyboard_scripted_drawable_file() -> RuntimeFile {
+    RuntimeFile::from_fixture_records(vec![
+        fixture_record("Backboard", Vec::new()),
+        fixture_record("Artboard", Vec::new()),
+        fixture_record(
+            "ScriptedDrawable",
+            vec![
+                fixture_property("ScriptedDrawable", "parentId", FixtureValue::Uint(0)),
+                fixture_property("ScriptedDrawable", "opacity", FixtureValue::Double(1.0)),
+            ],
+        ),
         fixture_record(
             "FocusData",
             vec![
                 fixture_property("FocusData", "parentId", FixtureValue::Uint(1)),
                 fixture_property("FocusData", "focusFlags", FixtureValue::Uint(7)),
             ],
-        ),
-        fixture_record(
-            "SemanticData",
-            vec![fixture_property(
-                "SemanticData",
-                "parentId",
-                FixtureValue::Uint(1),
-            )],
         ),
         fixture_record("StateMachine", Vec::new()),
     ])
@@ -200,7 +221,7 @@ fn park_advance_loop(fixture: &mut WakeFixture) {
 
 #[test]
 fn pointer_event_rearms_an_idle_scripted_drawables_advance_loop() {
-    let mut drawable = WakeFixture::new(ADVANCES | WANTS_POINTER_DOWN);
+    let mut drawable = WakeFixture::pointer(ADVANCES | WANTS_POINTER_DOWN);
     park_advance_loop(&mut drawable);
 
     drawable
@@ -217,7 +238,7 @@ fn pointer_event_rearms_an_idle_scripted_drawables_advance_loop() {
 
 #[test]
 fn keyboard_event_rearms_an_idle_scripted_drawables_advance_loop() {
-    let mut drawable = WakeFixture::new(ADVANCES | WANTS_KEYBOARD_INPUT);
+    let mut drawable = WakeFixture::keyboard(ADVANCES | WANTS_KEYBOARD_INPUT);
     park_advance_loop(&mut drawable);
 
     drawable

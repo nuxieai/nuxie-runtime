@@ -1,0 +1,449 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "c3-micro-fragment",
+  "case_count": 23,
+  "ratchet": {
+    "max_pending": 3
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/lite_rtti_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/lite_rtti_test.cpp",
+      "ordinal": 1,
+      "line": 6,
+      "name": "lite rtti behaves correctly",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_language_wave_c3.rs",
+          "line": 24,
+          "symbol": "wave_c3_lite_rtti_001_behaves_correctly"
+        }
+      ],
+      "adaptation_kind": "rust-safety",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/malformed_file_import_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/malformed_file_import_test.cpp",
+      "ordinal": 1,
+      "line": 29,
+      "name": "truncated file import never crashes",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_malformed_import_wave_c3.rs",
+          "line": 16,
+          "symbol": "wave_c3_malformed_import_001_truncated_file_never_crashes"
+        }
+      ],
+      "adaptation_kind": "rust-safety",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/malformed_file_import_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/malformed_file_import_test.cpp",
+      "ordinal": 2,
+      "line": 53,
+      "name": "full file still imports after the guards",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_malformed_import_wave_c3.rs",
+          "line": 36,
+          "symbol": "wave_c3_malformed_import_002_full_file_still_imports"
+        }
+      ],
+      "adaptation_kind": "rust-safety",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 1,
+      "line": 13,
+      "name": "ieee_float_divide",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 85,
+          "symbol": "wave_c3_math_001_ieee_float_divide"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 2,
+      "line": 62,
+      "name": "bit_cast",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 128,
+          "symbol": "wave_c3_math_002_bit_cast"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 3,
+      "line": 72,
+      "name": "cmp_equal",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 140,
+          "symbol": "wave_c3_math_003_cmp_equal"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 4,
+      "line": 98,
+      "name": "cmp_not_equal",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 156,
+          "symbol": "wave_c3_math_004_cmp_not_equal"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 5,
+      "line": 124,
+      "name": "cmp_less",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 172,
+          "symbol": "wave_c3_math_005_cmp_less"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 6,
+      "line": 147,
+      "name": "cmp_greater",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 191,
+          "symbol": "wave_c3_math_006_cmp_greater"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 7,
+      "line": 170,
+      "name": "cmp_less_equal",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 210,
+          "symbol": "wave_c3_math_007_cmp_less_equal"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 8,
+      "line": 193,
+      "name": "cmp_greater_equal",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 229,
+          "symbol": "wave_c3_math_008_cmp_greater_equal"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 9,
+      "line": 216,
+      "name": "clamp_cast",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 248,
+          "symbol": "wave_c3_math_009_clamp_cast"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 10,
+      "line": 231,
+      "name": "clz",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 260,
+          "symbol": "wave_c3_math_010_clz"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 11,
+      "line": 251,
+      "name": "rotateleft32",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 281,
+          "symbol": "wave_c3_math_011_rotateleft32"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 12,
+      "line": 258,
+      "name": "msb",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 287,
+          "symbol": "wave_c3_math_012_msb"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 13,
+      "line": 278,
+      "name": "round_up_to_multiple_of",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 306,
+          "symbol": "wave_c3_math_013_round_up_to_multiple_of"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 14,
+      "line": 295,
+      "name": "positive_mod",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 323,
+          "symbol": "wave_c3_math_014_positive_mod"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 15,
+      "line": 305,
+      "name": "count_set_bits",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
+          "line": 333,
+          "symbol": "wave_c3_math_015_count_set_bits"
+        }
+      ],
+      "adaptation_kind": "cxx-language-only",
+      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 16,
+      "line": 334,
+      "name": "compact_bitmask_value",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production compact_bitmask_value owner exists, and no honest executable behavior red can reach the missing capability without a forbidden test-local implementation or synthetic failure."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 17,
+      "line": 348,
+      "name": "expand_compacted_bitmask_value",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production expand_compacted_bitmask_value owner exists, and no honest executable behavior red can reach the missing capability without a forbidden test-local implementation or synthetic failure."
+    },
+    {
+      "id": "tests/unit_tests/runtime/math_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/math_test.cpp",
+      "ordinal": 18,
+      "line": 385,
+      "name": "iterate_bit_combinations_in_mask",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production iterate_bit_combinations_in_mask owner exists, and no honest executable behavior red can reach the missing capability without a forbidden test-local implementation or synthetic failure."
+    },
+    {
+      "id": "tests/unit_tests/runtime/node_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/node_test.cpp",
+      "ordinal": 1,
+      "line": 4,
+      "name": "Node instances",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/objects/wave_c3_node_owner_tests.rs",
+          "line": 49,
+          "symbol": "wave_c3_node_001_instances_default_x"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/node_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/node_test.cpp",
+      "ordinal": 2,
+      "line": 6,
+      "name": "nodeX function return x value",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/objects/wave_c3_node_owner_tests.rs",
+          "line": 55,
+          "symbol": "wave_c3_node_002_x_setter_returns_x_value"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    }
+  ]
+}

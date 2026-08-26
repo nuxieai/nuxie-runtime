@@ -57,3 +57,7 @@ pub(crate) fn reverse(input: f32, operand: f32, operation_type: u64) -> f32 {
         _ => operand,
     }
 }
+
+#[cfg(test)]
+#[path = "data_converter_operation/wave_c3_math_owner_tests.rs"]
+mod wave_c3_math_owner_tests;

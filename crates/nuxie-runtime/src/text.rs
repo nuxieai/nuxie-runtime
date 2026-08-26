@@ -982,6 +982,10 @@ struct StaticResolvedRun {
     local_id: usize,
     global_id: u32,
     style_local: Option<usize>,
+    /// Pinned `TextRun::styleId`: the wrapping `uint16_t` index into the
+    /// complete authored+dynamic `m_allRuns` sequence, including skipped
+    /// entries.
+    style_id: u16,
     /// Whether pinned `Text::makeStyled` appended this source run. The raw
     /// source text and style remain retained even when the StyledText run is
     /// omitted, matching the separate `m_allRuns` and `StyledText::m_runs`
@@ -989,6 +993,7 @@ struct StaticResolvedRun {
     styled_text_included: bool,
     char_start: usize,
     char_len: usize,
+    source_bytes: Vec<u8>,
     text: String,
 }
 
@@ -999,7 +1004,7 @@ impl StaticResolvedRun {
 
     fn styled_text(&self) -> &str {
         if self.styled_text_included {
-            cxx_styled_text_prefix(&self.text)
+            &self.text
         } else {
             ""
         }
@@ -1007,10 +1012,41 @@ impl StaticResolvedRun {
 }
 
 /// `StyledText::append` decodes from `std::string::c_str()` while `*ptr`, so
-/// an embedded NUL terminates the appended Unicode span even though the source
-/// `TextValueRun::text()` itself is nonempty.
-fn cxx_styled_text_prefix(text: &str) -> &str {
-    text.split_once('\0').map_or(text, |(prefix, _)| prefix)
+/// the byte suffix after the first NUL is neither decoded nor UTF-8 validated.
+/// Invalid bytes in the consumed prefix remain a named Rust safety rejection.
+fn cxx_styled_text_prefix(bytes: &[u8]) -> Result<&str> {
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    std::str::from_utf8(&bytes[..end]).context("StyledText UTF-8 prefix is invalid")
+}
+
+#[cfg(test)]
+impl StaticShapedTextTopology {
+    pub(crate) fn debug_styled_text_state(
+        &self,
+    ) -> (
+        String,
+        Vec<(usize, u16, Option<usize>, bool, usize, Vec<u8>)>,
+    ) {
+        (
+            self.text.clone(),
+            self.resolved_runs
+                .iter()
+                .map(|run| {
+                    (
+                        run.local_id,
+                        run.style_id,
+                        run.style_local,
+                        run.styled_text_included,
+                        run.char_len,
+                        run.source_bytes.clone(),
+                    )
+                })
+                .collect(),
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1727,8 +1763,7 @@ impl StaticTextSlice {
             return Ok(false);
         }
 
-        let base_style = self.base_style()?;
-        let mut participating_style_locals = BTreeSet::from([base_style.local_id]);
+        let mut participating_style_locals = BTreeSet::new();
         for run in resolved_runs
             .iter()
             .filter(|run| run.participates_in_styled_text())
@@ -2049,7 +2084,7 @@ impl StaticTextSlice {
             let bytes = run
                 .string_property_bytes("text")
                 .context("static text subset requires serialized TextValueRun.text")?;
-            std::str::from_utf8(bytes).context("TextValueRun text is not UTF-8")?;
+            cxx_styled_text_prefix(bytes).context("TextValueRun StyledText prefix is not UTF-8")?;
             runs.push(StaticTextRun {
                 local_id: run_local,
                 global_id: run_global,
@@ -2249,12 +2284,12 @@ impl StaticTextSlice {
             .iter()
             .map(StaticResolvedRun::styled_text)
             .collect::<String>();
-        let base_style = self.base_style()?;
+        let base_style = self.first_included_style(resolved_runs)?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
         if font_size < 0.0 {
             return Ok(None);
         }
-        let letter_spacing = self.letter_spacing(runtime, instance);
+        let letter_spacing = self.style_letter_spacing(runtime, instance, base_style);
         let Some(font_bytes) = base_style.font_bytes(runtime, instance) else {
             // Mirrors src/importers/file_asset_importer.cpp: with no
             // FileAssetLoader and no in-band contents, a hosted FontAsset
@@ -2263,7 +2298,7 @@ impl StaticTextSlice {
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
-        let harf_variations = self.base_style()?.harf_variations(instance);
+        let harf_variations = base_style.harf_variations(instance);
         let shaper_instance = if harf_variations.is_empty() {
             None
         } else {
@@ -2337,9 +2372,9 @@ impl StaticTextSlice {
         let contextual_glyphs = &topology.contextual_glyphs;
         let lines = topology.lines.clone();
         let font_scale = topology.font_scale;
-        let base_style = self.base_style()?;
+        let base_style = self.first_included_style(resolved_runs)?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
-        let letter_spacing = self.letter_spacing(runtime, instance);
+        let letter_spacing = self.style_letter_spacing(runtime, instance, base_style);
         let font_bytes = base_style
             .font_bytes(runtime, instance)
             .context("retained shaped Text lost its font bytes")?;
@@ -2744,7 +2779,7 @@ impl StaticTextSlice {
         if text.is_empty() {
             return self.unshaped_local_bounds(runtime, instance, None);
         }
-        let base_style = self.base_style()?;
+        let base_style = self.first_included_style(&resolved_runs)?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
         if font_size < 0.0 {
             return self.unshaped_local_bounds(runtime, instance, None);
@@ -2754,7 +2789,7 @@ impl StaticTextSlice {
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
-        let harf_variations = self.base_style()?.harf_variations(instance);
+        let harf_variations = base_style.harf_variations(instance);
         let shaper_instance = if harf_variations.is_empty() {
             None
         } else {
@@ -2789,7 +2824,7 @@ impl StaticTextSlice {
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
         let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
-        let letter_spacing = self.letter_spacing(runtime, instance);
+        let letter_spacing = self.style_letter_spacing(runtime, instance, base_style);
         let measured_width = lines
             .iter()
             .filter(|line| !line.text.is_empty())
@@ -2893,7 +2928,7 @@ impl StaticTextSlice {
                 }
             };
         }
-        let base_style = self.base_style()?;
+        let base_style = self.first_included_style(&resolved_runs)?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
         if font_size < 0.0 {
             return match purpose {
@@ -2913,7 +2948,7 @@ impl StaticTextSlice {
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
-        let harf_variations = self.base_style()?.harf_variations(instance);
+        let harf_variations = base_style.harf_variations(instance);
         let shaper_instance = if harf_variations.is_empty() {
             None
         } else {
@@ -2951,7 +2986,7 @@ impl StaticTextSlice {
         )?;
         let scaled_font_size = font_size * font_scale;
         let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
-        let letter_spacing = self.letter_spacing(runtime, instance);
+        let letter_spacing = self.style_letter_spacing(runtime, instance, base_style);
         let text_input_bidi = self.kind == StaticTextKind::TextInput && text_has_rtl(&text);
         let contextual_glyphs = if text_input_bidi {
             self.styled_resolved_run_glyphs_bidi(runtime, instance, &resolved_runs, font_scale)?
@@ -3045,56 +3080,60 @@ impl StaticTextSlice {
     ) -> Result<Vec<StaticResolvedRun>> {
         let mut runs = Vec::new();
         let mut char_start = 0;
+        let mut style_id = 0u16;
         for run in &self.runs {
             let property_key = property_key_for_name(run.text_property_owner, "text")
                 .with_context(|| format!("missing {}.text key", run.text_property_owner))?;
-            let text = if run.text_property_owner == "TextInput" {
+            let source_bytes = if run.text_property_owner == "TextInput" {
                 instance
                     .text_input_display_text(run.local_id)
+                    .map(String::into_bytes)
                     .or_else(|| {
                         instance
                             .string_property(run.local_id, property_key)
-                            .and_then(|bytes| std::str::from_utf8(bytes).ok())
-                            .map(str::to_owned)
+                            .map(<[u8]>::to_vec)
                     })
                     .or_else(|| {
                         runtime
                             .object(run.global_id as usize)
                             .and_then(|object| object.string_property_bytes("text"))
-                            .and_then(|bytes| std::str::from_utf8(bytes).ok())
-                            .map(str::to_owned)
+                            .map(<[u8]>::to_vec)
                     })
                     .context("TextInput missing text")?
             } else {
-                let bytes = instance
+                instance
                     .string_property(run.local_id, property_key)
                     .or_else(|| {
                         runtime
                             .object(run.global_id as usize)
                             .and_then(|object| object.string_property_bytes("text"))
                     })
-                    .context("TextValueRun missing text")?;
-                std::str::from_utf8(bytes)
-                    .with_context(|| format!("{}.text is not UTF-8", run.text_property_owner))?
-                    .to_owned()
+                    .context("TextValueRun missing text")?
+                    .to_vec()
             };
+            let text = cxx_styled_text_prefix(&source_bytes)
+                .with_context(|| format!("{}.text prefix is not UTF-8", run.text_property_owner))?
+                .to_owned();
             let style_index = self.style_index_for_local(run.style_local)?;
-            let styled_text_included = !text.is_empty()
+            let styled_text_included = !source_bytes.is_empty()
                 && self.styles[style_index]
                     .font_bytes(runtime, instance)
                     .is_some();
             let char_len = styled_text_included
-                .then(|| cxx_styled_text_prefix(&text).chars().count())
+                .then(|| text.chars().count())
                 .unwrap_or(0);
             runs.push(StaticResolvedRun {
                 local_id: run.local_id,
                 global_id: run.global_id,
                 style_local: Some(run.style_local),
+                style_id,
                 styled_text_included,
                 char_start,
                 char_len,
+                source_bytes,
                 text,
             });
+            style_id = style_id.wrapping_add(1);
             char_start += char_len;
         }
         runs.extend(self.resolved_dynamic_runs(
@@ -3102,6 +3141,7 @@ impl StaticTextSlice {
             instance,
             instance.text_list_runs(self.text_local),
             char_start,
+            style_id,
         )?);
         Ok(runs)
     }
@@ -3112,14 +3152,17 @@ impl StaticTextSlice {
         instance: &ArtboardInstance,
         list_runs: Vec<crate::view_model::RuntimeTextListRun>,
         mut char_start: usize,
+        mut style_id: u16,
     ) -> Result<Vec<StaticResolvedRun>> {
         let mut runs = Vec::with_capacity(list_runs.len());
         for run in list_runs {
             // A missing text-content property leaves the newly allocated C++
             // TextValueRun at its default empty value. It still occupies its
             // exact m_allRuns position.
-            let text = String::from_utf8(run.text.unwrap_or_default())
-                .context("dynamic TextValueRun text is not UTF-8")?;
+            let source_bytes = run.text.unwrap_or_default();
+            let text = cxx_styled_text_prefix(&source_bytes)
+                .context("dynamic TextValueRun StyledText prefix is not UTF-8")?
+                .to_owned();
             // A style property performs its initial write: choose the named
             // paint or the first paint as the pinned fallback. With no style
             // property there is no listener/write, so style remains null and
@@ -3137,7 +3180,7 @@ impl StaticTextSlice {
             });
             let styled_text_included = if let Some(style_local) = style_local {
                 let style_index = self.style_index_for_local(style_local)?;
-                !text.is_empty()
+                !source_bytes.is_empty()
                     && self.styles[style_index]
                         .font_bytes(runtime, instance)
                         .is_some()
@@ -3145,17 +3188,20 @@ impl StaticTextSlice {
                 false
             };
             let char_len = styled_text_included
-                .then(|| cxx_styled_text_prefix(&text).chars().count())
+                .then(|| text.chars().count())
                 .unwrap_or(0);
             runs.push(StaticResolvedRun {
                 local_id: self.text_local,
                 global_id: self.text_global,
                 style_local,
+                style_id,
                 styled_text_included,
                 char_start,
                 char_len,
+                source_bytes,
                 text,
             });
+            style_id = style_id.wrapping_add(1);
             char_start += char_len;
         }
         Ok(runs)
@@ -3179,6 +3225,41 @@ impl StaticTextSlice {
         Ok(order)
     }
 
+    fn resolved_run_style_index(&self, run: &StaticResolvedRun) -> Result<usize> {
+        let style_local = run
+            .style_local
+            .context("StyledText run has no source TextStylePaint")?;
+        self.style_index_for_local(style_local)
+    }
+
+    /// Pinned `Text::styleFromShaperId`: glyph/render style lookup uses the
+    /// wrapping `TextRun::styleId` as an index into the complete all-runs
+    /// sequence, not the style pointer retained on the appended run.
+    fn style_index_from_shaper_id(
+        &self,
+        runs: &[StaticResolvedRun],
+        style_id: u16,
+    ) -> Result<usize> {
+        let source_run = runs
+            .get(usize::from(style_id))
+            .with_context(|| format!("StyledText styleId {style_id} is outside m_allRuns"))?;
+        self.resolved_run_style_index(source_run)
+    }
+
+    fn first_included_style<'slice>(
+        &'slice self,
+        runs: &[StaticResolvedRun],
+    ) -> Result<&'slice StaticTextStyle> {
+        let first = runs
+            .iter()
+            .find(|run| run.participates_in_styled_text())
+            .context("StyledText has no included run")?;
+        let style_index = self.resolved_run_style_index(first)?;
+        self.styles
+            .get(style_index)
+            .context("first StyledText run references a missing style")
+    }
+
     fn style_font_size(
         &self,
         runtime: &RuntimeFile,
@@ -3195,13 +3276,6 @@ impl StaticTextSlice {
                     .and_then(|object| object.double_property("fontSize"))
             })
             .unwrap_or(12.0))
-    }
-
-    fn letter_spacing(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> f32 {
-        let Ok(style) = self.base_style() else {
-            return 0.0;
-        };
-        self.style_letter_spacing(runtime, instance, style)
     }
 
     fn paragraph_spacing(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<f32> {
@@ -3263,10 +3337,7 @@ impl StaticTextSlice {
                             && line.char_start <= run.char_start + run.char_len
                     })
                 {
-                    let style_local = run
-                        .style_local
-                        .expect("participating StyledText run has a style");
-                    let style_index = self.style_index_for_local(style_local)?;
+                    let style_index = self.resolved_run_style_index(run)?;
                     let style = &self.styles[style_index];
                     if style.font_bytes(runtime, instance).is_some() {
                         insertion_style_index = Some(style_index);
@@ -3458,10 +3529,10 @@ impl StaticTextSlice {
             let run_start = run.char_start;
             let run_end = run.char_start + run.char_len;
             if line_start < run_end && line_end > run_start {
-                let Some(style_local) = run.style_local else {
+                if !run.participates_in_styled_text() {
                     continue;
-                };
-                let style_index = self.style_index_for_local(style_local)?;
+                }
+                let style_index = self.resolved_run_style_index(run)?;
                 if !indices.contains(&style_index) {
                     indices.push(style_index);
                 }
@@ -3574,10 +3645,7 @@ impl StaticTextSlice {
             if !run.participates_in_styled_text() {
                 continue;
             }
-            let style_index = self.style_index_for_local(
-                run.style_local
-                    .expect("participating StyledText run has a style"),
-            )?;
+            let style_index = self.resolved_run_style_index(run)?;
             let style = &self.styles[style_index];
             if style.font_bytes(runtime, instance).is_some() {
                 max_size = max_size.max(self.style_font_size(runtime, instance, style)?);
@@ -3606,9 +3674,9 @@ impl StaticTextSlice {
 
         let box_width = self.effective_width(runtime, instance, layout_constraint)?;
         let box_height = self.effective_height(runtime, instance, layout_constraint)?;
-        let base_style = self.base_style()?;
+        let base_style = self.first_included_style(runs)?;
         let base_font_size = self.style_font_size(runtime, instance, base_style)?;
-        let letter_spacing = self.letter_spacing(runtime, instance);
+        let letter_spacing = self.style_letter_spacing(runtime, instance, base_style);
 
         let fits = |top_size: i32| -> Result<bool> {
             let font_scale = top_size as f32 / max_size;
@@ -3691,10 +3759,11 @@ impl StaticTextSlice {
             .collect::<Result<Vec<_>>>()?;
         let mut glyphs = Vec::new();
         for run in runs {
-            let Some(style_local) = run.style_local else {
+            if !run.participates_in_styled_text() {
                 continue;
-            };
-            let style_index = self.style_index_for_local(style_local)?;
+            }
+            let style_index = self.resolved_run_style_index(run)?;
+            let paint_style_index = self.style_index_from_shaper_id(runs, run.style_id)?;
             for paragraph in split_static_text_lines(run.styled_text()) {
                 // C++ shapes each paragraph before `BreakLines` and keeps the
                 // resulting advances when a soft wrap slices the glyph run.
@@ -3735,6 +3804,7 @@ impl StaticTextSlice {
                         &paragraph.text[byte_start..byte_end],
                         global_start,
                         style_index,
+                        paint_style_index,
                         font_scale,
                         &strengths,
                     )?);
@@ -3754,10 +3824,11 @@ impl StaticTextSlice {
     ) -> Result<Vec<StyledTextGlyph>> {
         let mut glyphs = Vec::new();
         for run in runs {
-            let Some(style_local) = run.style_local else {
+            if !run.participates_in_styled_text() {
                 continue;
-            };
-            let style_index = self.style_index_for_local(style_local)?;
+            }
+            let style_index = self.resolved_run_style_index(run)?;
+            let paint_style_index = self.style_index_from_shaper_id(runs, run.style_id)?;
             for paragraph in split_static_text_lines(run.styled_text()) {
                 glyphs.extend(self.styled_text_glyphs_for_style_bidi(
                     runtime,
@@ -3765,6 +3836,7 @@ impl StaticTextSlice {
                     &paragraph.text,
                     run.char_start + paragraph.char_start,
                     style_index,
+                    paint_style_index,
                     font_scale,
                 )?);
             }
@@ -3815,6 +3887,7 @@ impl StaticTextSlice {
             text,
             char_start,
             style_index,
+            style_index,
             font_scale,
             &[],
         )
@@ -3827,6 +3900,7 @@ impl StaticTextSlice {
         text: &str,
         char_start: usize,
         style_index: usize,
+        paint_style_index: usize,
         font_scale: f32,
         strengths: &[f32],
     ) -> Result<Vec<StyledTextGlyph>> {
@@ -3874,7 +3948,7 @@ impl StaticTextSlice {
                 glyph_id: glyph.glyph_id,
                 char_index: char_start + character_index_for_cluster(text, glyph.cluster),
                 char_len: glyph_character_len(text, &raw_glyphs, glyph_index),
-                style_index,
+                style_index: paint_style_index,
                 advance: glyph.advance * scale + letter_spacing,
                 offset_x: glyph.offset_x * scale,
                 offset_y: glyph.offset_y * scale,
@@ -3892,6 +3966,7 @@ impl StaticTextSlice {
         text: &str,
         char_start: usize,
         style_index: usize,
+        paint_style_index: usize,
         font_scale: f32,
     ) -> Result<Vec<StyledTextGlyph>> {
         let style = self
@@ -3936,7 +4011,7 @@ impl StaticTextSlice {
                 glyph_id: glyph.glyph_id,
                 char_index: char_start + character_index_for_cluster(text, glyph.cluster),
                 char_len: glyph_character_len(text, &raw_glyphs, glyph_index),
-                style_index,
+                style_index: paint_style_index,
                 advance: glyph.advance * scale + letter_spacing,
                 offset_x: glyph.offset_x * scale,
                 offset_y: glyph.offset_y * scale,
@@ -3968,10 +4043,7 @@ impl StaticTextSlice {
         runs: &[StaticResolvedRun],
     ) -> Result<bool> {
         for run in runs.iter().filter(|run| run.participates_in_styled_text()) {
-            let style_local = run
-                .style_local
-                .expect("participating StyledText run has a style");
-            let style_index = self.style_index_for_local(style_local)?;
+            let style_index = self.resolved_run_style_index(run)?;
             if self.styles[style_index]
                 .font_bytes(runtime, instance)
                 .is_some()
@@ -4110,7 +4182,7 @@ impl StaticTextSlice {
         let mut font_scale = 1.0f32;
 
         if !text.is_empty()
-            && let Ok(base_style) = self.base_style()
+            && let Ok(base_style) = self.first_included_style(&resolved_runs)
             && self.style_font_size(runtime, instance, base_style)? >= 0.0
             && let Some(font_bytes) = base_style.font_bytes(runtime, instance)
         {
@@ -4162,7 +4234,7 @@ impl StaticTextSlice {
                 disable_legacy_kern,
                 &features,
                 scale,
-                self.letter_spacing(runtime, instance),
+                self.style_letter_spacing(runtime, instance, base_style),
                 text_input_bidi,
                 Some(&contextual_glyphs),
             )?;
@@ -5667,6 +5739,80 @@ mod tests {
         (runtime, graph)
     }
 
+    fn first_included_run_text_runtime() -> (RuntimeFile, GraphFile) {
+        let style = |font_asset_id| {
+            let mut properties = vec![
+                property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                property("TextStylePaint", "fontSize", FixtureValue::Double(20.0)),
+            ];
+            if let Some(font_asset_id) = font_asset_id {
+                properties.push(property(
+                    "TextStylePaint",
+                    "fontAssetId",
+                    FixtureValue::Uint(font_asset_id),
+                ));
+            }
+            fixture_record("TextStylePaint", properties)
+        };
+        let run = |text: &str, style_id| {
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String(text.to_owned()),
+                    ),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(style_id)),
+                ],
+            )
+        };
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(0))],
+            ),
+            fixture_record(
+                "FileAssetContents",
+                vec![property(
+                    "FileAssetContents",
+                    "bytes",
+                    FixtureValue::Bytes(fixture_font_bytes()),
+                )],
+            ),
+            fixture_record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", FixtureValue::Double(200.0)),
+                    property("Artboard", "height", FixtureValue::Double(100.0)),
+                ],
+            ),
+            fixture_record(
+                "Text",
+                vec![
+                    property("Text", "sizingValue", FixtureValue::Uint(TEXT_SIZING_FIXED)),
+                    property("Text", "width", FixtureValue::Double(80.0)),
+                    property("Text", "height", FixtureValue::Double(50.0)),
+                    property(
+                        "Text",
+                        "overflowValue",
+                        FixtureValue::Uint(TEXT_OVERFLOW_CLIPPED),
+                    ),
+                ],
+            ),
+            style(None),
+            style(Some(0)),
+            run("font-null", 2),
+            run("A", 3),
+        ])
+        .expect("first-included-run Text records import");
+        let graph =
+            GraphFile::from_runtime_file(&runtime).expect("first-included-run Text graph builds");
+        (runtime, graph)
+    }
+
     fn synthetic_data_bind(
         target_local: usize,
         target_global: u32,
@@ -5970,10 +6116,16 @@ mod tests {
                     },
                 ],
                 0,
+                0,
             )
             .expect("dynamic runs resolve");
 
         assert_eq!(runs.len(), 5, "every valid list instance retains a run");
+        assert_eq!(
+            runs.iter().map(|run| run.style_id).collect::<Vec<_>>(),
+            vec![0, 1, 2, 3, 4],
+            "skipped entries still consume the literal all-runs styleId"
+        );
         assert_eq!(runs[0].text, "");
         assert_eq!(runs[0].style_local, Some(99));
         assert_eq!((runs[0].char_start, runs[0].char_len), (0, 0));
@@ -6003,6 +6155,7 @@ mod tests {
                     text: Some(b"unpainted".to_vec()),
                     style: Some(b"first".to_vec()),
                 }],
+                0,
                 0,
             )
             .expect("an empty style-paint list is valid");
@@ -6047,7 +6200,58 @@ mod tests {
     }
 
     #[test]
+    fn cxx_styled_text_style_id_wraps_and_drives_shaper_style_lookup() {
+        let (runtime, graphs) = dynamic_two_style_text_runtime();
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let mut slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        slice.styles[0].name = Some("first".to_owned());
+        slice.styles[1].name = Some("second".to_owned());
+
+        let mut list_runs = Vec::with_capacity(usize::from(u16::MAX) + 2);
+        list_runs.push(crate::view_model::RuntimeTextListRun {
+            text: Some(b"A".to_vec()),
+            style: Some(b"first".to_vec()),
+        });
+        list_runs.extend(
+            (1..=u16::MAX).map(|_| crate::view_model::RuntimeTextListRun {
+                text: None,
+                style: None,
+            }),
+        );
+        list_runs.push(crate::view_model::RuntimeTextListRun {
+            text: Some(b"B".to_vec()),
+            style: Some(b"second".to_vec()),
+        });
+
+        let runs = slice
+            .resolved_dynamic_runs(&runtime, &instance, list_runs, 0, 0)
+            .expect("wrapping all-runs sequence resolves");
+        assert_eq!(runs.len(), usize::from(u16::MAX) + 2);
+        assert_eq!(runs[0].style_id, 0);
+        assert_eq!(runs[usize::from(u16::MAX)].style_id, u16::MAX);
+        let wrapped = runs.last().expect("wrapped run exists");
+        assert_eq!(wrapped.style_id, 0);
+        assert_eq!(
+            slice.resolved_run_style_index(wrapped).unwrap(),
+            1,
+            "the TextRun retains the later run's actual font/style metadata"
+        );
+        assert_eq!(
+            slice
+                .style_index_from_shaper_id(&runs, wrapped.style_id)
+                .unwrap(),
+            0,
+            "paint/style lookup consumes the wrapped all-runs styleId"
+        );
+    }
+
+    #[test]
     fn cxx_styled_text_append_decodes_to_nul_and_rebuild_clears_prior_topology() {
+        assert!(
+            cxx_styled_text_prefix(&[0xff, 0x00]).is_err(),
+            "invalid bytes in the consumed prefix remain a Rust safety rejection"
+        );
         let (runtime, graphs) = baseline_origin_text_runtime_with_sizing_line_height_font_and_text(
             TEXT_SIZING_FIXED,
             Some(40.0),
@@ -6062,7 +6266,8 @@ mod tests {
             .resolved_runs(&runtime, &instance)
             .expect("initial StyledText runs resolve");
         assert_eq!(first_runs.len(), 1);
-        assert_eq!(first_runs[0].text, "AB\0ignored");
+        assert_eq!(first_runs[0].source_bytes, b"AB\0ignored");
+        assert_eq!(first_runs[0].text, "AB");
         assert_eq!((first_runs[0].char_start, first_runs[0].char_len), (0, 2));
         assert_eq!(first_runs[0].styled_text(), "AB");
         let first = slice
@@ -6072,6 +6277,16 @@ mod tests {
         assert_eq!(first.text, "AB");
 
         let text_key = property_key_for_name("TextValueRun", "text").expect("TextValueRun key");
+        assert!(instance.set_string_property(3, text_key, vec![0x00, 0xff]));
+        let leading_nul = slice
+            .render_topology(&runtime, &instance, None, Mat2D::IDENTITY)
+            .expect("unread invalid suffix is not decoded")
+            .expect("a nonempty source still appends a zero-count TextRun");
+        assert_eq!(leading_nul.text, "");
+        assert_eq!(leading_nul.resolved_runs[0].source_bytes, [0x00, 0xff]);
+        assert!(leading_nul.resolved_runs[0].styled_text_included);
+        assert_eq!(leading_nul.resolved_runs[0].char_len, 0);
+
         assert!(instance.set_string_property(3, text_key, b"C\0tail".to_vec()));
         let rebuilt = slice
             .render_topology(&runtime, &instance, None, Mat2D::IDENTITY)
@@ -6084,6 +6299,60 @@ mod tests {
         assert_ne!(
             rebuilt.text, first.text,
             "the prior Unicode buffer is not retained"
+        );
+    }
+
+    #[test]
+    fn cxx_shape_measure_and_clip_seed_from_first_included_run_font() {
+        let (runtime, graphs) = first_included_run_text_runtime();
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let runs = slice
+            .resolved_runs(&runtime, &instance)
+            .expect("StyledText runs resolve");
+        assert_eq!(runs.len(), 2);
+        assert!(!runs[0].styled_text_included);
+        assert!(runs[1].styled_text_included);
+        assert_eq!(runs[1].style_id, 1);
+        assert_eq!(slice.first_included_style(&runs).unwrap().local_id, 3);
+
+        let topology = slice
+            .render_topology(&runtime, &instance, None, Mat2D::IDENTITY)
+            .expect("render topology computes")
+            .expect("later valid run supplies the common shaper");
+        assert_eq!(topology.text, "A");
+        assert!(!topology.contextual_glyphs.is_empty());
+        assert!(
+            topology
+                .contextual_glyphs
+                .iter()
+                .all(|glyph| glyph.style_index == 1)
+        );
+
+        let bounds = slice
+            .local_bounds(&runtime, &instance)
+            .expect("bounds compute")
+            .expect("Text has bounds");
+        assert_eq!((bounds.2, bounds.3), (80.0, 50.0));
+        let constraint = RuntimeTextLayoutConstraint {
+            width: 200.0,
+            height: 100.0,
+            width_scale_type: 2,
+            height_scale_type: 2,
+            layout_direction: 0,
+        };
+        assert!(
+            slice
+                .measure_bounds_with_layout_constraint(&runtime, &instance, constraint)
+                .expect("measure computes")
+                .is_some()
+        );
+        assert!(
+            slice
+                .clip_bounds(&runtime, &instance, None)
+                .expect("clip computes")
+                .is_some()
         );
     }
 
@@ -6123,6 +6392,7 @@ mod tests {
                     },
                 ],
                 0,
+                0,
             )
             .expect("dynamic runs resolve");
         assert_eq!(runs.len(), 3);
@@ -6160,6 +6430,7 @@ mod tests {
                     style: Some(b"second".to_vec()),
                 }],
                 0,
+                0,
             )
             .expect("second-style control resolves");
         let second_metrics = slice
@@ -6173,6 +6444,7 @@ mod tests {
                     text: Some(b"\nA".to_vec()),
                     style: Some(b"first".to_vec()),
                 }],
+                0,
                 0,
             )
             .expect("first-style control resolves");

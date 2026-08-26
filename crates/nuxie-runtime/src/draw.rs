@@ -27429,6 +27429,69 @@ mod tests {
     }
 
     #[test]
+    fn text_write_replaces_live_retained_styled_text_topology_on_update() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let run_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "TextValueRun")
+            .expect("fixture has TextValueRun")
+            .local_id;
+        let text_key = property_key_for_name("TextValueRun", "text").expect("TextValueRun.text");
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        assert!(instance.update_pass());
+
+        let retained_topology = |instance: &ArtboardInstance| {
+            let drawable_index = instance.runtime_drawables.drawable_by_local[&text_local];
+            instance.runtime_drawables.drawables[drawable_index]
+                .text_draw_owner
+                .as_ref()
+                .expect("Text has a retained draw owner")
+                .shaped_topology
+                .borrow()
+                .clone()
+                .expect("update publishes StyledText topology")
+        };
+        let initial = retained_topology(&instance);
+        assert!(!initial.debug_styled_text_state().0.is_empty());
+
+        assert!(instance.set_string_property(run_local, text_key, vec![0x00, 0xff]));
+        let stale = retained_topology(&instance);
+        assert!(Arc::ptr_eq(&initial, &stale));
+        assert!(instance.update_pass());
+        let leading_nul = retained_topology(&instance);
+        assert!(!Arc::ptr_eq(&initial, &leading_nul));
+        let (text, runs) = leading_nul.debug_styled_text_state();
+        assert!(text.is_empty());
+        let run = runs
+            .iter()
+            .find(|run| run.0 == run_local)
+            .expect("updated run remains in the retained all-runs topology");
+        assert_eq!(run.5, [0x00, 0xff]);
+        assert!(run.3, "the nonempty source appended a StyledText run");
+        assert_eq!(run.4, 0);
+
+        assert!(instance.set_string_property(run_local, text_key, b"C\0tail".to_vec()));
+        assert!(instance.update_pass());
+        let rebuilt = retained_topology(&instance);
+        assert!(!Arc::ptr_eq(&leading_nul, &rebuilt));
+        let (text, runs) = rebuilt.debug_styled_text_state();
+        assert_eq!(text, "C");
+        let run = runs.iter().find(|run| run.0 == run_local).unwrap();
+        assert_eq!(run.5, b"C\0tail");
+        assert_eq!(run.4, 1);
+    }
+
+    #[test]
     fn polymorphic_shape_paint_containers_retain_all_nine_families() {
         let type_names = [
             "Artboard",

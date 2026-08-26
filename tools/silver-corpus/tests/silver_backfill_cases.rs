@@ -35,6 +35,15 @@ fn compare_case(id: &str, runtime: &Path) -> anyhow::Result<()> {
 }
 
 #[test]
+fn text_fit_font_size_source_correction_is_exact() {
+    let Some(runtime) = runtime_root("upstream Text fit-font-size silver assertion") else {
+        return;
+    };
+    compare_case("fit_font_size_test", &runtime)
+        .unwrap_or_else(|error| panic!("fit-font-size source correction regressed: {error:#}"));
+}
+
+#[test]
 fn upstream_fl_bc_exact_silver_assertions() {
     // Literal fixture/action streams from the corresponding upstream
     // TEST_CASEs. The final comparison is the original `silver.matches(...)`

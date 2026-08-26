@@ -1011,7 +1011,9 @@ impl RuntimeTextState {
 
     pub(crate) fn effective_sizing(&self, authored: u64) -> u64 {
         match self.layout_scale_types.get() {
-            Some((width, height)) if width != 2 && height != 2 => 2,
+            Some((width, height)) => {
+                crate::text::effective_layout_text_sizing(authored, width, height)
+            }
             _ => authored,
         }
     }

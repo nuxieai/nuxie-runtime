@@ -14,6 +14,7 @@ fn split_static_text_lines(text: &str) -> Vec<StaticTextLine> {
             text: text[line_start_byte..byte_index].to_owned(),
             char_start: line_start_char,
             line_index,
+            paragraph_end: true,
             soft_wrap_skipped_start: None,
             terminal_soft_wrap_skipped_end: None,
         });
@@ -41,6 +42,7 @@ fn split_static_text_lines(text: &str) -> Vec<StaticTextLine> {
             text: text[line_start_byte..].to_owned(),
             char_start: line_start_char,
             line_index,
+            paragraph_end: true,
             soft_wrap_skipped_start: None,
             terminal_soft_wrap_skipped_end: None,
         });

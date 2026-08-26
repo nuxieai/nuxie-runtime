@@ -187,6 +187,7 @@ EXACT = (
     "listener_view_model",
     "viewmodel_image_reset",
     "zero_width_space_line_break",
+    "fit_font_size_test",
     "advance_blend_mode-inputs",
     "advance_blend_mode-vms",
     "animated_clipping-layout",
@@ -1945,7 +1946,6 @@ data_bind_keyframes_test|frame 4, op 159 (save): expected save, got restore
 data_converter_interpolator_reset|frame 1, op 30 (save): expected save, got color
 drag_event|frame 23, op 602 (save): expected save, got color
 focus_traversal|frame 0, op 95 (color): expected color, got save
-fit_font_size_test|frame 2, op 199 (makeRenderPath): expected makeRenderPath, got rewind
 group_effect|frame 0, op 46 (addRawPath): expected 163 fields, got 3
 hittest_ab1|frame 1, op 153 (color): expected color, got save
 hittest_ab1_grand_parent|frame 2, op 304 (color): expected color, got save

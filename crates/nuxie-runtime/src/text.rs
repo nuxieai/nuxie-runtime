@@ -61,7 +61,34 @@ const TEXT_TRIM_TOP_CAP: u64 = 1;
 const TEXT_TRIM_TOP_EX: u64 = 2;
 const TEXT_TRIM_BOTTOM_ALPHABETIC: u64 = 1;
 const TEXT_TRIM_BOTTOM_TEXT: u64 = 2;
-const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
+const LAYOUT_SCALE_TYPE_FIXED: u64 = 0;
+const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
+
+pub(crate) fn effective_layout_text_sizing(
+    authored_sizing: u64,
+    width_scale_type: u64,
+    height_scale_type: u64,
+) -> u64 {
+    // Exact `Text::effectiveSizing` layout-participant matrix. A boxed width
+    // with a hug height is the one mixed-axis combination expressible by the
+    // single TextSizing enum: its width is controlled and its height remains
+    // content-sized.
+    let width_is_box = matches!(
+        width_scale_type,
+        LAYOUT_SCALE_TYPE_FIXED | LAYOUT_SCALE_TYPE_FILL
+    );
+    let height_is_box = matches!(
+        height_scale_type,
+        LAYOUT_SCALE_TYPE_FIXED | LAYOUT_SCALE_TYPE_FILL
+    );
+    if !width_is_box && !height_is_box {
+        authored_sizing
+    } else if width_is_box && !height_is_box {
+        TEXT_SIZING_AUTO_HEIGHT
+    } else {
+        TEXT_SIZING_FIXED
+    }
+}
 
 include!("text/font_hb.rs");
 
@@ -956,6 +983,7 @@ struct StaticTextLine {
     text: String,
     char_start: usize,
     line_index: usize,
+    paragraph_end: bool,
     soft_wrap_skipped_start: Option<usize>,
     terminal_soft_wrap_skipped_end: Option<usize>,
 }
@@ -981,6 +1009,7 @@ struct StaticTextLayoutInfo {
     align_value: u64,
     top_trim: f32,
     min_y: f32,
+    total_height: f32,
     x_offset: f32,
     y_offset: f32,
 }
@@ -1350,15 +1379,11 @@ pub(crate) struct StaticTextClipBounds {
 
 impl RuntimeTextLayoutConstraint {
     fn effective_sizing(self, authored_sizing: u64) -> u64 {
-        // Ported from C++ `src/text/text.cpp` `Text::effectiveSizing`:
-        // non-hug parent layout control sizes make text lay out as fixed.
-        if self.width_scale_type == LAYOUT_SCALE_TYPE_HUG
-            || self.height_scale_type == LAYOUT_SCALE_TYPE_HUG
-        {
-            authored_sizing
-        } else {
-            TEXT_SIZING_FIXED
-        }
+        effective_layout_text_sizing(
+            authored_sizing,
+            self.width_scale_type,
+            self.height_scale_type,
+        )
     }
 
     pub(crate) fn effective_align(self, authored_align: u64) -> u64 {
@@ -2302,10 +2327,7 @@ impl StaticTextSlice {
             .copied()
             .map(|width| layout_info.line_start_x(width))
             .fold(f32::INFINITY, f32::min);
-        let total_height = line_metrics
-            .last()
-            .map(|metrics| metrics.bottom + layout_info.min_y)
-            .unwrap_or(layout_info.min_y);
+        let total_height = layout_info.total_height;
         let first_baseline = line_metrics
             .first()
             .map(|metrics| metrics.baseline)
@@ -2718,6 +2740,10 @@ impl StaticTextSlice {
             _ => measured_width,
         };
         let min_y = self.static_text_min_y(runtime, instance, &line_metrics)?;
+        // `Text::measure` adds paragraph spacing after each paragraph but
+        // publishes the last line's bottom, so the final trailing space is not
+        // part of an auto-sized measurement. Inter-paragraph spacing is already
+        // carried by `static_line_metrics`.
         let measured_bottom = line_metrics
             .last()
             .map(|metrics| min_y + metrics.bottom)
@@ -3047,6 +3073,10 @@ impl StaticTextSlice {
         self.style_letter_spacing(runtime, instance, style)
     }
 
+    fn paragraph_spacing(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<f32> {
+        self.text_double_property(runtime, instance, "paragraphSpacing", 0.0)
+    }
+
     fn style_letter_spacing(
         &self,
         runtime: &RuntimeFile,
@@ -3084,6 +3114,7 @@ impl StaticTextSlice {
         // fit-font-size scale; natural font metrics do.
         let mut metrics = Vec::with_capacity(lines.len());
         let mut cursor_y = 0.0f32;
+        let paragraph_spacing = self.paragraph_spacing(runtime, instance)?;
         for (line_index, line) in lines.iter().enumerate() {
             let mut style_indices = self.style_indices_for_line(line, runs)?;
             if style_indices.is_empty() {
@@ -3148,8 +3179,30 @@ impl StaticTextSlice {
                 bottom,
             });
             cursor_y = bottom;
+            if line.paragraph_end {
+                cursor_y += paragraph_spacing;
+            }
         }
         Ok(metrics)
+    }
+
+    fn static_text_total_height(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        lines: &[StaticTextLine],
+        line_metrics: &[StaticTextLineMetrics],
+    ) -> Result<f32> {
+        let Some(last_metrics) = line_metrics.last() else {
+            return Ok(0.0);
+        };
+        let trailing_paragraph_spacing = lines
+            .last()
+            .is_some_and(|line| line.paragraph_end)
+            .then(|| self.paragraph_spacing(runtime, instance))
+            .transpose()?
+            .unwrap_or(0.0);
+        Ok(last_metrics.bottom + trailing_paragraph_spacing)
     }
 
     fn style_line_height(
@@ -3430,10 +3483,7 @@ impl StaticTextSlice {
                 .fold(0.0f32, f32::max);
             let line_metrics =
                 self.static_line_metrics(runtime, instance, &lines, runs, font_scale)?;
-            let height = line_metrics
-                .last()
-                .map(|metrics| metrics.bottom)
-                .unwrap_or(0.0);
+            let height = self.static_text_total_height(runtime, instance, &lines, &line_metrics)?;
             Ok(max_width <= box_width && (!overflow_as_fixed || height <= box_height))
         };
 
@@ -3952,10 +4002,7 @@ impl StaticTextSlice {
             false,
             layout_constraint,
         )?;
-        let total_height = line_metrics
-            .last()
-            .map(|metrics| metrics.bottom + layout_info.min_y)
-            .unwrap_or(layout_info.min_y);
+        let total_height = layout_info.total_height;
         let width = self.effective_width(runtime, instance, layout_constraint)?;
         let height = self.effective_height(runtime, instance, layout_constraint)?;
         let vertical_align_offset =
@@ -4211,6 +4258,7 @@ impl StaticTextSlice {
                     text: authored_line.text,
                     char_start: authored_line.char_start,
                     line_index,
+                    paragraph_end: true,
                     soft_wrap_skipped_start: None,
                     terminal_soft_wrap_skipped_end: None,
                 });
@@ -4295,6 +4343,7 @@ impl StaticTextSlice {
                     text: line_text.to_owned(),
                     char_start,
                     line_index,
+                    paragraph_end: false,
                     soft_wrap_skipped_start,
                     terminal_soft_wrap_skipped_end: None,
                 });
@@ -4314,6 +4363,10 @@ impl StaticTextSlice {
                 }
                 soft_wrap_skipped_start = (!remaining.is_empty()).then_some(char_end);
             }
+            lines
+                .last_mut()
+                .expect("a non-empty paragraph emits at least one line")
+                .paragraph_end = true;
         }
 
         Ok(lines)
@@ -4361,17 +4414,29 @@ impl StaticTextSlice {
             )?
         };
         let min_y = self.static_text_min_y(runtime, instance, line_metrics)?;
-        let full_height = line_metrics
+        let paragraph_spacing = self.paragraph_spacing(runtime, instance)?;
+        let trailing_paragraph_spacing = lines
             .last()
-            .map(|metrics| min_y + metrics.bottom)
-            .unwrap_or(min_y);
+            .is_some_and(|line| line.paragraph_end)
+            .then_some(paragraph_spacing)
+            .unwrap_or(0.0);
+        // `computeBoundsInfo` adds paragraph spacing after every paragraph,
+        // including the last. Auto-sized bounds subtract that one trailing
+        // space below; fixed alignment, fit, and ellipsis retain it.
+        let full_height =
+            min_y + self.static_text_total_height(runtime, instance, lines, line_metrics)?;
         let bounds_height = match (layout_constraint, sizing) {
             (Some(constraint), _) => constraint.height,
             (None, TEXT_SIZING_FIXED) => {
                 self.effective_height(runtime, instance, layout_constraint)?
             }
             (None, _) => {
-                (full_height - vertical_trim.top - vertical_trim.bottom).max(min_y) - min_y
+                (full_height
+                    - trailing_paragraph_spacing
+                    - vertical_trim.top
+                    - vertical_trim.bottom)
+                    .max(min_y)
+                    - min_y
             }
         };
         let origin_x = self.text_double_property(runtime, instance, "originX", 0.0)?;
@@ -4423,6 +4488,7 @@ impl StaticTextSlice {
             align_value,
             top_trim: vertical_trim.top,
             min_y,
+            total_height,
             x_offset: -bounds_width * origin_x,
             y_offset,
         })
@@ -5218,6 +5284,20 @@ mod tests {
         line_height: Option<f32>,
         font_bytes: Vec<u8>,
     ) -> (RuntimeFile, GraphFile) {
+        baseline_origin_text_runtime_with_sizing_line_height_font_and_text(
+            sizing_value,
+            line_height,
+            font_bytes,
+            "a\na",
+        )
+    }
+
+    fn baseline_origin_text_runtime_with_sizing_line_height_font_and_text(
+        sizing_value: u64,
+        line_height: Option<f32>,
+        font_bytes: Vec<u8>,
+        text: &str,
+    ) -> (RuntimeFile, GraphFile) {
         let mut style_properties = vec![
             property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
             property("TextStylePaint", "fontSize", FixtureValue::Double(20.0)),
@@ -5276,7 +5356,7 @@ mod tests {
                     property(
                         "TextValueRun",
                         "text",
-                        FixtureValue::String("a\na".to_owned()),
+                        FixtureValue::String(text.to_owned()),
                     ),
                     property("TextValueRun", "styleId", FixtureValue::Uint(2)),
                 ],
@@ -5374,6 +5454,162 @@ mod tests {
             (actual - expected).abs() <= 0.001,
             "expected {expected}, got {actual}"
         );
+    }
+
+    #[test]
+    fn cxx_effective_sizing_matrix_is_shared_by_constraints_state_and_callbacks() {
+        let authored = TEXT_SIZING_AUTO_WIDTH;
+        let cases = [
+            (0, 0, TEXT_SIZING_FIXED),
+            (1, 0, TEXT_SIZING_FIXED),
+            (0, 1, TEXT_SIZING_FIXED),
+            (1, 1, TEXT_SIZING_FIXED),
+            (0, 2, TEXT_SIZING_AUTO_HEIGHT),
+            (1, 2, TEXT_SIZING_AUTO_HEIGHT),
+            (2, 0, TEXT_SIZING_FIXED),
+            (2, 1, TEXT_SIZING_FIXED),
+            (2, 2, authored),
+        ];
+        let (runtime, graphs) = baseline_origin_text_runtime_with_sizing(authored);
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+
+        for (width_scale_type, height_scale_type, expected) in cases {
+            let constraint = RuntimeTextLayoutConstraint {
+                width: 80.0,
+                height: 50.0,
+                width_scale_type,
+                height_scale_type,
+                layout_direction: 0,
+            };
+            assert_eq!(constraint.effective_sizing(authored), expected);
+            let state = instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("fixture Text owns retained state");
+            state.retain_layout_scale_types(width_scale_type, height_scale_type);
+            assert_eq!(state.effective_sizing(authored), expected);
+        }
+
+        let state = instance
+            .component(1)
+            .and_then(|component| component.concrete.text.as_ref())
+            .expect("fixture Text owns retained state");
+        state.retain_layout_scale_types(0, 2);
+
+        instance.clear_component_dirt(1);
+        let width_key = property_key_for_name("Text", "width").expect("Text.width key");
+        assert_eq!(
+            crate::text_owner::double_property_changed(&mut instance, 1, Some("Text"), width_key,),
+            Some(true)
+        );
+        assert!(
+            instance
+                .debug_component_dirt(1)
+                .expect("fixture Text remains live")
+                .contains(crate::components::ComponentDirt::PATH)
+        );
+
+        instance.clear_component_dirt(1);
+        let height_key = property_key_for_name("Text", "height").expect("Text.height key");
+        assert_eq!(
+            crate::text_owner::double_property_changed(&mut instance, 1, Some("Text"), height_key,),
+            Some(false)
+        );
+        assert_eq!(
+            instance.debug_component_dirt(1),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+
+        let overflow_key =
+            property_key_for_name("Text", "overflowValue").expect("Text.overflowValue key");
+        assert_eq!(
+            crate::text_owner::uint_property_changed(&mut instance, 1, Some("Text"), overflow_key,),
+            Some(true)
+        );
+        assert!(
+            instance
+                .debug_component_dirt(1)
+                .expect("fixture Text remains live")
+                .contains(crate::components::ComponentDirt::PATH)
+        );
+    }
+
+    #[test]
+    fn cxx_paragraph_spacing_order_covers_empty_paragraphs_trim_measure_fit_and_render() {
+        let (runtime, graphs) = baseline_origin_text_runtime_with_sizing_line_height_font_and_text(
+            TEXT_SIZING_AUTO_HEIGHT,
+            Some(40.0),
+            fixture_font_bytes(),
+            "a\n\na",
+        );
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let runs = slice
+            .resolved_runs(&runtime, &instance)
+            .expect("Text runs resolve");
+        let text = runs.iter().map(|run| run.text.as_str()).collect::<String>();
+        let lines = split_static_text_lines(&text);
+        assert_eq!(lines.len(), 3);
+        assert!(lines[1].text.is_empty());
+
+        let trim_key = property_key_for_name("Text", "verticalTrimValue").expect("Text trim key");
+        assert!(instance.set_uint_property(1, trim_key, 1 | (1 << 8)));
+        let metrics_without_spacing = slice
+            .static_line_metrics(&runtime, &instance, &lines, &runs, 1.0)
+            .expect("unspaced line metrics compute");
+        let bounds_without_spacing = slice
+            .local_bounds(&runtime, &instance)
+            .expect("unspaced bounds compute")
+            .expect("Text has unspaced bounds");
+        let constraint = RuntimeTextLayoutConstraint {
+            width: 200.0,
+            height: 200.0,
+            width_scale_type: 2,
+            height_scale_type: 2,
+            layout_direction: 0,
+        };
+        let measure_without_spacing = slice
+            .measure_bounds_with_layout_constraint(&runtime, &instance, constraint)
+            .expect("unspaced measure computes")
+            .expect("Text has unspaced measure bounds");
+        let total_without_spacing = slice
+            .static_text_total_height(&runtime, &instance, &lines, &metrics_without_spacing)
+            .expect("unspaced fit/render height computes");
+
+        let spacing_key =
+            property_key_for_name("Text", "paragraphSpacing").expect("Text spacing key");
+        assert!(instance.set_double_property(1, spacing_key, 7.0));
+        let metrics_with_spacing = slice
+            .static_line_metrics(&runtime, &instance, &lines, &runs, 1.0)
+            .expect("spaced line metrics compute");
+        let bounds_with_spacing = slice
+            .local_bounds(&runtime, &instance)
+            .expect("spaced bounds compute")
+            .expect("Text has spaced bounds");
+        let measure_with_spacing = slice
+            .measure_bounds_with_layout_constraint(&runtime, &instance, constraint)
+            .expect("spaced measure computes")
+            .expect("Text has spaced measure bounds");
+        let total_with_spacing = slice
+            .static_text_total_height(&runtime, &instance, &lines, &metrics_with_spacing)
+            .expect("spaced fit/render height computes");
+
+        assert_close(
+            metrics_with_spacing[1].top - metrics_without_spacing[1].top,
+            7.0,
+        );
+        assert_close(
+            metrics_with_spacing[2].top - metrics_without_spacing[2].top,
+            14.0,
+        );
+        // Auto bounds and `measure` omit only the final trailing paragraph
+        // space, retaining one space between each of the three paragraphs.
+        assert_close(bounds_with_spacing.3 - bounds_without_spacing.3, 14.0);
+        assert_close(measure_with_spacing.3 - measure_without_spacing.3, 14.0);
+        // `computeBoundsInfo` and fit/fixed alignment retain the final space.
+        assert_close(total_with_spacing - total_without_spacing, 21.0);
     }
 
     #[test]
@@ -5767,6 +6003,7 @@ mod tests {
             text: "t".to_owned(),
             char_start: 0,
             line_index: 0,
+            paragraph_end: true,
             soft_wrap_skipped_start: None,
             terminal_soft_wrap_skipped_end: None,
         };

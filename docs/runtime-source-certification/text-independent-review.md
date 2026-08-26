@@ -581,3 +581,41 @@ delta passes `git diff --check`. Correction scope is only `artboard.rs`,
 and all other user dirt remain unstaged. Disabled row 39 remains red and
 consumer topology remains **4 pass, 3 executable expected-red, 11 pending**.
 This rereview changed documentation only.
+
+## Independent Text row 43 hit-test review of `2efeabe65`
+
+Verdict: **ACCEPTED AS EXACT OBSERVABLE BEHAVIOR WITH THE NAMED EDITOR
+ADAPTATION**
+
+The complete pinned enabled body returns null both before and after its
+render-opacity branch, and the disabled body also returns null. The only
+general drawable call chain is `Artboard::hitTest` (recursing through
+`NestedArtboard::hitTest`), which invokes each drawable's virtual `hitTest` and
+returns the first non-null owner. Rust's corresponding `geometry_hit_test`
+creates one caller-space `HitTestArea`, carries it through nested artboards,
+selects only the first traversal hit, and makes the Text catalogue branch
+unreachable whenever that pinned area is present. Both runtime and public
+facade `hit_test` methods delegate to this owner, so visible and zero-opacity
+Text cannot escape through the general route.
+
+The Text-inclusive `geometry_hit_test_paths`, segment, visible-catalogue, and
+retained-catalogue methods do not masquerade as that virtual call. They are
+separately named all-hit/editor queries covered by the pre-existing adaptation
+in `runtime-source-certification/hit-test.md`; visible queries still obey
+opacity and the retained catalogue intentionally does not. State-machine
+targeting is also not a leak: pinned `HitExpandable` calls the distinct
+inherited `Component::hitTestPoint`, while `TextValueRun` owns its separate
+high-fidelity override. Rust routes those listeners through the corresponding
+component owner rather than through the Artboard drawable query.
+
+The focused case imports a real RuntimeFile, constructs its GraphFile and
+ArtboardInstance, materializes a real Text occurrence, and observes the actual
+owners. It proves the general route is empty at visible and zero opacity, the
+named editor path/segment catalogues include visible Text, the retained
+catalogue preserves zero-opacity Text, and the component route remains
+hittable. It passes (one passed, zero failed or ignored), and the candidate
+delta passes `git diff --check`. The candidate changes only this real-owner
+test and the Text source receipt; no production behavior or topology moved.
+The pre-existing `draw.rs` formatting hunk and all other user dirt remain
+unstaged. Consumer topology remains **4 pass, 3 executable expected-red, 11
+pending**. This review changed documentation only.

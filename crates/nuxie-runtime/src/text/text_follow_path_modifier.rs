@@ -86,7 +86,11 @@ impl StaticTextFollowPathModifier {
         glyph: &StaticTextGlyphContext<'_>,
         offset: (f32, f32),
     ) -> Result<StaticFollowPathGlyphTransform> {
-        let path_measure = self.path_measure(instance, glyph.text_world_inverse);
+        let path_measure = instance
+            .component(self.local_id)
+            .and_then(|component| component.concrete.text_follow_path.as_ref())
+            .map(|state| state.local_measure())
+            .unwrap_or_else(|| RuntimePathMeasure::from_commands(&[]));
         let path_length = path_measure.length();
         if path_length == 0.0 {
             return Ok(current);
@@ -95,13 +99,13 @@ impl StaticTextFollowPathModifier {
         let position_on_path = (glyph.origin_x + offset.0, glyph.origin_y + offset.1);
         let start = self.double_property(runtime, instance, "start", 0.0)?;
         let end = self.double_property(runtime, instance, "end", 1.0)?;
-        let start_pct = start.min(end).clamp(0.0, 1.0);
-        let end_pct = start.max(end).clamp(0.0, 1.0);
+        let start_pct = text_follow_path_math_clamp(cpp_std_min(start, end), 0.0, 1.0);
+        let end_pct = text_follow_path_math_clamp(cpp_std_max(start, end), 0.0, 1.0);
         let can_wrap = path_measure.raw_is_closed() && (end_pct - start_pct) == 1.0;
         let valid_length = (end_pct - start_pct) * path_length;
-        let offset_pct = self
-            .double_property(runtime, instance, "offset", 0.0)?
-            .rem_euclid(1.0);
+        let offset_pct = text_follow_path_positive_unit_mod(
+            self.double_property(runtime, instance, "offset", 0.0)?,
+        );
         let start_pct = start_pct + offset_pct;
         let end_pct = end_pct + offset_pct;
 
@@ -163,9 +167,11 @@ impl StaticTextFollowPathModifier {
             0.0
         };
 
-        let strength = self
-            .double_property(runtime, instance, "strength", 1.0)?
-            .clamp(0.0, 1.0);
+        let strength = text_follow_path_math_clamp(
+            self.double_property(runtime, instance, "strength", 1.0)?,
+            0.0,
+            1.0,
+        );
         let inverse_strength = 1.0 - strength;
         Ok(StaticFollowPathGlyphTransform {
             x: translation.0 * strength + current.x * inverse_strength,
@@ -174,11 +180,7 @@ impl StaticTextFollowPathModifier {
         })
     }
 
-    fn path_measure(
-        &self,
-        instance: &ArtboardInstance,
-        text_world_inverse: Mat2D,
-    ) -> RuntimePathMeasure {
+    fn world_path_commands(&self, instance: &ArtboardInstance) -> Vec<RuntimePathCommand> {
         let mut commands = Vec::new();
         for path in &self.paths {
             let Some(path_world) = instance
@@ -187,12 +189,29 @@ impl StaticTextFollowPathModifier {
             else {
                 continue;
             };
-            let mut path_commands =
+            let path_commands =
                 runtime_path_geometry_commands(instance, &path.geometry, path_world);
-            transform_path_commands(&mut path_commands, text_world_inverse);
             commands.extend(path_commands);
         }
-        RuntimePathMeasure::from_commands_with_tolerance(&commands, 0.1)
+        commands
+    }
+
+    fn reset(&self, instance: &ArtboardInstance, inverse_text: Mat2D) {
+        let Some(state) = instance
+            .component(self.local_id)
+            .and_then(|component| component.concrete.text_follow_path.as_ref())
+        else {
+            return;
+        };
+        if self.resolved_transform_local.is_none() {
+            state.retain_local_measure(RuntimePathMeasure::from_commands(&[]));
+            return;
+        }
+        let mut commands = state.world_commands();
+        transform_path_commands(&mut commands, inverse_text);
+        state.retain_local_measure(RuntimePathMeasure::from_commands_with_tolerance(
+            &commands, 0.1,
+        ));
     }
 
     fn double_property(
@@ -230,6 +249,71 @@ impl StaticTextFollowPathModifier {
             default,
         )
     }
+}
+
+pub(crate) fn update_text_follow_path_world_path(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    local_id: usize,
+) -> Option<Vec<RuntimePathCommand>> {
+    StaticTextFollowPathModifier::from_graph(runtime, graph, local_id)
+        .ok()
+        .map(|modifier| modifier.world_path_commands(instance))
+}
+
+pub(crate) fn text_follow_path_modifier_double_property_changed(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> Option<bool> {
+    (type_name == Some("TextFollowPathModifier")
+        && ["start", "end", "offset", "strength"]
+            .into_iter()
+            .any(|name| {
+                property_key_for_name("TextFollowPathModifier", name) == Some(property_key)
+            }))
+    .then(|| text_follow_path_modifier_shape_dirty(instance, local_id))
+}
+
+pub(crate) fn text_follow_path_modifier_bool_property_changed(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> Option<bool> {
+    (type_name == Some("TextFollowPathModifier")
+        && ["radial", "orient"].into_iter().any(|name| {
+            property_key_for_name("TextFollowPathModifier", name) == Some(property_key)
+        }))
+    .then(|| text_follow_path_modifier_shape_dirty(instance, local_id))
+}
+
+fn text_follow_path_modifier_shape_dirty(instance: &mut ArtboardInstance, local_id: usize) -> bool {
+    instance
+        .component_parent_local(local_id)
+        .and_then(|group| modifier_group_text(instance, group))
+        .is_some_and(|text| crate::text_owner::modifier_shape_dirty(instance, text))
+}
+
+// Literal two-argument `std::min`/`std::max` comparison order. Equal signed
+// zero retains the left operand and a NaN left operand remains NaN.
+fn cpp_std_min(left: f32, right: f32) -> f32 {
+    if right < left { right } else { left }
+}
+
+fn cpp_std_max(left: f32, right: f32) -> f32 {
+    if left < right { right } else { left }
+}
+
+// Pinned `math::clamp` is `fminf(fmaxf(lo, value), hi)`.
+fn text_follow_path_math_clamp(value: f32, lo: f32, hi: f32) -> f32 {
+    lo.max(value).min(hi)
+}
+
+fn text_follow_path_positive_unit_mod(value: f32) -> f32 {
+    ((value % 1.0) + 1.0) % 1.0
 }
 #[derive(Debug, Clone, Copy)]
 struct RuntimePathSampleParts {

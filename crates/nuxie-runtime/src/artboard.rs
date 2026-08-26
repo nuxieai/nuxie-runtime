@@ -7677,6 +7677,12 @@ impl ArtboardInstance {
     }
 
     fn mark_text_changed_for_local(&mut self, local_id: usize) {
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("TextFollowPathModifier") {
+            // Each generated TextFollowPathModifier callback routes directly
+            // through its owning group to Text::modifierShapeDirty. Do not
+            // add the broader generic text-property invalidation afterward.
+            return;
+        }
         if !self
             .text_affecting_locals
             .get(local_id)
@@ -9352,6 +9358,26 @@ impl ArtboardInstance {
             .component(component_handle)
             .expect("component handle must remain live")
             .local_id;
+        let text_follow_path_world_commands = self
+            .objects
+            .component(component_handle)
+            .and_then(|component| component.concrete.text_follow_path.as_ref())
+            .and_then(|_| {
+                crate::text::update_text_follow_path_world_path(
+                    self.runtime_file()?,
+                    self.runtime_graph()?,
+                    self,
+                    local_id,
+                )
+            });
+        if let Some(commands) = text_follow_path_world_commands
+            && let Some(state) = self
+                .objects
+                .component(component_handle)
+                .and_then(|component| component.concrete.text_follow_path.as_ref())
+        {
+            state.retain_world_commands(commands);
+        }
         if self
             .objects
             .component(component_handle)
@@ -9821,6 +9847,14 @@ impl ArtboardInstance {
         });
         let owner_callback = owner_callback.or_else(|| {
             crate::layout_component::bool_property_changed(self, local_id, type_name, property_key)
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::text::text_follow_path_modifier_bool_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
         });
         let owner_callback = owner_callback.or_else(|| {
             crate::text::text_modifier_group_bool_property_changed(
@@ -10403,6 +10437,14 @@ impl ArtboardInstance {
                 })
                 .or_else(|| {
                     crate::text::text_variation_modifier_double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::text::text_follow_path_modifier_double_property_changed(
                         self,
                         local_id,
                         type_name,

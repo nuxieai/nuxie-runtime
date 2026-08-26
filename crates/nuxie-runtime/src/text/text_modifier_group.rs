@@ -282,6 +282,15 @@ impl StaticTextModifierGroup {
         Ok(apply_text_modifier_transform(transform, ctm, origin))
     }
 
+    fn reset_text_follow_path(&self, instance: &ArtboardInstance, inverse_text: Option<Mat2D>) {
+        let Some(inverse_text) = inverse_text else {
+            return;
+        };
+        for modifier in &self.follow_path_modifiers {
+            modifier.reset(instance, inverse_text);
+        }
+    }
+
     fn modifies_opacity(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<bool> {
         let flags = runtime_uint_property(
             runtime,
@@ -486,7 +495,6 @@ struct StaticTextGlyphContext<'a> {
     origin_y: f32,
     line_index_in_paragraph: usize,
     paragraph_baselines: &'a [f32],
-    text_world_inverse: Mat2D,
 }
 
 fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D) {

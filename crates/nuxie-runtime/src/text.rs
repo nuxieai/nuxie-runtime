@@ -2554,7 +2554,10 @@ impl StaticTextSlice {
             reorder_text_input_bidi_geometry(text, &mut shaped_lines);
         }
 
-        let text_world_inverse = text_world.invert_or_identity();
+        let text_world_inverse = text_world.invert();
+        for modifier in &self.modifiers {
+            modifier.reset_text_follow_path(instance, text_world_inverse);
+        }
         let mut has_geometric_modifiers = false;
         let mut has_non_monotone_advances = false;
         for line in &mut shaped_lines {
@@ -2569,7 +2572,6 @@ impl StaticTextSlice {
                     origin_y: line.baseline,
                     line_index_in_paragraph: line.line_index,
                     paragraph_baselines: &paragraph_baselines,
-                    text_world_inverse,
                 };
                 for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
                     let amount = glyph_coverage(coverage, glyph.char_index, glyph.char_len);
@@ -5415,6 +5417,7 @@ pub(crate) fn runtime_font_asset_bytes<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ComponentDirt;
     use nuxie_binary::{FieldValue, FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_graph::GraphFile;
 
@@ -7393,7 +7396,6 @@ mod tests {
             origin_y: 0.0,
             line_index_in_paragraph: 1,
             paragraph_baselines: &baselines,
-            text_world_inverse: Mat2D::IDENTITY,
         };
 
         assert!(std::ptr::eq(
@@ -7418,6 +7420,139 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(ordered, vec![0.2, 0.5, 0.8]);
+    }
+
+    fn pinned_text_follow_path_fixture() -> (RuntimeFile, GraphFile, usize, usize, usize) {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        );
+        let bytes =
+            std::fs::read(root.join("tests/unit_tests/assets/text_follow_path_shape_length.riv"))
+                .expect("read pinned TextFollowPathModifier fixture");
+        let runtime = nuxie_binary::read_runtime_file(&bytes)
+            .expect("import pinned TextFollowPathModifier fixture");
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .expect("build pinned TextFollowPathModifier graph");
+        let (graph_index, modifier_local) = graphs
+            .artboards
+            .iter()
+            .enumerate()
+            .find_map(|(graph_index, graph)| {
+                graph
+                    .components
+                    .iter()
+                    .find(|component| component.type_name == "TextFollowPathModifier")
+                    .map(|component| (graph_index, component.local_id))
+            })
+            .expect("fixture has a TextFollowPathModifier");
+        let graph = &graphs.artboards[graph_index];
+        let group_local = component_for_local(graph, modifier_local)
+            .and_then(|component| component.parent_local)
+            .expect("TextFollowPathModifier has a group parent");
+        let text_local = component_for_local(graph, group_local)
+            .and_then(|component| component.parent_local)
+            .expect("TextModifierGroup has a Text parent");
+        (runtime, graphs, graph_index, text_local, modifier_local)
+    }
+
+    #[test]
+    fn cxx_text_follow_path_retains_local_measure_when_text_inverse_fails() {
+        let (runtime, graphs, graph_index, text_local, modifier_local) =
+            pinned_text_follow_path_fixture();
+        let graph = &graphs.artboards[graph_index];
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instantiate pinned TextFollowPathModifier fixture");
+        instance.update_pass();
+
+        let world_commands = instance
+            .component(modifier_local)
+            .and_then(|component| component.concrete.text_follow_path.as_ref())
+            .expect("occurrence-owned TextFollowPathModifier state")
+            .world_commands();
+        assert!(
+            !world_commands.is_empty(),
+            "update retains the target world path"
+        );
+
+        let slice = StaticTextSlice::from_graph(&runtime, graph, text_local)
+            .expect("materialize the owning Text");
+        slice
+            .shaped_layout(&runtime, &instance, None, Mat2D::IDENTITY)
+            .expect("shape with an invertible Text transform");
+        let retained_length = instance
+            .component(modifier_local)
+            .and_then(|component| component.concrete.text_follow_path.as_ref())
+            .expect("occurrence-owned TextFollowPathModifier state")
+            .local_measure()
+            .length();
+        assert!(retained_length > 0.0);
+
+        let singular = Mat2D([0.0, 0.0, 0.0, 0.0, 12.0, -8.0]);
+        slice
+            .shaped_layout(&runtime, &instance, None, singular)
+            .expect("shape with a singular Text transform");
+        let after_failed_inverse = instance
+            .component(modifier_local)
+            .and_then(|component| component.concrete.text_follow_path.as_ref())
+            .expect("occurrence-owned TextFollowPathModifier state")
+            .local_measure()
+            .length();
+        assert_eq!(after_failed_inverse.to_bits(), retained_length.to_bits());
+    }
+
+    #[test]
+    fn cxx_text_follow_path_callbacks_publish_path_only() {
+        let (runtime, graphs, graph_index, text_local, modifier_local) =
+            pinned_text_follow_path_fixture();
+        let graph = &graphs.artboards[graph_index];
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                .expect("instantiate pinned TextFollowPathModifier fixture");
+        instance.update_pass();
+
+        for (name, value) in [
+            ("start", 0.125),
+            ("end", 0.875),
+            ("offset", -0.185),
+            ("strength", 0.625),
+        ] {
+            instance.clear_component_dirt(text_local);
+            let key = property_key_for_name("TextFollowPathModifier", name)
+                .expect("generated double property key");
+            assert!(instance.set_double_property(modifier_local, key, value));
+            assert_eq!(
+                instance.debug_component_dirt(text_local),
+                Some(ComponentDirt::PATH),
+                "{name}Changed -> modifierShapeDirty -> Text Path"
+            );
+        }
+        for (name, value) in [("radial", true), ("orient", false)] {
+            instance.clear_component_dirt(text_local);
+            let key = property_key_for_name("TextFollowPathModifier", name)
+                .expect("generated bool property key");
+            assert!(instance.set_bool_property(modifier_local, key, value));
+            assert_eq!(
+                instance.debug_component_dirt(text_local),
+                Some(ComponentDirt::PATH),
+                "{name}Changed -> modifierShapeDirty -> Text Path"
+            );
+        }
+    }
+
+    #[test]
+    fn cxx_text_follow_path_numeric_order_matches_min_max_clamp_and_nested_fmod() {
+        assert_eq!(cpp_std_min(-0.0, 0.0).to_bits(), (-0.0f32).to_bits());
+        assert_eq!(cpp_std_max(-0.0, 0.0).to_bits(), (-0.0f32).to_bits());
+        assert_eq!(text_follow_path_math_clamp(f32::NAN, 0.0, 1.0), 0.0);
+        assert_eq!(
+            text_follow_path_positive_unit_mod(-0.0).to_bits(),
+            0.0f32.to_bits()
+        );
+        assert_eq!(text_follow_path_positive_unit_mod(1.0), 0.0);
+        assert_eq!(text_follow_path_positive_unit_mod(-1.0), 0.0);
+        assert!(text_follow_path_positive_unit_mod(f32::INFINITY).is_nan());
     }
 
     #[test]
@@ -7936,7 +8071,6 @@ mod tests {
             origin_y: 0.0,
             line_index_in_paragraph: 0,
             paragraph_baselines: &[],
-            text_world_inverse: Mat2D::IDENTITY,
         };
         let transform = group
             .transform(&runtime, &instance, 1.0, Mat2D::IDENTITY, &glyph)
@@ -7977,7 +8111,6 @@ mod tests {
             origin_y: 0.0,
             line_index_in_paragraph: 0,
             paragraph_baselines: &[],
-            text_world_inverse: Mat2D::IDENTITY,
         };
         let actual = group
             .transform(&runtime, &instance, 0.5, incoming, &glyph)
@@ -8009,7 +8142,6 @@ mod tests {
             origin_y: 0.0,
             line_index_in_paragraph: 0,
             paragraph_baselines: &[],
-            text_world_inverse: Mat2D::IDENTITY,
         };
         let transformed = group
             .transform(&runtime, &instance, amount, Mat2D::IDENTITY, &glyph)

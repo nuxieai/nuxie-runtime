@@ -1,6 +1,6 @@
 use crate::animation::RuntimeInterpolator;
 use crate::artboard::{RuntimeComponentListItemInstance, RuntimeComponentListLogicalItem};
-use crate::draw::RuntimePathMeasure;
+use crate::draw::{RuntimePathCommand, RuntimePathMeasure};
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     artboard_index_for_graph, cached_property_key_for_name, property_key_for_name,
@@ -987,6 +987,44 @@ pub(crate) struct RuntimeTextState {
     modifier_range_map_clear_trace_depth: Cell<usize>,
 }
 
+/// Retained fields owned by one pinned C++ `TextFollowPathModifier`
+/// occurrence. Dependency updates replace the world path; a successful Text
+/// inversion resets the local measure from that retained path.
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeTextFollowPathState {
+    world_commands: RefCell<Vec<RuntimePathCommand>>,
+    local_measure: RefCell<RuntimePathMeasure>,
+}
+
+impl RuntimeTextFollowPathState {
+    fn new() -> Self {
+        Self {
+            world_commands: RefCell::new(Vec::new()),
+            local_measure: RefCell::new(RuntimePathMeasure::from_commands(&[])),
+        }
+    }
+
+    fn clone_for_occurrence(&self) -> Self {
+        Self::new()
+    }
+
+    pub(crate) fn retain_world_commands(&self, commands: Vec<RuntimePathCommand>) {
+        *self.world_commands.borrow_mut() = commands;
+    }
+
+    pub(crate) fn world_commands(&self) -> Vec<RuntimePathCommand> {
+        self.world_commands.borrow().clone()
+    }
+
+    pub(crate) fn retain_local_measure(&self, measure: RuntimePathMeasure) {
+        *self.local_measure.borrow_mut() = measure;
+    }
+
+    pub(crate) fn local_measure(&self) -> RuntimePathMeasure {
+        self.local_measure.borrow().clone()
+    }
+}
+
 impl RuntimeTextState {
     fn new() -> Self {
         Self {
@@ -1694,6 +1732,7 @@ pub(crate) struct RuntimeConcreteComponentState {
     pub(crate) vertex: Option<RuntimeVertexState>,
     pub(crate) scripted: Option<RuntimeScriptedComponentState>,
     pub(crate) text: Option<RuntimeTextState>,
+    pub(crate) text_follow_path: Option<RuntimeTextFollowPathState>,
     pub(crate) text_input: Option<RuntimeTextInputState>,
     pub(crate) drawable: Option<RuntimeDrawableComponentState>,
     pub(crate) solo: Option<RuntimeSoloState>,
@@ -1741,6 +1780,8 @@ impl RuntimeConcreteComponentState {
             )
             .then(RuntimeScriptedComponentState::default),
             text: type_is_a(type_name, "Text").then(RuntimeTextState::new),
+            text_follow_path: (type_name == "TextFollowPathModifier")
+                .then(RuntimeTextFollowPathState::new),
             text_input: (type_name == "TextInput").then(RuntimeTextInputState::default),
             drawable: (type_is_a(type_name, "Drawable") || type_is_a(type_name, "LayoutComponent"))
                 .then(|| RuntimeDrawableComponentState::new(type_name)),
@@ -1815,6 +1856,10 @@ impl RuntimeConcreteComponentState {
                 .text
                 .as_ref()
                 .map(RuntimeTextState::clone_for_occurrence),
+            text_follow_path: self
+                .text_follow_path
+                .as_ref()
+                .map(RuntimeTextFollowPathState::clone_for_occurrence),
             text_input: self
                 .text_input
                 .as_ref()

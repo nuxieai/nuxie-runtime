@@ -70,3 +70,26 @@ pending**; supporting lifecycle cases are not counted.
 
 The candidate is contained to its nine declared paths. All 17 pre-existing
 user-dirty paths remained unstaged and outside this receipt.
+
+## Narrow correction rereview
+
+Correction `a2a4ce1a9ef84d65fd0bb40402a49c62db632476` **closes the sole
+finding and is accepted**.
+
+`text_target_modifier_text_component` now resolves the direct parent, proves
+its schema definition is-a `TextModifierGroup`, returns null otherwise, and
+only then delegates to `modifier_group_text`. The new real
+`Text -> Shape -> TextFollowPathModifier` occurrence constructs under the
+existing target-derived `MissingObject` continuation, retains no target,
+returns no Text component, and drives the live production `start` setter while
+the grandparent Text remains at `ComponentDirt::NONE`. It therefore observes
+the exact effect that falsified the original candidate without implementing an
+alternate algorithm.
+
+The correction changes only the guard, its focused real-owner evidence, and
+the author receipt. Body 1's lifecycle/state owners are byte-for-byte
+unchanged. The consumer topology remains **1 direct pass / 0 red / 0 adapted /
+0 pending**. `cargo test -p nuxie-runtime d_st_target --lib -- --nocapture`
+passed 4 tests with no failures, correction-range `git diff --check` passed,
+the delta is contained to the declared three paths, and all 17 pre-existing
+user-dirty paths remain unstaged.

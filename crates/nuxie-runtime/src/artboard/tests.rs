@@ -13768,3 +13768,4 @@
     }
 
     include!("wave_b1_image_owner_tests.rs");
+    include!("wave_b4_global_owner_tests.rs");

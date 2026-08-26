@@ -1066,3 +1066,6 @@ mod upstream_color_glyph_tests {
         assert!(!lines[0].glyphs.is_empty(), "the first run produces a glyph");
     }
 }
+
+#[cfg(test)]
+include!("wave_b4_font_owner_tests.rs");

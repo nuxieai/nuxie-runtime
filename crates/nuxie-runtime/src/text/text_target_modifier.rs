@@ -46,6 +46,13 @@ fn text_target_modifier_text_component(
     modifier_local: usize,
 ) -> Option<usize> {
     let group_local = instance.component_parent_local(modifier_local)?;
+    let is_group = instance
+        .component(group_local)
+        .and_then(|group| nuxie_schema::definition_by_name(group.type_name))
+        .is_some_and(|definition| definition.is_a("TextModifierGroup"));
+    if !is_group {
+        return None;
+    }
     modifier_group_text(instance, group_local)
 }
 

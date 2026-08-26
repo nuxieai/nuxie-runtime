@@ -8428,6 +8428,63 @@ mod tests {
     }
 
     #[test]
+    fn d_st_target_non_group_parent_cannot_reach_grandparent_text() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("non-group parent".to_owned()),
+                    ),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                ],
+            ),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(1))],
+            ),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(0))],
+            ),
+            fixture_record(
+                "TextFollowPathModifier",
+                vec![
+                    property("TextFollowPathModifier", "parentId", FixtureValue::Uint(4)),
+                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(5)),
+                ],
+            ),
+        ])
+        .expect("non-group target-modifier records import");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("malformed graph builds");
+        let mut instance = ArtboardInstance::from_graph(&runtime, &graphs.artboards[0])
+            .expect("MissingObject permits Artboard construction");
+        assert_eq!(text_target_modifier_target_id(&instance, 6), 5);
+        assert_eq!(text_target_modifier_target_local(&instance, 6), None);
+        assert_eq!(text_target_modifier_text_component(&instance, 6), None);
+
+        instance.clear_component_dirt(1);
+        let start_key =
+            property_key_for_name("TextFollowPathModifier", "start").expect("generated start key");
+        assert!(instance.set_double_property(6, start_key, 0.25));
+        assert_eq!(instance.debug_component_dirt(1), Some(ComponentDirt::NONE));
+    }
+
+    #[test]
     fn d_st_target_live_write_freezes_current_target_and_clone_reresolves() {
         let (runtime, graphs, graph_index, _, modifier_local) = pinned_text_follow_path_fixture();
         let graph = &graphs.artboards[graph_index];

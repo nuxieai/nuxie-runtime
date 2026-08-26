@@ -26,7 +26,7 @@ consumer.
 | # | Pinned body | Required behavior and ordering | Concrete Rust owner | Candidate disposition |
 |---:|---|---|---|---|
 | 1 | `TextTargetModifier::onAddedDirty` (cpp 9-21) | Invoke `TextModifier::onAddedDirty` first and immediately propagate a non-Ok status. Only after success, resolve the current `targetId`, cast/store it in occurrence-owned `m_Target`, and return Ok. Missing resolution stores null. A later `targetId` write does not change `m_Target`; a clone copies the generated ID into fresh state and reruns resolution. | Super prerequisite/registration: `text/text_target_modifier.rs:20::text_target_modifier_resolution`, `text/text_modifier.rs:12::StaticTextModifier::from_group_child`, and construction links in `artboard.rs:1378-1453::build_component_occurrence_relations`. Occurrence state: `components.rs:999::RuntimeTextTargetState`, allocation/clone at `:1806`/`:1884`. Import and clone resolution: `artboard.rs:2847`, `:798`, and `:2894::initialize_text_target_modifiers`. Live generated property read: `text/text_target_modifier.rs:52::text_target_modifier_target_id`; retained read: `:59::text_target_modifier_target_local`. | **corrected exact under named ownership/safety adaptations**. The previous static descriptor repeatedly resolved the authored target, so a live write followed by clone still consumed the old target. The target is now retained per occurrence, live writes freeze the current target, and clone construction resolves the copied live ID. Target-derived wrong-parent `Super` failure skips resolution and modifier participation while preserving the Artboard-level `MissingObject` continuation behavior. Rust retains a local component ID instead of a raw pointer. |
-| 2 | `TextTargetModifier::textComponent` (cpp 23-30) | If and only if the direct parent is a `TextModifierGroup`, return that group's `textComponent`; otherwise return null. Group resolution in turn accepts its parent only when it is-a `Text`. | `text/text_target_modifier.rs:44::text_target_modifier_text_component` -> `text/text_modifier_group.rs:386::modifier_group_text`; real occurrence observations at `text.rs:8369` and `:8381`. | **exact**. The direct group/null branch and inherited Text test are concrete. `TextInput` is correctly excluded because pinned generated `TextInputBase` derives from `Drawable`, not `Text`; no TextInput parity claim is made. |
+| 2 | `TextTargetModifier::textComponent` (cpp 23-30) | If and only if the direct parent is a `TextModifierGroup`, return that group's `textComponent`; otherwise return null. Group resolution in turn accepts its parent only when it is-a `Text`. | Direct group guard and delegation: `text/text_target_modifier.rs:44::text_target_modifier_text_component` -> `text/text_modifier_group.rs:386::modifier_group_text`; real occurrence observations at `text.rs:8369`, `:8381`, and `:8431`. | **corrected exact**. The direct parent is now independently required to be-a TextModifierGroup before group-to-Text traversal. A malformed `Text -> Shape -> TextFollowPathModifier` therefore returns null instead of incorrectly reaching the grandparent Text. `TextInput` is correctly excluded because pinned generated `TextInputBase` derives from `Drawable`, not `Text`; no TextInput parity claim is made. |
 
 ## Header state, generated defaults, and adaptations
 
@@ -70,7 +70,7 @@ upstream consumers.
 
 ## Source-proven corrections and supporting evidence
 
-- `text.rs:8431::d_st_target_live_write_freezes_current_target_and_clone_reresolves`
+- `text.rs:8488::d_st_target_live_write_freezes_current_target_and_clone_reresolves`
   uses the real pinned follow-path fixture and real Artboard occurrences. It
   proves authored target A is retained, a live `targetId = B` write leaves the
   current target frozen at A, and cloning copies B then resolves the clone's
@@ -82,6 +82,10 @@ upstream consumers.
   gives the malformed target modifier a valid Transform target, proves
   Artboard construction continues on target-derived `MissingObject`, and
   proves neither target resolution nor Text registration occurs.
+- `text.rs:8431::d_st_target_non_group_parent_cannot_reach_grandparent_text`
+  covers the blocking counterexample from independent rejection `21e38bdc2`:
+  a real `Text -> Shape -> TextFollowPathModifier` occurrence retains no target
+  and no Text, and a live `start` write does not dirty the grandparent Text.
 - The derived TextFollowPath owner now reads the retained target for its reset,
   world-path update, and follow-path target flags
   (`text/text_follow_path_modifier.rs:126`, `:184`; `artboard.rs:2983`). This
@@ -90,7 +94,7 @@ upstream consumers.
 
 Focused gates:
 
-- `cargo test -p nuxie-runtime d_st_target --lib -- --nocapture`: 3 passed.
+- `cargo test -p nuxie-runtime d_st_target --lib -- --nocapture`: 4 passed.
 - `cargo test -p nuxie-runtime --lib cxx_text_follow_path -- --nocapture`: 3
   passed.
 - `cargo test -p nuxie-runtime --features tools --test cpp_probe d_st_target_live_cpp_missing_target_is_ok_like_rust -- --exact --nocapture`:

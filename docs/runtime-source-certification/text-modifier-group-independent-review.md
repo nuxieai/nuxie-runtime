@@ -84,3 +84,47 @@ The consumer denominator is also corrected from 13 to 12: `text_test.cpp` #9
 contains no TextModifierGroup and was previously included by mistake. Outcomes
 do not move; the pair topology is four pass, two executable expected-red, and
 six pending.
+
+## Independent reopened-lifecycle review
+
+Candidate `12d1fbe2d3723d2b8a21bb6e6f90dae9b7f6058a` is **accepted** for the
+reopened `onAddedDirty` / `Text::addModifierGroup` lifecycle scope. I reread
+the pinned lifecycle bodies and Artboard continuation rule independently; the
+earlier hard-failure acceptance is superseded, not reused as authority.
+
+Component Super linkage is retained first. A valid direct `Text` parent then
+appends the group to that Text occurrence's fresh authored-order vector. A
+non-Text parent retains its generic relation but contributes no Text
+registration, text-component resolution, or callback dirt, while
+`MissingObject` permits Artboard construction to continue. Its direct child
+modifiers still populate the malformed group's occurrence-owned all/shape/
+follow vectors. Live `parentId` writes correctly freeze the source occurrence;
+cold and post-materialized clones rebuild valid A-to-B membership, valid-to-
+malformed removal, and malformed-to-valid creation from copied generated
+fields. `StaticTextSlice`, `markShapeDirty`, and the shape-modifier predicate
+all consume these occurrence owners.
+
+The immutable `TextFollowPathModifierText` graph edge is excluded from runtime
+edge import and reconstructed exactly once from each occurrence's direct
+modifier -> group -> Text chain. This admits clone-time edge creation/removal
+without a grandparent leak. The recurse=true proof is causal: generic
+`ParentChild` dependencies point parent-to-child and therefore cannot carry
+modifier dirt back to Text. The retained Text onDirty trace separately proves
+that materialized clone topology follows the rebuilt owner. The existing cold
+`RuntimeTextDrawOwner::clone` behavior remains unchanged.
+
+The corrected consumer denominator is 12: 4 pass / 2 executable expected-red /
+6 pending. Pinned `text_test.cpp` #9 is the standalone `RangeMapper` unit with
+no `TextModifierGroup`, so excluding it is correct. The broader Text topology
+remains 5 / 3 / 10; accepted math/range rows and the two existing pair reds
+did not move.
+
+Focused checks passed (one test each):
+
+- `cargo test -p nuxie-runtime --lib cxx_text_modifier_group_missing_text_preserves_super_without_text_registration -- --nocapture`
+- `cargo test -p nuxie-runtime --lib cxx_text_modifier_group_live_parent_write_freezes_source_and_clone_reregisters -- --nocapture`
+- `cargo test -p nuxie-runtime --lib cxx_text_modifier_registers_valid_children_in_authored_order_across_clone -- --nocapture`
+
+Candidate-range `git diff --check` passed. The candidate contains exactly the
+seven declared paths; all 17 pre-existing user-dirty paths remain outside the
+commit and unstaged.

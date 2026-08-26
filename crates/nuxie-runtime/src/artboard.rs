@@ -7774,10 +7774,15 @@ impl ArtboardInstance {
     }
 
     fn mark_text_changed_for_local(&mut self, local_id: usize) {
-        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("TextFollowPathModifier") {
-            // Each generated TextFollowPathModifier callback routes directly
-            // through its owning group to Text::modifierShapeDirty. Do not
-            // add the broader generic text-property invalidation afterward.
+        if matches!(
+            self.slot(local_id).and_then(|slot| slot.type_name),
+            Some("TextFollowPathModifier" | "TextVariationModifier")
+        ) {
+            // Each generated TextFollowPathModifier callback and
+            // TextVariationModifier::axisValueChanged route directly through
+            // their owning group to Text's shape-dirt owner. The variation
+            // axisTag callback is intentionally empty. Do not add the broader
+            // generic text-property invalidation afterward for either type.
             return;
         }
         if !self

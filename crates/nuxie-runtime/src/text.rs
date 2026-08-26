@@ -3993,7 +3993,9 @@ impl StaticTextSlice {
             // Each nonzero group starts from the authored style font and then
             // swaps its replacement runs into `StyledText`; it never uses the
             // preceding group's variable font as the next group's source.
-            localized = group.variation_map(instance, &skrifa_font, *strength, &font_axes);
+            localized = group
+                .variation_map(instance, &skrifa_font, font_size, *strength, &font_axes)
+                .0;
         }
         let raw_glyphs = shape_text_glyphs_for_style_with_variations(
             font_bytes, style, instance, text, &localized,
@@ -8063,19 +8065,22 @@ mod tests {
         let inherited = BTreeMap::from([(wght, 400.0)]);
         assert_eq!(
             group
-                .variation_map(&untouched, &font, 1.25, &inherited)
+                .variation_map(&untouched, &font, 12.0, 1.25, &inherited)
+                .0
                 .get(&wght),
             Some(&181.25)
         );
         assert_eq!(
             group
-                .variation_map(&untouched, &font, -0.5, &inherited)
+                .variation_map(&untouched, &font, 12.0, -0.5, &inherited)
+                .0
                 .get(&wght),
             Some(&225.0)
         );
         assert_eq!(
             group
-                .variation_map(&untouched, &font, 0.0, &inherited)
+                .variation_map(&untouched, &font, 12.0, 0.0, &inherited)
+                .0
                 .get(&wght),
             Some(&400.0)
         );
@@ -8111,6 +8116,349 @@ mod tests {
             .unwrap();
         assert!((transform.0[4] - 0.05).abs() < 1e-6);
         assert!((transform.0[5] + 0.15).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cxx_text_variation_modifier_preserves_map_font_size_and_pinned_contraction() {
+        let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("variation fixture artboard");
+        let slice = StaticTextSlice::from_instance(&runtime, graph, &instance, 1)
+            .expect("live variation Text slice");
+        let group = slice.modifiers.first().expect("variation modifier group");
+        let modifier = group
+            .modifiers
+            .iter()
+            .filter_map(|modifier| match modifier {
+                StaticTextModifier::Variation(modifier) => Some(*modifier),
+                _ => None,
+            })
+            .last()
+            .expect("fixture has a variation modifier");
+        let style = slice.base_style().expect("fixture base style");
+        let font_bytes = style
+            .font_bytes(&runtime, &instance)
+            .expect("fixture font bytes")
+            .to_vec();
+        let font = SkrifaFontRef::new(&font_bytes).expect("fixture font parses");
+        let wght = u32::from_be_bytes(*b"wght");
+        let wdth = u32::from_be_bytes(*b"wdth");
+        let from = f32::from_bits(0xc389_eceb);
+        let axis_value = f32::from_bits(0xc321_b678);
+        let strength = f32::from_bits(0x3c8a_8fc1);
+        let font_size = f32::from_bits(0x7fc1_2345);
+        assert!(instance.set_double_property(
+            modifier.local_id,
+            property_key_for_name("TextVariationModifier", "axisValue").unwrap(),
+            axis_value,
+        ));
+        let mut variations = BTreeMap::from([(wght, from), (wdth, 321.0)]);
+        let returned_font_size = modifier.modify(
+            &instance,
+            &font,
+            &BTreeMap::new(),
+            &mut variations,
+            font_size,
+            strength,
+        );
+        assert_eq!(returned_font_size.to_bits(), font_size.to_bits());
+        assert_eq!(variations.get(&wght).unwrap().to_bits(), 0xc388_f5ce);
+        assert_eq!(variations.get(&wdth), Some(&321.0));
+
+        let mut inherited_variations = BTreeMap::new();
+        let inherited = BTreeMap::from([(wght, 333.0), (wdth, 222.0)]);
+        modifier.modify(
+            &instance,
+            &font,
+            &inherited,
+            &mut inherited_variations,
+            19.0,
+            0.0,
+        );
+        assert_eq!(inherited_variations.get(&wght), Some(&333.0));
+        assert!(!inherited_variations.contains_key(&wdth));
+
+        let mut unknown_instance =
+            ArtboardInstance::from_graph(&runtime, graph).expect("fresh variation occurrence");
+        let unknown_tag = u32::from_be_bytes(*b"NONE");
+        assert!(unknown_instance.set_uint_property(
+            modifier.local_id,
+            property_key_for_name("TextVariationModifier", "axisTag").unwrap(),
+            u64::from(unknown_tag),
+        ));
+        assert!(unknown_instance.set_double_property(
+            modifier.local_id,
+            property_key_for_name("TextVariationModifier", "axisValue").unwrap(),
+            2.0,
+        ));
+        let mut unknown = BTreeMap::new();
+        modifier.modify(
+            &unknown_instance,
+            &font,
+            &BTreeMap::new(),
+            &mut unknown,
+            27.0,
+            0.5,
+        );
+        assert_eq!(unknown.get(&unknown_tag), Some(&1.0));
+        let mut nan_strength = BTreeMap::new();
+        modifier.modify(
+            &unknown_instance,
+            &font,
+            &BTreeMap::new(),
+            &mut nan_strength,
+            27.0,
+            f32::from_bits(0x7fc0_4567),
+        );
+        assert!(nan_strength[&unknown_tag].is_nan());
+    }
+
+    #[test]
+    fn cxx_text_variation_modifier_axis_value_callback_requires_direct_group_and_text() {
+        let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("variation fixture artboard");
+        instance.update_runtime_text_render_styles(
+            1,
+            crate::components::ComponentDirt::TEXT_SHAPE,
+            graph,
+            None,
+        );
+        assert!(instance.runtime_drawables.dirty_text_locals().is_empty());
+        let modifier_local = 10;
+        let group_local = 7;
+        let range_local = 8;
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(group_local);
+        let axis_value = property_key_for_name("TextVariationModifier", "axisValue").unwrap();
+        let next_axis_value = instance
+            .double_property(modifier_local, axis_value)
+            .unwrap_or(0.0)
+            + 137.0;
+        assert!(instance.set_double_property(modifier_local, axis_value, next_axis_value));
+        assert_eq!(
+            instance.double_property(modifier_local, axis_value),
+            Some(next_axis_value)
+        );
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text occurrence state")
+                .take_modifier_range_map_clear_trace(),
+            [(false, range_local), (true, group_local)]
+        );
+        let text_dirt = instance.debug_component_dirt(1).expect("Text dirt");
+        assert!(text_dirt.contains(crate::components::ComponentDirt::PATH));
+        assert!(text_dirt.contains(crate::components::ComponentDirt::WORLD_TRANSFORM));
+        assert!(
+            instance
+                .debug_component_dirt(group_local)
+                .expect("modifier group dirt")
+                .contains(crate::components::ComponentDirt::TEXT_COVERAGE)
+        );
+        // The concrete callback publishes Text dirt. It must not also run the
+        // generic retained render-style invalidation route.
+        assert!(instance.runtime_drawables.dirty_text_locals().is_empty());
+        let clone = instance.clone();
+        assert_eq!(
+            clone.double_property(modifier_local, axis_value),
+            Some(next_axis_value)
+        );
+
+        let direct_wrong_parent = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(1))],
+            ),
+            fixture_record(
+                "TextVariationModifier",
+                vec![property(
+                    "TextVariationModifier",
+                    "parentId",
+                    FixtureValue::Uint(2),
+                )],
+            ),
+        ])
+        .expect("wrong-parent variation fixture imports");
+        let direct_graphs = GraphFile::from_runtime_file(&direct_wrong_parent)
+            .expect("wrong-parent variation graph builds");
+        let mut direct = ArtboardInstance::from_graph(
+            &direct_wrong_parent,
+            direct_graphs.artboards.first().unwrap(),
+        )
+        .expect("TextModifier MissingObject continues construction");
+        direct.update_runtime_text_render_styles(
+            1,
+            crate::components::ComponentDirt::TEXT_SHAPE,
+            direct_graphs.artboards.first().unwrap(),
+            None,
+        );
+        direct.clear_component_dirt(1);
+        assert!(direct.set_double_property(3, axis_value, 1.0));
+        assert_eq!(
+            direct.debug_component_dirt(1),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+        assert!(direct.runtime_drawables.dirty_text_locals().is_empty());
+
+        let malformed_group = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(1))],
+            ),
+            fixture_record(
+                "TextModifierGroup",
+                vec![property(
+                    "TextModifierGroup",
+                    "parentId",
+                    FixtureValue::Uint(2),
+                )],
+            ),
+            fixture_record(
+                "TextVariationModifier",
+                vec![property(
+                    "TextVariationModifier",
+                    "parentId",
+                    FixtureValue::Uint(3),
+                )],
+            ),
+        ])
+        .expect("malformed-group variation fixture imports");
+        let malformed_graphs = GraphFile::from_runtime_file(&malformed_group)
+            .expect("malformed-group variation graph builds");
+        let mut malformed = ArtboardInstance::from_graph(
+            &malformed_group,
+            malformed_graphs.artboards.first().unwrap(),
+        )
+        .expect("TextModifierGroup MissingObject continues construction");
+        malformed.update_runtime_text_render_styles(
+            1,
+            crate::components::ComponentDirt::TEXT_SHAPE,
+            malformed_graphs.artboards.first().unwrap(),
+            None,
+        );
+        malformed.clear_component_dirt(1);
+        assert!(malformed.set_double_property(4, axis_value, 1.0));
+        assert_eq!(
+            malformed.debug_component_dirt(1),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+        assert!(malformed.runtime_drawables.dirty_text_locals().is_empty());
+
+        let lifecycle_runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextModifierGroup",
+                vec![property(
+                    "TextModifierGroup",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
+                "TextVariationModifier",
+                vec![property(
+                    "TextVariationModifier",
+                    "parentId",
+                    FixtureValue::Uint(2),
+                )],
+            ),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextModifierGroup",
+                vec![property(
+                    "TextModifierGroup",
+                    "parentId",
+                    FixtureValue::Uint(4),
+                )],
+            ),
+        ])
+        .expect("variation lifecycle fixture imports");
+        let lifecycle_graphs = GraphFile::from_runtime_file(&lifecycle_runtime)
+            .expect("variation lifecycle graph builds");
+        let lifecycle_graph = lifecycle_graphs.artboards.first().unwrap();
+        let mut source = ArtboardInstance::from_graph(&lifecycle_runtime, lifecycle_graph)
+            .expect("variation lifecycle source constructs");
+        for text_local in [1, 4] {
+            source.update_runtime_text_render_styles(
+                text_local,
+                crate::components::ComponentDirt::TEXT_SHAPE,
+                lifecycle_graph,
+                None,
+            );
+            source.clear_component_dirt(text_local);
+        }
+        let parent_id = property_key_for_name("Component", "parentId").unwrap();
+        let axis_tag = property_key_for_name("TextVariationModifier", "axisTag").unwrap();
+        assert!(source.set_uint_property(3, parent_id, 5));
+        assert!(source.set_uint_property(3, axis_tag, u64::from(u32::from_be_bytes(*b"wdth"))));
+        assert_eq!(
+            source.debug_component_dirt(1),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+        assert_eq!(
+            source.debug_component_dirt(4),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+        assert!(source.runtime_drawables.dirty_text_locals().is_empty());
+        assert!(source.set_double_property(3, axis_value, 321.0));
+        assert!(
+            source
+                .debug_component_dirt(1)
+                .is_some_and(|dirt| dirt.contains(crate::components::ComponentDirt::PATH))
+        );
+        assert_eq!(
+            source.debug_component_dirt(4),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+        assert!(source.runtime_drawables.dirty_text_locals().is_empty());
+
+        let mut cold_clone = source.clone();
+        assert_eq!(
+            cold_clone.uint_property(3, axis_tag),
+            source.uint_property(3, axis_tag)
+        );
+        assert_eq!(
+            cold_clone.double_property(3, axis_value),
+            source.double_property(3, axis_value)
+        );
+        for text_local in [1, 4] {
+            cold_clone.update_runtime_text_render_styles(
+                text_local,
+                crate::components::ComponentDirt::TEXT_SHAPE,
+                lifecycle_graph,
+                None,
+            );
+            cold_clone.clear_component_dirt(text_local);
+        }
+        assert!(cold_clone.set_double_property(3, axis_value, 654.0));
+        assert_eq!(
+            cold_clone.debug_component_dirt(1),
+            Some(crate::components::ComponentDirt::NONE)
+        );
+        assert!(
+            cold_clone
+                .debug_component_dirt(4)
+                .is_some_and(|dirt| dirt.contains(crate::components::ComponentDirt::PATH))
+        );
+        assert!(cold_clone.runtime_drawables.dirty_text_locals().is_empty());
     }
 
     #[test]

@@ -448,16 +448,25 @@ impl StaticTextModifierGroup {
         &self,
         instance: &ArtboardInstance,
         font: &SkrifaFontRef<'_>,
+        font_size: f32,
         strength: f32,
         font_axes: &BTreeMap<u32, f32>,
-    ) -> BTreeMap<u32, f32> {
+    ) -> (BTreeMap<u32, f32>, f32) {
         let mut variations = BTreeMap::new();
+        let mut current_font_size = font_size;
         for index in &self.shape_modifier_indices {
             if let Some(StaticTextModifier::Variation(modifier)) = self.modifiers.get(*index) {
-                modifier.modify(instance, font, font_axes, &mut variations, strength);
+                current_font_size = modifier.modify(
+                    instance,
+                    font,
+                    font_axes,
+                    &mut variations,
+                    current_font_size,
+                    strength,
+                );
             }
         }
-        variations
+        (variations, current_font_size)
     }
 
     fn has_shape_modifiers(&self) -> bool {

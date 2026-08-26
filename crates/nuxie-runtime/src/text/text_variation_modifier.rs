@@ -6,6 +6,13 @@ struct StaticTextVariationModifier {
     authored_value: f32,
 }
 
+/// Pinned `TextVariationModifier::modify` computes the axis-value product,
+/// then contracts the previous-value product into that add on the supported
+/// clang/AArch64 build.
+fn text_variation_modifier_interpolate(from_value: f32, axis_value: f32, strength: f32) -> f32 {
+    from_value.mul_add(1.0 - strength, axis_value * strength)
+}
+
 impl StaticTextVariationModifier {
     fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
         let global_id = global_for_local(graph, local_id)?;
@@ -36,8 +43,9 @@ impl StaticTextVariationModifier {
         font: &SkrifaFontRef<'_>,
         inherited: &BTreeMap<u32, f32>,
         variations: &mut BTreeMap<u32, f32>,
+        font_size: f32,
         strength: f32,
-    ) {
+    ) -> f32 {
         let tag = self.tag(instance);
         let from = variations
             .get(&tag)
@@ -50,7 +58,11 @@ impl StaticTextVariationModifier {
                     .map(|axis| axis.default_value())
                     .unwrap_or(0.0)
             });
-        variations.insert(tag, from * (1.0 - strength) + self.value(instance) * strength);
+        variations.insert(
+            tag,
+            text_variation_modifier_interpolate(from, self.value(instance), strength),
+        );
+        font_size
     }
 }
 
@@ -60,12 +72,19 @@ pub(crate) fn text_variation_modifier_double_property_changed(
     type_name: Option<&str>,
     property_key: u16,
 ) -> Option<bool> {
-    (type_name == Some("TextVariationModifier")
-        && property_key_for_name("TextVariationModifier", "axisValue") == Some(property_key))
-    .then(|| {
-        let group = instance.component_parent_local(local_id)?;
-        let text = instance.component_parent_local(group)?;
-        Some(crate::text_owner::mark_shape_dirty(instance, text))
-    })
-    .flatten()
+    if type_name != Some("TextVariationModifier")
+        || property_key_for_name("TextVariationModifier", "axisValue") != Some(property_key)
+    {
+        return None;
+    }
+    let text = instance
+        .component_parent_local(local_id)
+        .filter(|group| {
+            instance
+                .component(*group)
+                .and_then(|group| nuxie_schema::definition_by_name(group.type_name))
+                .is_some_and(|definition| definition.is_a("TextModifierGroup"))
+        })
+        .and_then(|group| modifier_group_text(instance, group));
+    Some(text.is_some_and(|text| crate::text_owner::mark_shape_dirty(instance, text)))
 }

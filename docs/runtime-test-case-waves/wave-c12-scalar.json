@@ -1,0 +1,154 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "c12-scalar-fragment",
+  "case_count": 6,
+  "ratchet": {
+    "max_pending": 0
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp",
+      "ordinal": 2,
+      "line": 122,
+      "name": "scripted properties can be passed to luau",
+      "status": "adapted",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/src/vm/view_model/wave_c12_scalar_owner_tests.rs",
+          "line": 80,
+          "symbol": "wave_c12_scalar_002_scripted_properties_can_be_passed_to_luau"
+        }
+      ],
+      "adaptation_kind": "native-scripting",
+      "expected_red_reason": "The live ScriptedProperty listener owner invokes two listeners newest-first after the exact host rotation mutation, producing `changed with context` before `changed`; pinned C++ requires registration order.",
+      "note": "The owner test reads the pinned data_binding_test.riv schemas, applies the exact five host values, executes the literal typed Luau source, preserves direct and named rotation reads, host and script trigger actions, and asserts every ordered console line. Rust selects the same ViewModel schemas directly because this narrow scripting-owner test has no artboard-to-default-instance binding seam."
+    },
+    {
+      "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp",
+      "ordinal": 5,
+      "line": 433,
+      "name": "scripted color can be passed to luau",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/src/vm/view_model/wave_c12_scalar_owner_tests.rs",
+          "line": 274,
+          "symbol": "wave_c12_scalar_005_scripted_color_can_be_passed_to_luau"
+        }
+      ],
+      "adaptation_kind": "native-scripting",
+      "note": "The executable owner test preserves scripted_color.riv/colorsVm/colorProp, authored value 0xff101566, literal Luau, host write 0xff101567, Color.rgb red write, listener order, and all four exact console values through ScriptVm and ScriptViewModel."
+    },
+    {
+      "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp",
+      "ordinal": 6,
+      "line": 492,
+      "name": "scripted string can be passed to luau",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/src/vm/view_model/wave_c12_scalar_owner_tests.rs",
+          "line": 315,
+          "symbol": "wave_c12_scalar_006_scripted_string_can_be_passed_to_luau"
+        }
+      ],
+      "adaptation_kind": "native-scripting",
+      "note": "The executable owner test preserves scripted_string.riv/stringVm/stringProp, authored `yo`, literal Luau, host `yoo` write, scripted `Hello World` write, listener order, and all four exact console lines through ScriptVm and ScriptViewModel."
+    },
+    {
+      "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp",
+      "ordinal": 7,
+      "line": 551,
+      "name": "scripted boolean can be passed to luau",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/src/vm/view_model/wave_c12_scalar_owner_tests.rs",
+          "line": 355,
+          "symbol": "wave_c12_scalar_007_scripted_boolean_can_be_passed_to_luau"
+        }
+      ],
+      "adaptation_kind": "native-scripting",
+      "note": "The executable owner test preserves scripted_boolean.riv/BoolVM/BoolProp, authored false, literal Luau, scripted true then host false writes, listener order, and all four exact console lines through ScriptVm and ScriptViewModel."
+    },
+    {
+      "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp",
+      "ordinal": 8,
+      "line": 610,
+      "name": "scripted enum can be passed to luau",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/src/vm/view_model/wave_c12_scalar_owner_tests.rs",
+          "line": 395,
+          "symbol": "wave_c12_scalar_008_scripted_enum_can_be_passed_to_luau"
+        }
+      ],
+      "adaptation_kind": "native-scripting",
+      "note": "The executable owner test preserves scripted_enum.riv/EnumVM/EnumProp, authored white, literal Luau, blue/orange/red writes in order, listener order, and all seven exact console lines through ScriptVm and ScriptViewModel."
+    },
+    {
+      "id": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp",
+      "ordinal": 17,
+      "line": 906,
+      "name": "Scripted blob property reads and writes bytes",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/src/vm/view_model/wave_c12_scalar_owner_tests.rs",
+          "line": 443,
+          "symbol": "wave_c12_scalar_017_scripted_blob_property_reads_and_writes_bytes"
+        }
+      ],
+      "adaptation_kind": "rust-safety",
+      "note": "Pinned C++ constructs a standalone ViewModelInstanceAssetBlob; Rust's ScriptedPropertyBlob requires a real schema owner, supplied by the existing vendored blob fixture. The test then preserves the exact fixture-free RuntimeBlobAsset {10,20,30}, literal readSize/readByte/writeBytes script, fresh property wrappers per call, initial size 3 and byte 10 assertions, `abcd` write, retained asset length and bytes, final size 4, and byte `a`."
+    }
+  ]
+}

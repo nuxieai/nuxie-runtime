@@ -1960,6 +1960,9 @@ impl UserData for ScriptedPropertyTrigger {
 }
 
 #[cfg(all(test, feature = "compiler"))]
+mod wave_c12_scalar_owner_tests;
+
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::super::{ScriptProgram, ScriptVm};
     use super::*;

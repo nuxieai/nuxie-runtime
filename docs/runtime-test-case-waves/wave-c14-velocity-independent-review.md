@@ -32,9 +32,11 @@ distinct executable Rust tests in
 
 Every asserted velocity, physics-running, and activity value is read from the
 live retained `RuntimeScrollConstraintState` and its owned physics through
-`RuntimeScrollConstraintSnapshot`. The snapshot does not recompute those
-observables, and no test-local physics, expected-value algorithm, aggregate
-runner, proxy fixture, or placeholder failure is present.
+`RuntimeScrollConstraintSnapshot`: velocity is the retained physics speed,
+physics-running is the owned physics owner's status, and activity uses the
+same retained drag/bar-drag/physics-running expression as C++. No test-local
+physics, expected-value algorithm, aggregate runner, detached proxy fixture,
+or placeholder failure is present.
 
 ## Structured adaptations
 

@@ -547,3 +547,37 @@ ignored), the existing stale-retained-frame dirty-draw containment test passes
 `text.rs`, and the source receipt. The separate pre-existing `draw.rs`
 formatting hunk and all other user dirt remain unstaged. This review changed
 documentation only.
+
+## Final narrow Text row 39 evidence rereview of `f47e8735c`
+
+Verdict: **ACCEPTED**
+
+The proxy fixture is gone. The focused case imports a real RuntimeFile, builds
+its GraphFile and ArtboardInstance, runs the update owner to materialize the
+Text's retained frame, and then drives WorldTransform, Path, Paint, and the
+combined mask only through `ArtboardInstance::add_dirt`. Two run styles become
+the retained current style list in draw-command order; a third imported style
+has a real stroke effect but no current run.
+
+The WorldTransform case reaches the live follow-path group and records the
+pinned recursive stream: the outer authored group traversal re-enters after
+Path is accumulated, the nested traversal observes WorldTransform|Path and
+invalidates current styles 2 then 6 once, and the outer traversal then resumes.
+The standalone Path and Paint cases each visit those same two current styles.
+The combined case visits all authored groups before styles 2 and 6 without an
+extra recursive invalidation. Concrete effect state becomes dirty for styles 2
+and 6 while unused imported style 10 remains clean in every case.
+
+The `cfg(test)` additions only append the production callback's already chosen
+mask and action to occurrence-owned trace storage; they neither select targets
+nor replace traversal, reentrancy, or effect invalidation. Clone/reset remains
+cold through the existing `RuntimeTextDrawOwner::default` clone path. The
+production mapping is otherwise unchanged.
+
+The real-owner focused test and stale-retained-frame dirty-draw containment
+test both pass (one passed each, zero failed or ignored), and the candidate
+delta passes `git diff --check`. Correction scope is only `artboard.rs`,
+`draw.rs`, and the source receipt. The pre-existing `draw.rs` formatting hunk
+and all other user dirt remain unstaged. Disabled row 39 remains red and
+consumer topology remains **4 pass, 3 executable expected-red, 11 pending**.
+This rereview changed documentation only.

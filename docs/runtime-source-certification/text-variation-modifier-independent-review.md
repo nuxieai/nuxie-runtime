@@ -51,3 +51,35 @@ Focused results:
 
 Candidate-range `git diff --check` passed. The candidate contains the declared
 five paths, and all 17 pre-existing user-dirty paths remained outside it.
+
+## Narrow correction rereview
+
+Correction `ab777802eeacd17b8e7a1942cc29839a616ce656` is **still rejected**, now
+for one evidence-only blocker. The production correction itself closes the
+stale-tag finding: every concrete `modify` invocation reads the live occurrence
+property, and the revision-keyed field/cache is absent from all runtime paths.
+The immediate `axisTag` setter remains inert; the later Range-strength reshape
+uses the live `wdth` tag and the exact differential now reaches the pinned
+phase-6 `wdth=1300.0` result. The interpolation helper/call path did not change,
+so the previously reviewed release `fmul` + `llvm.fma` provenance is unchanged.
+Callback, malformed-hierarchy, clone, and 0 / 0 / 0 / 0 consumer semantics
+also did not move.
+
+The phase-5 probe does not observe retained Rust production state. It now runs
+`rust_phases.push(rust_phases.last().unwrap().clone())`, copying the test's
+previous vector instead of reading any runtime owner. That test-local expected
+value can pass even if the axisTag setter eagerly mutates or invalidates the
+actual retained output, so it cannot establish the temporal half of the pinned
+empty-callback contract.
+
+Narrow correction: after materializing a real retained Text shaping/draw owner,
+read that same owner after the axisTag write and prove its retained glyph/axis
+output and dirt state remain unchanged. Then drive the Range-strength write
+through the real dirt/update boundary and read the rebuilt retained owner to
+prove `wdth=1300.0`. A read-only `cfg(test)` snapshot is acceptable; copying a
+prior test vector or directly invoking a fresh parallel shape query is not.
+Keep the now-passing phase-6 live-tag behavior unchanged.
+
+Focused results: the two direct owner tests passed, and the full unskipped
+seven-phase C++ differential passed after the correction. Correction-range
+`git diff --check` passed; its five paths exclude all 17 user-dirty paths.

@@ -8,10 +8,18 @@ fn rive_vm() -> ScriptVm {
     vm
 }
 
-fn assert_close(actual: f64, expected: f64, tolerance: f64) {
+fn assert_catch_approx(actual: f64, expected: f64, margin: f64) {
+    let relative_margin = f64::from(f32::EPSILON)
+        * 100.0
+        * if expected.is_infinite() {
+            0.0
+        } else {
+            expected.abs()
+        };
+    let within = |allowed: f64| actual + allowed >= expected && expected + allowed >= actual;
     assert!(
-        (actual - expected).abs() <= tolerance,
-        "expected {actual} to be within {tolerance} of {expected}"
+        within(margin) || within(relative_margin),
+        "expected {actual} to match Catch Approx({expected}).margin({margin})"
     );
 }
 
@@ -33,7 +41,7 @@ fn buffer_writef16_and_readf16_round_trip() {
         )
         .unwrap();
 
-    assert_eq!(result, 1.5);
+    assert_catch_approx(result, 1.5, 0.0);
 }
 
 #[test]
@@ -75,7 +83,7 @@ fn buffer_writef16_and_readf16_negative_value() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, -3.25);
+    assert_catch_approx(result, -3.25, 0.0);
 }
 
 #[test]
@@ -89,7 +97,7 @@ fn buffer_writef16_and_readf16_small_denormal() {
             "#,
         )
         .unwrap();
-    assert_close(result, 5.960_464_48e-8, 1e-9);
+    assert_catch_approx(result, 5.960_464_48e-8, 1e-9);
 }
 
 #[test]
@@ -103,7 +111,7 @@ fn buffer_writef16_infinity() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, f64::INFINITY);
+    assert_catch_approx(result, f64::INFINITY, 0.0);
 }
 
 #[test]
@@ -117,7 +125,7 @@ fn buffer_writef16_negative_infinity() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, f64::NEG_INFINITY);
+    assert_catch_approx(result, f64::NEG_INFINITY, 0.0);
 }
 
 #[test]
@@ -131,7 +139,7 @@ fn buffer_writef16_overflow_to_infinity() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, f64::INFINITY);
+    assert_catch_approx(result, f64::INFINITY, 0.0);
 }
 
 #[test]
@@ -148,7 +156,9 @@ fn buffer_readf16_multiple_offsets() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (1.0, 2.0, 3.0));
+    assert_catch_approx(result.0, 1.0, 0.0);
+    assert_catch_approx(result.1, 2.0, 0.0);
+    assert_catch_approx(result.2, 3.0, 0.0);
 }
 
 #[test]
@@ -192,7 +202,9 @@ fn buffer_stridedcopy_basic() {
         )
         .unwrap();
 
-    assert_eq!(result, (10.0, 20.0, 30.0));
+    assert_catch_approx(result.0, 10.0, 0.0);
+    assert_catch_approx(result.1, 20.0, 0.0);
+    assert_catch_approx(result.2, 30.0, 0.0);
 }
 
 #[test]
@@ -218,7 +230,12 @@ fn buffer_stridedcopy_interleave() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (1.0, 4.0, 2.0, 5.0, 3.0, 6.0));
+    assert_catch_approx(result.0, 1.0, 0.0);
+    assert_catch_approx(result.1, 4.0, 0.0);
+    assert_catch_approx(result.2, 2.0, 0.0);
+    assert_catch_approx(result.3, 5.0, 0.0);
+    assert_catch_approx(result.4, 3.0, 0.0);
+    assert_catch_approx(result.5, 6.0, 0.0);
 }
 
 #[test]
@@ -233,7 +250,7 @@ fn buffer_stridedcopy_zero_count() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, 99.0);
+    assert_catch_approx(result, 99.0, 0.0);
 }
 
 #[test]
@@ -253,7 +270,10 @@ fn buffer_stridedcopy_multi_byte_element() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (1.0, 2.0, 3.0, 4.0));
+    assert_catch_approx(result.0, 1.0, 0.0);
+    assert_catch_approx(result.1, 2.0, 0.0);
+    assert_catch_approx(result.2, 3.0, 0.0);
+    assert_catch_approx(result.3, 4.0, 0.0);
 }
 
 #[test]
@@ -299,7 +319,9 @@ fn buffer_convert_f32_to_f16() {
         )
         .unwrap();
 
-    assert_eq!(result, (1.0, 0.5, -2.0));
+    assert_catch_approx(result.0, 1.0, 0.0);
+    assert_catch_approx(result.1, 0.5, 0.0);
+    assert_catch_approx(result.2, -2.0, 0.0);
 }
 
 #[test]
@@ -316,7 +338,8 @@ fn buffer_convert_f16_to_f32() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (3.5, -1.25));
+    assert_catch_approx(result.0, 3.5, 0.0);
+    assert_catch_approx(result.1, -1.25, 0.0);
 }
 
 #[test]
@@ -335,9 +358,9 @@ fn buffer_convert_u8norm_to_f32() {
             "#,
         )
         .unwrap();
-    assert_eq!(result.0, 0.0);
-    assert_close(result.1, 128.0 / 255.0, 0.001);
-    assert_eq!(result.2, 1.0);
+    assert_catch_approx(result.0, 0.0, 0.0);
+    assert_catch_approx(result.1, 128.0 / 255.0, 0.001);
+    assert_catch_approx(result.2, 1.0, 0.0);
 }
 
 #[test]
@@ -356,7 +379,9 @@ fn buffer_convert_f32_to_u8norm() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (0, 128, 255));
+    assert_eq!(result.0, 0);
+    assert_eq!(result.1, 128);
+    assert_eq!(result.2, 255);
 }
 
 #[test]
@@ -373,7 +398,8 @@ fn buffer_convert_u8norm_clamps_out_of_range_f32() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (0, 255));
+    assert_eq!(result.0, 0);
+    assert_eq!(result.1, 255);
 }
 
 #[test]
@@ -390,7 +416,8 @@ fn buffer_convert_u16norm_to_f32() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (0.0, 1.0));
+    assert_catch_approx(result.0, 0.0, 0.0);
+    assert_catch_approx(result.1, 1.0, 0.0);
 }
 
 #[test]
@@ -407,7 +434,8 @@ fn buffer_convert_same_format_is_memcpy() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (42.0, 99.0));
+    assert_catch_approx(result.0, 42.0, 0.0);
+    assert_catch_approx(result.1, 99.0, 0.0);
 }
 
 #[test]
@@ -423,7 +451,7 @@ fn buffer_convert_zero_count() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, 77.0);
+    assert_catch_approx(result, 77.0, 0.0);
 }
 
 #[test]
@@ -440,7 +468,8 @@ fn buffer_convert_u8_to_u16() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (200, 0));
+    assert_eq!(result.0, 200);
+    assert_eq!(result.1, 0);
 }
 
 #[test]
@@ -495,8 +524,8 @@ fn buffer_convert_i8norm_round_trip() {
             "#,
         )
         .unwrap();
-    assert_close(result.0, -1.0, 0.01);
-    assert_close(result.1, 0.5, 0.01);
+    assert_catch_approx(result.0, -1.0, 0.01);
+    assert_catch_approx(result.1, 0.5, 0.01);
 }
 
 #[test]
@@ -515,8 +544,8 @@ fn buffer_convert_i16norm_round_trip() {
             "#,
         )
         .unwrap();
-    assert_close(result.0, -0.75, 0.001);
-    assert_close(result.1, 0.25, 0.001);
+    assert_catch_approx(result.0, -0.75, 0.001);
+    assert_catch_approx(result.1, 0.25, 0.001);
 }
 
 #[test]
@@ -539,7 +568,12 @@ fn buffer_convert_f32_to_f16_with_components_2() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (1.0, 2.0, 3.0, 4.0, 5.0, 6.0));
+    assert_catch_approx(result.0, 1.0, 0.0);
+    assert_catch_approx(result.1, 2.0, 0.0);
+    assert_catch_approx(result.2, 3.0, 0.0);
+    assert_catch_approx(result.3, 4.0, 0.0);
+    assert_catch_approx(result.4, 5.0, 0.0);
+    assert_catch_approx(result.5, 6.0, 0.0);
 }
 
 #[test]
@@ -563,7 +597,10 @@ fn buffer_convert_strided_f32_to_f16() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (0.5, 0.75, 0.25, 1.0));
+    assert_catch_approx(result.0, 0.5, 0.0);
+    assert_catch_approx(result.1, 0.75, 0.0);
+    assert_catch_approx(result.2, 0.25, 0.0);
+    assert_catch_approx(result.3, 1.0, 0.0);
 }
 
 #[test]
@@ -589,14 +626,14 @@ fn buffer_convert_strided_u8norm_to_f32() {
             "#,
         )
         .unwrap();
-    assert_eq!(result.0, 1.0);
-    assert_eq!(result.1, 0.0);
-    assert_close(result.2, 128.0 / 255.0, 0.01);
-    assert_eq!(result.3, 1.0);
-    assert_eq!(result.4, 0.0);
-    assert_eq!(result.5, 1.0);
-    assert_eq!(result.6, 0.0);
-    assert_close(result.7, 128.0 / 255.0, 0.01);
+    assert_catch_approx(result.0, 1.0, 0.0);
+    assert_catch_approx(result.1, 0.0, 0.0);
+    assert_catch_approx(result.2, 128.0 / 255.0, 0.01);
+    assert_catch_approx(result.3, 1.0, 0.0);
+    assert_catch_approx(result.4, 0.0, 0.0);
+    assert_catch_approx(result.5, 1.0, 0.0);
+    assert_catch_approx(result.6, 0.0, 0.0);
+    assert_catch_approx(result.7, 128.0 / 255.0, 0.01);
 }
 
 #[test]
@@ -616,7 +653,10 @@ fn buffer_convert_components_1_is_default_behavior() {
             "#,
         )
         .unwrap();
-    assert_eq!(result, (1.5, -2.5, 1.5, -2.5));
+    assert_catch_approx(result.0, 1.5, 0.0);
+    assert_catch_approx(result.1, -2.5, 0.0);
+    assert_catch_approx(result.2, 1.5, 0.0);
+    assert_catch_approx(result.3, -2.5, 0.0);
 }
 
 #[test]

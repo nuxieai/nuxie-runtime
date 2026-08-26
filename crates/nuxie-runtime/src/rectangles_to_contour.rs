@@ -392,6 +392,7 @@ mod tests {
         converter.add_rect(Aabb::new(10.0, 10.0, 20.0, 20.0));
         converter.add_rect(Aabb::new(20.0, 10.0, 30.0, 20.0));
         converter.compute_contours();
+        assert_eq!(converter.contour_count(), 1);
         assert_contour(
             converter.contour(0),
             &[(10.0, 10.0), (10.0, 20.0), (30.0, 20.0), (30.0, 10.0)],

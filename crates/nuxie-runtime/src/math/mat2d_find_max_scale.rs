@@ -148,8 +148,9 @@ mod tests {
         let mut matrices = [Mat2D::IDENTITY; 8];
         for i in 0..base_matrices.len() {
             matrices[i] = base_matrices[i];
-            matrices[i + base_matrices.len()] = base_matrices[i].invert_or_identity();
-            assert_ne!(base_matrices[i].determinant(), 0.0);
+            let inverse = base_matrices[i].invert();
+            assert!(inverse.is_some());
+            matrices[i + base_matrices.len()] = inverse.unwrap();
         }
 
         let mut random = UpstreamRand::new(0);

@@ -44,7 +44,7 @@ Both rows are independently forceable; neither uses an unconditional or generic 
 ## Candidate gates
 
 - pinned upstream HEAD: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`;
-- strict C5 identity, line, name, outcome, pending shape, and evidence-locator audit: 43/43 green, 20/20 executable locators current;
+- strict C5 identity, line, name, outcome, pending shape, and evidence-locator audit: 43/43 green, 19/19 executable locators current;
 - exact Silver sweep: 3 pass / 1 ignored expected-red;
 - focused live-owner sweeps: all 17 denominator pass rows green (the RawPath file also retains two pending proxy tests outside the executable ledger);
 - both expected-red rows individually forced non-incrementally and failed at their declared concrete boundary;

@@ -32,7 +32,7 @@
   "wave": "c5",
   "case_count": 43,
   "ratchet": {
-    "max_pending": 24
+    "max_pending": 28
   },
   "cases": [
     {
@@ -77,7 +77,7 @@
       "ordinal": 3,
       "line": 172,
       "name": "mapBoundingBox",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
@@ -87,7 +87,12 @@
           "symbol": "upstream_map_bounding_box_complete_sequence"
         }
       ],
-      "note": "Every pinned matrix, AABB input, and exact mapped bounding-box assertion executes through Mat2D::map_bounding_box."
+      "note": "Every pinned matrix, AABB input, and exact mapped bounding-box assertion executes through Mat2D::map_bounding_box.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust's retained Mat2D owner accepts a safe slice for mapped bounding boxes, so the pinned raw-pointer/count and Span call forms intentionally collapse to the same owner while preserving every input and ordered numeric assertion.",
+        "inapplicable_observable": "Independent overload dispatch through C++ Mat2D::mapBoundingBox(const Vec2D*, size_t) versus Mat2D::mapBoundingBox(Span<const Vec2D>); both call forms have one safe slice owner in Rust."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/path_test.cpp#1",
@@ -314,17 +319,10 @@
       "ordinal": 4,
       "line": 200,
       "name": "addPath",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-render-api/tests/upstream_raw_path.rs",
-          "line": 194,
-          "symbol": "add_path"
-        }
-      ],
-      "note": "All pinned addPath transform and append actions execute through RawPath and preserve exact storage assertions."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the Rust evidence replaces pinned production RawPath::transformInPlace on the direct reference path with test-local point multiplication; no callable transform-in-place owner exists for the exact direct-versus-addPath comparison."
     },
     {
       "id": "tests/unit_tests/runtime/raw_path_test.cpp#5",
@@ -361,17 +359,10 @@
       "ordinal": 7,
       "line": 486,
       "name": "addPathBackwards",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-render-api/tests/upstream_raw_path.rs",
-          "line": 85,
-          "symbol": "add_path_backwards"
-        }
-      ],
-      "note": "The exact reverse-add path and matrix stream execute through RawPath with pinned verb/point assertions."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the Rust evidence replaces every pinned RawPath::Iter visit with a test-local verb/point-count fold and asserts three helper return values that pinned C++ intentionally ignores; no callable RawPath iterator owner exists."
     },
     {
       "id": "tests/unit_tests/runtime/rectangles_to_contour_test.cpp#1",
@@ -397,17 +388,10 @@
       "ordinal": 1,
       "line": 13,
       "name": "file with only solid color animating triggers change on artboard",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie/tests/upstream_render_change.rs",
-          "line": 18,
-          "symbol": "file_with_only_solid_color_animating_triggers_change_on_artboard"
-        }
-      ],
-      "note": "The pinned file, state-machine advance, draw sequence, and artboard-change assertion execute through the live runtime."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the existing Rust test creates the state machine before the view model but binds only the Artboard; the wrapper exposes no view-model handle seam for the pinned live StateMachineInstance bind action."
     },
     {
       "id": "tests/unit_tests/runtime/rotation_constraint_test.cpp#1",
@@ -478,17 +462,10 @@
       "ordinal": 1,
       "line": 13,
       "name": "stroke can be looked up at runtime",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie/tests/upstream_stroke.rs",
-          "line": 35,
-          "symbol": "stroke_can_be_looked_up_at_runtime"
-        }
-      ],
-      "note": "The pinned file imports, retained Stroke lookup, exact color read, mutation, and reread execute through live owners."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the existing Rust test uses immutable graph name/type/child projections instead of pinned live Artboard Stroke lookup and retained SolidColor paint type authority."
     },
     {
       "id": "tests/unit_tests/runtime/transform_constraint_test.cpp#1",

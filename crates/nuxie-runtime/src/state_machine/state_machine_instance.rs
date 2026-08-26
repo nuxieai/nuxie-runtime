@@ -101,6 +101,11 @@ mod scripted_listener_action_tests {
 }
 
 #[cfg(test)]
+mod wave_b5_hittest_tests {
+    include!("state_machine_instance/tests/wave_b5_hittest.rs");
+}
+
+#[cfg(test)]
 pub(crate) fn component_list_wave_a_hit_components_count(
     instance: &StateMachineInstance,
 ) -> usize {

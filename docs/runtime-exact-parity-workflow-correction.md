@@ -33,15 +33,18 @@ lookup.
 
 Do not describe a pending case as certified, ported, or executable.
 
-At this decision point, independently accepted waves account for 999 of the
-1,404 upstream cases, split honestly into:
+At the decision point, the inherited campaign total said 999 rows were
+accepted. The immutable receipt audit completed in
+`docs/runtime-phase-1a-checkpoint.md` corrected that inherited statement:
 
-- 925 executable cases, including passing and genuine expected-red tests;
-- 74 audited missing-owner cases that remain pending.
+- 929 rows had durable independent acceptance: 852 executable, three approved
+  C++-only not-applicable, and 74 pending owner blockers;
+- 70 executable Wave B1 rows had only an explicitly named self-acceptance and
+  therefore remain provisional rather than independently accepted.
 
-The combined 999 is an accounting total, not a behavioral-parity total.
-Corrected Wave C7 and the in-flight C8/C9 candidates are not included until an
-independent acceptance receipt exists.
+The later C7-C9 closeout is recorded only in the Phase 1A checkpoint. This
+document retains the decision-point numbers to explain why the workflow
+changed, not as the current campaign total.
 
 Future reporting must always separate:
 

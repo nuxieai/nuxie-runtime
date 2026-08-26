@@ -6,9 +6,9 @@
 
 use std::path::PathBuf;
 
-use nuxie_binary::{RuntimeFile, read_runtime_file};
-use nuxie_graph::{ArtboardGraph, GraphFile};
-use nuxie_runtime::{ArtboardInstance, RuntimeLayoutBounds, RuntimeLayoutBoundsReport};
+use nuxie_binary::read_runtime_file;
+use nuxie_graph::GraphFile;
+use nuxie_runtime::{ArtboardInstance, RuntimeLayoutBounds};
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -21,22 +21,17 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 }
 
 struct Fixture {
-    file: RuntimeFile,
+    artboard: ArtboardInstance,
     graphs: GraphFile,
     artboard_index: usize,
-    artboard: ArtboardInstance,
 }
 
-impl Fixture {
-    fn graph(&self) -> &ArtboardGraph {
-        &self.graphs.artboards[self.artboard_index]
-    }
-
-    fn report(&self) -> Vec<RuntimeLayoutBoundsReport> {
-        self.artboard
-            .debug_taffy_layout_bounds_report(&self.file, self.graph())
-            .expect("fixture has a runtime layout solve")
-    }
+#[derive(Debug, Clone, Copy)]
+struct RetainedShapeBounds {
+    local_id: usize,
+    parent_local: Option<usize>,
+    collapsed: bool,
+    bounds: Option<RuntimeLayoutBounds>,
 }
 
 fn fixture(name: &str, artboard_name: Option<&str>, advance: bool) -> Fixture {
@@ -58,10 +53,9 @@ fn fixture(name: &str, artboard_name: Option<&str>, advance: bool) -> Fixture {
         artboard.advance(0.0).expect("initial Artboard::advance(0)");
     }
     Fixture {
-        file,
+        artboard,
         graphs,
         artboard_index,
-        artboard,
     }
 }
 
@@ -82,24 +76,32 @@ fn property_key(type_name: &str, property_name: &str) -> u16 {
         .int
 }
 
-fn shape_reports(fixture: &Fixture) -> Vec<RuntimeLayoutBoundsReport> {
+fn retained_shape_bounds(fixture: &Fixture) -> Vec<RetainedShapeBounds> {
+    let graph = &fixture.graphs.artboards[fixture.artboard_index];
     fixture
-        .report()
-        .into_iter()
-        .filter(|report| report.type_name == "Shape")
+        .artboard
+        .components()
+        .iter()
+        .filter(|component| component.type_name == "Shape")
+        .map(|component| RetainedShapeBounds {
+            local_id: component.local_id,
+            parent_local: graph
+                .components
+                .iter()
+                .find(|node| node.local_id == component.local_id)
+                .and_then(|node| node.parent_local),
+            collapsed: component.is_collapsed(),
+            bounds: fixture.artboard.layout_bounds(component.local_id),
+        })
         .collect()
 }
 
 fn only_shape_bounds(fixture: &Fixture) -> RuntimeLayoutBounds {
-    let shapes = shape_reports(fixture);
+    let shapes = retained_shape_bounds(fixture);
     assert_eq!(shapes.len(), 1, "upstream requires exactly one Shape");
-    let shape = &shapes[0];
-    RuntimeLayoutBounds {
-        x: shape.x,
-        y: shape.y,
-        width: shape.width,
-        height: shape.height,
-    }
+    shapes[0]
+        .bounds
+        .expect("Shape retains its LayoutNodeProvider bounds after advance")
 }
 
 #[test]
@@ -129,13 +131,16 @@ fn a_fixed_size_participant_keeps_its_size_from_a_riv_file() {
 #[test]
 fn a_display_none_participant_collapses_and_leaves_the_flow_from_a_riv_file() {
     let fixture = fixture("layout/display_none_participant.riv", None, true);
-    let shapes = shape_reports(&fixture);
+    let shapes = retained_shape_bounds(&fixture);
     assert_eq!(shapes.len(), 2);
     assert_eq!(shapes.iter().filter(|shape| shape.collapsed).count(), 1);
     let shown = shapes
         .iter()
         .find(|shape| !shape.collapsed)
         .expect("one shown Shape");
+    let shown = shown
+        .bounds
+        .expect("shown Shape retains its LayoutNodeProvider bounds");
     assert!((shown.width - 200.0).abs() <= f32::EPSILON);
     assert!((shown.height - 200.0).abs() <= f32::EPSILON);
 }
@@ -171,19 +176,7 @@ fn width(fixture: &Fixture, shape_local: usize) -> f32 {
     fixture
         .artboard
         .layout_bounds(shape_local)
-        .unwrap_or_else(|| {
-            let report = fixture
-                .report()
-                .into_iter()
-                .find(|report| report.local_id == shape_local)
-                .expect("Shape is a live layout provider");
-            RuntimeLayoutBounds {
-                x: report.x,
-                y: report.y,
-                width: report.width,
-                height: report.height,
-            }
-        })
+        .expect("Shape retains its live LayoutNodeProvider bounds")
         .width
 }
 
@@ -215,13 +208,20 @@ fn disabling_a_layouts_interpolation_frees_participant_animation() {
 #[test]
 fn participants_size_to_grid_cells_from_a_riv_file() {
     let fixture = fixture("layout/grid_participant.riv", None, true);
-    let mut shapes = shape_reports(&fixture);
+    let mut shapes = retained_shape_bounds(&fixture);
     assert_eq!(shapes.len(), 2);
-    shapes.sort_by(|left, right| left.x.total_cmp(&right.x));
-    assert!((shapes[0].width - 100.0).abs() <= f32::EPSILON);
-    assert!((shapes[0].height - 200.0).abs() <= f32::EPSILON);
-    assert!((shapes[1].width - 100.0).abs() <= f32::EPSILON);
-    assert!((shapes[1].height - 50.0).abs() <= f32::EPSILON);
+    shapes.sort_by(|left, right| {
+        left.bounds
+            .expect("grid participant retains bounds")
+            .x
+            .total_cmp(&right.bounds.expect("grid participant retains bounds").x)
+    });
+    let first = shapes[0].bounds.expect("first grid participant bounds");
+    let second = shapes[1].bounds.expect("second grid participant bounds");
+    assert!((first.width - 100.0).abs() <= f32::EPSILON);
+    assert!((first.height - 200.0).abs() <= f32::EPSILON);
+    assert!((second.width - 100.0).abs() <= f32::EPSILON);
+    assert!((second.height - 50.0).abs() <= f32::EPSILON);
 }
 
 #[test]
@@ -279,7 +279,10 @@ fn participants_nested_in_groups_and_in_a_grouped_solo_are_laid_out() {
         .filter(|component| component.type_name == "Shape")
         .collect::<Vec<_>>();
     assert_eq!(all_shapes.len(), 3);
-    let shapes = shape_reports(&fixture);
+    let shapes = retained_shape_bounds(&fixture)
+        .into_iter()
+        .filter(|shape| shape.bounds.is_some())
+        .collect::<Vec<_>>();
     assert_eq!(
         shapes.len(),
         2,
@@ -289,8 +292,9 @@ fn participants_nested_in_groups_and_in_a_grouped_solo_are_laid_out() {
         .iter()
         .find(|shape| shape.parent_local == Some(solo.local_id))
         .expect("active grouped Solo child");
-    assert_eq!(active.width, 200.0);
-    assert_eq!(active.height, 200.0);
+    let active_bounds = active.bounds.expect("active Solo participant bounds");
+    assert_eq!(active_bounds.width, 200.0);
+    assert_eq!(active_bounds.height, 200.0);
     let inactive = all_shapes
         .iter()
         .find(|shape| shape.local_id != active.local_id && shape.is_collapsed())
@@ -300,6 +304,7 @@ fn participants_nested_in_groups_and_in_a_grouped_solo_are_laid_out() {
         .iter()
         .find(|shape| shape.parent_local != Some(solo.local_id))
         .expect("participant two groups deep");
-    assert_eq!(deep.width, 200.0);
-    assert_eq!(deep.height, 200.0);
+    let deep_bounds = deep.bounds.expect("deep participant bounds");
+    assert_eq!(deep_bounds.width, 200.0);
+    assert_eq!(deep_bounds.height, 200.0);
 }

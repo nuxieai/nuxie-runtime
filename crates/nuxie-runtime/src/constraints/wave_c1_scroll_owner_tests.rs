@@ -534,57 +534,6 @@ fn scroll_constraint_index_intent_across_hidden_layout_live_assertions() {
 }
 
 #[test]
-#[ignore = "expected-red: live ScrollConstraint snapshot cannot address nearestSnapOffsetInDirection"]
-fn scroll_constraint_nearest_snap_offset_in_direction() {
-    let mut fixture = fixture("layout/layout_scroll_vertical.riv", None);
-    fixture.artboard.advance(0.0).expect("initial advance");
-    let scroll = fixture.scroll_local();
-    assert!(!constraint_bool(
-        &fixture.artboard,
-        scroll,
-        "ScrollConstraint",
-        "snap",
-        false,
-    ));
-    let disabled_snapshot = fixture
-        .artboard
-        .scroll_constraint_occurrences()
-        .into_iter()
-        .next()
-        .expect("live ScrollConstraint snapshot");
-    assert_eq!(disabled_snapshot.offset, (0.0, 0.0));
-    assert!(
-        fixture
-            .artboard
-            .set_bool_property(scroll, key("ScrollConstraint", "snap"), true)
-    );
-    assert!(constraint_bool(
-        &fixture.artboard,
-        scroll,
-        "ScrollConstraint",
-        "snap",
-        false,
-    ));
-    let enabled_snapshot = fixture
-        .artboard
-        .scroll_constraint_occurrences()
-        .into_iter()
-        .next()
-        .expect("live ScrollConstraint snapshot after enabling snap");
-    let pinned_owner_calls = [
-        ((0.0, 0.0), (42.0, -150.0), (42.0, -150.0)),
-        ((0.0, 0.0), (0.0, -150.0), (0.0, -220.0)),
-        ((0.0, -500.0), (0.0, -150.0), (0.0, -110.0)),
-        ((0.0, -330.0), (0.0, -330.0), (0.0, -330.0)),
-        ((0.0, 0.0), (0.0, -220.0), (0.0, -220.0)),
-    ];
-    assert_ne!(
-        disabled_snapshot, enabled_snapshot,
-        "the live owner has no addressable nearestSnapOffsetInDirection capability for {pinned_owner_calls:?}",
-    );
-}
-
-#[test]
 fn elastic_scroll_physics_helper_snap_respects_trailing_padding() {
     fn settle(helper: &mut crate::components::RuntimeElasticScrollPhysicsHelper) -> f32 {
         let mut last = 0.0;

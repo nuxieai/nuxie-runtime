@@ -159,24 +159,6 @@ fn assert_in_band_asset_metadata(asset: &RuntimeObject) {
 }
 
 #[test]
-fn wave_c1_in_band_asset_001_load_asset_with_in_band_image() {
-    let file = read_runtime_file(&pinned_fixture("in_band_asset.riv")).expect("fixture imports");
-    let assets = file.file_assets();
-    assert_eq!(assets.len(), 1);
-    assert_in_band_asset_metadata(assets[0]);
-    let contents = file
-        .imported_file_asset_contents(assets[0].id)
-        .expect("in-band image contents");
-    assert_eq!(contents.len(), 308);
-
-    let mut factory = RecordingFactory::new();
-    let mut loader =
-        |_asset: &nuxie_runtime::RuntimeFileAsset, _bytes: &[u8], _factory: &mut dyn Factory| false;
-    let owners = RuntimeFileAssetOwners::import_with_loader(&file, None, &mut factory, &mut loader);
-    assert!(owners.image_assets().get(assets[0].id).is_some());
-}
-
-#[test]
 fn wave_c1_in_band_asset_002_loader_claims_responsibility() {
     let file = read_runtime_file(&pinned_fixture("in_band_asset.riv")).expect("fixture imports");
     let assets = file.file_assets();
@@ -213,23 +195,6 @@ fn wave_c1_in_band_asset_002_loader_claims_responsibility() {
         )),
     );
     assert!(owners.image_assets().get(assets[0].id).is_none());
-}
-
-#[test]
-fn wave_c1_in_band_asset_003_loader_rejection_uses_in_band_fallback() {
-    let file = read_runtime_file(&pinned_fixture("in_band_asset.riv")).expect("fixture imports");
-    let asset = file.file_assets()[0];
-    let mut attempted_bytes = 0;
-    let mut loader =
-        |_asset: &nuxie_runtime::RuntimeFileAsset, bytes: &[u8], _factory: &mut dyn Factory| {
-            attempted_bytes = bytes.len();
-            false
-        };
-    let mut factory = RecordingFactory::new();
-    let owners = RuntimeFileAssetOwners::import_with_loader(&file, None, &mut factory, &mut loader);
-
-    assert_eq!(attempted_bytes, 308);
-    assert!(owners.image_assets().get(asset.id).is_some());
 }
 
 #[test]

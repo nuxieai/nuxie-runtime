@@ -11,6 +11,8 @@ use nuxie_binary::{RuntimeFile, RuntimeObject, read_runtime_file};
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_render_api::RecordingFactory;
 
+use crate::RuntimeFileAssetOwners;
+
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
@@ -89,6 +91,69 @@ fn prepare_source_meshes(
         &graphs.artboards[graph_index],
         &graphs.artboards,
         &mut factory,
+    );
+}
+
+#[test]
+#[ignore = "expected-red: live ImageAsset::decodedByteSize is decoded RGBA length, not the pinned 308-byte source payload"]
+fn wave_c1_in_band_asset_001_live_decoded_byte_size_owner() {
+    let file = read_runtime_file(&pinned_fixture("in_band_asset.riv")).expect("fixture imports");
+    let assets = file.file_assets();
+    assert_eq!(assets.len(), 1);
+    let asset = assets[0];
+    assert_eq!(asset.type_name, "ImageAsset");
+    assert_eq!(asset.file_asset_cdn_uuid_string().as_deref(), Some(""));
+    assert_eq!(
+        asset.string_property("cdnBaseUrl"),
+        Some("https://public.rive.app/cdn/uuid"),
+    );
+    assert_eq!(
+        asset.file_asset_unique_filename().as_deref(),
+        Some("1x1-45022.png"),
+    );
+    assert_eq!(asset.file_asset_extension(), Some("png"));
+    assert_eq!(
+        file.imported_file_asset_contents(asset.id)
+            .expect("in-band source payload")
+            .len(),
+        308,
+    );
+
+    let mut factory = RecordingFactory::new();
+    let mut loader = |_asset: &crate::RuntimeFileAsset,
+                      _bytes: &[u8],
+                      _factory: &mut dyn nuxie_render_api::Factory| false;
+    let owners = RuntimeFileAssetOwners::import_with_loader(&file, None, &mut factory, &mut loader);
+    assert!(owners.image_assets().get(asset.id).is_some());
+    assert_eq!(
+        owners.image_assets().decoded_byte_length_for_test(asset.id),
+        Some(308),
+        "pinned ImageAsset::decodedByteSize observes the retained source byte count",
+    );
+}
+
+#[test]
+#[ignore = "expected-red: fallback ImageAsset::decodedByteSize is decoded RGBA length, not the pinned 308-byte source payload"]
+fn wave_c1_in_band_asset_003_fallback_live_decoded_byte_size_owner() {
+    let file = read_runtime_file(&pinned_fixture("in_band_asset.riv")).expect("fixture imports");
+    let asset = file.file_assets()[0];
+    assert_eq!(asset.type_name, "ImageAsset");
+    let mut attempted_bytes = 0;
+    let mut loader = |_asset: &crate::RuntimeFileAsset,
+                      bytes: &[u8],
+                      _factory: &mut dyn nuxie_render_api::Factory| {
+        attempted_bytes = bytes.len();
+        false
+    };
+    let mut factory = RecordingFactory::new();
+    let owners = RuntimeFileAssetOwners::import_with_loader(&file, None, &mut factory, &mut loader);
+
+    assert_eq!(attempted_bytes, 308);
+    assert!(owners.image_assets().get(asset.id).is_some());
+    assert_eq!(
+        owners.image_assets().decoded_byte_length_for_test(asset.id),
+        Some(308),
+        "fallback decode retains the exact source byte count on the live owner",
     );
 }
 
@@ -334,52 +399,4 @@ fn wave_c1_joystick_flags_001_flags_and_inverted_axes_match() {
 
     assert_flags(&artboard, world, [false, false, true]);
     assert_flags(&artboard, normal, [false, false, false]);
-}
-
-#[test]
-#[ignore = "expected-red: live grid LayoutComponent retains only rectangle output, not Taffy grid-line output"]
-fn wave_c1_layout_grid_005_line_offsets_are_exposed_after_layout() {
-    let (file, graphs, graph_index) = first_graph("layout/grid_2x2.riv");
-    let graph = &graphs.artboards[graph_index];
-    let mut artboard = source_occurrence(&file, &graphs, graph_index);
-    artboard.advance(0.0).expect("layout advance");
-
-    let grid = graph
-        .components
-        .iter()
-        .find(|component| {
-            let Some(style_local) = object_at_local(&file, graph, component.local_id)
-                .uint_property("styleId")
-                .and_then(|value| usize::try_from(value).ok())
-            else {
-                return false;
-            };
-            artboard.uint_property(
-                style_local,
-                property_key("LayoutComponentStyle", "layoutTypeValue"),
-            ) == Some(1)
-        })
-        .expect("live grid LayoutComponent");
-    assert!(artboard.layout_bounds(grid.local_id).is_some());
-
-    let layout = artboard
-        .component(grid.local_id)
-        .and_then(|component| component.concrete.layout.as_ref())
-        .expect("live grid LayoutComponent owner");
-    let retained_output = layout
-        .solved_bounds()
-        .map(|(x, y, width, height)| vec![x, y, width, height])
-        .expect("post-advance retained Taffy output");
-    let expected_columns = [0.0, 100.0, 200.0];
-    let expected_rows = [0.0, 50.0, 100.0];
-    let expected_flex_columns: [f32; 0] = [];
-    let expected_flex_rows: [f32; 0] = [];
-    assert_eq!(
-        retained_output,
-        expected_columns
-            .into_iter()
-            .chain(expected_rows)
-            .collect::<Vec<_>>(),
-        "the live grid LayoutComponent retains only its rectangle, not Taffy grid-line output; the non-grid owner must expose {expected_flex_columns:?}/{expected_flex_rows:?}",
-    );
 }

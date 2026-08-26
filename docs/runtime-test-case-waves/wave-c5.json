@@ -1,0 +1,647 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "c5",
+  "case_count": 43,
+  "ratchet": {
+    "max_pending": 24
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/mat2d_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/mat2d_test.cpp",
+      "ordinal": 1,
+      "line": 7,
+      "name": "mapPoints",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/math/mat2d.rs",
+          "line": 521,
+          "symbol": "upstream_map_points_complete_sequence"
+        }
+      ],
+      "note": "The complete pinned point array and every exact mapped result execute through Mat2D::map_points."
+    },
+    {
+      "id": "tests/unit_tests/runtime/mat2d_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/mat2d_test.cpp",
+      "ordinal": 2,
+      "line": 50,
+      "name": "findMaxScale",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/math/mat2d_find_max_scale.rs",
+          "line": 114,
+          "symbol": "upstream_find_max_scale_complete_randomized_sequence"
+        }
+      ],
+      "note": "The complete deterministic pinned transform sequence and expected maximum-scale bounds execute through Mat2D::find_max_scale."
+    },
+    {
+      "id": "tests/unit_tests/runtime/mat2d_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/mat2d_test.cpp",
+      "ordinal": 3,
+      "line": 172,
+      "name": "mapBoundingBox",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/math/mat2d.rs",
+          "line": 568,
+          "symbol": "upstream_map_bounding_box_complete_sequence"
+        }
+      ],
+      "note": "Every pinned matrix, AABB input, and exact mapped bounding-box assertion executes through Mat2D::map_bounding_box."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 1,
+      "line": 140,
+      "name": "rectangle path builds expected commands",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the Rust evidence directly calls the rectangle command helper and does not reproduce the pinned Artboard/Shape/Rectangle initialization and retained path owner."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 2,
+      "line": 174,
+      "name": "rounded rectangle path builds expected commands",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the Rust evidence directly calls the rounded-rectangle command helper and does not reproduce the pinned Artboard/Shape/Rectangle initialization and retained path owner."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 3,
+      "line": 234,
+      "name": "ellipse path builds expected commands",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the Rust evidence directly calls the ellipse command helper and does not reproduce the pinned Artboard/Shape/Ellipse initialization and retained path owner."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 4,
+      "line": 315,
+      "name": "nested solo with shape expanded and path collapsed",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the retained clipping render-path cache and its exact numContours observable are not callable; existing evidence terminates at an unconditional missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 5,
+      "line": 353,
+      "name": "nested solo clipping with shape collapsed and path expanded",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the retained clipping render-path cache and its exact numContours observable are not callable; existing evidence terminates at an unconditional missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 6,
+      "line": 389,
+      "name": "nested solo clipping with animation",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the retained animated clipping render-path cache and its exact numContours observable are not callable; existing evidence terminates at an unconditional missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 7,
+      "line": 440,
+      "name": "double nested solos clipping with animation",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the retained doubly nested clipping render-path cache and its exact numContours observable are not callable; existing evidence terminates at an unconditional missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 8,
+      "line": 505,
+      "name": "Path  with feather render",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the authoritative Feather renderCount owner is not exposed by the Rust runtime; render output alone cannot certify the pinned retained-count assertion."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 9,
+      "line": 527,
+      "name": "Apply stacked path effects to paths",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c5.rs",
+          "line": 42,
+          "symbol": "wave_c5_apply_stacked_path_effects_to_paths"
+        }
+      ],
+      "note": "The pinned stacked_path_effects fixture executes its complete manifest action stream and exact SRIV comparison."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 10,
+      "line": 564,
+      "name": "Apply trim path effect to fill",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c5.rs",
+          "line": 47,
+          "symbol": "wave_c5_apply_trim_path_effect_to_fill"
+        }
+      ],
+      "note": "The pinned fill_trim_path fixture executes its complete manifest action stream and exact SRIV comparison."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 11,
+      "line": 601,
+      "name": "Apply group effect to multiple paths",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the available Silver render comparator cannot observe the two pinned mid-frame ShapePaint dirt assertions before updatePass, so it cannot certify the complete action/assertion stream."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 12,
+      "line": 678,
+      "name": "Apply group effect with missing items",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c5.rs",
+          "line": 52,
+          "symbol": "wave_c5_apply_group_effect_with_missing_items"
+        }
+      ],
+      "note": "The pinned group_effect-main-missing-targets fixture executes its complete manifest action stream and exact SRIV comparison."
+    },
+    {
+      "id": "tests/unit_tests/runtime/path_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/path_test.cpp",
+      "ordinal": 13,
+      "line": 703,
+      "name": "Path effects with inner & outer feathers",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c5.rs",
+          "line": 58,
+          "symbol": "wave_c5_path_effects_with_inner_and_outer_feathers"
+        }
+      ],
+      "note": "The complete pinned path_effect_with_feathers action stream reaches the live renderer and fails at the exact SRIV paint-owner divergence.",
+      "expected_red_reason": "expected-red: exact path-effect feathers SRIV diverges at frame 0 operation 21 feather paint_id (expected 8, got 5)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_path_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/raw_path_test.cpp",
+      "ordinal": 1,
+      "line": 15,
+      "name": "rawpath-basics",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-render-api/tests/upstream_raw_path.rs",
+          "line": 30,
+          "symbol": "rawpath_basics"
+        }
+      ],
+      "note": "The exact move/line/cubic/close/reset sequence and verb/point assertions execute through RawPath."
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_path_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/raw_path_test.cpp",
+      "ordinal": 2,
+      "line": 37,
+      "name": "rawpath-add-helpers",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-render-api/tests/upstream_raw_path.rs",
+          "line": 437,
+          "symbol": "rawpath_add_helpers"
+        }
+      ],
+      "note": "The exact helper sequence, points, verbs, and bounds assertions execute through RawPath."
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_path_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/raw_path_test.cpp",
+      "ordinal": 3,
+      "line": 128,
+      "name": "rawpath-iter",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the Rust runtime exposes no RawPath iterator owner; the existing test reconstructs segments from verbs and points in test code, which is a prohibited proxy."
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_path_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/raw_path_test.cpp",
+      "ordinal": 4,
+      "line": 200,
+      "name": "addPath",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-render-api/tests/upstream_raw_path.rs",
+          "line": 194,
+          "symbol": "add_path"
+        }
+      ],
+      "note": "All pinned addPath transform and append actions execute through RawPath and preserve exact storage assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_path_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/raw_path_test.cpp",
+      "ordinal": 5,
+      "line": 266,
+      "name": "bounds",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-render-api/tests/upstream_raw_path.rs",
+          "line": 239,
+          "symbol": "bounds"
+        }
+      ],
+      "note": "The complete pinned path-building sequence and bounds assertions execute through RawPath::bounds."
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_path_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/raw_path_test.cpp",
+      "ordinal": 6,
+      "line": 327,
+      "name": "prune-empty-segments",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the live prune action exists, but the existing Rust assertions reconstruct every iterator segment in test code; without a callable RawPath iterator owner this is the same prohibited proxy as raw_path_test.cpp#3."
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_path_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/raw_path_test.cpp",
+      "ordinal": 7,
+      "line": 486,
+      "name": "addPathBackwards",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-render-api/tests/upstream_raw_path.rs",
+          "line": 85,
+          "symbol": "add_path_backwards"
+        }
+      ],
+      "note": "The exact reverse-add path and matrix stream execute through RawPath with pinned verb/point assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/rectangles_to_contour_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/rectangles_to_contour_test.cpp",
+      "ordinal": 1,
+      "line": 7,
+      "name": "RectanglesToContour generates correct contour",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/rectangles_to_contour.rs",
+          "line": 388,
+          "symbol": "adjacent_and_separate_rectangles_match_cpp_contours"
+        }
+      ],
+      "note": "The exact adjacent/separate rectangle inputs and exact contour outputs execute through RectanglesToContour."
+    },
+    {
+      "id": "tests/unit_tests/runtime/render_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/render_test.cpp",
+      "ordinal": 1,
+      "line": 13,
+      "name": "file with only solid color animating triggers change on artboard",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_render_change.rs",
+          "line": 18,
+          "symbol": "file_with_only_solid_color_animating_triggers_change_on_artboard"
+        }
+      ],
+      "note": "The pinned file, state-machine advance, draw sequence, and artboard-change assertion execute through the live runtime."
+    },
+    {
+      "id": "tests/unit_tests/runtime/rotation_constraint_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/rotation_constraint_test.cpp",
+      "ordinal": 1,
+      "line": 11,
+      "name": "rotation constraint updates world transform",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the fixture and retained transforms are live, but the Rust evidence replaces the production Mat2D::decompose owner with a test-local decomposition algorithm."
+    },
+    {
+      "id": "tests/unit_tests/runtime/rounded_rect_path_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/rounded_rect_path_test.cpp",
+      "ordinal": 1,
+      "line": 93,
+      "name": "rounded rect matches Rectangle",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the existing Rust evidence compares Path::addRoundedRect against a test-only vertex reconstruction instead of the retained Rectangle owner."
+    },
+    {
+      "id": "tests/unit_tests/runtime/rounded_rect_path_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/rounded_rect_path_test.cpp",
+      "ordinal": 2,
+      "line": 135,
+      "name": "rounded rect honours an offset origin",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 27755,
+          "symbol": "upstream_rounded_rect_honours_an_offset_origin"
+        }
+      ],
+      "note": "The exact non-zero-origin rounded rectangle action executes through Path::addRoundedRect and fails on its live returned bounds.",
+      "expected_red_reason": "expected-red: Path::addRoundedRect does not apply the input AABB origin"
+    },
+    {
+      "id": "tests/unit_tests/runtime/rounded_rect_path_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/rounded_rect_path_test.cpp",
+      "ordinal": 3,
+      "line": 156,
+      "name": "rounded rect matches through ShapePaintPath",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the existing Rust evidence compares Path::addRoundedRect against a test-only Rectangle reconstruction rather than a live retained ShapePaintPath owner."
+    },
+    {
+      "id": "tests/unit_tests/runtime/scale_constraint_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/scale_constraint_test.cpp",
+      "ordinal": 1,
+      "line": 11,
+      "name": "scale constraint updates world transform",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the fixture and retained transforms are live, but the Rust evidence replaces the production Mat2D::decompose owner with a test-local decomposition algorithm."
+    },
+    {
+      "id": "tests/unit_tests/runtime/stroke_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/stroke_test.cpp",
+      "ordinal": 1,
+      "line": 13,
+      "name": "stroke can be looked up at runtime",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_stroke.rs",
+          "line": 35,
+          "symbol": "stroke_can_be_looked_up_at_runtime"
+        }
+      ],
+      "note": "The pinned file imports, retained Stroke lookup, exact color read, mutation, and reread execute through live owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/transform_constraint_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/transform_constraint_test.cpp",
+      "ordinal": 1,
+      "line": 10,
+      "name": "transform constraint updates world transform",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie/tests/upstream_constraint_smoke.rs",
+          "line": 104,
+          "symbol": "transform_constraint_updates_world_transform"
+        }
+      ],
+      "note": "The pinned fixture advances its live Artboard and compares the exact retained target and constrained world transforms."
+    },
+    {
+      "id": "tests/unit_tests/runtime/translation_constraint_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/translation_constraint_test.cpp",
+      "ordinal": 1,
+      "line": 11,
+      "name": "translation constraint updates world transform",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the fixture and retained transforms are live, but the Rust evidence replaces the production Mat2D::decompose owner with a test-local decomposition algorithm."
+    },
+    {
+      "id": "tests/unit_tests/runtime/trim_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/trim_test.cpp",
+      "ordinal": 1,
+      "line": 14,
+      "name": "A 0 scale path will trim with no crash",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_trim.rs",
+          "line": 79,
+          "symbol": "a_zero_scale_path_will_trim_with_no_crash"
+        }
+      ],
+      "note": "The pinned fixture, initial draw, exact zero-scale mutations, advance, and second draw execute through the live Artboard."
+    },
+    {
+      "id": "tests/unit_tests/runtime/trim_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/trim_test.cpp",
+      "ordinal": 2,
+      "line": 69,
+      "name": "Different types of trim paths",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: the existing evidence observes a draw-dispatch effect-command projection rather than the pinned retained StrokeEffect effectPath rawPath owner."
+    },
+    {
+      "id": "tests/unit_tests/runtime/wangs_formula_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/wangs_formula_test.cpp",
+      "ordinal": 1,
+      "line": 201,
+      "name": "wangs_formula_log2",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: no callable standalone production Wangs-formula owner exists; the existing test reaches a generic missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/wangs_formula_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/wangs_formula_test.cpp",
+      "ordinal": 2,
+      "line": 400,
+      "name": "wangs_formula_vectorXforms",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: no callable standalone production Wangs-formula owner exists; the existing test reaches a generic missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/wangs_formula_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/wangs_formula_test.cpp",
+      "ordinal": 3,
+      "line": 417,
+      "name": "wangs_formula_worst_case_cubic",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: no callable standalone production Wangs-formula owner exists; the existing test reaches a generic missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/wangs_formula_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/wangs_formula_test.cpp",
+      "ordinal": 4,
+      "line": 462,
+      "name": "wangs_formula_quad_within_tol",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wangs_formula.rs",
+          "line": 442,
+          "symbol": "wangs_formula_quad_within_tol"
+        }
+      ],
+      "note": "The pinned C++ case intentionally defines and tests its own quadratic power-four tolerance reference rather than a production Wangs owner; the Rust test preserves that exact reference stream and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/wangs_formula_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/wangs_formula_test.cpp",
+      "ordinal": 5,
+      "line": 530,
+      "name": "wangs_formula_rational_quad_reduces",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: no callable standalone production Wangs-formula owner exists; the existing test reaches a generic missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/wangs_formula_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/wangs_formula_test.cpp",
+      "ordinal": 6,
+      "line": 550,
+      "name": "wangs_formula_conic_within_tol",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: no callable standalone production Wangs-formula owner exists; the existing test reaches a generic missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/wangs_formula_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/wangs_formula_test.cpp",
+      "ordinal": 7,
+      "line": 620,
+      "name": "wangs_formula_conic_matches_reference",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: no callable standalone production Wangs-formula owner exists; the existing test reaches a generic missing-owner panic."
+    },
+    {
+      "id": "tests/unit_tests/runtime/wangs_formula_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/wangs_formula_test.cpp",
+      "ordinal": 8,
+      "line": 643,
+      "name": "wangs_formula_conic_vectorXforms",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "blocked": "BLOCKED: no callable standalone production Wangs-formula owner exists; the existing test reaches a generic missing-owner panic."
+    }
+  ]
+}

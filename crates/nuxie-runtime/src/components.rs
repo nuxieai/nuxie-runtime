@@ -980,6 +980,10 @@ pub(crate) struct RuntimeTextState {
     bounds: Cell<Option<(f32, f32, f32, f32)>>,
     layout_scale_types: Cell<Option<(u64, u64)>>,
     modifier_range_maps: RefCell<BTreeMap<usize, Vec<(usize, usize)>>>,
+    #[cfg(test)]
+    modifier_range_map_clear_trace: RefCell<Vec<(bool, usize)>>,
+    #[cfg(test)]
+    modifier_range_map_clear_trace_depth: Cell<usize>,
 }
 
 impl RuntimeTextState {
@@ -988,6 +992,10 @@ impl RuntimeTextState {
             bounds: Cell::new(None),
             layout_scale_types: Cell::new(None),
             modifier_range_maps: RefCell::new(BTreeMap::new()),
+            #[cfg(test)]
+            modifier_range_map_clear_trace: RefCell::new(Vec::new()),
+            #[cfg(test)]
+            modifier_range_map_clear_trace_depth: Cell::new(0),
         }
     }
 
@@ -1041,6 +1049,41 @@ impl RuntimeTextState {
 
     pub(crate) fn clear_modifier_range_map(&self, range_local: usize) {
         self.modifier_range_maps.borrow_mut().remove(&range_local);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn begin_modifier_range_map_clear_trace(&self) {
+        self.modifier_range_map_clear_trace_depth
+            .set(self.modifier_range_map_clear_trace_depth.get() + 1);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn end_modifier_range_map_clear_trace(&self) {
+        self.modifier_range_map_clear_trace_depth
+            .set(self.modifier_range_map_clear_trace_depth.get() - 1);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn record_modifier_range_clear(&self, range_local: usize) {
+        if self.modifier_range_map_clear_trace_depth.get() == 1 {
+            self.modifier_range_map_clear_trace
+                .borrow_mut()
+                .push((false, range_local));
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn record_modifier_range_group_clear(&self, group_local: usize) {
+        if self.modifier_range_map_clear_trace_depth.get() == 1 {
+            self.modifier_range_map_clear_trace
+                .borrow_mut()
+                .push((true, group_local));
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn take_modifier_range_map_clear_trace(&self) -> Vec<(bool, usize)> {
+        std::mem::take(&mut *self.modifier_range_map_clear_trace.borrow_mut())
     }
 
     #[cfg(test)]

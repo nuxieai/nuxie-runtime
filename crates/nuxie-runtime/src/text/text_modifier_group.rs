@@ -418,6 +418,17 @@ pub(crate) fn text_modifier_group_double_property_changed(
     (type_name == Some("TextModifierRange")).then(|| range_changed(instance, local_id, false))
 }
 
+pub(crate) fn text_modifier_group_bool_property_changed(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> Option<bool> {
+    (type_name == Some("TextModifierRange")
+        && property_key_for_name("TextModifierRange", "clamp") == Some(property_key))
+    .then(|| range_changed(instance, local_id, false))
+}
+
 pub(crate) fn text_modifier_group_uint_property_changed(
     instance: &mut ArtboardInstance,
     local_id: usize,

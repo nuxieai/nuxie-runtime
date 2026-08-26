@@ -5264,7 +5264,7 @@ pub(crate) fn runtime_font_asset_bytes<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
+    use nuxie_binary::{FieldValue, FixtureProperty, FixtureRecord, FixtureValue};
     use nuxie_graph::GraphFile;
 
     #[test]
@@ -7029,25 +7029,153 @@ mod tests {
 
     #[test]
     fn cxx_text_shape_dirty_clears_retained_range_maps_before_group_and_world_dirt() {
-        let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
+        let (mut runtime, graphs, _) = fl_e8_fixture(include_bytes!(
             "../../../fixtures/fl-e8/text_variation_modifier.riv"
         ));
-        let graph = graphs.artboards.first().expect("fixture artboard");
-        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let mut graph = graphs.artboards.first().expect("fixture artboard").clone();
+        let initial = StaticTextSlice::from_graph(&runtime, &graph, 1).expect("Text slice builds");
+        let group_local = initial.modifiers[0].local_id;
+        let range_local = initial.modifiers[0].ranges[0].local_id;
+        let group_template = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == group_local)
+            .expect("modifier group component")
+            .clone();
+        let range_template = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == range_local)
+            .expect("modifier range component")
+            .clone();
+        let range_object = graph
+            .local_objects
+            .iter()
+            .find(|object| object.local_id == range_local)
+            .expect("modifier range object")
+            .clone();
+        let group_object = graph
+            .local_objects
+            .iter()
+            .find(|object| object.local_id == group_local)
+            .expect("modifier group object")
+            .clone();
+        let next_local = graph
+            .local_objects
+            .iter()
+            .map(|object| object.local_id)
+            .max()
+            .expect("fixture locals")
+            + 1;
+        let second_range_local = next_local;
+        let paint_group_local = next_local + 1;
+        let paint_range_a_local = next_local + 2;
+        let paint_range_b_local = next_local + 3;
+
+        let mut clone_runtime_object = |source_global: u32, parent_local: usize| {
+            let new_global = u32::try_from(runtime.objects.len()).expect("fixture object id fits");
+            let mut object = runtime.objects[source_global as usize]
+                .as_ref()
+                .expect("source runtime object")
+                .clone();
+            object.id = new_global;
+            object
+                .properties
+                .iter_mut()
+                .find(|property| property.name == "parentId")
+                .expect("component parentId is stored")
+                .value = FieldValue::Uint(u64::try_from(parent_local).expect("parent local fits"));
+            runtime.objects.push(Some(object));
+            runtime
+                .import_statuses
+                .push(runtime.import_statuses[source_global as usize]);
+            new_global
+        };
+        let second_range_global = clone_runtime_object(range_template.global_id, group_local);
+        let paint_group_global = clone_runtime_object(group_template.global_id, 1);
+        let paint_range_a_global =
+            clone_runtime_object(range_template.global_id, paint_group_local);
+        let paint_range_b_global =
+            clone_runtime_object(range_template.global_id, paint_group_local);
+
+        let mut append_range = |local_id: usize, global_id: u32, parent_local: usize| {
+            let mut component = range_template.clone();
+            component.local_id = local_id;
+            component.global_id = global_id;
+            component.parent_local = Some(parent_local);
+            component.children.clear();
+            graph.components.push(component);
+            let mut object = range_object.clone();
+            object.local_id = local_id;
+            object.global_id = global_id;
+            graph.local_objects.push(object);
+        };
+        append_range(second_range_local, second_range_global, group_local);
+        append_range(paint_range_a_local, paint_range_a_global, paint_group_local);
+        append_range(paint_range_b_local, paint_range_b_global, paint_group_local);
+        graph
+            .components
+            .iter_mut()
+            .find(|component| component.local_id == group_local)
+            .expect("shape modifier group remains")
+            .children
+            .push(second_range_local);
+        let mut paint_group = group_template;
+        paint_group.local_id = paint_group_local;
+        paint_group.global_id = paint_group_global;
+        paint_group.parent_local = Some(1);
+        paint_group.children = vec![paint_range_a_local, paint_range_b_local];
+        graph.components.push(paint_group);
+        let mut paint_group_object = group_object;
+        paint_group_object.local_id = paint_group_local;
+        paint_group_object.global_id = paint_group_global;
+        graph.local_objects.push(paint_group_object);
+        graph
+            .components
+            .iter_mut()
+            .find(|component| component.local_id == 1)
+            .expect("Text component")
+            .children
+            .push(paint_group_local);
+
+        let mut instance = ArtboardInstance::from_graph(&runtime, &graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, &graph, 1).expect("Text slice builds");
         let group_local = slice.modifiers[0].local_id;
         let range_local = slice.modifiers[0].ranges[0].local_id;
 
-        static_text_layout_debug_report(&runtime, graph, &instance, 1, None)
+        static_text_layout_debug_report(&runtime, &graph, &instance, 1, None)
             .expect("coverage materializes retained range maps");
         let text_state = instance
             .component(1)
             .and_then(|component| component.concrete.text.as_ref())
             .expect("Text owns retained state");
-        assert!(text_state.modifier_range_map_count() > 0);
+        assert_eq!(text_state.modifier_range_map_count(), 4);
 
         instance.clear_component_dirt(1);
         instance.clear_component_dirt(group_local);
+        instance.clear_component_dirt(paint_group_local);
+        instance
+            .component(1)
+            .and_then(|component| component.concrete.text.as_ref())
+            .expect("Text state remains")
+            .take_modifier_range_map_clear_trace();
         assert!(crate::text_owner::mark_shape_dirty(&mut instance, 1));
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .take_modifier_range_map_clear_trace(),
+            vec![
+                (false, range_local),
+                (false, second_range_local),
+                (true, group_local),
+                (false, paint_range_a_local),
+                (false, paint_range_b_local),
+                (true, paint_group_local),
+            ],
+            "markShapeDirty must clear every authored range and dirty each group in order"
+        );
         assert_eq!(
             instance
                 .component(1)
@@ -7066,15 +7194,15 @@ mod tests {
                 .contains(crate::components::ComponentDirt::TEXT_COVERAGE)
         );
 
-        static_text_layout_debug_report(&runtime, graph, &instance, 1, None)
+        static_text_layout_debug_report(&runtime, &graph, &instance, 1, None)
             .expect("coverage rematerializes retained range maps");
-        assert!(
+        assert_eq!(
             instance
                 .component(1)
                 .and_then(|component| component.concrete.text.as_ref())
                 .expect("Text state remains")
-                .modifier_range_map_count()
-                > 0
+                .modifier_range_map_count(),
+            4
         );
         instance.clear_component_dirt(1);
         instance.clear_component_dirt(group_local);
@@ -7094,7 +7222,7 @@ mod tests {
         assert!(text_dirt.contains(crate::components::ComponentDirt::PATH));
         assert!(text_dirt.contains(crate::components::ComponentDirt::WORLD_TRANSFORM));
 
-        static_text_layout_debug_report(&runtime, graph, &instance, 1, None)
+        static_text_layout_debug_report(&runtime, &graph, &instance, 1, None)
             .expect("coverage rematerializes after markShapeDirty(false)");
         let retained_count = instance
             .component(1)
@@ -7148,6 +7276,66 @@ mod tests {
                 .modifier_range_map_count(),
             retained_count,
             "unitsValueChanged routes through modifierShapeDirty, not markShapeDirty"
+        );
+
+        let clamp_key = property_key_for_name("TextModifierRange", "clamp").expect("clamp key");
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(group_local);
+        assert!(
+            instance.set_bool_property(
+                range_local,
+                clamp_key,
+                !instance
+                    .bool_property(range_local, clamp_key)
+                    .unwrap_or(false),
+            )
+        );
+        let text_dirt = instance.debug_component_dirt(1).expect("Text dirt");
+        assert!(text_dirt.contains(crate::components::ComponentDirt::PATH));
+        assert!(!text_dirt.contains(crate::components::ComponentDirt::PAINT));
+        assert!(
+            instance
+                .debug_component_dirt(group_local)
+                .expect("shape modifier group dirt")
+                .contains(crate::components::ComponentDirt::TEXT_COVERAGE)
+        );
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .modifier_range_map_count(),
+            retained_count
+        );
+
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(paint_group_local);
+        assert!(
+            instance.set_bool_property(
+                paint_range_a_local,
+                clamp_key,
+                !instance
+                    .bool_property(paint_range_a_local, clamp_key)
+                    .unwrap_or(false),
+            )
+        );
+        let text_dirt = instance.debug_component_dirt(1).expect("Text dirt");
+        assert!(text_dirt.contains(crate::components::ComponentDirt::PAINT));
+        assert!(!text_dirt.contains(crate::components::ComponentDirt::PATH));
+        assert!(
+            instance
+                .debug_component_dirt(paint_group_local)
+                .expect("paint-only modifier group dirt")
+                .contains(crate::components::ComponentDirt::TEXT_COVERAGE)
+        );
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .modifier_range_map_count(),
+            retained_count,
+            "clampChanged must preserve retained range maps"
         );
     }
 

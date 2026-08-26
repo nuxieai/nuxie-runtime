@@ -9668,6 +9668,14 @@ impl ArtboardInstance {
             crate::layout_component::bool_property_changed(self, local_id, type_name, property_key)
         });
         let owner_callback = owner_callback.or_else(|| {
+            crate::text::text_modifier_group_bool_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
+        let owner_callback = owner_callback.or_else(|| {
             (type_name == Some("TextInput")
                 && property_key_for_name("TextInput", "multiline") == Some(property_key))
             .then(|| self.text_input_multiline_changed(local_id))

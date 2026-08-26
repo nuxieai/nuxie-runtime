@@ -107,6 +107,13 @@ fn mark_shape_dirty_with_layout(
     // Pinned `Text::markShapeDirty(bool)` publishes Path first, then clears
     // every modifier range map and publishes TextCoverage for each group in
     // authored child order.
+    #[cfg(test)]
+    if let Some(text) = instance
+        .component(text_local_id)
+        .and_then(|component| component.concrete.text.as_ref())
+    {
+        text.begin_modifier_range_map_clear_trace();
+    }
     let mut changed = instance.add_dirt(text_local_id, ComponentDirt::PATH, false);
     for (group_local, ranges) in modifier_ranges {
         if let Some(text) = instance
@@ -115,9 +122,25 @@ fn mark_shape_dirty_with_layout(
         {
             for range_local in ranges {
                 text.clear_modifier_range_map(range_local);
+                #[cfg(test)]
+                text.record_modifier_range_clear(range_local);
             }
         }
         changed |= instance.add_dirt(group_local, ComponentDirt::TEXT_COVERAGE, false);
+        #[cfg(test)]
+        if let Some(text) = instance
+            .component(text_local_id)
+            .and_then(|component| component.concrete.text.as_ref())
+        {
+            text.record_modifier_range_group_clear(group_local);
+        }
+    }
+    #[cfg(test)]
+    if let Some(text) = instance
+        .component(text_local_id)
+        .and_then(|component| component.concrete.text.as_ref())
+    {
+        text.end_modifier_range_map_clear_trace();
     }
 
     instance.mark_text_shape_changed();

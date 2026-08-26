@@ -93,7 +93,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_malformed_import_wave_c3.rs",
-          "line": 36,
+          "line": 34,
           "symbol": "wave_c3_malformed_import_002_full_file_still_imports"
         }
       ],

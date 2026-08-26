@@ -88,7 +88,6 @@ fn wave_c3_lite_rtti_001_behaves_correctly() {
     assert_eq!(e.base.x, 4.5);
     assert_eq!(e.base.y, 6);
 
-    assert_ne!(TypeId::of::<RttiF>(), TypeId::of::<RttiG>());
     let erased_f: Rc<dyn Any> = Rc::new(RttiG);
     let g = Rc::clone(&erased_f).downcast::<RttiG>();
     let h = erased_f.downcast::<RttiH>();

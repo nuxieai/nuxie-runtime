@@ -1473,6 +1473,68 @@ mod fast_acos_tests {
             );
         }
     }
+
+    #[test]
+    fn wave_c4_simd_016_fast_acos() {
+        const MAX_ERROR: f32 = 0.016_755_2;
+        const MATH_EPSILON: f32 = 1.0 / 4096.0;
+
+        let boundaries = [fast_acos(-1.0), fast_acos(0.0), fast_acos(1.0), fast_acos(0.0)];
+        assert!(((-1.0_f32).acos() - boundaries[0]).abs() <= MAX_ERROR);
+        assert!((0.0_f32.acos() - boundaries[1]).abs() <= MAX_ERROR);
+        assert!((1.0_f32.acos() - boundaries[2]).abs() <= MAX_ERROR);
+
+        let mut x = [-0.99_f32, -0.8, -0.4, -0.2, 0.2, 0.4, 0.8, 0.99];
+        let mut derivative = [0.0_f32; 8];
+        for _ in 0..10 {
+            let fast_acos_x = x.map(fast_acos);
+            let mut second_derivative = [0.0_f32; 8];
+            for lane in 0..8 {
+                let xx = x[lane] * x[lane];
+                let a = -0.939115566365855_f32;
+                let b = 0.9217841528914573_f32;
+                let c = -1.2845906244690837_f32;
+                let d = 0.295624144969963174_f32;
+                let f = (b * xx + a) * x[lane];
+                let f_prime = 3.0 * b * xx + a;
+                let g = (d * xx + c) * xx + 1.0;
+                let g_prime = (4.0 * d * xx + 2.0 * c) * x[lane];
+                let gg = g * g;
+                let q = (1.0 - xx).sqrt();
+                derivative[lane] =
+                    (f_prime * g - f * g_prime) / gg + 1.0 / q;
+                let f_second = 6.0 * b * x[lane];
+                let g_second = 12.0 * d * xx + 2.0 * c;
+                second_derivative[lane] = ((f_second * g - f * g_second) * g
+                    - (f_prime * g - f * g_prime) * 2.0 * g_prime)
+                    / (gg * g)
+                    + x[lane] / ((1.0 - xx) * q);
+
+                assert!((x[lane].acos() - fast_acos_x[lane]).abs() <= MAX_ERROR);
+            }
+            for lane in 0..8 {
+                x[lane] =
+                    (x[lane] - derivative[lane] / second_derivative[lane]).clamp(-0.99, 0.99);
+            }
+        }
+
+        for lane in 0..8 {
+            assert!(derivative[lane].abs() <= MATH_EPSILON);
+        }
+
+        for known_root in [
+            -0.983_536_f32,
+            -0.867_381,
+            -0.410_923,
+            0.410_923,
+            0.867_381,
+            0.983_536,
+        ] {
+            assert!(x
+                .into_iter()
+                .any(|value| (value - known_root).abs() < MATH_EPSILON));
+        }
+    }
 }
 
 fn subtract(a: Vec2D, b: Vec2D) -> Vec2D {

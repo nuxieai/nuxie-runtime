@@ -1,0 +1,942 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "c4",
+  "case_count": 52,
+  "ratchet": {
+    "max_pending": 21
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/refcnt_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/refcnt_test.cpp",
+      "ordinal": 1,
+      "line": 23,
+      "name": "refcnt",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/mechanical_port/source/include/rive/refcnt_hpp/wave_c4_core_utility_tests.rs",
+          "line": 38,
+          "symbol": "wave_c4_refcnt_001_refcnt"
+        }
+      ],
+      "note": "The distinct owner-local test preserves the pinned construction, retain/unretain actions, null-safe calls, and five ordered count assertions through the retained RefCnt owner."
+    },
+    {
+      "id": "tests/unit_tests/runtime/refcnt_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/refcnt_test.cpp",
+      "ordinal": 2,
+      "line": 42,
+      "name": "rcp",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/mechanical_port/source/include/rive/refcnt_hpp/wave_c4_core_utility_tests.rs",
+          "line": 89,
+          "symbol": "wave_c4_refcnt_002_rcp"
+        }
+      ],
+      "note": "The distinct owner-local test preserves every pinned null, construction, copy, release, reset, conversion, move, equality, field, and reference-count assertion in source order through the retained rcp owner.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned C++ expresses A/B polymorphism with inheritance and implicit converting rcp constructors/assignment; Rust expresses the same layout-compatible CRTP owner and ownership transfers with repr(C), embedded RefCnt, and explicit retained conversion constructors.",
+        "inapplicable_observable": "C++ inheritance syntax and implicit overload selection; the pointee fields, pointer identities, moves, and intrusive reference counts remain observable and are asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 1,
+      "line": 38,
+      "name": "any",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 6,
+          "symbol": "wave_c4_simd_001_any"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 2,
+      "line": 57,
+      "name": "all",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 24,
+          "symbol": "wave_c4_simd_002_all"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 3,
+      "line": 75,
+      "name": "operators",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 42,
+          "symbol": "wave_c4_simd_003_operators"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 4,
+      "line": 96,
+      "name": "swizzles",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 5,
+      "line": 236,
+      "name": "ieee-compliance",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 6,
+      "line": 267,
+      "name": "ternary-operator",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 7,
+      "line": 283,
+      "name": "min-max",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 8,
+      "line": 377,
+      "name": "clamp",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 9,
+      "line": 421,
+      "name": "abs",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 97,
+          "symbol": "wave_c4_simd_009_abs"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 10,
+      "line": 448,
+      "name": "reduce",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 11,
+      "line": 529,
+      "name": "floor",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 133,
+          "symbol": "wave_c4_simd_011_floor"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 12,
+      "line": 538,
+      "name": "ceil",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 151,
+          "symbol": "wave_c4_simd_012_ceil"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 13,
+      "line": 546,
+      "name": "copysign",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 169,
+          "symbol": "wave_c4_simd_013_copysign"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 14,
+      "line": 563,
+      "name": "sqrt",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 212,
+          "symbol": "wave_c4_simd_014_sqrt"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 15,
+      "line": 575,
+      "name": "div255",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 16,
+      "line": 615,
+      "name": "fast_acos",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/draw.rs",
+          "line": 1478,
+          "symbol": "wave_c4_simd_016_fast_acos"
+        }
+      ],
+      "note": "The owner-local test calls the retained production fast_acos formula for every pinned boundary and Newton-search lane, preserving ten iterations, per-lane error checks, derivative checks, and all six root checks."
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 17,
+      "line": 703,
+      "name": "cast",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 236,
+          "symbol": "wave_c4_simd_017_cast"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 18,
+      "line": 716,
+      "name": "dot",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 253,
+          "symbol": "wave_c4_simd_018_dot"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#19",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 19,
+      "line": 736,
+      "name": "cross",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 369,
+          "symbol": "wave_c4_simd_019_cross"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#20",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 20,
+      "line": 746,
+      "name": "join",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 378,
+          "symbol": "wave_c4_simd_020_join"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#21",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 21,
+      "line": 766,
+      "name": "zip",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 422,
+          "symbol": "wave_c4_simd_021_zip"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#22",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 22,
+      "line": 828,
+      "name": "mix",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simd_test.cpp#23",
+      "upstream": "tests/unit_tests/runtime/simd_test.cpp",
+      "ordinal": 23,
+      "line": 847,
+      "name": "load4x4f",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/wave_c4_simd_strict.rs",
+          "line": 466,
+          "symbol": "wave_c4_simd_023_load4x4f"
+        }
+      ],
+      "note": "The distinct test preserves the pinned lane values, operation order, and individual assertion stream without defining a test-local SIMD implementation.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned simd::gvec is a C++ portability wrapper; the retained Rust build has no corresponding generic C++ vector template, and this row's complete contract is expressible by Rust primitive and fixed-array operations.",
+        "inapplicable_observable": "C++ SIMD wrapper type, overload resolution, and vector storage spelling; every pinned lane input and ordered result assertion remains observable and is asserted separately."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 1,
+      "line": 13,
+      "name": "array initializes as expected",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/mechanical_port/source/src/renderer_cpp/wave_c4_core_utility_tests.rs",
+          "line": 4,
+          "symbol": "wave_c4_simple_array_001_array_initializes_as_expected"
+        }
+      ],
+      "note": "The distinct owner-local test preserves the four pinned empty-array assertions through retained SimpleArray state."
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 2,
+      "line": 22,
+      "name": "simple array can be created",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 3,
+      "line": 43,
+      "name": "can iterate simple array",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 4,
+      "line": 55,
+      "name": "can build up a simple array",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 5,
+      "line": 126,
+      "name": "arrays of arrays work",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 6,
+      "line": 153,
+      "name": "builder arrays of arrays work",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 7,
+      "line": 162,
+      "name": "builders can be reset",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 8,
+      "line": 192,
+      "name": "ctor returns empty array on size*sizeof(T) overflow",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 9,
+      "line": 223,
+      "name": "ctor returns empty array when malloc fails (OOM)",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 10,
+      "line": 239,
+      "name": "delegating ctor stays safe on overflow",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 11,
+      "line": 253,
+      "name": "ctor still works for normal sizes after overflow guard",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 12,
+      "line": 265,
+      "name": "overflow-failed array stays composable",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/simple_array_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/simple_array_test.cpp",
+      "ordinal": 13,
+      "line": 306,
+      "name": "delegating ctor accepts (nullptr, 0) without UB",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/span_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/span_test.cpp",
+      "ordinal": 1,
+      "line": 12,
+      "name": "basics",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/span_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/span_test.cpp",
+      "ordinal": 2,
+      "line": 52,
+      "name": "const-and-containers",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/mechanical_port/source/src/renderer_cpp/wave_c4_core_utility_tests.rs",
+          "line": 19,
+          "symbol": "wave_c4_span_002_const_and_containers"
+        }
+      ],
+      "note": "The owner-local test passes the exact const array, mutable array, and empty vector-shaped inputs through the retained Span constructor and both call surfaces in source order.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned C++ uses type-level const qualification to distinguish Span<int> from Span<const int>; immutable Rust borrows provide the same no-mutation contract without a second retained Span type.",
+        "inapplicable_observable": "C++ const-qualified element type and implicit container conversion spelling; each source container and call ordering remains observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/span_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/span_test.cpp",
+      "ordinal": 3,
+      "line": 66,
+      "name": "can iterate span",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-renderer/src/mechanical_port/source/src/renderer_cpp/wave_c4_core_utility_tests.rs",
+          "line": 33,
+          "symbol": "wave_c4_span_003_can_iterate_span"
+        }
+      ],
+      "note": "The owner-local retained Span test preserves the pinned array, initial expectation, iteration order, per-element assertion, and doubling action."
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 1,
+      "line": 12,
+      "name": "checkedMul accepts zero inputs",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 8,
+          "symbol": "checked_mul_accepts_zero_inputs"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 2,
+      "line": 25,
+      "name": "checkedMul preserves identity",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 27,
+          "symbol": "checked_mul_preserves_identity"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 3,
+      "line": 39,
+      "name": "checkedMul computes small products",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 44,
+          "symbol": "checked_mul_computes_small_products"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 4,
+      "line": 48,
+      "name": "checkedMul succeeds just below overflow",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 56,
+          "symbol": "checked_mul_succeeds_just_below_overflow"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 5,
+      "line": 64,
+      "name": "checkedMul detects overflow at boundary",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 74,
+          "symbol": "checked_mul_detects_overflow_at_boundary"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 6,
+      "line": 78,
+      "name": "checkedMul detects square overflow",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 88,
+          "symbol": "checked_mul_detects_square_overflow"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 7,
+      "line": 89,
+      "name": "checkedMul covers narrow unsigned widths",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 97,
+          "symbol": "checked_mul_covers_narrow_unsigned_widths"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 8,
+      "line": 105,
+      "name": "checkedMul covers size_t directly",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 117,
+          "symbol": "checked_mul_covers_usize_directly"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 9,
+      "line": 122,
+      "name": "checkedMul tolerates output aliasing input",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 136,
+          "symbol": "checked_mul_tolerates_output_aliasing_input"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 10,
+      "line": 147,
+      "name": "mulOverflows inverts checkedMul",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 158,
+          "symbol": "mul_overflows_inverts_checked_mul"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/type_conversions_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/type_conversions_test.cpp",
+      "ordinal": 11,
+      "line": 159,
+      "name": "mulOverflows captures decoder-shaped sizing",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/type_conversions.rs",
+          "line": 175,
+          "symbol": "mul_overflows_captures_decoder_shaped_sizing"
+        }
+      ],
+      "note": "The distinct test preserves the pinned operands, integer widths, success/overflow result, output value when defined, scope ordering, and individual assertion stream without a test-local multiplication helper.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned checkedMul/mulOverflows abstracts compiler-specific C++ overflow builtins and fallback output pointers; Rust unsigned primitives provide the corresponding language-native checked_mul and overflowing_mul authority.",
+        "inapplicable_observable": "C++ output-pointer mutation, aliasing implementation route, and builtin/fallback selection; success flags, products, overflow boundaries, widths, and assertion order remain observable."
+      }
+    }
+  ]
+}

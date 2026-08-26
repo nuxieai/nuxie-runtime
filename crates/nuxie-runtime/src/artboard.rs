@@ -5986,12 +5986,28 @@ impl ArtboardInstance {
         // the A4 positive callback that makes this ordering observable.
         let mut owner_callback_handled = false;
         self.apply_uint_property_changed(local_id, property_key, &mut owner_callback_handled);
+        let text_style_feature_empty_callback = owner_callback_handled
+            && self
+                .slot(local_id)
+                .and_then(|slot| slot.type_name)
+                .is_some_and(|type_name| {
+                    definition_by_name(type_name)
+                        .is_some_and(|definition| definition.is_a("TextStyleFeature"))
+                })
+            && ["tag", "featureValue"].into_iter().any(|name| {
+                property_key_for_name("TextStyleFeature", name) == Some(property_key)
+            });
         if let Some(previous_flags) = previous_drawable_flags {
             self.mark_runtime_drawable_visibility_changed(local_id, previous_flags);
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
-        self.mark_changed_unless_view_model_instance(local_id);
+        if !text_style_feature_empty_callback {
+            // C++ preserves ordinary property notification for TextStyleFeature
+            // but its generated tag/value callbacks are empty. Do not convert
+            // that notification into a render-cache invalidation.
+            self.mark_changed_unless_view_model_instance(local_id);
+        }
         let font_asset_id_has_empty_callback = self
             .slot(local_id)
             .and_then(|slot| slot.type_name)
@@ -7831,16 +7847,22 @@ impl ArtboardInstance {
     }
 
     fn mark_text_changed_for_local(&mut self, local_id: usize) {
+        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
         if matches!(
-            self.slot(local_id).and_then(|slot| slot.type_name),
+            type_name,
             Some("TextFollowPathModifier" | "TextVariationModifier" | "TextStyleAxis")
-        ) {
+        ) || type_name.is_some_and(|type_name| {
+            definition_by_name(type_name)
+                .is_some_and(|definition| definition.is_a("TextStyleFeature"))
+        }) {
             // Each generated TextFollowPathModifier callback and
             // TextVariationModifier::axisValueChanged route directly through
             // their owning group to Text's shape-dirt owner. The variation
             // axisTag callback is intentionally empty. TextStyleAxis callbacks
-            // publish TextShape only on their direct TextStyle parent. Do not
-            // add the broader generic text-property invalidation afterward.
+            // publish TextShape only on their direct TextStyle parent.
+            // TextStyleFeature's tag/featureValue callbacks are both empty.
+            // Do not add the broader generic text-property invalidation after
+            // any of these concrete/generated owner paths.
             return;
         }
         if !self
@@ -9921,6 +9943,14 @@ impl ArtboardInstance {
         });
         let owner_callback = owner_callback.or_else(|| {
             crate::text::text_style_axis_uint_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::text::text_style_feature_uint_property_changed(
                 self,
                 local_id,
                 type_name,

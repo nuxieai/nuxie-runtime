@@ -8181,45 +8181,71 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "tools")]
     #[test]
     fn d_st_feature_preserves_order_defaults_duplicates_and_live_callback_inaction() {
         let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
             "../../../fixtures/fl-e8/text_style_feature.riv"
         ));
         let graph = graphs.artboards.first().unwrap();
+        instance.update_pass();
         let before = static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
         let liga = u32::from_be_bytes(*b"liga");
+        let clig = u32::from_be_bytes(*b"clig");
         assert_eq!(before.style_features[0], [(liga, 1), (liga, 0), (liga, 1)]);
-        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).unwrap();
+        let slice = instance
+            .retained_static_text_topology(&runtime, graph, 1)
+            .expect("real Text occurrence retains its style topology");
         let style = &slice.styles[0];
+        assert_eq!(
+            instance
+                .component(style.local_id)
+                .and_then(|component| component.concrete.text_style.as_ref())
+                .expect("TextStyle occurrence state")
+                .feature_locals(),
+            style
+                .features
+                .iter()
+                .map(|feature| feature.local_id)
+                .collect::<Vec<_>>(),
+            "production shaping consumes the occurrence-owned addFeature order"
+        );
         let feature_local = style.features.last().unwrap().local_id;
-        instance.update_pass();
-        assert!(instance.set_uint_property(
-            feature_local,
-            property_key_for_name("TextStyleFeature", "featureValue").unwrap(),
-            0,
-        ));
-        let after = static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
-        assert_eq!(after.style_features, before.style_features);
-        assert_eq!(after.line_glyph_ids, before.line_glyph_ids);
-        assert_eq!(instance.debug_component_dirt(1), Some(ComponentDirt::NONE));
-        assert_eq!(
-            instance.debug_component_dirt(style.local_id),
-            Some(ComponentDirt::NONE)
-        );
-        assert_eq!(
-            instance.uint_property(
-                feature_local,
-                property_key_for_name("TextStyleFeature", "featureValue").unwrap()
-            ),
-            Some(0),
-            "the generated property changes even though its callback is empty"
-        );
-
         let helper = instance
             .objects
             .text_variation_helper_handle(style.local_id)
             .expect("the option-bearing TextStyle owns a retained helper");
+        let retained_before = instance
+            .debug_retained_text_variation_snapshot(1)
+            .expect("update retains the production Text owner");
+        let cache_epoch_before = instance.cache_epoch();
+        let prepared_epoch_before = instance.prepared_epoch();
+        let tag_key = property_key_for_name("TextStyleFeature", "tag").unwrap();
+        let feature_value_key =
+            property_key_for_name("TextStyleFeature", "featureValue").unwrap();
+        for (key, value) in [(tag_key, u64::from(clig)), (feature_value_key, 0)] {
+            assert!(instance.set_uint_property(feature_local, key, value));
+            assert_eq!(instance.uint_property(feature_local, key), Some(value));
+            assert_eq!(instance.debug_component_dirt(1), Some(ComponentDirt::NONE));
+            assert_eq!(
+                instance.debug_component_dirt(style.local_id),
+                Some(ComponentDirt::NONE)
+            );
+            assert_eq!(
+                instance.objects.component(helper).unwrap().dirt,
+                ComponentDirt::NONE
+            );
+            assert_eq!(
+                instance.debug_retained_text_variation_snapshot(1),
+                Some(retained_before.clone()),
+                "empty generated tag/value callbacks preserve retained shape/render state"
+            );
+            assert_eq!(instance.cache_epoch(), cache_epoch_before);
+            assert_eq!(instance.prepared_epoch(), prepared_epoch_before);
+        }
+        let after = static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
+        assert_eq!(after.style_features, before.style_features);
+        assert_eq!(after.line_glyph_ids, before.line_glyph_ids);
         let cached_before = instance
             .component(style.local_id)
             .and_then(|component| component.concrete.text_style.as_ref())
@@ -8267,14 +8293,14 @@ mod tests {
                 .and_then(|style| style.variable_font())
                 .unwrap()
                 .features,
-            [(liga, 1), (liga, 0), (liga, 0)],
+            [(liga, 1), (liga, 0), (clig, 0)],
             "helper update rereads the dirt-inert feature's live value"
         );
         let reshaped =
             static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
         assert_eq!(
             reshaped.style_features[0],
-            [(liga, 1), (liga, 0), (liga, 0)]
+            [(liga, 1), (liga, 0), (clig, 0)]
         );
         assert_ne!(reshaped.line_glyph_ids, before.line_glyph_ids);
 
@@ -8284,7 +8310,7 @@ mod tests {
         instance.update_pass();
         assert!(instance.set_uint_property(
             feature_local,
-            property_key_for_name("TextStyleFeature", "featureValue").unwrap(),
+            feature_value_key,
             1,
         ));
         assert_eq!(instance.debug_component_dirt(1), Some(ComponentDirt::NONE));
@@ -8306,7 +8332,7 @@ mod tests {
                 .and_then(|style| style.variable_font())
                 .unwrap()
                 .features,
-            [(liga, 1), (liga, 0), (liga, 1)]
+            [(liga, 1), (liga, 0), (clig, 1)]
         );
         assert_eq!(
             instance.objects.component(helper).unwrap().dirt,
@@ -8918,6 +8944,29 @@ mod tests {
             ),
         ])
         .expect_err("TextStyleAxis InvalidObject must stop the Artboard import lifecycle");
+        assert!(error.to_string().contains("parent that is not TextStyle"));
+    }
+
+    #[test]
+    fn cxx_text_style_feature_invalid_direct_parent_stops_import() {
+        let error = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(1))],
+            ),
+            fixture_record(
+                "TextStyleFeature",
+                vec![property(
+                    "TextStyleFeature",
+                    "parentId",
+                    FixtureValue::Uint(2),
+                )],
+            ),
+        ])
+        .expect_err("TextStyleFeature InvalidObject must stop the Artboard import lifecycle");
         assert!(error.to_string().contains("parent that is not TextStyle"));
     }
 

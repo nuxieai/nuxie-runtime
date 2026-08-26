@@ -70,3 +70,24 @@ impl StaticTextStyleFeature {
         Feature::new(HarfTag::from_u32(tag), value, ..)
     }
 }
+
+/// Generated `TextStyleFeatureBase::{tag,featureValue}` stores first, invokes
+/// an empty callback, then notifies observers. Return `Some(false)` for those
+/// two inherited keys so the common setter retains notification order while
+/// suppressing the invented generic prepared/Text invalidation tail.
+pub(crate) fn text_style_feature_uint_property_changed(
+    _instance: &mut ArtboardInstance,
+    _local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> Option<bool> {
+    if !type_name.is_some_and(|type_name| {
+        definition_by_name(type_name).is_some_and(|definition| definition.is_a("TextStyleFeature"))
+    }) {
+        return None;
+    }
+    ["tag", "featureValue"]
+        .into_iter()
+        .any(|name| property_key_for_name("TextStyleFeature", name) == Some(property_key))
+        .then_some(false)
+}

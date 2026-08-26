@@ -232,3 +232,46 @@ the source receipt changed. The complete consumer section is unchanged at
 **4 pass, 3 executable expected-red, 11 pending**. All previously recorded
 listener/timing, literal `styleId`, and other source-pair adaptations remain in
 place. This rereview changed documentation only.
+
+## Empty-shape production-correction review of `5e56bf5f2`
+
+Verdict: **RESIDUAL REJECTION — the retained draw owner misclassifies one
+no-run binding direction**
+
+The new `has_styled_text` predicate matches pinned `makeStyled` for this branch:
+it requires a nonempty run, a non-null style, and a live font. The clean slice
+owners consequently publish zero bounds before `effectiveSizing`, controlled
+box, clipping, topology, or render-data work, and they do not retain layout
+scale types. The fixed fallback also correctly distinguishes a genuine no-run
+graph and a valid supported empty shape from an unsupported nonempty graph,
+whose prior fallback behavior remains unchanged. The focused 3x3 matrix uses
+those production owners, and the existing nonempty Taffy measure/controlled
+bounds test remains green.
+
+The actual retained rebuild is not yet exact. At
+`draw.rs:17772::runtime_build_text_draw_frame`, the no-authored-run guard at
+line 17795 treats every matching `Text.textRunListSource` data bind as a live
+run source. It does not apply `data_bind_flags_apply_source_to_target`, unlike
+both `text.rs:504::static_fixed_text_constraint_bounds` and
+`StaticTextSlice::from_graph`. A Text with no authored runs and a
+target-to-source-only list bind therefore bypasses the retained owner's empty
+early branch; topology construction then rejects the same bind as not supplying
+runs. Pinned `updateList` receives no source-to-target list in this case, so
+`makeStyled` is empty and `buildRenderStyles` must publish zero bounds and
+return successfully.
+
+Narrow correction request:
+
+1. Make the retained draw owner's run-list-source predicate use the same
+   source-to-target direction rule as the two accepted Text owners.
+2. Add focused retained-owner evidence for no authored run plus a
+   target-to-source-only `textRunListSource`: rebuild succeeds, retains zero
+   bounds, emits no commands/replay/clip, and does not retain controlled scale
+   types. Keep the existing no-bind matrix and supported-empty evidence.
+3. Freeze supported nonempty Taffy behavior, all other row 17 residuals, and
+   the **4 pass / 3 executable expected-red / 11 pending** consumer topology.
+
+Checks: the new empty-shape matrix and the existing nonempty Taffy test each
+pass independently (one passed, zero failed, zero ignored); the candidate
+delta passes `git diff --check`; production scope is `text.rs` only; and the
+consumer topology remains 4/3/11. This review changed documentation only.

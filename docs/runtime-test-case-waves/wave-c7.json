@@ -1,0 +1,734 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "c7",
+  "case_count": 58,
+  "ratchet": {
+    "max_pending": 48
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/nested_text_run_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/nested_text_run_test.cpp",
+      "ordinal": 1,
+      "line": 11,
+      "name": "validate nested text get/set",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 1,
+      "line": 9,
+      "name": "cursor operators work",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/text/cursor.rs",
+          "line": 89,
+          "symbol": "wave_c7_raw_text_input_001_cursor_operators_work"
+        }
+      ],
+      "note": "The distinct owner-local test preserves all six ordered comparisons and saturating-subtract assertions on the retained CursorPosition owner.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned C++ supplies relational and compound-assignment overloads; Rust exposes the retained indices and saturating offset method directly.",
+        "inapplicable_observable": "C++ overload-resolution and operator spelling only; both line/codepoint inputs, equality, ordering, mutation order, and saturation results remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 2,
+      "line": 45,
+      "name": "cursor's visual position computes correctly",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 3,
+      "line": 91,
+      "name": "cursor is placed correctly with ltr paragraphs",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 4,
+      "line": 144,
+      "name": "cursor is placed correctly with rtl paragraphs",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 5,
+      "line": 183,
+      "name": "cursor is placed correctly with mixed bidi paragraphs",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 6,
+      "line": 224,
+      "name": "cursor moves correctly",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 7,
+      "line": 286,
+      "name": "text inputs correctly",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 8,
+      "line": 309,
+      "name": "cursor home/end works",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 9,
+      "line": 340,
+      "name": "cursor word movement works",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
+          "line": 939,
+          "symbol": "wave_c7_raw_text_input_009_cursor_word_movement_works"
+        }
+      ],
+      "note": "The distinct owner-local test preserves the literal text, every cursor action, and all ten ordered cursor assertions without a shared loop.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; this case observes only RawTextInput buffer cursor transitions.",
+        "inapplicable_observable": "The pinned raw font pointer, sizing fields, and no-op factory update calls; none is read by a pinned assertion in this case, while every buffer action and result remains asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 10,
+      "line": 402,
+      "name": "cursor sub-word movement works",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
+          "line": 972,
+          "symbol": "wave_c7_raw_text_input_010_cursor_sub_word_movement_works"
+        }
+      ],
+      "note": "The distinct owner-local test preserves the literal camel-case/symbol text, all movement actions, and all seventeen ordered cursor assertions without a shared loop.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; this case observes only RawTextInput buffer cursor transitions.",
+        "inapplicable_observable": "The pinned raw font pointer, sizing fields, and no-op factory update calls; none is read by a pinned assertion in this case, while every buffer action and result remains asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 11,
+      "line": 487,
+      "name": "cursor skips multi-codepoint glyphs",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
+          "line": 1014,
+          "symbol": "wave_c7_raw_text_input_011_cursor_skips_multi_codepoint_glyphs"
+        }
+      ],
+      "note": "The distinct owner-local test preserves both pinned literal assignments, four character moves, and four ordered codepoint assertions.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; combining-cluster movement is retained directly by RawTextInput.",
+        "inapplicable_observable": "The pinned raw font pointer and no-op factory update calls; none is read by a pinned assertion in this case, while the complete codepoint movement stream remains asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 12,
+      "line": 527,
+      "name": "cursor left skips multi-codepoint glyphs",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 13,
+      "line": 560,
+      "name": "backspace deletes entire multi-codepoint glyph",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 14,
+      "line": 588,
+      "name": "delete forward removes entire multi-codepoint glyph",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
+          "line": 1032,
+          "symbol": "wave_c7_raw_text_input_014_delete_forward_removes_entire_multi_codepoint_glyph"
+        }
+      ],
+      "note": "The distinct owner-local test preserves the decomposed text, three cursor actions, cursor assertion, forward delete, and final text assertion.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; combining-cluster deletion is retained directly by RawTextInput.",
+        "inapplicable_observable": "The pinned raw font pointer and no-op factory update calls; none is read by a pinned assertion in this case, while the complete edit stream remains asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 15,
+      "line": 619,
+      "name": "word selection works",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
+          "line": 1048,
+          "symbol": "wave_c7_raw_text_input_015_word_selection_works"
+        }
+      ],
+      "note": "The distinct owner-local test preserves every cursor placement/selection action and the CHECK_CURSOR macro's eight ordered component assertions.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; word selection is retained directly by RawTextInput.",
+        "inapplicable_observable": "The pinned raw font pointer, sizing fields, and no-op factory update call; none is read by a pinned assertion in this case, while all selection endpoints remain asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 16,
+      "line": 653,
+      "name": "text input journal works",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
+          "line": 1075,
+          "symbol": "wave_c7_raw_text_input_016_text_input_journal_works"
+        }
+      ],
+      "note": "The distinct owner-local test preserves every insert, undo, redo, selection and replacement action plus every ordered text and cursor-component assertion.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; journaling is retained directly by RawTextInput.",
+        "inapplicable_observable": "The pinned raw font pointer, sizing fields, and no-op factory update calls; none is read by a pinned assertion in this case, while the complete journal stream remains asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/raw_text_input_test.cpp",
+      "ordinal": 17,
+      "line": 724,
+      "name": "clearSelection collapses to the selection end",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
+          "line": 1145,
+          "symbol": "wave_c7_raw_text_input_017_clear_selection_collapses_to_the_selection_end"
+        }
+      ],
+      "note": "The distinct owner-local test preserves the literal insertion, selection endpoints, both clearSelection calls, collapsed assertion, and four ordered endpoint assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 1,
+      "line": 19,
+      "name": "file with text input loads correctly",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 2,
+      "line": 37,
+      "name": "file with text input renders correctly",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 3,
+      "line": 50,
+      "name": "text input keyInput handles arrow keys",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 4,
+      "line": 85,
+      "name": "text input keyInput handles backspace and delete",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 5,
+      "line": 116,
+      "name": "text input keyInput handles undo/redo",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 6,
+      "line": 162,
+      "name": "text input keyInput returns false for unhandled keys",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 7,
+      "line": 184,
+      "name": "text input keyInput handles modifier keys for cursor boundary",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 8,
+      "line": 229,
+      "name": "text input keyInput handles shift for selection",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 9,
+      "line": 257,
+      "name": "text input keyInput handles select all",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 10,
+      "line": 290,
+      "name": "text input keyInput handles home and end",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 11,
+      "line": 326,
+      "name": "raw text input selectLine selects the visual line",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 12,
+      "line": 353,
+      "name": "text input selectWord and selectLine wrappers",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 13,
+      "line": 378,
+      "name": "text input double and triple click select word and line",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 14,
+      "line": 439,
+      "name": "text input textInput method inserts text",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 15,
+      "line": 464,
+      "name": "text input multiline toggles line breaks in displayed text",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 16,
+      "line": 487,
+      "name": "text input strips inserted line breaks when single line",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 17,
+      "line": 510,
+      "name": "text input keyInput handles enter key",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 18,
+      "line": 545,
+      "name": "text input selectionRadiusChanged updates raw text input",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#19",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 19,
+      "line": 563,
+      "name": "state machine keyInput and textInput forward to text input",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_input_test.cpp#20",
+      "upstream": "tests/unit_tests/runtime/text_input_test.cpp",
+      "ordinal": 20,
+      "line": 612,
+      "name": "losing focus clears the text input selection",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_modifier_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/text_modifier_test.cpp",
+      "ordinal": 1,
+      "line": 14,
+      "name": "text modifiers load correctly",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_modifier_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/text_modifier_test.cpp",
+      "ordinal": 2,
+      "line": 33,
+      "name": "text opacity falloff with feathered and plain fills",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 1,
+      "line": 19,
+      "name": "file with text loads correctly",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 2,
+      "line": 38,
+      "name": "can query for all text runs",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 93438,
+          "symbol": "upstream_query_all_text_runs_body_is_ported"
+        }
+      ],
+      "note": "The distinct live-artboard test loads the exact fixture and preserves the sole TextValueRun count assertion."
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 3,
+      "line": 47,
+      "name": "can query for a text run at a given index",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 93444,
+          "symbol": "upstream_query_text_run_at_index_body_is_ported"
+        }
+      ],
+      "note": "The distinct live-artboard test loads the exact fixture, selects the first retained TextValueRun, and preserves the sole text assertion."
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 4,
+      "line": 56,
+      "name": "simple text loads",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 5,
+      "line": 115,
+      "name": "vertical trim shrinks the box to the chosen band",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 6,
+      "line": 157,
+      "name": "vertical trim top/bottom uint passthroughs pack into the mask",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 7,
+      "line": 206,
+      "name": "ellipsis is shown",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 8,
+      "line": 279,
+      "name": "fitFontSize shrinks the font to fit the bounds",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 9,
+      "line": 327,
+      "name": "range mapper maps words",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 10,
+      "line": 335,
+      "name": "run modifier ranges select runs",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 11,
+      "line": 404,
+      "name": "run modifier ranges select runs with varying text size",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 12,
+      "line": 451,
+      "name": "double new line type works",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 13,
+      "line": 471,
+      "name": "can load and run opacity modifiers",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 14,
+      "line": 481,
+      "name": "Zero width spaces are used to break words",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 15,
+      "line": 525,
+      "name": "Word joiners are not used to break words",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 16,
+      "line": 690,
+      "name": "Fit font size",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 17,
+      "line": 744,
+      "name": "Vertical Trim",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/text_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/text_test.cpp",
+      "ordinal": 18,
+      "line": 774,
+      "name": "Text box matches layout-controlled size",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    }
+  ]
+}

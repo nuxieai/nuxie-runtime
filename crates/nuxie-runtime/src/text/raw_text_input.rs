@@ -930,4 +930,233 @@ mod tests {
         assert!(raw.undo());
         assert_eq!((raw.text(), cursor(&raw)), ("one Two".to_owned(), (4, 7)));
     }
+
+    // Wave C7 keeps the editable-buffer cases owner-local. The pinned C++
+    // font/sizing/update calls only refresh its separate shaping owner and do
+    // not participate in any observable below; Rust already separates that
+    // owner as TextInputGeometry.
+    #[test]
+    fn wave_c7_raw_text_input_009_cursor_word_movement_works() {
+        let mut text_input = RawTextInput::default();
+        let default_text = "one two three fo4ur five";
+        text_input.insert(default_text);
+        text_input.set_cursor(Cursor::at_start());
+
+        assert_eq!(text_input.cursor().start.codepoint_index, 0);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 3);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 7);
+        text_input.cursor_horizontal(-1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 4);
+        text_input.cursor_horizontal(-1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 0);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 19);
+        text_input.cursor_horizontal(-1, CursorBoundary::Character, false, None);
+        text_input.cursor_horizontal(-1, CursorBoundary::Character, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 17);
+        text_input.cursor_horizontal(-1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 14);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 16);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 19);
+    }
+
+    #[test]
+    fn wave_c7_raw_text_input_010_cursor_sub_word_movement_works() {
+        let mut text_input = RawTextInput::default();
+        let default_text = "oneTwo threeFo+ur fi--ve";
+        text_input.insert(default_text);
+        text_input.set_cursor(Cursor::at_start());
+
+        assert_eq!(text_input.cursor().start.codepoint_index, 0);
+        text_input.cursor_horizontal(1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 3);
+        text_input.cursor_horizontal(1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 6);
+        text_input.cursor_horizontal(1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 12);
+        text_input.cursor_horizontal(1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 14);
+        text_input.cursor_horizontal(1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 15);
+        text_input.cursor_horizontal(1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 17);
+        text_input.cursor_horizontal(-1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 15);
+        text_input.cursor_horizontal(-1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 14);
+        text_input.cursor_horizontal(-1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 12);
+        text_input.cursor_horizontal(-1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 7);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 14);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 15);
+        text_input.cursor_horizontal(1, CursorBoundary::Word, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 17);
+        text_input.cursor_horizontal(1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 20);
+        text_input.cursor_horizontal(1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 22);
+        text_input.cursor_horizontal(-1, CursorBoundary::SubWord, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 20);
+    }
+
+    #[test]
+    fn wave_c7_raw_text_input_011_cursor_skips_multi_codepoint_glyphs() {
+        let mut text_input = RawTextInput::default();
+        let mut default_text = "cafés";
+        default_text = "cafe\u{301}s";
+        text_input.insert(default_text);
+        text_input.set_cursor(Cursor::at_start());
+
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 1);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 2);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 3);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 5);
+    }
+
+    #[test]
+    fn wave_c7_raw_text_input_014_delete_forward_removes_entire_multi_codepoint_glyph() {
+        let mut text_input = RawTextInput::default();
+        let default_text = "cafe\u{301}s";
+        text_input.insert(default_text);
+        text_input.set_cursor(Cursor::at_start());
+
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        assert_eq!(text_input.cursor().start.codepoint_index, 3);
+
+        text_input.backspace(1);
+        assert_eq!(text_input.text(), "cafs");
+    }
+
+    #[test]
+    fn wave_c7_raw_text_input_015_word_selection_works() {
+        let mut text_input = RawTextInput::default();
+        let default_text = "oneTwo three == four";
+        text_input.insert(default_text);
+        text_input.set_cursor(Cursor::at_start());
+
+        text_input.select_word();
+        assert_eq!(text_input.cursor().start.codepoint_index, 0);
+        assert_eq!(text_input.cursor().end.codepoint_index, 6);
+
+        text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(9)));
+        text_input.select_word();
+        assert_eq!(text_input.cursor().start.codepoint_index, 7);
+        assert_eq!(text_input.cursor().end.codepoint_index, 12);
+
+        text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(12)));
+        text_input.select_word();
+        assert_eq!(text_input.cursor().start.codepoint_index, 7);
+        assert_eq!(text_input.cursor().end.codepoint_index, 12);
+
+        text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(14)));
+        text_input.select_word();
+        assert_eq!(text_input.cursor().start.codepoint_index, 13);
+        assert_eq!(text_input.cursor().end.codepoint_index, 15);
+    }
+
+    #[test]
+    fn wave_c7_raw_text_input_016_text_input_journal_works() {
+        let mut text_input = RawTextInput::default();
+        let default_text = "oneTwo";
+        text_input.insert(default_text);
+        text_input.set_cursor(Cursor::at_start());
+
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, false, None);
+
+        text_input.insert(" ");
+        text_input.insert("2");
+        text_input.insert(" ");
+        assert_eq!(text_input.text(), "one 2 Two");
+        assert_eq!(text_input.cursor().start.codepoint_index, 6);
+        assert_eq!(text_input.cursor().end.codepoint_index, 6);
+
+        text_input.undo();
+        assert_eq!(text_input.text(), "one 2Two");
+        assert_eq!(text_input.cursor().start.codepoint_index, 5);
+        assert_eq!(text_input.cursor().end.codepoint_index, 5);
+
+        text_input.undo();
+        assert_eq!(text_input.text(), "one Two");
+        assert_eq!(text_input.cursor().start.codepoint_index, 4);
+        assert_eq!(text_input.cursor().end.codepoint_index, 4);
+
+        text_input.undo();
+        assert_eq!(text_input.text(), "oneTwo");
+        assert_eq!(text_input.cursor().start.codepoint_index, 3);
+        assert_eq!(text_input.cursor().end.codepoint_index, 3);
+
+        text_input.redo();
+        assert_eq!(text_input.text(), "one Two");
+        assert_eq!(text_input.cursor().start.codepoint_index, 4);
+        assert_eq!(text_input.cursor().end.codepoint_index, 4);
+
+        text_input.insert("X");
+        assert_eq!(text_input.text(), "one XTwo");
+        assert_eq!(text_input.cursor().start.codepoint_index, 5);
+        assert_eq!(text_input.cursor().end.codepoint_index, 5);
+
+        text_input.redo();
+        assert_eq!(text_input.text(), "one XTwo");
+        assert_eq!(text_input.cursor().start.codepoint_index, 5);
+        assert_eq!(text_input.cursor().end.codepoint_index, 5);
+
+        text_input.undo();
+        assert_eq!(text_input.text(), "one Two");
+        assert_eq!(text_input.cursor().start.codepoint_index, 4);
+        assert_eq!(text_input.cursor().end.codepoint_index, 4);
+
+        text_input.cursor_horizontal(1, CursorBoundary::Character, true, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, true, None);
+        text_input.cursor_horizontal(1, CursorBoundary::Character, true, None);
+        assert_eq!(text_input.text(), "one Two");
+        assert_eq!(text_input.cursor().start.codepoint_index, 4);
+        assert_eq!(text_input.cursor().end.codepoint_index, 7);
+        text_input.insert("2");
+        assert_eq!(text_input.text(), "one 2");
+        assert_eq!(text_input.cursor().start.codepoint_index, 5);
+        assert_eq!(text_input.cursor().end.codepoint_index, 5);
+
+        text_input.undo();
+        assert_eq!(text_input.text(), "one Two");
+        assert_eq!(text_input.cursor().start.codepoint_index, 4);
+        assert_eq!(text_input.cursor().end.codepoint_index, 7);
+    }
+
+    #[test]
+    fn wave_c7_raw_text_input_017_clear_selection_collapses_to_the_selection_end() {
+        let mut text_input = RawTextInput::default();
+        text_input.insert("hello world");
+
+        text_input.set_cursor(Cursor {
+            start: CursorPosition::unresolved(2),
+            end: CursorPosition::unresolved(7),
+        });
+        text_input.clear_selection();
+        assert!(text_input.cursor().is_collapsed());
+        assert_eq!(text_input.cursor().start.codepoint_index, 7);
+        assert_eq!(text_input.cursor().end.codepoint_index, 7);
+
+        text_input.clear_selection();
+        assert_eq!(text_input.cursor().start.codepoint_index, 7);
+        assert_eq!(text_input.cursor().end.codepoint_index, 7);
+    }
 }

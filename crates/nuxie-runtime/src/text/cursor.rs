@@ -83,6 +83,37 @@ impl Cursor {
 mod tests {
     use super::*;
 
+    // Wave C7, raw_text_input_test.cpp #1. C++ orders CursorPosition through
+    // overloaded operators; Rust exposes the same retained indices directly.
+    #[test]
+    fn wave_c7_raw_text_input_001_cursor_operators_work() {
+        let a = CursorPosition {
+            line_index: Some(0),
+            codepoint_index: 1,
+        };
+        let b = CursorPosition {
+            line_index: Some(0),
+            codepoint_index: 4,
+        };
+        let c = CursorPosition {
+            line_index: Some(0),
+            codepoint_index: 4,
+        };
+        assert!(a.codepoint_index < b.codepoint_index);
+        assert!(b.codepoint_index > a.codepoint_index);
+        assert_eq!(c, b);
+        assert_ne!(c, a);
+
+        let mut d = CursorPosition {
+            line_index: Some(0),
+            codepoint_index: 1,
+        };
+        d = d.offset(-1);
+        assert_eq!(d.codepoint_index, 0);
+        d = d.offset(-1);
+        assert_eq!(d.codepoint_index, 0);
+    }
+
     #[test]
     fn upstream_cursor_operators_and_saturating_subtract_are_ported() {
         let a = CursorPosition::unresolved(1);

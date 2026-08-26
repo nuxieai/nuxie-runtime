@@ -493,3 +493,57 @@ formatting hunk remains unstaged with all other user dirt. Consumer topology is
 unchanged at **4 pass, 3 executable expected-red, 11 pending**, and the receipt
 continues to state the residual adaptations honestly. This review changed
 documentation only.
+
+## Text row 39 `onDirty` production-correction review of `afcf1819a`
+
+Verdict: **RESIDUAL REJECTION — focused evidence bypasses the Text owner and
+reentrant dirt dispatcher**
+
+The production mapping is source-shaped on inspection. `add_component_dirt`
+publishes the accumulated mask before `dispatch_component_on_dirty`; Text then
+visits immutable occurrence topology in authored modifier order. Only a group
+with a retained follow-path modifier re-adds Path, and that recursive add sees
+the accumulated WorldTransform-plus-Path mask before the outer modifier loop
+resumes. Path or Paint derives distinct current styles from the retained replay
+in first draw-command order and invalidates concrete occurrence-owned paint
+effect chains. The former later broad scan of every imported TextStylePaint is
+removed. Combined masks retain modifier-before-style order, and the accepted
+Text draw owner clones with retained frame/backend state cold while immutable
+import topology remains occurrence-addressed. The disabled body remains red
+and consumer topology remains **4 pass, 3 executable expected-red, 11
+pending**.
+
+The claimed evidence does not execute any of those integration properties.
+`cxx_text_on_dirty_visits_current_modifiers_then_current_style_effects`
+constructs `RuntimeTextOnDirtyTargets` directly with hard-coded modifier and
+style vectors, calls `visit` directly, and manually invokes the effect owner.
+It never creates a Text occurrence, builds current retained draw commands,
+calls `ArtboardInstance::add_dirt`, triggers the follow-path recursive add, or
+proves that an imported-but-not-current style stays clean. It therefore proves
+the small visitor and concrete effect primitive, but is a proxy for the exact
+owner boundary that row 39 claims.
+
+Narrow correction request:
+
+1. Replace or extend the focused case with a real RuntimeFile/Graph and
+   ArtboardInstance Text occurrence. Materialize its retained frame, then drive
+   WorldTransform, Path, Paint, and the combined mask through `add_dirt`, not a
+   manually constructed target list.
+2. Observe the existing production dispatch (a read-only test trace is fine)
+   to prove authored current-group order, the WorldTransform-follow-path
+   recursive accumulated-mask stream, modifier-before-style combined order,
+   and exactly one effect invalidation per current style at the reentrant
+   boundary. Do not reproduce target selection or traversal in the test.
+3. Include at least two current retained styles in draw-command order and one
+   imported unused style with concrete effects; prove only the two current
+   occurrence owners become dirty. Preserve the production correction,
+   clone/reset ownership, disabled red, and **4/3/11** topology unless the real
+   evidence falsifies them.
+
+Checks: the current proxy-focused test passes (one passed, zero failed or
+ignored), the existing stale-retained-frame dirty-draw containment test passes
+(one passed, zero failed or ignored), and the candidate delta passes
+`git diff --check`. The candidate changes only `artboard.rs`, `draw.rs`,
+`text.rs`, and the source receipt. The separate pre-existing `draw.rs`
+formatting hunk and all other user dirt remain unstaged. This review changed
+documentation only.

@@ -86,3 +86,31 @@ consistent and does not alter the literal consumer denominator.
 - Candidate-range `git diff --check` passed; its 13 paths are contained.
 - All 17 pre-existing user-dirty paths remained unstaged and outside this
   receipt.
+
+## Narrow feature-cache correction rereview
+
+Correction `4844ed5f0b8e51c668b49250d58634eecdbf33ec` **closes the sole
+finding and is accepted**.
+
+The lazy/helper replacement path now uses
+`StaticTextStyleFeature::live_option`, which reads current occurrence `tag` and
+`featureValue` properties directly on every invocation. It does not consult
+the `text_shape_revision` option cache. Ordinary shaping and the report
+observer instead use `feature_values`, which returns the retained
+`RuntimeTextStyleVariableFont.features` snapshot whenever it exists. The
+correction therefore fixes rows 6-7 without making the empty feature callbacks
+eager or bypassing the source-visible variable-font cache.
+
+The focused real-owner test reproduces the rejected sequence completely: the
+initial retained snapshot is `[(liga,1),(liga,0),(liga,1)]`; the live final
+write to zero changes the generated property but leaves Text, Style, helper,
+cache, and shaping unchanged; recursive root `WorldTransform` reaches the
+retained helper; `update_pass` replaces the cache with
+`[(liga,1),(liga,0),(liga,0)]`; and later ordinary shaping consumes that
+replacement. No test-local option algorithm or eager Text dirt is involved.
+
+The exact temporal feature test, TextStyle lifecycle test, and re-entrant
+shape-dirt test each passed. Correction-range `git diff --check` passed, the
+delta is contained to the declared three paths, the 17-row authority and
+0/0/0/0 literal-consumer topology plus all fixture counts are unchanged, and
+all 17 pre-existing user-dirty paths remain unstaged.

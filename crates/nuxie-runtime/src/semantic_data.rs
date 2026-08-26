@@ -12,6 +12,8 @@ use crate::semantic_provider::{
 };
 
 #[cfg(test)]
+mod wave_c15_lifecycle_tests;
+#[cfg(test)]
 mod wave_c16_focused_state_tests;
 #[cfg(test)]
 mod wave_c16_listener_tests;

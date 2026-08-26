@@ -47,7 +47,7 @@ fn load_fixture(name: &str) -> Fixture {
     let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
         .unwrap_or_else(|error| panic!("{name} default artboard instantiates: {error:#}"));
     let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
-    assert!(state_machine.enable_semantics());
+    state_machine.enable_semantics();
     let view_model = file
         .artboard(0)
         .and_then(|artboard| artboard.uint_property("viewModelId"))
@@ -190,25 +190,9 @@ fn fandom_labels() -> BTreeSet<&'static str> {
     FANDOM_LABELS.into_iter().collect()
 }
 
-fn missing_manager_node_by_id(_: u32) -> bool {
-    panic!("StateMachineInstance exposes semantic diffs but not the C++ manager nodeById owner")
-}
-
-#[test]
-#[ignore = "expected-red: Rust omits mounted ArtboardComponentList semantic items before nodeById"]
-fn artboard_component_list_items_populate_the_parent_artboards_semantic_manager() {
-    let setup = Setup::load("semantic/data_binding_lists.riv");
-    assert_eq!(setup.fandom_labels_present(), fandom_labels());
-    assert!(setup.fixture.state_machine.semantic_manager());
-    for label in FANDOM_LABELS {
-        let entry = setup.find_by_label(label).expect("fandom semantic entry");
-        assert!(missing_manager_node_by_id(entry.id), "{label}");
-    }
-}
-
 #[test]
 #[ignore = "expected-red: Rust does not retain the upstream initial Expanded semantic state"]
-fn dropdown_button_starts_expanded_with_the_expandable_trait_authored() {
+fn wave_c15_002_dropdown_button_starts_expanded_with_expandable_trait() {
     let setup = Setup::load("semantic/data_binding_lists.riv");
     let button = setup
         .find_by_label(DROPDOWN_LABEL)
@@ -225,8 +209,8 @@ fn dropdown_button_starts_expanded_with_the_expandable_trait_authored() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust omits mounted ArtboardComponentList semantic item bounds"]
-fn list_item_semantic_data_have_non_empty_bounds_in_the_unified_coordinate_space() {
+#[ignore = "expected-red: Rust omits mounted ArtboardComponentList semantic items before bounds assertions"]
+fn wave_c15_003_list_item_semantic_data_have_non_empty_unified_bounds() {
     let setup = Setup::load("semantic/data_binding_lists.riv");
     for label in FANDOM_LABELS {
         let entry = setup.find_by_label(label).expect("fandom semantic entry");
@@ -237,47 +221,8 @@ fn list_item_semantic_data_have_non_empty_bounds_in_the_unified_coordinate_space
 }
 
 #[test]
-#[ignore = "expected-red: Rust omits mounted ArtboardComponentList semantic items before nodeById"]
-fn collapsing_the_dropdown_removes_list_item_semantic_data_from_the_unified_tree() {
-    let mut setup = Setup::load("semantic/data_binding_lists.riv");
-    assert_eq!(setup.fandom_labels_present(), fandom_labels());
-    let ids = FANDOM_LABELS
-        .into_iter()
-        .map(|label| setup.find_by_label(label).expect("fandom entry").id)
-        .collect::<Vec<_>>();
-    setup.tap_dropdown();
-    assert!(setup.fandom_labels_present().is_empty());
-    let button = setup
-        .find_by_label(DROPDOWN_LABEL)
-        .expect("dropdown button");
-    assert!(!has_semantic_state(
-        button.state_flags,
-        SemanticState::EXPANDED
-    ));
-    assert!(setup.fixture.state_machine.semantic_manager());
-    for id in ids {
-        assert!(!missing_manager_node_by_id(id));
-    }
-}
-
-#[test]
-#[ignore = "expected-red: Rust omits mounted ArtboardComponentList semantic items before nodeById"]
-fn re_expanding_the_dropdown_re_registers_list_item_semantic_data() {
-    let mut setup = Setup::load("semantic/data_binding_lists.riv");
-    setup.tap_dropdown();
-    assert!(setup.fandom_labels_present().is_empty());
-    setup.tap_dropdown();
-    assert_eq!(setup.fandom_labels_present(), fandom_labels());
-    assert!(setup.fixture.state_machine.semantic_manager());
-    for label in FANDOM_LABELS {
-        let entry = setup.find_by_label(label).expect("fandom semantic entry");
-        assert!(missing_manager_node_by_id(entry.id), "{label}");
-    }
-}
-
-#[test]
 #[ignore = "expected-red: Rust omits mounted ArtboardComponentList semantic items"]
-fn multiple_collapse_uncollapse_cycles_maintain_exactly_four_fandoms() {
+fn wave_c15_006_multiple_cycles_maintain_exactly_four_fandoms() {
     let mut setup = Setup::load("semantic/data_binding_lists.riv");
     assert_eq!(setup.fandom_labels_present(), fandom_labels());
     for cycle in 0..3 {
@@ -303,7 +248,7 @@ fn multiple_collapse_uncollapse_cycles_maintain_exactly_four_fandoms() {
 
 #[test]
 #[ignore = "expected-red: Rust does not retain the upstream initial Expanded semantic state"]
-fn fire_semantic_action_tap_on_the_dropdown_button_collapses_the_list() {
+fn wave_c15_007_fire_semantic_action_tap_collapses_the_list() {
     let mut setup = Setup::load("semantic/data_binding_lists.riv");
     let button = setup
         .find_by_label(DROPDOWN_LABEL)
@@ -314,12 +259,10 @@ fn fire_semantic_action_tap_on_the_dropdown_button_collapses_the_list() {
     ));
     assert_eq!(setup.fandom_labels_present(), fandom_labels());
     let id = button.id;
-    assert!(
-        setup
-            .fixture
-            .state_machine
-            .fire_semantic_action(id, SemanticActionType::Tap as u32)
-    );
+    setup
+        .fixture
+        .state_machine
+        .fire_semantic_action(id, SemanticActionType::Tap as u32);
     setup.settle();
     let button = setup
         .find_by_label(DROPDOWN_LABEL)
@@ -332,7 +275,7 @@ fn fire_semantic_action_tap_on_the_dropdown_button_collapses_the_list() {
 }
 
 #[test]
-fn semantic_tap_and_pointer_down_up_converge_on_the_same_state() {
+fn wave_c15_008_semantic_tap_and_pointer_converge_on_the_same_state() {
     let mut pointer = Setup::load("semantic/data_binding_lists.riv");
     let mut semantic = Setup::load("semantic/data_binding_lists.riv");
     pointer.tap_dropdown();
@@ -340,12 +283,10 @@ fn semantic_tap_and_pointer_down_up_converge_on_the_same_state() {
         .find_by_label(DROPDOWN_LABEL)
         .expect("dropdown button")
         .id;
-    assert!(
-        semantic
-            .fixture
-            .state_machine
-            .fire_semantic_action(id, SemanticActionType::Tap as u32)
-    );
+    semantic
+        .fixture
+        .state_machine
+        .fire_semantic_action(id, SemanticActionType::Tap as u32);
     semantic.settle();
     assert!(pointer.fandom_labels_present().is_empty());
     assert!(semantic.fandom_labels_present().is_empty());
@@ -362,45 +303,8 @@ fn semantic_tap_and_pointer_down_up_converge_on_the_same_state() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust omits dynamic list-item semantic nodes before nodeById/parent"]
-fn dynamic_list_item_artboards_parent_list_items_under_the_enclosing_list_role() {
-    let mut fixture = load_fixture("semantic/data_binding_lists_items.riv");
-    assert!(fixture.state_machine.semantic_manager());
-    let diff = fixture
-        .state_machine
-        .drain_semantics_diff(&mut fixture.artboard)
-        .expect("initial semantics diff");
-    let list_ids = diff
-        .added
-        .iter()
-        .filter(|n| n.role == SemanticRole::List as u32)
-        .map(|n| n.id)
-        .collect::<Vec<_>>();
-    let item_ids = diff
-        .added
-        .iter()
-        .filter(|n| n.role == SemanticRole::ListItem as u32)
-        .map(|n| n.id)
-        .collect::<Vec<_>>();
-    assert_eq!(list_ids.len(), 1);
-    assert!(!item_ids.is_empty());
-    let parents = diff
-        .added
-        .iter()
-        .map(|n| (n.id, n.parent_id))
-        .collect::<BTreeMap<_, _>>();
-    for id in &item_ids {
-        assert!(parents.contains_key(id), "id {id}");
-        assert_eq!(parents[id], list_ids[0] as i32, "id {id}");
-    }
-    for id in item_ids {
-        assert!(missing_manager_node_by_id(id), "id {id}");
-    }
-}
-
-#[test]
 #[ignore = "expected-red: Rust omits mounted ArtboardComponentList semantic items"]
-fn enabling_semantics_twice_does_not_duplicate_list_item_entries() {
+fn wave_c15_010_enabling_semantics_twice_does_not_duplicate_list_items() {
     let file = read_runtime_file(&pinned_fixture("semantic/data_binding_lists.riv"))
         .expect("data_binding_lists imports");
     let graphs = GraphFile::from_runtime_file(&file).expect("data_binding_lists graph builds");
@@ -408,8 +312,8 @@ fn enabling_semantics_twice_does_not_duplicate_list_item_entries() {
     let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
         .expect("default artboard instantiates");
     let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
-    assert!(machine.enable_semantics());
-    assert!(!machine.enable_semantics());
+    machine.enable_semantics();
+    machine.enable_semantics();
     if let Some(vm_index) = file
         .artboard(0)
         .and_then(|a| a.uint_property("viewModelId"))

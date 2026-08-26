@@ -92850,6 +92850,111 @@ fn upstream_text_input_fixture() -> (RuntimeFile, GraphFile, usize, ArtboardInst
 }
 
 #[test]
+fn wave_c7_text_input_004_key_input_handles_backspace_and_delete() {
+    const BACKSPACE: u32 = 259;
+    const DELETE: u32 = 261;
+
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let _ = artboard.debug_set_text_input_raw_text(text_input, "hello");
+    let _ = artboard.debug_set_text_input_cursor(text_input, 3, 3);
+
+    artboard.update_pass();
+
+    let handled = artboard.debug_text_input_key_input(text_input, BACKSPACE, 0, true, false);
+    assert!(handled);
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("helo")
+    );
+
+    let _ = artboard.debug_set_text_input_cursor(text_input, 2, 2);
+    let handled = artboard.debug_text_input_key_input(text_input, DELETE, 0, true, false);
+    assert!(handled);
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("heo")
+    );
+}
+
+#[test]
+fn wave_c7_text_input_006_key_input_returns_false_for_unhandled_keys() {
+    const ESCAPE: u32 = 256;
+    const RIGHT: u32 = 262;
+
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+
+    artboard.update_pass();
+
+    let handled = artboard.debug_text_input_key_input(text_input, ESCAPE, 0, true, false);
+    assert!(!handled);
+
+    let handled = artboard.debug_text_input_key_input(text_input, RIGHT, 0, false, false);
+    assert!(!handled);
+}
+
+#[test]
+fn wave_c7_text_input_009_key_input_handles_select_all() {
+    const A: u32 = 65;
+    const CTRL: u32 = 2;
+    const META: u32 = 8;
+
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let _ = artboard.debug_set_text_input_raw_text(text_input, "hello world");
+    let _ = artboard.debug_set_text_input_cursor(text_input, 0, 0);
+
+    artboard.update_pass();
+
+    let system_modifier = if cfg!(windows) { CTRL } else { META };
+    let handled = artboard.debug_text_input_key_input(text_input, A, system_modifier, true, false);
+    assert!(handled);
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((0, 11)));
+
+    let handled = artboard.debug_text_input_key_input(text_input, A, 0, true, false);
+    assert!(!handled);
+}
+
+#[test]
+fn wave_c7_text_input_014_text_input_method_inserts_text() {
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let _ = artboard.debug_set_text_input_raw_text(text_input, "");
+    let _ = artboard.debug_set_text_input_cursor(text_input, 0, 0);
+
+    artboard.update_pass();
+
+    let handled = artboard.debug_text_input_text_input(text_input, "hello");
+    assert!(handled);
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("hello")
+    );
+
+    let handled = artboard.debug_text_input_text_input(text_input, " world");
+    assert!(handled);
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("hello world")
+    );
+}
+
+#[test]
+fn wave_c7_text_input_018_selection_radius_changed_updates_raw_text_input() {
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let radius = property_key_for_name("TextInput", "selectionRadius");
+
+    let _ = artboard.set_double_property(text_input, radius, 5.0);
+
+    assert_eq!(artboard.double_property(text_input, radius), Some(5.0));
+}
+
+#[test]
 fn upstream_text_input_load_and_drawable_children_are_ported() {
     let (runtime, graph, index, mut artboard, text_input) = upstream_text_input_fixture();
     let graph = &graph.artboards[index];

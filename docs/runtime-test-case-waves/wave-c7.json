@@ -32,7 +32,7 @@
   "wave": "c7",
   "case_count": 58,
   "ratchet": {
-    "max_pending": 52
+    "max_pending": 47
   },
   "cases": [
     {
@@ -270,7 +270,8 @@
       "name": "file with text input loads correctly",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending the live typed TextInput child-enumeration owner; static graph parent/type counts are a forbidden substitute for the five pinned live children<T>() queries."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#2",
@@ -280,7 +281,8 @@
       "name": "file with text input renders correctly",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending the pinned SerializingFactory frame stream and frozen text_input silver oracle; a downstream host render or graph projection cannot replace it."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#3",
@@ -290,7 +292,8 @@
       "name": "text input keyInput handles arrow keys",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending exact character and vertical navigation ownership: the full action stream includes Down/Up through the reconstructed retained-geometry navigation path identified in TextInput source row 22."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#4",
@@ -298,9 +301,17 @@
       "ordinal": 4,
       "line": 85,
       "name": "text input keyInput handles backspace and delete",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 92853,
+          "symbol": "wave_c7_text_input_004_key_input_handles_backspace_and_delete"
+        }
+      ],
+      "note": "The distinct live-fixture test preserves the raw hello setup, collapsed cursor positions, zero advance, both key actions and handled results, and both ordered raw-text assertions."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#5",
@@ -310,7 +321,8 @@
       "name": "text input keyInput handles undo/redo",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending a fixture-level callable RawTextInput::insert owner that preserves the pinned journal construction before TextInput key dispatch; replacing raw insert with TextInput::textInput would add source synchronization and shape dirt."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#6",
@@ -318,9 +330,17 @@
       "ordinal": 6,
       "line": 162,
       "name": "text input keyInput returns false for unhandled keys",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 92884,
+          "symbol": "wave_c7_text_input_006_key_input_returns_false_for_unhandled_keys"
+        }
+      ],
+      "note": "The distinct live-fixture test preserves the zero advance, Escape press and Right release order, and both false handled assertions."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#7",
@@ -330,7 +350,8 @@
       "name": "text input keyInput handles modifier keys for cursor boundary",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending exact navigation ownership because the full stream includes Meta+Right line-boundary movement through the reconstructed line-range path; word/subword-only agreement cannot certify the row."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#8",
@@ -340,7 +361,8 @@
       "name": "text input keyInput handles shift for selection",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending exact shaped character-navigation ownership; the Rust raw editor infers character clusters rather than consuming the pinned shaped glyph lookup."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#9",
@@ -348,9 +370,17 @@
       "ordinal": 9,
       "line": 257,
       "name": "text input keyInput handles select all",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 92900,
+          "symbol": "wave_c7_text_input_009_key_input_handles_select_all"
+        }
+      ],
+      "note": "The distinct live-fixture test preserves the raw text/cursor setup, zero advance, native system-modifier branch, handled result and both selection endpoints, then the plain-A false result."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#10",
@@ -360,7 +390,8 @@
       "name": "text input keyInput handles home and end",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending exact visual-line navigation ownership for Home, End, and Shift+End; the current TextInput reconstructs the line range from retained geometry/text."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#11",
@@ -370,7 +401,8 @@
       "name": "raw text input selectLine selects the visual line",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending a callable occurrence-level RawTextInput::selectLine backed by the pinned shaped visual-line owner; newline scanning or a debug-computed line range is forbidden."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#12",
@@ -380,7 +412,8 @@
       "name": "text input selectWord and selectLine wrappers",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending exact TextInput::selectLine ownership: selectWord is callable, but the same pinned row also requires the reconstructed line-selection wrapper and its assertions."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#13",
@@ -390,7 +423,8 @@
       "name": "text input double and triple click select word and line",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending exact TextInput hit routing and click-count selection through the state-machine pointer owner; direct selection wrappers or synthetic local hits are forbidden substitutes."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#14",
@@ -398,9 +432,17 @@
       "ordinal": 14,
       "line": 439,
       "name": "text input textInput method inserts text",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 92921,
+          "symbol": "wave_c7_text_input_014_text_input_method_inserts_text"
+        }
+      ],
+      "note": "The distinct live-fixture test preserves empty raw text/cursor setup, zero advance, both TextInput insertion calls and handled results, and both ordered raw-text assertions."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#15",
@@ -410,7 +452,8 @@
       "name": "text input multiline toggles line breaks in displayed text",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending the complete updateMultiline owner: retained raw maxWidth/sizing, cross-axis reset, display sync, and layout-before-TextShape ordering remain incomplete in source row 21."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#16",
@@ -420,7 +463,8 @@
       "name": "text input strips inserted line breaks when single line",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending the shared updateMultiline owner used before and after insertion; the literal case cannot be split around the incomplete multiline transition sequence."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#17",
@@ -430,7 +474,8 @@
       "name": "text input keyInput handles enter key",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending the shared updateMultiline owner in both multiline and single-line branches; the corrected Enter handled/sync/Paint path alone does not complete the pinned stream."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#18",
@@ -438,9 +483,17 @@
       "ordinal": 18,
       "line": 545,
       "name": "text input selectionRadiusChanged updates raw text input",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 92948,
+          "symbol": "wave_c7_text_input_018_selection_radius_changed_updates_raw_text_input"
+        }
+      ],
+      "note": "The distinct live-fixture test performs the pinned generated selectionRadius write and preserves the sole observable assertion on the generated value; it does not substitute a raw-radius assertion."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#19",
@@ -450,7 +503,8 @@
       "name": "state machine keyInput and textInput forward to text input",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending the focus/listener capability owner: through the real authored FocusData parent and StateMachineInstance setFocus seam, the literal committed-text dispatch remains unhandled; TextInput acceptsKeyboardInput is still not independently published as required by header row H3."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#20",
@@ -460,7 +514,8 @@
       "name": "losing focus clears the text input selection",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": []
+      "evidence": [],
+      "note": "Pending the live TextInputCursor localClockwisePath focus observable and complete focus-capability dispatch; the corrected blur selection collapse is only part of this assertion stream."
     },
     {
       "id": "tests/unit_tests/runtime/text_modifier_test.cpp#1",

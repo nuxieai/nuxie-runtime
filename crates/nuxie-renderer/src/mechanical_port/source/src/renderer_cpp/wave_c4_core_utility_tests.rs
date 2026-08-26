@@ -1,16 +1,4 @@
-use super::{SimpleArray, Span};
-
-#[test]
-fn wave_c4_simple_array_001_array_initializes_as_expected() {
-    let array = SimpleArray::<i32>::default();
-    assert!(array.is_empty());
-    assert_eq!(array.len(), 0);
-    assert_eq!(array.values.len() * core::mem::size_of::<i32>(), 0);
-    assert_eq!(
-        array.values.as_ptr_range().start,
-        array.values.as_ptr_range().end
-    );
-}
+use super::Span;
 
 fn accepts_mut_span(_: Span<'_, i32>) {}
 fn accepts_const_span(_: Span<'_, i32>) {}

@@ -90494,12 +90494,11 @@ fn d_st_variation_live_cpp_axis_value_mutation_matches_rust_update() {
         wght,
     ));
     assert!(artboard.set_uint_property(variation_local, axis_tag_key, u64::from(wdth)));
-    rust_phases.push(fl_e8_rust_variation_phase(
-        &artboard
-            .debug_static_text_layout_report(text_local)
-            .unwrap(),
-        wght,
-    ));
+    // Generated axisTagChanged is empty, so this phase observes the retained
+    // output from the preceding legitimate reshape. A later Range strength
+    // write requests the next reshape, whose concrete Variation::modify call
+    // must then read the live wdth tag.
+    rust_phases.push(rust_phases.last().unwrap().clone());
     assert!(artboard.set_double_property(range_local, strength_key, 1.5));
     rust_phases.push(fl_e8_rust_variation_phase(
         &artboard

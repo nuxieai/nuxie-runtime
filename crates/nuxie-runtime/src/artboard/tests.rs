@@ -951,7 +951,6 @@
             image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
             text_style_feature_options: RefCell::new(BTreeMap::new()),
-            text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::default(),
             external_font_assets: Arc::new(BTreeMap::new()),
             runtime_font_assets: Arc::new(crate::RuntimeFontAssetOwners::default()),

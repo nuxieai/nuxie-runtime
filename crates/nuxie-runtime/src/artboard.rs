@@ -508,7 +508,6 @@ pub struct ArtboardInstance {
     pub(crate) image_render_overrides: BTreeMap<usize, crate::RuntimeViewModelImage>,
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
     text_style_feature_options: RefCell<BTreeMap<usize, RuntimeTextStyleFeatureOption>>,
-    text_variation_modifier_tags: RefCell<BTreeMap<usize, (u64, u32)>>,
     pub(crate) runtime_images: crate::draw::image::RuntimeImageList,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
     pub(crate) runtime_font_assets: Arc<crate::RuntimeFontAssetOwners>,
@@ -714,7 +713,6 @@ impl Clone for ArtboardInstance {
             // C++ clones generated feature fields, then builds a fresh
             // occurrence-local optioned-font cache during clean/add.
             text_style_feature_options: RefCell::new(BTreeMap::new()),
-            text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: self.runtime_images.clone(),
             external_font_assets: self.external_font_assets.clone(),
             runtime_font_assets: Arc::clone(&self.runtime_font_assets),
@@ -2863,7 +2861,6 @@ impl ArtboardInstance {
             image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
             text_style_feature_options: RefCell::new(BTreeMap::new()),
-            text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::from_graph(file, graph),
             external_font_assets,
             runtime_font_assets,

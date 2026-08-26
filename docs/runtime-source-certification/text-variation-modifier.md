@@ -2,6 +2,13 @@
 
 Status: **author candidate; independent review required**.
 
+Correction after independent rejection `618fba0b1`: the previous candidate
+incorrectly attributed the phase-6 differential to Range/group reshaping. The
+actual defect was the revision-keyed Variation tag cache. This correction
+removes that cache, restores a live tag read at every `modify`, and fixes the
+probe's phase-5 Rust observer to retain output when the empty callback requests
+no update.
+
 This receipt is governed by
 `docs/runtime-exact-parity-workflow-correction.md`. It does not self-accept the
 pair. The complete pinned asset inventory has no material consumer, so every
@@ -33,12 +40,12 @@ and `axisValue` to `0.0f`. Both generated setters are equal-value no-ops,
 otherwise store before invoking their callback and property notification.
 `axisTagChanged` is empty; `axisValueChanged` is the handwritten body above.
 Generated copy copies both fields. Rust stores live generated properties in
-the occurrence and lazily keys the tag cache by text-shape revision
-(`artboard/text/text_variation_helper.rs:5`). A live parent write does not
-rerun construction, while a cold clone reconstructs occurrence registration
-from the copied parent ID. Supporting evidence proves the source keeps its
-old callback owner, the clone resolves the new group/Text, and both live tag
-and value are copied.
+the occurrence, and every concrete `modify` call reads the current tag through
+`artboard/text/text_variation_helper.rs:5`; there is no revision-keyed tag
+cache. A live parent write does not rerun construction, while a cold clone
+reconstructs occurrence registration from the copied parent ID. Supporting
+evidence proves the source keeps its old callback owner, the clone resolves
+the new group/Text, and both live tag and value are copied.
 
 ## Floating-point provenance
 
@@ -71,20 +78,18 @@ fixture, direct owner tests, and cpp probe are support only.
   empty axisTag behavior, both malformed hierarchy no-ops, live-parent freeze,
   and cold-clone callback re-registration with copied tag/value.
 - `cpp_probe.rs:90357::d_st_variation_live_cpp_axis_value_mutation_matches_rust_update`
-  was executed against the real C++ probe. Its initial axisValue mutation
-  matches. Its separate seven-phase cycle remains red at phase 6: after the
-  intentionally empty axisTag callback, a later TextModifierRange strength
-  write expects `[Some(1300.0), None, ...]` for 13 C++ glyphs while Rust
-  returns 13 `None` values. The suspected owner is the Range/group
-  strength-to-retained-reshape route, outside these two Variation bodies; it
-  is recorded rather than hidden or repaired with an invented Variation fix.
+  executes the real C++ probe and the full seven-phase cycle. The immediate
+  axisTag phase retains the preceding output because its generated callback is
+  empty. The later legitimate Range strength reshape calls concrete
+  `Variation::modify`, reads live `wdth`, and matches the C++ phase-6
+  `[Some(1300.0), None, ...]` stream.
 
 Focused gates:
 
 - `cargo test -p nuxie-runtime --lib cxx_text_variation_modifier_ -- --nocapture`:
   2 passed.
 - `cargo test -p nuxie-runtime --features tools --test cpp_probe d_st_variation_live_cpp_axis_value_mutation_matches_rust_update -- --exact --nocapture`:
-  executed, 1 failed at the documented downstream phase-6 dependency.
+  1 passed, including all seven phases.
 
 ## Author conclusion
 

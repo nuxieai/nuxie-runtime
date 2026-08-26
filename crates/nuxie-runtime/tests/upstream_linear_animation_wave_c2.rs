@@ -2,7 +2,10 @@
 
 use std::path::PathBuf;
 
-use nuxie_binary::{read_runtime_file, FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
+use nuxie_binary::{
+    FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, RuntimeImportStatus,
+    read_runtime_file,
+};
 use nuxie_graph::GraphFile;
 use nuxie_runtime::ArtboardInstance;
 
@@ -110,9 +113,32 @@ fn wave_c2_linear_definition_005_missing_keyed_object_does_not_stop_initializati
         record("KeyedObject", vec![uint("KeyedObject", "objectId", 1)]),
     ])
     .expect("fixture imports while retaining the valid sibling after MissingObject");
+    let authored = [
+        runtime.object(4).expect("missing-target KeyedObject"),
+        runtime.object(5).expect("valid KeyedObject"),
+    ];
+    assert_eq!(authored.map(|object| object.type_name), ["KeyedObject"; 2]);
+    assert_eq!(
+        authored.map(|object| object.uint_property("objectId")),
+        [Some(99), Some(1)]
+    );
+    assert_eq!(
+        runtime.import_status(4),
+        Some(RuntimeImportStatus::Imported)
+    );
+    assert_eq!(
+        runtime.import_status(5),
+        Some(RuntimeImportStatus::Imported)
+    );
+
+    // Rust's immutable graph build is the approved ownership adaptation for
+    // C++ virtual onAddedDirty callbacks: it evaluates both authored records
+    // in order, drops only the missing target, and continues to the valid
+    // sibling instead of exposing callback counters or a mutable StatusCode.
     let graphs = GraphFile::from_runtime_file(&runtime).expect("fixture graphs");
     let animation = &graphs.artboards[0].animations[0];
     assert_eq!(animation.keyed_objects.len(), 1);
+    assert_eq!(animation.keyed_objects[0].global_id, 5);
     assert_eq!(animation.keyed_objects[0].object_id, 1);
 }
 

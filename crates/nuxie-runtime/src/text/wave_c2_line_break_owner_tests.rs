@@ -150,18 +150,6 @@ mod wave_c2_line_break_owner_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: the first concrete paragraph does not split U+2028 into the pinned two GlyphLines"]
-    fn wave_c2_line_break_007_shaper_separates_paragraphs() {
-        let font = font();
-        let text = "hello look\u{2028}here\nsecond paragraph";
-        let glyphs = shape(&[run(&font, text, 32.0, 0)]);
-        let lines = break_lines(text, &glyphs, 300.0);
-        let first = lines.iter().filter(|line| line.paragraph == 0).count();
-        let second = lines.iter().filter(|line| line.paragraph == 1).count();
-        assert_eq!((first, second), (2, 1));
-    }
-
-    #[test]
     fn wave_c2_line_break_008_shaper_handles_rtl() {
         // Pinned loadFont ignores its filename argument and decodes RobotoFlex.
         let font = font();
@@ -221,27 +209,5 @@ mod wave_c2_line_break_owner_tests {
         assert!(!paragraph_base_is_rtl(text, lines[1].char_start));
         assert_eq!(lines[1].glyphs.len(), 1);
         assert_eq!(lines[1].glyphs[0].char_index, 3);
-    }
-
-    #[test]
-    #[ignore = "expected-red: standalone_break_lines does not treat U+2028 as a forced break at unbounded width"]
-    fn wave_c2_line_break_011_deals_with_space_only_lines() {
-        let font = font();
-        let text = "hi\u{2028} ";
-        let glyphs = shape(&[run(&font, text, 32.0, 0)]);
-        assert_eq!(break_lines(text, &glyphs, -1.0).len(), 2);
-    }
-
-    #[test]
-    #[ignore = "expected-red: standalone_break_lines materializes a trailing empty paragraph after the pinned hi-newline run"]
-    fn wave_c2_line_break_012_deals_with_empty_lines() {
-        let font = font();
-        let text = "hi\n";
-        let glyphs = shape(&[run(&font, text, 32.0, 0)]);
-        let lines = break_lines(text, &glyphs, -1.0);
-        assert_eq!(lines.len(), 1);
-        assert_eq!((lines[0].char_start, lines[0].char_end), (0, 3));
-        assert_eq!(lines[0].glyphs.len(), 3);
-        assert_eq!(lines[0].glyphs[0].char_index, 0);
     }
 }

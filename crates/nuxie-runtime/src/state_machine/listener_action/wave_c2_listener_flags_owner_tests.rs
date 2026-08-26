@@ -86,6 +86,54 @@ fn owner_counts(file: &RuntimeFile) -> (usize, usize, usize) {
     (listener, transition, state)
 }
 
+#[derive(Clone, Copy)]
+enum ExactOwner {
+    Listener,
+    Transition,
+    State,
+}
+
+fn assert_exact_route(file: &RuntimeFile, expected: ExactOwner, flags: u64) {
+    let machine = &file.artboard_state_machine_graphs(0)[0];
+    let imported = file
+        .objects
+        .iter()
+        .flatten()
+        .find(|object| object.type_name == "FocusActionClear")
+        .expect("exact imported ListenerAction");
+    assert_eq!(imported.uint_property("flags"), Some(flags));
+    let routed = match expected {
+        ExactOwner::Listener => {
+            assert!(machine.layers[0].states[3].listener_actions.is_empty());
+            assert!(
+                machine.layers[0].states[3]
+                    .transitions
+                    .first()
+                    .is_none_or(|transition| transition.listener_actions.is_empty())
+            );
+            assert_eq!(machine.listeners[0].actions.len(), 1);
+            &machine.listeners[0].actions[0]
+        }
+        ExactOwner::Transition => {
+            assert!(machine.listeners[0].actions.is_empty());
+            assert!(machine.layers[0].states[3].listener_actions.is_empty());
+            let transition = machine.layers[0].states[3]
+                .transitions
+                .first()
+                .expect("exact transition owner");
+            assert_eq!(transition.listener_actions.len(), 1);
+            &transition.listener_actions[0]
+        }
+        ExactOwner::State => {
+            assert!(machine.listeners[0].actions.is_empty());
+            assert!(machine.layers[0].states[3].transitions.is_empty());
+            assert_eq!(machine.layers[0].states[3].listener_actions.len(), 1);
+            &machine.layers[0].states[3].listener_actions[0]
+        }
+    };
+    assert!(std::ptr::eq(routed.object, imported));
+}
+
 fn occurrence_runs(flags: u64, occurrence: StateMachineFireOccurrence) -> bool {
     struct CountingExecutor(usize);
     impl RuntimeScheduledListenerActionExecutor for CountingExecutor {
@@ -154,21 +202,25 @@ fn occurrence_runs(flags: u64, occurrence: StateMachineFireOccurrence) -> bool {
 
 #[test]
 fn wave_c2_listener_flags_001_parent_kind_decodes_bits_one_and_two() {
-    assert_eq!(owner_counts(&routed(true, 0)), (1, 0, 0));
-    assert_eq!(owner_counts(&routed(true, 1 << 1)), (0, 1, 0));
-    assert_eq!(owner_counts(&routed(false, 2 << 1)), (0, 0, 1));
-    assert_eq!(owner_counts(&routed(true, 3 << 1)), (1, 0, 0));
+    assert_exact_route(&routed(true, 0), ExactOwner::Listener, 0);
+    assert_exact_route(&routed(true, 1 << 1), ExactOwner::Transition, 1 << 1);
+    assert_exact_route(&routed(false, 2 << 1), ExactOwner::State, 2 << 1);
+    assert_exact_route(&routed(true, 3 << 1), ExactOwner::Listener, 3 << 1);
 }
 
 #[test]
 fn wave_c2_listener_flags_002_fields_are_independent() {
-    assert_eq!(owner_counts(&routed(true, 1)), (1, 0, 0));
+    assert_exact_route(&routed(true, 1), ExactOwner::Listener, 1);
     assert!(occurrence_runs(1, StateMachineFireOccurrence::AtEnd));
     assert!(!occurrence_runs(1, StateMachineFireOccurrence::AtStart));
-    assert_eq!(owner_counts(&routed(false, 2 << 1)), (0, 0, 1));
+    assert_exact_route(&routed(false, 2 << 1), ExactOwner::State, 2 << 1);
     assert!(occurrence_runs(2 << 1, StateMachineFireOccurrence::AtStart));
     assert!(!occurrence_runs(2 << 1, StateMachineFireOccurrence::AtEnd));
-    assert_eq!(owner_counts(&routed(true, 1 | (1 << 1))), (0, 1, 0));
+    assert_exact_route(
+        &routed(true, 1 | (1 << 1)),
+        ExactOwner::Transition,
+        1 | (1 << 1),
+    );
     assert!(occurrence_runs(
         1 | (1 << 1),
         StateMachineFireOccurrence::AtEnd
@@ -185,17 +237,17 @@ fn wave_c2_listener_flags_003_matches_both_occurrences() {
 
 #[test]
 fn wave_c2_listener_flags_004_transition_routes_to_layer_importer() {
-    assert_eq!(owner_counts(&routed(true, 1 << 1)), (0, 1, 0));
+    assert_exact_route(&routed(true, 1 << 1), ExactOwner::Transition, 1 << 1);
 }
 
 #[test]
 fn wave_c2_listener_flags_005_state_routes_to_layer_importer() {
-    assert_eq!(owner_counts(&routed(false, 2 << 1)), (0, 0, 1));
+    assert_exact_route(&routed(false, 2 << 1), ExactOwner::State, 2 << 1);
 }
 
 #[test]
 fn wave_c2_listener_flags_006_listener_routes_to_listener_importer() {
-    assert_eq!(owner_counts(&routed(true, 0)), (1, 0, 0));
+    assert_exact_route(&routed(true, 0), ExactOwner::Listener, 0);
 }
 
 #[test]
@@ -223,5 +275,34 @@ fn wave_c2_listener_flags_007_missing_listener_importer_fails() {
         ),
     ])
     .expect_err("Listener parent without listener importer must reject");
-    assert!(error.to_string().contains("FocusActionClear"));
+    assert_eq!(
+        error.to_string(),
+        "fixture object 9 (FocusActionClear) would be dropped during import: MissingObject"
+    );
+
+    // Rust fixture import is transactional: the failed RuntimeFile is never
+    // published. Re-run the exact owner prefix without the failed action and
+    // prove the transition's concrete retained collection is empty.
+    let control = RuntimeFile::from_fixture_records(vec![
+        record("Backboard", Vec::new()),
+        record("Artboard", Vec::new()),
+        record("StateMachine", Vec::new()),
+        record("StateMachineLayer", Vec::new()),
+        record("AnyState", Vec::new()),
+        record("EntryState", Vec::new()),
+        record("ExitState", Vec::new()),
+        record("AnimationState", Vec::new()),
+        record(
+            "StateTransition",
+            vec![property(
+                "StateTransition",
+                "stateToId",
+                FixtureValue::Uint(3),
+            )],
+        ),
+    ])
+    .expect("exact transition owner prefix");
+    let transition =
+        &control.artboard_state_machine_graphs(0)[0].layers[0].states[3].transitions[0];
+    assert!(transition.listener_actions.is_empty());
 }

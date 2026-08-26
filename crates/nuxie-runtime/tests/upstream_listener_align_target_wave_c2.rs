@@ -42,11 +42,15 @@ fn run_case(artboard_name: &str, expected_y: f32) {
         .expect("align-state-machine instance");
 
     artboard.advance(0.0).expect("Artboard::advance(0)");
-    let _ = artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+    let _ = state_machine
+        .advance_and_apply(&mut artboard, 0.0)
+        .expect("StateMachineInstance::advanceAndApply(0)");
     let _ = artboard.advance_state_machine_instance(&mut state_machine, 0.0);
     let _ = state_machine.pointer_move(&mut artboard, 100.0, 50.0, 0.0, 0);
     let _ = state_machine.pointer_move(&mut artboard, 100.0, 51.0, 0.0, 0);
-    let _ = artboard.advance_state_machine_instance(&mut state_machine, 1.0);
+    let _ = state_machine
+        .advance_and_apply(&mut artboard, 1.0)
+        .expect("StateMachineInstance::advanceAndApply(1)");
     let _ = artboard.advance_state_machine_instance(&mut state_machine, 0.0);
 
     let transform = artboard

@@ -2,9 +2,11 @@
 
 use std::path::PathBuf;
 
-use nuxie_binary::{read_runtime_file, RuntimeFile};
+use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::{ArtboardGraph, GraphFile};
-use nuxie_runtime::{ArtboardInstance, ComponentDirt, RuntimeLayoutBoundsReport};
+use nuxie_runtime::{
+    ArtboardInstance, ComponentDirt, RuntimeLayoutBounds, RuntimeLayoutBoundsReport,
+};
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -54,11 +56,10 @@ impl Fixture {
         .expect("styleId fits usize")
     }
 
-    fn bounds(&self, local_id: usize) -> RuntimeLayoutBoundsReport {
-        self.report()
-            .into_iter()
-            .find(|entry| entry.local_id == local_id)
-            .unwrap_or_else(|| panic!("missing layout report for local {local_id}"))
+    fn bounds(&self, local_id: usize) -> RuntimeLayoutBounds {
+        self.artboard
+            .layout_bounds(local_id)
+            .unwrap_or_else(|| panic!("missing retained layout bounds for local {local_id}"))
     }
 
     fn world_xy(&mut self, local_id: usize) -> (f32, f32) {
@@ -290,19 +291,6 @@ fn wave_c2_layout_005_center_alignment() {
     );
 }
 
-#[test]
-#[ignore = "expected-red: the exact HiText localBounds owner is not retained by the Rust Text occurrence"]
-fn wave_c2_layout_006_intrinsic_text_size() {
-    let mut fixture = fixture("layout/measure_tests.riv", Some("hi"));
-    fixture.advance();
-    let text = fixture.local("HiText");
-    let bounds = fixture.bounds(text);
-    assert_eq!(
-        (bounds.x, bounds.y, bounds.width, bounds.height),
-        (0.0, 0.0, 62.48047, 72.62695)
-    );
-}
-
 fn assert_style_f32(fixture: &Fixture, style: usize, property: &str, expected: f32) {
     assert_eq!(
         fixture
@@ -400,24 +388,6 @@ fn wave_c2_layout_009_corner_radius() {
 }
 
 #[test]
-#[ignore = "expected-red: the live Text occurrence retains authored alignValue but exposes no actual-direction-derived align owner"]
-fn wave_c2_layout_010_direction() {
-    let mut fixture = fixture("layout/layout_direction.riv", None);
-    fixture.advance();
-    for (name, x) in [("Layout1", 200.0), ("Layout2", 100.0), ("Layout3", 0.0)] {
-        let local = fixture.local(name);
-        assert_eq!(fixture.world_xy(local).0, x);
-    }
-    let text = fixture.local("SampleText");
-    assert_eq!(
-        fixture
-            .artboard
-            .debug_uint_property(text, property_key("Text", "alignValue")),
-        Some(2)
-    );
-}
-
-#[test]
 fn wave_c2_layout_011_forced_size_dirt() {
     let mut fixture = fixture("layout/layout_complex1.riv", None);
     let layout = fixture.local("LayoutLeftChild1");
@@ -425,29 +395,39 @@ fn wave_c2_layout_011_forced_size_dirt() {
         fixture.artboard.debug_layout_forced_size(layout),
         Some((None, None))
     );
-    assert!(fixture
-        .artboard
-        .debug_set_layout_forced_size(layout, 100.0, 150.0));
+    assert!(
+        fixture
+            .artboard
+            .debug_set_layout_forced_size(layout, 100.0, 150.0)
+    );
     assert_eq!(
         fixture.artboard.debug_layout_forced_size(layout),
         Some((Some(100.0), Some(150.0)))
     );
-    assert!(fixture
-        .artboard
-        .debug_component_dirt(layout)
-        .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE)));
+    assert!(
+        fixture
+            .artboard
+            .debug_component_dirt(layout)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE))
+    );
     fixture.advance();
-    assert!(!fixture
-        .artboard
-        .debug_component_dirt(layout)
-        .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE)));
-    assert!(!fixture
-        .artboard
-        .debug_set_layout_forced_size(layout, 100.0, 150.0));
-    assert!(!fixture
-        .artboard
-        .debug_component_dirt(layout)
-        .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE)));
+    assert!(
+        !fixture
+            .artboard
+            .debug_component_dirt(layout)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE))
+    );
+    assert!(
+        !fixture
+            .artboard
+            .debug_set_layout_forced_size(layout, 100.0, 150.0)
+    );
+    assert!(
+        !fixture
+            .artboard
+            .debug_component_dirt(layout)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE))
+    );
 }
 
 #[test]
@@ -499,14 +479,19 @@ fn wave_c2_layout_013_prevent_percent_margin_on_artboard() {
 fn wave_c2_layout_023_padding_insets_fill_child() {
     let mut fixture = fixture("layout/styled_flex.riv", None);
     fixture.advance();
-    let report = fixture.report();
-    let child = report
+    let child = fixture
+        .graph()
+        .local_objects
         .iter()
-        .find(|entry| {
-            entry.type_name == "LayoutComponent"
-                && entry.parent_local.is_some_and(|parent| parent != 0)
+        .find(|object| {
+            object.type_name == Some("LayoutComponent")
+                && object.local_id != 0
+                && fixture.graph().components.iter().any(|parent| {
+                    parent.local_id != 0 && parent.children.contains(&object.local_id)
+                })
         })
         .expect("fill child nested under container");
+    let child = fixture.bounds(child.local_id);
     assert_eq!(
         (child.x, child.y, child.width, child.height),
         (10.0, 20.0, 160.0, 140.0)

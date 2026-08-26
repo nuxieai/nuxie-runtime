@@ -22,14 +22,6 @@ fn instance(animation: &RuntimeLinearAnimation) -> LinearAnimationInstance {
     LinearAnimationInstance::new_for_test(RuntimeLinearAnimationHandle::new(0), animation, 1.0)
 }
 
-fn end_time(definition: &RuntimeLinearAnimation, speed_multiplier: f32) -> f32 {
-    if definition.speed * speed_multiplier < 0.0 {
-        definition.start_seconds()
-    } else {
-        definition.end_seconds()
-    }
-}
-
 #[test]
 fn wave_c2_linear_instance_001_one_shot() {
     let definition = animation(1.0, 0, false);
@@ -197,7 +189,7 @@ fn wave_c2_linear_definition_001_positive_speed_times() {
     assert_eq!(definition.start_seconds(), 0.0);
     assert_eq!(definition.end_seconds(), 5.0);
     assert_eq!(definition.start_time_with_speed(1.0), 0.0);
-    assert_eq!(end_time(&definition, 1.0), 5.0);
+    assert_eq!(definition.start_time_with_speed(-1.0), 5.0);
     assert_eq!(definition.duration_seconds(), 5.0);
 }
 
@@ -207,7 +199,7 @@ fn wave_c2_linear_definition_002_negative_speed_times() {
     assert_eq!(definition.start_seconds(), 0.0);
     assert_eq!(definition.end_seconds(), 5.0);
     assert_eq!(definition.start_time_with_speed(1.0), 5.0);
-    assert_eq!(end_time(&definition, 1.0), 0.0);
+    assert_eq!(definition.start_time_with_speed(-1.0), 0.0);
     assert_eq!(definition.duration_seconds(), 5.0);
 }
 

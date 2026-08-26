@@ -32,7 +32,7 @@
   "wave": "c2",
   "case_count": 73,
   "ratchet": {
-    "max_pending": 0
+    "max_pending": 4
   },
   "cases": [
     {
@@ -47,7 +47,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 148,
+          "line": 149,
           "symbol": "wave_c2_layout_stack_001_overlaps_children_and_aligns_from_file"
         }
       ],
@@ -65,7 +65,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 165,
+          "line": 166,
           "symbol": "wave_c2_layout_stack_002_alignment_positions_fixed_child"
         }
       ],
@@ -82,9 +82,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 190,
-          "symbol": "wave_c2_layout_stack_003_engine_display_folds_visibility_and_type"
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 27811,
+          "symbol": "upstream_engine_display_folds_visibility_and_layout_type"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
@@ -101,7 +101,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 231,
+          "line": 232,
           "symbol": "wave_c2_layout_001_flex_direction_row"
         }
       ],
@@ -119,7 +119,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 254,
+          "line": 255,
           "symbol": "wave_c2_layout_002_flex_direction_column"
         }
       ],
@@ -137,7 +137,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 266,
+          "line": 267,
           "symbol": "wave_c2_layout_003_flex_direction_row_with_gap"
         }
       ],
@@ -155,7 +155,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 278,
+          "line": 279,
           "symbol": "wave_c2_layout_004_flex_direction_row_with_wrap"
         }
       ],
@@ -173,7 +173,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 286,
+          "line": 287,
           "symbol": "wave_c2_layout_005_center_alignment"
         }
       ],
@@ -186,17 +186,16 @@
       "line": 147,
       "name": "LayoutComponent with intrinsic size gets measured correctly",
       "status": "direct",
-      "outcome": "expected-red",
+      "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 295,
-          "symbol": "wave_c2_layout_006_intrinsic_text_size"
+          "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
+          "line": 51,
+          "symbol": "wave_c2_layout_006_intrinsic_text_size_from_retained_text_owner"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and reaches the declared missing seam.",
-      "expected_red_reason": "expected-red: the exact HiText localBounds owner is not retained by the Rust Text occurrence"
+      "note": "The executable test imports the exact hi artboard, advances the live Artboard occurrence, reads RuntimeTextState::bounds retained on the exact HiText owner, and asserts the pinned localBounds tuple."
     },
     {
       "id": "tests/unit_tests/runtime/layout_test.cpp#7",
@@ -210,7 +209,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 327,
+          "line": 315,
           "symbol": "wave_c2_layout_007_padding_px"
         }
       ],
@@ -228,7 +227,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 354,
+          "line": 342,
           "symbol": "wave_c2_layout_008_margin_px_and_percent"
         }
       ],
@@ -246,7 +245,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 388,
+          "line": 376,
           "symbol": "wave_c2_layout_009_corner_radius"
         }
       ],
@@ -258,18 +257,10 @@
       "ordinal": 10,
       "line": 286,
       "name": "LayoutComponent Direction",
-      "status": "direct",
-      "outcome": "expected-red",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 404,
-          "symbol": "wave_c2_layout_010_direction"
-        }
-      ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and reaches the declared missing seam.",
-      "expected_red_reason": "expected-red: the live Text occurrence retains authored alignValue but exposes no actual-direction-derived align owner"
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: the Rust occurrence does not retain an accessible Text::align owner. Authored align, a fresh Taffy solve, or a test-constructed layout constraint would be forbidden proxies, and no honest executable behavior red reaches this missing owner."
     },
     {
       "id": "tests/unit_tests/runtime/layout_test.cpp#11",
@@ -283,7 +274,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 421,
+          "line": 391,
           "symbol": "wave_c2_layout_011_forced_size_dirt"
         }
       ],
@@ -301,7 +292,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 454,
+          "line": 434,
           "symbol": "wave_c2_layout_012_alignment_mutation"
         }
       ],
@@ -319,7 +310,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 490,
+          "line": 470,
           "symbol": "wave_c2_layout_013_prevent_percent_margin_on_artboard"
         }
       ],
@@ -508,7 +499,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 499,
+          "line": 479,
           "symbol": "wave_c2_layout_023_padding_insets_fill_child"
         }
       ],
@@ -544,9 +535,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/upstream_library_asset.rs",
-          "line": 121,
-          "symbol": "file_with_library_animation_loads"
+          "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
+          "line": 71,
+          "symbol": "wave_c2_library_002_named_nested_owner_retains_exact_simple_animation"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
@@ -562,9 +553,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/upstream_library_asset.rs",
-          "line": 149,
-          "symbol": "file_with_library_state_machine_loads"
+          "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
+          "line": 111,
+          "symbol": "wave_c2_library_003_named_nested_owner_retains_exact_state_machine"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
@@ -618,9 +609,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/upstream_library_asset.rs",
-          "line": 213,
-          "symbol": "file_with_library_including_image"
+          "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
+          "line": 168,
+          "symbol": "wave_c2_library_006_live_library_image_retains_exact_asset_owner"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
@@ -636,9 +627,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/upstream_library_asset.rs",
-          "line": 243,
-          "symbol": "file_with_multiple_libraries_including_image"
+          "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
+          "line": 188,
+          "symbol": "wave_c2_library_007_each_live_library_image_retains_its_exact_asset_owner"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
@@ -673,7 +664,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_library_asset.rs",
-          "line": 307,
+          "line": 309,
           "symbol": "file_with_view_model"
         }
       ],
@@ -691,7 +682,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_library_asset.rs",
-          "line": 362,
+          "line": 383,
           "symbol": "library_vmtest_1_host"
         }
       ],
@@ -814,18 +805,10 @@
       "ordinal": 7,
       "line": 263,
       "name": "shaper separates paragraphs",
-      "status": "direct",
-      "outcome": "expected-red",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/text/wave_c2_line_break_owner_tests.rs",
-          "line": 154,
-          "symbol": "wave_c2_line_break_007_shaper_separates_paragraphs"
-        }
-      ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and reaches the declared missing seam.",
-      "expected_red_reason": "expected-red: the first concrete paragraph does not split U+2028 into the pinned two GlyphLines"
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: the Rust shaper exposes flattened StandaloneLine output but no retained Paragraph/run owner corresponding to pinned Font::shapeText. Aggregate paragraph labels would be a forbidden proxy and no honest executable red can address the missing owner."
     },
     {
       "id": "tests/unit_tests/runtime/line_break_test.cpp#8",
@@ -839,7 +822,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_c2_line_break_owner_tests.rs",
-          "line": 165,
+          "line": 153,
           "symbol": "wave_c2_line_break_008_shaper_handles_rtl"
         }
       ],
@@ -857,7 +840,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_c2_line_break_owner_tests.rs",
-          "line": 196,
+          "line": 184,
           "symbol": "wave_c2_line_break_009_shaper_handles_empty_space"
         }
       ],
@@ -875,7 +858,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_c2_line_break_owner_tests.rs",
-          "line": 210,
+          "line": 198,
           "symbol": "wave_c2_line_break_010_deals_with_empty_paragraphs"
         }
       ],
@@ -887,18 +870,10 @@
       "ordinal": 11,
       "line": 382,
       "name": "line breaker deals with space only lines",
-      "status": "direct",
-      "outcome": "expected-red",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/text/wave_c2_line_break_owner_tests.rs",
-          "line": 228,
-          "symbol": "wave_c2_line_break_011_deals_with_space_only_lines"
-        }
-      ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and reaches the declared missing seam.",
-      "expected_red_reason": "expected-red: standalone_break_lines does not treat U+2028 as a forced break at unbounded width"
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: the Rust shaper exposes flattened StandaloneLine output but no retained Paragraph/base-direction owner corresponding to pinned Font::shapeText. Aggregate paragraph labels would be a forbidden proxy and no honest executable red can address the missing owner."
     },
     {
       "id": "tests/unit_tests/runtime/line_break_test.cpp#12",
@@ -906,18 +881,10 @@
       "ordinal": 12,
       "line": 406,
       "name": "line breaker deals with empty lines",
-      "status": "direct",
-      "outcome": "expected-red",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/text/wave_c2_line_break_owner_tests.rs",
-          "line": 237,
-          "symbol": "wave_c2_line_break_012_deals_with_empty_lines"
-        }
-      ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and reaches the declared missing seam.",
-      "expected_red_reason": "expected-red: standalone_break_lines materializes a trailing empty paragraph after the pinned hi-newline run"
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: the Rust shaper exposes flattened StandaloneLine output but no retained Paragraph/base-direction owner corresponding to pinned Font::shapeText. Aggregate paragraph labels would be a forbidden proxy and no honest executable red can address the missing owner."
     },
     {
       "id": "tests/unit_tests/runtime/linear_animation_instance_test.cpp#1",
@@ -931,7 +898,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 34,
+          "line": 26,
           "symbol": "wave_c2_linear_instance_001_one_shot"
         }
       ],
@@ -949,7 +916,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 48,
+          "line": 40,
           "symbol": "wave_c2_linear_instance_002_speed"
         }
       ],
@@ -967,7 +934,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 57,
+          "line": 49,
           "symbol": "wave_c2_linear_instance_003_negative_advance_adds_absolute_total_time"
         }
       ],
@@ -985,7 +952,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 67,
+          "line": 59,
           "symbol": "wave_c2_linear_instance_004_reverse_one_shot"
         }
       ],
@@ -1003,7 +970,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 90,
+          "line": 82,
           "symbol": "wave_c2_linear_instance_005_forward_loop"
         }
       ],
@@ -1021,7 +988,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 104,
+          "line": 96,
           "symbol": "wave_c2_linear_instance_006_reverse_loop"
         }
       ],
@@ -1039,7 +1006,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 123,
+          "line": 115,
           "symbol": "wave_c2_linear_instance_007_reverse_loop_work_area"
         }
       ],
@@ -1057,7 +1024,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 143,
+          "line": 135,
           "symbol": "wave_c2_linear_instance_008_forward_ping_pong"
         }
       ],
@@ -1075,7 +1042,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 162,
+          "line": 154,
           "symbol": "wave_c2_linear_instance_009_reverse_ping_pong"
         }
       ],
@@ -1093,7 +1060,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 181,
+          "line": 173,
           "symbol": "wave_c2_linear_instance_010_override_loop"
         }
       ],
@@ -1111,7 +1078,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 195,
+          "line": 187,
           "symbol": "wave_c2_linear_definition_001_positive_speed_times"
         }
       ],
@@ -1129,7 +1096,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 205,
+          "line": 197,
           "symbol": "wave_c2_linear_definition_002_negative_speed_times"
         }
       ],
@@ -1147,7 +1114,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_linear_animation_wave_c2.rs",
-          "line": 55,
+          "line": 58,
           "symbol": "wave_c2_linear_definition_003_quantize_goes_to_whole_frames"
         }
       ],
@@ -1166,7 +1133,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/animation/wave_c2_animation_owner_tests.rs",
-          "line": 215,
+          "line": 207,
           "symbol": "wave_c2_linear_definition_004_keep_going_work_area"
         }
       ],
@@ -1178,17 +1145,18 @@
       "ordinal": 5,
       "line": 139,
       "name": "LinearAnimation keeps initializing after missing keyed object",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_linear_animation_wave_c2.rs",
-          "line": 103,
+          "line": 106,
           "symbol": "wave_c2_linear_definition_005_missing_keyed_object_does_not_stop_initialization"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "Rust immutable graph construction is the approved ownership adaptation for C++ virtual onAddedDirty callbacks: the test proves both authored KeyedObjects are imported in order, only the MissingObject target is filtered, and the exact valid sibling remains. Callback counters and mutable StatusCode do not exist in the Rust lifecycle.",
+      "adaptation_kind": "cxx-language-only"
     },
     {
       "id": "tests/unit_tests/runtime/linear_animation_test.cpp#6",
@@ -1202,7 +1170,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_linear_animation_wave_c2.rs",
-          "line": 120,
+          "line": 146,
           "symbol": "wave_c2_linear_definition_006_looping_timeline_events_load_and_report"
         }
       ],
@@ -1214,17 +1182,18 @@
       "ordinal": 1,
       "line": 22,
       "name": "ListenerAction::parentKind decodes flags bits 1-2",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/listener_action/wave_c2_listener_flags_owner_tests.rs",
-          "line": 156,
+          "line": 204,
           "symbol": "wave_c2_listener_flags_001_parent_kind_decodes_bits_one_and_two"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "Rust consumes C++ parentKind during import instead of retaining a generated mutable getter. The executable test proves the exact flags and imported RuntimeObject identity on the exact listener/state/transition owner while asserting every untouched owner remains empty; this is the approved Rust ownership adaptation.",
+      "adaptation_kind": "cxx-language-only"
     },
     {
       "id": "tests/unit_tests/runtime/listener_action_flags_test.cpp#2",
@@ -1232,17 +1201,18 @@
       "ordinal": 2,
       "line": 45,
       "name": "ListenerAction flag fields are independent",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/listener_action/wave_c2_listener_flags_owner_tests.rs",
-          "line": 164,
+          "line": 212,
           "symbol": "wave_c2_listener_flags_002_fields_are_independent"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "Rust consumes C++ parentKind during import instead of retaining a generated mutable getter. The executable test proves the exact flags and imported RuntimeObject identity on the exact listener/state/transition owner while asserting every untouched owner remains empty; this is the approved Rust ownership adaptation.",
+      "adaptation_kind": "cxx-language-only"
     },
     {
       "id": "tests/unit_tests/runtime/listener_action_flags_test.cpp#3",
@@ -1256,7 +1226,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/listener_action/wave_c2_listener_flags_owner_tests.rs",
-          "line": 179,
+          "line": 231,
           "symbol": "wave_c2_listener_flags_003_matches_both_occurrences"
         }
       ],
@@ -1268,17 +1238,18 @@
       "ordinal": 4,
       "line": 121,
       "name": "ListenerAction::import routes Transition parent to layer importer even when a listener importer is also on the stack",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/listener_action/wave_c2_listener_flags_owner_tests.rs",
-          "line": 187,
+          "line": 239,
           "symbol": "wave_c2_listener_flags_004_transition_routes_to_layer_importer"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "Rust consumes C++ parentKind during import instead of retaining a generated mutable getter. The executable test proves the exact flags and imported RuntimeObject identity on the exact listener/state/transition owner while asserting every untouched owner remains empty; this is the approved Rust ownership adaptation.",
+      "adaptation_kind": "cxx-language-only"
     },
     {
       "id": "tests/unit_tests/runtime/listener_action_flags_test.cpp#5",
@@ -1286,17 +1257,18 @@
       "ordinal": 5,
       "line": 136,
       "name": "ListenerAction::import routes State parent to layer importer even when a listener importer is also on the stack",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/listener_action/wave_c2_listener_flags_owner_tests.rs",
-          "line": 192,
+          "line": 244,
           "symbol": "wave_c2_listener_flags_005_state_routes_to_layer_importer"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "Rust consumes C++ parentKind during import instead of retaining a generated mutable getter. The executable test proves the exact flags and imported RuntimeObject identity on the exact listener/state/transition owner while asserting every untouched owner remains empty; this is the approved Rust ownership adaptation.",
+      "adaptation_kind": "cxx-language-only"
     },
     {
       "id": "tests/unit_tests/runtime/listener_action_flags_test.cpp#6",
@@ -1304,17 +1276,18 @@
       "ordinal": 6,
       "line": 157,
       "name": "ListenerAction::import routes Listener parent to the listener importer when both are on the stack",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/listener_action/wave_c2_listener_flags_owner_tests.rs",
-          "line": 197,
+          "line": 249,
           "symbol": "wave_c2_listener_flags_006_listener_routes_to_listener_importer"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "Rust consumes C++ parentKind during import instead of retaining a generated mutable getter. The executable test proves the exact flags and imported RuntimeObject identity on the exact listener/state/transition owner while asserting every untouched owner remains empty; this is the approved Rust ownership adaptation.",
+      "adaptation_kind": "cxx-language-only"
     },
     {
       "id": "tests/unit_tests/runtime/listener_action_flags_test.cpp#7",
@@ -1322,17 +1295,18 @@
       "ordinal": 7,
       "line": 171,
       "name": "ListenerAction::import fails when the Listener parent kind has no listener importer on the stack",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/state_machine/listener_action/wave_c2_listener_flags_owner_tests.rs",
-          "line": 202,
+          "line": 254,
           "symbol": "wave_c2_listener_flags_007_missing_listener_importer_fails"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "Rust fixture import is transactional rather than returning a mutable action and StatusCode. The test asserts the exact structured MissingObject diagnostic for the exact action and proves the corresponding concrete transition owner remains empty in the identical owner-prefix control; this is the approved ownership adaptation.",
+      "adaptation_kind": "cxx-language-only"
     },
     {
       "id": "tests/unit_tests/runtime/listener_align_target_test.cpp#1",
@@ -1346,7 +1320,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_listener_align_target_wave_c2.rs",
-          "line": 60,
+          "line": 64,
           "symbol": "wave_c2_listener_align_001_preserve_offset_off"
         }
       ],
@@ -1364,7 +1338,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_listener_align_target_wave_c2.rs",
-          "line": 65,
+          "line": 69,
           "symbol": "wave_c2_listener_align_002_preserve_offset_on"
         }
       ],

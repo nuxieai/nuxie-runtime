@@ -283,9 +283,11 @@ fn file_with_data_enum() {
         .instantiate_default_view_model_instance()
         .expect("default view model instance");
     assert!(instance.bind_view_model(&view_model));
-    assert!(artboard.graph().local_objects.iter().any(|object| {
-        object.type_name == Some("Event") && object.name.as_deref() == Some("my_event")
-    }));
+    let event = local_named(artboard.graph(), "Event", "my_event");
+    assert_eq!(
+        instance.raw().component(event).map(|owner| owner.type_name),
+        Some("Event")
+    );
     instance.advance(0.0);
     let property = local_named(
         artboard.graph(),
@@ -312,6 +314,25 @@ fn file_with_view_model() {
         .instantiate_default_view_model_instance()
         .expect("default view model instance");
     assert!(instance.bind_view_model(&view_model));
+
+    let mut retained_two_before_advance = false;
+    let mut retained_one_before_advance = false;
+    instance
+        .raw_mut()
+        .try_visit_nested_artboard_instances_mut(&mut |depth, global_id, _child| {
+            let graph = graph_for_global(&file, global_id);
+            if depth == 1 {
+                assert_eq!(graph.name.as_deref(), Some("2"));
+                retained_two_before_advance = true;
+            } else if depth == 2 {
+                assert_eq!(graph.name.as_deref(), Some("1"));
+                retained_one_before_advance = true;
+            }
+            Ok::<_, ()>(())
+        })
+        .expect("retain both exact nested owners before advance");
+    assert!(retained_two_before_advance);
+    assert!(retained_one_before_advance);
     instance.advance(0.0);
 
     let mut saw_two = false;
@@ -367,6 +388,20 @@ fn library_vmtest_1_host() {
         .instantiate_default_view_model_instance()
         .expect("default view model instance");
     assert!(instance.bind_view_model(&view_model));
+
+    let mut retained_before_advance = false;
+    instance
+        .raw_mut()
+        .try_visit_nested_artboard_instances_mut(&mut |depth, global_id, _child| {
+            if depth == 1 {
+                let graph = graph_for_global(&file, global_id);
+                assert_eq!(graph.name.as_deref(), Some("lib2artboard"));
+                retained_before_advance = true;
+            }
+            Ok::<_, ()>(())
+        })
+        .expect("retain exact lib2 occurrence before advance");
+    assert!(retained_before_advance);
     instance.advance(0.0);
 
     let mut occurrences = 0;

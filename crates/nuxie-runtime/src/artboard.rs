@@ -11755,6 +11755,8 @@ impl ArtboardInstance {
 
 #[cfg(test)]
 mod wave_c1_early_owner_tests;
+#[cfg(test)]
+mod wave_c2_library_owner_tests;
 
 #[cfg(test)]
 mod tests {

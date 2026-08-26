@@ -10514,9 +10514,11 @@ impl Clone for RuntimeTextDrawOwner {
         // (`src/generated/text/text_base.cpp:6-10`,
         // `include/rive/generated/text/text_base.hpp:244-262`,
         // `src/text/text_style_paint.cpp:13-19,125-134`).
-        let cloned = Self::default();
-        *cloned.topology.borrow_mut() = self.topology.borrow().clone();
-        cloned
+        // The imported identities are reconstructed through the clone's own
+        // Component/onAddedDirty relations. Carrying the source Arc would
+        // preserve stale modifier-group registration after live parentId
+        // writes instead of rebuilding the clone's custom Text collections.
+        Self::default()
     }
 }
 

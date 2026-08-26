@@ -8357,9 +8357,8 @@ mod tests {
                 group.follow_path_modifier_locals(),
             )
         };
-        let production_topology = |owner: &ArtboardInstance| {
-            StaticTextSlice::from_instance(&runtime, graph, owner, 1)
-                .expect("occurrence Text topology materializes")
+        let modifier_topology = |slice: &StaticTextSlice| {
+            slice
                 .modifiers
                 .iter()
                 .map(|group| {
@@ -8384,7 +8383,6 @@ mod tests {
         let source_topology = vec![(vec![6, 7, 8], vec![1], vec![6, 8]), empty.clone()];
         assert_eq!(registered_modifiers(&instance, 4), source_a);
         assert_eq!(registered_modifiers(&instance, 5), empty);
-        assert_eq!(production_topology(&instance), source_topology);
 
         let parent_key = property_key_for_name("Component", "parentId")
             .expect("Component.parentId property key");
@@ -8395,10 +8393,9 @@ mod tests {
         // Generated parentId writes do not rerun onAddedDirty on the source.
         assert_eq!(registered_modifiers(&instance, 4), source_a);
         assert_eq!(registered_modifiers(&instance, 5), empty);
-        assert_eq!(production_topology(&instance), source_topology);
 
         // A cold clone copies generated fields and reconstructs occurrence
-        // registration, so all three production lists now belong to group B.
+        // registration. Its real retained owner is still cold at this point.
         let cold_clone = instance.clone();
         let clone_b = (vec![6, 7, 8], vec![7], vec![6, 8]);
         let clone_topology = vec![
@@ -8407,15 +8404,70 @@ mod tests {
         ];
         assert_eq!(registered_modifiers(&cold_clone, 4), empty);
         assert_eq!(registered_modifiers(&cold_clone, 5), clone_b);
-        assert_eq!(production_topology(&cold_clone), clone_topology);
+        let cold_clone_topology = cold_clone
+            .retained_static_text_topology(&runtime, graph, 1)
+            .expect("cold clone retained owner builds from clone registration");
+        assert_eq!(modifier_topology(&cold_clone_topology), clone_topology);
 
-        instance
+        let source_retained_topology = instance
             .retained_static_text_topology(&runtime, graph, 1)
             .expect("source retained render topology materializes");
-        let materialized_clone = instance.clone();
+        assert_eq!(modifier_topology(&source_retained_topology), source_topology);
+
+        let mut materialized_clone = instance.clone();
         assert_eq!(registered_modifiers(&materialized_clone, 4), empty);
         assert_eq!(registered_modifiers(&materialized_clone, 5), clone_b);
-        assert_eq!(production_topology(&materialized_clone), clone_topology);
+        materialized_clone.clear_component_dirt(1);
+        materialized_clone
+            .runtime_drawables
+            .clear_text_on_dirty_trace(1);
+        assert!(materialized_clone.add_dirt(
+            1,
+            crate::components::ComponentDirt::WORLD_TRANSFORM,
+            false,
+        ));
+        let world = crate::components::ComponentDirt::WORLD_TRANSFORM;
+        let world_path = world | crate::components::ComponentDirt::PATH;
+        assert_eq!(
+            materialized_clone.runtime_drawables.text_on_dirty_trace(1),
+            [
+                (
+                    world,
+                    crate::draw::RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 4,
+                        follows_path: false,
+                    },
+                ),
+                (
+                    world,
+                    crate::draw::RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 5,
+                        follows_path: true,
+                    },
+                ),
+                (
+                    world_path,
+                    crate::draw::RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 4,
+                        follows_path: false,
+                    },
+                ),
+                (
+                    world_path,
+                    crate::draw::RuntimeTextOnDirtyAction::ModifierWorldTransform {
+                        group_local: 5,
+                        follows_path: true,
+                    },
+                ),
+            ]
+        );
+        let materialized_clone_topology = materialized_clone
+            .retained_static_text_topology(&runtime, graph, 1)
+            .expect("WorldTransform onDirty retained clone topology");
+        assert_eq!(
+            modifier_topology(&materialized_clone_topology),
+            clone_topology
+        );
     }
 
     #[test]

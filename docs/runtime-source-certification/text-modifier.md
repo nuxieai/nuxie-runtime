@@ -22,7 +22,7 @@ not self-accept the candidate.
 
 | # | Pinned body | Required behavior and ordering | Concrete Rust owner | Candidate disposition |
 |---:|---|---|---|---|
-| 1 | `TextModifier::onAddedDirty` (cpp 7-21) | Call Component Super first and immediately propagate non-Ok. After successful parent linkage, append the modifier to its direct parent only when that parent is-a `TextModifierGroup`, preserving authored callback order, then return Ok. Any other valid Container parent returns `MissingObject`: retain the Component Super linkage, do not register, and do not run registration-dependent subclass continuation. Artboard initialization continues on MissingObject. | Component validation/link and authored traversal: `artboard.rs:1362::ArtboardInstance::build_component_occurrence_relations`, especially `:1384-1430`. Occurrence-owned all/shape/follow vectors: `components.rs:1007::RuntimeTextModifierGroupState`; fresh clone state and reconstruction at `components.rs:1018`, `:1938` and `artboard.rs:1366-1374`. Causal static/render descriptor construction: `text.rs:1800::StaticTextSlice::from_instance` and `text/text_modifier_group.rs:93::StaticTextModifierGroup::from_instance`, with all/shape/follow traversal assembled only from the occurrence vectors at `:115::from_registered_locals`. Live layout, geometry, retained draw, on-dirty, and semantic paths call `from_instance` (`text.rs:145-626`, `text/text_engine.rs:22-67`, `text/raw_text.rs:1031`, `draw.rs:11160-11180`, `:18055`, `:18363-18381`). | **corrected exact under retained-local-ID/immutable-descriptor adaptations**. A real occurrence owns the three vectors populated by the successful callback boundary, and those vectors now causally own production modifier traversal. Live parent-property writes leave the source's registration/topology frozen; cold and already-materialized clones rebuild from copied generated fields. Wrong-parent concrete subclasses retain their Component parent but leave all group vectors and production topology untouched, and Artboard construction continues. The former late `StaticTextSlice::from_graph` hard rejection is removed. |
+| 1 | `TextModifier::onAddedDirty` (cpp 7-21) | Call Component Super first and immediately propagate non-Ok. After successful parent linkage, append the modifier to its direct parent only when that parent is-a `TextModifierGroup`, preserving authored callback order, then return Ok. Any other valid Container parent returns `MissingObject`: retain the Component Super linkage, do not register, and do not run registration-dependent subclass continuation. Artboard initialization continues on MissingObject. | Component validation/link and authored traversal: `artboard.rs:1362::ArtboardInstance::build_component_occurrence_relations`, especially `:1384-1430`. Occurrence-owned all/shape/follow vectors: `components.rs:1007::RuntimeTextModifierGroupState`; fresh clone state and reconstruction at `components.rs:1018`, `:1938` and `artboard.rs:1366-1374`. Causal static/render descriptor construction: `text.rs:1800::StaticTextSlice::from_instance` and `text/text_modifier_group.rs:93::StaticTextModifierGroup::from_instance`, with all/shape/follow traversal assembled only from the occurrence vectors at `:115::from_registered_locals`. `draw.rs:10508::RuntimeTextDrawOwner::clone` leaves retained topology cold, and live layout, geometry, retained draw, on-dirty, and semantic paths call `from_instance` (`text.rs:145-626`, `text/text_engine.rs:22-67`, `text/raw_text.rs:1031`, `draw.rs:11162-11182`, `:18057`, `:18365-18383`). | **corrected exact under retained-local-ID/immutable-descriptor adaptations**. A real occurrence owns the three vectors populated by the successful callback boundary, and those vectors now causally own production modifier traversal. Live parent-property writes leave the source's registration/topology frozen; cold and already-materialized clones rebuild from copied generated fields rather than inheriting the source topology Arc. Wrong-parent concrete subclasses retain their Component parent but leave all group vectors and production topology untouched, and Artboard construction continues. The former late `StaticTextSlice::from_graph` hard rejection is removed. |
 
 ## Super status, subclass, and clone adjudication
 
@@ -58,9 +58,10 @@ occurrence; it is not used by live production consumers.
   children authored in group A. It writes all three generated `parentId`
   properties to group B. The source occurrence and its actual static/render
   topology stay frozen in A with all `[6, 7, 8]`, shape index `[1]`, and
-  follow-path `[6, 8]`; a cold clone and a clone after retained source topology
-  materialization reconstruct all three occurrence vectors and production
-  consumers in B.
+  follow-path `[6, 8]`. A cold clone builds B through its real retained owner.
+  After source topology is retained in A, a second clone is driven through the
+  live WorldTransform-onDirty consumer and its retained owner rebuilds all
+  three production consumers in B.
 - `text.rs:8419::cxx_text_modifier_missing_group_omits_concrete_subclasses_without_late_rejection`
   constructs both instantiable subclass paths under a non-group Shape. For
   each, Artboard construction succeeds, Component parent linkage remains, the
@@ -108,6 +109,16 @@ live `StaticTextSlice` construction through the occurrence vectors and keeps
 graph membership only as a bootstrap/support fallback. The two-group lifecycle
 evidence now distinguishes frozen source ownership from clone reconstruction
 through the same topology consumed by shaping and rendering.
+
+## Correction after residual rejection `5bf9c1cdd`
+
+`RuntimeTextDrawOwner::clone` no longer copies the source occurrence's retained
+`StaticTextSlice` Arc. All other clone state remains the same fresh default
+state used before this correction. Exhaustive owner search finds no second
+Text draw-owner clone path or topology-copy site. The lifecycle test now
+observes source A, cold-clone B, and post-materialized-clone B through the
+retained owner itself; the final clone is forced through the real
+WorldTransform-onDirty consumer before its retained topology is inspected.
 
 ## Honest adjacent residual
 

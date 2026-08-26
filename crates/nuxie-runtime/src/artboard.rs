@@ -89,7 +89,7 @@ use crate::state_machine::{
 };
 use crate::view_model::{
     RuntimeFontAssetValue, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelListItemEntry,
+    RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelListItemEntry, RuntimeTextListRun,
     set_component_list_item_index,
 };
 use crate::view_model_cell::{RuntimeFileViewModelInstanceCatalog, RuntimeViewModelCellValue};
@@ -5797,7 +5797,7 @@ impl ArtboardInstance {
         self.objects.string_property(local_id, property_key)
     }
 
-    pub(crate) fn text_list_runs(&self, text_local: usize) -> Vec<(Vec<u8>, Vec<u8>)> {
+    pub(crate) fn text_list_runs(&self, text_local: usize) -> Vec<RuntimeTextListRun> {
         self.artboard_text_list_bindings
             .iter()
             .find(|binding| binding.target_local_id() == text_local)

@@ -27,6 +27,16 @@ pub(crate) struct RuntimeOwnedViewModelListItemEntry {
     pub(crate) instance: RuntimeOwnedViewModelHandle,
 }
 
+/// Current values written into one dynamic `TextValueRun` by the retained
+/// list listener. `None` is observably different from an empty string: a
+/// missing property creates no C++ property listener, while an empty property
+/// creates a listener and performs its initial write.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RuntimeTextListRun {
+    pub(crate) text: Option<Vec<u8>>,
+    pub(crate) style: Option<Vec<u8>>,
+}
+
 impl RuntimeOwnedViewModelListHandle {
     pub(crate) fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.value, &other.value)
@@ -129,19 +139,23 @@ impl RuntimeOwnedViewModelListHandle {
             .collect()
     }
 
-    pub(crate) fn text_runs(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+    pub(crate) fn text_runs(&self) -> Vec<RuntimeTextListRun> {
         self.value
             .borrow()
             .items
             .iter()
-            .filter_map(|item| {
+            .map(|item| {
                 let item = item.instance.borrow();
-                Some((
-                    item.string_value_by_property_name("textContent")?.to_vec(),
-                    item.string_value_by_property_name("textStyle")
-                        .unwrap_or_default()
-                        .to_vec(),
-                ))
+                // `TextValueRunListener::createProperties` creates and
+                // initially writes style before content. Read in the same
+                // order while retaining absent properties as absent.
+                let style = item
+                    .string_value_by_property_name("textStyle")
+                    .map(|value| value.to_vec());
+                let text = item
+                    .string_value_by_property_name("textContent")
+                    .map(|value| value.to_vec());
+                RuntimeTextListRun { text, style }
             })
             .collect()
     }
@@ -550,4 +564,105 @@ fn runtime_owned_list_matches_string_boolean_handle(
                     .iter()
                     .any(|value| value.property_index == handle.boolean_property_index)
         })
+}
+
+#[cfg(test)]
+mod dynamic_text_run_projection_tests {
+    use super::*;
+    use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue};
+    use nuxie_schema::definition_by_name;
+
+    fn record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+        FixtureRecord {
+            type_key: definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn property(type_name: &str, name: &str, value: FixtureValue) -> FixtureProperty {
+        FixtureProperty {
+            key: crate::properties::property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value,
+        }
+    }
+
+    fn view_model(name: &str) -> FixtureRecord {
+        record(
+            "ViewModel",
+            vec![property(
+                "ViewModel",
+                "name",
+                FixtureValue::String(name.to_owned()),
+            )],
+        )
+    }
+
+    fn string_property(name: &str) -> FixtureRecord {
+        record(
+            "ViewModelPropertyString",
+            vec![property(
+                "ViewModelPropertyString",
+                "name",
+                FixtureValue::String(name.to_owned()),
+            )],
+        )
+    }
+
+    #[test]
+    fn cxx_text_run_projection_preserves_missing_properties_and_item_order() {
+        let file = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            view_model("StyleOnly"),
+            string_property("textStyle"),
+            view_model("ContentOnly"),
+            string_property("textContent"),
+            view_model("Complete"),
+            string_property("textStyle"),
+            string_property("textContent"),
+        ])
+        .expect("dynamic TextValueRun view-model fixture");
+
+        let mut style_only = RuntimeOwnedViewModelInstance::new(&file, 0).expect("style-only");
+        assert!(style_only.set_string_by_property_name("textStyle", b"title"));
+        let mut content_only = RuntimeOwnedViewModelInstance::new(&file, 1).expect("content-only");
+        assert!(content_only.set_string_by_property_name("textContent", b"visible"));
+        let mut complete = RuntimeOwnedViewModelInstance::new(&file, 2).expect("complete");
+        assert!(complete.set_string_by_property_name("textStyle", b"body"));
+        assert!(complete.set_string_by_property_name("textContent", b"complete"));
+
+        let items = vec![style_only, content_only, complete]
+            .into_iter()
+            .map(|instance| RuntimeOwnedViewModelListItem::new(Rc::new(RefCell::new(instance))))
+            .collect::<Vec<_>>();
+        let handle = RuntimeOwnedViewModelListHandle {
+            value: Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
+                parent_relay: Weak::new(),
+                item_count: items.len(),
+                items,
+            })),
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::List),
+        };
+
+        assert_eq!(
+            handle.text_runs(),
+            vec![
+                RuntimeTextListRun {
+                    text: None,
+                    style: Some(b"title".to_vec()),
+                },
+                RuntimeTextListRun {
+                    text: Some(b"visible".to_vec()),
+                    style: None,
+                },
+                RuntimeTextListRun {
+                    text: Some(b"complete".to_vec()),
+                    style: Some(b"body".to_vec()),
+                },
+            ]
+        );
+    }
 }

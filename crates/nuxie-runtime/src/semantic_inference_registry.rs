@@ -40,8 +40,10 @@ pub(crate) fn resolve_inferred_semantics(
         };
         label.push_str(&String::from_utf8_lossy(text));
     }
-    for (text, _) in artboard.text_list_runs(component_local_id) {
-        label.push_str(&String::from_utf8_lossy(&text));
+    for run in artboard.text_list_runs(component_local_id) {
+        if let Some(text) = run.text {
+            label.push_str(&String::from_utf8_lossy(&text));
+        }
     }
     if label.is_empty() {
         return false;

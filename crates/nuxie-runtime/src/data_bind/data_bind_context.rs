@@ -36,6 +36,7 @@ use crate::retained_data_bind::{RuntimeDataBindTarget, RuntimeRetainedDataBind};
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::{
     RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelStructuralSource,
+    RuntimeTextListRun,
 };
 use crate::view_model_cell::{
     RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue, RuntimeViewModelCell,
@@ -3486,7 +3487,7 @@ impl RuntimeArtboardTextListBindingInstance {
         self.target_local_id
     }
 
-    pub(super) fn text_runs(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+    pub(super) fn text_runs(&self) -> Vec<RuntimeTextListRun> {
         self.source
             .as_ref()
             .map(RuntimeOwnedViewModelListHandle::text_runs)

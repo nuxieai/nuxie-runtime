@@ -198,7 +198,7 @@ pub(crate) fn static_text_layout_debug_report(
     let resolved = slice.resolved_runs(runtime, instance).ok()?;
     let text = resolved
         .iter()
-        .map(|run| run.text.as_str())
+        .map(StaticResolvedRun::styled_text)
         .collect::<String>();
     let layout = slice
         .shaped_layout(runtime, instance, layout_constraint, Mat2D::IDENTITY)
@@ -955,10 +955,20 @@ struct StaticTextRun {
 struct StaticResolvedRun {
     local_id: usize,
     global_id: u32,
-    style_local: usize,
+    style_local: Option<usize>,
     char_start: usize,
     char_len: usize,
     text: String,
+}
+
+impl StaticResolvedRun {
+    fn participates_in_styled_text(&self) -> bool {
+        self.style_local.is_some() && !self.text.is_empty()
+    }
+
+    fn styled_text(&self) -> &str {
+        self.style_local.map(|_| self.text.as_str()).unwrap_or("")
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1668,8 +1678,13 @@ impl StaticTextSlice {
 
         let base_style = self.base_style()?;
         let mut participating_style_locals = BTreeSet::from([base_style.local_id]);
-        for run in resolved_runs.iter().filter(|run| !run.text.is_empty()) {
-            participating_style_locals.insert(run.style_local);
+        for run in resolved_runs
+            .iter()
+            .filter(|run| run.participates_in_styled_text())
+        {
+            if let Some(style_local) = run.style_local {
+                participating_style_locals.insert(style_local);
+            }
         }
         for style in self
             .styles
@@ -1965,12 +1980,6 @@ impl StaticTextSlice {
                 run_locals.len()
             );
         }
-        if style_locals.is_empty() {
-            bail!(
-                "static text subset requires at least one TextStylePaint child, found {}",
-                style_locals.len()
-            );
-        }
         let text_global = global_for_local(graph, text_local)?;
         let mut runs = Vec::new();
         for run_local in run_locals {
@@ -2095,7 +2104,10 @@ impl StaticTextSlice {
         text_world: Mat2D,
     ) -> Result<Option<StaticShapedTextLayout>> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
-        if resolved_runs.iter().all(|run| run.text.is_empty()) {
+        if resolved_runs
+            .iter()
+            .all(|run| !run.participates_in_styled_text())
+        {
             return Ok(None);
         }
         self.shaped_layout_from_resolved_runs(
@@ -2118,7 +2130,10 @@ impl StaticTextSlice {
         text_world: Mat2D,
     ) -> Result<Option<StaticShapedTextTopology>> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
-        if resolved_runs.iter().all(|run| run.text.is_empty()) {
+        if resolved_runs
+            .iter()
+            .all(|run| !run.participates_in_styled_text())
+        {
             return Ok(None);
         }
         self.shaped_topology_from_resolved_runs(
@@ -2140,6 +2155,12 @@ impl StaticTextSlice {
         resolved_runs: &[StaticResolvedRun],
         purpose: StaticShapedTextPurpose,
     ) -> Result<Option<StaticShapedTextLayout>> {
+        if resolved_runs
+            .iter()
+            .all(|run| !run.participates_in_styled_text())
+        {
+            return Ok(None);
+        }
         let Some(topology) = self.shaped_topology_from_resolved_runs(
             runtime,
             instance,
@@ -2184,7 +2205,7 @@ impl StaticTextSlice {
         }
         let text = resolved_runs
             .iter()
-            .map(|run| run.text.as_str())
+            .map(StaticResolvedRun::styled_text)
             .collect::<String>();
         let base_style = self.base_style()?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
@@ -2673,11 +2694,14 @@ impl StaticTextSlice {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
         let text = resolved_runs
             .iter()
-            .map(|run| run.text.as_str())
+            .map(StaticResolvedRun::styled_text)
             .collect::<String>();
+        if text.is_empty() {
+            return self.unshaped_local_bounds(runtime, instance, None);
+        }
         let base_style = self.base_style()?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
-        if text.is_empty() || font_size < 0.0 {
+        if font_size < 0.0 {
             return self.unshaped_local_bounds(runtime, instance, None);
         }
         let Some(font_bytes) = base_style.font_bytes(runtime, instance) else {
@@ -2811,11 +2835,19 @@ impl StaticTextSlice {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
         let text = resolved_runs
             .iter()
-            .map(|run| run.text.as_str())
+            .map(StaticResolvedRun::styled_text)
             .collect::<String>();
+        if text.is_empty() {
+            return match purpose {
+                StaticTextLayoutBoundsPurpose::Measure => Ok(Some((0.0, 0.0, 0.0, 0.0))),
+                StaticTextLayoutBoundsPurpose::Controlled => {
+                    self.unshaped_local_bounds(runtime, instance, Some(layout_constraint))
+                }
+            };
+        }
         let base_style = self.base_style()?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
-        if text.is_empty() || font_size < 0.0 {
+        if font_size < 0.0 {
             return match purpose {
                 StaticTextLayoutBoundsPurpose::Measure => Ok(Some((0.0, 0.0, 0.0, 0.0))),
                 StaticTextLayoutBoundsPurpose::Controlled => {
@@ -3002,24 +3034,47 @@ impl StaticTextSlice {
             runs.push(StaticResolvedRun {
                 local_id: run.local_id,
                 global_id: run.global_id,
-                style_local: run.style_local,
+                style_local: Some(run.style_local),
                 char_start,
                 char_len,
                 text,
             });
             char_start += char_len;
         }
-        for (text, style_name) in instance.text_list_runs(self.text_local) {
-            let text = String::from_utf8(text).context("dynamic TextValueRun text is not UTF-8")?;
-            let style_name = std::str::from_utf8(&style_name).unwrap_or_default();
-            let style_local = self
-                .styles
-                .iter()
-                .find(|style| style.name.as_deref() == Some(style_name))
-                .or_else(|| self.styles.first())
-                .context("dynamic TextValueRun requires a TextStylePaint")?
-                .local_id;
-            let char_len = text.chars().count();
+        runs.extend(
+            self.resolved_dynamic_runs(instance.text_list_runs(self.text_local), char_start)?,
+        );
+        Ok(runs)
+    }
+
+    fn resolved_dynamic_runs(
+        &self,
+        list_runs: Vec<crate::view_model::RuntimeTextListRun>,
+        mut char_start: usize,
+    ) -> Result<Vec<StaticResolvedRun>> {
+        let mut runs = Vec::with_capacity(list_runs.len());
+        for run in list_runs {
+            // A missing text-content property leaves the newly allocated C++
+            // TextValueRun at its default empty value. It still occupies its
+            // exact m_allRuns position.
+            let text = String::from_utf8(run.text.unwrap_or_default())
+                .context("dynamic TextValueRun text is not UTF-8")?;
+            // A style property performs its initial write: choose the named
+            // paint or the first paint as the pinned fallback. With no style
+            // property there is no listener/write, so style remains null and
+            // makeStyled skips the run.
+            let style_local = run.style.as_deref().and_then(|style_name| {
+                std::str::from_utf8(style_name)
+                    .ok()
+                    .and_then(|style_name| {
+                        self.styles
+                            .iter()
+                            .find(|style| style.name.as_deref() == Some(style_name))
+                    })
+                    .or_else(|| self.styles.first())
+                    .map(|style| style.local_id)
+            });
+            let char_len = style_local.map_or(0, |_| text.chars().count());
             runs.push(StaticResolvedRun {
                 local_id: self.text_local,
                 global_id: self.text_global,
@@ -3040,7 +3095,10 @@ impl StaticTextSlice {
     ) -> Result<Vec<usize>> {
         let mut order = Vec::new();
         for run in self.resolved_runs(runtime, instance)? {
-            let style_index = self.style_index_for_local(run.style_local)?;
+            let Some(style_local) = run.style_local else {
+                continue;
+            };
+            let style_index = self.style_index_for_local(style_local)?;
             if !order.contains(&style_index) {
                 order.push(style_index);
             }
@@ -3124,8 +3182,9 @@ impl StaticTextSlice {
                 if let Some(run) = runs.iter().find(|run| {
                     line.char_start >= run.char_start
                         && line.char_start <= run.char_start + run.char_len
-                }) {
-                    style_indices.push(self.style_index_for_local(run.style_local)?);
+                }) && let Some(style_local) = run.style_local
+                {
+                    style_indices.push(self.style_index_for_local(style_local)?);
                 } else if !self.styles.is_empty() {
                     style_indices.push(0);
                 }
@@ -3309,7 +3368,10 @@ impl StaticTextSlice {
             let run_start = run.char_start;
             let run_end = run.char_start + run.char_len;
             if line_start < run_end && line_end > run_start {
-                let style_index = self.style_index_for_local(run.style_local)?;
+                let Some(style_local) = run.style_local else {
+                    continue;
+                };
+                let style_index = self.style_index_for_local(style_local)?;
                 if !indices.contains(&style_index) {
                     indices.push(style_index);
                 }
@@ -3419,10 +3481,13 @@ impl StaticTextSlice {
     ) -> Result<f32> {
         let mut max_size = 0.0f32;
         for run in runs {
-            if run.text.is_empty() {
+            if !run.participates_in_styled_text() {
                 continue;
             }
-            let style_index = self.style_index_for_local(run.style_local)?;
+            let style_index = self.style_index_for_local(
+                run.style_local
+                    .expect("participating StyledText run has a style"),
+            )?;
             let style = &self.styles[style_index];
             if style.font_bytes(runtime, instance).is_some() {
                 max_size = max_size.max(self.style_font_size(runtime, instance, style)?);
@@ -3515,7 +3580,10 @@ impl StaticTextSlice {
         runs: &[StaticResolvedRun],
         font_scale: f32,
     ) -> Result<Vec<StyledTextGlyph>> {
-        let full_text = runs.iter().map(|run| run.text.as_str()).collect::<String>();
+        let full_text = runs
+            .iter()
+            .map(StaticResolvedRun::styled_text)
+            .collect::<String>();
         let source_lines = split_static_text_lines(&full_text);
         let character_count = full_text.chars().count();
         let modifier_coverages = self
@@ -3533,7 +3601,10 @@ impl StaticTextSlice {
             .collect::<Result<Vec<_>>>()?;
         let mut glyphs = Vec::new();
         for run in runs {
-            let style_index = self.style_index_for_local(run.style_local)?;
+            let Some(style_local) = run.style_local else {
+                continue;
+            };
+            let style_index = self.style_index_for_local(style_local)?;
             for paragraph in split_static_text_lines(&run.text) {
                 // C++ shapes each paragraph before `BreakLines` and keeps the
                 // resulting advances when a soft wrap slices the glyph run.
@@ -3593,7 +3664,10 @@ impl StaticTextSlice {
     ) -> Result<Vec<StyledTextGlyph>> {
         let mut glyphs = Vec::new();
         for run in runs {
-            let style_index = self.style_index_for_local(run.style_local)?;
+            let Some(style_local) = run.style_local else {
+                continue;
+            };
+            let style_index = self.style_index_for_local(style_local)?;
             for paragraph in split_static_text_lines(&run.text) {
                 glyphs.extend(self.styled_text_glyphs_for_style_bidi(
                     runtime,
@@ -3919,7 +3993,7 @@ impl StaticTextSlice {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
         let text = resolved_runs
             .iter()
-            .map(|run| run.text.as_str())
+            .map(StaticResolvedRun::styled_text)
             .collect::<String>();
         let mut lines = Vec::new();
         let mut line_metrics = Vec::new();
@@ -4634,7 +4708,10 @@ impl StaticTextSlice {
         instance: &ArtboardInstance,
     ) -> Result<f32> {
         let runs = self.resolved_runs(runtime, instance)?;
-        let text = runs.iter().map(|run| run.text.as_str()).collect::<String>();
+        let text = runs
+            .iter()
+            .map(StaticResolvedRun::styled_text)
+            .collect::<String>();
         let lines = split_static_text_lines(&text);
         let line_metrics = self.static_line_metrics(runtime, instance, &lines, &runs, 1.0)?;
         let line_height = line_metrics
@@ -5610,6 +5687,109 @@ mod tests {
         assert_close(measure_with_spacing.3 - measure_without_spacing.3, 14.0);
         // `computeBoundsInfo` and fit/fixed alignment retain the final space.
         assert_close(total_with_spacing - total_without_spacing, 21.0);
+    }
+
+    #[test]
+    fn cxx_dynamic_text_runs_retain_all_indices_and_skip_only_null_style_or_empty_runs() {
+        let (runtime, graphs) = baseline_origin_text_runtime();
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        slice.styles[0].name = Some("first".to_owned());
+        let mut second_style = slice.styles[0].clone();
+        second_style.local_id = 99;
+        second_style.name = Some("second".to_owned());
+        slice.styles.push(second_style);
+
+        let runs = slice
+            .resolved_dynamic_runs(
+                vec![
+                    crate::view_model::RuntimeTextListRun {
+                        text: None,
+                        style: Some(b"second".to_vec()),
+                    },
+                    crate::view_model::RuntimeTextListRun {
+                        text: Some(b"hidden".to_vec()),
+                        style: None,
+                    },
+                    crate::view_model::RuntimeTextListRun {
+                        text: Some(b"fallback".to_vec()),
+                        style: Some(b"unknown".to_vec()),
+                    },
+                    crate::view_model::RuntimeTextListRun {
+                        text: Some(b"named".to_vec()),
+                        style: Some(b"second".to_vec()),
+                    },
+                ],
+                0,
+            )
+            .expect("dynamic runs resolve");
+
+        assert_eq!(runs.len(), 4, "every valid list instance retains a run");
+        assert_eq!(runs[0].text, "");
+        assert_eq!(runs[0].style_local, Some(99));
+        assert_eq!((runs[0].char_start, runs[0].char_len), (0, 0));
+        assert_eq!(runs[1].text, "hidden");
+        assert_eq!(runs[1].style_local, None);
+        assert_eq!((runs[1].char_start, runs[1].char_len), (0, 0));
+        assert_eq!(runs[2].style_local, Some(slice.styles[0].local_id));
+        assert_eq!((runs[2].char_start, runs[2].char_len), (0, 8));
+        assert_eq!(runs[3].style_local, Some(99));
+        assert_eq!((runs[3].char_start, runs[3].char_len), (8, 5));
+        assert_eq!(
+            runs.iter()
+                .map(StaticResolvedRun::styled_text)
+                .collect::<String>(),
+            "fallbacknamed"
+        );
+
+        slice.styles.clear();
+        let no_paints = slice
+            .resolved_dynamic_runs(
+                vec![crate::view_model::RuntimeTextListRun {
+                    text: Some(b"unpainted".to_vec()),
+                    style: Some(b"first".to_vec()),
+                }],
+                0,
+            )
+            .expect("an empty style-paint list is valid");
+        assert_eq!(no_paints.len(), 1);
+        assert_eq!(no_paints[0].style_local, None);
+        assert!(!no_paints[0].participates_in_styled_text());
+
+        let mut list_only_graph = graph.clone();
+        list_only_graph
+            .local_objects
+            .retain(|object| !matches!(object.local_id, 2 | 3));
+        list_only_graph
+            .components
+            .retain(|component| !matches!(component.local_id, 2 | 3));
+        list_only_graph
+            .components
+            .iter_mut()
+            .find(|component| component.local_id == 1)
+            .expect("Text component remains")
+            .children
+            .retain(|local_id| !matches!(*local_id, 2 | 3));
+        list_only_graph.data_binds.push(DataBindNode {
+            global_id: u32::MAX,
+            type_name: "DataBind",
+            property_key: u64::from(
+                property_key_for_name("Text", "textRunListSource")
+                    .expect("Text.textRunListSource key"),
+            ),
+            flags: 0,
+            converter_id: 0,
+            converter_global: None,
+            converter_type_name: None,
+            converter_duration: None,
+            target_global: Some(slice.text_global),
+            target_type_name: Some("Text"),
+            target_local: Some(1),
+        });
+        let list_only = StaticTextSlice::from_graph(&runtime, &list_only_graph, 1)
+            .expect("list-driven Text legitimately retains an empty style-paint topology");
+        assert!(list_only.runs.is_empty());
+        assert!(list_only.styles.is_empty());
     }
 
     #[test]

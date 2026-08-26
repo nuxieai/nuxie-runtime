@@ -42,3 +42,22 @@ Candidate-range `git diff --check` was clean. Focused test compilation
 succeeded; the attempted exact-name invocations selected zero tests because
 the unit tests are module-qualified, so they are not claimed as execution
 evidence here. Pre-existing user worktree changes remained unstaged.
+
+## Narrow correction rereview
+
+Correction `cbe97cab6` **closes the rejection and is accepted**. The direct
+parent check now runs in
+`ArtboardInstance::build_component_occurrence_relations` immediately after
+the Component parent relation is linked and before construction can return a
+usable occurrence. Its fixture is genuinely malformed before construction and
+travels through `RuntimeFile`, `GraphFile`, and the first
+`ArtboardInstance::from_graph` call, which returns the expected error. The late
+`StaticTextSlice::from_graph` guard and projection-only evidence were removed.
+
+No other production behavior changed in the correction. Row 2 and correction
+5 now describe the actual lifecycle owner; rows 13 and 28 remain red. The
+13-consumer topology remains 4 pass / 2 red / 7 pending, and the broader Text
+topology remains 4 / 3 / 11. `cargo test -p nuxie-runtime --lib
+cxx_text_modifier_group_requires_a_direct_text_parent -- --nocapture` passed
+(1 test), and correction-range `git diff --check` was clean. Pre-existing user
+worktree changes remained unstaged.

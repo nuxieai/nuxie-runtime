@@ -677,3 +677,39 @@ Candidate scope is only `text.rs` and the Text source receipt. The pre-existing
 working-tree check still reports the user's existing trailing whitespace in
 `tools/webgpu-renderer-replay/build.sh`. Consumer topology remains **4 pass, 3
 executable expected-red, 11 pending**. This review changed documentation only.
+
+## Narrow StyledText correction rereview of `6e3b93d4c`
+
+Verdict: **RESIDUAL REJECTION — behavior is corrected, but the consolidated
+style-ID helper cites the wrong pinned owner**
+
+All four behavioral findings from `fa99cacfa` are closed. Byte truncation now
+precedes UTF-8 validation, so `[0x00, 0xff]` retains a zero-count included run
+while an invalid consumed prefix remains the named safety rejection. The
+wrapping `u16` ID spans authored and dynamic all-runs entries and consumes
+skipped gaps. Actual uni- and bidi-glyph consumers keep the appended run's
+font/metrics separate from the ID-selected paint. Every production common
+shaper, topology, bounds, fit, measure, render, and clip seed now resolves the
+first included run. The live occurrence test observes the retained old Arc
+before update and a new leading-NUL then `C` topology after updates; its
+`cfg(test)` snapshot is read-only and contains no alternate algorithm.
+
+One source-authority correction remains. The new
+`style_index_from_shaper_id` comment and test name attribute the complete
+all-runs lookup to pinned `Text::styleFromShaperId`. That is false: pinned
+`buildRenderStyles` indexes `m_allRuns[run->styleId]`, while
+`Text::styleFromShaperId` separately asserts and indexes authored `m_runs` for
+modifier reconstruction. The latter remains part of the acknowledged
+modifier-group red. Rename and describe this helper/test as the all-runs paint
+lookup and cite `buildRenderStyles`; do not imply row 18 is closed. Refresh the
+directly affected stale row 18 and H3 locators at the same time
+(`style_index_for_local` is now 4849; the glyph owners are 3734 and 3896).
+No behavior or test algorithm needs to change.
+
+Focused checks pass: two StyledText tests together, the skipped-run test, the
+first-included-run render/measure/clip test, and the live retained-owner test
+all pass (five passed total, zero failed or ignored). The correction delta
+passes `git diff --check`. Modifier layering/swap remains visibly red and
+consumer topology remains **4 pass, 3 executable expected-red, 11 pending**.
+The pre-existing `draw.rs` formatting hunk and all other user dirt remain
+unstaged. This rereview changed documentation only.

@@ -1,5 +1,12 @@
 # Runtime exact-parity campaign
 
+> **Workflow correction (2026-08-26):** The rigid phase boundary in this
+> document created a missing-owner deadlock during the test-port campaign.
+> Continue under
+> [`runtime-exact-parity-workflow-correction.md`](runtime-exact-parity-workflow-correction.md),
+> which preserves the parity rules but closes the in-flight test checkpoint and
+> moves one-to-one source correspondence ahead of the remaining blocked tests.
+
 This campaign applies the renderer-port lesson to the pinned Rive runtime:
 establish the complete upstream test oracle first, then make source ownership
 comparable, then correct demonstrated translation discrepancies. It is not a

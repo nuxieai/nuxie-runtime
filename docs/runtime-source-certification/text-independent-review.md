@@ -301,3 +301,48 @@ delta passes `git diff --check`, and the `draw.rs` hunk is one insertion. The
 row 17 residual wording remains honest, and the complete consumer section is
 unchanged at **4 pass, 3 executable expected-red, 11 pending**. Pre-existing
 user changes remain unstaged; this rereview changed documentation only.
+
+## Text rows 24/25 production-correction review of `2c6ca226e`
+
+Verdict: **RESIDUAL REJECTION — one pinned range callback is not dispatched**
+
+The core correction is source-shaped. `RuntimeTextState` owns its range maps
+per occurrence and `clone_for_occurrence` returns a cold state. The real
+`StaticTextModifierRange::range_units` consumer reads and fills that cache;
+empty maps retain the pinned recompute behavior. `markShapeDirty(bool)` walks
+direct groups and their ranges in authored child order, adds Text Path first,
+clears each group's maps before adding its TextCoverage dirt, then performs the
+named Rust revision/bounds bookkeeping before WorldTransform and optional
+layout publication. The distinct `modifierShapeDirty` owner adds Text Path
+only. `unitsValue` now takes `rangeTypeChanged`, while `typeValue` takes the
+ordinary `rangeChanged` route, with Text dirt before group TextCoverage.
+
+One executable callback remains missing. Pinned
+`TextModifierRange::clampChanged` calls `TextModifierGroup::rangeChanged`, but
+Rust `ArtboardInstance::apply_bool_property_changed` has no TextModifierRange
+owner at all. A live `TextModifierRange.clamp` write therefore updates the bool
+and generic notifications without publishing the owning Text's Path/Paint dirt
+or the group's TextCoverage dirt. This also makes row 25's claim that
+shape-modifier-backed range changes route through the Path-only owner too
+broad. Separately, row 25 must say **exact enabled-path candidate**: the pinned
+disabled body at line 1427 is still absent/red, as required by the accepted
+inventory convention.
+
+Narrow correction request:
+
+1. Route only `TextModifierRange.clamp` bool writes through the same ordinary
+   `rangeChanged` owner as pinned `clampChanged`, and wire that owner into the
+   bool setter callback chain.
+2. Add real callback evidence for clamp with both a shape-modifier group
+   (Text Path only, then group TextCoverage) and a paint-only group (Text Paint
+   only, then group TextCoverage). Retained range maps must remain populated.
+3. Extend the existing focused evidence to observe the authored multi-group /
+   multi-range clear-and-dirt order rather than only collapsed final dirt bits,
+   without duplicating the production traversal in the test.
+4. Keep Rust revision/bounds bookkeeping named as an adaptation, keep the
+   disabled path red, and freeze the **4 pass / 3 executable expected-red / 11
+   pending** consumer topology.
+
+Checks: the candidate's focused owner test passes (one passed, zero failed,
+zero ignored), the delta passes `git diff --check`, and the complete consumer
+section is unchanged at 4/3/11. This review changed documentation only.

@@ -67,3 +67,30 @@ promotions need no test changes.
   are nevertheless present and cannot honestly be classified pending.
 
 This review changes no production code, tests, or machine ledger.
+
+## Narrow correction rereview
+
+Verdict: **ACCEPTED**
+
+Reviewed correction: `3693b5d767da6f99e8a64a3e6508a7e62a2d37ba`
+
+The correction satisfies all three requests above without changing the five
+previously accepted pass tests:
+
+- case 2 now has one distinct direct Silver test over the existing literal
+  `text_input` corpus entry. Default execution reports exactly one ignored
+  expected-red. Explicit `--ignored` execution runs the complete owner and
+  fails at the frozen difference: `frame 0, op 25 (transform), field xy:
+  expected -0.0 (0x80000000), got 0`;
+- case 19 now identifies the absent live
+  `FocusNode -> FocusData::m_textInputListeners -> TextInput` forwarding path
+  and no longer attributes dispatch to `acceptsKeyboardInput`; and
+- case 20 now identifies only the missing complete live cursor-path
+  focus/selection/blur evidence stream.
+
+The corrected ledger has 58 unique rows and the exact topology **11 pass, 1
+expected-red, 46 pending; 9 direct, 3 adapted, 46 pending**. Its TextInput
+subset is **5 pass, 1 expected-red, 14 pending**, `max_pending` is 46, and all
+six evidence locators resolve exactly. JSON/topology checks, targeted
+`rustfmt --check`, candidate `git diff --check`, and the proof that
+`cpp_probe.rs` is unchanged from the rejection checkpoint all pass.

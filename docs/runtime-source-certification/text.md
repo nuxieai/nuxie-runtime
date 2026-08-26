@@ -37,6 +37,18 @@ a null-style row and an empty row before a second-style `"\nA"`, and proves the
 empty paragraph retains the second style's metrics. Consumer topology remains
 four pass, three executable expected-red, and 11 pending.
 
+Empty-shape production-correction candidate note: row 17's clean Text owner
+now follows the pinned `buildRenderStyles` early branch. When `makeStyled`
+would produce no run, uncontrolled and every fixed/fill/hug controlled layout
+combination publish zero bounds before effective-sizing retention, produce no
+render topology, paths, color glyphs, draw order, or clip, and the no-authored-
+run fallback also returns zero. Focused direct owner evidence covers all three
+authored sizing modes and the complete 3x3 controlled scale-type matrix.
+Retained path clearing, update-phase layout-dirt publication, hit rectangles
+and contours, and the complete packed eight-phase order remain separate row 17
+gaps. No consumer moved; topology remains four pass, three executable
+expected-red, and 11 pending.
+
 This is an atomic source-pair audit under
 `docs/runtime-exact-parity-workflow-correction.md`. It does not inherit the
 older file-level `mapped` or `faithful` verdict. The later correction candidate
@@ -106,7 +118,7 @@ not surrounding module attribution, are the durable identity.
 | 14 | `computeBoundsInfo` (304) | Accumulate paragraph lines, widths, baseline origin, paragraph spacing, ellipsis line/height, and non-fixed trim in source order. | `text.rs:4466::static_layout_info`; `3158::static_line_metrics`; `3265::static_text_total_height`; `text.rs:5686::cxx_paragraph_spacing_order_covers_empty_paragraphs_trim_measure_fit_and_render` | **adapted correction candidate**: the flattened line representation now adds spacing after each paragraph, retains final spacing for fixed-height/ellipsis calculations, and removes exactly one final spacing before auto-bounds trim. Empty-line insertion ownership now excludes every source run omitted by pinned `makeStyled`; the shaped-line representation remains adapted. |
 | 15 | `fitFontScale` (389) | Find max nonempty styled run size; early return; binary-search integer top size; each probe makes styled text, shapes, breaks, includes paragraph spacing, and checks width/height. | `text.rs:3383::fit_font_scale`; `3434::fit_font_scale_for_max_size`; `3189::static_text_total_height`; complete Silver stream `tools/silver-corpus/tests/silver_backfill_cases.rs:37::text_fit_font_size_source_correction_is_exact` | **adapted correction candidate with exact consumer evidence**: each binary-search height probe now includes every paragraph's spacing in pinned order; the seven-frame `fit_font_size_test` stream is exact. Shaping/line-break representation remains adapted. |
 | 16 | `shouldDrawLine` (481) | Hidden/clipped and top/middle/bottom use distinct top/bottom comparisons yielding draw/skip/stop. | `text/line_breaker.rs:50::static_text_line_iteration` | **exact algorithm candidate, pending all nine branch comparisons**. |
-| 17 | `buildRenderStyles` (558) | Eight ordered phases: clear; empty-shape bounds/return; bounds+ellipsis; modifier coverage; bounds/clip; ordered glyph paths/color commands/hit rects; fit/vertical transform plus layout dirt; hit contours. | `text.rs:2263::StaticTextSlice::layout_from_shaped_topology`; `2543::render_data_from_layout`; `4375::static_layout_info`; `4498::static_render_transform`; `draw.rs:17772::runtime_build_text_draw_frame` | **incorrect/incomplete/packed**: paragraph spacing is now present in retained bounds/ellipsis/fit/render calculations, but TextValueRun hit rectangles/contours have no source-equivalent owner. Additionally, pinned empty shape always publishes zero bounds and returns; Rust `text.rs:3889::unshaped_local_bounds` and `477::static_fixed_text_constraint_bounds` can publish the controlled layout box for empty layout-controlled Text. Phase/order is split across immutable reconstruction and retained draw-owner publication. |
+| 17 | `buildRenderStyles` (558) | Eight ordered phases: clear; empty-shape bounds/return; bounds+ellipsis; modifier coverage; bounds/clip; ordered glyph paths/color commands/hit rects; fit/vertical transform plus layout dirt; hit contours. | `text.rs:2301::StaticTextSlice::layout_from_shaped_topology`; `2581::render_data_from_layout`; empty-shape owners `504::static_fixed_text_constraint_bounds`, `2125::render_layout`, `2706::local_bounds`, `2848::layout_bounds_with_constraint`, `3909::has_styled_text`, `4047::clip_bounds`; nonempty bounds/order `4518::static_layout_info`, `4641::static_render_transform`; retained owner `draw.rs:17772::runtime_build_text_draw_frame`; evidence `text.rs:6373::cxx_empty_shape_publishes_zero_before_controlled_box_and_render_work` | **adapted correction candidate/incomplete/packed**: paragraph spacing remains present in retained nonempty bounds/ellipsis/fit/render calculations. The clean owner now exactly publishes zero bounds for every no-`makeStyled`-run case before controlled sizing, render data, and clip work, including the no-authored-run fallback. TextValueRun hit rectangles/contours still have no source-equivalent owner; retained path clearing, layout-dirt publication, and the complete phase order remain split across immutable reconstruction and the retained draw owner. |
 | 18 | `styleFromShaperId` (863; disabled 1429) | Assert ID in `m_runs`, return its style; disabled returns null. | `text.rs:4528::style_index_for_local` and indexed `styles` reads | **adapted/incomplete**: local-ID lookup replaces shaper index assertion; no disabled-feature counterpart. |
 | 19 | `draw` (869; disabled 1413) | Conditional outer save; optional clipped path; replay style/color commands in stored order; conditional restore. Disabled draw is inert. | `draw.rs:18306::runtime_draw_live_text_family`; `17948::runtime_text_replay_order` | **adapted candidate**: retained replay and save/clip/restore exist; exact renderer stream remains required. |
 | 20 | `drawColorGlyph` (901) | Get layers or return; save+transform; cache/decode bitmap and apply extent transform, or build nonzero path/paint; restore. | `draw.rs:18222::runtime_draw_integrated_color_glyph`; caches at `draw.rs:10677::RuntimeTextBackendResources::{color_paths,emoji_images}` | **incorrect/adapted**: pinned creates a new render path and paint for every non-image layer on every draw; Rust retains vector `color_paths` by `(glyph_index,layer_index)` across draws, changing the factory stream. The raster cache/order is adapted and gradient layer support is broader. |
@@ -281,8 +293,8 @@ least these actionable discrepancies:
   retain the literal `StyledText::TextRun::styleId` space;
 - `controlSize` does not retain and compare the complete pinned five-field
   state in one owner;
-- empty layout-controlled Text publishes the controlled box instead of pinned
-  zero bounds;
+- retained path clearing and update-phase layout-dirt order around the corrected
+  empty-shape branch remain distributed rather than directly owned;
 - non-image color-glyph layers retain vector paths across draws instead of
   creating fresh factory path/paint objects on every draw;
 - TextValueRun hit rectangles/contours and the direct null `Text::hitTest`

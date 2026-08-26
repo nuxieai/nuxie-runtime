@@ -513,6 +513,32 @@ pub(crate) fn static_fixed_text_constraint_bounds(
         .iter()
         .find(|object| object.local_id == text_local && object.type_name == Some("Text"))?;
     let runtime_object = runtime.object(text_object.global_id as usize)?;
+    let has_authored_run = graph
+        .components
+        .iter()
+        .find(|component| component.local_id == text_local)
+        .is_some_and(|text| {
+            text.children.iter().any(|child_local| {
+                graph.local_objects.iter().any(|object| {
+                    object.local_id == *child_local && object.type_name == Some("TextValueRun")
+                })
+            })
+        });
+    let has_run_list_source = graph.data_binds.iter().any(|data_bind| {
+        data_bind.target_local == Some(text_local)
+            && data_bind.target_type_name == Some("Text")
+            && u16::try_from(data_bind.property_key).ok()
+                == property_key_for_name("Text", "textRunListSource")
+            && data_bind_flags_apply_source_to_target(data_bind.flags)
+    });
+    if !has_authored_run && !has_run_list_source {
+        return Some((0.0, 0.0, 0.0, 0.0));
+    }
+    if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
+        && matches!(slice.has_styled_text(runtime, instance), Ok(false))
+    {
+        return Some((0.0, 0.0, 0.0, 0.0));
+    }
     let uint_property = |name| {
         let key = property_key_for_name("Text", name)?;
         instance
@@ -2104,10 +2130,7 @@ impl StaticTextSlice {
         text_world: Mat2D,
     ) -> Result<Option<StaticShapedTextLayout>> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
-        if resolved_runs
-            .iter()
-            .all(|run| !run.participates_in_styled_text())
-        {
+        if !self.has_styled_text_from_resolved_runs(runtime, instance, &resolved_runs)? {
             return Ok(None);
         }
         self.shaped_layout_from_resolved_runs(
@@ -2130,10 +2153,7 @@ impl StaticTextSlice {
         text_world: Mat2D,
     ) -> Result<Option<StaticShapedTextTopology>> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
-        if resolved_runs
-            .iter()
-            .all(|run| !run.participates_in_styled_text())
-        {
+        if !self.has_styled_text_from_resolved_runs(runtime, instance, &resolved_runs)? {
             return Ok(None);
         }
         self.shaped_topology_from_resolved_runs(
@@ -2155,10 +2175,7 @@ impl StaticTextSlice {
         resolved_runs: &[StaticResolvedRun],
         purpose: StaticShapedTextPurpose,
     ) -> Result<Option<StaticShapedTextLayout>> {
-        if resolved_runs
-            .iter()
-            .all(|run| !run.participates_in_styled_text())
-        {
+        if !self.has_styled_text_from_resolved_runs(runtime, instance, resolved_runs)? {
             return Ok(None);
         }
         let Some(topology) = self.shaped_topology_from_resolved_runs(
@@ -2692,6 +2709,9 @@ impl StaticTextSlice {
         instance: &ArtboardInstance,
     ) -> Result<Option<(f32, f32, f32, f32)>> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
+        if !self.has_styled_text_from_resolved_runs(runtime, instance, &resolved_runs)? {
+            return Ok(Some((0.0, 0.0, 0.0, 0.0)));
+        }
         let text = resolved_runs
             .iter()
             .map(StaticResolvedRun::styled_text)
@@ -2833,6 +2853,9 @@ impl StaticTextSlice {
         purpose: StaticTextLayoutBoundsPurpose,
     ) -> Result<Option<(f32, f32, f32, f32)>> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
+        if !self.has_styled_text_from_resolved_runs(runtime, instance, &resolved_runs)? {
+            return Ok(Some((0.0, 0.0, 0.0, 0.0)));
+        }
         let text = resolved_runs
             .iter()
             .map(StaticResolvedRun::styled_text)
@@ -3883,6 +3906,32 @@ impl StaticTextSlice {
             .context("static text subset requires a base TextStylePaint")
     }
 
+    fn has_styled_text(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<bool> {
+        let runs = self.resolved_runs(runtime, instance)?;
+        self.has_styled_text_from_resolved_runs(runtime, instance, &runs)
+    }
+
+    fn has_styled_text_from_resolved_runs(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        runs: &[StaticResolvedRun],
+    ) -> Result<bool> {
+        for run in runs.iter().filter(|run| run.participates_in_styled_text()) {
+            let style_local = run
+                .style_local
+                .expect("participating StyledText run has a style");
+            let style_index = self.style_index_for_local(style_local)?;
+            if self.styles[style_index]
+                .font_bytes(runtime, instance)
+                .is_some()
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     fn text_width(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<f32> {
         if self.kind == StaticTextKind::TextInput {
             return Ok(0.0);
@@ -4001,6 +4050,9 @@ impl StaticTextSlice {
         instance: &ArtboardInstance,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<Option<StaticTextClipBounds>> {
+        if !self.has_styled_text(runtime, instance)? {
+            return Ok(None);
+        }
         if !self.overflow_as_fixed(runtime, instance, layout_constraint)?
             || self.text_uint_property(runtime, instance, "overflowValue")? != TEXT_OVERFLOW_CLIPPED
         {
@@ -6315,6 +6367,151 @@ mod tests {
         assert_close(measured.2, 80.0);
         assert_close(controlled.2, 200.0);
         assert_close(controlled.3, 100.0);
+    }
+
+    #[test]
+    fn cxx_empty_shape_publishes_zero_before_controlled_box_and_render_work() {
+        let zero = (0.0, 0.0, 0.0, 0.0);
+        let scale_types = [0, 1, 2];
+
+        for authored_sizing in [
+            TEXT_SIZING_AUTO_WIDTH,
+            TEXT_SIZING_AUTO_HEIGHT,
+            TEXT_SIZING_FIXED,
+        ] {
+            let (runtime, graphs) =
+                baseline_origin_text_runtime_with_sizing_line_height_font_and_text(
+                    authored_sizing,
+                    Some(40.0),
+                    fixture_font_bytes(),
+                    "",
+                );
+            let graph = graphs.artboards.first().expect("fixture has an artboard");
+            let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+            let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+
+            assert_eq!(
+                slice
+                    .local_bounds(&runtime, &instance)
+                    .expect("uncontrolled empty bounds compute"),
+                Some(zero)
+            );
+            assert!(
+                slice
+                    .render_topology(&runtime, &instance, None, Mat2D::IDENTITY)
+                    .expect("empty render topology computes")
+                    .is_none()
+            );
+            let render_data = slice
+                .render_data_filtered(&runtime, &instance, graph, None, Mat2D::IDENTITY, None)
+                .expect("empty render data computes");
+            assert!(render_data.path_buckets_by_style.iter().all(Vec::is_empty));
+            assert!(render_data.color_glyphs.is_empty());
+            assert!(render_data.order.is_empty());
+            assert_eq!(render_data.local_transform, Mat2D::IDENTITY);
+            assert!(
+                slice
+                    .clip_bounds(&runtime, &instance, None)
+                    .expect("empty clip computes")
+                    .is_none()
+            );
+            assert_eq!(
+                static_fixed_text_constraint_bounds(&runtime, graph, &instance, 1, None),
+                Some(zero)
+            );
+
+            for width_scale_type in scale_types {
+                for height_scale_type in scale_types {
+                    let constraint = RuntimeTextLayoutConstraint {
+                        width: 200.0,
+                        height: 100.0,
+                        width_scale_type,
+                        height_scale_type,
+                        layout_direction: 0,
+                    };
+                    assert_eq!(
+                        slice
+                            .local_bounds_with_layout_constraint(&runtime, &instance, constraint,)
+                            .expect("controlled empty bounds compute"),
+                        Some(zero)
+                    );
+                    assert_eq!(
+                        slice
+                            .measure_bounds_with_layout_constraint(&runtime, &instance, constraint,)
+                            .expect("empty measure computes"),
+                        Some(zero)
+                    );
+                    assert_eq!(
+                        build_static_text_constraint_bounds_from_slice(
+                            &slice,
+                            &runtime,
+                            graph,
+                            &instance,
+                            1,
+                            Some(constraint),
+                        ),
+                        Some(zero)
+                    );
+                    assert_eq!(
+                        static_fixed_text_constraint_bounds(
+                            &runtime,
+                            graph,
+                            &instance,
+                            1,
+                            Some(constraint),
+                        ),
+                        Some(zero)
+                    );
+                    assert!(
+                        slice
+                            .clip_bounds(&runtime, &instance, Some(constraint))
+                            .expect("controlled empty clip computes")
+                            .is_none()
+                    );
+                }
+            }
+
+            let state = instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("fixture Text owns retained state");
+            assert_eq!(
+                state.effective_sizing(authored_sizing),
+                authored_sizing,
+                "empty early return must not publish controlled scale types"
+            );
+
+            let mut no_runs = graph.clone();
+            no_runs.local_objects.retain(|object| object.local_id != 3);
+            no_runs
+                .components
+                .retain(|component| component.local_id != 3);
+            no_runs
+                .components
+                .iter_mut()
+                .find(|component| component.local_id == 1)
+                .expect("Text component remains")
+                .children
+                .retain(|local_id| *local_id != 3);
+            let constraint = RuntimeTextLayoutConstraint {
+                width: 200.0,
+                height: 100.0,
+                width_scale_type: 1,
+                height_scale_type: 1,
+                layout_direction: 0,
+            };
+            assert_eq!(
+                static_fixed_text_constraint_bounds(
+                    &runtime,
+                    &no_runs,
+                    &instance,
+                    1,
+                    Some(constraint),
+                ),
+                Some(zero),
+                "the no-run update fallback must publish pinned zero bounds"
+            );
+        }
     }
 
     #[test]

@@ -15,7 +15,6 @@ impl StaticTextModifier {
     fn from_group_child(
         runtime: &RuntimeFile,
         graph: &ArtboardGraph,
-        group_local: usize,
         child_local: usize,
     ) -> Result<Option<Self>> {
         Ok(match type_for_local(graph, child_local) {

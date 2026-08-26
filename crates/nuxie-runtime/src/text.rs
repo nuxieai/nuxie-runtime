@@ -1994,21 +1994,6 @@ impl StaticTextSlice {
         }
 
         if let Some(component) = graph.components.iter().find(|component| {
-            definition_by_name(component.type_name).is_some_and(|definition| {
-                definition.is_a("TextModifier") && !definition.is_a("TextTargetModifier")
-            }) && component.type_name != "TextModifierRange"
-                && component
-                    .parent_local
-                    .and_then(|parent| type_for_local(graph, parent))
-                    != Some("TextModifierGroup")
-        }) {
-            bail!(
-                "{} local {} requires a direct TextModifierGroup parent",
-                component.type_name,
-                component.local_id
-            );
-        }
-        if let Some(component) = graph.components.iter().find(|component| {
             component.type_name == "TextStyleFeature"
                 && !matches!(
                     component
@@ -8261,6 +8246,191 @@ mod tests {
             Err(error) => error,
         };
         assert!(error.to_string().contains("requires a direct Text parent"));
+    }
+
+    #[test]
+    fn cxx_text_modifier_registers_valid_children_in_authored_order_across_clone() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("ordered modifiers".to_owned()),
+                    ),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                ],
+            ),
+            fixture_record(
+                "TextModifierGroup",
+                vec![property(
+                    "TextModifierGroup",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
+                "TextFollowPathModifier",
+                vec![
+                    property("TextFollowPathModifier", "parentId", FixtureValue::Uint(4)),
+                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(8)),
+                ],
+            ),
+            fixture_record(
+                "TextVariationModifier",
+                vec![property(
+                    "TextVariationModifier",
+                    "parentId",
+                    FixtureValue::Uint(4),
+                )],
+            ),
+            fixture_record(
+                "TextFollowPathModifier",
+                vec![
+                    property("TextFollowPathModifier", "parentId", FixtureValue::Uint(4)),
+                    property("TextFollowPathModifier", "targetId", FixtureValue::Uint(8)),
+                ],
+            ),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(0))],
+            ),
+        ])
+        .expect("valid TextModifier records import");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("valid modifier graph builds");
+        let graph = &graphs.artboards[0];
+        let instance = ArtboardInstance::from_graph(&runtime, graph)
+            .expect("valid modifier occurrence constructs");
+        let cold_clone = instance.clone();
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1)
+            .expect("valid modifier Text materializes");
+        assert_eq!(slice.modifiers.len(), 1);
+        assert_eq!(
+            slice.modifiers[0]
+                .modifiers
+                .iter()
+                .map(StaticTextModifier::local_id)
+                .collect::<Vec<_>>(),
+            vec![5, 6, 7]
+        );
+
+        let registered_modifiers = |owner: &ArtboardInstance| {
+            let group = owner
+                .component(4)
+                .expect("modifier group occurrence")
+                .concrete
+                .text_modifier_group
+                .as_ref()
+                .expect("occurrence-owned modifier registration");
+            (
+                group.modifier_locals(),
+                group.shape_modifier_locals(),
+                group.follow_path_modifier_locals(),
+            )
+        };
+        let expected = (vec![5, 6, 7], vec![6], vec![5, 7]);
+        assert_eq!(registered_modifiers(&instance), expected);
+        assert_eq!(registered_modifiers(&cold_clone), expected);
+        assert_eq!(registered_modifiers(&instance.clone()), expected);
+    }
+
+    #[test]
+    fn cxx_text_modifier_missing_group_omits_concrete_subclasses_without_late_rejection() {
+        for modifier_type in ["TextVariationModifier", "TextFollowPathModifier"] {
+            let mut modifier_properties =
+                vec![property(modifier_type, "parentId", FixtureValue::Uint(5))];
+            if modifier_type == "TextFollowPathModifier" {
+                modifier_properties.push(property(
+                    modifier_type,
+                    "targetId",
+                    FixtureValue::Uint(6),
+                ));
+            }
+            let runtime = RuntimeFile::from_fixture_records(vec![
+                fixture_record("Backboard", Vec::new()),
+                fixture_record("Artboard", Vec::new()),
+                fixture_record("Text", Vec::new()),
+                fixture_record(
+                    "TextStylePaint",
+                    vec![property(
+                        "TextStylePaint",
+                        "parentId",
+                        FixtureValue::Uint(1),
+                    )],
+                ),
+                fixture_record(
+                    "TextValueRun",
+                    vec![
+                        property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                        property(
+                            "TextValueRun",
+                            "text",
+                            FixtureValue::String("missing group".to_owned()),
+                        ),
+                        property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                    ],
+                ),
+                fixture_record(
+                    "TextModifierGroup",
+                    vec![property(
+                        "TextModifierGroup",
+                        "parentId",
+                        FixtureValue::Uint(1),
+                    )],
+                ),
+                fixture_record(
+                    "Shape",
+                    vec![property("Shape", "parentId", FixtureValue::Uint(1))],
+                ),
+                fixture_record(
+                    "Shape",
+                    vec![property("Shape", "parentId", FixtureValue::Uint(0))],
+                ),
+                fixture_record(modifier_type, modifier_properties),
+            ])
+            .unwrap_or_else(|error| panic!("{modifier_type} records import: {error:#}"));
+            let graphs = GraphFile::from_runtime_file(&runtime)
+                .unwrap_or_else(|error| panic!("{modifier_type} graph builds: {error:#}"));
+            let graph = &graphs.artboards[0];
+            let instance = ArtboardInstance::from_graph(&runtime, graph).unwrap_or_else(|error| {
+                panic!("{modifier_type} MissingObject permits construction: {error:#}")
+            });
+            assert_eq!(
+                instance.component_parent_local(7),
+                Some(5),
+                "{modifier_type}"
+            );
+            assert!(
+                instance
+                    .component(4)
+                    .and_then(|group| group.concrete.text_modifier_group.as_ref())
+                    .expect("occurrence-owned modifier registration")
+                    .modifier_locals()
+                    .is_empty(),
+                "{modifier_type}"
+            );
+            let slice = StaticTextSlice::from_graph(&runtime, graph, 1)
+                .unwrap_or_else(|error| panic!("{modifier_type} has no late rejection: {error:#}"));
+            assert_eq!(slice.modifiers.len(), 1, "{modifier_type}");
+            assert!(slice.modifiers[0].modifiers.is_empty(), "{modifier_type}");
+            if modifier_type == "TextFollowPathModifier" {
+                assert_eq!(text_target_modifier_target_local(&instance, 7), None);
+                assert_eq!(text_target_modifier_text_component(&instance, 7), None);
+            }
+        }
     }
 
     #[test]

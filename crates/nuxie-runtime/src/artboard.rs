@@ -1364,6 +1364,14 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
     ) -> Result<()> {
         objects.reset_component_relations();
+        for handle in objects.component_handles() {
+            if let Some(group) = objects
+                .component(*handle)
+                .and_then(|component| component.concrete.text_modifier_group.as_ref())
+            {
+                group.clear_modifiers();
+            }
+        }
         let root = objects
             .root()
             .context("artboard occurrence is missing its root Component")?;
@@ -1400,6 +1408,25 @@ impl ArtboardInstance {
                 }
                 if !objects.link_parent(handle, parent) {
                     anyhow::bail!("Component parent link could not be retained");
+                }
+                // `TextModifier::onAddedDirty` runs after Component Super has
+                // linked the parent. A direct TextModifierGroup parent is the
+                // only successful registration path; authored iteration order
+                // is the retained modifier order.
+                if let Some(modifier_definition) = definition_by_name(component.type_name)
+                    .filter(|definition| definition.is_a("TextModifier"))
+                    && definition_by_name(parent_type)
+                        .is_some_and(|definition| definition.is_a("TextModifierGroup"))
+                {
+                    objects
+                        .component_mut(parent)
+                        .and_then(|parent| parent.concrete.text_modifier_group.as_ref())
+                        .expect("TextModifierGroup occurrence state")
+                        .register_modifier(
+                            component.local_id,
+                            modifier_definition.is_a("TextShapeModifier"),
+                            modifier_definition.is_a("TextFollowPathModifier"),
+                        );
                 }
                 // TextModifierGroup::onAddedDirty runs its Component base
                 // callback before requiring the direct parent to be a Text.

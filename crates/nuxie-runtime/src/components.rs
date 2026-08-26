@@ -1004,6 +1004,57 @@ pub(crate) struct RuntimeTextTargetState {
     target_local: Cell<Option<usize>>,
 }
 
+/// Occurrence-owned counterpart of `TextModifierGroup::m_modifiers`.
+/// `TextModifier::onAddedDirty` appends here only after its Component Super
+/// succeeds and its direct parent is a TextModifierGroup.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeTextModifierGroupState {
+    modifier_locals: RefCell<Vec<usize>>,
+    shape_modifier_locals: RefCell<Vec<usize>>,
+    follow_path_modifier_locals: RefCell<Vec<usize>>,
+}
+
+impl RuntimeTextModifierGroupState {
+    fn clone_for_occurrence(&self) -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn register_modifier(
+        &self,
+        modifier_local: usize,
+        is_shape_modifier: bool,
+        is_follow_path_modifier: bool,
+    ) {
+        self.modifier_locals.borrow_mut().push(modifier_local);
+        if is_shape_modifier {
+            self.shape_modifier_locals.borrow_mut().push(modifier_local);
+        }
+        if is_follow_path_modifier {
+            self.follow_path_modifier_locals
+                .borrow_mut()
+                .push(modifier_local);
+        }
+    }
+
+    pub(crate) fn clear_modifiers(&self) {
+        self.modifier_locals.borrow_mut().clear();
+        self.shape_modifier_locals.borrow_mut().clear();
+        self.follow_path_modifier_locals.borrow_mut().clear();
+    }
+
+    pub(crate) fn modifier_locals(&self) -> Vec<usize> {
+        self.modifier_locals.borrow().clone()
+    }
+
+    pub(crate) fn shape_modifier_locals(&self) -> Vec<usize> {
+        self.shape_modifier_locals.borrow().clone()
+    }
+
+    pub(crate) fn follow_path_modifier_locals(&self) -> Vec<usize> {
+        self.follow_path_modifier_locals.borrow().clone()
+    }
+}
+
 impl RuntimeTextTargetState {
     fn clone_for_occurrence(&self) -> Self {
         Self::default()
@@ -1754,6 +1805,7 @@ pub(crate) struct RuntimeConcreteComponentState {
     pub(crate) vertex: Option<RuntimeVertexState>,
     pub(crate) scripted: Option<RuntimeScriptedComponentState>,
     pub(crate) text: Option<RuntimeTextState>,
+    pub(crate) text_modifier_group: Option<RuntimeTextModifierGroupState>,
     pub(crate) text_target: Option<RuntimeTextTargetState>,
     pub(crate) text_follow_path: Option<RuntimeTextFollowPathState>,
     pub(crate) text_input: Option<RuntimeTextInputState>,
@@ -1803,6 +1855,8 @@ impl RuntimeConcreteComponentState {
             )
             .then(RuntimeScriptedComponentState::default),
             text: type_is_a(type_name, "Text").then(RuntimeTextState::new),
+            text_modifier_group: type_is_a(type_name, "TextModifierGroup")
+                .then(RuntimeTextModifierGroupState::default),
             text_target: type_is_a(type_name, "TextTargetModifier")
                 .then(RuntimeTextTargetState::default),
             text_follow_path: (type_name == "TextFollowPathModifier")
@@ -1881,6 +1935,10 @@ impl RuntimeConcreteComponentState {
                 .text
                 .as_ref()
                 .map(RuntimeTextState::clone_for_occurrence),
+            text_modifier_group: self
+                .text_modifier_group
+                .as_ref()
+                .map(RuntimeTextModifierGroupState::clone_for_occurrence),
             text_target: self
                 .text_target
                 .as_ref()

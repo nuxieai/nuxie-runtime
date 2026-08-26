@@ -91,7 +91,6 @@ impl StaticTextModifierGroup {
                     let modifier = StaticTextModifier::from_group_child(
                         runtime,
                         graph,
-                        local_id,
                         *child_local,
                     )?
                     .with_context(|| {

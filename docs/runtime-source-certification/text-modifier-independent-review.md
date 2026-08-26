@@ -69,3 +69,39 @@ direct pass / 0 red / 0 adapted / 0 pending**.
 
 The candidate is contained to its seven declared paths. All 17 pre-existing
 user-dirty paths remained unstaged and outside this receipt.
+
+## Narrow causal-correction rereview
+
+Correction `73bd7313b38adefd893f8cf2471ad0a4f90ff5cc` remains **rejected**
+for one retained-owner clone defect.
+
+The correction successfully routes live constructor callsites through
+`StaticTextSlice::from_instance`; exhaustive callsite search leaves
+`from_graph` only in the explicit no-occurrence support query and tests. A cold
+clone therefore builds all/shape/follow descriptors from its occurrence
+registration. However, `RuntimeTextDrawOwner::clone` at
+`crates/nuxie-runtime/src/draw.rs:10508-10520` copies the source owner's
+already-materialized `topology` Arc into the clone. `topology_or_build` then
+returns that Arc without consulting the clone occurrence.
+
+This preserves the exact rejected A/B divergence on the required
+post-materialized path. The candidate test materializes source topology at
+`text.rs:8412-8414`, clones it at `:8415`, but validates the clone at `:8418`
+through the local `production_topology` closure. That closure directly invokes
+`StaticTextSlice::from_instance` (`:8360-8362`) and bypasses the clone's real
+retained draw owner. Actual retained draw, measure, onDirty, and topology
+callers reuse source-A membership instead of rebuilding clone-B membership.
+
+Narrow correction: `RuntimeTextDrawOwner` clone construction must start with
+cold topology (or explicitly rebuild it from the clone occurrence only after
+its relations are reconstructed), matching fresh C++ custom Text collections.
+Replace the bypassing post-materialized assertion with an inspection of
+`materialized_clone.retained_static_text_topology(...)`, and drive at least one
+real retained consumer such as draw-frame rebuild or WorldTransform onDirty to
+prove it observes group B. Preserve the now-correct cold constructor routing,
+malformed behavior, topology accounting, and adjacent group discrepancy.
+
+The focused lifecycle test still passes 1 test because of the bypass above.
+Correction-range `git diff --check` passed; the commit is contained to its
+seven declared paths. The pre-existing unstaged formatting-only hunk in
+`draw.rs` remains outside the commit, and all 17 user-dirty paths are preserved.

@@ -69,3 +69,35 @@ configuration are confirmed.
   for cases 14-18 were checked directly.
 - No production code, test, or source-candidate document was changed by this
   review.
+
+## Narrow correction rereview of `d4cf30f9d`
+
+Verdict: **RESIDUAL REJECTION — six substantive corrections are accepted;
+the exact-locator correction remains incomplete**
+
+The denominator and pinned hashes are unchanged. The corrected source receipt
+now honestly records the missing-style dynamic-run behavior, empty-shape
+controlled bounds, per-draw color-glyph factory stream and adapted H6 key,
+no-style topology error, and the 26 disabled-body row ranges. Its consumer
+topology is also correct at **3 pass, 4 executable expected-red, 11 pending**,
+including the ten-rendered-frame word-joiner stream.
+
+Only the following locator cleanup remains:
+
+1. Row 1 promises a definition-start locator but names
+   `text/text.rs:15::RuntimeTextValueRunListener::new`; line 15 is the `impl`
+   block and `new` starts at line 16. Use the actual definition line.
+2. Row 39 still gives the generic range
+   `draw.rs:10445-10509::RuntimeTextDrawOwner` instead of naming the individual
+   nearest methods and their definition lines (or stating that no direct owner
+   exists). Row 40 likewise retains `artboard.rs:9020-9078` and a bare
+   `RuntimeTextDrawOwner`. These do not satisfy the receipt's durable
+   file/line/symbol rule.
+3. H29 names “retained topology text” without its source locator. Name
+   `text/fully_shaped_text.rs:22::StaticShapedTextTopology::text`, as H1
+   already does, or state that no retained source field is being claimed.
+
+Checks: candidate delta is documentation-only and passes `git diff --check`;
+all three pinned SHA-256 values match; corrected Silver manifest entries and
+frozen differences for cases 14-18 were rechecked. Production and tests remain
+untouched.

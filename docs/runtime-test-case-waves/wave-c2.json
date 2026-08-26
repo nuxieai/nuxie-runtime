@@ -498,9 +498,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_layout_wave_c2.rs",
-          "line": 479,
-          "symbol": "wave_c2_layout_023_padding_insets_fill_child"
+          "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
+          "line": 374,
+          "symbol": "wave_c2_layout_023_live_parent_selects_padding_child"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and reaches the declared missing seam.",
@@ -554,7 +554,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
-          "line": 111,
+          "line": 128,
           "symbol": "wave_c2_library_003_named_nested_owner_retains_exact_state_machine"
         }
       ],
@@ -610,7 +610,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
-          "line": 168,
+          "line": 209,
           "symbol": "wave_c2_library_006_live_library_image_retains_exact_asset_owner"
         }
       ],
@@ -628,7 +628,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
-          "line": 188,
+          "line": 230,
           "symbol": "wave_c2_library_007_each_live_library_image_retains_its_exact_asset_owner"
         }
       ],
@@ -681,9 +681,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie/tests/upstream_library_asset.rs",
-          "line": 383,
-          "symbol": "library_vmtest_1_host"
+          "path": "crates/nuxie-runtime/src/artboard/wave_c2_library_owner_tests.rs",
+          "line": 288,
+          "symbol": "wave_c2_library_010_nested_shape_retains_exact_first_fill_owner"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."

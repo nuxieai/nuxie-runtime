@@ -473,27 +473,3 @@ fn wave_c2_layout_013_prevent_percent_margin_on_artboard() {
     let root = fixture.bounds(0);
     assert_eq!((root.width, root.height), (501.0, 512.0));
 }
-
-#[test]
-#[ignore = "expected-red: exact styled_flex runtime solve offsets the child by its margins in addition to the pinned padding-only expectation"]
-fn wave_c2_layout_023_padding_insets_fill_child() {
-    let mut fixture = fixture("layout/styled_flex.riv", None);
-    fixture.advance();
-    let child = fixture
-        .graph()
-        .local_objects
-        .iter()
-        .find(|object| {
-            object.type_name == Some("LayoutComponent")
-                && object.local_id != 0
-                && fixture.graph().components.iter().any(|parent| {
-                    parent.local_id != 0 && parent.children.contains(&object.local_id)
-                })
-        })
-        .expect("fill child nested under container");
-    let child = fixture.bounds(child.local_id);
-    assert_eq!(
-        (child.x, child.y, child.width, child.height),
-        (10.0, 20.0, 160.0, 140.0)
-    );
-}

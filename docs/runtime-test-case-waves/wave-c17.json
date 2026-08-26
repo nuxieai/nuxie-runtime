@@ -303,8 +303,12 @@
           "symbol": "wave_c17_015_interactive_role_classification_is_exact"
         }
       ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "Rust has one u32 role-classification owner rather than C++ enum and uint32_t overloads; the executable test preserves both pinned assertion streams with explicit Rust enum-to-u32 conversions."
+      "note": "Rust has one u32 role-classification owner rather than C++ enum and uint32_t overloads; the executable test preserves both pinned assertion streams with explicit Rust enum-to-u32 conversions.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Pinned C++ exposes SemanticRole and uint32_t isInteractiveRole overloads; Rust intentionally exposes one u32 owner, so the enum assertions use explicit enum-to-u32 conversions and the two pinned raw-u32 assertions call that same owner directly.",
+        "inapplicable_observable": "C++ compile-time overload resolution between SemanticRole and uint32_t; Rust has no function overloading, while every pinned runtime boolean classification remains asserted against the live u32 owner."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/semantic_label_inference_test.cpp#16",

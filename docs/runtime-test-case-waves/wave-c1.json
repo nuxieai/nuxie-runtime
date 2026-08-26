@@ -1,0 +1,1197 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "c1",
+  "case_count": 62,
+  "ratchet": {
+    "max_pending": 0
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/image_mesh_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/image_mesh_test.cpp",
+      "ordinal": 1,
+      "line": 14,
+      "name": "image with mesh loads correctly",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 125,
+          "symbol": "wave_c1_image_mesh_001_image_with_mesh_loads_correctly"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/image_mesh_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/image_mesh_test.cpp",
+      "ordinal": 2,
+      "line": 29,
+      "name": "duplicating a mesh shares the indices",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 150,
+          "symbol": "wave_c1_image_mesh_002_duplicating_a_mesh_shares_the_indices"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust shares the immutable GraphFile mesh index slice across independently instantiated artboards instead of exposing mutable C++ vector-buffer pointer identity.",
+        "inapplicable_observable": "C++ std::vector allocation-address identity; the identical index data and three live instance draws remain asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/in_band_asset_load_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/in_band_asset_load_test.cpp",
+      "ordinal": 1,
+      "line": 49,
+      "name": "Load asset with in-band image",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 214,
+          "symbol": "wave_c1_in_band_asset_001_load_asset_with_in_band_image"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/in_band_asset_load_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/in_band_asset_load_test.cpp",
+      "ordinal": 2,
+      "line": 71,
+      "name": "Load asset with in-band image, passing responsibility to loader",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 232,
+          "symbol": "wave_c1_in_band_asset_002_loader_claims_responsibility"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/in_band_asset_load_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/in_band_asset_load_test.cpp",
+      "ordinal": 3,
+      "line": 110,
+      "name": "Load asset with in-band image, rejecting the loading responsiblity as loader",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 271,
+          "symbol": "wave_c1_in_band_asset_003_loader_rejection_uses_in_band_fallback"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/instancing_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/instancing_test.cpp",
+      "ordinal": 1,
+      "line": 12,
+      "name": "cloning an ellipse works",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 288,
+          "symbol": "wave_c1_instancing_001_cloning_an_ellipse_works"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust clones the ownership-safe ArtboardInstance occurrence rather than exposing an individually heap-cloned RuntimeObject.",
+        "inapplicable_observable": "C++ individual Component pointer identity; cloned Shape properties and positions remain asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/instancing_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/instancing_test.cpp",
+      "ordinal": 2,
+      "line": 26,
+      "name": "instancing artboard clones clipped properties",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 305,
+          "symbol": "wave_c1_instancing_002_artboard_clone_preserves_clipping_properties"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust separates immutable ArtboardGraph definition identity from mutable ArtboardInstance occurrence identity.",
+        "inapplicable_observable": "The C++ isInstance flag; exact ordered clipping sources and live cloned draw remain asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/instancing_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/instancing_test.cpp",
+      "ordinal": 3,
+      "line": 51,
+      "name": "instancing artboard doesn't clone animations",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 340,
+          "symbol": "wave_c1_instancing_003_artboard_instances_share_animation_definitions"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust retains animation definitions in the immutable GraphFile shared by instance lifetimes.",
+        "inapplicable_observable": "The C++ destructor/deleteCount instrumentation; shared definition identity and surviving second instance remain asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/joystick_flags_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/joystick_flags_test.cpp",
+      "ordinal": 1,
+      "line": 6,
+      "name": "joystick flags load as expected",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 357,
+          "symbol": "wave_c1_joystick_flags_001_flags_and_inverted_axes_match"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp",
+      "ordinal": 1,
+      "line": 42,
+      "name": "grid with layouts silver",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1.rs",
+          "line": 109,
+          "symbol": "wave_c1_layout_grid_stack_001_grid_with_layouts"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact grid-with-layouts SRIV diverges at frame 1 operation 228"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp",
+      "ordinal": 2,
+      "line": 47,
+      "name": "stack with layouts silver",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1.rs",
+          "line": 115,
+          "symbol": "wave_c1_layout_grid_stack_002_stack_with_layouts"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact stack-with-layouts SRIV diverges at frame 1 operation 228"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp",
+      "ordinal": 3,
+      "line": 52,
+      "name": "grid with layouts size changing silver",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1.rs",
+          "line": 120,
+          "symbol": "wave_c1_layout_grid_stack_003_grid_with_layouts_size_changing"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp",
+      "ordinal": 4,
+      "line": 58,
+      "name": "grid with layouts span silver",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1.rs",
+          "line": 126,
+          "symbol": "wave_c1_layout_grid_stack_004_grid_with_layouts_span"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact grid-with-layouts-span SRIV diverges at frame 34 operation 1116"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp",
+      "ordinal": 5,
+      "line": 64,
+      "name": "grid with layouts size span changing silver",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1.rs",
+          "line": 132,
+          "symbol": "wave_c1_layout_grid_stack_005_grid_with_layouts_size_span_changing"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact size-span-changing SRIV diverges at frame 32 operation 1592"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp",
+      "ordinal": 6,
+      "line": 70,
+      "name": "grid with layout participants silver",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1.rs",
+          "line": 141,
+          "symbol": "wave_c1_layout_grid_stack_006_grid_with_layout_participants"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact layout-participant draw fails because Text local 57 retains no render styles"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/layout_grid_test.cpp",
+      "ordinal": 1,
+      "line": 28,
+      "name": "grid layout places cells from a .riv file",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 416,
+          "symbol": "wave_c1_layout_grid_001_places_cells_from_riv"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/layout_grid_test.cpp",
+      "ordinal": 2,
+      "line": 91,
+      "name": "grid auto rows size overflow cells",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 458,
+          "symbol": "wave_c1_layout_grid_002_auto_rows_size_overflow_cells"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/layout_grid_test.cpp",
+      "ordinal": 3,
+      "line": 150,
+      "name": "animating a grid track value reflows the layout",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 486,
+          "symbol": "wave_c1_layout_grid_003_track_value_reflows_layout"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/layout_grid_test.cpp",
+      "ordinal": 4,
+      "line": 191,
+      "name": "grid track types (minmax/percent/fr) size their columns",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 523,
+          "symbol": "wave_c1_layout_grid_004_track_types_size_columns"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_grid_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/layout_grid_test.cpp",
+      "ordinal": 5,
+      "line": 225,
+      "name": "grid line offsets are exposed after layout",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
+          "line": 544,
+          "symbol": "wave_c1_layout_grid_005_line_offsets_are_exposed_after_layout"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: settled runtime layout exposes no retained grid-line query owner"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 1,
+      "line": 22,
+      "name": "a fill participant fills a stack cell from a .riv file",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 115,
+          "symbol": "a_fill_participant_fills_a_stack_cell_from_a_riv_file"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 2,
+      "line": 46,
+      "name": "a Solo's active child is laid out through it from a .riv file",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 123,
+          "symbol": "a_solos_active_child_is_laid_out_through_it_from_a_riv_file"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 3,
+      "line": 73,
+      "name": "a hug participant hugs its content from a .riv file",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 151,
+          "symbol": "a_hug_participant_hugs_its_content_from_a_riv_file"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 4,
+      "line": 98,
+      "name": "a fixed-size participant keeps its size from a .riv file",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 159,
+          "symbol": "a_fixed_size_participant_keeps_its_size_from_a_riv_file"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 5,
+      "line": 120,
+      "name": "a display:none participant collapses and leaves the flow from a .riv file",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 167,
+          "symbol": "a_display_none_participant_collapses_and_leaves_the_flow_from_a_riv_file"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 6,
+      "line": 159,
+      "name": "min/max constraints clamp a participant slot from a .riv file",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 181,
+          "symbol": "min_max_constraints_clamp_a_participant_slot_from_a_riv_file"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 7,
+      "line": 180,
+      "name": "a Solo's active-child index helpers work from a .riv file",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 189,
+          "symbol": "a_solos_active_child_index_helpers_work_from_a_riv_file"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 8,
+      "line": 203,
+      "name": "a participant animates its slot under an animated layout",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 31508,
+          "symbol": "a_participant_animates_its_slot_under_an_animated_layout"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 9,
+      "line": 256,
+      "name": "a participant re-targets an in-flight layout animation",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 31668,
+          "symbol": "a_participant_retargets_an_in_flight_layout_animation"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 10,
+      "line": 307,
+      "name": "disabling a layout's interpolation frees participant animation",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 285,
+          "symbol": "disabling_a_layouts_interpolation_frees_participant_animation"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 11,
+      "line": 346,
+      "name": "participants size to grid cells from a .riv file",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 310,
+          "symbol": "participants_size_to_grid_cells_from_a_riv_file"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 12,
+      "line": 380,
+      "name": "a participant animates its slot with a cubic interpolator",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 31736,
+          "symbol": "a_participant_animates_its_slot_with_a_cubic_interpolator"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 13,
+      "line": 430,
+      "name": "a participant re-targets a cubic animation while smoothing",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 322,
+          "symbol": "a_participant_retargets_a_cubic_animation_while_smoothing"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 14,
+      "line": 482,
+      "name": "a participant inside a group is laid out through it",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 361,
+          "symbol": "a_participant_inside_a_group_is_laid_out_through_it"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 15,
+      "line": 506,
+      "name": "participants nested in groups and in a grouped Solo are laid out",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 378,
+          "symbol": "participants_nested_in_groups_and_in_a_grouped_solo_are_laid_out"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust represents an inactive Solo child by excluding its collapsed provider from the retained Taffy solve rather than retaining a C++ LayoutNodeProvider bounds object.",
+        "inapplicable_observable": "The inactive C++ provider object identity; active/deep sizing, inactive collapse, and solve exclusion remain asserted."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 16,
+      "line": 564,
+      "name": "an artboard component list inside a group stays out of the layout",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 32317,
+          "symbol": "upstream_component_list_inside_a_group_stays_out_of_layout"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 17,
+      "line": 587,
+      "name": "a flagged artboard component list joins the layout through a group",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 32325,
+          "symbol": "upstream_flagged_component_list_joins_layout_through_a_group"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 18,
+      "line": 603,
+      "name": "a custom-path participant measures before its paths are built",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/draw.rs",
+          "line": 32334,
+          "symbol": "upstream_custom_path_participant_measures_before_paths_are_built"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: custom PointsPath intrinsic geometry is absent before first update"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_participant_test.cpp#19",
+      "upstream": "tests/unit_tests/runtime/layout_participant_test.cpp",
+      "ordinal": 19,
+      "line": 645,
+      "name": "a participant with an empty path keeps a sane world transform",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
+          "line": 485,
+          "symbol": "a_participant_with_an_empty_path_keeps_a_sane_world_transform"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 1,
+      "line": 17,
+      "name": "ScrollConstraint vertical offset",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 109,
+          "symbol": "scroll_constraint_vertical_offset"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 2,
+      "line": 50,
+      "name": "ScrollConstraint vertical offset manual",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 189,
+          "symbol": "scroll_constraint_vertical_offset_manual"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 3,
+      "line": 102,
+      "name": "ScrollConstraint horizontal offset",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 256,
+          "symbol": "scroll_constraint_horizontal_offset"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 4,
+      "line": 135,
+      "name": "ScrollConstraint list",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 334,
+          "symbol": "scroll_constraint_list"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 5,
+      "line": 176,
+      "name": "Carousel snap swipe right settles past index 0",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1_scroll.rs",
+          "line": 49,
+          "symbol": "carousel_snap_swipe_right_settles_past_index_zero"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact carousel swipe diverges at frame 1/op145 (expected rewind, got drawPath)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 6,
+      "line": 246,
+      "name": "ScrollConstraint nearestSnapOffsetInDirection",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 530,
+          "symbol": "scroll_constraint_nearest_snap_offset_in_direction"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 7,
+      "line": 304,
+      "name": "ElasticScrollPhysicsHelper snap respects trailing padding",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 574,
+          "symbol": "elastic_scroll_physics_helper_snap_respects_trailing_padding"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 8,
+      "line": 550,
+      "name": "Scroll snap respects viewport padding (layouts)",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1_scroll.rs",
+          "line": 55,
+          "symbol": "scroll_snap_respects_viewport_padding_layouts"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact layout snap-padding diverges at frame 0/op38 (expected makeRenderPaint, got frameSize)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 9,
+      "line": 556,
+      "name": "Scroll snap respects viewport padding (list)",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1_scroll.rs",
+          "line": 61,
+          "symbol": "scroll_snap_respects_viewport_padding_list"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact list snap-padding diverges at frame 0/op24 (expected makeRenderPaint, got frameSize)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 10,
+      "line": 562,
+      "name": "Scroll snap respects viewport padding (virtualized list)",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1_scroll.rs",
+          "line": 67,
+          "symbol": "scroll_snap_respects_viewport_padding_virtualized_list"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact virtualized snap-padding diverges at frame 0/op24 (expected makeRenderPaint, got frameSize)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 11,
+      "line": 569,
+      "name": "Scroll drag multiplier (layouts)",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1_scroll.rs",
+          "line": 73,
+          "symbol": "scroll_drag_multiplier_layouts"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact layout drag-multiplier diverges at frame 0/op38 (expected makeRenderPaint, got frameSize)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 12,
+      "line": 575,
+      "name": "Scroll drag multiplier (list)",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1_scroll.rs",
+          "line": 79,
+          "symbol": "scroll_drag_multiplier_list"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact list drag-multiplier diverges at frame 0/op24 (expected makeRenderPaint, got frameSize)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 13,
+      "line": 581,
+      "name": "Scroll drag multiplier (virtualized list)",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1_scroll.rs",
+          "line": 85,
+          "symbol": "scroll_drag_multiplier_virtualized_list"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact virtualized drag-multiplier diverges at frame 0/op24 (expected makeRenderPaint, got frameSize)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 14,
+      "line": 587,
+      "name": "ScrollConstraint scrollIndex with hidden items",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c1_scroll.rs",
+          "line": 91,
+          "symbol": "scroll_constraint_scroll_index_with_hidden_items"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: exact hidden-item stream diverges at frame 0/op130 (expected negative-zero xy, got positive-zero)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 15,
+      "line": 657,
+      "name": "ScrollConstraint index intent across hidden layout",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 392,
+          "symbol": "scroll_constraint_index_intent_across_hidden_layout_live_assertions"
+        }
+      ],
+      "note": "The complete 114-action Silver stream executes and the companion exact owner test preserves every live assertion; both fail at concrete retained runtime seams.",
+      "expected_red_reason": "expected-red: scroll_intent.riv frame 6 keeps offset zero after live VM scrollIndex=2"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 16,
+      "line": 783,
+      "name": "Viewport drag updates velocity",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 613,
+          "symbol": "viewport_drag_updates_velocity"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 17,
+      "line": 834,
+      "name": "Viewport release triggers fling",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 635,
+          "symbol": "viewport_release_triggers_fling"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 18,
+      "line": 891,
+      "name": "Viewport drag held still clears velocity",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 657,
+          "symbol": "viewport_drag_held_still_clears_velocity"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#19",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 19,
+      "line": 941,
+      "name": "Scrollbar drag updates velocity",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 673,
+          "symbol": "scrollbar_drag_updates_velocity"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#20",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 20,
+      "line": 993,
+      "name": "Scrollbar release zeros velocity",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 695,
+          "symbol": "scrollbar_release_zeros_velocity"
+        }
+      ],
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: live ScrollBarConstraint release leaves is_scroll_bar_dragging set"
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#21",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 21,
+      "line": 1048,
+      "name": "ScrollConstraint index set before layout resolves on advance",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 722,
+          "symbol": "scroll_constraint_index_set_before_layout_resolves_on_advance"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#22",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 22,
+      "line": 1067,
+      "name": "ScrollConstraint percent set before layout resolves on advance",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 748,
+          "symbol": "scroll_constraint_percent_set_before_layout_resolves_on_advance"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    },
+    {
+      "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#23",
+      "upstream": "tests/unit_tests/runtime/layout_scroll_test.cpp",
+      "ordinal": 23,
+      "line": 1086,
+      "name": "ScrollConstraint out-of-range index clamps to the ends",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
+          "line": 774,
+          "symbol": "scroll_constraint_out_of_range_index_clamps_to_the_ends"
+        }
+      ],
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+    }
+  ]
+}

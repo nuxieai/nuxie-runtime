@@ -4609,3 +4609,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "constraints/wave_c1_scroll_owner_tests.rs"]
+mod wave_c1_scroll_owner_tests;

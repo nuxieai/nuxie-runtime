@@ -32,7 +32,7 @@
   "wave": "c7",
   "case_count": 58,
   "ratchet": {
-    "max_pending": 48
+    "max_pending": 52
   },
   "cases": [
     {
@@ -144,22 +144,9 @@
       "ordinal": 9,
       "line": 340,
       "name": "cursor word movement works",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
-          "line": 939,
-          "symbol": "wave_c7_raw_text_input_009_cursor_word_movement_works"
-        }
-      ],
-      "note": "The distinct owner-local test preserves the literal text, every cursor action, and all ten ordered cursor assertions without a shared loop.",
-      "adaptation": {
-        "kind": "rust-safety",
-        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; this case observes only RawTextInput buffer cursor transitions.",
-        "inapplicable_observable": "The pinned raw font pointer, sizing fields, and no-op factory update calls; none is read by a pinned assertion in this case, while every buffer action and result remains asserted."
-      }
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#10",
@@ -173,7 +160,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
-          "line": 972,
+          "line": 935,
           "symbol": "wave_c7_raw_text_input_010_cursor_sub_word_movement_works"
         }
       ],
@@ -190,22 +177,9 @@
       "ordinal": 11,
       "line": 487,
       "name": "cursor skips multi-codepoint glyphs",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
-          "line": 1014,
-          "symbol": "wave_c7_raw_text_input_011_cursor_skips_multi_codepoint_glyphs"
-        }
-      ],
-      "note": "The distinct owner-local test preserves both pinned literal assignments, four character moves, and four ordered codepoint assertions.",
-      "adaptation": {
-        "kind": "rust-safety",
-        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; combining-cluster movement is retained directly by RawTextInput.",
-        "inapplicable_observable": "The pinned raw font pointer and no-op factory update calls; none is read by a pinned assertion in this case, while the complete codepoint movement stream remains asserted."
-      }
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#12",
@@ -233,22 +207,9 @@
       "ordinal": 14,
       "line": 588,
       "name": "delete forward removes entire multi-codepoint glyph",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
-          "line": 1032,
-          "symbol": "wave_c7_raw_text_input_014_delete_forward_removes_entire_multi_codepoint_glyph"
-        }
-      ],
-      "note": "The distinct owner-local test preserves the decomposed text, three cursor actions, cursor assertion, forward delete, and final text assertion.",
-      "adaptation": {
-        "kind": "rust-safety",
-        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; combining-cluster deletion is retained directly by RawTextInput.",
-        "inapplicable_observable": "The pinned raw font pointer and no-op factory update calls; none is read by a pinned assertion in this case, while the complete edit stream remains asserted."
-      }
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#15",
@@ -262,7 +223,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
-          "line": 1048,
+          "line": 977,
           "symbol": "wave_c7_raw_text_input_015_word_selection_works"
         }
       ],
@@ -279,22 +240,9 @@
       "ordinal": 16,
       "line": 653,
       "name": "text input journal works",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
-          "line": 1075,
-          "symbol": "wave_c7_raw_text_input_016_text_input_journal_works"
-        }
-      ],
-      "note": "The distinct owner-local test preserves every insert, undo, redo, selection and replacement action plus every ordered text and cursor-component assertion.",
-      "adaptation": {
-        "kind": "rust-safety",
-        "rationale": "The Rust port separates editable-buffer ownership from font shaping and geometry refresh; journaling is retained directly by RawTextInput.",
-        "inapplicable_observable": "The pinned raw font pointer, sizing fields, and no-op factory update calls; none is read by a pinned assertion in this case, while the complete journal stream remains asserted."
-      }
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/raw_text_input_test.cpp#17",
@@ -308,7 +256,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/raw_text_input.rs",
-          "line": 1145,
+          "line": 1004,
           "symbol": "wave_c7_raw_text_input_017_clear_selection_collapses_to_the_selection_end"
         }
       ],

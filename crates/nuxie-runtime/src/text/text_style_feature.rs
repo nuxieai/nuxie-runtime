@@ -53,6 +53,18 @@ impl StaticTextStyleFeature {
         instance.text_style_feature_option(self.local_id, self.authored_tag, self.authored_value)
     }
 
+    fn live_option(self, instance: &ArtboardInstance) -> (u32, u32) {
+        let tag = property_key_for_name("TextStyleFeature", "tag")
+            .and_then(|key| instance.uint_property(self.local_id, key))
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(self.authored_tag);
+        let value = property_key_for_name("TextStyleFeature", "featureValue")
+            .and_then(|key| instance.uint_property(self.local_id, key))
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(self.authored_value);
+        (tag, value)
+    }
+
     fn harf_feature(self, instance: &ArtboardInstance) -> Feature {
         let (tag, value) = self.option(instance);
         Feature::new(HarfTag::from_u32(tag), value, ..)

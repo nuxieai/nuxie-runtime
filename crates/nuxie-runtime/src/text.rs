@@ -281,13 +281,7 @@ pub(crate) fn static_text_layout_debug_report(
         let style_features = slice
             .styles
             .iter()
-            .map(|style| {
-                style
-                    .features
-                    .iter()
-                    .map(|feature| feature.option(instance))
-                    .collect()
-            })
+            .map(|style| style.feature_values(instance))
             .collect();
         return Some(RuntimeTextLayoutDebugReport {
             text,
@@ -317,13 +311,7 @@ pub(crate) fn static_text_layout_debug_report(
     let style_features = slice
         .styles
         .iter()
-        .map(|style| {
-            style
-                .features
-                .iter()
-                .map(|feature| feature.option(instance))
-                .collect()
-        })
+        .map(|style| style.feature_values(instance))
         .collect();
     Some(RuntimeTextLayoutDebugReport {
         paragraph_count: (!text.is_empty())
@@ -5123,7 +5111,11 @@ impl StaticTextStyle {
         self.features
             .iter()
             .copied()
-            .map(|feature| feature.option(instance))
+            // TextStyle::updateVariableFont reads every retained feature's
+            // generated tag/value on every invocation. This path must bypass
+            // the shaping-revision option cache because both feature callbacks
+            // are intentionally dirt-inert.
+            .map(|feature| feature.live_option(instance))
             .collect()
     }
 
@@ -8200,6 +8192,7 @@ mod tests {
         let slice = StaticTextSlice::from_graph(&runtime, graph, 1).unwrap();
         let style = &slice.styles[0];
         let feature_local = style.features.last().unwrap().local_id;
+        instance.update_pass();
         assert!(instance.set_uint_property(
             feature_local,
             property_key_for_name("TextStyleFeature", "featureValue").unwrap(),
@@ -8208,12 +8201,74 @@ mod tests {
         let after = static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
         assert_eq!(after.style_features, before.style_features);
         assert_eq!(after.line_glyph_ids, before.line_glyph_ids);
+        assert_eq!(instance.debug_component_dirt(1), Some(ComponentDirt::NONE));
+        assert_eq!(
+            instance.debug_component_dirt(style.local_id),
+            Some(ComponentDirt::NONE)
+        );
+        assert_eq!(
+            instance.uint_property(
+                feature_local,
+                property_key_for_name("TextStyleFeature", "featureValue").unwrap()
+            ),
+            Some(0),
+            "the generated property changes even though its callback is empty"
+        );
 
-        let font_bytes = style.font_bytes(&runtime, &instance).unwrap().to_vec();
-        instance.clear_component_dirt(style.local_id);
-        instance.clear_component_dirt(1);
-        assert!(instance.debug_set_text_style_font_bytes(style.local_id, font_bytes));
+        let helper = instance
+            .objects
+            .text_variation_helper_handle(style.local_id)
+            .expect("the option-bearing TextStyle owns a retained helper");
+        let cached_before = instance
+            .component(style.local_id)
+            .and_then(|component| component.concrete.text_style.as_ref())
+            .and_then(|style| style.variable_font())
+            .expect("initial shaping retains a variable-font snapshot")
+            .features
+            .clone();
+        assert_eq!(cached_before, [(liga, 1), (liga, 0), (liga, 1)]);
+        assert_eq!(
+            instance.objects.component(helper).unwrap().dirt,
+            ComponentDirt::NONE,
+            "the empty feature callback must not dirty the retained helper"
+        );
+
+        let root_local = instance
+            .objects
+            .root()
+            .and_then(|root| instance.objects.component_local_id(root))
+            .expect("fixture has a retained Artboard root");
+        assert!(instance.add_dirt(root_local, ComponentDirt::WORLD_TRANSFORM, true));
+        assert_eq!(
+            instance
+                .component(style.local_id)
+                .and_then(|component| component.concrete.text_style.as_ref())
+                .and_then(|style| style.variable_font())
+                .unwrap()
+                .features,
+            cached_before,
+            "recursive dirt does not replace the snapshot before helper update"
+        );
+        assert!(
+            instance
+                .objects
+                .component(helper)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::WORLD_TRANSFORM),
+            "the real recursive root wave reaches the retained helper"
+        );
         instance.update_pass();
+        assert_eq!(
+            instance
+                .component(style.local_id)
+                .and_then(|component| component.concrete.text_style.as_ref())
+                .and_then(|style| style.variable_font())
+                .unwrap()
+                .features,
+            [(liga, 1), (liga, 0), (liga, 0)],
+            "helper update rereads the dirt-inert feature's live value"
+        );
         let reshaped =
             static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
         assert_eq!(

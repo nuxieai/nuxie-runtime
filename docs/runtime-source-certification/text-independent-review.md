@@ -713,3 +713,29 @@ passes `git diff --check`. Modifier layering/swap remains visibly red and
 consumer topology remains **4 pass, 3 executable expected-red, 11 pending**.
 The pre-existing `draw.rs` formatting hunk and all other user dirt remain
 unstaged. This rereview changed documentation only.
+
+## Final StyledText authority-only rereview of `a78bb0464`
+
+Verdict: **ACCEPTED**
+
+The consolidated helper and witness now correctly name the pinned
+`buildRenderStyles` all-runs paint lookup. `all_runs_paint_style_index`
+consumes the wrapping `TextRun::styleId` against the retained complete
+authored-plus-dynamic run sequence, while the appended run's actual style
+continues to own shaping font and metrics. This is a rename/comment/citation
+correction only; both uni- and bidi-glyph call edges are behaviorally
+unchanged.
+
+Row 18 separately and accurately retains `Text::styleFromShaperId` as the
+incomplete authored-`m_runs` modifier boundary, and H3 continues to mark the
+original-style reconstruction and `swapRuns` behavior red. Their refreshed
+locators resolve exactly to `style_index_for_local` at 4849,
+`styled_resolved_run_glyphs` at 3734, and
+`styled_text_glyphs_for_style_with_strengths` at 3896. The correction does not
+move consumer topology or disguise the modifier discrepancy.
+
+The renamed focused all-runs paint-lookup test passes (one passed, zero failed
+or ignored), and the authority-only delta passes `git diff --check`. Consumer
+topology remains **4 pass, 3 executable expected-red, 11 pending**. The
+pre-existing `draw.rs` formatting hunk and all other user dirt remain unstaged.
+This rereview changed documentation only.

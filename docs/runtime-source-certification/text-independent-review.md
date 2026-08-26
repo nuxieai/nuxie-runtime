@@ -275,3 +275,29 @@ Checks: the new empty-shape matrix and the existing nonempty Taffy test each
 pass independently (one passed, zero failed, zero ignored); the candidate
 delta passes `git diff --check`; production scope is `text.rs` only; and the
 consumer topology remains 4/3/11. This review changed documentation only.
+
+## Narrow retained empty-shape rereview of `8d7cabedb`
+
+Verdict: **ACCEPTED**
+
+The retained owner at `draw.rs:17772::runtime_build_text_draw_frame` now counts
+`Text.textRunListSource` only when
+`data_bind_flags_apply_source_to_target(data_bind.flags)` is true. That is the
+same ownership predicate already used by `StaticTextSlice::from_graph` and
+`static_fixed_text_constraint_bounds`, and it matches the pinned fact that a
+target-to-source-only bind cannot supply `updateList` runs. The `draw.rs` delta
+is exactly this one added predicate line.
+
+The focused production test at
+`text.rs:6518::target_to_source_only_run_list_bind_keeps_retained_empty_text`
+uses no authored run plus a direction-to-source-only bind. It drives the real
+update pass and retained draw command owner, then proves zero Text bounds, an
+empty Text `shape_paints` list, no Text-local clip, unchanged authored sizing,
+and no `drawPath` replay. Checking the Text dispatch directly keeps root-level
+clip behavior separate from the Text assertion.
+
+The focused test passes (one passed, zero failed, zero ignored), the candidate
+delta passes `git diff --check`, and the `draw.rs` hunk is one insertion. The
+row 17 residual wording remains honest, and the complete consumer section is
+unchanged at **4 pass, 3 executable expected-red, 11 pending**. Pre-existing
+user changes remain unstaged; this rereview changed documentation only.

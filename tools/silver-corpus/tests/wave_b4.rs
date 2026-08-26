@@ -74,7 +74,7 @@ fn wave_b4_gamepad_test() {
 }
 
 #[test]
-#[ignore = "expected-red: exact global-variables SRIV stops at frame 0 operation 49 after the complete upstream action stream (expected 18540 operations, got 49)"]
+#[ignore = "expected-red: exact global-variables SRIV diverges at frame 0 operation 49 (expected makeRenderPaint, got color)"]
 fn wave_b4_global_variables_test() {
     replay(
         "global_variables_test",

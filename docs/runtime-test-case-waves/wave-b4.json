@@ -186,16 +186,17 @@
       "line": 63,
       "name": "Inspect Font Styles",
       "status": "direct",
-      "outcome": "pass",
+      "outcome": "expected-red",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 168,
+          "line": 127,
           "symbol": "wave_b4_font_test_001_inspect_font_styles"
         }
       ],
-      "note": "The executable test decodes each pinned face and asserts weight and italic through the RawTextFont owner methods."
+      "note": "The executable test decodes the first exact pinned face through the production RawTextFont owner and reaches the absent public Font weight/italic inspection surface without reparsing or implementing it in the test.",
+      "expected_red_reason": "expected-red: RawTextFont has no public Font weight/italic inspection owner"
     },
     {
       "id": "tests/unit_tests/runtime/font_test.cpp#2",
@@ -204,16 +205,17 @@
       "line": 93,
       "name": "font exposes cap and x height for vertical trim",
       "status": "direct",
-      "outcome": "pass",
+      "outcome": "expected-red",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 188,
+          "line": 149,
           "symbol": "wave_b4_font_test_002_cap_and_x_height_for_vertical_trim"
         }
       ],
-      "note": "The executable test reads RawTextFont lineMetrics/capHeight/xHeight owner values and uses Catch's double-valued, float-epsilon, expected-magnitude Approx oracle."
+      "note": "The executable test decodes the first exact pinned face through the production RawTextFont owner and reaches the absent public Font lineMetrics surface before retaining the complete metric, capHeight, xHeight, and Catch Approx assertion stream.",
+      "expected_red_reason": "expected-red: RawTextFont has no public Font lineMetrics/capHeight/xHeight owner"
     },
     {
       "id": "tests/unit_tests/runtime/font_test.cpp#3",
@@ -227,7 +229,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 211,
+          "line": 172,
           "symbol": "wave_b4_font_test_003_fallback_glyphs_are_found"
         }
       ],
@@ -244,22 +246,18 @@
       "ordinal": 4,
       "line": 146,
       "name": "variable axis values can be read",
-      "status": "adapted",
-      "outcome": "pass",
+      "status": "direct",
+      "outcome": "expected-red",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 246,
+          "line": 208,
           "symbol": "wave_b4_font_test_004_variable_axis_values_can_be_read"
         }
       ],
-      "note": "The executable test enumerates axes and reads defaults through RawTextFont owner methods, then clones at weight and width coordinates and proves the first coordinate survives the second clone.",
-      "adaptation": {
-        "kind": "rust-safety",
-        "rationale": "RawTextFont retains immutable variation-coordinate state on each Rust clone rather than exposing a mutable C++ Font allocation, while preserving the same default and cumulative axis values.",
-        "inapplicable_observable": "The identity of intermediate C++ Font clone objects; axis defaults and retained cumulative coordinate values remain asserted."
-      }
+      "note": "The executable test decodes the exact production RawTextFont owner and reaches its absent public getAxisCount surface before retaining the complete axis enumeration, default, makeAtCoords, and cumulative-coordinate assertion stream.",
+      "expected_red_reason": "expected-red: RawTextFont has no public Font variation-axis owner"
     },
     {
       "id": "tests/unit_tests/runtime/font_test.cpp#5",
@@ -268,16 +266,17 @@
       "line": 203,
       "name": "font features load as expected",
       "status": "direct",
-      "outcome": "pass",
+      "outcome": "expected-red",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/text/wave_b4_font_owner_tests.rs",
-          "line": 272,
+          "line": 250,
           "symbol": "wave_b4_font_test_005_font_features_load_as_expected"
         }
       ],
-      "note": "The executable test calls RawTextFont's feature owner flow and asserts the exact count plus all seven pinned OpenType tags."
+      "note": "The executable test decodes the exact production RawTextFont owner and reaches its absent public Font features surface before retaining the exact count and seven-tag assertion stream; it does not reparse GPOS or GSUB in test code.",
+      "expected_red_reason": "expected-red: RawTextFont has no public Font feature owner"
     },
     {
       "id": "tests/unit_tests/runtime/gamepad_test.cpp#1",
@@ -695,7 +694,7 @@
         }
       ],
       "note": "The complete pinned Silver action stream executes through the real renderer/runtime owner and fails at the recorded first exact SRIV divergence.",
-      "expected_red_reason": "expected-red: exact global-variables SRIV stops at frame 0 operation 49 after the complete upstream action stream (expected 18540 operations, got 49)"
+      "expected_red_reason": "expected-red: exact global-variables SRIV diverges at frame 0 operation 49 (expected makeRenderPaint, got color)"
     },
     {
       "id": "tests/unit_tests/runtime/global_viewmodels_test.cpp#2",

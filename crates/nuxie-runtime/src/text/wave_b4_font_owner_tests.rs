@@ -1,7 +1,5 @@
 mod wave_b4_font_owner_tests {
     use super::*;
-    use skrifa::attribute::Style;
-    use std::collections::{BTreeMap, BTreeSet};
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -18,52 +16,10 @@ mod wave_b4_font_owner_tests {
         def: f32,
     }
 
-    // Test-only inherent methods keep every assertion on the runtime owner;
-    // Skrifa is its implementation detail, like HarfBuzz is for C++ HBFont.
+    // These are the only test-only RawTextFont methods in this wave. They
+    // expose the real occurrence-local fallback owner already consumed by
+    // production shaping; they do not implement a missing Font API.
     impl RawTextFont {
-        fn wave_b4_face(&self) -> SkrifaFontRef<'_> {
-            SkrifaFontRef::from_index(self.bytes(), self.face_index)
-                .expect("RawTextFont retained its validated face")
-        }
-
-        fn wave_b4_get_weight(&self) -> u16 {
-            self.wave_b4_face().attributes().weight.value() as u16
-        }
-
-        fn wave_b4_is_italic(&self) -> bool {
-            matches!(
-                self.wave_b4_face().attributes().style,
-                Style::Italic | Style::Oblique(_)
-            )
-        }
-
-        fn wave_b4_line_metrics(&self) -> WaveB4LineMetrics {
-            let metrics = self
-                .wave_b4_face()
-                .metrics(Size::new(1.0), LocationRef::default());
-            WaveB4LineMetrics {
-                ascent: -metrics.ascent,
-                cap_height: -metrics.cap_height.expect("font exposes cap height"),
-                x_height: -metrics.x_height.expect("font exposes x height"),
-            }
-        }
-
-        fn wave_b4_cap_height(&self, size: f32) -> f32 {
-            -self
-                .wave_b4_face()
-                .metrics(Size::new(size), LocationRef::default())
-                .cap_height
-                .expect("font exposes cap height")
-        }
-
-        fn wave_b4_x_height(&self, size: f32) -> f32 {
-            -self
-                .wave_b4_face()
-                .metrics(Size::new(size), LocationRef::default())
-                .x_height
-                .expect("font exposes x height")
-        }
-
         fn wave_b4_fallback_count(&self) -> usize {
             self.fallbacks.len()
         }
@@ -71,69 +27,71 @@ mod wave_b4_font_owner_tests {
         fn wave_b4_clear_fallbacks(&mut self) {
             self.fallbacks = Arc::from([]);
         }
+    }
 
-        fn wave_b4_get_axis_count(&self) -> u16 {
-            self.wave_b4_face().axes().len() as u16
-        }
+    #[derive(Debug, Clone, Copy)]
+    struct WaveB4FontStyle {
+        weight: u16,
+        italic: bool,
+    }
 
-        fn wave_b4_get_axis(&self, index: u16) -> Option<WaveB4Axis> {
-            let axis = self.wave_b4_face().axes().get(usize::from(index))?;
-            Some(WaveB4Axis {
-                tag: u32::from_be_bytes(axis.tag().to_be_bytes()),
-                def: axis.default_value(),
-            })
-        }
+    fn inspect_font_style(font: &RawTextFont) -> Result<WaveB4FontStyle, &'static str> {
+        assert_eq!(
+            font.face_index(),
+            0,
+            "decoded the exact production font owner"
+        );
+        Err("RawTextFont has no public Font weight/italic inspection owner")
+    }
 
-        fn wave_b4_get_axis_value(&self, tag: u32) -> Option<f32> {
-            let tag = SkrifaTag::from_u32(tag);
-            self.variation_coords
-                .iter()
-                .find_map(|(candidate, value)| (*candidate == tag).then_some(*value))
-                .or_else(|| {
-                    self.wave_b4_face()
-                        .axes()
-                        .get_by_tag(tag)
-                        .map(|axis| axis.default_value())
-                })
-        }
+    fn font_line_metrics(font: &RawTextFont) -> Result<WaveB4LineMetrics, &'static str> {
+        assert_eq!(
+            font.face_index(),
+            0,
+            "decoded the exact production font owner"
+        );
+        Err("RawTextFont has no public Font::lineMetrics owner")
+    }
 
-        fn wave_b4_make_at_coords(&self, coords: &[(u32, f32)]) -> Self {
-            let mut next = self.clone();
-            let mut merged = self
-                .variation_coords
-                .iter()
-                .copied()
-                .collect::<BTreeMap<_, _>>();
-            for (tag, value) in coords {
-                merged.insert(SkrifaTag::from_u32(*tag), *value);
-            }
-            next.variation_coords = merged.into_iter().collect::<Vec<_>>().into();
-            next
-        }
+    fn font_cap_height(_font: &RawTextFont, _size: f32) -> Result<f32, &'static str> {
+        Err("RawTextFont has no public Font::capHeight owner")
+    }
 
-        fn wave_b4_features(&self) -> Vec<u32> {
-            let face = self.wave_b4_face();
-            let mut features = BTreeSet::new();
-            if let Ok(table) = face.gpos() {
-                if let Ok(list) = table.feature_list() {
-                    features.extend(
-                        list.feature_records()
-                            .iter()
-                            .map(|record| u32::from_be_bytes(record.feature_tag().to_be_bytes())),
-                    );
-                }
-            }
-            if let Ok(table) = face.gsub() {
-                if let Ok(list) = table.feature_list() {
-                    features.extend(
-                        list.feature_records()
-                            .iter()
-                            .map(|record| u32::from_be_bytes(record.feature_tag().to_be_bytes())),
-                    );
-                }
-            }
-            features.into_iter().collect()
-        }
+    fn font_x_height(_font: &RawTextFont, _size: f32) -> Result<f32, &'static str> {
+        Err("RawTextFont has no public Font::xHeight owner")
+    }
+
+    fn font_axis_count(font: &RawTextFont) -> Result<u16, &'static str> {
+        assert_eq!(
+            font.face_index(),
+            0,
+            "decoded the exact production font owner"
+        );
+        Err("RawTextFont has no public Font::getAxisCount owner")
+    }
+
+    fn font_axis(_font: &RawTextFont, _index: u16) -> Result<WaveB4Axis, &'static str> {
+        Err("RawTextFont has no public Font::getAxis owner")
+    }
+
+    fn font_axis_value(_font: &RawTextFont, _tag: u32) -> Result<f32, &'static str> {
+        Err("RawTextFont has no public Font::getAxisValue owner")
+    }
+
+    fn font_make_at_coords(
+        _font: &RawTextFont,
+        _coords: &[(u32, f32)],
+    ) -> Result<RawTextFont, &'static str> {
+        Err("RawTextFont has no public Font::makeAtCoords owner")
+    }
+
+    fn font_features(font: &RawTextFont) -> Result<Vec<u32>, &'static str> {
+        assert_eq!(
+            font.face_index(),
+            0,
+            "decoded the exact production font owner"
+        );
+        Err("RawTextFont has no public Font::features owner")
     }
 
     fn upstream_root() -> PathBuf {
@@ -165,6 +123,7 @@ mod wave_b4_font_owner_tests {
     }
 
     #[test]
+    #[ignore = "expected-red: RawTextFont has no public Font weight/italic inspection owner"]
     fn wave_b4_font_test_001_inspect_font_styles() {
         let cases = [
             (
@@ -179,29 +138,31 @@ mod wave_b4_font_owner_tests {
         ];
         for (path, expected_weight, expected_italic) in cases {
             let font = load_font(path);
-            assert_eq!(font.wave_b4_get_weight(), expected_weight, "{path}");
-            assert_eq!(font.wave_b4_is_italic(), expected_italic, "{path}");
+            let style = inspect_font_style(&font).expect("Font weight/italic owner");
+            assert_eq!(style.weight, expected_weight, "{path}");
+            assert_eq!(style.italic, expected_italic, "{path}");
         }
     }
 
     #[test]
+    #[ignore = "expected-red: RawTextFont has no public Font lineMetrics/capHeight/xHeight owner"]
     fn wave_b4_font_test_002_cap_and_x_height_for_vertical_trim() {
         for path in [
             "assets/fonts/Inter_18pt-Regular.ttf",
             "assets/Montserrat.ttf",
         ] {
             let font = load_font(path);
-            let metrics = font.wave_b4_line_metrics();
+            let metrics = font_line_metrics(&font).expect("Font::lineMetrics owner");
             assert!(metrics.cap_height < 0.0, "{path}");
             assert!(metrics.cap_height >= metrics.ascent, "{path}");
             assert!(metrics.x_height > metrics.cap_height, "{path}");
             assert!(metrics.x_height < 0.0, "{path}");
             assert!(catch_approx_eq(
-                font.wave_b4_cap_height(20.0),
+                font_cap_height(&font, 20.0).expect("Font::capHeight owner"),
                 metrics.cap_height * 20.0
             ));
             assert!(catch_approx_eq(
-                font.wave_b4_x_height(20.0),
+                font_x_height(&font, 20.0).expect("Font::xHeight owner"),
                 metrics.x_height * 20.0
             ));
         }
@@ -243,15 +204,14 @@ mod wave_b4_font_owner_tests {
     }
 
     #[test]
+    #[ignore = "expected-red: RawTextFont has no public Font variation-axis owner"]
     fn wave_b4_font_test_004_variable_axis_values_can_be_read() {
         const WGHT: u32 = 2_003_265_652;
         const WDTH: u32 = 2_003_072_104;
         let font = load_font("assets/RobotoFlex.ttf");
         let mut has_weight = false;
-        for index in 0..font.wave_b4_get_axis_count() {
-            let axis = font
-                .wave_b4_get_axis(index)
-                .expect("axis in reported range");
+        for index in 0..font_axis_count(&font).expect("Font::getAxisCount owner") {
+            let axis = font_axis(&font, index).expect("Font::getAxis owner");
             if axis.tag == WGHT {
                 assert_eq!(axis.def, 400.0);
                 has_weight = true;
@@ -259,19 +219,37 @@ mod wave_b4_font_owner_tests {
             }
         }
         assert!(has_weight);
-        assert_eq!(font.wave_b4_get_axis_value(WGHT), Some(400.0));
-        assert_eq!(font.wave_b4_get_axis_value(WDTH), Some(100.0));
-        let weighted = font.wave_b4_make_at_coords(&[(WGHT, 800.0)]);
-        assert_eq!(weighted.wave_b4_get_axis_value(WGHT), Some(800.0));
-        let weighted_and_wide = weighted.wave_b4_make_at_coords(&[(WDTH, 122.0)]);
-        assert_eq!(weighted_and_wide.wave_b4_get_axis_value(WDTH), Some(122.0));
-        assert_eq!(weighted_and_wide.wave_b4_get_axis_value(WGHT), Some(800.0));
+        assert_eq!(
+            font_axis_value(&font, WGHT).expect("Font::getAxisValue owner"),
+            400.0
+        );
+        assert_eq!(
+            font_axis_value(&font, WDTH).expect("Font::getAxisValue owner"),
+            100.0
+        );
+        let weighted =
+            font_make_at_coords(&font, &[(WGHT, 800.0)]).expect("Font::makeAtCoords weight owner");
+        assert_eq!(
+            font_axis_value(&weighted, WGHT).expect("varied weight owner"),
+            800.0
+        );
+        let weighted_and_wide = font_make_at_coords(&weighted, &[(WDTH, 122.0)])
+            .expect("Font::makeAtCoords width owner");
+        assert_eq!(
+            font_axis_value(&weighted_and_wide, WDTH).expect("varied width owner"),
+            122.0
+        );
+        assert_eq!(
+            font_axis_value(&weighted_and_wide, WGHT).expect("retained weight owner"),
+            800.0
+        );
     }
 
     #[test]
+    #[ignore = "expected-red: RawTextFont has no public Font feature owner"]
     fn wave_b4_font_test_005_font_features_load_as_expected() {
         let font = load_font("assets/RobotoFlex.ttf");
-        let features = font.wave_b4_features();
+        let features = font_features(&font).expect("Font::features owner");
         assert_eq!(features.len(), 7);
         for expected in ["mkmk", "kern", "rvrn", "mark", "locl", "pnum", "liga"] {
             let tag = u32::from_be_bytes(expected.as_bytes().try_into().expect("four-byte tag"));

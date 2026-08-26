@@ -188,9 +188,9 @@ producer_line = 603
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 303 (rewind): expected rewind, got drawPath."
 
 [[case]]
-id = "artboard_opacity_and_transform_test"
-expected = "tests/unit_tests/silvers/artboard_opacity_and_transform_test.sriv"
-source = "artboard_opacity_and_transform_test.riv"
+id = "global_variables_test"
+expected = "tests/unit_tests/silvers/global_variables_test.sriv"
+source = "global_variables_test.riv"
 dependencies = []
 artboard = "default"
 animation = "none"
@@ -199,15 +199,15 @@ lane = "runtime"
 deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
-sample_times = [0.1, 0.1]
+sample_times = [0.1, 0.016]
 actions = [{ kind = "create-default-main-view-model" }, { kind = "set-state-machine-main-view-model" }, { kind = "create-default-global-view-model", global = "Sizes" }, { kind = "set-state-machine-global-view-model", global = "Sizes" }, { kind = "create-default-global-view-model", global = "Colors" }, { kind = "set-state-machine-global-view-model", global = "Colors" }, { kind = "create-default-global-view-model", global = "Labels" }, { kind = "set-state-machine-global-view-model", global = "Labels" }, { kind = "bind-state-machine-view-models" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
 status = "diverges"
 producer_class = "runtime-literal"
-provenance_file = "tests/unit_tests/runtime/artboard_transform_test.cpp"
-provenance_test = "Artboard transform and opacity"
-producer_line = 203
-note = "Unsupported feature: missing runtime surface pointer-expression-encoding; the pinned C++ action stream requires that unported runtime surface."
+provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
+provenance_test = "Global view models and overrides"
+producer_line = 56
+note = "Genuine Rust-vs-C++ divergence after replaying the full pinned 197-action setter/bind/advance/draw stream."
 
 [[case]]
 id = "artboard_width_test"
@@ -1706,9 +1706,9 @@ producer_line = 424
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize."
 
 [[case]]
-id = "global_variables_test"
-expected = "tests/unit_tests/silvers/global_variables_test.sriv"
-source = "global_variables_test.riv"
+id = "artboard_opacity_and_transform_test"
+expected = "tests/unit_tests/silvers/artboard_opacity_and_transform_test.sriv"
+source = "artboard_opacity_and_transform_test.riv"
 dependencies = []
 artboard = "default"
 animation = "none"
@@ -1717,15 +1717,15 @@ lane = "runtime"
 deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
-sample_times = [0.1, 0.016]
+sample_times = [0.1, 0.1]
 actions = []
 verification = "sriv-v1-epsilon"
 status = "unsupported-feature"
 producer_class = "runtime-literal"
-provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
-provenance_test = "Global view models and overrides"
-producer_line = 56
-note = "Genuine Rust-vs-C++ divergence after replaying the full pinned setter/bind/advance/draw action stream."
+provenance_file = "tests/unit_tests/runtime/artboard_transform_test.cpp"
+provenance_test = "Artboard transform and opacity"
+producer_line = 203
+note = "Unsupported feature: missing runtime surface pointer-expression-encoding; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
 id = "global_viewmodels_test-auto_instance"
@@ -1762,7 +1762,7 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0, 0.016, 0.016]
-actions = [{ kind = "create-default-main-view-model" }, { kind = "set-state-machine-main-view-model" }, { kind = "create-default-global-view-model", global = "GlobalColors" }, { kind = "set-staged-global-color", global = "GlobalColors", property = "c1", value = 4294967040 }, { kind = "set-state-machine-global-view-model", global = "GlobalColors" }, { kind = "bind-state-machine-view-models" }, { kind = "advance", target = "state-machine", seconds = 0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "create-default-main-view-model" }, { kind = "set-staged-main-string", property = "label", value = "label updated" }, { kind = "create-default-global-view-model", global = "GlobalColors" }, { kind = "set-staged-global-color", global = "GlobalColors", property = "c1", value = 4278255615 }, { kind = "set-state-machine-global-view-model", global = "GlobalColors" }, { kind = "set-state-machine-main-view-model" }, { kind = "bind-state-machine-view-models" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
+actions = [{ kind = "create-default-main-view-model" }, { kind = "create-default-global-view-model", global = "GlobalColors" }, { kind = "set-staged-global-color", global = "GlobalColors", property = "c1", value = 4294967040 }, { kind = "set-state-machine-main-view-model" }, { kind = "set-state-machine-global-view-model", global = "GlobalColors" }, { kind = "bind-state-machine-view-models" }, { kind = "advance", target = "state-machine", seconds = 0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "create-default-main-view-model" }, { kind = "set-staged-main-string", property = "label", value = "label updated" }, { kind = "create-default-global-view-model", global = "GlobalColors" }, { kind = "set-staged-global-color", global = "GlobalColors", property = "c1", value = 4278255615 }, { kind = "set-state-machine-global-view-model", global = "GlobalColors" }, { kind = "set-state-machine-main-view-model" }, { kind = "bind-state-machine-view-models" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
 status = "diverges"
 producer_class = "runtime-literal"

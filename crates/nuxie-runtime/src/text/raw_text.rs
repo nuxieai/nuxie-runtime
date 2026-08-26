@@ -48,8 +48,6 @@ pub struct RawTextFont {
     bytes: std::sync::Arc<[u8]>,
     face_index: u32,
     fallbacks: std::sync::Arc<[RawTextFont]>,
-    #[cfg(test)]
-    variation_coords: std::sync::Arc<[(SkrifaTag, f32)]>,
 }
 
 impl std::fmt::Debug for RawTextFont {
@@ -86,8 +84,6 @@ impl RawTextFont {
             bytes,
             face_index,
             fallbacks: std::sync::Arc::from([]),
-            #[cfg(test)]
-            variation_coords: std::sync::Arc::from([]),
         })
     }
 

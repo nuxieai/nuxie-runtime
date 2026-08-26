@@ -47,7 +47,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/tests/upstream_scripting_renderer.rs",
-          "line": 32,
+          "line": 31,
           "symbol": "can_call_renderer"
         }
       ],
@@ -459,15 +459,15 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/upstream_scripting_update_phase_guard.rs",
-          "line": 117,
+          "line": 119,
           "symbol": "mark_needs_update_is_ignored_during_script_update"
         }
       ],
-      "note": "The literal Lua generator and Context.markNeedsUpdate callback attach to a concrete production ScriptedDrawable occurrence and assert live update-phase suppression plus restored outside-phase dirt.",
+      "note": "The literal Lua generator and Context.markNeedsUpdate callback attach to a concrete production ScriptedDrawable occurrence, directly assert its authoritative inUpdatePhase field is false immediately before and after the live update, and assert live update-phase suppression plus restored outside-phase dirt.",
       "adaptation": {
         "kind": "native-scripting",
         "rationale": "Rust has no public abstract ScriptedDrawable constructor or direct scriptUpdate call; the test uses a pinned concrete ScriptedDrawable occurrence and schedules the same callback through ArtboardInstance's production update owner.",
-        "inapplicable_observable": "The C++ test subclass's dirt counter and direct protected scriptUpdate entry are unavailable; Rust asserts the authoritative ScriptUpdate component bit before, during, and after the scheduled callback."
+        "inapplicable_observable": "The C++ test subclass's dirt counter and direct protected scriptUpdate entry are unavailable; Rust preserves both authoritative phase assertions and asserts the live ScriptUpdate component bit before, during, and after the scheduled callback."
       }
     },
     {
@@ -500,7 +500,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/upstream_scripting_update_phase_guard.rs",
-          "line": 158,
+          "line": 174,
           "symbol": "mark_needs_update_works_outside_update_phase"
         }
       ],

@@ -1,9 +1,8 @@
 //! One-for-one ports of `tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp`.
-#![cfg(feature = "luau")]
+#![cfg(all(feature = "luau", feature = "upstream-test-seams"))]
 
 use luaur_rt::{Function, Table};
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
-use nuxie_runtime::{NoopScriptHost, ScriptInstance};
 use nuxie_scripting::vm::ScriptVm;
 
 mod support;
@@ -43,11 +42,12 @@ end";
 
     let (vm, mut factory) = configured_vm();
     run_named(&vm, "test_source", SOURCE);
-    let mut instance = vm.script_instance_from_table(draw_table(&vm));
+    let table = draw_table(&vm);
     let mut renderer = factory.borrow().make_renderer();
-    instance
-        .call_draw(&mut factory, &mut renderer, &mut NoopScriptHost)
+    let balanced = vm
+        .upstream_test_call_draw_with_balance(&table, &mut factory, &mut renderer)
         .unwrap();
+    assert!(balanced);
 
     let afterwards: Function = vm.lua().globals().get("afterwards").unwrap();
     let error = afterwards.call::<()>(()).unwrap_err().to_string();

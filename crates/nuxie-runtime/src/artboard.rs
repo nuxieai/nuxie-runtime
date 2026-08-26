@@ -5585,6 +5585,18 @@ impl ArtboardInstance {
         self.component(local_id).map(|component| component.dirt)
     }
 
+    #[cfg(any(test, feature = "tools"))]
+    #[doc(hidden)]
+    pub fn debug_script_in_update_phase_for_global(&self, global_id: u32) -> Option<bool> {
+        let component = self.script_component_handle_for_global(global_id)?;
+        self.objects
+            .component(component)?
+            .concrete
+            .scripted
+            .as_ref()
+            .map(|scripted| scripted.in_update_phase)
+    }
+
     #[doc(hidden)]
     pub fn debug_layout_forced_size(&self, local_id: usize) -> Option<(Option<f32>, Option<f32>)> {
         self.component(local_id)?

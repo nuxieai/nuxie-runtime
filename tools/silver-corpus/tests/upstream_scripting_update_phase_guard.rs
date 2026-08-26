@@ -104,9 +104,11 @@ fn with_production_update_owner(test: impl FnOnce(&mut nuxie::ArtboardInstance<'
     let script = vm
         .instantiate_registered_script_with_context(&program, None, vec![None])
         .expect("literal update program initializes with a live Context");
-    assert!(script
-        .has_method(ScriptMethod::Update)
-        .expect("method lookup"));
+    assert!(
+        script
+            .has_method(ScriptMethod::Update)
+            .expect("method lookup")
+    );
     artboard
         .raw_mut()
         .set_script_instance_for_global(global_id, script);
@@ -121,10 +123,24 @@ fn mark_needs_update_is_ignored_during_script_update() {
             "the production owner starts outside its update phase",
         );
         artboard.raw_mut().clear_component_dirt(local_id);
-        assert!(artboard
-            .raw_mut()
-            .update_script_instances()
-            .expect("scriptUpdate"));
+        assert_eq!(
+            artboard
+                .raw()
+                .debug_script_in_update_phase_for_global(global_id),
+            Some(false),
+        );
+        assert!(
+            artboard
+                .raw_mut()
+                .update_script_instances()
+                .expect("scriptUpdate")
+        );
+        assert_eq!(
+            artboard
+                .raw()
+                .debug_script_in_update_phase_for_global(global_id),
+            Some(false),
+        );
         assert!(
             !artboard
                 .raw()
@@ -158,15 +174,19 @@ fn in_update_phase_defaults_to_false() {
 fn mark_needs_update_works_outside_update_phase() {
     with_production_update_owner(|artboard, local_id, global_id| {
         artboard.raw_mut().clear_component_dirt(local_id);
-        assert!(!artboard
-            .raw()
-            .debug_component_dirt(local_id)
-            .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),);
+        assert!(
+            !artboard
+                .raw()
+                .debug_component_dirt(local_id)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
+        );
         assert!(artboard.raw_mut().mark_script_update_for_global(global_id));
-        assert!(artboard
-            .raw()
-            .debug_component_dirt(local_id)
-            .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),);
+        assert!(
+            artboard
+                .raw()
+                .debug_component_dirt(local_id)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
+        );
         assert!(artboard.raw_mut().mark_script_update_for_global(global_id));
         assert!(
             artboard

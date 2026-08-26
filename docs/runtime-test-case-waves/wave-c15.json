@@ -355,7 +355,7 @@
         }
       ],
       "note": "The executable test constructs and registers the live RuntimeSemanticData node, verifies the initial manager state, lets the real owner leave scope, and preserves the exact post-drop assertion stream without explicit detach.",
-      "expected_red_reason": "expected-red: RuntimeSemanticData scope destruction leaves the retained node indexed in SemanticManager"
+      "expected_red_reason": "expected-red: dropping RuntimeSemanticData does not remove its retained node from SemanticManager"
     },
     {
       "id": "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp#8",
@@ -374,7 +374,7 @@
         }
       ],
       "note": "The executable test constructs and registers the live RuntimeSemanticData node, verifies the initial manager state, lets the real owner leave scope, and preserves the exact post-drop assertion stream without explicit detach.",
-      "expected_red_reason": "expected-red: RuntimeSemanticData scope destruction does not enqueue the retained node id in the next removed diff"
+      "expected_red_reason": "expected-red: dropping RuntimeSemanticData does not enqueue its retained node in the next removed diff"
     },
     {
       "id": "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp#9",

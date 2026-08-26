@@ -50,3 +50,32 @@ passed. The existing `cpp_probe` case-9 command requires the `tools` feature,
 so the invocation without that feature was a command-configuration failure,
 not evidence of a semantic failure. Candidate-range `git diff --check` was
 clean, and pre-existing user worktree changes remained unstaged.
+
+## Narrow correction rereview
+
+Correction `44a57d576` **closes both findings and is accepted**.
+
+Wave C7 `text_test.cpp#9` is now a distinct direct/pass row whose sole evidence
+resolves exactly to
+`cpp_probe.rs:93871::upstream_range_mapper_words_body_is_ported`. The test
+preserves the pinned literal `"one two three four"` and sole `unitCount == 4`
+assertion while its read-only seam delegates to production
+`StaticRangeMap::from_words`. Mechanical recount confirms 58 rows, 12 pass,
+one expected-red, 45 pending, ten direct, three adapted, and `max_pending =
+45`. Cases 10 and 11 remain pending/unverified with empty evidence. The pair
+topology is therefore 1 / 0 / 2 and broader Text is 5 / 3 / 10 as claimed.
+
+The synthetic ligature-count injection was removed. The replacement test
+loads the real `modifier_to_run.riv` RuntimeFile/Graph/Artboard occurrence,
+selects the actual range and its authored frozen `runId` target, writes the
+real run, invokes update plus the production shaped-layout path, observes the
+live ligature GlyphLookup span, and reads the occurrence-owned retained range
+map. The result `[(0,1), (1,1), (2,2), (4,1), (5,1)]` proves that the
+unmodified glyph stream feeds character-unit construction without a parallel
+algorithm. The new observer only clones existing retained state under
+`cfg(test/tools)` and cannot affect production behavior.
+
+Both focused `cpp_probe` tests passed with the `tools` feature. The exact
+ledger/locator/count audit passed, correction-range `git diff --check` was
+clean, rows 17/23 and the cross-Text dependent red remain unchanged, and all
+17 pre-existing user-dirty paths remained outside the correction.

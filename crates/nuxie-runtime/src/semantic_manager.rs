@@ -11,6 +11,8 @@ use crate::semantic_data::{
 };
 
 #[cfg(test)]
+mod wave_c16_dispatch_tests;
+#[cfg(test)]
 mod wave_c17_id_tests;
 #[cfg(test)]
 mod wave_c17_incremental_tests;

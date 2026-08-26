@@ -52,7 +52,7 @@ fn catch_approx(actual: f32, expected: f32) -> bool {
 
 #[test]
 #[ignore = "expected-red: focus_nodes_list_order added nodes do not retain the upstream visual-order bounds"]
-fn four_root_buttons_are_in_visual_order() {
+fn wave_c16_017_four_root_buttons_are_in_visual_order() {
     let diff = load_fixture();
     assert_eq!(diff.added.len(), EXPECTED_SLOTS.len());
 
@@ -82,7 +82,7 @@ fn four_root_buttons_are_in_visual_order() {
 
 #[test]
 #[ignore = "expected-red: Rust assigns the smallest semantic id to visual slot 0 instead of bottom slot 3"]
-fn bottom_button_has_the_smallest_id_but_sorts_last() {
+fn wave_c16_018_bottom_button_has_the_smallest_id_but_sorts_last() {
     let diff = load_fixture();
     assert_eq!(diff.added.len(), EXPECTED_SLOTS.len());
 

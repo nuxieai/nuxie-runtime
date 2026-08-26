@@ -11,6 +11,11 @@ use crate::semantic_provider::{
     ResolvedSemanticData, SemanticProvider, semantic_string_property, semantic_uint_property,
 };
 
+#[cfg(test)]
+mod wave_c16_focused_state_tests;
+#[cfg(test)]
+mod wave_c16_listener_tests;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SemanticActionType {

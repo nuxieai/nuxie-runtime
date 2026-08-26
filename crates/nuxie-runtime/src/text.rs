@@ -3232,10 +3232,10 @@ impl StaticTextSlice {
         self.style_index_for_local(style_local)
     }
 
-    /// Pinned `Text::styleFromShaperId`: glyph/render style lookup uses the
-    /// wrapping `TextRun::styleId` as an index into the complete all-runs
-    /// sequence, not the style pointer retained on the appended run.
-    fn style_index_from_shaper_id(
+    /// Pinned `Text::buildRenderStyles`: glyph paint lookup uses the wrapping
+    /// `TextRun::styleId` as an index into the complete `m_allRuns` sequence,
+    /// not the style pointer retained on the appended run.
+    fn all_runs_paint_style_index(
         &self,
         runs: &[StaticResolvedRun],
         style_id: u16,
@@ -3763,7 +3763,7 @@ impl StaticTextSlice {
                 continue;
             }
             let style_index = self.resolved_run_style_index(run)?;
-            let paint_style_index = self.style_index_from_shaper_id(runs, run.style_id)?;
+            let paint_style_index = self.all_runs_paint_style_index(runs, run.style_id)?;
             for paragraph in split_static_text_lines(run.styled_text()) {
                 // C++ shapes each paragraph before `BreakLines` and keeps the
                 // resulting advances when a soft wrap slices the glyph run.
@@ -3828,7 +3828,7 @@ impl StaticTextSlice {
                 continue;
             }
             let style_index = self.resolved_run_style_index(run)?;
-            let paint_style_index = self.style_index_from_shaper_id(runs, run.style_id)?;
+            let paint_style_index = self.all_runs_paint_style_index(runs, run.style_id)?;
             for paragraph in split_static_text_lines(run.styled_text()) {
                 glyphs.extend(self.styled_text_glyphs_for_style_bidi(
                     runtime,
@@ -6200,7 +6200,7 @@ mod tests {
     }
 
     #[test]
-    fn cxx_styled_text_style_id_wraps_and_drives_shaper_style_lookup() {
+    fn cxx_styled_text_style_id_wraps_and_drives_all_runs_paint_lookup() {
         let (runtime, graphs) = dynamic_two_style_text_runtime();
         let graph = graphs.artboards.first().expect("fixture has an artboard");
         let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
@@ -6239,10 +6239,10 @@ mod tests {
         );
         assert_eq!(
             slice
-                .style_index_from_shaper_id(&runs, wrapped.style_id)
+                .all_runs_paint_style_index(&runs, wrapped.style_id)
                 .unwrap(),
             0,
-            "paint/style lookup consumes the wrapped all-runs styleId"
+            "buildRenderStyles paint lookup consumes the wrapped all-runs styleId"
         );
     }
 

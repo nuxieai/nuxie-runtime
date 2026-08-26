@@ -1,9 +1,10 @@
 //! One-for-one ports of `tests/unit_tests/runtime/scripting/scripting_vector_test.cpp`.
 #![cfg(feature = "luau")]
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use luaur_rt::Lua;
 use nuxie_scripting::vm::ScriptVm;
 
 mod support;
@@ -24,8 +25,10 @@ fn eval_bool(source: &str) -> bool {
 }
 
 fn assert_approx(actual: f64, expected: f64) {
+    let expected = expected as f32;
+    let scale = f64::from(f32::EPSILON) * 100.0 * f64::from(expected.abs());
     assert!(
-        (actual - expected).abs() <= 1e-6,
+        (actual - f64::from(expected)).abs() <= scale,
         "expected approximately {expected}, got {actual}"
     );
 }
@@ -433,10 +436,15 @@ fn vector_meta_methods_work() {
 
 #[test]
 fn closure_test() {
-    let lua = Lua::new();
+    let vm = rive_vm();
+    let lua = vm.lua();
+    let observed = Rc::new(Cell::new(None));
+    let callback_observed = Rc::clone(&observed);
+    let index = 222_u32;
     let callback = lua
-        .create_function(|_, ()| {
-            eprintln!("index from callback upvalue is: {}", 222_u32);
+        .create_function(move |_, ()| {
+            callback_observed.set(Some(index));
+            eprintln!("index from callback upvalue is: {index}");
             Ok(())
         })
         .unwrap();
@@ -446,6 +454,7 @@ fn closure_test() {
         .set_name("test_source")
         .exec()
         .unwrap();
+    assert_eq!(observed.get(), Some(222));
 }
 
 fn best_run(source: &str, warmup: usize, runs: usize) -> Duration {
@@ -462,7 +471,7 @@ fn best_run(source: &str, warmup: usize, runs: usize) -> Duration {
 }
 
 #[test]
-#[ignore = "upstream performance benchmark; run explicitly in a stable benchmark environment"]
+#[ignore = "expected-red: exact N=1,000,000 benchmark exceeds the production 100,000-script-safepoint quota"]
 fn vector_fast_function_benchmark() {
     const N: usize = 1_000_000;
     const WARMUP: usize = 3;

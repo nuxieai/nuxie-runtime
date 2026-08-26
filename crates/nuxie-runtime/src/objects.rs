@@ -1016,7 +1016,3 @@ fn field_value_matches_kind(value: &FieldValue, kind: FieldKind) -> bool {
             | (FieldValue::Uint(_), FieldKind::Uint)
     )
 }
-
-#[cfg(test)]
-#[path = "objects/wave_c3_node_owner_tests.rs"]
-mod wave_c3_node_owner_tests;

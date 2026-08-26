@@ -32,7 +32,7 @@
   "wave": "c3-micro-fragment",
   "case_count": 23,
   "ratchet": {
-    "max_pending": 3
+    "max_pending": 13
   },
   "cases": [
     {
@@ -104,7 +104,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 85,
+          "line": 4,
           "symbol": "wave_c3_math_001_ieee_float_divide"
         }
       ],
@@ -123,7 +123,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 128,
+          "line": 47,
           "symbol": "wave_c3_math_002_bit_cast"
         }
       ],
@@ -136,18 +136,10 @@
       "ordinal": 3,
       "line": 72,
       "name": "cmp_equal",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 140,
-          "symbol": "wave_c3_math_003_cmp_equal"
-        }
-      ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production mixed-sign cmp_equal owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#4",
@@ -155,18 +147,10 @@
       "ordinal": 4,
       "line": 98,
       "name": "cmp_not_equal",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 156,
-          "symbol": "wave_c3_math_004_cmp_not_equal"
-        }
-      ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production mixed-sign cmp_not_equal owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#5",
@@ -174,18 +158,10 @@
       "ordinal": 5,
       "line": 124,
       "name": "cmp_less",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 172,
-          "symbol": "wave_c3_math_005_cmp_less"
-        }
-      ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production mixed-sign cmp_less owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#6",
@@ -193,18 +169,10 @@
       "ordinal": 6,
       "line": 147,
       "name": "cmp_greater",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 191,
-          "symbol": "wave_c3_math_006_cmp_greater"
-        }
-      ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production mixed-sign cmp_greater owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#7",
@@ -212,18 +180,10 @@
       "ordinal": 7,
       "line": 170,
       "name": "cmp_less_equal",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 210,
-          "symbol": "wave_c3_math_007_cmp_less_equal"
-        }
-      ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production mixed-sign cmp_less_equal owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#8",
@@ -231,18 +191,10 @@
       "ordinal": 8,
       "line": 193,
       "name": "cmp_greater_equal",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 229,
-          "symbol": "wave_c3_math_008_cmp_greater_equal"
-        }
-      ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production mixed-sign cmp_greater_equal owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#9",
@@ -256,7 +208,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 248,
+          "line": 59,
           "symbol": "wave_c3_math_009_clamp_cast"
         }
       ],
@@ -275,7 +227,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 260,
+          "line": 71,
           "symbol": "wave_c3_math_010_clz"
         }
       ],
@@ -294,7 +246,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 281,
+          "line": 92,
           "symbol": "wave_c3_math_011_rotateleft32"
         }
       ],
@@ -313,7 +265,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 287,
+          "line": 98,
           "symbol": "wave_c3_math_012_msb"
         }
       ],
@@ -326,18 +278,10 @@
       "ordinal": 13,
       "line": 278,
       "name": "round_up_to_multiple_of",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 306,
-          "symbol": "wave_c3_math_013_round_up_to_multiple_of"
-        }
-      ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no production round_up_to_multiple_of owner exists. The rejected test-local closure was removed, and no honest expected-red reaches an absent callable owner."
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#14",
@@ -351,7 +295,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 323,
+          "line": 117,
           "symbol": "wave_c3_math_014_positive_mod"
         }
       ],
@@ -363,18 +307,10 @@
       "ordinal": 15,
       "line": 305,
       "name": "count_set_bits",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/data_bind/converters/data_converter_operation/wave_c3_math_owner_tests.rs",
-          "line": 333,
-          "symbol": "wave_c3_math_015_count_set_bits"
-        }
-      ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: Rust count_ones covers the public operation but no separately callable production fallback owner exists for the pinned second assertion stream. The rejected duplicate primitive evidence was removed, and no honest expected-red reaches that absent owner."
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#16",
@@ -415,17 +351,10 @@
       "ordinal": 1,
       "line": 4,
       "name": "Node instances",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/objects/wave_c3_node_owner_tests.rs",
-          "line": 49,
-          "symbol": "wave_c3_node_001_instances_default_x"
-        }
-      ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no concrete one-to-one runtime Node owner exists for the pinned default-x observation. The rejected InstanceObjectArena graph proxy was removed, and no honest expected-red reaches an absent Node authority."
     },
     {
       "id": "tests/unit_tests/runtime/node_test.cpp#2",
@@ -433,17 +362,10 @@
       "ordinal": 2,
       "line": 6,
       "name": "nodeX function return x value",
-      "status": "direct",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/objects/wave_c3_node_owner_tests.rs",
-          "line": 55,
-          "symbol": "wave_c3_node_002_x_setter_returns_x_value"
-        }
-      ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": [],
+      "note": "BLOCKED: no concrete one-to-one runtime Node owner exists for the pinned x mutation/readback. The rejected InstanceObjectArena graph proxy was removed, and no honest expected-red reaches an absent Node authority."
     }
   ]
 }

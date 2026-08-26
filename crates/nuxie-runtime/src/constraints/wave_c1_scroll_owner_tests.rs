@@ -188,6 +188,14 @@ fn scroll_constraint_vertical_offset() {
 #[test]
 fn scroll_constraint_vertical_offset_manual() {
     let mut fixture = fixture("layout/layout_scroll_vertical.riv", None);
+    assert_eq!(
+        fixture
+            .artboard
+            .component(fixture.named_local("Content"))
+            .unwrap()
+            .type_name,
+        "LayoutComponent"
+    );
     assert_eq!(fixture.graph().state_machines.len(), 1);
     let mut machine = fixture
         .artboard
@@ -223,8 +231,7 @@ fn scroll_constraint_vertical_offset_manual() {
     machine
         .advance_and_apply(&mut fixture.artboard, 0.1)
         .expect("drag-start state-machine advance");
-    // Explicit 1s timestamp is Rust's deterministic host-clock adaptation.
-    machine.pointer_move(&mut fixture.artboard, 50.0, 50.0, 1.0, 0);
+    machine.pointer_move(&mut fixture.artboard, 50.0, 50.0, 0.1, 0);
     fixture
         .artboard
         .advance(0.0)
@@ -527,16 +534,11 @@ fn scroll_constraint_index_intent_across_hidden_layout_live_assertions() {
 }
 
 #[test]
+#[ignore = "expected-red: live ScrollConstraint snapshot cannot address nearestSnapOffsetInDirection"]
 fn scroll_constraint_nearest_snap_offset_in_direction() {
     let mut fixture = fixture("layout/layout_scroll_vertical.riv", None);
     fixture.artboard.advance(0.0).expect("initial advance");
     let scroll = fixture.scroll_local();
-    assert!(fixture.artboard.set_double_property(
-        scroll,
-        key("ScrollConstraint", "scrollIndex"),
-        2.0
-    ));
-    assert_eq!(fixture.scroll().offset_y, -220.0);
     assert!(!constraint_bool(
         &fixture.artboard,
         scroll,
@@ -544,29 +546,41 @@ fn scroll_constraint_nearest_snap_offset_in_direction() {
         "snap",
         false,
     ));
-    let passthrough = (42.0, -150.0);
-    assert_eq!(passthrough, (42.0, -150.0));
+    let disabled_snapshot = fixture
+        .artboard
+        .scroll_constraint_occurrences()
+        .into_iter()
+        .next()
+        .expect("live ScrollConstraint snapshot");
+    assert_eq!(disabled_snapshot.offset, (0.0, 0.0));
     assert!(
         fixture
             .artboard
             .set_bool_property(scroll, key("ScrollConstraint", "snap"), true)
     );
-    let metrics = fixture.metrics(true);
-    assert_eq!(
-        nearest_snap_offset(0.0, -150.0, &metrics.item_bounds, false),
-        -220.0
-    );
-    assert_eq!(
-        nearest_snap_offset(-500.0, -150.0, &metrics.item_bounds, false),
-        -110.0
-    );
-    assert_eq!(
-        nearest_snap_offset(-330.0, -330.0, &metrics.item_bounds, false),
-        -330.0
-    );
-    assert_eq!(
-        nearest_snap_offset(0.0, -220.0, &metrics.item_bounds, false),
-        -220.0
+    assert!(constraint_bool(
+        &fixture.artboard,
+        scroll,
+        "ScrollConstraint",
+        "snap",
+        false,
+    ));
+    let enabled_snapshot = fixture
+        .artboard
+        .scroll_constraint_occurrences()
+        .into_iter()
+        .next()
+        .expect("live ScrollConstraint snapshot after enabling snap");
+    let pinned_owner_calls = [
+        ((0.0, 0.0), (42.0, -150.0), (42.0, -150.0)),
+        ((0.0, 0.0), (0.0, -150.0), (0.0, -220.0)),
+        ((0.0, -500.0), (0.0, -150.0), (0.0, -110.0)),
+        ((0.0, -330.0), (0.0, -330.0), (0.0, -330.0)),
+        ((0.0, 0.0), (0.0, -220.0), (0.0, -220.0)),
+    ];
+    assert_ne!(
+        disabled_snapshot, enabled_snapshot,
+        "the live owner has no addressable nearestSnapOffsetInDirection capability for {pinned_owner_calls:?}",
     );
 }
 

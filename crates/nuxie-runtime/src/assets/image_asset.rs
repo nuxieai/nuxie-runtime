@@ -393,6 +393,16 @@ impl RuntimeImageAssetOwners {
     pub(crate) fn retained_decoded_bytes(&self) -> usize {
         self.state.borrow().retained_decoded_bytes
     }
+
+    #[cfg(test)]
+    pub(crate) fn decoded_byte_length_for_test(&self, global_id: u32) -> Option<usize> {
+        self.state
+            .borrow()
+            .owners_by_global
+            .get(global_id as usize)?
+            .as_ref()
+            .map(|owner| owner.decoded_byte_length)
+    }
 }
 
 pub(super) fn predecode_render_image(

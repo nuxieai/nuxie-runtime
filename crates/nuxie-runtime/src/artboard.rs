@@ -11754,6 +11754,9 @@ impl ArtboardInstance {
 }
 
 #[cfg(test)]
+mod wave_c1_early_owner_tests;
+
+#[cfg(test)]
 mod tests {
     include!("artboard/tests.rs");
 }

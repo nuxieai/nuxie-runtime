@@ -37,15 +37,6 @@ impl Fixture {
             .debug_taffy_layout_bounds_report(&self.file, self.graph())
             .expect("fixture has a runtime layout solve")
     }
-
-    fn named_local(&self, name: &str) -> usize {
-        self.graph()
-            .local_objects
-            .iter()
-            .find(|object| object.name.as_deref() == Some(name))
-            .unwrap_or_else(|| panic!("fixture has object named {name}"))
-            .local_id
-    }
 }
 
 fn fixture(name: &str, artboard_name: Option<&str>, advance: bool) -> Fixture {
@@ -120,34 +111,6 @@ fn a_fill_participant_fills_a_stack_cell_from_a_riv_file() {
 }
 
 #[test]
-fn a_solos_active_child_is_laid_out_through_it_from_a_riv_file() {
-    let fixture = fixture("layout/solo_participant.riv", None, true);
-    let solo = fixture
-        .artboard
-        .components()
-        .iter()
-        .find(|component| component.type_name == "Solo")
-        .expect("exactly one Solo");
-    let all_shapes = fixture
-        .artboard
-        .components()
-        .iter()
-        .filter(|component| component.type_name == "Shape")
-        .collect::<Vec<_>>();
-    assert_eq!(all_shapes.len(), 2);
-    let shapes = shape_reports(&fixture);
-    assert_eq!(
-        shapes.len(),
-        1,
-        "only the active Solo child joins the solve"
-    );
-    let active = &shapes[0];
-    assert_eq!(active.parent_local, Some(solo.local_id));
-    assert_eq!(active.width, 200.0);
-    assert_eq!(active.height, 200.0);
-}
-
-#[test]
 fn a_hug_participant_hugs_its_content_from_a_riv_file() {
     let fixture = fixture("layout/hug_participant.riv", None, true);
     let bounds = only_shape_bounds(&fixture);
@@ -183,63 +146,6 @@ fn min_max_constraints_clamp_a_participant_slot_from_a_riv_file() {
     let bounds = only_shape_bounds(&fixture);
     assert!((bounds.width - 50.0).abs() <= f32::EPSILON);
     assert!((bounds.height - 30.0).abs() <= f32::EPSILON);
-}
-
-#[test]
-fn a_solos_active_child_index_helpers_work_from_a_riv_file() {
-    let mut fixture = fixture("layout/solo_participant.riv", None, true);
-    let solo_local = fixture
-        .artboard
-        .components()
-        .iter()
-        .find(|component| component.type_name == "Solo")
-        .expect("exactly one Solo")
-        .local_id;
-    let active_key = property_key("Solo", "activeComponentId");
-    let shapes = fixture
-        .artboard
-        .components()
-        .iter()
-        .filter(|component| component.type_name == "Shape")
-        .map(|component| component.local_id)
-        .collect::<Vec<_>>();
-    assert_eq!(shapes.len(), 2);
-    assert!(
-        !fixture
-            .artboard
-            .component(shapes[0])
-            .unwrap()
-            .is_collapsed()
-    );
-    assert!(
-        fixture
-            .artboard
-            .component(shapes[1])
-            .unwrap()
-            .is_collapsed()
-    );
-
-    // `Solo::updateByIndex(1)` writes the second option's object-table id to
-    // generated `activeComponentId`; Rust exposes that exact generated setter.
-    assert!(
-        fixture
-            .artboard
-            .set_uint_property(solo_local, active_key, shapes[1] as u64)
-    );
-    assert!(
-        fixture
-            .artboard
-            .component(shapes[0])
-            .unwrap()
-            .is_collapsed()
-    );
-    assert!(
-        !fixture
-            .artboard
-            .component(shapes[1])
-            .unwrap()
-            .is_collapsed()
-    );
 }
 
 fn animated_participant(name: &str) -> (Fixture, usize, usize) {
@@ -358,23 +264,6 @@ fn a_participant_retargets_a_cubic_animation_while_smoothing() {
 }
 
 #[test]
-fn a_participant_inside_a_group_is_laid_out_through_it() {
-    let fixture = fixture("layout/group_participant.riv", None, true);
-    let shapes = shape_reports(&fixture);
-    assert_eq!(shapes.len(), 1);
-    let shape = &shapes[0];
-    let parent = shape
-        .parent_local
-        .expect("Shape has its plain group parent");
-    assert_eq!(
-        fixture.artboard.component(parent).unwrap().type_name,
-        "Node"
-    );
-    assert_eq!(shape.width, 200.0);
-    assert_eq!(shape.height, 200.0);
-}
-
-#[test]
 fn participants_nested_in_groups_and_in_a_grouped_solo_are_laid_out() {
     let fixture = fixture("layout/nested_group_participant.riv", None, true);
     let solo = fixture
@@ -413,101 +302,4 @@ fn participants_nested_in_groups_and_in_a_grouped_solo_are_laid_out() {
         .expect("participant two groups deep");
     assert_eq!(deep.width, 200.0);
     assert_eq!(deep.height, 200.0);
-}
-
-#[test]
-fn an_artboard_component_list_inside_a_group_stays_out_of_the_layout() {
-    let fixture = fixture("clipping_and_draw_order.riv", None, true);
-    let lists = fixture
-        .artboard
-        .components()
-        .iter()
-        .filter(|component| component.type_name == "ArtboardComponentList")
-        .collect::<Vec<_>>();
-    assert_eq!(lists.len(), 1);
-    let list_report = fixture
-        .report()
-        .into_iter()
-        .find(|report| report.local_id == lists[0].local_id);
-    let parent = fixture
-        .graph()
-        .components
-        .iter()
-        .find(|component| component.local_id == lists[0].local_id)
-        .and_then(|component| component.parent_local)
-        .expect("list parent");
-    assert_eq!(
-        fixture.artboard.component(parent).unwrap().type_name,
-        "Node"
-    );
-    assert!(list_report.is_none(), "artboard remains a layout leaf");
-}
-
-#[test]
-#[ignore = "expected-red: Shape::computeIntrinsicBounds has no public exact pre-advance owner"]
-fn a_custom_path_participant_measures_before_its_paths_are_built() {
-    let mut fixture = fixture(
-        "layout_grid_stack.riv",
-        Some("GridWithLayoutParticipants"),
-        false,
-    );
-    let shapes = fixture
-        .artboard
-        .components()
-        .iter()
-        .filter(|component| component.type_name == "Shape")
-        .map(|component| component.local_id)
-        .collect::<Vec<_>>();
-    assert!(!shapes.is_empty());
-    let mut custom_path_shapes = 0;
-    for shape in shapes {
-        // This executes the live Shape geometry owner before any advance.  A
-        // missing/inverted result is the exact computeIntrinsicBounds seam.
-        let bounds = fixture
-            .artboard
-            .object_world_bounds(shape)
-            .expect("pre-advance Shape::computeIntrinsicBounds result");
-        assert!(bounds.max_x - bounds.min_x >= 0.0);
-        assert!(bounds.max_y - bounds.min_y >= 0.0);
-        let has_points_path = fixture.graph().components.iter().any(|component| {
-            component.type_name == "PointsPath" && component.parent_local == Some(shape)
-        });
-        if has_points_path {
-            custom_path_shapes += 1;
-            assert!(bounds.max_x - bounds.min_x > 0.0);
-            assert!(bounds.max_y - bounds.min_y > 0.0);
-        }
-    }
-    assert!(custom_path_shapes > 0);
-}
-
-#[test]
-fn a_participant_with_an_empty_path_keeps_a_sane_world_transform() {
-    let mut fixture = fixture(
-        "layout_grid_stack.riv",
-        Some("GridWithLayoutParticipants"),
-        true,
-    );
-    let shapes = fixture
-        .artboard
-        .components()
-        .iter()
-        .filter(|component| component.type_name == "Shape")
-        .map(|component| component.local_id)
-        .collect::<Vec<_>>();
-    assert!(!shapes.is_empty());
-    for shape in shapes {
-        let bounds = fixture
-            .artboard
-            .object_world_bounds(shape)
-            .expect("Shape::computeIntrinsicBounds result");
-        assert!(bounds.max_x - bounds.min_x >= 0.0);
-        assert!(bounds.max_y - bounds.min_y >= 0.0);
-        let world = fixture
-            .artboard
-            .object_world_transform(shape)
-            .expect("Shape::worldTransform");
-        assert!(world.0[4].abs() < 1.0e6);
-        assert!(world.0[5].abs() < 1.0e6);
-    }
 }

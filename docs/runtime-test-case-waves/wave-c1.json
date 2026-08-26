@@ -42,16 +42,17 @@
       "line": 14,
       "name": "image with mesh loads correctly",
       "status": "direct",
-      "outcome": "pass",
+      "outcome": "expected-red",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 125,
+          "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
+          "line": 97,
           "symbol": "wave_c1_image_mesh_001_image_with_mesh_loads_correctly"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "The ignored executable port reaches the live Image, ImageAsset, and Mesh owners and fails at the exact missing decoded-source-byte member.",
+      "expected_red_reason": "expected-red: the live ImageAsset owner does not retain pinned decoded source byte size"
     },
     {
       "id": "tests/unit_tests/runtime/image_mesh_test.cpp#2",
@@ -64,16 +65,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 150,
+          "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
+          "line": 145,
           "symbol": "wave_c1_image_mesh_002_duplicating_a_mesh_shares_the_indices"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions.",
       "adaptation": {
         "kind": "rust-safety",
-        "rationale": "Rust shares the immutable GraphFile mesh index slice across independently instantiated artboards instead of exposing mutable C++ vector-buffer pointer identity.",
-        "inapplicable_observable": "C++ std::vector allocation-address identity; the identical index data and three live instance draws remain asserted."
+        "rationale": "Rust clones share the file-owned reference-counted mesh buffer containing the immutable index buffer instead of exposing a C++ std::vector pointer.",
+        "inapplicable_observable": "C++ std::vector allocation-address identity; three live Image occurrences retain their ImageAsset and Mesh owners and share the exact runtime index-buffer owner."
       }
     },
     {
@@ -88,7 +89,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 214,
+          "line": 162,
           "symbol": "wave_c1_in_band_asset_001_load_asset_with_in_band_image"
         }
       ],
@@ -106,7 +107,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 232,
+          "line": 180,
           "symbol": "wave_c1_in_band_asset_002_loader_claims_responsibility"
         }
       ],
@@ -124,7 +125,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 271,
+          "line": 219,
           "symbol": "wave_c1_in_band_asset_003_loader_rejection_uses_in_band_fallback"
         }
       ],
@@ -142,7 +143,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 288,
+          "line": 236,
           "symbol": "wave_c1_instancing_001_cloning_an_ellipse_works"
         }
       ],
@@ -164,8 +165,8 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 305,
+          "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
+          "line": 191,
           "symbol": "wave_c1_instancing_002_artboard_clone_preserves_clipping_properties"
         }
       ],
@@ -187,16 +188,16 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 340,
+          "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
+          "line": 240,
           "symbol": "wave_c1_instancing_003_artboard_instances_share_animation_definitions"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions.",
       "adaptation": {
         "kind": "rust-safety",
-        "rationale": "Rust retains animation definitions in the immutable GraphFile shared by instance lifetimes.",
-        "inapplicable_observable": "The C++ destructor/deleteCount instrumentation; shared definition identity and surviving second instance remain asserted."
+        "rationale": "Rust retains animation definitions in one reference-counted arena shared by the source occurrence and every clone.",
+        "inapplicable_observable": "The C++ destructor/deleteCount instrumentation; exact definition pointer identity, instance-drop survival, and final arena release remain asserted."
       }
     },
     {
@@ -210,8 +211,8 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 357,
+          "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
+          "line": 300,
           "symbol": "wave_c1_joystick_flags_001_flags_and_inverted_axes_match"
         }
       ],
@@ -342,7 +343,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 416,
+          "line": 259,
           "symbol": "wave_c1_layout_grid_001_places_cells_from_riv"
         }
       ],
@@ -360,7 +361,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 458,
+          "line": 303,
           "symbol": "wave_c1_layout_grid_002_auto_rows_size_overflow_cells"
         }
       ],
@@ -378,7 +379,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 486,
+          "line": 332,
           "symbol": "wave_c1_layout_grid_003_track_value_reflows_layout"
         }
       ],
@@ -396,7 +397,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 523,
+          "line": 363,
           "symbol": "wave_c1_layout_grid_004_track_types_size_columns"
         }
       ],
@@ -413,13 +414,13 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_wave_c1.rs",
-          "line": 544,
+          "path": "crates/nuxie-runtime/src/artboard/wave_c1_early_owner_tests.rs",
+          "line": 341,
           "symbol": "wave_c1_layout_grid_005_line_offsets_are_exposed_after_layout"
         }
       ],
       "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
-      "expected_red_reason": "expected-red: settled runtime layout exposes no retained grid-line query owner"
+      "expected_red_reason": "expected-red: live grid LayoutComponent retains only rectangle output, not Taffy grid-line output"
     },
     {
       "id": "tests/unit_tests/runtime/layout_participant_test.cpp#1",
@@ -433,7 +434,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 115,
+          "line": 106,
           "symbol": "a_fill_participant_fills_a_stack_cell_from_a_riv_file"
         }
       ],
@@ -450,9 +451,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 123,
-          "symbol": "a_solos_active_child_is_laid_out_through_it_from_a_riv_file"
+          "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
+          "line": 52,
+          "symbol": "wave_c1_participant_002_solo_and_active_child_keep_exact_provider_owners"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
@@ -469,7 +470,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 151,
+          "line": 114,
           "symbol": "a_hug_participant_hugs_its_content_from_a_riv_file"
         }
       ],
@@ -487,7 +488,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 159,
+          "line": 122,
           "symbol": "a_fixed_size_participant_keeps_its_size_from_a_riv_file"
         }
       ],
@@ -505,7 +506,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 167,
+          "line": 130,
           "symbol": "a_display_none_participant_collapses_and_leaves_the_flow_from_a_riv_file"
         }
       ],
@@ -523,7 +524,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 181,
+          "line": 144,
           "symbol": "min_max_constraints_clamp_a_participant_slot_from_a_riv_file"
         }
       ],
@@ -540,9 +541,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 189,
-          "symbol": "a_solos_active_child_index_helpers_work_from_a_riv_file"
+          "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
+          "line": 79,
+          "symbol": "wave_c1_participant_007_solo_active_child_index_helpers_use_exact_owner"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
@@ -559,7 +560,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/draw.rs",
-          "line": 31508,
+          "line": 31512,
           "symbol": "a_participant_animates_its_slot_under_an_animated_layout"
         }
       ],
@@ -577,7 +578,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/draw.rs",
-          "line": 31668,
+          "line": 31672,
           "symbol": "a_participant_retargets_an_in_flight_layout_animation"
         }
       ],
@@ -595,7 +596,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 285,
+          "line": 191,
           "symbol": "disabling_a_layouts_interpolation_frees_participant_animation"
         }
       ],
@@ -613,7 +614,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 310,
+          "line": 216,
           "symbol": "participants_size_to_grid_cells_from_a_riv_file"
         }
       ],
@@ -631,7 +632,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/draw.rs",
-          "line": 31736,
+          "line": 31740,
           "symbol": "a_participant_animates_its_slot_with_a_cubic_interpolator"
         }
       ],
@@ -649,7 +650,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 322,
+          "line": 228,
           "symbol": "a_participant_retargets_a_cubic_animation_while_smoothing"
         }
       ],
@@ -666,9 +667,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 361,
-          "symbol": "a_participant_inside_a_group_is_laid_out_through_it"
+          "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
+          "line": 94,
+          "symbol": "wave_c1_participant_014_plain_group_has_no_provider_owner"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
@@ -685,7 +686,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 378,
+          "line": 267,
           "symbol": "participants_nested_in_groups_and_in_a_grouped_solo_are_laid_out"
         }
       ],
@@ -702,17 +703,22 @@
       "ordinal": 16,
       "line": 564,
       "name": "an artboard component list inside a group stays out of the layout",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/draw.rs",
-          "line": 32317,
-          "symbol": "upstream_component_list_inside_a_group_stays_out_of_layout"
+          "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
+          "line": 141,
+          "symbol": "wave_c1_participant_016_component_list_keeps_artboard_leaf_after_advance"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions.",
+      "adaptation": {
+        "kind": "taffy",
+        "rationale": "Rust asks the post-advance occurrence-owned Taffy provider topology whether the Artboard has children instead of querying a retained Yoga YGNode isLeaf bit.",
+        "inapplicable_observable": "The C++ Yoga node identity; the exact unflagged component-list exclusion and resulting Artboard leaf topology remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/layout_participant_test.cpp#17",
@@ -720,17 +726,22 @@
       "ordinal": 17,
       "line": 587,
       "name": "a flagged artboard component list joins the layout through a group",
-      "status": "direct",
+      "status": "adapted",
       "outcome": "pass",
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/draw.rs",
-          "line": 32325,
-          "symbol": "upstream_flagged_component_list_joins_layout_through_a_group"
+          "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
+          "line": 149,
+          "symbol": "wave_c1_participant_017_flagged_component_list_makes_artboard_non_leaf"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions.",
+      "adaptation": {
+        "kind": "taffy",
+        "rationale": "Rust asks the post-advance occurrence-owned Taffy provider topology whether the Artboard has children instead of querying a retained Yoga YGNode isLeaf bit.",
+        "inapplicable_observable": "The C++ Yoga node identity; the exact flagged component-list inclusion and resulting non-leaf Artboard topology remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/layout_participant_test.cpp#18",
@@ -743,13 +754,13 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/src/draw.rs",
-          "line": 32334,
-          "symbol": "upstream_custom_path_participant_measures_before_paths_are_built"
+          "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
+          "line": 187,
+          "symbol": "wave_c1_participant_018_custom_paths_compute_intrinsic_bounds_before_advance"
         }
       ],
       "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
-      "expected_red_reason": "expected-red: custom PointsPath intrinsic geometry is absent before first update"
+      "expected_red_reason": "expected-red: pre-advance noncollapsed PointsPath has no Shape intrinsic-bounds owner"
     },
     {
       "id": "tests/unit_tests/runtime/layout_participant_test.cpp#19",
@@ -762,9 +773,9 @@
       "evidence": [
         {
           "kind": "rust-test",
-          "path": "crates/nuxie-runtime/tests/upstream_layout_participant_wave_c1.rs",
-          "line": 485,
-          "symbol": "a_participant_with_an_empty_path_keeps_a_sane_world_transform"
+          "path": "crates/nuxie-runtime/src/draw/wave_c1_participant_owner_tests.rs",
+          "line": 235,
+          "symbol": "wave_c1_participant_019_empty_path_intrinsic_bounds_keep_world_transform_sane"
         }
       ],
       "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
@@ -817,7 +828,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 256,
+          "line": 263,
           "symbol": "scroll_constraint_horizontal_offset"
         }
       ],
@@ -835,7 +846,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 334,
+          "line": 341,
           "symbol": "scroll_constraint_list"
         }
       ],
@@ -867,16 +878,17 @@
       "line": 246,
       "name": "ScrollConstraint nearestSnapOffsetInDirection",
       "status": "direct",
-      "outcome": "pass",
+      "outcome": "expected-red",
       "evidence": [
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 530,
+          "line": 538,
           "symbol": "scroll_constraint_nearest_snap_offset_in_direction"
         }
       ],
-      "note": "The executable Rust test preserves the pinned fixture, action order, concrete runtime owner, and assertions."
+      "note": "The ignored executable port preserves the pinned flow and fails at the first concrete missing runtime seam.",
+      "expected_red_reason": "expected-red: live ScrollConstraint snapshot cannot address nearestSnapOffsetInDirection"
     },
     {
       "id": "tests/unit_tests/runtime/layout_scroll_test.cpp#7",
@@ -890,7 +902,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 574,
+          "line": 588,
           "symbol": "elastic_scroll_physics_helper_snap_respects_trailing_padding"
         }
       ],
@@ -1041,7 +1053,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 392,
+          "line": 399,
           "symbol": "scroll_constraint_index_intent_across_hidden_layout_live_assertions"
         }
       ],
@@ -1060,7 +1072,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 613,
+          "line": 627,
           "symbol": "viewport_drag_updates_velocity"
         }
       ],
@@ -1078,7 +1090,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 635,
+          "line": 649,
           "symbol": "viewport_release_triggers_fling"
         }
       ],
@@ -1096,7 +1108,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 657,
+          "line": 671,
           "symbol": "viewport_drag_held_still_clears_velocity"
         }
       ],
@@ -1114,7 +1126,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 673,
+          "line": 687,
           "symbol": "scrollbar_drag_updates_velocity"
         }
       ],
@@ -1132,7 +1144,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 695,
+          "line": 709,
           "symbol": "scrollbar_release_zeros_velocity"
         }
       ],
@@ -1151,7 +1163,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 722,
+          "line": 736,
           "symbol": "scroll_constraint_index_set_before_layout_resolves_on_advance"
         }
       ],
@@ -1169,7 +1181,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 748,
+          "line": 762,
           "symbol": "scroll_constraint_percent_set_before_layout_resolves_on_advance"
         }
       ],
@@ -1187,7 +1199,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-runtime/src/constraints/wave_c1_scroll_owner_tests.rs",
-          "line": 774,
+          "line": 788,
           "symbol": "scroll_constraint_out_of_range_index_clamps_to_the_ends"
         }
       ],

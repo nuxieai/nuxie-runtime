@@ -71,6 +71,10 @@ thread_local! {
     static RUNTIME_SHAPE_PAINT_COMMAND_REPORT_COUNT: Cell<usize> = const { Cell::new(0) };
 }
 
+#[cfg(test)]
+#[path = "draw/wave_c1_participant_owner_tests.rs"]
+mod wave_c1_participant_owner_tests;
+
 #[cfg(feature = "tools")]
 #[doc(hidden)]
 pub fn reset_runtime_shape_paint_command_report_count() {

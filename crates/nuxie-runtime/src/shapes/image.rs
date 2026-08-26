@@ -92,6 +92,11 @@ impl RuntimeImageList {
         self.owner(local_id)?.borrow().mesh
     }
 
+    #[cfg(test)]
+    pub(crate) fn asset_global_for_test(&self, local_id: usize) -> Option<u32> {
+        self.owner(local_id)?.borrow().asset_global
+    }
+
     /// Direct port of `Image::computedWidth/Height`: intrinsic image
     /// dimensions multiplied by the effective render scale. Modern files
     /// compose the authored scale with the retained layout-fit scale; legacy

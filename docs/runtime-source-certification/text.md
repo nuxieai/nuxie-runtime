@@ -134,6 +134,25 @@ proves both current styles invalidate and the imported-unused style remains
 untouched. No production mapping or consumer classification changed; topology
 remains four pass, three executable expected-red, and 11 pending.
 
+Text hit-test source-audit candidate note: row 43's complete enabled and
+disabled bodies both return null for every input; the enabled opacity branch
+has no distinct observable side effect. Rust's exact `Artboard::hitTest` route
+is `draw.rs::ArtboardInstance::geometry_hit_test` through
+`geometry_hit_test_with_context`: it carries the caller-space pinned hit area,
+selects the first drawable hit, and deliberately omits the Text catalogue
+branch. The public facade delegates to that owner. The separately named
+path/segment queries retain Text bounds as the already documented editor
+all-hit catalogue adaptation in `runtime-source-certification/hit-test.md`;
+they are not the C++ virtual `Text::hitTest` call. State-machine Text targeting
+likewise remains separate and exact: pinned `HitExpandable` calls inherited
+`Component::hitTestPoint`, while `TextValueRun` owns its distinct high-fidelity
+test. Focused real-file evidence is
+`draw.rs::cxx_text_hit_test_is_null_while_named_editor_catalogue_keeps_text`;
+it proves visible and zero-opacity null results on the exact route, preserves
+visible and retained editor catalogue behavior, and exercises the live
+Component route. No production behavior or consumer topology changed; totals
+remain four pass, three executable expected-red, and 11 pending.
+
 This is an atomic source-pair audit under
 `docs/runtime-exact-parity-workflow-correction.md`. It does not inherit the
 older file-level `mapped` or `faithful` verdict. The later correction candidate
@@ -229,7 +248,7 @@ not surrounding module attribution, are the durable identity.
 | 40 | `update` (1154; disabled 1419) | Super first. Path: optional premodifier shape, styled shape/lines/coverage, clear retained caches, build styles. Paint rebuilds styles. Opacity only propagates. Finally rebuild clip path/shape world for world/path/paint. | Distributed across `artboard.rs:ArtboardInstance::update_components_with_hook_recording` and `draw.rs::ArtboardInstance::update_runtime_text_render_styles`, with concrete Text-owner phases at `draw.rs::RuntimeTextDrawOwner::mark_shape_dirty_unless_paths_retained`, `draw.rs::RuntimeTextDrawOwner::mark_render_styles_dirty_unless_paths_retained`, `draw.rs::RuntimeTextDrawOwner::propagate_render_opacity`, `draw.rs::RuntimeTextDrawOwner::propagate_world_transform`, and `draw.rs::RuntimeTextDrawOwner::rebuild`; there is no single Rust owner for the complete C++ method. | **adapted/incomplete**: broad phase split is retained and the rebuilt static layout now consumes paragraph spacing, but superclass/order is distributed and layout dirty is published outside the Text owner after rebuild. Row 39's pre-update callback is now separately owned at addDirt time. |
 | 41 | `measure` (1259) | Make styled; choose width from authored sizing; choose wrap from max constraint; shape/break; baseline/ellipsis/paragraph spacing/trim; authored-sizing bounds; clamp to max; empty returns zero. | `text/text_engine.rs:54::static_text_layout_measure_bounds`; `text.rs:2790::measure_bounds_with_layout_constraint`; spacing evidence `text.rs:5539::cxx_paragraph_spacing_order_covers_empty_paragraphs_trim_measure_fit_and_render` | **adapted correction candidate**: measurement now includes inter-paragraph spacing and removes final trailing spacing in auto bounds. Taffy projection and fallback behavior remain adaptations. |
 | 42 | `localBounds` (1366; disabled 1434) | Shift retained `m_bounds` by normalized origin and return; disabled empty AABB. | `text/text_engine.rs:1::static_text_constraint_bounds`; `components.rs:996::RuntimeTextState::bounds` | **exact enabled retained-access candidate** after update; no disabled-feature counterpart. |
-| 43 | `hitTest` (1376; disabled 1414) | If render opacity is zero return null; otherwise still return null. Disabled also null. | Generic geometry hit routing; no Text-specific public null override | **missing direct owner/evidence**: prove Text itself can never be returned by the general hit path. |
+| 43 | `hitTest` (1376; disabled 1414) | If render opacity is zero return null; otherwise still return null. Disabled also null. | Exact Artboard route `draw.rs::ArtboardInstance::geometry_hit_test` -> `geometry_hit_test_with_context` -> `geometry_path_segments_with_path_cache`; named editor adaptation `geometry_hit_test_paths` / `geometry_hit_test_path_segments_with_bounds`; separate listener route `artboard.rs::ArtboardInstance::component_hit_test_point`; evidence `draw.rs::cxx_text_hit_test_is_null_while_named_editor_catalogue_keeps_text` | **exact observable enabled/disabled result, with named editor-query adaptation**: the caller-space first-hit route never dispatches Text, at visible or zero opacity. The separately named editor all-hit catalogue deliberately retains visible Text bounds (and the retained catalogue keeps zero-opacity Text); pinned listener targeting independently uses inherited `Component::hitTestPoint`, and `TextValueRun` keeps its own high-fidelity path. No dead Text method or proxy was introduced. |
 | 44 | `originValueChanged` (1386; disabled 1435) | Paint dirty, then world-transform dirty. | `text/text.rs:110::mark_origin_dirty` | **exact order candidate**. |
 | 45 | `originXChanged` (1392; disabled 1436) | Paint dirty, then world-transform dirty. | `text/text.rs:115::double_property_changed` -> `mark_origin_dirty` | **exact order candidate**. |
 | 46 | `originYChanged` (1397; disabled 1437) | Paint dirty, then world-transform dirty. | `text/text.rs:115::double_property_changed` -> `110::mark_origin_dirty` | **exact order candidate**. |

@@ -27826,6 +27826,122 @@ mod tests {
     }
 
     #[test]
+    fn cxx_text_hit_test_is_null_while_named_editor_catalogue_keeps_text() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "FontAsset",
+                vec![fixture_property(
+                    "FontAsset",
+                    "assetId",
+                    FixtureValue::Uint(0),
+                )],
+            ),
+            fixture_record(
+                "FileAssetContents",
+                vec![fixture_property(
+                    "FileAssetContents",
+                    "bytes",
+                    FixtureValue::Bytes(
+                        include_bytes!("../../../fixtures/fonts/roboto-a.ttf").to_vec(),
+                    ),
+                )],
+            ),
+            fixture_record(
+                "Artboard",
+                vec![
+                    fixture_property("Artboard", "width", FixtureValue::Double(100.0)),
+                    fixture_property("Artboard", "height", FixtureValue::Double(100.0)),
+                ],
+            ),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![
+                    fixture_property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                    fixture_property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
+                    fixture_property("TextStylePaint", "fontSize", FixtureValue::Double(20.0)),
+                ],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    fixture_property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    fixture_property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                    fixture_property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("Text".to_owned()),
+                    ),
+                ],
+            ),
+        ])
+        .expect("real Text hit-test fixture imports");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("real Text hit-test graph builds");
+        let graph = &graphs.artboards[0];
+        let mut instance =
+            ArtboardInstance::from_graph(&runtime, graph).expect("real Text occurrence builds");
+        assert!(instance.update_components().did_update);
+        let mut cache = RuntimeGeometryState::default();
+
+        let visible_text = instance
+            .geometry_path_segments_with_bounds(&mut cache)
+            .into_iter()
+            .find(|hit| hit.path.last().is_some_and(|segment| segment.local_id == 1))
+            .expect("the named editor catalogue retains the visible Text occurrence");
+        let point = RenderVec2D::new(
+            (visible_text.bounds.min_x + visible_text.bounds.max_x) * 0.5,
+            (visible_text.bounds.min_y + visible_text.bounds.max_y) * 0.5,
+        );
+
+        assert!(
+            instance.geometry_hit_test(point, &mut cache).is_empty(),
+            "Artboard::hitTest must observe Text::hitTest's unconditional null"
+        );
+        assert_eq!(
+            instance.geometry_hit_test_paths(point, &mut cache),
+            vec![vec![1]],
+            "the separately named editor all-hit catalogue deliberately retains Text bounds: {visible_text:?}, {point:?}"
+        );
+        assert_eq!(
+            instance
+                .geometry_hit_test_path_segments_with_bounds(point, &mut cache)
+                .into_iter()
+                .map(|hit| {
+                    hit.path
+                        .into_iter()
+                        .map(|segment| segment.local_id)
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>(),
+            vec![vec![1]]
+        );
+
+        let text = instance.component_handle(1).expect("live Text component");
+        assert!(
+            instance.component_hit_test_point(text, (point.x, point.y), true, true),
+            "state-machine HitExpandable uses inherited Component::hitTestPoint, not Text::hitTest"
+        );
+
+        assert!(instance.set_transform_property(1, TransformProperty::Opacity, 0.0));
+        assert!(instance.update_components().did_update);
+        assert!(instance.geometry_hit_test(point, &mut cache).is_empty());
+        assert!(
+            instance
+                .geometry_hit_test_paths(point, &mut cache)
+                .is_empty()
+        );
+        assert!(
+            instance
+                .retained_geometry_path_segments_with_bounds(&mut cache)
+                .iter()
+                .any(|hit| hit.path.last().is_some_and(|segment| segment.local_id == 1)),
+            "the retained editor catalogue remains independent of visible point-hit policy"
+        );
+    }
+
+    #[test]
     fn retained_opacity_owner_index_matches_static_owner_resolution() {
         let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
         let runtime = read_runtime_file(bytes).expect("text style fixture imports");

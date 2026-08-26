@@ -6604,6 +6604,14 @@ fn runtime_file_asset_referencers_resolve_like_cpp_backboard_importer() {
             push_uint_property(bytes, "TextStyle", "parentId", 4);
             push_uint_property(bytes, "TextStyle", "fontAssetId", 1);
         });
+        push_object_with_properties(bytes, "TextStylePaint", |bytes| {
+            push_uint_property(bytes, "TextStylePaint", "parentId", 4);
+            push_uint_property(bytes, "TextStylePaint", "fontAssetId", 1);
+        });
+        push_object_with_properties(bytes, "TextStylePaint", |bytes| {
+            push_uint_property(bytes, "TextStylePaint", "parentId", 4);
+            push_uint_property(bytes, "TextStylePaint", "fontAssetId", 0);
+        });
         push_object_with_properties(bytes, "ScriptedDrawable", |bytes| {
             push_uint_property(bytes, "ScriptedDrawable", "parentId", 0);
             push_uint_property(bytes, "ScriptedDrawable", "scriptAssetId", 3);
@@ -6632,6 +6640,16 @@ fn runtime_file_asset_referencers_resolve_like_cpp_backboard_importer() {
     );
     assert_eq!(
         file.resolved_file_asset_for_object(11)
+            .map(|asset| asset.type_name),
+        Some("FontAsset"),
+        "TextStylePaint inherits TextStyle's FileAssetReferencer contract"
+    );
+    assert!(
+        file.resolved_file_asset_for_object(12).is_none(),
+        "TextStyle::setAsset ignores a non-FontAsset entry"
+    );
+    assert_eq!(
+        file.resolved_file_asset_for_object(13)
             .map(|asset| asset.type_name),
         Some("ScriptAsset")
     );

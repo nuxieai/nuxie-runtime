@@ -18,6 +18,7 @@ use skrifa::setting::VariationSetting;
 use skrifa::{FontRef as SkrifaFontRef, GlyphId, MetadataProvider, Tag as SkrifaTag};
 use std::collections::BTreeSet;
 use std::rc::Rc;
+use std::sync::Arc;
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 use unicode_script::{Script as UnicodeScript, UnicodeScript as UnicodeScriptProperty};
 
@@ -5078,7 +5079,7 @@ impl StaticTextStyle {
             .unwrap_or(0xff00_0000)
     }
 
-    fn variation_values(&self, instance: &ArtboardInstance) -> Vec<(u32, f32)> {
+    fn live_variation_values(&self, instance: &ArtboardInstance) -> Vec<(u32, f32)> {
         let tag_key = property_key_for_name("TextStyleAxis", "tag");
         let axis_value_key = property_key_for_name("TextStyleAxis", "axisValue");
         self.variations
@@ -5096,6 +5097,15 @@ impl StaticTextStyle {
             .collect()
     }
 
+    fn variation_values(&self, instance: &ArtboardInstance) -> Vec<(u32, f32)> {
+        instance
+            .component(self.local_id)
+            .and_then(|component| component.concrete.text_style.as_ref())
+            .and_then(|style| style.variable_font())
+            .map(|font| font.coords.clone())
+            .unwrap_or_else(|| self.live_variation_values(instance))
+    }
+
     fn variations_are_finite(&self, instance: &ArtboardInstance) -> bool {
         self.variation_values(instance)
             .iter()
@@ -5109,11 +5119,27 @@ impl StaticTextStyle {
             .collect()
     }
 
-    fn harf_features(&self, instance: &ArtboardInstance) -> Vec<Feature> {
+    fn live_feature_values(&self, instance: &ArtboardInstance) -> Vec<(u32, u32)> {
         self.features
             .iter()
             .copied()
-            .map(|feature| feature.harf_feature(instance))
+            .map(|feature| feature.option(instance))
+            .collect()
+    }
+
+    fn feature_values(&self, instance: &ArtboardInstance) -> Vec<(u32, u32)> {
+        instance
+            .component(self.local_id)
+            .and_then(|component| component.concrete.text_style.as_ref())
+            .and_then(|style| style.variable_font())
+            .map(|font| font.features.clone())
+            .unwrap_or_else(|| self.live_feature_values(instance))
+    }
+
+    fn harf_features(&self, instance: &ArtboardInstance) -> Vec<Feature> {
+        self.feature_values(instance)
+            .into_iter()
+            .map(|(tag, value)| Feature::new(HarfTag::from_u32(tag), value, ..))
             .collect()
     }
 
@@ -5176,30 +5202,16 @@ impl StaticTextStyle {
         let style = runtime
             .object(style_global as usize)
             .with_context(|| format!("missing TextStylePaint global {style_global}"))?;
-        let (font_asset_global, font_asset_id) = if style.property("fontAssetId").is_some() {
-            let font_asset_index = style
-                .uint_property("fontAssetId")
-                .context("TextStylePaint serialized fontAssetId is not a uint")?;
-            let font_asset = runtime
-                .file_asset(
-                    usize::try_from(font_asset_index).context("font asset id is too large")?,
-                )
-                .context("TextStylePaint fontAssetId did not resolve to a file asset")?;
-            if font_asset.type_name != "FontAsset" {
-                bail!(
-                    "static text subset expected FontAsset, found {} global {}",
-                    font_asset.type_name,
-                    font_asset.id
-                );
-            }
-            let asset_id = font_asset
-                .uint_property("assetId")
-                .context("FontAsset is missing its semantic assetId")?;
-            let asset_id = u32::try_from(asset_id).context("FontAsset assetId is too large")?;
-            (Some(font_asset.id), Some(asset_id))
-        } else {
-            (None, None)
-        };
+        let (font_asset_global, font_asset_id) =
+            if let Some(font_asset) = runtime.resolved_file_asset_for_referencer(style) {
+                let asset_id = font_asset
+                    .uint_property("assetId")
+                    .context("FontAsset is missing its semantic assetId")?;
+                let asset_id = u32::try_from(asset_id).context("FontAsset assetId is too large")?;
+                (Some(font_asset.id), Some(asset_id))
+            } else {
+                (None, None)
+            };
 
         let style_component = graph
             .components
@@ -5236,12 +5248,24 @@ impl StaticTextStyle {
                 authored_value: axis_value,
             });
         }
-        let features = style_component
-            .children
-            .iter()
-            .copied()
-            .filter(|local| type_for_local(graph, *local) == Some("TextStyleFeature"))
-            .map(|local| StaticTextStyleFeature::from_graph(runtime, graph, local))
+        let feature_locals = match instance {
+            Some(instance) => instance
+                .component(style_local)
+                .and_then(|component| component.concrete.text_style.as_ref())
+                .context("TextStyle occurrence state is missing")?
+                .feature_locals(),
+            None => style_component
+                .children
+                .iter()
+                .copied()
+                .filter(|local| type_for_local(graph, *local) == Some("TextStyleFeature"))
+                .collect(),
+        };
+        let features = feature_locals
+            .into_iter()
+            .map(|local| {
+                StaticTextStyleFeature::from_graph_with_occurrence(runtime, graph, instance, local)
+            })
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
@@ -5256,7 +5280,7 @@ impl StaticTextStyle {
         })
     }
 
-    fn font_bytes<'instance>(
+    fn base_font_bytes<'instance>(
         &'instance self,
         runtime: &'instance RuntimeFile,
         instance: &'instance ArtboardInstance,
@@ -5274,6 +5298,43 @@ impl StaticTextStyle {
                 self.font_asset_id
                     .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
             })
+    }
+
+    fn variable_font_replacement(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+    ) -> Option<crate::components::RuntimeTextStyleVariableFont> {
+        Some(crate::components::RuntimeTextStyleVariableFont {
+            font_bytes: Arc::from(self.base_font_bytes(runtime, instance)?),
+            coords: self.live_variation_values(instance),
+            features: self.live_feature_values(instance),
+        })
+    }
+
+    fn font_bytes<'instance>(
+        &'instance self,
+        runtime: &'instance RuntimeFile,
+        instance: &'instance ArtboardInstance,
+    ) -> Option<&'instance [u8]> {
+        if self.variations.is_empty() && self.features.is_empty() {
+            return self.base_font_bytes(runtime, instance);
+        }
+        let style = instance
+            .component(self.local_id)?
+            .concrete
+            .text_style
+            .as_ref()?;
+        if let Some(font) = style.variable_font() {
+            return Some(font.font_bytes.as_ref());
+        }
+        let replacement = self.variable_font_replacement(runtime, instance)?;
+        Some(
+            style
+                .initialize_variable_font(replacement)
+                .font_bytes
+                .as_ref(),
+        )
     }
 
     fn retained_shaper_data(
@@ -6668,16 +6729,33 @@ mod tests {
         let live: std::sync::Arc<[u8]> = fixture_font_bytes().into();
         let mut value = RuntimeFontAssetValue::default();
         assert!(value.set_live_font_bytes(Some(std::sync::Arc::clone(&live))));
+        instance.clear_component_dirt(style.local_id);
+        instance.clear_component_dirt(1);
         let path_epoch = instance.path_epoch();
         let layout_revision = instance.layout_revision();
 
         assert!(instance.set_text_style_font_override(style.local_id, value.clone()));
         assert_eq!(style.font_bytes(&runtime, &instance), Some(live.as_ref()));
         assert!(instance.path_epoch() > path_epoch);
-        assert!(instance.layout_revision() > layout_revision);
+        assert_eq!(
+            instance.layout_revision(),
+            layout_revision,
+            "TextStyle::setAsset owns TextShape only; it must not publish an extra layout revision"
+        );
         assert!(
-            !instance.set_text_style_font_override(style.local_id, value),
-            "reapplying the same live font must not re-dirty text"
+            !instance.set_text_style_font_override(style.local_id, value.clone()),
+            "Component::addDirt suppresses a repeated publication while the style is already dirty"
+        );
+
+        instance.clear_component_dirt(style.local_id);
+        instance.clear_component_dirt(1);
+        assert!(instance.set_text_style_font_override(style.local_id, value.clone()));
+        assert!(
+            instance
+                .debug_component_dirt(style.local_id)
+                .unwrap()
+                .contains(ComponentDirt::TEXT_SHAPE),
+            "FileAssetReferencer::setAsset republishes even the same retained asset after clean"
         );
     }
 
@@ -7869,6 +7947,16 @@ mod tests {
             .expect("Text state remains")
             .take_modifier_range_map_clear_trace();
         assert!(crate::text_owner::mark_shape_dirty(&mut instance, 1));
+        let one_mark_shape_dirty_pass = vec![
+            (false, range_local),
+            (false, second_range_local),
+            (true, group_local),
+            (false, paint_range_a_local),
+            (false, paint_range_b_local),
+            (true, paint_group_local),
+        ];
+        let mut expected_style_trace = one_mark_shape_dirty_pass.clone();
+        expected_style_trace.extend(one_mark_shape_dirty_pass);
         assert_eq!(
             instance
                 .component(1)
@@ -7913,6 +8001,58 @@ mod tests {
                 .modifier_range_map_count(),
             4
         );
+
+        // Enter the same owner through TextStyle::onDirty, not through a
+        // test-side substitute. This proves the source-ordered callback uses
+        // the complete Text::markShapeDirty cascade.
+        let style_local = slice.styles[0].local_id;
+        for local in [1, group_local, paint_group_local, style_local] {
+            instance.clear_component_dirt(local);
+        }
+        instance
+            .component(1)
+            .and_then(|component| component.concrete.text.as_ref())
+            .expect("Text state remains")
+            .take_modifier_range_map_clear_trace();
+        assert!(instance.add_dirt(style_local, ComponentDirt::TEXT_SHAPE, false));
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .take_modifier_range_map_clear_trace(),
+            expected_style_trace,
+            "TextStyle::onDirty must preserve the direct pass and the re-entrant accumulated-mask pass caused when WorldTransform reaches the dependent style"
+        );
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("Text state remains")
+                .modifier_range_map_count(),
+            0
+        );
+        assert!(
+            instance
+                .debug_component_dirt(1)
+                .unwrap()
+                .contains(ComponentDirt::WORLD_TRANSFORM)
+        );
+        assert!(
+            instance
+                .debug_component_dirt(group_local)
+                .unwrap()
+                .contains(ComponentDirt::TEXT_COVERAGE)
+        );
+        assert!(
+            instance
+                .debug_component_dirt(paint_group_local)
+                .unwrap()
+                .contains(ComponentDirt::TEXT_COVERAGE)
+        );
+
+        static_text_layout_debug_report(&runtime, &graph, &instance, 1, None)
+            .expect("coverage rematerializes after TextStyle dirt");
         instance.clear_component_dirt(1);
         instance.clear_component_dirt(group_local);
         assert!(crate::text_owner::mark_shape_dirty_without_layout(
@@ -8070,7 +8210,10 @@ mod tests {
         assert_eq!(after.line_glyph_ids, before.line_glyph_ids);
 
         let font_bytes = style.font_bytes(&runtime, &instance).unwrap().to_vec();
+        instance.clear_component_dirt(style.local_id);
+        instance.clear_component_dirt(1);
         assert!(instance.debug_set_text_style_font_bytes(style.local_id, font_bytes));
+        instance.update_pass();
         let reshaped =
             static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
         assert_eq!(
@@ -8305,6 +8448,365 @@ mod tests {
         assert_eq!(
             input_slice.styles[0].variation_values(&text_input_instance),
             [(u32::from_be_bytes(*b"wght"), 650.0)]
+        );
+    }
+
+    #[test]
+    fn cxx_text_style_rebuilds_options_helper_and_retained_text_callbacks_on_clone() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(0))],
+            ),
+            fixture_record(
+                "FileAssetContents",
+                vec![property(
+                    "FileAssetContents",
+                    "bytes",
+                    FixtureValue::Bytes(fixture_font_bytes()),
+                )],
+            ),
+            fixture_record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(1))],
+            ),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![
+                    property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                    property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
+                    property("TextStylePaint", "fontSize", FixtureValue::Double(20.0)),
+                ],
+            ),
+            fixture_record(
+                "TextStyleAxis",
+                vec![
+                    property("TextStyleAxis", "parentId", FixtureValue::Uint(2)),
+                    property(
+                        "TextStyleAxis",
+                        "tag",
+                        FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
+                    ),
+                    property("TextStyleAxis", "axisValue", FixtureValue::Double(400.0)),
+                ],
+            ),
+            fixture_record(
+                "TextStyleFeature",
+                vec![
+                    property("TextStyleFeature", "parentId", FixtureValue::Uint(2)),
+                    property(
+                        "TextStyleFeature",
+                        "tag",
+                        FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
+                    ),
+                    property("TextStyleFeature", "featureValue", FixtureValue::Uint(0)),
+                ],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                    property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("office".into()),
+                    ),
+                ],
+            ),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![
+                    property("TextStylePaint", "parentId", FixtureValue::Uint(6)),
+                    property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
+                    property("TextStylePaint", "fontSize", FixtureValue::Double(20.0)),
+                ],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(6)),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(7)),
+                    property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("office".into()),
+                    ),
+                ],
+            ),
+        ])
+        .expect("TextStyle lifecycle fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("TextStyle lifecycle graph");
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let mut source = ArtboardInstance::from_graph(&runtime, graph)
+            .expect("TextStyle lifecycle occurrence constructs");
+
+        assert!(
+            source
+                .component(2)
+                .unwrap()
+                .concrete
+                .text_style
+                .as_ref()
+                .unwrap()
+                .variable_font()
+                .is_none(),
+            "TextStyle constructor starts with no variable-font cache"
+        );
+
+        let source_a = StaticTextSlice::from_instance(&runtime, graph, &source, 1)
+            .expect("source A production style topology");
+        let source_b = StaticTextSlice::from_instance(&runtime, graph, &source, 6)
+            .expect("source B production style topology");
+        assert_eq!(source_a.styles[0].variation_values(&source).len(), 1);
+        assert_eq!(source_a.styles[0].harf_features(&source).len(), 1);
+        assert!(source_b.styles[0].variation_values(&source).is_empty());
+        assert!(source_b.styles[0].harf_features(&source).is_empty());
+        assert!(source_a.styles[0].font_bytes(&runtime, &source).is_some());
+        let cached = source
+            .component(2)
+            .unwrap()
+            .concrete
+            .text_style
+            .as_ref()
+            .unwrap()
+            .variable_font()
+            .expect("the first font() call lazily caches options");
+        assert_eq!(cached.coords, [(u32::from_be_bytes(*b"wght"), 400.0)]);
+        assert_eq!(cached.features, [(u32::from_be_bytes(*b"liga"), 0)]);
+        let source_helper = source
+            .objects
+            .text_variation_helper_handle(2)
+            .expect("source A owns its helper");
+        assert_eq!(
+            source.objects.text_variation_helper_text_handle(2),
+            source.objects.component_handle(1)
+        );
+        assert!(source.objects.text_variation_helper_handle(7).is_none());
+
+        // The inherited TextStyle callbacks on TextStylePaint retain their
+        // direct Text owner. A live generated parent write does not retarget
+        // that pointer until clone construction.
+        let parent_id = property_key_for_name("Component", "parentId").unwrap();
+        let metric_keys = ["fontSize", "lineHeight", "letterSpacing"]
+            .map(|name| property_key_for_name("TextStyle", name).unwrap());
+        assert!(source.set_uint_property(2, parent_id, 6));
+        for local in [1, 2, 6] {
+            source.clear_component_dirt(local);
+        }
+        for (index, metric_key) in metric_keys.iter().copied().enumerate() {
+            source.clear_component_dirt(1);
+            source.clear_component_dirt(6);
+            assert!(source.set_double_property(2, metric_key, 21.0 + index as f32));
+            let source_text_dirt = source.debug_component_dirt(1).unwrap();
+            assert!(source_text_dirt.contains(ComponentDirt::PATH));
+            assert!(source_text_dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+            assert_eq!(source.debug_component_dirt(6), Some(ComponentDirt::NONE));
+        }
+        source.clear_component_dirt(1);
+        source.clear_component_dirt(2);
+        assert!(source.debug_set_text_style_font_bytes(2, fixture_font_bytes()));
+        assert!(
+            source
+                .debug_component_dirt(2)
+                .unwrap()
+                .contains(ComponentDirt::TEXT_SHAPE)
+        );
+        assert!(
+            source
+                .debug_component_dirt(1)
+                .unwrap()
+                .contains(ComponentDirt::PATH)
+        );
+        assert_eq!(source.debug_component_dirt(6), Some(ComponentDirt::NONE));
+        assert_eq!(
+            source.objects.dependent_at(source_helper, 0),
+            source.objects.component_handle(1)
+        );
+
+        source.clear_component_dirt(1);
+        source.clear_component_dirt(2);
+        assert!(source.set_uint_property(
+            2,
+            property_key_for_name("TextStyle", "fontAssetId").unwrap(),
+            1,
+        ));
+        assert_eq!(source.debug_component_dirt(1), Some(ComponentDirt::NONE));
+        assert_eq!(source.debug_component_dirt(2), Some(ComponentDirt::NONE));
+
+        // updateVariableFont returns without clearing the old snapshot when a
+        // valid replacement FontAsset exists but its Font is not ready.
+        let cached_bytes = source_a.styles[0]
+            .font_bytes(&runtime, &source)
+            .unwrap()
+            .to_vec();
+        source.clear_component_dirt(2);
+        source.clear_component_dirt(1);
+        assert!(
+            source
+                .set_text_style_font_override(2, RuntimeFontAssetValue::from_file_asset_index(1),)
+        );
+        source.update_pass();
+        assert_eq!(
+            source_a.styles[0].font_bytes(&runtime, &source),
+            Some(cached_bytes.as_slice()),
+            "base-font null preserves the previous variable-font snapshot"
+        );
+
+        // Before onAddedClean assigns m_text, TextStyle::onDirty is inert.
+        let source_text = source.objects.component_handle(1).unwrap();
+        source
+            .component(2)
+            .unwrap()
+            .concrete
+            .text_style
+            .as_ref()
+            .unwrap()
+            .retain_text(None);
+        source.clear_component_dirt(1);
+        source.clear_component_dirt(2);
+        assert!(source.add_dirt(2, ComponentDirt::TEXT_SHAPE, false));
+        assert_eq!(source.debug_component_dirt(1), Some(ComponentDirt::NONE));
+        source
+            .component(2)
+            .unwrap()
+            .concrete
+            .text_style
+            .as_ref()
+            .unwrap()
+            .retain_text(Some(source_text));
+
+        // Axis/feature parent writes likewise leave this occurrence's option
+        // vectors frozen. Clone onAddedDirty rebuilds them from copied parent
+        // ids, removes A's helper, and creates B's helper at B's build slot.
+        assert!(source.set_uint_property(3, parent_id, 7));
+        assert!(source.set_uint_property(4, parent_id, 7));
+        let clone = source.clone();
+        assert!(
+            clone
+                .component(2)
+                .unwrap()
+                .concrete
+                .text_style
+                .as_ref()
+                .unwrap()
+                .variable_font()
+                .is_none(),
+            "TextStyle clone starts cache-cold"
+        );
+        let clone_a = StaticTextSlice::from_instance(&runtime, graph, &clone, 1)
+            .expect("clone A production style topology");
+        let clone_b = StaticTextSlice::from_instance(&runtime, graph, &clone, 6)
+            .expect("clone B production style topology");
+        assert!(clone_a.styles[0].variation_values(&clone).is_empty());
+        assert!(clone_a.styles[0].harf_features(&clone).is_empty());
+        assert_eq!(clone_b.styles[0].variation_values(&clone).len(), 1);
+        assert_eq!(clone_b.styles[0].harf_features(&clone).len(), 1);
+        assert!(clone.objects.text_variation_helper_handle(2).is_none());
+        let clone_helper = clone
+            .objects
+            .text_variation_helper_handle(7)
+            .expect("clone B creates its helper");
+        assert_eq!(
+            clone.objects.text_variation_helper_text_handle(7),
+            clone.objects.component_handle(6)
+        );
+        assert_eq!(
+            clone.objects.dependent_at(clone_helper, 0),
+            clone.objects.component_handle(6)
+        );
+
+        let source_a_report = static_text_layout_debug_report(&runtime, graph, &source, 1, None)
+            .expect("source A shapes through its feature option");
+        let clone_b_report = static_text_layout_debug_report(&runtime, graph, &clone, 6, None)
+            .expect("clone B shapes through its rebuilt feature option");
+        assert_eq!(
+            source_a_report.style_features[0],
+            clone_b_report.style_features[0]
+        );
+        assert_eq!(
+            source_a_report.line_glyph_ids,
+            clone_b_report.line_glyph_ids
+        );
+
+        let mut clone = clone;
+        for local in [1, 6] {
+            clone.clear_component_dirt(local);
+        }
+        assert!(clone.set_double_property(2, metric_keys[0], 22.0));
+        assert_eq!(clone.debug_component_dirt(1), Some(ComponentDirt::NONE));
+        assert!(
+            clone
+                .debug_component_dirt(6)
+                .unwrap()
+                .contains(ComponentDirt::PATH)
+        );
+    }
+
+    #[test]
+    fn cxx_text_style_validate_and_wrong_asset_follow_pinned_boundaries() {
+        let invalid_parent_error = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(0))],
+            ),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+        ])
+        .expect_err("TextStyle::validate rejects a non-TextInterface direct parent");
+        assert!(
+            invalid_parent_error
+                .to_string()
+                .contains("invalid artboard-local object")
+        );
+
+        let wrong_asset = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("ImageAsset", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![
+                    property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                    property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
+                ],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                    property("TextValueRun", "text", FixtureValue::String("A".into())),
+                ],
+            ),
+        ])
+        .expect("wrong-type asset remains an importable FileAsset reference");
+        let wrong_graphs =
+            GraphFile::from_runtime_file(&wrong_asset).expect("wrong-type style graph builds");
+        let wrong_graph = &wrong_graphs.artboards[0];
+        let wrong_instance = ArtboardInstance::from_graph(&wrong_asset, wrong_graph)
+            .expect("TextStyle::setAsset silently ignores non-FontAsset");
+        let wrong_slice =
+            StaticTextSlice::from_instance(&wrong_asset, wrong_graph, &wrong_instance, 1)
+                .expect("wrong-type asset does not reject TextStyle construction");
+        assert_eq!(wrong_slice.styles.len(), 1);
+        assert!(
+            wrong_slice.styles[0]
+                .font_bytes(&wrong_asset, &wrong_instance)
+                .is_none()
         );
     }
 

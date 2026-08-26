@@ -51,6 +51,23 @@ impl RuntimeFontAssetReferencerQueue {
         self.pending.borrow_mut().clear();
     }
 
+    pub(crate) fn reregister_style(&self, style_local: usize, asset_global: Option<u32>) {
+        let mut styles_by_asset = self.styles_by_asset.borrow_mut();
+        for styles in styles_by_asset.values_mut() {
+            styles.retain(|candidate| *candidate != style_local);
+        }
+        styles_by_asset.retain(|_, styles| !styles.is_empty());
+        if let Some(asset_global) = asset_global {
+            styles_by_asset
+                .entry(asset_global)
+                .or_default()
+                .push(style_local);
+        }
+        self.pending
+            .borrow_mut()
+            .retain(|(_, candidate)| *candidate != style_local);
+    }
+
     fn publish(&self, asset_global: u32) {
         let Some(styles) = self.styles_by_asset.borrow().get(&asset_global).cloned() else {
             return;
@@ -216,7 +233,9 @@ impl ArtboardInstance {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetOwners};
+    use crate::{
+        RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetOwners, RuntimeFontAssetValue,
+    };
     use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
     use nuxie_graph::GraphFile;
     use nuxie_render_api::{
@@ -432,6 +451,76 @@ mod tests {
                 .expect("TextStylePaint occurrence")
                 .dirt
                 .contains(ComponentDirt::TEXT_SHAPE)
+        );
+    }
+
+    #[test]
+    fn text_style_set_asset_moves_the_live_font_referencer() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(10))],
+            ),
+            record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", FixtureValue::Uint(11))],
+            ),
+            record("Artboard", Vec::new()),
+            record("Text", Vec::new()),
+            record(
+                "TextStylePaint",
+                vec![
+                    property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                    property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
+                ],
+            ),
+        ])
+        .expect("font rebind fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("font rebind graph builds");
+        let graph = &graphs.artboards[0];
+        let retained = Rc::new(RefCell::new(BTreeMap::<u32, RuntimeFileAsset>::new()));
+        let retained_for_loader = Rc::clone(&retained);
+        let mut loader =
+            move |asset: &RuntimeFileAsset,
+                  _in_band: &[u8],
+                  _factory: &mut dyn nuxie_render_api::Factory| {
+                retained_for_loader
+                    .borrow_mut()
+                    .insert(asset.descriptor().id, asset.clone());
+                true
+            };
+        let mut factory = NullFactory::new();
+        let owners =
+            RuntimeFileAssetOwners::import_with_loader(&runtime, None, &mut factory, &mut loader);
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        instance.attach_runtime_file_asset_owners(&owners);
+        instance.update_pass();
+
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(2);
+        assert!(
+            instance
+                .set_text_style_font_override(2, RuntimeFontAssetValue::from_file_asset_index(1),)
+        );
+        instance.update_pass();
+
+        let old = retained.borrow().get(&1).expect("old FontAsset").clone();
+        let new = retained.borrow().get(&2).expect("new FontAsset").clone();
+        assert!(old.decode(&fixture_font_bytes(), &mut factory));
+        assert!(
+            !instance.runtime_font_asset_referencer.is_pending(),
+            "the old FontAsset no longer owns the TextStyle referencer"
+        );
+        assert!(new.decode(&fixture_font_bytes(), &mut factory));
+        assert!(instance.runtime_font_asset_referencer.is_pending());
+        assert!(instance.settle_runtime_font_asset_updates());
+        assert!(
+            instance
+                .debug_component_dirt(2)
+                .unwrap()
+                .contains(ComponentDirt::TEXT_SHAPE),
+            "the replacement FontAsset publishes to the moved TextStyle referencer"
         );
     }
 

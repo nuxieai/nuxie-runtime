@@ -60,27 +60,18 @@ impl ArtboardInstance {
         local_id: usize,
         value: RuntimeFontAssetValue,
     ) -> bool {
-        let unchanged = self
-            .text_style_font_overrides
-            .get(&local_id)
-            .is_some_and(|current| {
-                current.file_asset_index() == value.file_asset_index()
-                    && match (current.live_font_bytes_arc(), value.live_font_bytes_arc()) {
-                        (Some(current), Some(next)) => {
-                            Arc::ptr_eq(current, next) || current.as_ref() == next.as_ref()
-                        }
-                        (None, None) => true,
-                        _ => false,
-                    }
-            });
-        if unchanged {
-            return false;
-        }
+        // FileAssetReferencer::setAsset always republishes a valid asset,
+        // even when it is the same retained pointer. Component::addDirt owns
+        // the already-dirty no-op boundary.
+        let asset_global = usize::try_from(value.file_asset_index())
+            .ok()
+            .and_then(|index| self.runtime_file()?.file_asset(index))
+            .filter(|asset| asset.type_name == "FontAsset")
+            .map(|asset| asset.id);
+        self.runtime_font_asset_referencer
+            .reregister_style(local_id, asset_global);
         self.text_style_font_overrides.insert(local_id, value);
-        self.mark_text_style_shape_dirty(local_id);
-        self.mark_path_changed();
-        self.mark_layout_changed();
-        true
+        self.mark_text_style_shape_dirty(local_id)
     }
 
     #[cfg(any(test, feature = "tools"))]
@@ -91,13 +82,7 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn mark_text_style_shape_dirty(&mut self, style_local_id: usize) -> bool {
-        let Some(parent_key) = property_key_for_name("Component", "parentId") else {
-            return false;
-        };
-        let Some(text_local) = self
-            .uint_property(style_local_id, parent_key)
-            .and_then(|parent_id| usize::try_from(parent_id).ok())
-        else {
+        let Some(text_local) = crate::text_style_owner::owning_text(self, style_local_id) else {
             return false;
         };
         if !matches!(
@@ -107,7 +92,8 @@ impl ArtboardInstance {
             return false;
         }
 
+        // `TextStyle::setAsset` adds TextShape dirt to the style. Its onDirty
+        // callback owns the later Text::markShapeDirty/helper cascade.
         self.add_dirt(style_local_id, ComponentDirt::TEXT_SHAPE, false)
-            | crate::text_owner::mark_shape_dirty(self, text_local)
     }
 }

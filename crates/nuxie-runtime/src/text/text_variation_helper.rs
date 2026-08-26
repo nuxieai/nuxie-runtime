@@ -17,13 +17,7 @@ fn shape_text_glyphs_for_style(
     instance: &ArtboardInstance,
     text: &str,
 ) -> Result<Vec<TextGlyph>> {
-    shape_text_glyphs_for_style_with_variations(
-        font_bytes,
-        style,
-        instance,
-        text,
-        &BTreeMap::new(),
-    )
+    shape_text_glyphs_for_style_with_variations(font_bytes, style, instance, text, &BTreeMap::new())
 }
 fn shape_text_glyphs_for_style_with_variations(
     font_bytes: &[u8],
@@ -76,7 +70,27 @@ fn shape_text_glyphs_for_style_with_variations(
 /// The helper-to-Text dependency has already propagated the source dirt before
 /// this update node runs (`text_variation_helper.cpp:7-17`).
 pub(crate) fn update_text_variation_helper(
-    _instance: &mut ArtboardInstance,
+    instance: &mut ArtboardInstance,
+    style_local: usize,
     _text: crate::components::ComponentHandle,
     _dirt: crate::components::ComponentDirt,
-) {}
+) {
+    let replacement = instance.runtime_file().and_then(|runtime| {
+        instance.runtime_graph().and_then(|graph| {
+            StaticTextStyle::from_graph_with_occurrence(runtime, graph, Some(instance), style_local)
+                .ok()?
+                .variable_font_replacement(runtime, instance)
+        })
+    });
+    let Some(replacement) = replacement else {
+        // Pinned updateVariableFont returns without touching an existing
+        // variable font when the replacement base font is not ready.
+        return;
+    };
+    if let Some(style) = instance
+        .component_mut(style_local)
+        .and_then(|component| component.concrete.text_style.as_mut())
+    {
+        style.update_variable_font(replacement);
+    }
+}

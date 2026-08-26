@@ -124,11 +124,11 @@ impl RuntimeObjectOccurrence {
                 .as_ref()
                 .map(RuntimeComponent::clone_for_occurrence),
             path_composer_handle: self.path_composer_handle,
-            text_variation_helper: self
-                .text_variation_helper
-                .as_ref()
-                .map(RuntimeComponent::clone_for_occurrence),
-            text_variation_helper_handle: self.text_variation_helper_handle,
+            // TextStyle owns this unique_ptr outside its generated base. A
+            // clone starts without it; TextStyle::onAddedClean recreates it
+            // from the clone occurrence's registered axes/features.
+            text_variation_helper: None,
+            text_variation_helper_handle: None,
         }
     }
 }
@@ -145,7 +145,15 @@ impl Clone for InstanceObjectArena {
                         .map(RuntimeObjectOccurrence::clone_without_runtime_links)
                 })
                 .collect(),
-            component_addresses: self.component_addresses.clone(),
+            // Helpers are appended after every authored/path-composer address.
+            // Drop that clone-external unique_ptr family so onAddedClean can
+            // append exactly the helpers required by the clone occurrence.
+            component_addresses: self
+                .component_addresses
+                .iter()
+                .copied()
+                .filter(|address| !matches!(address, ComponentAddress::TextVariationHelper { .. }))
+                .collect(),
             authored_component_handles: self.authored_component_handles.clone(),
             dependency_order: Vec::new(),
             root: self.root,
@@ -367,36 +375,11 @@ impl InstanceObjectArena {
             .text_variation_helper_handle
     }
 
-    pub(crate) fn relink_text_variation_helper_owner(
-        &mut self,
-        text_style_local: usize,
-    ) -> Option<ComponentHandle> {
-        let style = self.component_handle(text_style_local)?;
-        let text = self.component(style)?.parent?;
-        let helper = self.text_variation_helper_handle(text_style_local)?;
-        *self.component_addresses.get_mut(helper.index())? =
-            ComponentAddress::TextVariationHelper {
-                style: ObjectHandle(text_style_local),
-                text,
-            };
-        Some(helper)
-    }
-
     pub(crate) fn text_variation_helper_text_handle(
         &self,
         text_style_local: usize,
     ) -> Option<ComponentHandle> {
         let helper = self.text_variation_helper_handle(text_style_local)?;
-        match self.address(helper)? {
-            ComponentAddress::TextVariationHelper { text, .. } => Some(text),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn text_variation_helper_text(
-        &self,
-        helper: ComponentHandle,
-    ) -> Option<ComponentHandle> {
         match self.address(helper)? {
             ComponentAddress::TextVariationHelper { text, .. } => Some(text),
             _ => None,

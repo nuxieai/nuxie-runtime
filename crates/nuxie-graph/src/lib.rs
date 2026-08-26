@@ -5521,7 +5521,7 @@ fn local_object_is_valid(file: &RuntimeFile, local_objects: &[LocalObject], inde
         return is_nested_artboard(parent) || parent.type_name == "ArtboardListMapRule";
     }
 
-    if definition.name == "TextStyle" {
+    if definition.is_a("TextStyle") {
         let Some(parent) = local_object_reference(file, local_objects, object_parent_id(object))
         else {
             return false;

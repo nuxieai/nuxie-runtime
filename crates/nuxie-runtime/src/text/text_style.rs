@@ -1,16 +1,15 @@
+use nuxie_schema::definition_by_name;
+
 use crate::{artboard::ArtboardInstance, properties::property_key_for_name, text_owner};
 
-pub(super) fn owning_text(instance: &ArtboardInstance, mut local_id: usize) -> Option<usize> {
-    loop {
-        local_id = instance.component_parent_local(local_id)?;
-        if crate::text::text_interface::is_text_interface(
-            instance
-                .component(local_id)
-                .map(|component| component.type_name),
-        ) {
-            return Some(local_id);
-        }
-    }
+pub(super) fn owning_text(instance: &ArtboardInstance, local_id: usize) -> Option<usize> {
+    instance
+        .component(local_id)?
+        .concrete
+        .text_style
+        .as_ref()?
+        .text()
+        .and_then(|text| instance.component_local_id(text))
 }
 
 pub(crate) fn double_property_changed(
@@ -19,7 +18,9 @@ pub(crate) fn double_property_changed(
     type_name: Option<&str>,
     property_key: u16,
 ) -> Option<bool> {
-    if type_name != Some("TextStyle") {
+    if !type_name.is_some_and(|type_name| {
+        definition_by_name(type_name).is_some_and(|definition| definition.is_a("TextStyle"))
+    }) {
         return None;
     }
     metric_property_changed(instance, local_id, property_key)

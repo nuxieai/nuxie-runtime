@@ -1413,6 +1413,15 @@ impl ArtboardInstance {
                 if !objects.link_parent(handle, parent) {
                     anyhow::bail!("Component parent link could not be retained");
                 }
+                if definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("TextStyle"))
+                    && !matches!(parent_type, "Text" | "TextInput")
+                {
+                    anyhow::bail!(
+                        "TextStyle local {} requires a direct TextInterface parent",
+                        component.local_id
+                    );
+                }
                 // `TextStyleAxis::onAddedDirty` first runs Component Super,
                 // then requires a direct TextStyle parent and appends itself
                 // to that occurrence's authored-order variation list.
@@ -1430,6 +1439,21 @@ impl ArtboardInstance {
                         .and_then(|parent| parent.concrete.text_style.as_ref())
                         .expect("TextStyle occurrence state")
                         .register_variation(component.local_id);
+                }
+                if component.type_name == "TextStyleFeature" {
+                    if !definition_by_name(parent_type)
+                        .is_some_and(|definition| definition.is_a("TextStyle"))
+                    {
+                        anyhow::bail!(
+                            "TextStyleFeature local {} requires a direct TextStyle parent",
+                            component.local_id
+                        );
+                    }
+                    objects
+                        .component_mut(parent)
+                        .and_then(|parent| parent.concrete.text_style.as_ref())
+                        .expect("TextStyle occurrence state")
+                        .register_feature(component.local_id);
                 }
                 // `TextModifier::onAddedDirty` runs after Component Super has
                 // linked the parent. A direct TextModifierGroup parent is the
@@ -1926,32 +1950,40 @@ impl ArtboardInstance {
         // construction point rather than pre-attaching every helper as a
         // family batch.
         for component in &graph.components {
-            let Some(helper) = graph
-                .text_variation_helpers
-                .iter()
-                .find(|helper| helper.text_style_local == component.local_id)
-            else {
-                continue;
-            };
-            let handle = if objects
-                .text_variation_helper_handle(helper.text_style_local)
-                .is_some()
+            if !definition_by_name(component.type_name)
+                .is_some_and(|definition| definition.is_a("TextStyle"))
             {
-                objects
-                    .relink_text_variation_helper_owner(helper.text_style_local)
-                    .context("TextVariationHelper cannot retain its rebuilt TextStyle parent")?
-            } else {
-                objects
-                    .attach_text_variation_helper(
-                        helper.text_style_local,
-                        RuntimeComponent::embedded(
-                            helper.text_style_local,
-                            helper.text_style_global,
-                            "TextVariationHelper",
-                        ),
-                    )
-                    .context("TextStyle cannot own its TextVariationHelper")?
-            };
+                continue;
+            }
+            let style_handle = objects
+                .component_handle(component.local_id)
+                .context("TextStyle occurrence handle is missing")?;
+            let text = objects
+                .component(style_handle)
+                .and_then(|style| style.parent)
+                .context("TextStyle requires its retained Text parent")?;
+            let has_font_options = objects
+                .component(style_handle)
+                .and_then(|style| style.concrete.text_style.as_ref())
+                .is_some_and(|style| {
+                    // Pinned onAddedClean assigns m_text before Super and
+                    // before optional helper construction.
+                    style.retain_text(Some(text));
+                    style.has_font_options()
+                });
+            if !has_font_options {
+                continue;
+            }
+            let handle = objects
+                .attach_text_variation_helper(
+                    component.local_id,
+                    RuntimeComponent::embedded(
+                        component.local_id,
+                        component.global_id,
+                        "TextVariationHelper",
+                    ),
+                )
+                .context("TextStyle cannot own its TextVariationHelper")?;
             if !objects.link_parent(handle, root) {
                 anyhow::bail!("TextVariationHelper parent link could not be retained");
             }
@@ -1974,14 +2006,13 @@ impl ArtboardInstance {
                 } => objects.text_variation_helper_handle(text_style_local),
             })
             .collect::<Vec<_>>();
+        enum DependencyBuildAction {
+            GraphEdge(usize),
+            RetainedEdge(ComponentHandle, ComponentHandle),
+        }
         let mut ordered_edges =
             Vec::with_capacity(graph.dependency_node_edges_in_insertion_order.len());
         let mut scheduled_edges = BTreeSet::new();
-        let mut push_edge = |edge_index: usize| {
-            if scheduled_edges.insert(edge_index) {
-                ordered_edges.push(edge_index);
-            }
-        };
 
         // C++ invokes each concrete buildDependencies in authored object
         // order. Shape invokes its embedded PathComposer before Super, and
@@ -2012,34 +2043,19 @@ impl ArtboardInstance {
                                 | nuxie_graph::DependencyKind::PathComposerPath
                         )
                     {
-                        push_edge(edge_index);
+                        if scheduled_edges.insert(edge_index) {
+                            ordered_edges.push(DependencyBuildAction::GraphEdge(edge_index));
+                        }
                     }
                 }
             }
-            if let Some(helper_node) = graph.dependency_nodes.iter().position(|node| {
-                matches!(
-                    node.kind,
-                    DependencyNodeKind::TextVariationHelper {
-                        text_style_local,
-                        ..
-                    } if text_style_local == component.local_id
-                )
-            }) {
-                for (edge_index, edge) in graph
-                    .dependency_node_edges_in_insertion_order
-                    .iter()
-                    .enumerate()
-                {
-                    if (edge.source_node == helper_node || edge.dependent_node == helper_node)
-                        && matches!(
-                            edge.kind,
-                            nuxie_graph::DependencyKind::TextVariationHelperArtboard
-                                | nuxie_graph::DependencyKind::TextVariationHelperText
-                        )
-                    {
-                        push_edge(edge_index);
-                    }
-                }
+            if let Some(helper) = objects.text_variation_helper_handle(component.local_id) {
+                let text = objects
+                    .component(handle)
+                    .and_then(|style| style.parent)
+                    .context("TextStyle helper requires its retained Text parent")?;
+                ordered_edges.push(DependencyBuildAction::RetainedEdge(root, helper));
+                ordered_edges.push(DependencyBuildAction::RetainedEdge(helper, text));
             }
 
             // LinearGradient::buildDependencies and Feather::buildDependencies
@@ -2069,7 +2085,9 @@ impl ArtboardInstance {
                         kind,
                         component.local_id,
                     ) {
-                        push_edge(edge_index);
+                        if scheduled_edges.insert(edge_index) {
+                            ordered_edges.push(DependencyBuildAction::GraphEdge(edge_index));
+                        }
                     }
                 }
             }
@@ -2264,7 +2282,9 @@ impl ArtboardInstance {
                     continue;
                 };
                 if *local_id == component.local_id {
-                    push_edge(edge_index);
+                    if scheduled_edges.insert(edge_index) {
+                        ordered_edges.push(DependencyBuildAction::GraphEdge(edge_index));
+                    }
                 }
             }
 
@@ -2285,10 +2305,19 @@ impl ArtboardInstance {
             }
         }
         for edge_index in 0..graph.dependency_node_edges_in_insertion_order.len() {
-            push_edge(edge_index);
+            if scheduled_edges.insert(edge_index) {
+                ordered_edges.push(DependencyBuildAction::GraphEdge(edge_index));
+            }
         }
 
-        for edge_index in ordered_edges {
+        for action in ordered_edges {
+            let edge_index = match action {
+                DependencyBuildAction::RetainedEdge(source, dependent) => {
+                    objects.add_dependent(source, dependent);
+                    continue;
+                }
+                DependencyBuildAction::GraphEdge(edge_index) => edge_index,
+            };
             let edge = &graph.dependency_node_edges_in_insertion_order[edge_index];
             if matches!(
                 edge.kind,
@@ -2305,6 +2334,8 @@ impl ArtboardInstance {
                     | nuxie_graph::DependencyKind::FollowPathConstraintTargetPathComposer
                     | nuxie_graph::DependencyKind::FollowPathConstraintTargetPath
                     | nuxie_graph::DependencyKind::TextFollowPathModifierText
+                    | nuxie_graph::DependencyKind::TextVariationHelperArtboard
+                    | nuxie_graph::DependencyKind::TextVariationHelperText
             ) {
                 continue;
             }
@@ -2327,11 +2358,6 @@ impl ArtboardInstance {
                     continue;
                 };
                 source = current_parent;
-            } else if edge.kind == nuxie_graph::DependencyKind::TextVariationHelperText {
-                let Some(current_text) = objects.text_variation_helper_text(source) else {
-                    continue;
-                };
-                dependent = current_text;
             }
             objects.add_dependent(source, dependent);
         }
@@ -5917,7 +5943,14 @@ impl ArtboardInstance {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed_unless_view_model_instance(local_id);
-        self.mark_text_changed_for_local(local_id);
+        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        let text_style_metric_callback = owner_callback_handled
+            && type_name.is_some_and(|type_name| {
+                definition_by_name(type_name).is_some_and(|definition| definition.is_a("TextStyle"))
+            });
+        if !text_style_metric_callback {
+            self.mark_text_changed_for_local(local_id);
+        }
         if !owner_callback_handled {
             self.mark_prepared_changed_for_property(local_id, property_key);
         }
@@ -5959,7 +5992,16 @@ impl ArtboardInstance {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed_unless_view_model_instance(local_id);
-        self.mark_text_changed_for_local(local_id);
+        let font_asset_id_has_empty_callback = self
+            .slot(local_id)
+            .and_then(|slot| slot.type_name)
+            .is_some_and(|type_name| {
+                definition_by_name(type_name).is_some_and(|definition| definition.is_a("TextStyle"))
+            })
+            && property_key_for_name("TextStyle", "fontAssetId") == Some(property_key);
+        if !font_asset_id_has_empty_callback {
+            self.mark_text_changed_for_local(local_id);
+        }
         if !owner_callback_handled {
             self.mark_prepared_changed_for_property(local_id, property_key);
         }
@@ -8135,13 +8177,20 @@ impl ArtboardInstance {
             }
         }
 
-        let text_variation_helper = accumulated
-            .contains(ComponentDirt::TEXT_SHAPE)
-            .then(|| self.objects.text_variation_helper_handle(local_id))
+        let is_text_style = self.objects.component(handle).is_some_and(|component| {
+            definition_by_name(component.type_name)
+                .is_some_and(|definition| definition.is_a("TextStyle"))
+        });
+        let text_style_parent = (is_text_style && accumulated.contains(ComponentDirt::TEXT_SHAPE))
+            .then(|| {
+                self.objects
+                    .component(handle)
+                    .and_then(|component| component.concrete.text_style.as_ref())
+                    .and_then(|style| style.text())
+            })
             .flatten();
-        let text_style_parent = text_variation_helper
-            .and_then(|_| self.objects.component(handle))
-            .and_then(|component| component.parent);
+        let text_variation_helper =
+            text_style_parent.and_then(|_| self.objects.text_variation_helper_handle(local_id));
 
         self.runtime_meshes
             .mark_component_dirt(local_id, accumulated);
@@ -8187,11 +8236,13 @@ impl ArtboardInstance {
         // must run in dependency order after Artboard and before Text
         // (`src/text/text_style.cpp:22-34`,
         // `src/text/text_variation_helper.cpp:7-17`).
-        if let Some(helper) = text_variation_helper {
-            if let Some(text) = text_style_parent {
-                self.add_component_dirt(text, ComponentDirt::TEXT_SHAPE, false);
+        if let Some(text) = text_style_parent {
+            if let Some(text_local) = self.objects.component_local_id(text) {
+                crate::text_owner::mark_shape_dirty(self, text_local);
             }
-            self.add_component_dirt(helper, ComponentDirt::TEXT_SHAPE, false);
+            if let Some(helper) = text_variation_helper {
+                self.add_component_dirt(helper, ComponentDirt::TEXT_SHAPE, false);
+            }
         }
     }
 
@@ -9379,8 +9430,13 @@ impl ArtboardInstance {
                             );
                         }
                     }
-                    ComponentAddress::TextVariationHelper { text, .. } => {
-                        crate::text::update_text_variation_helper(self, text, dirt);
+                    ComponentAddress::TextVariationHelper { style, text } => {
+                        crate::text::update_text_variation_helper(
+                            self,
+                            style.local_id(),
+                            text,
+                            dirt,
+                        );
                     }
                 }
 

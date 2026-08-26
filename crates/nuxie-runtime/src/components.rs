@@ -10,10 +10,10 @@ use nuxie_binary::RuntimeFile;
 use nuxie_graph::{ArtboardGraph, ComponentNode};
 use nuxie_render_api::RawPath;
 use nuxie_schema::definition_by_name;
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 mod bones {
     pub(crate) mod bone {
@@ -1015,13 +1015,23 @@ pub(crate) struct RuntimeTextModifierGroupState {
     follow_path_modifier_locals: RefCell<Vec<usize>>,
 }
 
-/// Occurrence-owned counterpart of pinned `TextStyle::m_variations`.
-/// `TextStyleAxis::onAddedDirty` appends here only after Component Super
-/// succeeds and its direct parent is a TextStyle. Clones reconstruct this
-/// authored-order list from their copied parent ids.
+/// Occurrence-owned counterpart of pinned `TextStyle::{m_variations,
+/// m_styleFeatures}`. Each child callback appends only after Component Super
+/// succeeds and its direct parent is a TextStyle. Clones reconstruct both
+/// authored-order lists from their copied parent ids.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RuntimeTextStyleState {
     variation_locals: RefCell<Vec<usize>>,
+    feature_locals: RefCell<Vec<usize>>,
+    text: Cell<Option<ComponentHandle>>,
+    variable_font: OnceCell<RuntimeTextStyleVariableFont>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeTextStyleVariableFont {
+    pub(crate) font_bytes: Arc<[u8]>,
+    pub(crate) coords: Vec<(u32, f32)>,
+    pub(crate) features: Vec<(u32, u32)>,
 }
 
 impl RuntimeTextStyleState {
@@ -1035,6 +1045,47 @@ impl RuntimeTextStyleState {
 
     pub(crate) fn variation_locals(&self) -> Vec<usize> {
         self.variation_locals.borrow().clone()
+    }
+
+    pub(crate) fn register_feature(&self, feature_local: usize) {
+        self.feature_locals.borrow_mut().push(feature_local);
+    }
+
+    pub(crate) fn feature_locals(&self) -> Vec<usize> {
+        self.feature_locals.borrow().clone()
+    }
+
+    pub(crate) fn has_font_options(&self) -> bool {
+        !self.variation_locals.borrow().is_empty() || !self.feature_locals.borrow().is_empty()
+    }
+
+    pub(crate) fn retain_text(&self, text: Option<ComponentHandle>) {
+        self.text.set(text);
+    }
+
+    pub(crate) fn text(&self) -> Option<ComponentHandle> {
+        self.text.get()
+    }
+
+    pub(crate) fn variable_font(&self) -> Option<&RuntimeTextStyleVariableFont> {
+        self.variable_font.get()
+    }
+
+    pub(crate) fn initialize_variable_font(
+        &self,
+        variable_font: RuntimeTextStyleVariableFont,
+    ) -> &RuntimeTextStyleVariableFont {
+        let _ = self.variable_font.set(variable_font);
+        self.variable_font
+            .get()
+            .expect("TextStyle variable-font cache was initialized")
+    }
+
+    pub(crate) fn update_variable_font(&mut self, variable_font: RuntimeTextStyleVariableFont) {
+        let _ = self.variable_font.take();
+        self.variable_font
+            .set(variable_font)
+            .expect("cleared TextStyle variable-font cache accepts replacement");
     }
 }
 

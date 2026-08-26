@@ -1413,6 +1413,24 @@ impl ArtboardInstance {
                 if !objects.link_parent(handle, parent) {
                     anyhow::bail!("Component parent link could not be retained");
                 }
+                // `TextStyleAxis::onAddedDirty` first runs Component Super,
+                // then requires a direct TextStyle parent and appends itself
+                // to that occurrence's authored-order variation list.
+                if component.type_name == "TextStyleAxis" {
+                    if !definition_by_name(parent_type)
+                        .is_some_and(|definition| definition.is_a("TextStyle"))
+                    {
+                        anyhow::bail!(
+                            "TextStyleAxis local {} requires a direct TextStyle parent",
+                            component.local_id
+                        );
+                    }
+                    objects
+                        .component_mut(parent)
+                        .and_then(|parent| parent.concrete.text_style.as_ref())
+                        .expect("TextStyle occurrence state")
+                        .register_variation(component.local_id);
+                }
                 // `TextModifier::onAddedDirty` runs after Component Super has
                 // linked the parent. A direct TextModifierGroup parent is the
                 // only successful registration path; authored iteration order
@@ -7773,13 +7791,14 @@ impl ArtboardInstance {
     fn mark_text_changed_for_local(&mut self, local_id: usize) {
         if matches!(
             self.slot(local_id).and_then(|slot| slot.type_name),
-            Some("TextFollowPathModifier" | "TextVariationModifier")
+            Some("TextFollowPathModifier" | "TextVariationModifier" | "TextStyleAxis")
         ) {
             // Each generated TextFollowPathModifier callback and
             // TextVariationModifier::axisValueChanged route directly through
             // their owning group to Text's shape-dirt owner. The variation
-            // axisTag callback is intentionally empty. Do not add the broader
-            // generic text-property invalidation afterward for either type.
+            // axisTag callback is intentionally empty. TextStyleAxis callbacks
+            // publish TextShape only on their direct TextStyle parent. Do not
+            // add the broader generic text-property invalidation afterward.
             return;
         }
         if !self

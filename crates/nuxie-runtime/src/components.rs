@@ -1015,6 +1015,29 @@ pub(crate) struct RuntimeTextModifierGroupState {
     follow_path_modifier_locals: RefCell<Vec<usize>>,
 }
 
+/// Occurrence-owned counterpart of pinned `TextStyle::m_variations`.
+/// `TextStyleAxis::onAddedDirty` appends here only after Component Super
+/// succeeds and its direct parent is a TextStyle. Clones reconstruct this
+/// authored-order list from their copied parent ids.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeTextStyleState {
+    variation_locals: RefCell<Vec<usize>>,
+}
+
+impl RuntimeTextStyleState {
+    fn clone_for_occurrence(&self) -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn register_variation(&self, axis_local: usize) {
+        self.variation_locals.borrow_mut().push(axis_local);
+    }
+
+    pub(crate) fn variation_locals(&self) -> Vec<usize> {
+        self.variation_locals.borrow().clone()
+    }
+}
+
 impl RuntimeTextModifierGroupState {
     fn clone_for_occurrence(&self) -> Self {
         Self::default()
@@ -1819,6 +1842,7 @@ pub(crate) struct RuntimeConcreteComponentState {
     pub(crate) vertex: Option<RuntimeVertexState>,
     pub(crate) scripted: Option<RuntimeScriptedComponentState>,
     pub(crate) text: Option<RuntimeTextState>,
+    pub(crate) text_style: Option<RuntimeTextStyleState>,
     pub(crate) text_modifier_group: Option<RuntimeTextModifierGroupState>,
     pub(crate) text_target: Option<RuntimeTextTargetState>,
     pub(crate) text_follow_path: Option<RuntimeTextFollowPathState>,
@@ -1869,6 +1893,7 @@ impl RuntimeConcreteComponentState {
             )
             .then(RuntimeScriptedComponentState::default),
             text: type_is_a(type_name, "Text").then(RuntimeTextState::new),
+            text_style: type_is_a(type_name, "TextStyle").then(RuntimeTextStyleState::default),
             text_modifier_group: type_is_a(type_name, "TextModifierGroup")
                 .then(RuntimeTextModifierGroupState::default),
             text_target: type_is_a(type_name, "TextTargetModifier")
@@ -1949,6 +1974,10 @@ impl RuntimeConcreteComponentState {
                 .text
                 .as_ref()
                 .map(RuntimeTextState::clone_for_occurrence),
+            text_style: self
+                .text_style
+                .as_ref()
+                .map(RuntimeTextStyleState::clone_for_occurrence),
             text_modifier_group: self
                 .text_modifier_group
                 .as_ref()

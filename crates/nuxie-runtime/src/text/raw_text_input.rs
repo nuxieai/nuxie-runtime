@@ -146,7 +146,8 @@ pub(crate) fn build_text_input_geometry(
     text_local: usize,
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Option<TextInputGeometry> {
-    let slice = StaticTextSlice::from_text_input_graph(runtime, graph, text_local).ok()?;
+    let slice =
+        StaticTextSlice::from_text_input_instance(runtime, graph, instance, text_local).ok()?;
     let local_bounds = match layout_constraint {
         Some(constraint) => slice
             .local_bounds_with_layout_constraint(runtime, instance, constraint)

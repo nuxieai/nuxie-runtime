@@ -583,11 +583,12 @@ pub(crate) fn text_input_layout_measure_bounds(
     {
         return Some(bounds);
     }
-    let bounds = StaticTextSlice::from_text_input_graph(runtime, graph, text_input_local)
-        .ok()?
-        .measure_bounds_with_layout_constraint(runtime, instance, layout_constraint)
-        .ok()
-        .flatten()?;
+    let bounds =
+        StaticTextSlice::from_text_input_instance(runtime, graph, instance, text_input_local)
+            .ok()?
+            .measure_bounds_with_layout_constraint(runtime, instance, layout_constraint)
+            .ok()
+            .flatten()?;
     state.raw.borrow_mut().retain_measure(
         layout_constraint.width,
         layout_constraint.height,
@@ -866,7 +867,8 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
             format!("TextInputDrawable local {drawable_local} missing shape paint container")
         })?;
     let container = &graph.shape_paint_containers[container_index];
-    let slice = StaticTextSlice::from_text_input_graph(runtime, graph, text_input_local)?;
+    let slice =
+        StaticTextSlice::from_text_input_instance(runtime, graph, instance, text_input_local)?;
     let layout_constraint =
         instance.runtime_text_input_layout_constraint(text_input_local, graph, layout_bounds);
     let text_input_world = instance.runtime_component_world_transform_with_bounds(
@@ -2110,7 +2112,12 @@ impl StaticTextSlice {
         }
         let mut styles = Vec::new();
         for style_local in style_locals {
-            styles.push(StaticTextStyle::from_graph(runtime, graph, style_local)?);
+            styles.push(StaticTextStyle::from_graph_with_occurrence(
+                runtime,
+                graph,
+                instance,
+                style_local,
+            )?);
         }
         let modifier_group_locals = match instance {
             Some(instance) => instance
@@ -2145,9 +2152,10 @@ impl StaticTextSlice {
         })
     }
 
-    fn from_text_input_graph(
+    fn from_text_input_instance(
         runtime: &RuntimeFile,
         graph: &ArtboardGraph,
+        instance: &ArtboardInstance,
         text_input_local: usize,
     ) -> Result<Self> {
         let text_input_object = graph
@@ -2179,7 +2187,12 @@ impl StaticTextSlice {
             bail!("TextInput subset currently supports exactly one TextStyle child");
         }
         let text_input_global = global_for_local(graph, text_input_local)?;
-        let style = StaticTextStyle::from_graph(runtime, graph, style_local)?;
+        let style = StaticTextStyle::from_graph_with_occurrence(
+            runtime,
+            graph,
+            Some(instance),
+            style_local,
+        )?;
         Ok(Self {
             kind: StaticTextKind::TextInput,
             text_local: text_input_local,
@@ -5116,6 +5129,15 @@ impl StaticTextStyle {
         graph: &ArtboardGraph,
         style_local: usize,
     ) -> Result<Self> {
+        Self::from_graph_with_occurrence(runtime, graph, None, style_local)
+    }
+
+    fn from_graph_with_occurrence(
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        instance: Option<&ArtboardInstance>,
+        style_local: usize,
+    ) -> Result<Self> {
         let style_global = global_for_local(graph, style_local)?;
         let container_index = graph
             .shape_paint_containers
@@ -5184,15 +5206,21 @@ impl StaticTextStyle {
             .iter()
             .find(|component| component.local_id == style_local)
             .context("TextStylePaint component is missing")?;
-        let mut variations = Vec::new();
-        for axis_local in style_component.children.iter().copied().filter(|local| {
-            graph
-                .local_objects
+        let variation_locals = match instance {
+            Some(instance) => instance
+                .component(style_local)
+                .and_then(|component| component.concrete.text_style.as_ref())
+                .context("TextStyle occurrence state is missing")?
+                .variation_locals(),
+            None => style_component
+                .children
                 .iter()
-                .find(|object| object.local_id == *local)
-                .and_then(|object| object.type_name)
-                == Some("TextStyleAxis")
-        }) {
+                .copied()
+                .filter(|local| type_for_local(graph, *local) == Some("TextStyleAxis"))
+                .collect(),
+        };
+        let mut variations = Vec::new();
+        for axis_local in variation_locals {
             let axis_global = global_for_local(graph, axis_local)?;
             let axis = runtime
                 .object(axis_global as usize)
@@ -5712,6 +5740,10 @@ mod tests {
                     ),
                     property("TextValueRun", "styleId", FixtureValue::Uint(2)),
                 ],
+            ),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(1))],
             ),
         ];
         let runtime = RuntimeFile::from_fixture_records(records)
@@ -8049,6 +8081,253 @@ mod tests {
     }
 
     #[test]
+    fn cxx_text_style_axis_registers_per_occurrence_and_clone_parent() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
+                "TextStyleAxis",
+                vec![
+                    property("TextStyleAxis", "parentId", FixtureValue::Uint(2)),
+                    property(
+                        "TextStyleAxis",
+                        "tag",
+                        FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
+                    ),
+                    property("TextStyleAxis", "axisValue", FixtureValue::Double(400.0)),
+                ],
+            ),
+            fixture_record(
+                "TextStyleAxis",
+                vec![
+                    property("TextStyleAxis", "parentId", FixtureValue::Uint(2)),
+                    property(
+                        "TextStyleAxis",
+                        "tag",
+                        FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"wdth"))),
+                    ),
+                    property("TextStyleAxis", "axisValue", FixtureValue::Double(100.0)),
+                ],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                    property("TextValueRun", "text", FixtureValue::String("A".into())),
+                ],
+            ),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(6),
+                )],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(6)),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(7)),
+                    property("TextValueRun", "text", FixtureValue::String("B".into())),
+                ],
+            ),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(1))],
+            ),
+        ])
+        .expect("TextStyleAxis lifecycle fixture imports");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("TextStyleAxis lifecycle graph builds");
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let mut source = ArtboardInstance::from_graph(&runtime, graph)
+            .expect("valid TextStyleAxis parents construct");
+
+        let source_a = source
+            .retained_static_text_topology(&runtime, graph, 1)
+            .expect("source A retained Text topology");
+        let source_b = source
+            .retained_static_text_topology(&runtime, graph, 6)
+            .expect("source B retained Text topology");
+        assert_eq!(
+            source_a.styles[0]
+                .variations
+                .iter()
+                .map(|axis| axis.axis_local)
+                .collect::<Vec<_>>(),
+            [3, 4]
+        );
+        assert!(source_b.styles[0].variations.is_empty());
+
+        let parent_id = property_key_for_name("Component", "parentId").unwrap();
+        let tag = property_key_for_name("TextStyleAxis", "tag").unwrap();
+        let axis_value = property_key_for_name("TextStyleAxis", "axisValue").unwrap();
+        source.clear_component_dirt(2);
+        assert!(!source.set_uint_property(3, tag, u64::from(u32::from_be_bytes(*b"wght")),));
+        assert!(!source.set_double_property(3, axis_value, 400.0));
+        assert_eq!(source.debug_component_dirt(2), Some(ComponentDirt::NONE));
+        let retained_dirty_before = source.runtime_drawables.dirty_text_locals();
+        assert!(source.set_uint_property(3, parent_id, 7));
+        for local in [2, 7] {
+            source.clear_component_dirt(local);
+        }
+        assert!(source.set_uint_property(3, tag, u64::from(u32::from_be_bytes(*b"opsz")),));
+        assert!(
+            source
+                .debug_component_dirt(2)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::TEXT_SHAPE))
+        );
+        assert_eq!(source.debug_component_dirt(7), Some(ComponentDirt::NONE));
+        assert_eq!(
+            source.runtime_drawables.dirty_text_locals(),
+            retained_dirty_before
+        );
+        source.clear_component_dirt(2);
+        assert!(source.set_double_property(3, axis_value, 12.0));
+        assert!(
+            source
+                .debug_component_dirt(2)
+                .is_some_and(|dirt| dirt.contains(ComponentDirt::TEXT_SHAPE))
+        );
+        assert_eq!(source.debug_component_dirt(7), Some(ComponentDirt::NONE));
+        assert_eq!(
+            source_a.styles[0].variation_values(&source),
+            [
+                (u32::from_be_bytes(*b"opsz"), 12.0),
+                (u32::from_be_bytes(*b"wdth"), 100.0),
+            ]
+        );
+        assert!(source_b.styles[0].variation_values(&source).is_empty());
+
+        let clone = source.clone();
+        assert_eq!(clone.uint_property(3, parent_id), Some(7));
+        assert_eq!(clone.uint_property(3, tag), source.uint_property(3, tag));
+        assert_eq!(
+            clone.double_property(3, axis_value),
+            source.double_property(3, axis_value)
+        );
+        let clone_a = clone
+            .retained_static_text_topology(&runtime, graph, 1)
+            .expect("clone A retained Text topology");
+        let clone_b = clone
+            .retained_static_text_topology(&runtime, graph, 6)
+            .expect("clone B retained Text topology");
+        assert_eq!(
+            clone_a.styles[0]
+                .variations
+                .iter()
+                .map(|axis| axis.axis_local)
+                .collect::<Vec<_>>(),
+            [4]
+        );
+        assert_eq!(
+            clone_b.styles[0]
+                .variations
+                .iter()
+                .map(|axis| axis.axis_local)
+                .collect::<Vec<_>>(),
+            [3]
+        );
+        assert_eq!(
+            clone_a.styles[0].variation_values(&clone),
+            [(u32::from_be_bytes(*b"wdth"), 100.0)]
+        );
+        assert_eq!(
+            clone_b.styles[0].variation_values(&clone),
+            [(u32::from_be_bytes(*b"opsz"), 12.0)]
+        );
+
+        // The immutable graph still names A. Production topology must instead
+        // consume each occurrence's registered variation list.
+        let graph_slice =
+            StaticTextSlice::from_graph(&runtime, graph, 1).expect("graph bootstrap topology");
+        assert_eq!(
+            graph_slice.styles[0]
+                .variations
+                .iter()
+                .map(|axis| axis.axis_local)
+                .collect::<Vec<_>>(),
+            [3, 4]
+        );
+
+        // A live generated parent write does not rerun onAddedDirty. Clone
+        // construction does, and must stop when the copied parent is invalid.
+        assert!(source.set_uint_property(4, parent_id, 9));
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| source.clone())).is_err());
+
+        let text_input_runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("TextInput", Vec::new()),
+            fixture_record(
+                "TextStyle",
+                vec![property("TextStyle", "parentId", FixtureValue::Uint(1))],
+            ),
+            fixture_record(
+                "TextStyleAxis",
+                vec![
+                    property("TextStyleAxis", "parentId", FixtureValue::Uint(2)),
+                    property(
+                        "TextStyleAxis",
+                        "tag",
+                        FixtureValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
+                    ),
+                    property("TextStyleAxis", "axisValue", FixtureValue::Double(650.0)),
+                ],
+            ),
+        ])
+        .expect("TextInput TextStyleAxis fixture imports");
+        let text_input_graphs = GraphFile::from_runtime_file(&text_input_runtime)
+            .expect("TextInput TextStyleAxis graph builds");
+        let text_input_graph = text_input_graphs.artboards.first().unwrap();
+        let text_input_instance =
+            ArtboardInstance::from_graph(&text_input_runtime, text_input_graph)
+                .expect("TextInput TextStyleAxis occurrence constructs");
+        let input_slice = StaticTextSlice::from_text_input_instance(
+            &text_input_runtime,
+            text_input_graph,
+            &text_input_instance,
+            1,
+        )
+        .expect("TextInput production topology");
+        assert_eq!(
+            input_slice.styles[0].variation_values(&text_input_instance),
+            [(u32::from_be_bytes(*b"wght"), 650.0)]
+        );
+    }
+
+    #[test]
+    fn cxx_text_style_axis_invalid_direct_parent_stops_import() {
+        let error = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "Shape",
+                vec![property("Shape", "parentId", FixtureValue::Uint(1))],
+            ),
+            fixture_record(
+                "TextStyleAxis",
+                vec![property("TextStyleAxis", "parentId", FixtureValue::Uint(2))],
+            ),
+        ])
+        .expect_err("TextStyleAxis InvalidObject must stop the Artboard import lifecycle");
+        assert!(error.to_string().contains("parent that is not TextStyle"));
+    }
+
+    #[test]
     fn d_st_variation_splits_coverage_and_applies_duplicate_unclamped_interpolation() {
         let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
             "../../../fixtures/fl-e8/text_variation_modifier.riv"
@@ -9093,7 +9372,10 @@ mod tests {
         let source_retained_topology = instance
             .retained_static_text_topology(&runtime, graph, 1)
             .expect("source retained render topology materializes");
-        assert_eq!(modifier_topology(&source_retained_topology), source_topology);
+        assert_eq!(
+            modifier_topology(&source_retained_topology),
+            source_topology
+        );
 
         let mut materialized_clone = instance.clone();
         assert_eq!(registered_modifiers(&materialized_clone, 4), empty);

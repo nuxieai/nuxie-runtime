@@ -1320,9 +1320,11 @@ dependencies = [
  "luaur-rt",
  "luaur-vm",
  "nuxie-binary",
+ "nuxie-graph",
  "nuxie-image-codec",
  "nuxie-render-api",
  "nuxie-runtime",
+ "nuxie-schema",
  "sha2",
 ]
 

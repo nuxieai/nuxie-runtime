@@ -644,6 +644,24 @@ pub struct ScriptProgram {
     generator: Function,
 }
 
+#[cfg(any(test, feature = "upstream-test-seams"))]
+impl ScriptProgram {
+    /// Read a numeric getter from the script chunk's own private environment.
+    ///
+    /// This exists only for literal upstream ports whose assertions use Lua's
+    /// module globals. It observes the script-owned value without mirroring it
+    /// in the Rust host or exposing the environment to runtime consumers.
+    #[doc(hidden)]
+    pub fn upstream_test_module_i32_getter(&self, getter: &str) -> Result<i32> {
+        let environment = self
+            .generator
+            .environment()
+            .ok_or_else(|| Error::runtime("script generator has no Lua environment"))?;
+        let getter: Function = environment.get(getter)?;
+        getter.call(())
+    }
+}
+
 impl std::fmt::Debug for ScriptProgram {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter

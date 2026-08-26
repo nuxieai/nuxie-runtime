@@ -1,12 +1,17 @@
 //! One-for-one ports of
 //! `tests/unit_tests/runtime/scripting/scripting_wake_advance_test.cpp`.
-#![cfg(all(feature = "luau", feature = "compiler"))]
+#![cfg(all(
+    feature = "luau",
+    feature = "compiler",
+    feature = "upstream-test-seams"
+))]
 
+use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
+use nuxie_graph::GraphFile;
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
-use nuxie_runtime::{
-    NoopScriptHost, ScriptInstance, ScriptListenerInvocation, ScriptMethod, ScriptValue,
-};
-use nuxie_scripting::vm::ScriptVm;
+use nuxie_runtime::{ArtboardInstance, NoopScriptHost, StateMachineInstance};
+use nuxie_schema::definition_by_name;
+use nuxie_scripting::vm::{ScriptProgram, ScriptVm};
 
 mod support;
 use support::compile_source;
@@ -56,19 +61,19 @@ return function(): Node<MyDrawing>
 end
 "#;
 
-const ADVANCE_FLAGS: u32 = (1 << 0) | (1 << 1) | (1 << 3);
+const ADVANCES: u32 = 1 << 0;
+const WANTS_POINTER_DOWN: u32 = 1 << 3;
+const WANTS_KEYBOARD_INPUT: u32 = 1 << 16;
 
-struct WakeHarness {
+struct WakeFixture {
     _vm: ScriptVm,
-    instance: Box<dyn ScriptInstance>,
-    advance_active: bool,
-    advance_count: i32,
-    pointer_down_count: i32,
-    key_count: i32,
+    program: ScriptProgram,
+    artboard: ArtboardInstance,
+    machine: StateMachineInstance,
 }
 
-impl WakeHarness {
-    fn new() -> Self {
+impl WakeFixture {
+    fn new(implemented_methods: u32) -> Self {
         let bytecode = compile_source(WAKE_SCRIPT).expect("wake script compiles");
         let mut payload = Vec::with_capacity(bytecode.len() + 1);
         payload.push(0);
@@ -83,110 +88,146 @@ impl WakeHarness {
             .instantiate_registered_script_with_context(&program, None, Vec::new())
             .expect("wake script instantiates");
         assert!(instance.call_init(&mut NoopScriptHost).unwrap());
+
+        let file = scripted_drawable_file();
+        let graph = GraphFile::from_runtime_file(&file).expect("scripted-input graph builds");
+        let mut artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            graph.artboards.first().expect("scripted-input artboard"),
+            &graph.artboards,
+        )
+        .expect("scripted-input artboard instantiates");
+        let global_id = artboard
+            .component(1)
+            .expect("scripted drawable occurrence")
+            .global_id;
+        artboard.set_script_instance_for_global_with_implemented_methods(
+            global_id,
+            instance,
+            implemented_methods,
+        );
+        artboard.update_components();
+
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("scripted-input state machine");
+        assert!(machine.set_focus(Some(1)));
+        machine.mark_scripted_object_initialization_complete(None);
+
         Self {
             _vm: vm,
-            instance,
-            advance_active: true,
-            advance_count: 0,
-            pointer_down_count: 0,
-            key_count: 0,
+            program,
+            artboard,
+            machine,
         }
     }
 
-    fn read_counter(&self, getter: &str) -> i32 {
-        match getter {
-            "getAdvanceCount" => self.advance_count,
-            "getPointerDownCount" => self.pointer_down_count,
-            "getKeyCount" => self.key_count,
-            _ => panic!("unknown upstream counter getter {getter}"),
-        }
-    }
-
-    fn advance_component(&mut self, seconds: f32, flags: u32) {
-        assert_eq!(flags, ADVANCE_FLAGS);
-        if seconds == 0.0 || !self.advance_active {
-            return;
-        }
-        self.advance_active = false;
-        let result = self
-            .instance
-            .call_method(
-                ScriptMethod::Advance,
-                &[ScriptValue::Number(f64::from(seconds))],
-                &mut NoopScriptHost,
-            )
-            .expect("advance callback");
-        self.advance_count += 1;
-        if result == ScriptValue::Bool(true) {
-            self.advance_active = true;
-        }
-    }
-
-    fn pointer_down(&mut self, x: f32, y: f32, pointer_id: i32) {
-        let outcome = self
-            .instance
-            .call_scripted_drawable_pointer(
-                ScriptMethod::PointerDown,
-                pointer_id,
-                x,
-                y,
-                &mut NoopScriptHost,
-            )
-            .expect("pointer callback");
-        if outcome.invoked {
-            self.pointer_down_count += 1;
-            self.advance_active = true;
-        }
-    }
-
-    fn key_a_down(&mut self) {
-        let outcome = self
-            .instance
-            .call_scripted_drawable_input(
-                &ScriptListenerInvocation::Keyboard {
-                    key: 65,
-                    modifiers: 0,
-                    is_pressed: true,
-                    is_repeat: false,
-                },
-                &mut NoopScriptHost,
-            )
-            .expect("keyboard callback");
-        if outcome.invoked {
-            self.key_count += 1;
-            self.advance_active = true;
-        }
+    fn counter(&self, getter: &str) -> i32 {
+        self.program
+            .upstream_test_module_i32_getter(getter)
+            .unwrap_or_else(|error| panic!("read {getter}: {error}"))
     }
 }
 
-fn park_advance_loop(harness: &mut WakeHarness) {
-    let before = harness.read_counter("getAdvanceCount");
-    harness.advance_component(0.016, ADVANCE_FLAGS);
-    assert_eq!(harness.read_counter("getAdvanceCount"), before + 1);
-    harness.advance_component(0.016, ADVANCE_FLAGS);
-    assert_eq!(harness.read_counter("getAdvanceCount"), before + 1);
+fn fixture_property(type_name: &str, property_name: &str, value: FixtureValue) -> FixtureProperty {
+    let definition = definition_by_name(type_name).expect("fixture type exists");
+    let property = std::iter::once(definition.name)
+        .chain(definition.ancestors.iter().copied())
+        .filter_map(definition_by_name)
+        .flat_map(|owner| owner.properties)
+        .find(|property| property.name == property_name)
+        .unwrap_or_else(|| panic!("missing {type_name}.{property_name}"));
+    FixtureProperty {
+        key: property.key.int,
+        value,
+    }
+}
+
+fn fixture_record(type_name: &str, properties: Vec<FixtureProperty>) -> FixtureRecord {
+    FixtureRecord {
+        type_key: definition_by_name(type_name)
+            .expect("fixture type exists")
+            .type_key
+            .int,
+        properties,
+    }
+}
+
+fn scripted_drawable_file() -> RuntimeFile {
+    RuntimeFile::from_fixture_records(vec![
+        fixture_record("Backboard", Vec::new()),
+        fixture_record("Artboard", Vec::new()),
+        fixture_record(
+            "ScriptedDrawable",
+            vec![
+                fixture_property("ScriptedDrawable", "parentId", FixtureValue::Uint(0)),
+                fixture_property("ScriptedDrawable", "opacity", FixtureValue::Double(1.0)),
+            ],
+        ),
+        fixture_record(
+            "FocusData",
+            vec![
+                fixture_property("FocusData", "parentId", FixtureValue::Uint(1)),
+                fixture_property("FocusData", "focusFlags", FixtureValue::Uint(7)),
+            ],
+        ),
+        fixture_record(
+            "SemanticData",
+            vec![fixture_property(
+                "SemanticData",
+                "parentId",
+                FixtureValue::Uint(1),
+            )],
+        ),
+        fixture_record("StateMachine", Vec::new()),
+    ])
+    .expect("scripted-input records import")
+}
+
+fn park_advance_loop(fixture: &mut WakeFixture) {
+    let before = fixture.counter("getAdvanceCount");
+    fixture
+        .artboard
+        .advance_script_instances(0.016)
+        .expect("first production advance");
+    assert_eq!(fixture.counter("getAdvanceCount"), before + 1);
+    fixture
+        .artboard
+        .advance_script_instances(0.016)
+        .expect("parked production advance");
+    assert_eq!(fixture.counter("getAdvanceCount"), before + 1);
 }
 
 #[test]
 fn pointer_event_rearms_an_idle_scripted_drawables_advance_loop() {
-    let mut drawable = WakeHarness::new();
+    let mut drawable = WakeFixture::new(ADVANCES | WANTS_POINTER_DOWN);
     park_advance_loop(&mut drawable);
 
-    drawable.pointer_down(1.0, 1.0, 0);
-    assert_eq!(drawable.read_counter("getPointerDownCount"), 1);
+    drawable
+        .machine
+        .pointer_down(&mut drawable.artboard, 1.0, 1.0, 0);
+    assert_eq!(drawable.counter("getPointerDownCount"), 1);
 
-    drawable.advance_component(0.016, ADVANCE_FLAGS);
-    assert_eq!(drawable.read_counter("getAdvanceCount"), 2);
+    drawable
+        .artboard
+        .advance_script_instances(0.016)
+        .expect("re-armed production advance");
+    assert_eq!(drawable.counter("getAdvanceCount"), 2);
 }
 
 #[test]
 fn keyboard_event_rearms_an_idle_scripted_drawables_advance_loop() {
-    let mut drawable = WakeHarness::new();
+    let mut drawable = WakeFixture::new(ADVANCES | WANTS_KEYBOARD_INPUT);
     park_advance_loop(&mut drawable);
 
-    drawable.key_a_down();
-    assert_eq!(drawable.read_counter("getKeyCount"), 1);
+    drawable
+        .machine
+        .key_input(&mut drawable.artboard, 65, 0, true, false);
+    assert_eq!(drawable.counter("getKeyCount"), 1);
 
-    drawable.advance_component(0.016, ADVANCE_FLAGS);
-    assert_eq!(drawable.read_counter("getAdvanceCount"), 2);
+    drawable
+        .artboard
+        .advance_script_instances(0.016)
+        .expect("re-armed production advance");
+    assert_eq!(drawable.counter("getAdvanceCount"), 2);
 }

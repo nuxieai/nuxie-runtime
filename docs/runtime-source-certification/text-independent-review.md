@@ -619,3 +619,61 @@ test and the Text source receipt; no production behavior or topology moved.
 The pre-existing `draw.rs` formatting hunk and all other user dirt remain
 unstaged. Consumer topology remains **4 pass, 3 executable expected-red, 11
 pending**. This review changed documentation only.
+
+## Independent StyledText production-correction review of `721a38cc3`
+
+Verdict: **REJECTED — the retained projection still changes defined append,
+style-ID, and first-run shaping behavior**
+
+The new inclusion bit correctly preserves the important leading-NUL case when
+the whole source is valid UTF-8: a nonempty source with a live font retains a
+StyledText run even when its decoded prefix and `unicharCount` are both empty.
+The ordinary embedded-NUL, skipped null-style/font-null/empty-run offset, and
+fresh immutable rebuild witnesses pass. The separately owned modifier-group
+discrepancy is also stated honestly: Rust still layers successive group
+variations, while pinned `applyShapeModifiers` restarts each replacement from
+the original style and swaps the run vector.
+
+Four narrow blockers remain:
+
+1. `resolved_runs` and `resolved_dynamic_runs` validate the complete byte
+   vector as UTF-8 before applying the C-string prefix. For source bytes
+   `[0x00, 0xff]`, pinned `text.empty()` is false, `append` stops before the
+   invalid suffix, appends a zero-count run, and therefore leaves
+   `StyledText::empty()` false. Rust rejects the full value before constructing
+   that run. Truncate at the first NUL in byte space before validating the
+   StyledText prefix; retain inclusion from the original source's nonempty
+   state. Invalid bytes before the first NUL may remain an explicitly approved
+   Rust-safety adaptation, but an unread suffix is not unchecked upstream
+   decoding.
+2. `StaticResolvedRun` does not retain pinned `uint16_t styleId` at all.
+   Direct `style_local` happens to recover ordinary skipped-run gaps, but it
+   bypasses the all-runs index owner and the defined unsigned wrap after
+   65,535. Retain the pre-increment all-runs index (including every skipped
+   entry) as a wrapping `u16`, and make the corresponding paint/style lookup
+   consume that ID. Add focused skipped-prefix and wrap-boundary evidence; do
+   not use the modifier correction to hide the already acknowledged
+   `text_modifier_group.cpp` red.
+3. The real topology, bounds, measure, clip, and fit paths still seed their
+   common shaper from `self.base_style()`, the first TextStylePaint, rather
+   than `styledText.runs()[0].font`, the first run actually appended by
+   `makeStyled`. An unrelated or font-null first paint followed by a valid run
+   therefore returns no topology or uses the wrong shaper/metrics in Rust,
+   while pinned code skips the invalid run and shapes with the later included
+   run. Resolve the common shaping owner from the first participating retained
+   run and cover a font-null/unrelated first-paint plus valid later-run case
+   through the real render/measure consumers.
+4. The clear/rebuild witness calls `StaticTextSlice::render_topology` directly.
+   It proves a fresh local value but not that the retained
+   `RuntimeTextDrawOwner::shaped_topology_or_build` invalidates the old
+   publication before rebuilding. Exercise the occurrence owner through a
+   real text write/update and observe that the prior Unicode/run topology is
+   absent, including the leading-NUL zero-run state.
+
+The three focused candidate tests pass individually (one passed each, zero
+failed or ignored), and the candidate delta passes `git diff --check`.
+Candidate scope is only `text.rs` and the Text source receipt. The pre-existing
+`draw.rs` formatting hunk and all other user dirt remain unstaged; the global
+working-tree check still reports the user's existing trailing whitespace in
+`tools/webgpu-renderer-replay/build.sh`. Consumer topology remains **4 pass, 3
+executable expected-red, 11 pending**. This review changed documentation only.

@@ -346,3 +346,31 @@ Narrow correction request:
 Checks: the candidate's focused owner test passes (one passed, zero failed,
 zero ignored), the delta passes `git diff --check`, and the complete consumer
 section is unchanged at 4/3/11. This review changed documentation only.
+
+## Narrow Text rows 24/25 residual rereview of `9e8b9c0e9`
+
+Verdict: **ACCEPTED**
+
+`ArtboardInstance::apply_bool_property_changed` now routes only
+`TextModifierRange.clamp` to
+`text_modifier_group_bool_property_changed`, which invokes the same real
+`range_changed` owner as the pinned `clampChanged` callback. A group with a
+shape modifier publishes Text Path but not Paint; a paint-only group publishes
+Text Paint but not Path; both publish their own TextCoverage after the Text
+dirt and preserve every retained range map.
+
+The focused owner evidence now builds two authored groups and four ranges.
+Test-only trace hooks surround the existing production traversal and record
+each real range clear and group-publication boundary; they do not compute or
+substitute the traversal. The observed stream is both ranges of the first
+group, that group's publication, both ranges of the second group, then that
+group's publication. The same test separately exercises both clamp routes and
+verifies retained map count remains four.
+
+The focused test passes (one passed, zero failed, zero ignored), the candidate
+delta passes `git diff --check`, and its scope is limited to the bool callback,
+test-only observation state, expanded owner evidence, and the source receipt.
+Row 25 now says **exact enabled-path candidate; disabled path missing**, keeping
+the pinned disabled body red. The complete consumer section is unchanged at
+**4 pass, 3 executable expected-red, 11 pending**. This rereview changed
+documentation only; pre-existing user dirt remains unstaged.

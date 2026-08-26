@@ -1137,6 +1137,11 @@ impl RuntimeTextState {
     pub(crate) fn modifier_range_map_count(&self) -> usize {
         self.modifier_range_maps.borrow().len()
     }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub(crate) fn modifier_range_map(&self, range_local: usize) -> Option<Vec<(usize, usize)>> {
+        self.modifier_range_maps.borrow().get(&range_local).cloned()
+    }
 }
 
 impl Default for RuntimeTextInputState {

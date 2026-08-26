@@ -4742,6 +4742,20 @@ impl ArtboardInstance {
 
     #[cfg(feature = "tools")]
     #[doc(hidden)]
+    pub fn debug_text_modifier_range_map(
+        &self,
+        text_local: usize,
+        range_local: usize,
+    ) -> Option<Vec<(usize, usize)>> {
+        self.component(text_local)?
+            .concrete
+            .text
+            .as_ref()?
+            .modifier_range_map(range_local)
+    }
+
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
     pub fn debug_static_text_target_report(
         &self,
         text_local: usize,

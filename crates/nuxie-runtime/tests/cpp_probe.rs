@@ -93876,6 +93876,72 @@ fn upstream_range_mapper_words_body_is_ported() {
 }
 
 #[test]
+fn upstream_character_range_mapper_consumes_live_ligature_spans() {
+    let (runtime, graphs, index, mut artboard) =
+        upstream_layout_fixture("modifier_to_run.riv", None);
+    let graph = &graphs.artboards[index];
+    let text = upstream_text_local(graph, Some("Characters"));
+    let group = graph
+        .components
+        .iter()
+        .find(|component| {
+            component.parent_local == Some(text) && component.type_name == "TextModifierGroup"
+        })
+        .expect("Characters TextModifierGroup")
+        .local_id;
+    let range = graph
+        .components
+        .iter()
+        .find(|component| {
+            component.parent_local == Some(group) && component.type_name == "TextModifierRange"
+        })
+        .expect("Characters TextModifierRange")
+        .local_id;
+    let runs = graph
+        .components
+        .iter()
+        .filter(|component| {
+            component.parent_local == Some(text) && component.type_name == "TextValueRun"
+        })
+        .map(|component| component.local_id)
+        .collect::<Vec<_>>();
+    let selected_run = usize::try_from(
+        artboard
+            .debug_uint_property(range, property_key_for_name("TextModifierRange", "runId"))
+            .expect("range runId"),
+    )
+    .expect("range runId fits local id");
+    let text_key = property_key_for_name("TextValueRun", "text");
+    for run in runs {
+        let value = if run == selected_run {
+            b"a -> b".to_vec()
+        } else {
+            Vec::new()
+        };
+        artboard.set_string_property(run, text_key, value);
+    }
+    artboard.set_uint_property(
+        range,
+        property_key_for_name("TextModifierRange", "unitsValue"),
+        0,
+    );
+    artboard.update_pass();
+
+    let report = artboard
+        .debug_text_layout_report(&runtime, graph, text)
+        .expect("live Text layout report");
+    for (index, expected) in [(0, 1), (1, 1), (2, 2), (4, 1), (5, 1)] {
+        assert_eq!(report.glyph_lookup_counts[index], expected);
+    }
+    assert_eq!(
+        artboard
+            .debug_text_modifier_range_map(text, range)
+            .expect("live Text retains its character range map"),
+        [(0, 1), (1, 1), (2, 2), (4, 1), (5, 1)]
+    );
+}
+
+#[test]
 fn upstream_modifier_to_run_body_is_ported() {
     let (runtime, graph, index, mut artboard) =
         upstream_layout_fixture("modifier_to_run.riv", None);

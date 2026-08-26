@@ -8124,16 +8124,6 @@ mod tests {
         assert_eq!(range_map.unit_to_character_range(1.5), 5.5);
         assert_eq!(range_map.unit_to_character_range(4.0), 18.0);
         assert_eq!(range_map.unit_to_character_range(5.0), 18.0);
-
-        let ligature_units =
-            StaticTextModifierRange::character_range_units("fica", 0, 4, &[3, 0, 0, 1], false);
-        assert_eq!(
-            ligature_units
-                .iter()
-                .map(|unit| (unit.start, unit.len))
-                .collect::<Vec<_>>(),
-            [(0, 3), (3, 1)]
-        );
     }
 
     #[test]

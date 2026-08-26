@@ -32,7 +32,7 @@
   "wave": "c7",
   "case_count": 58,
   "ratchet": {
-    "max_pending": 46
+    "max_pending": 45
   },
   "cases": [
     {
@@ -646,9 +646,17 @@
       "ordinal": 9,
       "line": 327,
       "name": "range mapper maps words",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": []
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-runtime/tests/cpp_probe.rs",
+          "line": 93871,
+          "symbol": "upstream_range_mapper_words_body_is_ported"
+        }
+      ],
+      "note": "The distinct executable translation preserves the pinned literal text and sole unit-count assertion while calling the real StaticRangeMap::from_words owner through a read-only production seam."
     },
     {
       "id": "tests/unit_tests/runtime/text_test.cpp#10",

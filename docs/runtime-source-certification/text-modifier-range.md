@@ -85,8 +85,14 @@ a test-local shaping algorithm.
 Focused evidence:
 
 - `text.rs::cxx_range_mapper_maps_words_and_converts_fractional_units` covers
-  the complete upstream case 9 assertion, sentinel/fractional conversion, and
-  a synthetic real-owner ligature span;
+  the RangeMap sentinel and fractional conversion;
+- `cpp_probe.rs::upstream_range_mapper_words_body_is_ported` is the distinct
+  executable translation of upstream `text_test.cpp` case 9 and is bound to
+  that exact Wave C7 row;
+- `cpp_probe.rs::upstream_character_range_mapper_consumes_live_ligature_spans`
+  shapes a real RuntimeFile/Graph/Artboard Text occurrence, observes its
+  ligature span, and then reads the occurrence-owned retained range map to
+  prove that the unmodified glyph lookup feeds character-unit construction;
 - `text.rs::cxx_text_modifier_range_constructs_with_frozen_run_and_last_cubic_child`
   covers valid construction, frozen run identity, last-cubic wins, and real
   construction rejection for wrong parent/run targets;
@@ -110,6 +116,13 @@ The material pinned consumers in `text_test.cpp` are cases 9-11:
 Accordingly this pair's consumer topology is **1 pass / 0 executable red / 2
 pending**. The broader 18-case Text topology becomes **5 pass / 3 executable
 expected-red / 10 pending**. No projection was promoted.
+
+Correction after independent rejection `6be29dc90`: the authoritative Wave C7
+row for case 9 is now `direct` / `pass` with its exact executable locator, and
+the prior synthetic glyph-count proof is replaced by the live retained-owner
+evidence named above. The pair and broader Text topology are unchanged from
+the candidate claim; the authoritative Wave C7 totals move to 12 pass, 1
+expected-red, and 45 pending (10 direct, 3 adapted, 45 pending).
 
 Two dependent source reds remain explicit:
 

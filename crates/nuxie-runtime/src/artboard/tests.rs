@@ -9855,6 +9855,26 @@
             .expect("TextStyle owns a variation helper");
         let later_child = instance.component_handle(4).expect("later Node handle");
 
+        assert!(matches!(
+            instance.objects.address(helper),
+            Some(ComponentAddress::TextVariationHelper {
+                style: retained_style,
+                text: retained_text,
+            }) if retained_style.local_id() == 2 && retained_text == text
+        ));
+        assert_eq!(
+            instance.objects.component(helper).unwrap().parent,
+            Some(root),
+            "the helper constructor retains the exact TextStyle identity while Component Super attaches the embedded helper to its Artboard"
+        );
+        assert_eq!(
+            (0..instance.objects.dependent_len(helper))
+                .filter_map(|index| instance.objects.dependent_at(helper, index))
+                .collect::<Vec<_>>(),
+            vec![text],
+            "TextVariationHelper::buildDependencies adds exactly helper -> retained Text"
+        );
+
         assert_eq!(
             (0..instance.objects.dependent_len(root))
                 .filter_map(|index| instance.objects.dependent_at(root, index))

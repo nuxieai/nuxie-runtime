@@ -353,6 +353,7 @@ pub fn debug_text_word_unit_count(text: &str) -> usize {
     StaticRangeMap::from_words(text, 0, character_count).unit_count()
 }
 
+include!("text/styled_text.rs");
 include!("text/text_engine.rs");
 
 include!("text/raw_text.rs");
@@ -8276,6 +8277,42 @@ mod tests {
             [(liga, 1), (liga, 0), (liga, 0)]
         );
         assert_ne!(reshaped.line_glyph_ids, before.line_glyph_ids);
+
+        // update ignores its ComponentDirt argument. FILTHY carries every
+        // non-collapsed dirt bit, so the retained helper must still perform
+        // exactly one live option refresh and publish no new dirt of its own.
+        instance.update_pass();
+        assert!(instance.set_uint_property(
+            feature_local,
+            property_key_for_name("TextStyleFeature", "featureValue").unwrap(),
+            1,
+        ));
+        assert_eq!(instance.debug_component_dirt(1), Some(ComponentDirt::NONE));
+        assert_eq!(
+            instance.objects.component(helper).unwrap().dirt,
+            ComponentDirt::NONE
+        );
+        assert!(instance.add_dirt(root_local, ComponentDirt::FILTHY, true));
+        assert_eq!(
+            instance.objects.component(helper).unwrap().dirt,
+            ComponentDirt::FILTHY,
+            "every non-collapsed dirt family reaches the real retained helper"
+        );
+        instance.update_pass();
+        assert_eq!(
+            instance
+                .component(style.local_id)
+                .and_then(|component| component.concrete.text_style.as_ref())
+                .and_then(|style| style.variable_font())
+                .unwrap()
+                .features,
+            [(liga, 1), (liga, 0), (liga, 1)]
+        );
+        assert_eq!(
+            instance.objects.component(helper).unwrap().dirt,
+            ComponentDirt::NONE,
+            "helper update replaces only the variable-font cache"
+        );
     }
 
     #[test]

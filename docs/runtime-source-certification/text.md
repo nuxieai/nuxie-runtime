@@ -60,6 +60,13 @@ Focused evidence is
 Consumer topology remains four pass, three executable expected-red, and 11
 pending.
 
+TextModifierRange source-pair candidate note: the complete pair is audited in
+`runtime-source-certification/text-modifier-range.md`. Its concrete RangeMap
+owner replaces the former word-count projection and promotes only
+`text_test.cpp` case 9. Cases 10-11 remain pending because the existing debug
+report recomputes their coverage instead of observing literal retained state.
+Current topology is five pass, three executable expected-red, and ten pending.
+
 Shape-dirt production-correction candidate note: rows 24 and 25 now have
 separate occurrence-owned callbacks. `markShapeDirty(bool)` publishes Path,
 clears retained modifier range maps and publishes each group's TextCoverage in
@@ -368,8 +375,8 @@ authority; Rust has no corresponding symbol.
 Pinned consumer: `tests/unit_tests/runtime/text_test.cpp`, 820 lines, 27,373
 bytes, SHA-256
 `d3917b4de319fbb3d2eb7d4eae1deee4f53d509b460ee2377595696b8bfd5367`.
-The exact 18-case topology is **four pass, three executable expected-red, and
-11 pending**. Cases 2 and 3 are direct/pass in Wave C7. Cases 14 and 16 have
+The exact 18-case topology is **five pass, three executable expected-red, and
+10 pending**. Cases 2, 3, and 9 are direct/pass. Cases 14 and 16 have
 exact literal Silver entries and pass. Cases 15, 17, and 18 retain executable
 literal Silver entries with frozen first differences; they are not
 missing-owner pending work.
@@ -384,7 +391,7 @@ missing-owner pending work.
 | 6 trim uint passthroughs | **pending**: generated top/bottom masked registry accessors need a literal executable owner and read/write stream; current shaping mask consumption is downstream only. |
 | 7 `ellipsis is shown` | **pending**: missing literal `orderedLines`, `shape`, `unichars`, and `GlyphLookup` observables (H26/H28/H29); reconstructed line/glyph projections cannot replace them. |
 | 8 `fitFontSize shrinks...` | **pending**: missing literal shaped run size and `m_transform.xx` observers; the exact Silver stream for case 16 is not a proxy for these retained observables. |
-| 9 `range mapper maps words` | **pending**: owned by `text_modifier_range.cpp`, not this pair; direct `RangeMapper::unitCount` owner/evidence remains required. |
+| 9 `range mapper maps words` | **pass/direct**: the complete literal assertion calls `debug_text_word_unit_count`, now a thin read-only seam over `text/text_modifier_range.rs:21::StaticRangeMap::from_words` and `28::unit_count`; focused evidence also covers the terminal sentinel and fractional unit conversion. |
 | 10 modifier ranges select runs | **pending**: missing literal modifier group/range/run/coverage observer stream (H27) and source-pair certification for modifier owners. |
 | 11 varying-size modifier runs | **pending**: same H27 blocker plus literal Unicode offset/length/text byte assertions across multiple runs. |
 | 12 `double new line type works` | **pending**: missing `orderedLines()` observer (H26); custom line splitting is not a substitute for the exact retained ordered-line count. |

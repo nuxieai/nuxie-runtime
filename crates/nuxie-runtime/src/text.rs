@@ -209,21 +209,16 @@ pub(crate) fn static_text_layout_debug_report(
         .iter()
         .map(|group| {
             let coverage = group
-                .coverage_by_character(runtime, instance, &text, &resolved, &source_lines)
+                .coverage_by_character(runtime, instance, &text, &resolved, &source_lines, &[])
                 .ok()?;
             let selected_runs = group
                 .ranges
                 .iter()
                 .map(|range| {
-                    let run_id = range
-                        .uint_property(runtime, instance, "runId", u32::MAX as u64)
-                        .ok()?;
-                    if run_id == u32::MAX as u64 {
+                    let Some(run_local) = range.run_local else {
                         return Some(None);
-                    }
-                    let run = resolved.iter().find(|run| {
-                        run.local_id as u64 == run_id || run.global_id as u64 == run_id
-                    })?;
+                    };
+                    let run = resolved.iter().find(|run| run.local_id == run_local)?;
                     Some(Some(RuntimeTextSelectedRunDebugReport {
                         offset: run.char_start,
                         length: run.char_len,
@@ -349,23 +344,8 @@ pub(crate) fn static_text_layout_debug_report(
 
 #[doc(hidden)]
 pub fn debug_text_word_unit_count(text: &str) -> usize {
-    let glyphs = text
-        .char_indices()
-        .map(|(cluster, _)| TextGlyph {
-            glyph_id: 0,
-            cluster: u32::try_from(cluster).unwrap_or(u32::MAX),
-            advance: 1.0,
-            offset_x: 0.0,
-            offset_y: 0.0,
-            renderer_breaks_before: 0,
-            renderer_breaks_after: 0,
-            renderer_joiners: Vec::new(),
-        })
-        .collect::<Vec<_>>();
-    let mut glyphs = glyphs;
-    materialize_renderer_glyph_run_annotations(text, &mut glyphs)
-        .map(|annotations| annotations.breaks.len() / 2)
-        .unwrap_or(0)
+    let character_count = text.chars().count();
+    StaticRangeMap::from_words(text, 0, character_count).unit_count()
 }
 
 include!("text/text_engine.rs");
@@ -1997,6 +1977,7 @@ impl StaticTextSlice {
         if let Some(component) = graph.components.iter().find(|component| {
             definition_by_name(component.type_name)
                 .is_some_and(|definition| definition.is_a("TextModifier"))
+                && component.type_name != "TextModifierRange"
                 && component
                     .parent_local
                     .and_then(|parent| type_for_local(graph, parent))
@@ -2461,7 +2442,14 @@ impl StaticTextSlice {
             .modifiers
             .iter()
             .map(|modifier| {
-                modifier.coverage_by_character(runtime, instance, &text, resolved_runs, &lines)
+                modifier.coverage_by_character(
+                    runtime,
+                    instance,
+                    &text,
+                    resolved_runs,
+                    &lines,
+                    &styled_glyph_lookup_counts(text.chars().count(), &contextual_glyphs),
+                )
             })
             .collect::<Result<Vec<_>>>()?;
         let mut shaped_lines = Vec::new();
@@ -3744,12 +3732,35 @@ impl StaticTextSlice {
             .collect::<String>();
         let source_lines = split_static_text_lines(&full_text);
         let character_count = full_text.chars().count();
+        let empty_coverages = vec![vec![0.0; character_count]; self.modifiers.len()];
+        let unmodified_glyphs = self.styled_resolved_run_glyphs_with_coverages(
+            runtime,
+            instance,
+            runs,
+            font_scale,
+            &empty_coverages,
+        )?;
+        if !self
+            .modifiers
+            .iter()
+            .any(StaticTextModifierGroup::has_shape_modifiers)
+        {
+            return Ok(unmodified_glyphs);
+        }
+        let glyph_lookup_counts = styled_glyph_lookup_counts(character_count, &unmodified_glyphs);
         let modifier_coverages = self
             .modifiers
             .iter()
             .map(|group| {
                 if group.has_shape_modifiers() {
-                    group.coverage_by_character(runtime, instance, &full_text, runs, &source_lines)
+                    group.coverage_by_character(
+                        runtime,
+                        instance,
+                        &full_text,
+                        runs,
+                        &source_lines,
+                        &glyph_lookup_counts,
+                    )
                 } else {
                     // Paint-only modifier coverage must not fracture shaping
                     // context. C++ only splits runs for shape modifiers.
@@ -3757,6 +3768,23 @@ impl StaticTextSlice {
                 }
             })
             .collect::<Result<Vec<_>>>()?;
+        self.styled_resolved_run_glyphs_with_coverages(
+            runtime,
+            instance,
+            runs,
+            font_scale,
+            &modifier_coverages,
+        )
+    }
+
+    fn styled_resolved_run_glyphs_with_coverages(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        runs: &[StaticResolvedRun],
+        font_scale: f32,
+        modifier_coverages: &[Vec<f32>],
+    ) -> Result<Vec<StyledTextGlyph>> {
         let mut glyphs = Vec::new();
         for run in runs {
             if !run.participates_in_styled_text() {
@@ -5285,6 +5313,16 @@ fn runtime_bool_property(
 include!("text/utf.rs");
 
 include!("text/glyph_lookup.rs");
+
+fn styled_glyph_lookup_counts(character_count: usize, glyphs: &[StyledTextGlyph]) -> Vec<usize> {
+    let mut counts = vec![0; character_count];
+    for glyph in glyphs {
+        if let Some(count) = counts.get_mut(glyph.char_index) {
+            *count = glyph.char_len;
+        }
+    }
+    counts
+}
 
 include!("text/line_breaker.rs");
 
@@ -8072,6 +8110,104 @@ mod tests {
             Err(error) => error,
         };
         assert!(error.to_string().contains("requires a direct Text parent"));
+    }
+
+    #[test]
+    fn cxx_range_mapper_maps_words_and_converts_fractional_units() {
+        let text = "one two three four";
+        let range_map = StaticRangeMap::from_words(text, 0, text.chars().count());
+        assert_eq!(range_map.unit_count(), 4);
+        assert_eq!(range_map.unit_character_index_count(), 5);
+        assert_eq!(range_map.unit_to_character_range(-1.0), 0.0);
+        assert_eq!(range_map.unit_to_character_range(0.5), 1.5);
+        assert_eq!(range_map.unit_to_character_range(1.0), 4.0);
+        assert_eq!(range_map.unit_to_character_range(1.5), 5.5);
+        assert_eq!(range_map.unit_to_character_range(4.0), 18.0);
+        assert_eq!(range_map.unit_to_character_range(5.0), 18.0);
+
+        let ligature_units =
+            StaticTextModifierRange::character_range_units("fica", 0, 4, &[3, 0, 0, 1], false);
+        assert_eq!(
+            ligature_units
+                .iter()
+                .map(|unit| (unit.start, unit.len))
+                .collect::<Vec<_>>(),
+            [(0, 3), (3, 1)]
+        );
+    }
+
+    #[test]
+    fn cxx_text_modifier_range_constructs_with_frozen_run_and_last_cubic_child() {
+        let runtime_for = |range_parent, run_id| {
+            RuntimeFile::from_fixture_records(vec![
+                fixture_record("Backboard", Vec::new()),
+                fixture_record("Artboard", Vec::new()),
+                fixture_record("Text", Vec::new()),
+                fixture_record(
+                    "TextModifierGroup",
+                    vec![property(
+                        "TextModifierGroup",
+                        "parentId",
+                        FixtureValue::Uint(1),
+                    )],
+                ),
+                fixture_record(
+                    "TextModifierRange",
+                    vec![
+                        property(
+                            "TextModifierRange",
+                            "parentId",
+                            FixtureValue::Uint(range_parent),
+                        ),
+                        property("TextModifierRange", "runId", FixtureValue::Uint(run_id)),
+                    ],
+                ),
+                fixture_record(
+                    "TextValueRun",
+                    vec![property("TextValueRun", "parentId", FixtureValue::Uint(1))],
+                ),
+                fixture_record(
+                    "CubicInterpolatorComponent",
+                    vec![property(
+                        "CubicInterpolatorComponent",
+                        "parentId",
+                        FixtureValue::Uint(3),
+                    )],
+                ),
+                fixture_record(
+                    "CubicInterpolatorComponent",
+                    vec![property(
+                        "CubicInterpolatorComponent",
+                        "parentId",
+                        FixtureValue::Uint(3),
+                    )],
+                ),
+            ])
+        };
+        let runtime = runtime_for(2, 4).expect("modifier-range records import");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("modifier-range graph builds");
+        let graph = &graphs.artboards[0];
+        ArtboardInstance::from_graph(&runtime, graph).expect("valid range occurrence constructs");
+        let range = StaticTextModifierRange::from_graph(&runtime, graph, 3).unwrap();
+        assert_eq!(range.run_local, Some(4));
+        assert_eq!(
+            range.interpolator.map(|interpolator| interpolator.local_id),
+            Some(6)
+        );
+
+        for (parent, run, expected) in [
+            (1, 4, "requires a direct TextModifierGroup parent"),
+            (2, 1, "runId 1 is not a TextValueRun"),
+        ] {
+            let malformed = runtime_for(parent, run).unwrap();
+            let malformed_graph = GraphFile::from_runtime_file(&malformed).unwrap();
+            let error =
+                match ArtboardInstance::from_graph(&malformed, &malformed_graph.artboards[0]) {
+                    Ok(_) => panic!("malformed range must fail runtime construction"),
+                    Err(error) => error,
+                };
+            assert!(error.to_string().contains(expected), "{error:#}");
+        }
     }
 
     #[test]

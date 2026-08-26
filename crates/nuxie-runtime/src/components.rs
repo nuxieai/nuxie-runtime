@@ -980,6 +980,7 @@ pub(crate) struct RuntimeTextState {
     bounds: Cell<Option<(f32, f32, f32, f32)>>,
     control_size: Cell<Option<(f32, f32, u64, u64, u64)>>,
     modifier_range_maps: RefCell<BTreeMap<usize, Vec<(usize, usize)>>>,
+    modifier_range_indices: RefCell<BTreeMap<usize, [f32; 4]>>,
     #[cfg(test)]
     modifier_range_map_clear_trace: RefCell<Vec<(bool, usize)>>,
     #[cfg(test)]
@@ -992,6 +993,7 @@ impl RuntimeTextState {
             bounds: Cell::new(None),
             control_size: Cell::new(None),
             modifier_range_maps: RefCell::new(BTreeMap::new()),
+            modifier_range_indices: RefCell::new(BTreeMap::new()),
             #[cfg(test)]
             modifier_range_map_clear_trace: RefCell::new(Vec::new()),
             #[cfg(test)]
@@ -1075,6 +1077,25 @@ impl RuntimeTextState {
 
     pub(crate) fn clear_modifier_range_map(&self, range_local: usize) {
         self.modifier_range_maps.borrow_mut().remove(&range_local);
+    }
+
+    pub(crate) fn modifier_range_indices(
+        &self,
+        range_local: usize,
+        update: Option<[f32; 4]>,
+    ) -> [f32; 4] {
+        if let Some(indices) = update {
+            self.modifier_range_indices
+                .borrow_mut()
+                .insert(range_local, indices);
+            indices
+        } else {
+            self.modifier_range_indices
+                .borrow()
+                .get(&range_local)
+                .copied()
+                .unwrap_or([0.0; 4])
+        }
     }
 
     #[cfg(test)]

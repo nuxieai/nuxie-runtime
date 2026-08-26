@@ -338,10 +338,19 @@ impl StaticTextModifierGroup {
         text: &str,
         runs: &[StaticResolvedRun],
         lines: &[StaticTextLine],
+        glyph_lookup_counts: &[usize],
     ) -> Result<Vec<f32>> {
         let mut coverage = vec![0.0; text.chars().count()];
         for range in &self.ranges {
-            range.apply_coverage(runtime, instance, text, runs, lines, &mut coverage)?;
+            range.apply_coverage(
+                runtime,
+                instance,
+                text,
+                runs,
+                lines,
+                glyph_lookup_counts,
+                &mut coverage,
+            )?;
         }
         Ok(coverage)
     }
@@ -462,8 +471,13 @@ pub(crate) fn text_modifier_group_uint_property_changed(
     if type_name != Some("TextModifierRange") {
         return None;
     }
-    let path_only = property_key_for_name("TextModifierRange", "unitsValue") == Some(property_key);
-    Some(range_changed(instance, local_id, path_only))
+    if property_key_for_name("TextModifierRange", "unitsValue") == Some(property_key) {
+        return Some(range_changed(instance, local_id, true));
+    }
+    ["typeValue", "modeValue"]
+        .into_iter()
+        .any(|name| property_key_for_name("TextModifierRange", name) == Some(property_key))
+        .then(|| range_changed(instance, local_id, false))
 }
 
 #[derive(Debug, Clone)]

@@ -1414,6 +1414,41 @@ impl ArtboardInstance {
                         component.local_id
                     );
                 }
+                if definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("TextModifierRange"))
+                {
+                    if !definition_by_name(parent_type)
+                        .is_some_and(|definition| definition.is_a("TextModifierGroup"))
+                    {
+                        anyhow::bail!(
+                            "TextModifierRange local {} requires a direct TextModifierGroup parent",
+                            component.local_id
+                        );
+                    }
+                    let run_key = property_key_for_name("TextModifierRange", "runId")
+                        .context("TextModifierRange.runId is missing from the runtime schema")?;
+                    let run_id = objects
+                        .uint_property(component.local_id, run_key)
+                        .unwrap_or(u64::from(u32::MAX));
+                    if run_id != u64::from(u32::MAX) {
+                        let run_local = usize::try_from(run_id)
+                            .context("TextModifierRange runId does not fit a local object id")?;
+                        let run_type = objects
+                            .component_handle(run_local)
+                            .and_then(|run| objects.component(run))
+                            .map(|run| run.type_name);
+                        if !run_type
+                            .and_then(definition_by_name)
+                            .is_some_and(|definition| definition.is_a("TextValueRun"))
+                        {
+                            anyhow::bail!(
+                                "TextModifierRange local {} runId {} is not a TextValueRun",
+                                component.local_id,
+                                run_id
+                            );
+                        }
+                    }
+                }
                 let is_vertex = objects
                     .component(handle)
                     .is_some_and(|component| component.concrete.vertex.is_some());

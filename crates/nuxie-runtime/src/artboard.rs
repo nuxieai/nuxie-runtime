@@ -1400,6 +1400,20 @@ impl ArtboardInstance {
                 if !objects.link_parent(handle, parent) {
                     anyhow::bail!("Component parent link could not be retained");
                 }
+                // TextModifierGroup::onAddedDirty runs its Component base
+                // callback before requiring the direct parent to be a Text.
+                // Keep that validation at this authored construction boundary
+                // so a malformed occurrence never becomes usable.
+                if definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("TextModifierGroup"))
+                    && !definition_by_name(parent_type)
+                        .is_some_and(|definition| definition.is_a("Text"))
+                {
+                    anyhow::bail!(
+                        "TextModifierGroup local {} requires a direct Text parent",
+                        component.local_id
+                    );
+                }
                 let is_vertex = objects
                     .component(handle)
                     .is_some_and(|component| component.concrete.vertex.is_some());

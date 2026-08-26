@@ -38,7 +38,7 @@ means a concrete source discrepancy remains.
 | # | Pinned body | Source contract | Concrete Rust owner | Candidate disposition |
 |---:|---|---|---|---|
 | 1 | `textComponent` (13) | Return the parent only when it is a `Text`; otherwise null. | `text/text_modifier_group.rs:368::modifier_group_text` | **exact value under occurrence adaptation** |
-| 2 | `onAddedDirty` (22) | Run `Super`; on success register with a direct `Text` parent, otherwise `MissingObject`. | import validation `text.rs:1995-2009`; authored collection `text.rs:2112-2118::StaticTextSlice::from_graph` | **adapted correction candidate**: graph import replaces pointer registration and now rejects a non-Text parent. |
+| 2 | `onAddedDirty` (22) | Run `Super`; on success register with a direct `Text` parent, otherwise `MissingObject`. | construction validation after the base parent link `artboard.rs:1361::ArtboardInstance::build_component_occurrence_relations`, specifically 1400-1416; authored collection `text.rs:2099-2105::StaticTextSlice::from_graph` | **adapted correction candidate**: runtime construction replaces pointer registration and rejects a non-Text parent immediately after the Component base relation is retained, before a usable `ArtboardInstance` exists. |
 | 3 | `addModifierRange` (39) | Append range in callback/child order. | `text/text_modifier_group.rs:49::StaticTextModifierGroup::from_graph`, range branch 84-90 | **exact order under immutable descriptor adaptation** |
 | 4 | `addModifier` (44) | Append every modifier; additionally append shape and follow-path subtypes in the same order. | `text/text_modifier_group.rs:91-111::StaticTextModifierGroup::from_graph`; subtype owner `text/text_modifier.rs:12::StaticTextModifier` | **exact order under immutable descriptor adaptation** |
 | 5 | `rangeTypeChanged` (57) | `Text::modifierShapeDirty`, then add group `TextCoverage`. | `text/text_modifier_group.rs:394::range_changed(path_only=true)`; dispatch `449::text_modifier_group_uint_property_changed` | **exact supported callback/order** |
@@ -108,7 +108,9 @@ This candidate makes five source-proven corrections:
 3. inverted opacity retains its distinct pinned finite contraction;
 4. `TextVariationModifier::axisValueChanged` reaches the single pinned
    `markShapeDirty` sequence without premature group dirt; and
-5. a modifier group without a direct Text parent is rejected at import.
+5. a modifier group without a direct Text parent is rejected during
+   `ArtboardInstance` construction, immediately after the base Component parent
+   relation is retained and before a usable occurrence is returned.
 
 Focused actual-owner evidence:
 

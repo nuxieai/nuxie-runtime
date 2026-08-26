@@ -1995,19 +1995,6 @@ impl StaticTextSlice {
         }
 
         if let Some(component) = graph.components.iter().find(|component| {
-            component.type_name == "TextModifierGroup"
-                && !component
-                    .parent_local
-                    .and_then(|parent| type_for_local(graph, parent))
-                    .and_then(definition_by_name)
-                    .is_some_and(|definition| definition.is_a("Text"))
-        }) {
-            bail!(
-                "TextModifierGroup local {} requires a direct Text parent",
-                component.local_id
-            );
-        }
-        if let Some(component) = graph.components.iter().find(|component| {
             definition_by_name(component.type_name)
                 .is_some_and(|definition| definition.is_a("TextModifier"))
                 && component
@@ -8066,30 +8053,24 @@ mod tests {
 
     #[test]
     fn cxx_text_modifier_group_requires_a_direct_text_parent() {
-        let (runtime, graphs, _) = fl_e8_fixture(include_bytes!(
-            "../../../fixtures/fl-e8/text_variation_modifier.riv"
-        ));
-        let mut graph = graphs.artboards.first().unwrap().clone();
-        let group_local = graph
-            .components
-            .iter()
-            .find(|component| component.type_name == "TextModifierGroup")
-            .map(|component| component.local_id)
-            .unwrap();
-        let artboard_local = graph
-            .components
-            .iter()
-            .find(|component| component.type_name == "Artboard")
-            .map(|component| component.local_id)
-            .unwrap();
-        graph
-            .components
-            .iter_mut()
-            .find(|component| component.local_id == group_local)
-            .unwrap()
-            .parent_local = Some(artboard_local);
-
-        let error = StaticTextSlice::from_graph(&runtime, &graph, 1).unwrap_err();
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record(
+                "TextModifierGroup",
+                vec![property(
+                    "TextModifierGroup",
+                    "parentId",
+                    FixtureValue::Uint(0),
+                )],
+            ),
+        ])
+        .expect("malformed modifier-group records import");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("malformed graph builds");
+        let error = match ArtboardInstance::from_graph(&runtime, &graphs.artboards[0]) {
+            Ok(_) => panic!("malformed TextModifierGroup must fail runtime construction"),
+            Err(error) => error,
+        };
         assert!(error.to_string().contains("requires a direct Text parent"));
     }
 

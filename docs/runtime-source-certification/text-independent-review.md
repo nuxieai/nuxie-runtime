@@ -204,3 +204,31 @@ failed, zero ignored each); the pinned `text.cpp` and `text.hpp` SHA-256 values
 remain `a485332b...d346fb` and `10688904...cf0c8`; the candidate delta passes
 `git diff --check`; and no manifest or consumer-test file changed. This review
 changed documentation only.
+
+## Narrow dynamic-list residual rereview of `291fb2933`
+
+Verdict: **ACCEPTED**
+
+The one rejected insertion-point path is corrected at
+`text.rs:3158::StaticTextSlice::static_line_metrics`. The lookup preserves
+all-runs order but now considers only nonempty styled participants and then
+requires a live font before selecting the insertion-point style. Null-style,
+empty-source, and font-null runs therefore cannot mask the later run that
+pinned `makeStyled` actually emits; the existing base-style fallback remains
+unchanged when no emitted run owns the insertion point.
+
+The focused real-owner test at
+`text.rs:5866::cxx_empty_line_metrics_ignore_runs_omitted_by_make_styled`
+constructs the rejected sequence exactly: a null-style row, an empty first-style
+row, and a second-style `"\nA"` row. It verifies the retained zero-length and
+two-character offsets, invokes the production line-metrics owner, matches the
+second-style-only control, and materially differs from the paint-zero control.
+The prior dynamic-run test at line 5763 is byte-unchanged apart from its shifted
+locator.
+
+Both focused tests pass independently (one passed, zero failed, zero ignored
+each), the candidate delta passes `git diff --check`, and only `text.rs` plus
+the source receipt changed. The complete consumer section is unchanged at
+**4 pass, 3 executable expected-red, 11 pending**. All previously recorded
+listener/timing, literal `styleId`, and other source-pair adaptations remain in
+place. This rereview changed documentation only.

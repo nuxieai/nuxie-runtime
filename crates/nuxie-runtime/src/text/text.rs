@@ -65,6 +65,37 @@ pub(crate) fn mark_shape_dirty_without_layout(
     mark_shape_dirty_with_layout(instance, text_local_id, false)
 }
 
+/// Direct pinned `Text::controlSize`: compare the complete retained state,
+/// publish every field before callbacks can observe it, then shape-dirty
+/// without feeding the new size back into layout.
+pub(crate) fn control_size(
+    instance: &mut ArtboardInstance,
+    text_local_id: usize,
+    width: f32,
+    height: f32,
+    width_scale_type: u64,
+    height_scale_type: u64,
+    layout_direction: u64,
+) -> bool {
+    let changed = instance
+        .component(text_local_id)
+        .and_then(|component| component.concrete.text.as_ref())
+        .is_some_and(|text| {
+            text.retain_control_size(
+                width,
+                height,
+                width_scale_type,
+                height_scale_type,
+                layout_direction,
+            )
+        });
+    if !changed {
+        return false;
+    }
+    mark_shape_dirty_without_layout(instance, text_local_id);
+    true
+}
+
 fn mark_shape_dirty_with_layout(
     instance: &mut ArtboardInstance,
     text_local_id: usize,

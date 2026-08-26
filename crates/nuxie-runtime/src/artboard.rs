@@ -6863,7 +6863,7 @@ impl ArtboardInstance {
             // out a Text host (`layout_participant.cpp:256-274`;
             // `parametric_path.cpp:24-33`; `text.cpp` controlSize).
             self.mark_runtime_layout_controlled_paths_dirty(host_local);
-            self.invalidate_runtime_layout_text_host(host_local);
+            self.invalidate_runtime_layout_text_host(host_local, entry.local_id);
         }
         if advance.layout_changed {
             // `applyInterpolation` marks the host's world transform after
@@ -6879,17 +6879,62 @@ impl ArtboardInstance {
     /// The participant-host half of C++ `controlSize` on Text
     /// (`text.cpp:1240-1287`): a changed resolved size invalidates the host's
     /// retained text bounds and shape.
-    fn invalidate_runtime_layout_text_host(&mut self, host_local: usize) {
-        let Some(component) = self.component(host_local) else {
+    pub(crate) fn invalidate_runtime_layout_text_host(
+        &mut self,
+        host_local: usize,
+        participant_local: usize,
+    ) {
+        let Some(type_name) = self
+            .component(host_local)
+            .map(|component| component.type_name)
+        else {
             return;
         };
-        if !matches!(component.type_name, "Text" | "TextInput") {
+        if !matches!(type_name, "Text" | "TextInput") {
             return;
         }
-        if let Some(text) = component.concrete.text.as_ref() {
+        if type_name == "Text" {
+            let control = self
+                .component(participant_local)
+                .and_then(|component| component.concrete.participant_layout.as_ref())
+                .map(|participant| participant.current_bounds())
+                .map(|(_, _, width, height)| {
+                    (
+                        width,
+                        height,
+                        self.runtime_layout_axis_scale(participant_local, true),
+                        self.runtime_layout_axis_scale(participant_local, false),
+                        self.debug_layout_actual_direction(host_local).unwrap_or(0),
+                    )
+                });
+            if let Some((width, height, width_scale_type, height_scale_type, layout_direction)) =
+                control
+            {
+                if crate::text_owner::control_size(
+                    self,
+                    host_local,
+                    width,
+                    height,
+                    width_scale_type,
+                    height_scale_type,
+                    layout_direction,
+                ) {
+                    self.runtime_drawables
+                        .mark_text_render_styles_dirty_for_local(host_local);
+                }
+                return;
+            }
+        }
+        if let Some(text) = self
+            .component(host_local)
+            .and_then(|component| component.concrete.text.as_ref())
+        {
             text.invalidate_bounds();
         }
-        if let Some(text_input) = component.concrete.text_input.as_ref() {
+        if let Some(text_input) = self
+            .component(host_local)
+            .and_then(|component| component.concrete.text_input.as_ref())
+        {
             text_input.raw.borrow_mut().mark_geometry_dirty();
         }
         self.runtime_drawables

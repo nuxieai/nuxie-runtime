@@ -3971,16 +3971,6 @@ impl StaticTextSlice {
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<u64> {
         let authored = self.authored_sizing(runtime, instance)?;
-        if let Some(constraint) = layout_constraint
-            && let Some(text) = instance
-                .component(self.text_local)
-                .and_then(|component| component.concrete.text.as_ref())
-        {
-            text.retain_layout_scale_types(
-                constraint.width_scale_type,
-                constraint.height_scale_type,
-            );
-        }
         Ok(layout_constraint
             .map(|constraint| constraint.effective_sizing(authored))
             .unwrap_or(authored))
@@ -5686,7 +5676,7 @@ mod tests {
                 .component(1)
                 .and_then(|component| component.concrete.text.as_ref())
                 .expect("fixture Text owns retained state");
-            state.retain_layout_scale_types(width_scale_type, height_scale_type);
+            state.retain_control_size(80.0, 50.0, width_scale_type, height_scale_type, 0);
             assert_eq!(state.effective_sizing(authored), expected);
         }
 
@@ -5694,7 +5684,7 @@ mod tests {
             .component(1)
             .and_then(|component| component.concrete.text.as_ref())
             .expect("fixture Text owns retained state");
-        state.retain_layout_scale_types(0, 2);
+        state.retain_control_size(80.0, 50.0, 0, 2, 0);
 
         instance.clear_component_dirt(1);
         let width_key = property_key_for_name("Text", "width").expect("Text.width key");
@@ -5731,6 +5721,80 @@ mod tests {
                 .debug_component_dirt(1)
                 .expect("fixture Text remains live")
                 .contains(crate::components::ComponentDirt::PATH)
+        );
+    }
+
+    #[test]
+    fn cxx_control_size_retains_all_fields_before_no_layout_shape_dirt() {
+        let (runtime, graphs) = baseline_origin_text_runtime_with_sizing(TEXT_SIZING_AUTO_WIDTH);
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let mut current = (80.0, 50.0, 0, 2, 0);
+
+        for next in [
+            current,
+            (81.0, current.1, current.2, current.3, current.4),
+            (81.0, 51.0, current.2, current.3, current.4),
+            (81.0, 51.0, 1, current.3, current.4),
+            (81.0, 51.0, 1, 1, current.4),
+            (81.0, 51.0, 1, 1, 2),
+        ] {
+            instance.clear_component_dirt(1);
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("fixture Text owns retained state")
+                .retain_bounds((1.0, 2.0, 3.0, 4.0));
+
+            assert!(crate::text_owner::control_size(
+                &mut instance,
+                1,
+                next.0,
+                next.1,
+                next.2,
+                next.3,
+                next.4,
+            ));
+            let state = instance
+                .component(1)
+                .and_then(|component| component.concrete.text.as_ref())
+                .expect("fixture Text retains controlSize state");
+            assert_eq!(state.control_size(), Some(next));
+            assert_eq!(state.bounds(), None, "shape dirt follows field publication");
+            let dirt = instance
+                .debug_component_dirt(1)
+                .expect("Text dirt remains live");
+            assert!(dirt.contains(crate::components::ComponentDirt::PATH));
+            assert!(dirt.contains(crate::components::ComponentDirt::WORLD_TRANSFORM));
+            current = next;
+        }
+
+        instance.clear_component_dirt(1);
+        let sentinel_bounds = (1.0, 2.0, 3.0, 4.0);
+        let state = instance
+            .component(1)
+            .and_then(|component| component.concrete.text.as_ref())
+            .expect("fixture Text retains controlSize state");
+        state.retain_bounds(sentinel_bounds);
+        assert!(!crate::text_owner::control_size(
+            &mut instance,
+            1,
+            current.0,
+            current.1,
+            current.2,
+            current.3,
+            current.4,
+        ));
+        let state = instance
+            .component(1)
+            .and_then(|component| component.concrete.text.as_ref())
+            .expect("fixture Text retains controlSize state");
+        assert_eq!(state.control_size(), Some(current));
+        assert_eq!(state.bounds(), Some(sentinel_bounds));
+        assert_eq!(
+            instance.debug_component_dirt(1),
+            Some(crate::components::ComponentDirt::NONE),
+            "an identical controlSize call is inert"
         );
     }
 

@@ -7130,6 +7130,7 @@ impl ArtboardInstance {
             let should_propagate_size = layout.should_force_update_layout_bounds()
                 || layout.target_bounds() != target_bounds;
             let size_changed = layout.retain_bounds(x, y, bounds.width, bounds.height);
+            let (_, _, control_width, control_height) = layout.current_bounds();
             if size_changed {
                 // Pinned LayoutComponent::updateLayoutBounds publishes Path
                 // before propagateSize/markWorldTransformDirty whenever the
@@ -7147,7 +7148,7 @@ impl ArtboardInstance {
                 self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
                 self.layout_revision = self.layout_revision.wrapping_add(1);
             }
-            if size_changed {
+            if should_propagate_size {
                 // Artboard overrides LayoutComponent::propagateSize and
                 // never calls propagateSizeToChildren. Other concrete
                 // LayoutComponents retain the ordinary direct-child control
@@ -7172,13 +7173,54 @@ impl ArtboardInstance {
                                     // dirt (`layout_component.cpp:981-1025`,
                                     // `text.cpp:160-178`).
                                     && self.component_parent_local(component.local_id)
-                                        == Some(local_id))
+                                        == Some(local_id)
+                                    // A participating child owns its own Yoga
+                                    // node and receives controlSize from its
+                                    // LayoutParticipant, not this container.
+                                    && self
+                                        .runtime_layout_participant_local(component.local_id)
+                                        .is_none())
                                 .then_some(component.local_id)
                             })
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
                 for text_local in affected_text {
+                    if self
+                        .component(text_local)
+                        .is_some_and(|component| component.type_name == "Text")
+                    {
+                        let control = self.runtime_layout_component_style_local(local_id).map(
+                            |style_local| {
+                                (
+                                    self.runtime_layout_axis_scale(style_local, true),
+                                    self.runtime_layout_axis_scale(style_local, false),
+                                    self.debug_layout_actual_direction(local_id).unwrap_or(0),
+                                )
+                            },
+                        );
+                        let control_changed = control.is_some_and(
+                            |(width_scale_type, height_scale_type, layout_direction)| {
+                                crate::text_owner::control_size(
+                                    self,
+                                    text_local,
+                                    control_width,
+                                    control_height,
+                                    width_scale_type,
+                                    height_scale_type,
+                                    layout_direction,
+                                )
+                            },
+                        );
+                        if control_changed {
+                            self.runtime_drawables
+                                .mark_text_render_styles_dirty_for_local(text_local);
+                        }
+                        continue;
+                    }
+                    if !size_changed {
+                        continue;
+                    }
                     if let Some(text) = self
                         .component(text_local)
                         .and_then(|component| component.concrete.text.as_ref())
@@ -7215,13 +7257,7 @@ impl ArtboardInstance {
         // split. Dirt for the snap case stays with the existing map-driven
         // reads; the animated slot publishes through the participant's
         // advance entry.
-        if let Some(participant) =
-            self.runtime_layout_participant_local(local_id)
-                .and_then(|participant_local| {
-                    self.component(participant_local)
-                        .and_then(|component| component.concrete.participant_layout.as_ref())
-                })
-        {
+        if let Some(participant_local) = self.runtime_layout_participant_local(local_id) {
             let mut parent = self.component_parent_local(local_id);
             let parent_bounds = loop {
                 let Some(parent_local) = parent else {
@@ -7236,7 +7272,19 @@ impl ArtboardInstance {
             };
             let x = parent_bounds.map_or(bounds.x, |parent| bounds.x - parent.x);
             let y = parent_bounds.map_or(bounds.y, |parent| bounds.y - parent.y);
-            participant.retain_bounds(x, y, bounds.width, bounds.height);
+            let size_changed = self
+                .component(participant_local)
+                .and_then(|component| component.concrete.participant_layout.as_ref())
+                .is_some_and(|participant| {
+                    participant.retain_bounds(x, y, bounds.width, bounds.height)
+                });
+            if self
+                .component(local_id)
+                .is_some_and(|component| component.type_name == "Text")
+                || size_changed
+            {
+                self.invalidate_runtime_layout_text_host(local_id, participant_local);
+            }
         }
     }
 
@@ -7502,6 +7550,19 @@ impl ArtboardInstance {
         text_local: usize,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Option<RuntimeTextLayoutConstraint> {
+        if let Some((width, height, width_scale_type, height_scale_type, layout_direction)) = self
+            .component(text_local)
+            .and_then(|component| component.concrete.text.as_ref())
+            .and_then(|text| text.control_size())
+        {
+            return Some(RuntimeTextLayoutConstraint {
+                width,
+                height,
+                width_scale_type,
+                height_scale_type,
+                layout_direction,
+            });
+        }
         let parent_local = self.component_parent_local(text_local)?;
         let parent = self.component(parent_local)?;
         if parent.type_name != "LayoutComponent" {
@@ -8545,7 +8606,7 @@ impl ArtboardInstance {
             .unwrap_or(0.0)
     }
 
-    fn runtime_layout_axis_scale(&self, style_local: usize, width_axis: bool) -> u64 {
+    pub(crate) fn runtime_layout_axis_scale(&self, style_local: usize, width_axis: bool) -> u64 {
         self.runtime_layout_style_uint_default(
             style_local,
             if width_axis {
@@ -32031,6 +32092,28 @@ mod tests {
                 bounds(100.0),
                 Some(&BTreeMap::from([(layout_local, bounds(100.0))])),
             );
+            let expected_control_size = expected_text_shape_dirt.then(|| {
+                let style_local = instance
+                    .runtime_layout_component_style_local(layout_local)
+                    .expect("controlled layout owns a style");
+                (
+                    100.0,
+                    50.0,
+                    instance.runtime_layout_axis_scale(style_local, true),
+                    instance.runtime_layout_axis_scale(style_local, false),
+                    instance
+                        .debug_layout_actual_direction(layout_local)
+                        .unwrap_or(0),
+                )
+            });
+            assert_eq!(
+                instance
+                    .component(text_local)
+                    .and_then(|component| component.concrete.text.as_ref())
+                    .and_then(|text| text.control_size()),
+                expected_control_size,
+                "the real Taffy propagation caller retains all five controlSize fields"
+            );
             instance.component_mut(text_local).unwrap().dirt = ComponentDirt::NONE;
             instance.retain_runtime_layout_component_bounds(
                 layout_local,
@@ -32046,6 +32129,18 @@ mod tests {
                     .contains(ComponentDirt::TEXT_SHAPE),
                 expected_text_shape_dirt,
                 "only the direct Text child receives pinned C++ controlSize dirt"
+            );
+            let expected_control_size =
+                expected_control_size.map(|(_, height, width_scale, height_scale, direction)| {
+                    (120.0, height, width_scale, height_scale, direction)
+                });
+            assert_eq!(
+                instance
+                    .component(text_local)
+                    .and_then(|component| component.concrete.text.as_ref())
+                    .and_then(|text| text.control_size()),
+                expected_control_size,
+                "the second Taffy width is retained before shape publication"
             );
         }
     }

@@ -978,7 +978,7 @@ pub(crate) struct RuntimeTextInputState {
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeTextState {
     bounds: Cell<Option<(f32, f32, f32, f32)>>,
-    layout_scale_types: Cell<Option<(u64, u64)>>,
+    control_size: Cell<Option<(f32, f32, u64, u64, u64)>>,
     modifier_range_maps: RefCell<BTreeMap<usize, Vec<(usize, usize)>>>,
     #[cfg(test)]
     modifier_range_map_clear_trace: RefCell<Vec<(bool, usize)>>,
@@ -990,7 +990,7 @@ impl RuntimeTextState {
     fn new() -> Self {
         Self {
             bounds: Cell::new(None),
-            layout_scale_types: Cell::new(None),
+            control_size: Cell::new(None),
             modifier_range_maps: RefCell::new(BTreeMap::new()),
             #[cfg(test)]
             modifier_range_map_clear_trace: RefCell::new(Vec::new()),
@@ -1015,14 +1015,40 @@ impl RuntimeTextState {
         self.bounds.set(None);
     }
 
-    pub(crate) fn retain_layout_scale_types(&self, width: u64, height: u64) {
-        self.layout_scale_types.set(Some((width, height)));
+    pub(crate) fn retain_control_size(
+        &self,
+        width: f32,
+        height: f32,
+        width_scale_type: u64,
+        height_scale_type: u64,
+        layout_direction: u64,
+    ) -> bool {
+        let next = (
+            width,
+            height,
+            width_scale_type,
+            height_scale_type,
+            layout_direction,
+        );
+        if self.control_size.get() == Some(next) {
+            return false;
+        }
+        self.control_size.set(Some(next));
+        true
+    }
+
+    pub(crate) fn control_size(&self) -> Option<(f32, f32, u64, u64, u64)> {
+        self.control_size.get()
     }
 
     pub(crate) fn effective_sizing(&self, authored: u64) -> u64 {
-        match self.layout_scale_types.get() {
-            Some((width, height)) => {
-                crate::text::effective_layout_text_sizing(authored, width, height)
+        match self.control_size.get() {
+            Some((_, _, width_scale_type, height_scale_type, _)) => {
+                crate::text::effective_layout_text_sizing(
+                    authored,
+                    width_scale_type,
+                    height_scale_type,
+                )
             }
             _ => authored,
         }

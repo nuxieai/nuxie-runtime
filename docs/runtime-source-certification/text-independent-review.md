@@ -159,3 +159,48 @@ instead. One documentation-only cleanup remains: row 17's first two shifted
 locators should now read `text.rs:2263::layout_from_shaped_topology` and
 `text.rs:2543::render_data_from_layout`. This does not affect the accepted
 production behavior. No production or test file was changed by this review.
+
+## Dynamic-list production-correction review of `90726b99f`
+
+Verdict: **RESIDUAL REJECTION — one insertion-point consumer still loses the
+pinned styled-run owner**
+
+The value projection itself is correct. Every valid list item remains in source
+order; absent content becomes the concrete run's default empty text; absent
+style remains null; a present unmatched style selects the first paint; and an
+empty paint list is valid. Style is read before content, and the changed
+`Option` projection reaches the artboard, semantic-label, topology, bounds,
+shaping, glyph, and paint-order callers. The receipt also honestly leaves the
+aggregate listener, initial-write/retention, synchronous dirt, font-null, and
+literal all-runs `styleId` ownership as adaptations. No `text_test.cpp`
+consumer moved: topology remains **4 pass, 3 executable expected-red, 11
+pending**.
+
+One affected production consumer is not exact. In
+`text.rs:3158::StaticTextSlice::static_line_metrics` (fallback at line 3182), the empty-line lookup
+finds the first run whose inclusive range touches the line insertion point,
+then checks whether that run has a style. A retained null-style dynamic run has
+zero StyledText length, so it can win that search at the same `char_start` as a
+later participating run. The code then falls back to paint zero instead of the
+later run's paint. For example, a missing-style row followed by a second-style
+row beginning `"\nA"` gives the empty first paragraph base-style metrics. The
+pinned `makeStyled` omits the null-style row entirely, so that paragraph remains
+owned by the second-style StyledText run.
+
+Narrow correction request:
+
+1. In the empty-line insertion-point lookup, exclude runs that did not produce
+   a StyledText run before choosing the owner (at minimum null-style and empty
+   source runs), rather than allowing one to trigger the base-style fallback.
+2. Add focused production-owner evidence with a null-style/empty row preceding
+   a differently styled run whose leading newline makes line metrics observable.
+   Assert the retained run/character offsets and the selected line metric style;
+   do not duplicate the selection algorithm in the test.
+3. Freeze all other production behavior, source classifications, residual gaps,
+   and the 4/3/11 consumer topology.
+
+Checks: both focused candidate owner tests pass independently (one passed, zero
+failed, zero ignored each); the pinned `text.cpp` and `text.hpp` SHA-256 values
+remain `a485332b...d346fb` and `10688904...cf0c8`; the candidate delta passes
+`git diff --check`; and no manifest or consumer-test file changed. This review
+changed documentation only.

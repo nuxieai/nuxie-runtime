@@ -1,0 +1,115 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "c14-scroll",
+  "case_count": 4,
+  "ratchet": {
+    "max_pending": 0
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/scroll_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/scroll_test.cpp",
+      "ordinal": 1,
+      "line": 16,
+      "name": "multiple scrolling artboards",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/upstream_scroll.rs",
+          "line": 145,
+          "symbol": "wave_c14_scroll_001_multiple_scrolling_artboards"
+        }
+      ],
+      "note": "The independently encoded direct runner preserves the pinned fixture, frame boundaries, pointer coordinates and order, advances, draws, and real SRIV comparison through live runtime owners.",
+      "expected_red_reason": "expected-red: exact scroll_test SRIV diverges at frame 0/op53 transform.xy (-0.0 vs 0)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/scroll_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/scroll_test.cpp",
+      "ordinal": 2,
+      "line": 103,
+      "name": "Vertical scroll with threshold",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/upstream_scroll.rs",
+          "line": 235,
+          "symbol": "wave_c14_scroll_002_vertical_scroll_with_threshold"
+        }
+      ],
+      "note": "The independently encoded direct runner preserves the pinned named artboard, view-model instance zero, threshold loops, pointer stream, advances, draws, and real SRIV comparison.",
+      "expected_red_reason": "expected-red: exact vertical-threshold SRIV diverges at frame 0/op69 transform.xy (-0.0 vs 0)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/scroll_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/scroll_test.cpp",
+      "ordinal": 3,
+      "line": 168,
+      "name": "Horizontal scroll with threshold",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/upstream_scroll.rs",
+          "line": 294,
+          "symbol": "wave_c14_scroll_003_horizontal_scroll_with_threshold"
+        }
+      ],
+      "note": "The independently encoded direct runner preserves the pinned named artboard, view-model instance zero, threshold loops, pointer stream, advances, draws, and real SRIV comparison.",
+      "expected_red_reason": "expected-red: exact horizontal-threshold SRIV diverges at frame 0/op79 transform.xy (-0.0 vs 0)"
+    },
+    {
+      "id": "tests/unit_tests/runtime/scroll_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/scroll_test.cpp",
+      "ordinal": 4,
+      "line": 233,
+      "name": "Multidirectional scroll with threshold",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/upstream_scroll.rs",
+          "line": 353,
+          "symbol": "wave_c14_scroll_004_multidirectional_scroll_with_threshold"
+        }
+      ],
+      "note": "The independently encoded direct runner preserves the pinned named artboard, view-model instance zero, threshold loops, pointer stream, advances, draws, and real SRIV comparison.",
+      "expected_red_reason": "expected-red: exact multidirectional-threshold SRIV diverges at frame 0/op82 transform.xy (-0.0 vs 0)"
+    }
+  ]
+}

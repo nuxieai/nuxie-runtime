@@ -32,7 +32,7 @@
   "wave": "c7",
   "case_count": 58,
   "ratchet": {
-    "max_pending": 47
+    "max_pending": 46
   },
   "cases": [
     {
@@ -279,10 +279,17 @@
       "ordinal": 2,
       "line": 37,
       "name": "file with text input renders correctly",
-      "status": "pending",
-      "outcome": "unverified",
-      "evidence": [],
-      "note": "Pending the pinned SerializingFactory frame stream and frozen text_input silver oracle; a downstream host render or graph projection cannot replace it."
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c7.rs",
+          "line": 49,
+          "symbol": "wave_c7_text_input_002_file_with_text_input_renders_correctly"
+        }
+      ],
+      "note": "The distinct executable Silver test replays the pinned text_input.riv fixture, named Text Input - Multiline artboard, zero advance, draw, and frozen text_input.sriv oracle. It is expected-red at frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#3",
@@ -504,7 +511,7 @@
       "status": "pending",
       "outcome": "unverified",
       "evidence": [],
-      "note": "Pending the focus/listener capability owner: through the real authored FocusData parent and StateMachineInstance setFocus seam, the literal committed-text dispatch remains unhandled; TextInput acceptsKeyboardInput is still not independently published as required by header row H3."
+      "note": "Pending the live retained forwarding owner: pinned FocusManager dispatch walks FocusNode to its FocusData focusable, then m_textInputListeners to TextInput; Rust text_input_at_focus_data instead searches authored keyboard_listener_groups, so the focused fixture TextInput is never reached."
     },
     {
       "id": "tests/unit_tests/runtime/text_input_test.cpp#20",
@@ -515,7 +522,7 @@
       "status": "pending",
       "outcome": "unverified",
       "evidence": [],
-      "note": "Pending the live TextInputCursor localClockwisePath focus observable and complete focus-capability dispatch; the corrected blur selection collapse is only part of this assertion stream."
+      "note": "Pending complete live focus/selection/blur consumer evidence, specifically the retained TextInputCursor::localClockwisePath null/non-null/null observations; the accepted focus/blur owners and selection collapse alone do not complete the assertion stream."
     },
     {
       "id": "tests/unit_tests/runtime/text_modifier_test.cpp#1",

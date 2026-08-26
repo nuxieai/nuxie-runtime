@@ -1,0 +1,1007 @@
+{
+  "schema": "nuxie-test-case-correspondence/v1",
+  "schema_version": 1,
+  "upstream_ref": "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
+  "source_globs": [
+    "tests/unit_tests/runtime/*.cpp",
+    "tests/unit_tests/runtime/scripting/*.cpp"
+  ],
+  "status_values": [
+    "pending",
+    "direct",
+    "differential",
+    "adapted"
+  ],
+  "outcome_values": [
+    "unverified",
+    "pass",
+    "expected-red",
+    "not-applicable"
+  ],
+  "evidence_kinds": [
+    "rust-test",
+    "live-differential"
+  ],
+  "adaptation_kinds": [
+    "cxx-language-only",
+    "rust-safety",
+    "taffy",
+    "native-audio",
+    "native-scripting"
+  ],
+  "wave": "c8",
+  "case_count": 62,
+  "ratchet": {
+    "max_pending": 23
+  },
+  "cases": [
+    {
+      "id": "tests/unit_tests/runtime/object_stream_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/object_stream_test.cpp",
+      "ordinal": 1,
+      "line": 14,
+      "name": "ObjectStream",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/object_stream_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/object_stream_test.cpp",
+      "ordinal": 2,
+      "line": 37,
+      "name": "ObjectStream -- force deque realloc",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/object_stream_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/object_stream_test.cpp",
+      "ordinal": 3,
+      "line": 57,
+      "name": "PODStream",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/object_stream_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/object_stream_test.cpp",
+      "ordinal": 4,
+      "line": 110,
+      "name": "PODStream -- force deque realloc",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/reader_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/reader_test.cpp",
+      "ordinal": 1,
+      "line": 4,
+      "name": "uint leb decoder",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/wave_c8_reader.rs",
+          "line": 6,
+          "symbol": "wave_c8_reader_001_uint_leb_decoder"
+        }
+      ],
+      "note": "The distinct retained-owner test preserves the pinned literal byte fixtures and complete ordered success/failure assertion stream.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Rust returns the decoded unsigned value from BinaryDataReader instead of filling a raw output pointer.",
+        "inapplicable_observable": "Only the C++ output-pointer and free-function spelling; all three literal byte fixtures and ordered decoded values remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/reader_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/reader_test.cpp",
+      "ordinal": 2,
+      "line": 21,
+      "name": "string decoder",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/wave_c8_reader.rs",
+          "line": 18,
+          "symbol": "wave_c8_reader_002_string_decoder"
+        }
+      ],
+      "note": "The distinct retained-owner test preserves the pinned literal byte fixtures and complete ordered success/failure assertion stream.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust BinaryDataReader owns length-prefix decoding and returns an owned byte vector instead of accepting an explicit length and writable destination pointer.",
+        "inapplicable_observable": "The C allocation, writable destination pointer, and explicit terminator storage; the exact payload, decoded string, twelve content bytes consumed, and truncated failure remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/reader_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/reader_test.cpp",
+      "ordinal": 3,
+      "line": 49,
+      "name": "float decoder",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/wave_c8_reader.rs",
+          "line": 38,
+          "symbol": "wave_c8_reader_003_float_decoder"
+        }
+      ],
+      "note": "The distinct retained-owner test preserves the pinned literal byte fixtures and complete ordered success/failure assertion stream.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust returns each float and records safe-reader position or overflow instead of writing through a raw pointer and returning a decode count.",
+        "inapplicable_observable": "The raw begin/end and output pointers; every literal byte fixture, decoded value, four-byte success count, and truncated zero-count failure remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/reader_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/reader_test.cpp",
+      "ordinal": 4,
+      "line": 77,
+      "name": "byte decoder",
+      "status": "adapted",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-binary/tests/wave_c8_reader.rs",
+          "line": 60,
+          "symbol": "wave_c8_reader_004_byte_decoder"
+        }
+      ],
+      "note": "The distinct retained-owner test preserves the pinned literal byte fixtures and complete ordered success/failure assertion stream.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust returns each byte and advances a safe reader instead of writing through a raw pointer and returning a decode count.",
+        "inapplicable_observable": "The mutable output pointer and pointer-arithmetic spelling; all four ordered bytes and the terminal zero-count failure remain observable."
+      }
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 1,
+      "line": 30,
+      "name": "juice silver",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 44,
+          "symbol": "wave_c8_render_001_juice_silver"
+        }
+      ],
+      "note": "The distinct juice replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: juice frame 0, op 40 (blendMode): expected blendMode, got makeRenderPaint"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 2,
+      "line": 59,
+      "name": "hide silver",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 49,
+          "symbol": "wave_c8_render_002_hide_silver"
+        }
+      ],
+      "note": "The distinct hide_test replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 3,
+      "line": 84,
+      "name": "n-slice silver",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 54,
+          "symbol": "wave_c8_render_003_n_slice_silver"
+        }
+      ],
+      "note": "The distinct n_slice_triangle replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 4,
+      "line": 99,
+      "name": "lock icon listener silver",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 59,
+          "symbol": "wave_c8_render_004_lock_icon_listener_silver"
+        }
+      ],
+      "note": "The distinct lock_icon_demo replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 5,
+      "line": 138,
+      "name": "validate text run listener works",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 64,
+          "symbol": "wave_c8_render_005_validate_text_run_listener_works"
+        }
+      ],
+      "note": "The distinct text_listener_simpler replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 6,
+      "line": 166,
+      "name": "validate text with modifiers and dashes render correctly",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 69,
+          "symbol": "wave_c8_render_006_validate_text_with_modifiers_and_dashes"
+        }
+      ],
+      "note": "The distinct text_stroke_test replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 7,
+      "line": 193,
+      "name": "superbowl data binding",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 75,
+          "symbol": "wave_c8_render_007_superbowl_data_binding"
+        }
+      ],
+      "note": "The distinct superbowl replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: superbowl frame 0, op 2825 (color), field paint_id: expected 220, got 208"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 8,
+      "line": 229,
+      "name": "data viz demo data binding",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 9,
+      "line": 275,
+      "name": "bank card data binding",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 81,
+          "symbol": "wave_c8_render_009_bank_card_data_binding"
+        }
+      ],
+      "note": "The distinct bankcard replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: bankcard frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 10,
+      "line": 308,
+      "name": "ai assistant data binding",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 87,
+          "symbol": "wave_c8_render_010_ai_assistant_data_binding"
+        }
+      ],
+      "note": "The distinct ai_assitant replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: ai_assitant frame 0, op 82 (makeLinearGradient): expected makeLinearGradient, got feather"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 11,
+      "line": 350,
+      "name": "echo show demo data binding",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 12,
+      "line": 383,
+      "name": "rewards demo data binding",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 93,
+          "symbol": "wave_c8_render_012_rewards_demo_data_binding"
+        }
+      ],
+      "note": "The distinct rewards_demo replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: rewards_demo frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 13,
+      "line": 429,
+      "name": "spotify kids demo data binding",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 99,
+          "symbol": "wave_c8_render_013_spotify_kids_demo_data_binding"
+        }
+      ],
+      "note": "The distinct spotify_kids_demo replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: spotify_kids_demo frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 14,
+      "line": 463,
+      "name": "spotify kids app icon data binding",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 104,
+          "symbol": "wave_c8_render_014_spotify_kids_app_icon_data_binding"
+        }
+      ],
+      "note": "The distinct spotify_kids_app_icon replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 15,
+      "line": 497,
+      "name": "hunter x demo data binding",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 110,
+          "symbol": "wave_c8_render_015_hunter_x_demo_data_binding"
+        }
+      ],
+      "note": "The distinct hunter_x_demo replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: hunter_x_demo frame 0, op 488 (blendMode): expected blendMode, got makeRenderPaint"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 16,
+      "line": 531,
+      "name": "health tracker data binding",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#17",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 17,
+      "line": 565,
+      "name": "car widgets data binding",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 116,
+          "symbol": "wave_c8_render_017_car_widgets_data_binding"
+        }
+      ],
+      "note": "The distinct car_widgets_v01 replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: car_widgets_v01 frame 0, op 222 (blendMode): expected blendMode, got makeRenderPaint"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#18",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 18,
+      "line": 625,
+      "name": "Vertical align on text with ellipsis",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 121,
+          "symbol": "wave_c8_render_018_vertical_align_ellipsis"
+        }
+      ],
+      "note": "The distinct vertical_align_ellipsis replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#19",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 19,
+      "line": 643,
+      "name": "Event triggers another event",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 126,
+          "symbol": "wave_c8_render_019_event_triggers_another_event"
+        }
+      ],
+      "note": "The distinct event_trigger_event replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#20",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 20,
+      "line": 685,
+      "name": "Collapsed data binds from layouts with display hidden",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 132,
+          "symbol": "wave_c8_render_020_collapsed_data_binds_hidden_layout"
+        }
+      ],
+      "note": "The distinct collapse_data_binds-test_1 replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: collapse_data_binds-test_1 frame 10, op 760 (rewind): expected rewind, got drawPath"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#21",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 21,
+      "line": 719,
+      "name": "Collapsed data binds from property groups in solos",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 138,
+          "symbol": "wave_c8_render_021_collapsed_data_binds_property_group_solo"
+        }
+      ],
+      "note": "The distinct collapse_data_binds-test_2 replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: collapse_data_binds-test_2 frame 15, op 315 (addRawPath): expected 151 fields, got 256"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#22",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 22,
+      "line": 753,
+      "name": "Collapsed data bound layout styles still update",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 143,
+          "symbol": "wave_c8_render_022_collapsed_data_bound_layout_styles_update"
+        }
+      ],
+      "note": "The distinct collapse_data_binds-test_3 replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#23",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 23,
+      "line": 805,
+      "name": "Reset randomization on value change",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#24",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 24,
+      "line": 857,
+      "name": "Reset randomization only once",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#25",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 25,
+      "line": 909,
+      "name": "Reset randomization on every change",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#26",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 26,
+      "line": 960,
+      "name": "Target to source with different data types on source and target",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 148,
+          "symbol": "wave_c8_render_026_target_to_source_different_types"
+        }
+      ],
+      "note": "The distinct saturation replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#27",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 27,
+      "line": 995,
+      "name": "interactive and non interactive scrolling",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 154,
+          "symbol": "wave_c8_render_027_interactive_and_non_interactive_scrolling"
+        }
+      ],
+      "note": "The distinct interactive_scrolling replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: interactive_scrolling frame 0, op 42 (transform), field xy: expected -0.0 (0x80000000), got 0"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#28",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 28,
+      "line": 1071,
+      "name": "Interpolator returns advance status as true until it settles",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 160,
+          "symbol": "wave_c8_render_028_interpolator_advance_until_settled"
+        }
+      ],
+      "note": "The distinct interpolate_to_end replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: interpolate_to_end frame 1, op 63 (addRawPath): expected 954 fields, got 975"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#29",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 29,
+      "line": 1111,
+      "name": "View models keep reference to their dependents and parents",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#30",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 30,
+      "line": 1238,
+      "name": "Replace view model instance in list",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#31",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 31,
+      "line": 1321,
+      "name": "Replace view model instance in nested list",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#32",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 32,
+      "line": 1409,
+      "name": "Pointer drag event",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 166,
+          "symbol": "wave_c8_render_032_pointer_drag_event"
+        }
+      ],
+      "note": "The distinct drag_event replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: drag_event frame 23, op 602 (save): expected save, got color"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#33",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 33,
+      "line": 1468,
+      "name": "Recursive data binding artboards are skipped",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 171,
+          "symbol": "wave_c8_render_033_recursive_data_binding_artboards_skipped"
+        }
+      ],
+      "note": "The distinct recursive_data_bind replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#34",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 34,
+      "line": 1525,
+      "name": "Collapsable data binds get added when object is uncollapsed",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 177,
+          "symbol": "wave_c8_render_034_collapsable_data_binds_added_when_uncollapsed"
+        }
+      ],
+      "note": "The distinct collapsable_data_binding replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: collapsable_data_binding frame 0, op 14 (save): expected save, got color"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#35",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 35,
+      "line": 1584,
+      "name": "Virtualized list with blended animations as initial state correctly render their mixed values",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 183,
+          "symbol": "wave_c8_render_035_virtualized_list_blended_initial_state"
+        }
+      ],
+      "note": "The distinct virtualize_blendmode replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: virtualize_blendmode frame 0, op 33 (color): expected color, got save"
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#36",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 36,
+      "line": 1621,
+      "name": "Advance two consecutive blend modes and apply inputs",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 190,
+          "symbol": "wave_c8_render_036_advance_blend_modes_inputs"
+        }
+      ],
+      "note": "The distinct advance_blend_mode-inputs replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#37",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 37,
+      "line": 1652,
+      "name": "Advance two consecutive blend modes and apply view model",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 197,
+          "symbol": "wave_c8_render_037_advance_blend_modes_view_model"
+        }
+      ],
+      "note": "The distinct advance_blend_mode-vms replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners."
+    },
+    {
+      "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#38",
+      "upstream": "tests/unit_tests/runtime/serialized_rendering_test.cpp",
+      "ordinal": 38,
+      "line": 1684,
+      "name": "Test State machine transition conditions based on artboards",
+      "status": "direct",
+      "outcome": "expected-red",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "tools/silver-corpus/tests/wave_c8.rs",
+          "line": 205,
+          "symbol": "wave_c8_render_038_transition_conditions_based_on_artboards"
+        }
+      ],
+      "note": "The distinct transition_artboard_condition_test replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
+      "expected_red_reason": "expected-red: transition_artboard_condition_test frame 0, op 16 (frameSize), field width: expected 983, got 984"
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#1",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 1,
+      "line": 8,
+      "name": "SignedContentHeader - empty data is invalid",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/tests/upstream_signed_content_header.rs",
+          "line": 44,
+          "symbol": "signed_content_header_empty_data_is_invalid"
+        }
+      ],
+      "note": "The distinct test executes the complete literal byte fixture and ordered assertions through retained SignedContent parsing and borrowed content/signature observations."
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#2",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 2,
+      "line": 16,
+      "name": "SignedContentHeader - unsigned header",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/tests/upstream_signed_content_header.rs",
+          "line": 51,
+          "symbol": "signed_content_header_unsigned_header"
+        }
+      ],
+      "note": "The distinct test executes the complete literal byte fixture and ordered assertions through retained SignedContent parsing and borrowed content/signature observations."
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#3",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 3,
+      "line": 36,
+      "name": "SignedContentHeader - signed header",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/tests/upstream_signed_content_header.rs",
+          "line": 72,
+          "symbol": "signed_content_header_signed_header"
+        }
+      ],
+      "note": "The distinct test executes the complete literal byte fixture and ordered assertions through retained SignedContent parsing and borrowed content/signature observations."
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#4",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 4,
+      "line": 69,
+      "name": "SignedContentHeader - version extraction",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/tests/upstream_signed_content_header.rs",
+          "line": 103,
+          "symbol": "signed_content_header_version_extraction"
+        }
+      ],
+      "note": "The distinct test executes the complete literal byte fixture and ordered assertions through retained SignedContent parsing and borrowed content/signature observations."
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#5",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 5,
+      "line": 79,
+      "name": "SignedContentHeader - truncated signed data is invalid",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#6",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 6,
+      "line": 91,
+      "name": "SignedContentHeader - minimum unsigned (flags only)",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/tests/upstream_signed_content_header.rs",
+          "line": 125,
+          "symbol": "signed_content_header_minimum_unsigned_flags_only"
+        }
+      ],
+      "note": "The distinct test executes the complete literal byte fixture and ordered assertions through retained SignedContent parsing and borrowed content/signature observations."
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#7",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 7,
+      "line": 101,
+      "name": "SignedContentHeader - minimum signed (no content)",
+      "status": "direct",
+      "outcome": "pass",
+      "evidence": [
+        {
+          "kind": "rust-test",
+          "path": "crates/nuxie-scripting/tests/upstream_signed_content_header.rs",
+          "line": 135,
+          "symbol": "signed_content_header_minimum_signed_no_content"
+        }
+      ],
+      "note": "The distinct test executes the complete literal byte fixture and ordered assertions through retained SignedContent parsing and borrowed content/signature observations."
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#8",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 8,
+      "line": 126,
+      "name": "signed content parsing - empty data fails",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#9",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 9,
+      "line": 138,
+      "name": "signed content parsing - unsigned content succeeds",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#10",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 10,
+      "line": 165,
+      "name": "signed content parsing - signed flag is detected",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#11",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 11,
+      "line": 194,
+      "name": "signed content parsing - truncated signed data fails",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#12",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 12,
+      "line": 213,
+      "name": "signed content parsing - version is preserved in flags",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#13",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 13,
+      "line": 235,
+      "name": "signed content parsing - signed content offset is correct",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#14",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 14,
+      "line": 260,
+      "name": "signed content parsing - unsigned content offset is correct",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#15",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 15,
+      "line": 288,
+      "name": "signed content parsing - minimum valid unsigned data",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "tests/unit_tests/runtime/signed_content_header_test.cpp#16",
+      "upstream": "tests/unit_tests/runtime/signed_content_header_test.cpp",
+      "ordinal": 16,
+      "line": 305,
+      "name": "signed content parsing - minimum valid signed data structure",
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
+    }
+  ]
+}

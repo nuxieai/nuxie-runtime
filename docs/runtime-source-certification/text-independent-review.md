@@ -101,3 +101,19 @@ Checks: candidate delta is documentation-only and passes `git diff --check`;
 all three pinned SHA-256 values match; corrected Silver manifest entries and
 frozen differences for cases 14-18 were rechecked. Production and tests remain
 untouched.
+
+## Final locator-only rereview of `eb768b4c8`
+
+Verdict: **ACCEPTED**
+
+The finite residual list is closed. Row 1 now names the actual `new` definition
+at `text/text.rs:16`; rows 39-40 name each nearest split Rust method at its
+verified definition line and explicitly retain the absent single-owner and
+missing-callback findings; H29 now names
+`text/fully_shaped_text.rs:22::StaticShapedTextTopology::text`.
+
+The candidate delta is documentation-only and passes `git diff --check`. The
+denominator remains 53 logical/79 physical definitions, 29 executable header
+methods, and eight defaults; the consumer topology remains **3 pass, 4
+expected-red, 11 pending**; and all three pinned hashes are unchanged. No
+production or test file was modified by this review.

@@ -51,8 +51,12 @@
           "symbol": "wave_c3_lite_rtti_001_behaves_correctly"
         }
       ],
-      "adaptation_kind": "rust-safety",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "note": "The executable Rust test preserves the pinned TypeId equality and inequality sequence, exact dynamic-cast success and null sequence, constructor values, and shared-ownership cast results through Rust's live Any, TypeId, Box, and Rc owners.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust has no raw-pointer lite_rtti_cast or intrusive rcp cast surface; Any and TypeId own exact dynamic-type identity while Box and Rc own the corresponding unique and shared lifetimes without recreating the C++ macros.",
+        "inapplicable_observable": "The numeric CONST_ID hash, macro-generated liteTypeID method, raw base-pointer cast mechanics, and intrusive RefCnt bookkeeping are C++ implementation observables; the pinned test asserts only identity relationships, cast nullness or exact referent, constructor fields, and shared-cast success, all preserved by the Rust owners."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/malformed_file_import_test.cpp#1",
@@ -70,8 +74,12 @@
           "symbol": "wave_c3_malformed_import_001_truncated_file_never_crashes"
         }
       ],
-      "adaptation_kind": "rust-safety",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "note": "The executable Rust test imports every exact byte prefix of the pinned asset in order and drops every returned or partially-owned Rust value before the next prefix, including the empty and full prefixes.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust File::import returns Result<File>, so a failed import cannot coexist with a non-null partially-built File and ownership cleanup occurs through Drop rather than a raw File pointer destructor.",
+        "inapplicable_observable": "The separate C++ ImportResult value, independently nullable File pointer, gNoOpFactory pointer, and allocator effect of deleting an uninitialized m_backboard are unrepresentable in the Rust Result ownership surface; the exact every-prefix import and safe destruction lifecycle remains executable."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/malformed_file_import_test.cpp#2",
@@ -89,8 +97,12 @@
           "symbol": "wave_c3_malformed_import_002_full_file_still_imports"
         }
       ],
-      "adaptation_kind": "rust-safety",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "note": "The executable Rust test imports the exact full pinned asset after the prefix guard sweep and observes a retained default artboard through the live File owner.",
+      "adaptation": {
+        "kind": "rust-safety",
+        "rationale": "Rust expresses successful file import as Result<File> and artboard presence as Option rather than the C++ ReadRiveFile helper's owning and raw pointers.",
+        "inapplicable_observable": "C++ raw File and Artboard pointer non-nullness and the ReadRiveFile helper's pointer ownership are not exposed by Rust; successful Result construction and Some(default_artboard) preserve the pinned success and artboard-presence observations."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#1",
@@ -108,8 +120,12 @@
           "symbol": "wave_c3_math_001_ieee_float_divide"
         }
       ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "note": "The executable Rust test preserves every pinned operand and result assertion, including the source's integer -0 spelling, infinities, zero results, repeated infinite division, and NaN classifications through primitive IEEE f32 division.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "The upstream math::ieee_float_divide helper is a C++ portability wrapper for IEEE division; Rust f32 division is the language-owned IEEE operation and needs no runtime wrapper.",
+        "inapplicable_observable": "Calling the specifically named C++ inline math::ieee_float_divide wrapper is not a Rust runtime observable; every numeric equality, sign, infinity, zero, and NaN result asserted by the pinned body is preserved."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#2",
@@ -127,8 +143,12 @@
           "symbol": "wave_c3_math_002_bit_cast"
         }
       ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "note": "The executable Rust test preserves all five pinned bit patterns and their exact positive, negative, infinite, and NaN f32 observations through f32::from_bits.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "Rust f32::from_bits is the language-owned bit reinterpretation operation corresponding to the C++ math::bit_cast<float> portability template.",
+        "inapplicable_observable": "The C++ math::bit_cast<float> template instantiation and its internal representation-copy mechanism have no Rust call identity; the exact input bits and resulting f32 observations remain executable."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#3",
@@ -138,8 +158,7 @@
       "name": "cmp_equal",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production mixed-sign cmp_equal owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#4",
@@ -149,8 +168,7 @@
       "name": "cmp_not_equal",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production mixed-sign cmp_not_equal owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#5",
@@ -160,8 +178,7 @@
       "name": "cmp_less",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production mixed-sign cmp_less owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#6",
@@ -171,8 +188,7 @@
       "name": "cmp_greater",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production mixed-sign cmp_greater owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#7",
@@ -182,8 +198,7 @@
       "name": "cmp_less_equal",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production mixed-sign cmp_less_equal owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#8",
@@ -193,8 +208,7 @@
       "name": "cmp_greater_equal",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production mixed-sign cmp_greater_equal owner exists. The rejected test-local MixedInteger implementation was removed, and no honest expected-red reaches an absent callable owner."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#9",
@@ -212,8 +226,12 @@
           "symbol": "wave_c3_math_009_clamp_cast"
         }
       ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "note": "The executable Rust test preserves all eight pinned source values, destination widths and signedness, clamped boundaries, and exact integer results through Rust primitive min and clamp owners.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "The upstream math::clamp_cast overload set is a C++ template and integral-promotion portability surface; Rust primitive min, clamp, and explicit casts own the corresponding typed operations.",
+        "inapplicable_observable": "C++ template overload selection and implicit integral-promotion mechanics are not Rust observables; each pinned source value, destination type boundary, and clamped result is asserted explicitly."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#10",
@@ -231,8 +249,12 @@
           "symbol": "wave_c3_math_010_clz"
         }
       ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "note": "The executable Rust test preserves the 32-bit and 64-bit boundary assertions, every loop iteration, one libc rand sample per iteration, and both leading-zero assertions through the primitive leading_zeros owner.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "The C++ math::clz32 and math::clz64 functions are portability wrappers over platform leading-zero operations; Rust integer leading_zeros is the language-owned operation and libc::rand preserves the pinned random-sample action.",
+        "inapplicable_observable": "The named C++ clz32/clz64 wrapper dispatch and compiler-builtin selection are not observable in Rust; bit widths, loop bounds, random-mask construction, and every expected leading-zero count remain asserted."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#11",
@@ -250,8 +272,12 @@
           "symbol": "wave_c3_math_011_rotateleft32"
         }
       ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "note": "The executable Rust test preserves both pinned u32 inputs, rotation counts, and exact hexadecimal results through u32::rotate_left.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "The upstream math::rotateleft32 function is a C++ portability wrapper; Rust u32::rotate_left is the language-owned 32-bit rotate operation.",
+        "inapplicable_observable": "Invocation of the specifically named C++ rotateleft32 wrapper and its platform intrinsic dispatch is not a Rust observable; both input/count/result triples are preserved exactly."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#12",
@@ -269,8 +295,12 @@
           "symbol": "wave_c3_math_012_msb"
         }
       ],
-      "adaptation_kind": "cxx-language-only",
-      "note": "The executable Rust test preserves the pinned action and assertion sequence through the explicitly approved Rust language/ownership adaptation."
+      "note": "The executable Rust test preserves the exact zero-through-nine assertions, all 29 shifted-ten assertions, and the all-bits-set terminal assertion through the primitive leading_zeros owner.",
+      "adaptation": {
+        "kind": "cxx-language-only",
+        "rationale": "The upstream math::msb helper derives the one-based most-significant-bit position from a leading-zero count; Rust exposes the language-owned u32::BITS and leading_zeros operations directly.",
+        "inapplicable_observable": "The named C++ math::msb helper call is not a Rust observable; the same one-based result expression and every pinned input/result assertion remain executable."
+      }
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#13",
@@ -280,8 +310,7 @@
       "name": "round_up_to_multiple_of",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production round_up_to_multiple_of owner exists. The rejected test-local closure was removed, and no honest expected-red reaches an absent callable owner."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#14",
@@ -309,8 +338,7 @@
       "name": "count_set_bits",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: Rust count_ones covers the public operation but no separately callable production fallback owner exists for the pinned second assertion stream. The rejected duplicate primitive evidence was removed, and no honest expected-red reaches that absent owner."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#16",
@@ -320,8 +348,7 @@
       "name": "compact_bitmask_value",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production compact_bitmask_value owner exists, and no honest executable behavior red can reach the missing capability without a forbidden test-local implementation or synthetic failure."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#17",
@@ -331,8 +358,7 @@
       "name": "expand_compacted_bitmask_value",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production expand_compacted_bitmask_value owner exists, and no honest executable behavior red can reach the missing capability without a forbidden test-local implementation or synthetic failure."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/math_test.cpp#18",
@@ -342,8 +368,7 @@
       "name": "iterate_bit_combinations_in_mask",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no production iterate_bit_combinations_in_mask owner exists, and no honest executable behavior red can reach the missing capability without a forbidden test-local implementation or synthetic failure."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/node_test.cpp#1",
@@ -353,8 +378,7 @@
       "name": "Node instances",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no concrete one-to-one runtime Node owner exists for the pinned default-x observation. The rejected InstanceObjectArena graph proxy was removed, and no honest expected-red reaches an absent Node authority."
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/node_test.cpp#2",
@@ -364,8 +388,7 @@
       "name": "nodeX function return x value",
       "status": "pending",
       "outcome": "unverified",
-      "evidence": [],
-      "note": "BLOCKED: no concrete one-to-one runtime Node owner exists for the pinned x mutation/readback. The rejected InstanceObjectArena graph proxy was removed, and no honest expected-red reaches an absent Node authority."
+      "evidence": []
     }
   ]
 }

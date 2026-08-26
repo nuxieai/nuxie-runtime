@@ -31,8 +31,42 @@ fn advance_draw(
         .expect("transition comparator artboard draws");
 }
 
+/// Test-only probe for the actual retained list owner at the missing nullable
+/// item boundary. `set_list_item_count` is the only current owner mutation
+/// capable of requesting a slot without fabricating a typed child instance.
+/// A same-index swap is identity-preserving, but it can succeed only when that
+/// logical slot is backed by a concrete `ViewModelInstanceListItem` owner.
+///
+/// Today the first mutation raises `item_count` while retaining no wrapper, so
+/// the real owner rejects the swap. Once nullable wrappers are retained, these
+/// same owner operations leave the inserted item in place and return true.
+fn add_nullable_list_item_at_actual_owner(
+    owner: &nuxie_runtime::RuntimeOwnedViewModelHandle,
+    property_path: &str,
+    index: usize,
+) -> (Option<usize>, bool) {
+    let Some(item_count) = owner.list_item_count_by_property_name_path(property_path) else {
+        return (None, false);
+    };
+    if index != item_count
+        || !owner
+            .borrow_mut()
+            .set_list_item_count_by_property_name_path(property_path, item_count + 1)
+    {
+        return (
+            owner.list_item_count_by_property_name_path(property_path),
+            false,
+        );
+    }
+    let addressable = owner.swap_list_items_by_property_name_path(property_path, index, index);
+    (
+        owner.list_item_count_by_property_name_path(property_path),
+        addressable,
+    )
+}
+
 #[test]
-#[ignore = "expected-red: Rust list owner cannot construct the pinned null ViewModelInstanceListItem required by the first addItem action"]
+#[ignore = "expected-red: the actual list owner records the first nullable slot count but cannot retain an addressable ViewModelInstanceListItem wrapper"]
 fn transition_self_conditions_reach_empty_list_swap_seam() {
     let file = Box::leak(Box::new(File::import(&pinned()).expect("fixture imports")));
     let mut artboard = file
@@ -173,7 +207,15 @@ fn transition_self_conditions_reach_empty_list_swap_seam() {
         Some(0),
         "the pinned first list action starts from an empty retained list owner",
     );
-    panic!(
-        "Rust list owner cannot construct the pinned null ViewModelInstanceListItem required by the first addItem action"
+    let (item_count, nullable_wrapper_is_addressable) =
+        add_nullable_list_item_at_actual_owner(view_model.handle(), "lis", 0);
+    assert_eq!(
+        item_count,
+        Some(1),
+        "the actual list owner must record the first nullable add",
+    );
+    assert!(
+        nullable_wrapper_is_addressable,
+        "the actual retained list owner must add an addressable nullable wrapper at index 0",
     );
 }

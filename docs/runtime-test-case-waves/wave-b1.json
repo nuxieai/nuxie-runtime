@@ -777,12 +777,12 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie/tests/upstream_transition_self.rs",
-          "line": 36,
+          "line": 70,
           "symbol": "transition_self_conditions_reach_empty_list_swap_seam"
         }
       ],
-      "note": "The executable owner flow preserves every scalar transition and stops at the first list action because Rust cannot construct the pinned nullable empty ViewModelInstanceListItem owner.",
-      "expected_red_reason": "expected-red: Rust list owner cannot construct the pinned null ViewModelInstanceListItem required by the first addItem action"
+      "note": "The executable owner flow preserves every scalar transition, asks the actual retained list owner to add its first nullable slot without fabricating a typed child, proves the logical count becomes one, and reaches the concrete missing addressable ViewModelInstanceListItem wrapper seam.",
+      "expected_red_reason": "expected-red: the actual list owner records the first nullable slot count but cannot retain an addressable ViewModelInstanceListItem wrapper"
     },
     {
       "id": "tests/unit_tests/runtime/data_binding_test.cpp#15",

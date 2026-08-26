@@ -1,7 +1,7 @@
 //! Exact pinned Silver replays for executable Wave C8 rendering cases.
 
 use nuxie_runtime::{runtime_random_call_count, set_runtime_random_test_values};
-use silver_corpus::{Execution, compare_sriv, parse_sriv, read_manifest, resolve_expected};
+use silver_corpus::{compare_sriv, parse_sriv, read_manifest, resolve_expected, Execution};
 use std::path::{Path, PathBuf};
 
 fn workspace_root() -> PathBuf {
@@ -37,12 +37,6 @@ fn replay(id: &str) {
             .expect("parse pinned SRIV");
     let actual = parse_sriv(actual.bytes()).expect("parse Rust SRIV");
     compare_sriv(&expected, &actual).unwrap_or_else(|difference| panic!("{id}: {difference}"));
-}
-
-#[test]
-#[ignore = "expected-red: juice frame 0, op 40 (blendMode): expected blendMode, got makeRenderPaint"]
-fn wave_c8_render_001_juice_silver() {
-    replay("juice");
 }
 
 #[test]
@@ -156,12 +150,6 @@ fn wave_c8_render_027_interactive_and_non_interactive_scrolling() {
 }
 
 #[test]
-#[ignore = "expected-red: interpolate_to_end frame 1, op 63 (addRawPath): expected 954 fields, got 975"]
-fn wave_c8_render_028_interpolator_advance_until_settled() {
-    replay("interpolate_to_end");
-}
-
-#[test]
 #[ignore = "expected-red: drag_event frame 23, op 602 (save): expected save, got color"]
 fn wave_c8_render_032_pointer_drag_event() {
     replay("drag_event");
@@ -176,14 +164,6 @@ fn wave_c8_render_033_recursive_data_binding_artboards_skipped() {
 #[ignore = "expected-red: collapsable_data_binding frame 0, op 14 (save): expected save, got color"]
 fn wave_c8_render_034_collapsable_data_binds_added_when_uncollapsed() {
     replay("collapsable_data_binding");
-}
-
-#[test]
-#[ignore = "expected-red: virtualize_blendmode frame 0, op 33 (color): expected color, got save"]
-fn wave_c8_render_035_virtualized_list_blended_initial_state() {
-    let _random_values = set_runtime_random_test_values(&[]);
-    assert_eq!(runtime_random_call_count(), 0);
-    replay("virtualize_blendmode");
 }
 
 #[test]

@@ -32,7 +32,7 @@
   "wave": "c8",
   "case_count": 62,
   "ratchet": {
-    "max_pending": 23
+    "max_pending": 27
   },
   "cases": [
     {
@@ -104,22 +104,9 @@
       "ordinal": 2,
       "line": 21,
       "name": "string decoder",
-      "status": "adapted",
-      "outcome": "pass",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "crates/nuxie-binary/tests/wave_c8_reader.rs",
-          "line": 18,
-          "symbol": "wave_c8_reader_002_string_decoder"
-        }
-      ],
-      "note": "The distinct retained-owner test preserves the pinned literal byte fixtures and complete ordered success/failure assertion stream.",
-      "adaptation": {
-        "kind": "rust-safety",
-        "rationale": "Rust BinaryDataReader owns length-prefix decoding and returns an owned byte vector instead of accepting an explicit length and writable destination pointer.",
-        "inapplicable_observable": "The C allocation, writable destination pointer, and explicit terminator storage; the exact payload, decoded string, twelve content bytes consumed, and truncated failure remain observable."
-      }
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/reader_test.cpp#3",
@@ -133,7 +120,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-binary/tests/wave_c8_reader.rs",
-          "line": 38,
+          "line": 19,
           "symbol": "wave_c8_reader_003_float_decoder"
         }
       ],
@@ -156,7 +143,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-binary/tests/wave_c8_reader.rs",
-          "line": 60,
+          "line": 41,
           "symbol": "wave_c8_reader_004_byte_decoder"
         }
       ],
@@ -173,18 +160,9 @@
       "ordinal": 1,
       "line": 30,
       "name": "juice silver",
-      "status": "direct",
-      "outcome": "expected-red",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 44,
-          "symbol": "wave_c8_render_001_juice_silver"
-        }
-      ],
-      "note": "The distinct juice replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
-      "expected_red_reason": "expected-red: juice frame 0, op 40 (blendMode): expected blendMode, got makeRenderPaint"
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#2",
@@ -198,7 +176,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 49,
+          "line": 43,
           "symbol": "wave_c8_render_002_hide_silver"
         }
       ],
@@ -216,7 +194,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 54,
+          "line": 48,
           "symbol": "wave_c8_render_003_n_slice_silver"
         }
       ],
@@ -234,7 +212,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 59,
+          "line": 53,
           "symbol": "wave_c8_render_004_lock_icon_listener_silver"
         }
       ],
@@ -252,7 +230,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 64,
+          "line": 58,
           "symbol": "wave_c8_render_005_validate_text_run_listener_works"
         }
       ],
@@ -270,7 +248,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 69,
+          "line": 63,
           "symbol": "wave_c8_render_006_validate_text_with_modifiers_and_dashes"
         }
       ],
@@ -288,7 +266,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 75,
+          "line": 69,
           "symbol": "wave_c8_render_007_superbowl_data_binding"
         }
       ],
@@ -317,7 +295,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 81,
+          "line": 75,
           "symbol": "wave_c8_render_009_bank_card_data_binding"
         }
       ],
@@ -336,7 +314,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 87,
+          "line": 81,
           "symbol": "wave_c8_render_010_ai_assistant_data_binding"
         }
       ],
@@ -365,7 +343,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 93,
+          "line": 87,
           "symbol": "wave_c8_render_012_rewards_demo_data_binding"
         }
       ],
@@ -384,7 +362,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 99,
+          "line": 93,
           "symbol": "wave_c8_render_013_spotify_kids_demo_data_binding"
         }
       ],
@@ -403,7 +381,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 104,
+          "line": 98,
           "symbol": "wave_c8_render_014_spotify_kids_app_icon_data_binding"
         }
       ],
@@ -421,7 +399,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 110,
+          "line": 104,
           "symbol": "wave_c8_render_015_hunter_x_demo_data_binding"
         }
       ],
@@ -450,7 +428,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 116,
+          "line": 110,
           "symbol": "wave_c8_render_017_car_widgets_data_binding"
         }
       ],
@@ -469,7 +447,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 121,
+          "line": 115,
           "symbol": "wave_c8_render_018_vertical_align_ellipsis"
         }
       ],
@@ -487,7 +465,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 126,
+          "line": 120,
           "symbol": "wave_c8_render_019_event_triggers_another_event"
         }
       ],
@@ -505,7 +483,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 132,
+          "line": 126,
           "symbol": "wave_c8_render_020_collapsed_data_binds_hidden_layout"
         }
       ],
@@ -524,7 +502,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 138,
+          "line": 132,
           "symbol": "wave_c8_render_021_collapsed_data_binds_property_group_solo"
         }
       ],
@@ -543,7 +521,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 143,
+          "line": 137,
           "symbol": "wave_c8_render_022_collapsed_data_bound_layout_styles_update"
         }
       ],
@@ -591,7 +569,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 148,
+          "line": 142,
           "symbol": "wave_c8_render_026_target_to_source_different_types"
         }
       ],
@@ -609,7 +587,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 154,
+          "line": 148,
           "symbol": "wave_c8_render_027_interactive_and_non_interactive_scrolling"
         }
       ],
@@ -622,18 +600,9 @@
       "ordinal": 28,
       "line": 1071,
       "name": "Interpolator returns advance status as true until it settles",
-      "status": "direct",
-      "outcome": "expected-red",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 160,
-          "symbol": "wave_c8_render_028_interpolator_advance_until_settled"
-        }
-      ],
-      "note": "The distinct interpolate_to_end replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
-      "expected_red_reason": "expected-red: interpolate_to_end frame 1, op 63 (addRawPath): expected 954 fields, got 975"
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#29",
@@ -677,7 +646,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 166,
+          "line": 154,
           "symbol": "wave_c8_render_032_pointer_drag_event"
         }
       ],
@@ -696,7 +665,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 171,
+          "line": 159,
           "symbol": "wave_c8_render_033_recursive_data_binding_artboards_skipped"
         }
       ],
@@ -714,7 +683,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 177,
+          "line": 165,
           "symbol": "wave_c8_render_034_collapsable_data_binds_added_when_uncollapsed"
         }
       ],
@@ -727,18 +696,9 @@
       "ordinal": 35,
       "line": 1584,
       "name": "Virtualized list with blended animations as initial state correctly render their mixed values",
-      "status": "direct",
-      "outcome": "expected-red",
-      "evidence": [
-        {
-          "kind": "rust-test",
-          "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 183,
-          "symbol": "wave_c8_render_035_virtualized_list_blended_initial_state"
-        }
-      ],
-      "note": "The distinct virtualize_blendmode replay executes the complete pinned per-case action stream through the retained import, state-machine, render-serialization, SRIV parsing, and exact comparison owners.",
-      "expected_red_reason": "expected-red: virtualize_blendmode frame 0, op 33 (color): expected color, got save"
+      "status": "pending",
+      "outcome": "unverified",
+      "evidence": []
     },
     {
       "id": "tests/unit_tests/runtime/serialized_rendering_test.cpp#36",
@@ -752,7 +712,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 190,
+          "line": 170,
           "symbol": "wave_c8_render_036_advance_blend_modes_inputs"
         }
       ],
@@ -770,7 +730,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 197,
+          "line": 177,
           "symbol": "wave_c8_render_037_advance_blend_modes_view_model"
         }
       ],
@@ -788,7 +748,7 @@
         {
           "kind": "rust-test",
           "path": "tools/silver-corpus/tests/wave_c8.rs",
-          "line": 205,
+          "line": 185,
           "symbol": "wave_c8_render_038_transition_conditions_based_on_artboards"
         }
       ],

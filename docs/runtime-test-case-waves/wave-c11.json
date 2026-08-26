@@ -47,7 +47,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 681,
+          "line": 649,
           "symbol": "promise_resolve_creates_a_fulfilled_promise"
         }
       ],
@@ -65,7 +65,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 691,
+          "line": 662,
           "symbol": "promise_reject_creates_a_rejected_promise"
         }
       ],
@@ -83,7 +83,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 701,
+          "line": 675,
           "symbol": "promise_reject_with_no_args_uses_default_reason"
         }
       ],
@@ -101,7 +101,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 711,
+          "line": 688,
           "symbol": "and_then_chains_propagate_values"
         }
       ],
@@ -119,7 +119,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 722,
+          "line": 702,
           "symbol": "and_then_propagates_to_catch_on_rejection"
         }
       ],
@@ -137,7 +137,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 733,
+          "line": 716,
           "symbol": "finally_runs_on_fulfillment"
         }
       ],
@@ -155,7 +155,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 742,
+          "line": 728,
           "symbol": "finally_runs_on_rejection"
         }
       ],
@@ -173,7 +173,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 751,
+          "line": 740,
           "symbol": "promise_all_resolves_when_all_resolve"
         }
       ],
@@ -191,7 +191,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 761,
+          "line": 753,
           "symbol": "promise_all_rejects_if_any_rejects"
         }
       ],
@@ -209,7 +209,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 771,
+          "line": 766,
           "symbol": "promise_all_with_empty_array_resolves_immediately"
         }
       ],
@@ -227,7 +227,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 780,
+          "line": 778,
           "symbol": "async_await_with_already_resolved_promise"
         }
       ],
@@ -286,7 +286,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 840,
+          "line": 843,
           "symbol": "await_returns_false_error_on_rejection_no_throw"
         }
       ],
@@ -304,7 +304,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 854,
+          "line": 869,
           "symbol": "await_rejection_resumes_coroutine_so_cleanup_code_runs"
         }
       ],
@@ -322,7 +322,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 869,
+          "line": 896,
           "symbol": "await_on_cancelled_promise_returns_false_message"
         }
       ],
@@ -340,7 +340,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 885,
+          "line": 924,
           "symbol": "async_returns_a_promise_that_resolves_with_return_value"
         }
       ],
@@ -358,7 +358,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 895,
+          "line": 937,
           "symbol": "and_then_handler_error_rejects_chained_promise"
         }
       ],
@@ -376,7 +376,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 906,
+          "line": 955,
           "symbol": "finally_error_rejects_chained_promise"
         }
       ],
@@ -394,7 +394,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 917,
+          "line": 973,
           "symbol": "cancelled_promise_does_not_fire_then_catch_finally_handlers"
         }
       ],
@@ -412,7 +412,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 933,
+          "line": 992,
           "symbol": "promise_new_creates_a_pending_promise"
         }
       ],
@@ -430,7 +430,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 938,
+          "line": 1000,
           "symbol": "promise_new_resolve_settles_the_promise"
         }
       ],
@@ -448,7 +448,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 948,
+          "line": 1013,
           "symbol": "promise_new_reject_settles_the_promise"
         }
       ],
@@ -466,7 +466,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 958,
+          "line": 1026,
           "symbol": "promise_new_executor_error_rejects_the_promise"
         }
       ],
@@ -484,7 +484,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 968,
+          "line": 1043,
           "symbol": "cancel_sets_state_to_cancelled"
         }
       ],
@@ -502,7 +502,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 973,
+          "line": 1055,
           "symbol": "cancel_fires_on_cancel_hook"
         }
       ],
@@ -520,7 +520,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 985,
+          "line": 1070,
           "symbol": "cancel_propagates_down_to_consumers"
         }
       ],
@@ -538,7 +538,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 995,
+          "line": 1083,
           "symbol": "cancel_propagates_up_when_all_consumers_cancelled"
         }
       ],
@@ -556,7 +556,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1008,
+          "line": 1100,
           "symbol": "cancel_is_noop_on_already_settled_promise"
         }
       ],
@@ -574,7 +574,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1013,
+          "line": 1107,
           "symbol": "cancelled_promise_does_not_fire_and_then_callbacks"
         }
       ],
@@ -592,7 +592,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1024,
+          "line": 1121,
           "symbol": "get_status_returns_correct_strings"
         }
       ],
@@ -610,7 +610,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1036,
+          "line": 1137,
           "symbol": "await_on_already_rejected_promise_returns_false_error"
         }
       ],
@@ -628,7 +628,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1050,
+          "line": 1163,
           "symbol": "promise_all_cancels_remaining_on_rejection"
         }
       ],
@@ -646,7 +646,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1064,
+          "line": 1180,
           "symbol": "await_success_returns_true_value_explicitly"
         }
       ],
@@ -664,7 +664,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1078,
+          "line": 1197,
           "symbol": "await_mixed_success_and_failure_in_sequence"
         }
       ],
@@ -682,7 +682,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1094,
+          "line": 1216,
           "symbol": "async_function_handles_rejection_and_returns_recovery_value"
         }
       ],
@@ -700,7 +700,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1108,
+          "line": 1233,
           "symbol": "await_in_retry_loop_pattern"
         }
       ],
@@ -718,7 +718,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1126,
+          "line": 1254,
           "symbol": "on_cancel_via_instance_method"
         }
       ],
@@ -736,7 +736,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1137,
+          "line": 1268,
           "symbol": "promise_resolve_flattens_a_fulfilled_promise"
         }
       ],
@@ -754,7 +754,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1147,
+          "line": 1282,
           "symbol": "promise_resolve_flattens_a_rejected_promise"
         }
       ],
@@ -772,7 +772,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1157,
+          "line": 1296,
           "symbol": "and_then_flattens_a_returned_promise"
         }
       ],
@@ -790,7 +790,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1168,
+          "line": 1310,
           "symbol": "and_then_flattens_a_returned_rejected_promise"
         }
       ],
@@ -808,7 +808,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1179,
+          "line": 1324,
           "symbol": "recursive_flattening_through_multiple_promise_layers"
         }
       ],
@@ -826,7 +826,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1189,
+          "line": 1337,
           "symbol": "promise_new_resolve_callback_flattens_a_promise"
         }
       ],
@@ -844,7 +844,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1199,
+          "line": 1350,
           "symbol": "catch_handler_returning_a_promise_flattens_for_recovery"
         }
       ],
@@ -862,7 +862,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1210,
+          "line": 1364,
           "symbol": "flattening_a_pending_promise_adopts_its_eventual_value"
         }
       ],
@@ -880,7 +880,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1223,
+          "line": 1380,
           "symbol": "flattening_a_pending_promise_that_rejects"
         }
       ],
@@ -898,7 +898,7 @@
         {
           "kind": "rust-test",
           "path": "crates/nuxie-scripting/src/vm/lua_promise.rs",
-          "line": 1236,
+          "line": 1396,
           "symbol": "cancelling_adopted_promise_propagates_to_inner"
         }
       ],

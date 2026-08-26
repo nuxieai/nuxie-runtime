@@ -131,3 +131,54 @@ definitions plus one `EM_JS` definition and five executable inline header
 methods, and the correction changes only `text-input.md`. No production or
 test behavior changed, so no runtime test gate was required for this narrow
 document-only rereview.
+
+## Scoped production-correction review
+
+Production correction reviewed:
+`78e4fb844b8d7ca14a5d1cdda158444666e1170c`.
+
+Verdict: **ACCEPTED for the corrected row portions**.
+
+The affected production methods were reread in full against pinned rows 5,
+17, 22, 25–26, and 31–37. The correction preserves the required operation and
+side-effect order:
+
+- single-line raw synchronization writes the stripped raw value with cursor
+  preservation before updating retained source and invoking the generated
+  property setter;
+- both scroll velocities are zeroed before graph lookup or inverse failure;
+- recognized key operations are followed by unconditional key-specific dirt,
+  with source synchronization before dirt for edits and Paint for multiline
+  Enter;
+- focus, blur, selection-radius, drag, word-selection, and line-selection
+  owners perform their pinned callback side effects without gating them on a
+  raw mutation result; and
+- the Rust-only changed-result values from word/line selection are diagnostic;
+  production pointer dispatch ignores them, so they do not replace the pinned
+  void callback semantics.
+
+The focus correction is not debug-only. Production pointer dispatch and frame
+advance call `StateMachineInstance::sync_text_input_focus`, which resolves the
+live focused TextInput and calls `ArtboardInstance::sync_text_input_focus`;
+actual focus transitions then invoke the same `text_input_focused` and
+`text_input_blurred` owners exercised by the thin debug entry point. The caller
+does not repeat callbacks without a transition, matching pinned
+`FocusManager::notifyFocusChange`; once invoked, each owner retains the pinned
+unconditional assignment/selection-clear/Publish-Paint sequence. No test-local
+algorithm, backing-container proxy, or circular receipt claim is used.
+
+Focused verification:
+
+- `CARGO_INCREMENTAL=0 cargo test -p nuxie-runtime --features tools --test
+  cpp_probe upstream_text_input_ -- --nocapture`: 12 passed, zero failed;
+- targeted `rustfmt --edition 2024 --check` on `text_input.rs` and
+  `cpp_probe.rs`: passed; and
+- the correction diff is scoped to the primary owner, focused direct evidence,
+  and the correspondence receipt.
+
+This acceptance does not promote the unresolved parts of the rows. The
+reconstructed vertical/line navigation in rows 22 and 36, the packed
+geometry-hit boundary in row 31, and the full scroll-constraint advance trace
+in row 37 remain adapted or pending exactly as recorded. All untouched red and
+pending TextInput rows remain red or pending, so the complete source pair is
+still not at parity.

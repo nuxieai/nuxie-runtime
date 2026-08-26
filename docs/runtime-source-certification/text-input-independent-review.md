@@ -102,3 +102,32 @@ candidate granularity. Their `pending evidence`, `incomplete`, `incorrect`, or
 - The candidate commit changes only the correspondence document.
 - No runtime source, test, fixture, or evidence ledger was changed or executed
   by this review.
+
+## Narrow correction rereview
+
+Correction reviewed: `fe69bde91252d000301714506c059381767e7876`.
+
+Verdict: **ACCEPTED as the independently reviewed TextInput discrepancy
+inventory; the source pair remains correctly classified as not at parity**.
+
+The correction addresses every item enumerated above without changing the
+frozen denominator or source authority. Rows 4, 9, 17, 24, and 31 now carry
+the required ordering, lazy-materialization, missing raw write-back,
+Rust-signature, and failed-inversion classifications. Rows 32, 33, and 37
+inherit the failed-conversion velocity defect. Rows 5 and 8 correctly identify
+Path/TextShape as the same bit and retain only the real gating and additional
+publication differences. Row 22 explicitly records the reconstructed
+navigation owners and required differentials.
+
+All four corrected locators resolve to their named definitions at the reviewed
+commit: `hit_expandable` at 4506,
+`invalidate_runtime_layout_text_host` at 6882,
+`update_runtime_text_render_styles` at 18038, and
+`publish_focusable_keyboard_capabilities` at 2199. The added
+`move_cursor_vertical` locator also resolves at 598.
+
+The pinned upstream hashes remain unchanged, the denominator remains 37 C++
+definitions plus one `EM_JS` definition and five executable inline header
+methods, and the correction changes only `text-input.md`. No production or
+test behavior changed, so no runtime test gate was required for this narrow
+document-only rereview.

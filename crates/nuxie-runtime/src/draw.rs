@@ -9862,7 +9862,10 @@ impl RuntimeShapeList {
         }
     }
 
-    fn text_style_paint_owner(&self, paint_local: usize) -> Option<&RuntimeShapePaintOwner> {
+    pub(crate) fn text_style_paint_owner(
+        &self,
+        paint_local: usize,
+    ) -> Option<&RuntimeShapePaintOwner> {
         self.paint_owners_by_component_local
             .get(paint_local)?
             .iter()
@@ -10034,7 +10037,11 @@ impl RuntimeShapeList {
     /// called after every dirty/clean clone lifecycle; copied local-id
     /// memberships are never runtime truth (`src/shapes/path.cpp:76-96`;
     /// `include/rive/shapes/{path,shape}.hpp`).
-    pub(crate) fn rebuild_component_memberships(&mut self, objects: &InstanceObjectArena) {
+    pub(crate) fn rebuild_component_memberships(
+        &mut self,
+        objects: &InstanceObjectArena,
+        graph: &ArtboardGraph,
+    ) {
         for shape in self.by_local.iter_mut().flatten() {
             shape.path_locals.clear();
         }
@@ -10061,6 +10068,124 @@ impl RuntimeShapeList {
             }
             self.slot_mut(shape_local).path_locals = path_locals;
         }
+
+        // `TextStylePaint` is both a TextStyle and a ShapePaintContainer.
+        // Its ShapePaint children register on the concrete occurrence during
+        // onAddedClean. Rebuild that list from the retained Component links so
+        // live parent-id writes leave the source frozen while a clone observes
+        // the copied property and constructs fresh paint/backend owners.
+        let source_paints = graph
+            .shape_paint_containers
+            .iter()
+            .flat_map(|container| container.paints.iter())
+            .map(|paint| (paint.local_id, paint.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let text_style_paint_memberships = objects
+            .component_handles()
+            .iter()
+            .filter_map(|handle| {
+                let component = objects.component(*handle)?;
+                let state = component.concrete.text_style_paint.as_ref()?;
+                Some((component.local_id, state.paint_locals()))
+            })
+            .collect::<Vec<_>>();
+        for (style_local, paint_locals) in text_style_paint_memberships {
+            let style = self.slot_mut(style_local);
+            style.paint_owners.clear();
+            for (paint_index, paint_local) in paint_locals.into_iter().enumerate() {
+                let Some(paint) = source_paints.get(&paint_local) else {
+                    continue;
+                };
+                style.paint_owners.push(RuntimeShapePaintOwner::new(
+                    paint_index,
+                    paint,
+                    style_local,
+                ));
+            }
+        }
+        self.rebuild_paint_component_indices(graph);
+    }
+
+    fn rebuild_paint_component_indices(&mut self, graph: &ArtboardGraph) {
+        self.paint_owners_by_component_local.clear();
+        self.effect_owners_by_component_local.clear();
+        self.paint_owner_refs.clear();
+
+        let source_paints = graph
+            .shape_paint_containers
+            .iter()
+            .flat_map(|container| container.paints.iter())
+            .map(|paint| (paint.local_id, paint))
+            .collect::<BTreeMap<_, _>>();
+        let registrations = self
+            .by_local
+            .iter()
+            .enumerate()
+            .filter_map(|(shape_local, shape)| shape.as_ref().map(|shape| (shape_local, shape)))
+            .flat_map(|(shape_local, shape)| {
+                shape
+                    .paint_owners
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(owner_index, owner)| {
+                        source_paints.get(&owner.paint_local).map(|paint| {
+                            (
+                                RuntimeShapePaintOwnerRef {
+                                    shape_local,
+                                    owner_index,
+                                },
+                                (*paint).clone(),
+                                shape.paint_container_family,
+                            )
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        for (owner_ref, paint, family) in registrations {
+            if family.is_some_and(|family| family.owns_shape_geometry() || family.owns_text_paint())
+            {
+                self.paint_owner_refs.push(owner_ref);
+            }
+            self.register_paint_component(owner_ref.shape_local, owner_ref);
+            self.register_paint_component(paint.local_id, owner_ref);
+            if let Some(local_id) = paint.mutator_local {
+                self.register_paint_component(local_id, owner_ref);
+            }
+            if let Some(local_id) = paint.feather_local {
+                self.register_paint_component(local_id, owner_ref);
+            }
+            for stop in &paint.gradient_stops {
+                self.register_paint_component(stop.local_id, owner_ref);
+            }
+            for (effect_index, effect) in paint.effects.iter().enumerate() {
+                self.register_effect_components(effect, owner_ref, effect_index);
+            }
+        }
+        self.pending_backend_paints
+            .get_mut()
+            .clone_from(&self.paint_owner_refs);
+        for owner_ref in &self.paint_owner_refs {
+            if let Some(owner) = self
+                .get(owner_ref.shape_local)
+                .and_then(|shape| shape.paint_owners.get(owner_ref.owner_index))
+            {
+                owner.backend_queued.set(true);
+            }
+        }
+        self.backend_context_id.set(None);
+    }
+
+    pub(crate) fn text_style_paint_locals(&self, style_local: usize) -> Vec<usize> {
+        self.get(style_local)
+            .map(|style| {
+                style
+                    .paint_owners
+                    .iter()
+                    .map(|paint| paint.paint_local)
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn register_paint_component(&mut self, local_id: usize, owner: RuntimeShapePaintOwnerRef) {
@@ -10680,15 +10805,7 @@ impl RuntimeTextDrawOwner {
             let effective_opacity =
                 render_opacity * command.text_path_bucket_opacity.unwrap_or(1.0);
             command.render_opacity = effective_opacity;
-            if let Some(paint) =
-                command
-                    .text_paint_ref
-                    .and_then(|(container_index, paint_index)| {
-                        graph
-                            .shape_paint_containers
-                            .get(container_index)
-                            .and_then(|container| container.paints.get(paint_index))
-                    })
+            if let Some(paint) = runtime_shape_paint_node_for_local(graph, command.paint_local)
             {
                 command.paint_state = runtime_shape_paint_state(instance, paint, effective_opacity);
             }
@@ -10717,15 +10834,7 @@ impl RuntimeTextDrawOwner {
         let mut world_geometry_changed = false;
         for command in commands.iter_mut() {
             let previous_shape_world = command.shape_world_override.unwrap_or(shape_world);
-            if let Some(paint) =
-                command
-                    .text_paint_ref
-                    .and_then(|(container_index, paint_index)| {
-                        graph
-                            .shape_paint_containers
-                            .get(container_index)
-                            .and_then(|container| container.paints.get(paint_index))
-                    })
+            if let Some(paint) = runtime_shape_paint_node_for_local(graph, command.paint_local)
             {
                 let path_kind = runtime_live_shape_paint_path_kind(instance, paint)
                     .unwrap_or(command.path_kind);
@@ -16058,7 +16167,6 @@ struct RuntimeCachedTextShapePaints {
 #[derive(Debug, Clone)]
 struct RuntimeRetainedColorGlyphs {
     glyphs: Vec<RuntimeIntegratedColorGlyphCommand>,
-    order: Vec<RuntimeTextDrawOrder>,
     shape_world: Mat2D,
 }
 
@@ -16066,6 +16174,7 @@ struct RuntimeRetainedColorGlyphs {
 enum RuntimeTextReplay {
     Paint(usize),
     ColorGlyph(usize),
+    EmptyStyle(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17762,24 +17871,18 @@ fn preallocate_render_paint_for_mounted_instance(
         initialize_authored_shape_render_paint(render_paint.as_mut(), paint_object, mutator_object);
     }
 
-    let text_owner = graph
+    let text_paint_local = graph
         .shape_paint_containers
         .iter()
         .filter(|container| {
             crate::shapes::shape_paint_container::family(container.type_name)
                 .is_some_and(|family| family.owns_text_paint())
         })
-        .find_map(|container| {
-            let owner_index = container
-                .paints
-                .iter()
-                .position(|paint| paint.global_id == global_id)?;
-            instance
-                .runtime_shapes
-                .get(container.local_id)?
-                .paint_owners
-                .get(owner_index)
-        });
+        .flat_map(|container| container.paints.iter())
+        .find(|paint| paint.global_id == global_id)
+        .map(|paint| paint.local_id);
+    let text_owner = text_paint_local
+        .and_then(|paint_local| instance.runtime_shapes.text_style_paint_owner(paint_local));
     if let Some(owner) = text_owner {
         let mut backend = owner.backend.value.borrow_mut();
         if backend.context_id != Some(paints.backend_context_id) {
@@ -18060,8 +18163,8 @@ fn runtime_build_text_draw_frame(
     } else {
         None
     };
-    let (mut commands, clip_bounds, color, shape_local_transform) = if drawable.type_name == "Text"
-    {
+    let (mut commands, clip_bounds, color, draw_order, shape_local_transform) =
+        if drawable.type_name == "Text" {
         let layout_constraint =
             instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
         let topology = topology
@@ -18090,16 +18193,17 @@ fn runtime_build_text_draw_frame(
             shaped_topology.as_deref(),
         )?;
         let shape_local_transform = draw_data.local_transform;
+        let draw_order = draw_data.order;
         (
             draw_data.commands,
             topology.clip_bounds(runtime, instance, layout_constraint)?,
             (!draw_data.color_glyphs.is_empty()).then(|| {
                 Arc::new(RuntimeRetainedColorGlyphs {
                     glyphs: draw_data.color_glyphs,
-                    order: draw_data.order,
                     shape_world: draw_data.shape_world,
                 })
             }),
+            draw_order,
             shape_local_transform,
         )
     } else {
@@ -18113,11 +18217,12 @@ fn runtime_build_text_draw_frame(
             )?,
             None,
             None,
+            Vec::new(),
             Mat2D::IDENTITY,
         )
     };
     assign_shape_paint_path_slot_indices(&mut commands);
-    let replay = runtime_text_replay_order(&commands, color.as_deref());
+    let replay = runtime_text_replay_order(&commands, &draw_order, color.as_deref());
     let paths = Arc::new(runtime_text_owned_raw_paths(&commands));
     let clip_path = clip_bounds
         // C++ `Text::buildRenderStyles` returns before rebuilding
@@ -18165,29 +18270,36 @@ fn runtime_build_text_draw_frame(
 
 fn runtime_text_replay_order(
     commands: &[RuntimeShapePaintCommand],
+    order: &[RuntimeTextDrawOrder],
     color: Option<&RuntimeRetainedColorGlyphs>,
 ) -> Vec<RuntimeTextReplay> {
-    let Some(color) = color else {
+    if order.is_empty() {
         return (0..commands.len()).map(RuntimeTextReplay::Paint).collect();
-    };
-    let mut replay = Vec::with_capacity(commands.len() + color.glyphs.len());
+    }
+    let mut replay = Vec::with_capacity(
+        commands.len() + color.map_or(0, |color| color.glyphs.len()) + order.len(),
+    );
     let mut ordered_styles = BTreeSet::new();
-    for item in &color.order {
+    for item in order {
         match *item {
             RuntimeTextDrawOrder::Style(style_local) => {
                 ordered_styles.insert(style_local);
-                replay.extend(
-                    commands
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, paint)| {
-                            runtime_text_style_path_owner_local(paint) == Some(style_local)
-                        })
-                        .map(|(index, _)| RuntimeTextReplay::Paint(index)),
-                );
+                let style_commands = commands
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, paint)| {
+                        runtime_text_style_path_owner_local(paint) == Some(style_local)
+                    })
+                    .map(|(index, _)| RuntimeTextReplay::Paint(index))
+                    .collect::<Vec<_>>();
+                if style_commands.is_empty() {
+                    replay.push(RuntimeTextReplay::EmptyStyle(style_local));
+                } else {
+                    replay.extend(style_commands);
+                }
             }
             RuntimeTextDrawOrder::ColorGlyph(index) => {
-                if color.glyphs.get(index).is_some() {
+                if color.is_some_and(|color| color.glyphs.get(index).is_some()) {
                     replay.push(RuntimeTextReplay::ColorGlyph(index));
                 }
             }
@@ -18452,21 +18564,12 @@ fn runtime_configure_text_pooled_paint(
     paint: &RuntimeShapePaintCommand,
 ) -> Result<()> {
     let instance_epoch = runtime_paint_configuration_epoch(instance, paint);
-    if backend
-        .configuration
-        .as_ref()
-        .is_some_and(|cached| cached.instance_epoch == instance_epoch)
-    {
-        return Ok(());
-    }
     let configuration = runtime_render_paint_configuration(instance, object, paint)?;
-    if backend
-        .configuration
-        .as_ref()
-        .is_none_or(|cached| cached.configuration != configuration)
-    {
-        runtime_configure_paint(backend.paint.as_mut(), instance, object, paint, None)?;
-    }
+    // Pinned TextStylePaint resets paintIndex for every ShapePaint and calls
+    // ShapePaint::applyTo on the shared pooled paint unconditionally. An
+    // epoch-only cache would let child paint #2 inherit child paint #1's
+    // color/shader/feather when both are visited in the same update epoch.
+    runtime_configure_paint(backend.paint.as_mut(), instance, object, paint, None)?;
     backend.paint.shader(authored_shader);
     backend.configuration = Some(RuntimeCachedRenderPaintConfiguration {
         instance_epoch,
@@ -18620,6 +18723,44 @@ fn runtime_draw_live_text_family(
                     renderer,
                     emoji_images,
                 );
+                continue;
+            }
+            RuntimeTextReplay::EmptyStyle(style_local) => {
+                let Some(style) = instance.runtime_shapes.get(style_local) else {
+                    continue;
+                };
+                let text_blend_mode = instance
+                    .component_parent_local(style_local)
+                    .and_then(|text_local| {
+                        runtime_draw_property_key_for_name("Drawable", "blendModeValue")
+                            .and_then(|key| instance.uint_property(text_local, key))
+                    })
+                    .and_then(|value| u32::try_from(value).ok())
+                    .unwrap_or(0);
+                for paint in &style.paint_owners {
+                    if !runtime_owned_shape_paint_is_visible(instance, paint)
+                        || !runtime_shape_paint_state_is_effectively_visible(
+                            &paint.paint_state.borrow(),
+                        )
+                    {
+                        continue;
+                    }
+                    let mut backend = paint.backend.value.borrow_mut();
+                    if backend.context_id != Some(backend_context_id) {
+                        anyhow::bail!(
+                            "TextStylePaint local {} was not realized for backend context {}",
+                            paint.paint_local,
+                            backend_context_id
+                        );
+                    }
+                    let render_paint = backend.paint.as_mut().with_context(|| {
+                        format!(
+                            "TextStylePaint local {} has no occurrence-owned RenderPaint",
+                            paint.paint_local
+                        )
+                    })?;
+                    render_paint.blend_mode(runtime_blend_mode(text_blend_mode)?);
+                }
                 continue;
             }
         };
@@ -21482,6 +21623,45 @@ pub(crate) fn runtime_shape_paint_command(
         shape_world,
         path_commands,
         effect_path_commands,
+        None,
+        require_effective_visible,
+        suppress_authored_transparent,
+        aliases_local_clockwise_path,
+    )
+}
+
+/// TextStylePaint draws each opacity bucket, but its ShapePaint effects and
+/// inner Feather are prepared from the aggregate `m_path` that contains every
+/// accepted glyph. Keep those two sources distinct exactly as the pinned
+/// `TextStylePaint::addPath`/`ShapePaint::draw` owner does.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn runtime_text_style_paint_command(
+    artboard: &ArtboardInstance,
+    paint: &ShapePaintNode,
+    container_blend_mode_value: u32,
+    needs_save_operation: bool,
+    render_opacity: f32,
+    shape_world: Mat2D,
+    path_commands: Vec<RuntimePathCommand>,
+    aggregate_path_commands: &[RuntimePathCommand],
+    require_effective_visible: bool,
+    suppress_authored_transparent: bool,
+    aliases_local_clockwise_path: bool,
+) -> Option<RuntimeShapePaintCommand> {
+    let mut path_commands = path_commands;
+    prune_empty_path_segments(&mut path_commands);
+    let effect_path_commands =
+        runtime_effect_path_commands(artboard, paint, aggregate_path_commands);
+    runtime_shape_paint_command_with_effect_path(
+        artboard,
+        paint,
+        container_blend_mode_value,
+        needs_save_operation,
+        render_opacity,
+        shape_world,
+        path_commands,
+        effect_path_commands,
+        Some(aggregate_path_commands),
         require_effective_visible,
         suppress_authored_transparent,
         aliases_local_clockwise_path,
@@ -21498,6 +21678,7 @@ fn runtime_shape_paint_command_with_effect_path(
     shape_world: Mat2D,
     path_commands: Vec<RuntimePathCommand>,
     effect_path_commands: Option<Vec<RuntimePathCommand>>,
+    feather_source_override: Option<&[RuntimePathCommand]>,
     require_effective_visible: bool,
     suppress_authored_transparent: bool,
     aliases_local_clockwise_path: bool,
@@ -21519,7 +21700,7 @@ fn runtime_shape_paint_command_with_effect_path(
     let feather_path_commands = if has_effect_path {
         effect_path_commands.as_slice()
     } else {
-        path_commands.as_slice()
+        feather_source_override.unwrap_or(path_commands.as_slice())
     };
     let mut feather_state = runtime_feather_state(
         artboard,
@@ -21794,6 +21975,17 @@ pub(crate) fn runtime_live_owned_shape_paint_path_kind(
         }
         RuntimeShapePaintKind::Unknown => paint.authored_path_kind,
     }
+}
+
+fn runtime_shape_paint_node_for_local(
+    graph: &ArtboardGraph,
+    paint_local: usize,
+) -> Option<&ShapePaintNode> {
+    graph
+        .shape_paint_containers
+        .iter()
+        .flat_map(|container| container.paints.iter())
+        .find(|paint| paint.local_id == paint_local)
 }
 
 fn runtime_shape_paint_space_transform(
@@ -27121,6 +27313,355 @@ mod tests {
                 .shape_local_transform,
             "Text-owned Paint dirt must recompute paint-phase positioning"
         );
+    }
+
+    #[test]
+    fn text_style_paint_reapplies_each_child_to_the_shared_nonopaque_pool_slot() {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        );
+        let bytes = std::fs::read(
+            root.join("tests/unit_tests/assets/text_feather_falloff.riv"),
+        )
+        .expect("read pinned TextStylePaint fixture");
+        let runtime = read_runtime_file(&bytes).expect("TextStylePaint fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("TextStylePaint graph builds");
+        let (graph_index, _) = graphs
+            .artboards
+            .iter()
+            .enumerate()
+            .find(|(_, graph)| {
+                graph.shape_paint_containers.iter().any(|container| {
+                    container.type_name == "TextStylePaint" && container.paints.len() >= 2
+                })
+            })
+            .expect("fixture has a multi-paint TextStylePaint");
+        let graph = &graphs.artboards[graph_index];
+        let mut witnessed = None;
+
+        for animation_index in 0..graph.animations.len().max(1) {
+            let mut instance = ArtboardInstance::from_graph_with_artboards(
+                &runtime,
+                graph,
+                &graphs.artboards,
+            )
+            .expect("TextStylePaint fixture occurrence constructs");
+            let mut animation = instance.linear_animation_instance(animation_index);
+            for step in 0..=120 {
+                if let Some(animation) = animation.as_mut() {
+                    if step != 0 {
+                        instance.advance_linear_animation_instance(animation, 1.0 / 60.0);
+                    }
+                    instance.apply_linear_animation_instance(animation, 1.0);
+                }
+                instance.update_pass();
+
+                let pair = instance
+                    .runtime_drawables
+                    .drawables
+                    .iter()
+                    .filter_map(|drawable| drawable.text_draw_owner.as_ref())
+                    .filter_map(|owner| owner.retained.borrow().clone())
+                    .find_map(|retained| {
+                        let commands = retained.commands.as_ref();
+                        commands.iter().enumerate().find_map(|(left_index, left)| {
+                            let left_pool = left.text_paint_pool?;
+                            commands.iter().skip(left_index + 1).find_map(|right| {
+                                (right.text_paint_pool == Some(left_pool)
+                                    && right.paint_local != left.paint_local
+                                    && (right.paint_state != left.paint_state
+                                        || right.feather_state != left.feather_state))
+                                    .then(|| (left.clone(), right.clone()))
+                            })
+                        })
+                    });
+                let Some((left, right)) = pair else {
+                    continue;
+                };
+
+                let mut factory = nuxie_render_api::RecordingFactory::new();
+                let mut renderer = factory.make_renderer();
+                instance
+                    .draw_artboard(
+                        &runtime,
+                        graph,
+                        &graphs.artboards,
+                        &mut factory,
+                        &mut renderer,
+                        &BTreeMap::new(),
+                        None,
+                        true,
+                    )
+                    .expect("real retained TextStylePaint draw succeeds");
+                witnessed = Some((left, right, factory.stream()));
+                break;
+            }
+            if witnessed.is_some() {
+                break;
+            }
+        }
+
+        let (left, right, stream) = witnessed
+            .expect("fixture animation reaches two child paints sharing one nonopaque pool slot");
+        assert_eq!(left.text_paint_pool, right.text_paint_pool);
+        assert_ne!(left.paint_local, right.paint_local);
+        assert!(stream.matches("drawPath").count() >= 2, "{stream}");
+        if let (
+            Some(RuntimeShapePaintState::SolidColor {
+                render_color: left_color,
+                ..
+            }),
+            Some(RuntimeShapePaintState::SolidColor {
+                render_color: right_color,
+                ..
+            }),
+        ) = (&left.paint_state, &right.paint_state)
+        {
+            assert!(
+                stream.contains(&format!("color=0x{left_color:08x}")),
+                "left child configuration is absent from the real draw stream: {stream}"
+            );
+            assert!(
+                stream.contains(&format!("color=0x{right_color:08x}")),
+                "right child configuration is absent from the real draw stream: {stream}"
+            );
+        }
+        assert_ne!(
+            left.feather_state.as_ref().map(|feather| feather.strength),
+            right.feather_state.as_ref().map(|feather| feather.strength),
+            "the fixture pair distinguishes the shared pool slot by feather state"
+        );
+    }
+
+    #[test]
+    fn text_style_paint_rejected_first_opacity_retains_style_and_runs_paint_loop() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "FontAsset",
+                vec![fixture_property(
+                    "FontAsset",
+                    "assetId",
+                    FixtureValue::Uint(0),
+                )],
+            ),
+            fixture_record(
+                "FileAssetContents",
+                vec![fixture_property(
+                    "FileAssetContents",
+                    "bytes",
+                    FixtureValue::Bytes(
+                        include_bytes!("../../../fixtures/fonts/roboto-a.ttf").to_vec(),
+                    ),
+                )],
+            ),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record(
+                "Text",
+                vec![fixture_property(
+                    "Drawable",
+                    "blendModeValue",
+                    FixtureValue::Uint(24),
+                )],
+            ),
+            fixture_record(
+                "TextStylePaint",
+                vec![
+                    fixture_property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                    fixture_property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
+                    fixture_property("TextStylePaint", "fontSize", FixtureValue::Double(20.0)),
+                ],
+            ),
+            fixture_record(
+                "Fill",
+                vec![fixture_property("Fill", "parentId", FixtureValue::Uint(2))],
+            ),
+            fixture_record(
+                "SolidColor",
+                vec![
+                    fixture_property("SolidColor", "parentId", FixtureValue::Uint(3)),
+                    fixture_property(
+                        "SolidColor",
+                        "colorValue",
+                        FixtureValue::Color(0xff11_2233),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    fixture_property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    fixture_property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                    fixture_property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("A".into()),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "TextModifierGroup",
+                vec![
+                    fixture_property(
+                        "TextModifierGroup",
+                        "parentId",
+                        FixtureValue::Uint(1),
+                    ),
+                    fixture_property(
+                        "TextModifierGroup",
+                        "modifierFlags",
+                        FixtureValue::Uint(1 << 5),
+                    ),
+                    fixture_property(
+                        "TextModifierGroup",
+                        "opacity",
+                        FixtureValue::Double(f32::NAN),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "TextModifierRange",
+                vec![fixture_property(
+                    "TextModifierRange",
+                    "parentId",
+                    FixtureValue::Uint(6),
+                )],
+            ),
+        ])
+        .expect("rejected-opacity TextStylePaint fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .expect("rejected-opacity TextStylePaint graph builds");
+        let graph = &graphs.artboards[0];
+        let mut instance = ArtboardInstance::from_graph_with_artboards(
+            &runtime,
+            graph,
+            &graphs.artboards,
+        )
+        .expect("rejected-opacity occurrence constructs");
+        instance.update_pass();
+
+        let drawable_index = instance.runtime_drawables.drawable_by_local[&1];
+        let retained = instance.runtime_drawables.drawables[drawable_index]
+            .text_draw_owner
+            .as_ref()
+            .expect("Text retained owner")
+            .retained
+            .borrow()
+            .clone()
+            .expect("Text update publishes retained render state");
+        assert!(retained.commands.is_empty(), "{:?}", retained.commands);
+        assert_eq!(retained.replay.as_ref(), &[RuntimeTextReplay::EmptyStyle(2)]);
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut renderer = PathGeometryRecordingRenderer::default();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("rejected-opacity retained frame draws");
+        assert!(renderer.draw_paths.is_empty());
+        assert!(
+            stats.paint_ops.borrow().contains(&"blend_mode"),
+            "TextStylePaint::draw still copies the Text blend mode before finding no opacity bucket"
+        );
+    }
+
+    #[test]
+    fn text_style_paint_effect_and_inner_feather_use_the_aggregate_path() {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        );
+        let bytes = std::fs::read(
+            root.join("tests/unit_tests/assets/text_feather_falloff.riv"),
+        )
+        .expect("read pinned TextStylePaint aggregate-path fixture");
+        let runtime = read_runtime_file(&bytes).expect("aggregate-path fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("aggregate-path graph builds");
+        let (graph, container, mut paint) = graphs
+            .artboards
+            .iter()
+            .find_map(|graph| {
+                graph.shape_paint_containers.iter().find_map(|container| {
+                    (container.type_name == "TextStylePaint").then(|| {
+                        container
+                            .paints
+                            .iter()
+                            .find(|paint| !paint.effects.is_empty() || paint.feather.is_some())
+                    })?
+                    .map(|paint| (graph, container, paint.clone()))
+                })
+            })
+            .expect("fixture has an effected or feathered TextStylePaint child");
+        if paint.effects.is_empty()
+            && let Some(feather) = paint.feather.as_mut()
+        {
+            // The pinned fixture owns the real TextStylePaint/Feather
+            // occurrence. Select its inner branch explicitly so this focused
+            // owner test observes which path `runtime_feather_state` consumes.
+            feather.inner = true;
+            feather.strength = 5.0;
+        }
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph)
+            .expect("aggregate-path fixture occurrence constructs");
+        if paint.effects.is_empty()
+            && let Some(feather) = paint.feather.as_ref()
+        {
+            let inner_key = property_key_for_name(feather.type_name, "inner").unwrap();
+            let strength_key = property_key_for_name(feather.type_name, "strength").unwrap();
+            instance.set_bool_property(feather.local_id, inner_key, true);
+            instance.set_double_property(feather.local_id, strength_key, 5.0);
+        }
+        let near = rect_commands(RenderAabb::new(0.0, 0.0, 10.0, 10.0));
+        let far = rect_commands(RenderAabb::new(100.0, 0.0, 110.0, 10.0));
+        let aggregate = [near.clone(), far].concat();
+        let command = runtime_text_style_paint_command(
+            &instance,
+            &paint,
+            container.blend_mode_value,
+            true,
+            0.5,
+            Mat2D::IDENTITY,
+            near,
+            &aggregate,
+            false,
+            false,
+            true,
+        )
+        .expect("TextStylePaint command builds");
+
+        let aggregate_observable = if command.has_effect_path {
+            &command.effect_path_commands
+        } else {
+            &command
+                .feather_state
+                .as_ref()
+                .expect("selected child has aggregate-consuming inner feather")
+                .inner_path_commands
+        };
+        let bounds = runtime_raw_path_from_commands(aggregate_observable)
+            .bounds()
+            .expect("aggregate-consuming path has bounds");
+        assert!(
+            bounds.max_x >= 100.0,
+            "effect/inner-feather preparation must see the far glyph from m_path: {bounds:?}"
+        );
+        let bucket_bounds = runtime_raw_path_from_commands(&command.path_commands)
+            .bounds()
+            .expect("opacity bucket has bounds");
+        assert!(bucket_bounds.max_x <= 10.0);
     }
 
     #[test]

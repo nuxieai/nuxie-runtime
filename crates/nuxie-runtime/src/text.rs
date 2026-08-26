@@ -6,7 +6,7 @@ use harfrust::{
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::{
     ArtboardGraph, DataBindNode, PathGeometryNode, ShapePaintContainerNode, ShapePaintKind,
-    ShapePaintStateNode,
+    ShapePaintNode, ShapePaintStateNode,
 };
 use nuxie_render_api::{Aabb as RenderAabb, Vec2D as RenderVec2D};
 use nuxie_schema::definition_by_name;
@@ -33,6 +33,7 @@ use crate::properties::{property_key_for_name, solid_color_value_property_key};
 use crate::view_model::RuntimeFontAssetValue;
 use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
+use crate::text_style_paint_owner::RuntimeTextStylePaintPaths;
 use std::collections::BTreeMap;
 
 pub(crate) mod cursor;
@@ -666,9 +667,9 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
         instance.runtime_component_world_transform_with_bounds(text_local, graph, layout_bounds);
     let render_data = slice.render_data_from_layout(runtime, instance, graph, layout, None)?;
     if render_data
-        .path_buckets_by_style
+        .style_paths
         .iter()
-        .all(|buckets| buckets.is_empty())
+        .all(RuntimeTextStylePaintPaths::is_empty)
         && render_data.color_glyphs.is_empty()
     {
         return Ok(RuntimeTextDrawData::default());
@@ -684,11 +685,23 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
     let mut next_path_bucket_slot = 0usize;
     for style_index in style_order {
         let style = &slice.styles[style_index];
-        let path_buckets = render_data.path_buckets_by_style[style_index].clone();
-        let Some(container) = style.container(graph) else {
+        let style_paths = &render_data.style_paths[style_index];
+        let path_buckets = style_paths.ordered_buckets();
+        let aggregate_path_commands = style_paths.aggregate();
+        if style.container(graph).is_none() {
             continue;
-        };
-        let path_buckets = order_opacity_buckets_like_cpp(path_buckets);
+        }
+        let paint_nodes = instance
+            .runtime_shapes
+            .text_style_paint_locals(style.local_id)
+            .into_iter()
+            .filter_map(|paint_local| {
+                text_style_paint_node_for_local(graph, paint_local)
+                    .map(|(container_index, paint_index, paint)| {
+                        (container_index, paint_index, paint)
+                    })
+            })
+            .collect::<Vec<_>>();
         let paint_pool = RuntimeTextPaintPoolSpec {
             style_local: style.local_id,
             // C++ reserves one pooled paint per opacity bucket, including the
@@ -701,7 +714,7 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
             .iter()
             .enumerate()
             .find(|(_, path_bucket)| path_bucket.opacity == 1.0);
-        for (paint_index, paint) in container.paints.iter().enumerate() {
+        for &(source_container_index, source_paint_index, paint) in &paint_nodes {
             if let Some((bucket_index, path_bucket)) = opaque_bucket {
                 let mut path_commands = path_bucket.commands.clone();
                 if runtime_live_shape_paint_path_kind(instance, paint)
@@ -709,7 +722,7 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
                 {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
-                if let Some(mut command) = runtime_shape_paint_command(
+                if let Some(mut command) = crate::draw::runtime_text_style_paint_command(
                     instance,
                     paint,
                     text_blend_mode_value,
@@ -717,6 +730,7 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
                     render_opacity * path_bucket.opacity,
                     shape_world,
                     path_commands,
+                    aggregate_path_commands,
                     // C++ `Text::m_drawCommands` is opacity-independent:
                     // `TextStylePaint::draw` re-tests `shapePaint->shouldDraw()`
                     // on every draw (`src/text/text_style_paint.cpp:53-58`), so
@@ -733,13 +747,14 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
                     }
                     command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
                     command.text_path_bucket_opacity = Some(path_bucket.opacity);
-                    command.text_paint_ref = Some((style.container_index.unwrap(), paint_index));
+                    command.text_paint_ref =
+                        Some((source_container_index, source_paint_index));
                     command.ensure_text_paint_pool_after_draw = Some(paint_pool);
                     commands.push(command);
                 }
             }
 
-            for (paint_index, (bucket_index, path_bucket)) in path_buckets
+            for (pool_index, (bucket_index, path_bucket)) in path_buckets
                 .iter()
                 .enumerate()
                 .filter(|(_, path_bucket)| path_bucket.opacity != 1.0)
@@ -751,7 +766,7 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
                 {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
-                let Some(mut command) = runtime_shape_paint_command(
+                let Some(mut command) = crate::draw::runtime_text_style_paint_command(
                     instance,
                     paint,
                     text_blend_mode_value,
@@ -759,6 +774,7 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
                     render_opacity * path_bucket.opacity,
                     shape_world,
                     path_commands,
+                    aggregate_path_commands,
                     // Opacity-independent for the same reason as the opaque
                     // bucket above; `shouldDraw` runs at emit time.
                     false,
@@ -774,10 +790,10 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
                 command.uses_temporary_paint = true;
                 command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
                 command.text_path_bucket_opacity = Some(path_bucket.opacity);
-                command.text_paint_ref = Some((style.container_index.unwrap(), paint_index));
+                command.text_paint_ref = Some((source_container_index, source_paint_index));
                 command.text_paint_pool = Some(RuntimeTextPaintPoolUse {
                     spec: paint_pool,
-                    paint_index,
+                    paint_index: pool_index,
                 });
                 commands.push(command);
             }
@@ -904,9 +920,13 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
                 render_opacity,
                 shape_world,
                 render_data
-                    .path_buckets_by_style
+                    .style_paths
                     .into_iter()
-                    .flatten()
+                    .flat_map(|paths| paths.ordered_buckets())
+                    .map(|bucket| StaticTextInputPathBucket {
+                        opacity: bucket.opacity,
+                        commands: bucket.commands,
+                    })
                     .collect(),
             );
         }
@@ -914,7 +934,7 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
             if !instance.text_input_is_focused(text_input_local) {
                 return Ok(Vec::new());
             }
-            vec![StaticTextPathBucket {
+            vec![StaticTextInputPathBucket {
                 opacity: 1.0,
                 commands: text_input_cursor::local_clockwise_path(
                     instance,
@@ -923,7 +943,7 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
                 ),
             }]
         }
-        "TextInputSelection" => vec![StaticTextPathBucket {
+        "TextInputSelection" => vec![StaticTextInputPathBucket {
             opacity: 1.0,
             commands: text_input_selection::local_clockwise_path(instance, text_input_local),
         }],
@@ -1121,7 +1141,7 @@ struct StaticVerticalTrim {
 
 #[derive(Debug, Clone)]
 struct StaticTextRenderData {
-    path_buckets_by_style: Vec<Vec<StaticTextPathBucket>>,
+    style_paths: Vec<RuntimeTextStylePaintPaths>,
     color_glyphs: Vec<RuntimeIntegratedColorGlyphCommand>,
     order: Vec<RuntimeTextDrawOrder>,
     local_transform: Mat2D,
@@ -2691,13 +2711,13 @@ impl StaticTextSlice {
     ) -> Result<StaticTextRenderData> {
         let Some(layout) = layout else {
             return Ok(StaticTextRenderData {
-                path_buckets_by_style: vec![Vec::new(); self.styles.len()],
+                style_paths: vec![RuntimeTextStylePaintPaths::default(); self.styles.len()],
                 color_glyphs: Vec::new(),
                 order: Vec::new(),
                 local_transform: Mat2D::IDENTITY,
             });
         };
-        let mut commands_by_style = vec![Vec::new(); self.styles.len()];
+        let mut style_paths = vec![RuntimeTextStylePaintPaths::default(); self.styles.len()];
         let mut color_glyphs = Vec::new();
         let mut order = Vec::new();
         let mut established_styles = vec![false; self.styles.len()];
@@ -2782,12 +2802,8 @@ impl StaticTextSlice {
                         outline
                             .draw(draw_settings, &mut pen)
                             .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
-                        append_opacity_bucket(
-                            &mut commands_by_style[glyph.style_index],
-                            positioned.modifier_opacity,
-                            pen.commands,
-                        );
-                        if positioned.modifier_opacity > 0.0
+                        if style_paths[glyph.style_index]
+                            .add_path(pen.commands, positioned.modifier_opacity)
                             && !established_styles[glyph.style_index]
                         {
                             established_styles[glyph.style_index] = true;
@@ -2799,7 +2815,7 @@ impl StaticTextSlice {
         }
 
         Ok(StaticTextRenderData {
-            path_buckets_by_style: commands_by_style,
+            style_paths,
             color_glyphs,
             order,
             local_transform: layout.local_transform,
@@ -4996,10 +5012,10 @@ impl StaticTextSlice {
         needs_save_operation: bool,
         render_opacity: f32,
         shape_world: Mat2D,
-        path_buckets: Vec<StaticTextPathBucket>,
+        path_buckets: Vec<StaticTextInputPathBucket>,
     ) -> Result<Vec<RuntimeShapePaintCommand>> {
         let mut commands = Vec::new();
-        for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
+        for path_bucket in order_text_input_opacity_buckets(path_buckets) {
             for (paint_index, paint) in container.paints.iter().enumerate() {
                 let mut path_commands = path_bucket.commands.clone();
                 if runtime_live_shape_paint_path_kind(instance, paint)
@@ -5034,6 +5050,24 @@ impl StaticTextSlice {
     }
 }
 
+fn text_style_paint_node_for_local(
+    graph: &ArtboardGraph,
+    paint_local: usize,
+) -> Option<(usize, usize, &ShapePaintNode)> {
+    graph
+        .shape_paint_containers
+        .iter()
+        .enumerate()
+        .find_map(|(container_index, container)| {
+            container
+                .paints
+                .iter()
+                .enumerate()
+                .find(|(_, paint)| paint.local_id == paint_local)
+                .map(|(paint_index, paint)| (container_index, paint_index, paint))
+        })
+}
+
 impl StaticTextStyle {
     fn container<'graph>(
         &self,
@@ -5045,9 +5079,14 @@ impl StaticTextStyle {
     }
 
     fn foreground_color(&self, instance: &ArtboardInstance, graph: &ArtboardGraph) -> u32 {
-        self.container(graph)
+        instance
+            .runtime_shapes
+            .text_style_paint_locals(self.local_id)
             .into_iter()
-            .flat_map(|container| container.paints.iter())
+            .filter_map(|paint_local| {
+                text_style_paint_node_for_local(graph, paint_local)
+                    .map(|(_, _, paint)| paint)
+            })
             .find(|paint| {
                 paint.paint_type == ShapePaintKind::Fill
                     && matches!(
@@ -7053,7 +7092,12 @@ mod tests {
             let render_data = slice
                 .render_data_filtered(&runtime, &instance, graph, None, Mat2D::IDENTITY, None)
                 .expect("empty render data computes");
-            assert!(render_data.path_buckets_by_style.iter().all(Vec::is_empty));
+            assert!(
+                render_data
+                    .style_paths
+                    .iter()
+                    .all(RuntimeTextStylePaintPaths::is_empty)
+            );
             assert!(render_data.color_glyphs.is_empty());
             assert!(render_data.order.is_empty());
             assert_eq!(render_data.local_transform, Mat2D::IDENTITY);
@@ -7561,20 +7605,132 @@ mod tests {
 
     #[test]
     fn opacity_buckets_follow_cpp_ordered_map_iteration() {
-        let buckets = [0.8, 0.2, 0.5]
-            .into_iter()
-            .map(|opacity| StaticTextPathBucket {
-                opacity,
-                commands: Vec::new(),
-            })
-            .collect();
+        let mut paths = RuntimeTextStylePaintPaths::default();
+        for opacity in [0.8, 0.2, 0.5] {
+            paths.add_path(Vec::new(), opacity);
+        }
 
-        let ordered = order_opacity_buckets_like_cpp(buckets)
+        let ordered = paths
+            .ordered_buckets()
             .into_iter()
             .map(|bucket| bucket.opacity)
             .collect::<Vec<_>>();
 
         assert_eq!(ordered, vec![0.2, 0.5, 0.8]);
+    }
+
+    #[test]
+    fn text_style_paint_membership_is_frozen_on_source_and_rebuilt_on_clone() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(1),
+                )],
+            ),
+            fixture_record(
+                "Fill",
+                vec![property("Fill", "parentId", FixtureValue::Uint(2))],
+            ),
+            fixture_record(
+                "SolidColor",
+                vec![
+                    property("SolidColor", "parentId", FixtureValue::Uint(3)),
+                    property(
+                        "SolidColor",
+                        "colorValue",
+                        FixtureValue::Color(0xff11_2233),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                    property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("A".into()),
+                    ),
+                ],
+            ),
+            fixture_record("Text", Vec::new()),
+            fixture_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    FixtureValue::Uint(6),
+                )],
+            ),
+            fixture_record(
+                "Fill",
+                vec![property("Fill", "parentId", FixtureValue::Uint(7))],
+            ),
+            fixture_record(
+                "SolidColor",
+                vec![
+                    property("SolidColor", "parentId", FixtureValue::Uint(8)),
+                    property(
+                        "SolidColor",
+                        "colorValue",
+                        FixtureValue::Color(0xffaa_bbcc),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", FixtureValue::Uint(6)),
+                    property("TextValueRun", "styleId", FixtureValue::Uint(7)),
+                    property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("B".into()),
+                    ),
+                ],
+            ),
+        ])
+        .expect("TextStylePaint lifecycle fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .expect("TextStylePaint lifecycle graph builds");
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let mut source = ArtboardInstance::from_graph(&runtime, graph)
+            .expect("TextStylePaint source occurrence constructs");
+
+        assert_eq!(source.runtime_shapes.text_style_paint_locals(2), [3]);
+        assert_eq!(source.runtime_shapes.text_style_paint_locals(7), [8]);
+        let source_a = StaticTextSlice::from_instance(&runtime, graph, &source, 1)
+            .expect("source A production topology");
+        let source_b = StaticTextSlice::from_instance(&runtime, graph, &source, 6)
+            .expect("source B production topology");
+        assert_eq!(source_a.styles[0].foreground_color(&source, graph), 0xff11_2233);
+        assert_eq!(source_b.styles[0].foreground_color(&source, graph), 0xffaa_bbcc);
+
+        let parent_id = property_key_for_name("Component", "parentId").unwrap();
+        assert!(source.set_uint_property(3, parent_id, 7));
+        assert_eq!(source.runtime_shapes.text_style_paint_locals(2), [3]);
+        assert_eq!(source.runtime_shapes.text_style_paint_locals(7), [8]);
+
+        let clone = source.clone();
+        assert!(clone.runtime_shapes.text_style_paint_locals(2).is_empty());
+        assert_eq!(clone.runtime_shapes.text_style_paint_locals(7), [3, 8]);
+        let clone_a = StaticTextSlice::from_instance(&runtime, graph, &clone, 1)
+            .expect("clone A production topology");
+        let clone_b = StaticTextSlice::from_instance(&runtime, graph, &clone, 6)
+            .expect("clone B production topology");
+        assert_eq!(clone_a.styles[0].foreground_color(&clone, graph), 0xff00_0000);
+        assert_eq!(clone_b.styles[0].foreground_color(&clone, graph), 0xff11_2233);
+        assert!(
+            clone.runtime_shapes.text_style_paint_owner(3).is_some(),
+            "clone rebuilds the moved paint's concrete backend owner under B"
+        );
     }
 
     fn pinned_text_follow_path_fixture() -> (RuntimeFile, GraphFile, usize, usize, usize) {

@@ -792,7 +792,7 @@ impl Clone for ArtboardInstance {
             ) = Self::build_component_interface_schedules(&cloned.objects, &graph);
             cloned
                 .runtime_shapes
-                .rebuild_component_memberships(&cloned.objects);
+                .rebuild_component_memberships(&cloned.objects, &graph);
             cloned.initialize_text_target_modifiers();
             cloned.initialize_path_target_flags(&graph);
             cloned.initialize_component_data_bind_collapsables(&file, &graph);
@@ -1454,6 +1454,21 @@ impl ArtboardInstance {
                         .and_then(|parent| parent.concrete.text_style.as_ref())
                         .expect("TextStyle occurrence state")
                         .register_feature(component.local_id);
+                }
+                // `ShapePaint::onAddedClean` appends the concrete paint to its
+                // direct ShapePaintContainer after Component Super. Retain the
+                // TextStylePaint branch here so clone construction rebuilds
+                // `m_ShapePaints` from copied parent ids.
+                if definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("ShapePaint"))
+                    && definition_by_name(parent_type)
+                        .is_some_and(|definition| definition.is_a("TextStylePaint"))
+                {
+                    objects
+                        .component_mut(parent)
+                        .and_then(|parent| parent.concrete.text_style_paint.as_ref())
+                        .expect("TextStylePaint occurrence state")
+                        .register_paint(component.local_id);
                 }
                 // `TextModifier::onAddedDirty` runs after Component Super has
                 // linked the parent. A direct TextModifierGroup parent is the
@@ -2944,7 +2959,7 @@ impl ArtboardInstance {
         instance.initialize_root_layout_bounds();
         instance
             .runtime_shapes
-            .rebuild_component_memberships(&instance.objects);
+            .rebuild_component_memberships(&instance.objects, graph);
         instance.initialize_text_target_modifiers();
         instance.initialize_path_target_flags(graph);
         // C++ `DataBind::initialize` links every authored bind to its exact

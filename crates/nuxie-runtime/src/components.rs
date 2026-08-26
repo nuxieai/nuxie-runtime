@@ -1027,6 +1027,32 @@ pub(crate) struct RuntimeTextStyleState {
     variable_font: OnceCell<RuntimeTextStyleVariableFont>,
 }
 
+/// Occurrence-owned counterpart of pinned
+/// `ShapePaintContainer::m_ShapePaints` on `TextStylePaint`.
+///
+/// `ShapePaint::onAddedClean` appends to the concrete direct parent. A live
+/// generated `parentId` write therefore leaves the current occurrence frozen,
+/// while clone construction rebuilds this authored-order list from the copied
+/// property.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeTextStylePaintState {
+    paint_locals: RefCell<Vec<usize>>,
+}
+
+impl RuntimeTextStylePaintState {
+    fn clone_for_occurrence(&self) -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn register_paint(&self, paint_local: usize) {
+        self.paint_locals.borrow_mut().push(paint_local);
+    }
+
+    pub(crate) fn paint_locals(&self) -> Vec<usize> {
+        self.paint_locals.borrow().clone()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeTextStyleVariableFont {
     pub(crate) font_bytes: Arc<[u8]>,
@@ -1894,6 +1920,7 @@ pub(crate) struct RuntimeConcreteComponentState {
     pub(crate) scripted: Option<RuntimeScriptedComponentState>,
     pub(crate) text: Option<RuntimeTextState>,
     pub(crate) text_style: Option<RuntimeTextStyleState>,
+    pub(crate) text_style_paint: Option<RuntimeTextStylePaintState>,
     pub(crate) text_modifier_group: Option<RuntimeTextModifierGroupState>,
     pub(crate) text_target: Option<RuntimeTextTargetState>,
     pub(crate) text_follow_path: Option<RuntimeTextFollowPathState>,
@@ -1945,6 +1972,8 @@ impl RuntimeConcreteComponentState {
             .then(RuntimeScriptedComponentState::default),
             text: type_is_a(type_name, "Text").then(RuntimeTextState::new),
             text_style: type_is_a(type_name, "TextStyle").then(RuntimeTextStyleState::default),
+            text_style_paint: type_is_a(type_name, "TextStylePaint")
+                .then(RuntimeTextStylePaintState::default),
             text_modifier_group: type_is_a(type_name, "TextModifierGroup")
                 .then(RuntimeTextModifierGroupState::default),
             text_target: type_is_a(type_name, "TextTargetModifier")
@@ -2029,6 +2058,10 @@ impl RuntimeConcreteComponentState {
                 .text_style
                 .as_ref()
                 .map(RuntimeTextStyleState::clone_for_occurrence),
+            text_style_paint: self
+                .text_style_paint
+                .as_ref()
+                .map(RuntimeTextStylePaintState::clone_for_occurrence),
             text_modifier_group: self
                 .text_modifier_group
                 .as_ref()

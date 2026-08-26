@@ -602,31 +602,14 @@ fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D
 }
 
 #[derive(Debug, Clone)]
-struct StaticTextPathBucket {
+struct StaticTextInputPathBucket {
     opacity: f32,
     commands: Vec<RuntimePathCommand>,
 }
 
-fn append_opacity_bucket(
-    buckets: &mut Vec<StaticTextPathBucket>,
-    opacity: f32,
-    commands: Vec<RuntimePathCommand>,
-) {
-    if opacity <= 0.0 {
-        return;
-    }
-    if let Some(bucket) = buckets.iter_mut().find(|bucket| bucket.opacity == opacity) {
-        bucket.commands.extend(commands);
-    } else {
-        buckets.push(StaticTextPathBucket { opacity, commands });
-    }
-}
-
-fn order_opacity_buckets_like_cpp(
-    mut buckets: Vec<StaticTextPathBucket>,
-) -> Vec<StaticTextPathBucket> {
-    // `TextModifierGroup::computeOpacity` supplies the coverage buckets;
-    // TextStylePaint retains them in the pinned ascending float map.
+fn order_text_input_opacity_buckets(
+    mut buckets: Vec<StaticTextInputPathBucket>,
+) -> Vec<StaticTextInputPathBucket> {
     buckets.sort_by(|a, b| {
         a.opacity
             .partial_cmp(&b.opacity)

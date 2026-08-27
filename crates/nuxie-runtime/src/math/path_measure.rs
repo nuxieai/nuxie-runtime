@@ -160,19 +160,11 @@ impl RuntimePathMeasure {
 // Literal two-argument `std::min`/`std::max` comparison order. This preserves
 // the pinned NaN and signed-zero behavior; Rust's float helpers do not.
 fn path_measure_cpp_std_min(first: f32, second: f32) -> f32 {
-    if second < first {
-        second
-    } else {
-        first
-    }
+    if second < first { second } else { first }
 }
 
 fn path_measure_cpp_std_max(first: f32, second: f32) -> f32 {
-    if first < second {
-        second
-    } else {
-        first
-    }
+    if first < second { second } else { first }
 }
 
 impl RuntimePathMeasure {

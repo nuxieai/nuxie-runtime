@@ -1,50 +1,87 @@
-use crate::{artboard::ArtboardInstance, layout_component};
+use crate::{
+    artboard::ArtboardInstance, components::ComponentHandle, objects::InstanceObjectArena,
+};
 
-/// Direct `Node::markLayoutNodeDirty`: every retained LayoutComponent in the
-/// parent chain owns a separate layout node and receives the callback.
+/// Pinned `LayoutNodeProvider::from(Component*)`.
+///
+/// Rust retains `LayoutParticipant` as the migrated host's authored child, so
+/// the Text/Image/Shape cases resolve that child handle instead of a member
+/// pointer returned by `layoutParticipant()`.
+pub(crate) fn from(
+    objects: &InstanceObjectArena,
+    component: Option<ComponentHandle>,
+) -> Option<ComponentHandle> {
+    let component = component?;
+    let runtime_component = objects.component(component)?;
+    match runtime_component.type_name {
+        "LayoutComponent" | "NestedArtboardLayout" | "ArtboardComponentList" => Some(component),
+        "Text" | "Image" | "Shape" => runtime_component.children.iter().find_map(|child| {
+            objects
+                .component(*child)
+                .is_some_and(|child| child.type_name == "LayoutParticipant")
+                .then_some(*child)
+        }),
+        _ => None,
+    }
+}
+
+/// Rust's empty `Vec` has no heap allocation, preserving the handwritten
+/// header's lazy `m_layoutConstraints` allocation and shared-empty read
+/// behavior while keeping the storage occurrence-local.
+pub(crate) fn layout_constraints(
+    objects: &InstanceObjectArena,
+    provider: ComponentHandle,
+) -> &[ComponentHandle] {
+    let Some(component) = objects.component(provider) else {
+        return &[];
+    };
+    if let Some(list) = component.concrete.constrainable_list.as_ref() {
+        &list.layout_constraints
+    } else if let Some(layout) = component.concrete.layout.as_ref() {
+        &layout.layout_constraints
+    } else if let Some(participant) = component.concrete.participant_layout.as_ref() {
+        &participant.layout_constraints
+    } else {
+        &[]
+    }
+}
+
+/// Pinned `LayoutNodeProvider::addLayoutConstraint` in source order: reject a
+/// duplicate, append to the provider, then call the constraint's reciprocal
+/// `addLayoutChild`. The only pinned override is `ScrollConstraint`.
+pub(crate) fn add_layout_constraint(
+    objects: &mut InstanceObjectArena,
+    provider: ComponentHandle,
+    constraint: ComponentHandle,
+) {
+    let component = objects
+        .component_mut(provider)
+        .expect("LayoutNodeProvider handle must remain live");
+    let constraints = if let Some(list) = component.concrete.constrainable_list.as_mut() {
+        &mut list.layout_constraints
+    } else if let Some(layout) = component.concrete.layout.as_mut() {
+        &mut layout.layout_constraints
+    } else if let Some(participant) = component.concrete.participant_layout.as_mut() {
+        &mut participant.layout_constraints
+    } else {
+        unreachable!("LayoutNodeProvider::from returned a non-provider")
+    };
+    assert!(!constraints.contains(&constraint));
+    constraints.push(constraint);
+
+    if let Some(scroll) = objects
+        .component_mut(constraint)
+        .and_then(|component| component.concrete.scroll.as_mut())
+    {
+        scroll.layout_children.push(provider);
+    }
+}
+
+/// Live compatibility seam for callers of the formerly packed Node body. The
+/// behavior itself now resides in the primary Rust `Node` owner.
 pub(crate) fn mark_layout_node_dirty(
     instance: &mut ArtboardInstance,
     node_local_id: usize,
 ) -> bool {
-    let retained_layout_ancestor_count = instance
-        .component(node_local_id)
-        .map_or(0, |component| component.layout_ancestors.len());
-    // Cycle guard: a malformed-but-accepted file can make `parentId` form a
-    // parent cycle (A -> B -> A), and C++ hangs on this walk. We deliberately
-    // DIVERGE and terminate, mirroring C++'s own cycle-guard idiom -- the
-    // visited-set from DependencySorter::visit (src/dependency_sorter.cpp) --
-    // so the walk ends as if the chain did. Marks already made stay; the
-    // retained node's dirty transition is idempotent. Unreachable on any
-    // valid file. See runtime_layout_ancestors (components.rs) and
-    // fuzz/regressions/README.md.
-    let mut visited = std::collections::BTreeSet::new();
-    let mut parent = instance.component_parent_local(node_local_id);
-    let mut changed = false;
-    while let Some(local_id) = parent {
-        if !visited.insert(local_id) {
-            break;
-        }
-        parent = instance.component_parent_local(local_id);
-        if instance
-            .component(local_id)
-            .is_some_and(|component| component.concrete.layout.is_some())
-        {
-            changed |= layout_component::mark_layout_node_dirty(instance, local_id);
-        }
-    }
-    // Imported graphs retain this same parent-walk result for ownership that
-    // passes through non-Node Core objects. Duplicate owners are harmless:
-    // the retained node's dirty transition is idempotent until the next solve.
-    for index in 0..retained_layout_ancestor_count {
-        let Some(layout) = instance
-            .component(node_local_id)
-            .and_then(|component| component.layout_ancestors.get(index).copied())
-        else {
-            continue;
-        };
-        if let Some(local_id) = instance.component_local_id(layout) {
-            changed |= layout_component::mark_layout_node_dirty(instance, local_id);
-        }
-    }
-    changed
+    instance.runtime_node_mark_layout_node_dirty(node_local_id)
 }

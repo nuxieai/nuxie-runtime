@@ -887,24 +887,19 @@ pub(crate) fn retain_runtime_scroll_constraints(
         let content = objects
             .component(handle)
             .and_then(|component| component.parent);
-        let layout_children = graph
-            .layout_constraint_registrations
-            .iter()
-            .filter(|registration| registration.constraint_local == object.local_id)
-            .filter_map(|registration| objects.component_handle(registration.layout_provider_local))
+        // Pinned ScrollConstraint::buildDependencies iterates the content's
+        // direct children and resolves each through LayoutNodeProvider::from.
+        // Retaining provider handles here also preserves migrated
+        // Text/Image/Shape ownership through their LayoutParticipant child.
+        let layout_children = content
+            .and_then(|content| objects.component(content))
+            .map(|content| content.children.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|child| crate::layout_node_provider::from(objects, Some(child)))
             .collect::<Vec<_>>();
         for child in &layout_children {
-            if let Some(list) = objects
-                .component_mut(*child)
-                .and_then(|component| component.concrete.constrainable_list.as_mut())
-            {
-                list.layout_constraints.push(handle);
-            } else if let Some(layout) = objects
-                .component_mut(*child)
-                .and_then(|component| component.concrete.layout.as_mut())
-            {
-                layout.layout_constraints.push(handle);
-            }
+            crate::layout_node_provider::add_layout_constraint(objects, *child, handle);
         }
         let has_list_children = layout_children.iter().any(|child| {
             objects
@@ -933,7 +928,6 @@ pub(crate) fn retain_runtime_scroll_constraints(
             continue;
         };
         scroll.content = content;
-        scroll.layout_children = layout_children;
         scroll.has_list_children = has_list_children;
         scroll.physics = owned_physics;
         scroll.virtualizer = virtualizer;
@@ -1827,43 +1821,13 @@ pub(crate) fn apply_parent_layout_constraints(
     artboard: &mut ArtboardInstance,
     component: ComponentHandle,
 ) -> bool {
-    let count = artboard
-        .objects
-        .component(component)
-        .map_or(0, |component| {
-            if component.concrete.constrainable_list.is_some() {
-                component
-                    .concrete
-                    .constrainable_list
-                    .as_ref()
-                    .map_or(0, |list| list.layout_constraints.len())
-            } else {
-                component
-                    .concrete
-                    .layout
-                    .as_ref()
-                    .map_or(0, |layout| layout.layout_constraints.len())
-            }
-        });
+    let count = crate::layout_node_provider::layout_constraints(&artboard.objects, component).len();
     let mut changed = false;
     for index in 0..count {
-        let constraint = artboard.objects.component(component).and_then(|component| {
-            if component.concrete.constrainable_list.is_some() {
-                component
-                    .concrete
-                    .constrainable_list
-                    .as_ref()
-                    .and_then(|list| list.layout_constraints.get(index))
-                    .copied()
-            } else {
-                component
-                    .concrete
-                    .layout
-                    .as_ref()
-                    .and_then(|layout| layout.layout_constraints.get(index))
-                    .copied()
-            }
-        });
+        let constraint =
+            crate::layout_node_provider::layout_constraints(&artboard.objects, component)
+                .get(index)
+                .copied();
         if let Some(constraint) = constraint {
             changed |= apply_scroll_constraint_child(artboard, component, constraint);
         }

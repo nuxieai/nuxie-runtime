@@ -8264,10 +8264,10 @@ impl ArtboardInstance {
                 // without rewriting the serialized fontAssetId property.
                 let font_value = font_value
                     .unwrap_or_else(|| RuntimeFontAssetValue::from_file_asset_index(*value));
-                let has_font = self.runtime_file().is_some_and(|runtime| {
-                    crate::context_value_asset_font::resolves_to_font(runtime, self, &font_value)
+                let applies = self.runtime_file().is_some_and(|runtime| {
+                    crate::context_value_asset_font::applies_to_text_style(runtime, &font_value)
                 });
-                has_font && self.set_text_style_font_override(target_local_id, font_value)
+                applies && self.set_text_style_font_override(target_local_id, font_value)
             }
         }
     }
@@ -12188,10 +12188,11 @@ mod tests {
 
         assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
         let _ = artboard.advance_artboard_data_binds();
-        assert!(
-            artboard.text_style_font_override(2).is_none(),
-            "a file FontAsset with no loaded Font keeps the TextStyle's authored font"
-        );
+        let initial = artboard
+            .text_style_font_override(2)
+            .expect("a valid file FontAsset replaces the retained TextStyle asset");
+        assert_eq!(initial.file_asset_index(), 0);
+        assert_eq!(initial.live_font_bytes(), None);
 
         let live: Arc<[u8]> = vec![1, 2, 3, 4].into();
         assert!(context.set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live))));
@@ -12208,18 +12209,20 @@ mod tests {
 
         assert!(context.set_font_asset_index_by_property_name("font", 0));
         assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
-        assert!(!artboard.advance_artboard_data_binds());
+        let _ = artboard.advance_artboard_data_binds();
         let file_backed = artboard
             .text_style_font_override(2)
-            .expect("the prior live override remains installed");
-        assert_eq!(
-            file_backed.file_asset_index(),
-            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
-        );
+            .expect("the resolved file FontAsset replaces the live override");
+        assert_eq!(file_backed.file_asset_index(), 0);
         assert_eq!(
             file_backed.live_font_bytes(),
             Some(live.as_ref()),
-            "an unresolved file FontAsset preserves the TextStyle's previously authored/effective font"
+            "the generated property write preserves the source's private live Font"
+        );
+        assert_eq!(
+            crate::text::runtime_font_asset_bytes(&file, &artboard, file_backed),
+            None,
+            "the valid file FontAsset wins even before it has decoded a Font"
         );
     }
 

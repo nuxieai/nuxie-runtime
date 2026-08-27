@@ -38,6 +38,7 @@ include!("animation/cubic_value_interpolator.rs");
 include!("animation/blend_state_1d.rs");
 include!("animation/blend_state_direct.rs");
 include!("animation/blend_animation_1d.rs");
+include!("animation/blend_animation_direct.rs");
 include!("animation/animation_state.rs");
 include!("animation/animation_state_instance.rs");
 include!("animation/elastic_interpolator.rs");

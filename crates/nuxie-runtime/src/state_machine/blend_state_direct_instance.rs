@@ -116,8 +116,9 @@ impl BlendStateDirectInstance {
                     .and_then(StateMachineInputInstance::number_value)
                     .unwrap_or(0.0),
                 RuntimeDirectBlendSource::MixValue { value } => value,
-                RuntimeDirectBlendSource::BindableProperty { global_id } => {
-                    let Some(value) = global_id
+                RuntimeDirectBlendSource::BindableProperty { .. } => {
+                    let Some(value) = definition
+                        .bindable_property()
                         .and_then(|global_id| bindable_number_value(bindable_numbers, global_id))
                     else {
                         // C++ leaves the current mix untouched when the authored

@@ -758,47 +758,14 @@ impl RuntimeBlendStateDirect {
                     .and_then(|animation| animation_index_by_global.get(&animation.id).copied())
                     .map(RuntimeLinearAnimationHandle::new)
                     .unwrap_or_else(RuntimeLinearAnimationHandle::empty);
-                Some(RuntimeBlendAnimationDirect {
-                    animation: definition,
-                    source: RuntimeDirectBlendSource::from_object(file, animation.object),
-                })
+                Some(RuntimeBlendAnimationDirect::from_imported(
+                    file,
+                    animation.object,
+                    definition,
+                ))
             })
             .collect::<Vec<_>>();
         Some(Self { animations })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBlendAnimationDirect {
-    pub(crate) animation: RuntimeLinearAnimationHandle,
-    pub(crate) source: RuntimeDirectBlendSource,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum RuntimeDirectBlendSource {
-    Input { input_index: usize },
-    MixValue { value: f32 },
-    BindableProperty { global_id: Option<u32> },
-}
-
-impl RuntimeDirectBlendSource {
-    fn from_object(file: &RuntimeFile, object: &RuntimeObject) -> Self {
-        match object.uint_property("blendSource").unwrap_or(0) {
-            1 => Self::MixValue {
-                value: object.double_property("mixValue").unwrap_or(100.0),
-            },
-            2 => Self::BindableProperty {
-                global_id: file
-                    .latest_bindable_property_for_object(object)
-                    .map(|property| property.id as u32),
-            },
-            _ => Self::Input {
-                input_index: object
-                    .uint_property("inputId")
-                    .and_then(|input_id| usize::try_from(input_id).ok())
-                    .unwrap_or(usize::MAX),
-            },
-        }
     }
 }
 

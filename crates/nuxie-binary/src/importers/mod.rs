@@ -100,7 +100,7 @@ impl ImportContext {
 }
 
 pub(crate) mod artboard_importer;
-mod backboard_importer;
+pub(crate) mod backboard_importer;
 mod bindable_property_importer;
 mod data_bind_path_importer;
 mod data_converter_formula_importer;

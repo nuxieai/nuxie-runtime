@@ -28,9 +28,7 @@ use std::{
 mod assets;
 
 pub use assets::{RuntimeFileAssetContents, RuntimeManifest};
-use assets::{
-    cpp_file_assets_contains, normalize_file_asset_ids, validate_cpp_manifest_assets_with_budget,
-};
+use assets::{cpp_file_assets_contains, validate_cpp_manifest_assets_with_budget};
 #[cfg(test)]
 use assets::{
     cpp_manifest_key, cpp_manifest_resolver_key, validate_cpp_manifest_asset_with_budget,
@@ -639,24 +637,6 @@ impl RuntimeFile {
             view_model_index,
             object: view_model.object,
         })
-    }
-
-    pub fn resolved_artboard_for_referencer(&self, object_id: usize) -> Option<&RuntimeObject> {
-        let referencer = self.object(object_id)?;
-        self.resolved_artboard_for_referencer_object(referencer)
-    }
-
-    pub fn resolved_artboard_for_referencer_object(
-        &self,
-        referencer: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(referencer.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-
-        let artboard_index = usize::try_from(cpp_artboard_referencer_index(referencer)?).ok()?;
-        self.artboard(artboard_index)
     }
 
     pub fn resolved_handle_source_for_joystick(
@@ -2454,92 +2434,6 @@ impl RuntimeFile {
         self.view_model(view_model_index)
     }
 
-    pub fn scroll_physics(&self) -> Vec<&RuntimeObject> {
-        self.cpp_scroll_physics().collect()
-    }
-
-    pub fn scroll_physics_object(&self, index: usize) -> Option<&RuntimeObject> {
-        self.cpp_scroll_physics().nth(index)
-    }
-
-    pub fn resolved_scroll_physics_for_constraint(
-        &self,
-        scroll_constraint_id: usize,
-    ) -> Option<&RuntimeObject> {
-        let scroll_constraint = self.object(scroll_constraint_id)?;
-        self.resolved_scroll_physics_for_constraint_object(scroll_constraint)
-    }
-
-    pub fn resolved_scroll_physics_for_constraint_object(
-        &self,
-        scroll_constraint: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(scroll_constraint.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-        if scroll_constraint.type_name != "ScrollConstraint" {
-            return None;
-        }
-
-        let physics_index = usize::try_from(scroll_constraint.uint_property("physicsId")?).ok()?;
-        self.scroll_physics_object(physics_index)
-    }
-
-    pub fn resolved_interpolator_for_data_converter(
-        &self,
-        data_converter_id: usize,
-    ) -> Option<&RuntimeObject> {
-        let data_converter = self.object(data_converter_id)?;
-        self.resolved_interpolator_for_data_converter_object(data_converter)
-    }
-
-    pub fn resolved_interpolator_for_data_converter_object(
-        &self,
-        data_converter: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(data_converter.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-        if !matches!(
-            data_converter.type_name,
-            "DataConverterRangeMapper" | "DataConverterInterpolator"
-        ) {
-            return None;
-        }
-
-        let interpolator_index =
-            usize::try_from(data_converter.uint_property("interpolatorId")?).ok()?;
-        self.data_converter_interpolator(interpolator_index)
-    }
-
-    pub fn resolved_data_converter_for_data_bind(
-        &self,
-        data_bind_id: usize,
-    ) -> Option<&RuntimeObject> {
-        let data_bind = self.object(data_bind_id)?;
-        self.resolved_data_converter_for_data_bind_object(data_bind)
-    }
-
-    pub fn resolved_data_converter_for_data_bind_object(
-        &self,
-        data_bind: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(data_bind.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-
-        let definition = definition_by_type_key(data_bind.type_key)?;
-        if !definition.is_a("DataBind") {
-            return None;
-        }
-
-        let converter_index = usize::try_from(data_bind.uint_property("converterId")?).ok()?;
-        self.data_converter(converter_index)
-    }
-
     pub fn data_bind_source_output_type(&self, data_bind_id: usize) -> Option<RuntimeDataType> {
         let data_bind = self.object(data_bind_id)?;
         self.data_bind_source_output_type_for_object(data_bind)
@@ -3647,30 +3541,6 @@ impl RuntimeFile {
         self.cpp_data_converter_group_items(data_converter_index)
             .into_iter()
             .nth(item_index)
-    }
-
-    pub fn resolved_data_converter_for_group_item(
-        &self,
-        group_item_id: usize,
-    ) -> Option<&RuntimeObject> {
-        let group_item = self.object(group_item_id)?;
-        self.resolved_data_converter_for_group_item_object(group_item)
-    }
-
-    pub fn resolved_data_converter_for_group_item_object(
-        &self,
-        group_item: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(group_item.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-        if group_item.type_name != "DataConverterGroupItem" {
-            return None;
-        }
-
-        let converter_index = usize::try_from(group_item.uint_property("converterId")?).ok()?;
-        self.data_converter(converter_index)
     }
 
     pub fn view_models(&self) -> Vec<RuntimeViewModel<'_>> {
@@ -5719,51 +5589,6 @@ impl RuntimeFile {
             }
             _ => Some(Vec::new()),
         }
-    }
-
-    fn cpp_data_converter_interpolators(&self) -> Vec<&RuntimeObject> {
-        let mut latest_artboard_importer = false;
-        let mut interpolators = Vec::new();
-
-        for (index, object) in self.objects.iter().enumerate() {
-            if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                continue;
-            }
-
-            let Some(object) = object.as_ref() else {
-                continue;
-            };
-            let Some(definition) = definition_by_type_key(object.type_key) else {
-                continue;
-            };
-
-            if definition.name == "Artboard" {
-                latest_artboard_importer = true;
-                continue;
-            }
-
-            if definition.is_a("KeyFrameInterpolator") && !latest_artboard_importer {
-                interpolators.push(object);
-            }
-        }
-
-        interpolators
-    }
-
-    fn cpp_scroll_physics(&self) -> impl Iterator<Item = &RuntimeObject> {
-        self.objects
-            .iter()
-            .enumerate()
-            .filter_map(|(index, object)| {
-                if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                    return None;
-                }
-
-                let object = object.as_ref()?;
-                definition_by_type_key(object.type_key)
-                    .is_some_and(|definition| definition.is_a("ScrollPhysics"))
-                    .then_some(object)
-            })
     }
 }
 
@@ -8057,13 +7882,6 @@ use importers::{
     CppDataBindTarget, ImportContext, ImportStackKey, NullObjectConsumer, StateMachineInputKind,
     compute_import_statuses, replay_import_stack_make_latest,
 };
-
-fn cpp_artboard_referencer_index(object: &RuntimeObject) -> Option<u64> {
-    let definition = definition_by_type_key(object.type_key)?;
-    (definition.is_a("NestedArtboard") || definition.name == "ScriptInputArtboard")
-        .then(|| object.uint_property("artboardId"))
-        .flatten()
-}
 
 fn cpp_data_bind_is_name_based(object: &RuntimeObject) -> bool {
     const DATA_BIND_NAME_BASED_FLAG: u64 = 1 << 4;
@@ -11677,7 +11495,7 @@ fn apply_cpp_import_mutations(
     objects: &mut [Option<RuntimeObject>],
     import_statuses: &[RuntimeImportStatus],
 ) {
-    normalize_file_asset_ids(objects, import_statuses);
+    importers::backboard_importer::normalize_file_asset_ids(objects, import_statuses);
 }
 
 fn read_runtime_object(

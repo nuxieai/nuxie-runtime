@@ -33,7 +33,10 @@ impl RuntimeFile {
         }
 
         let asset_index = usize::try_from(cpp_file_asset_referencer_index(referencer)?).ok()?;
-        let asset = self.file_asset(asset_index)?;
+        let asset = self
+            .cpp_file_assets_for_backboard_owner(referencer)
+            .into_iter()
+            .nth(asset_index)?;
         if cpp_file_asset_matches_referencer(referencer, asset) {
             Some(asset)
         } else {

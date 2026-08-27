@@ -1,10 +1,7 @@
 //! Direct Rust owner for pinned C++
 //! `src/viewmodel/viewmodel_instance_asset.cpp`.
 
-use crate::{
-    RuntimeFile, RuntimeImportStatus, RuntimeObject, assets::cpp_file_assets_contains,
-    definition_by_type_key,
-};
+use crate::{RuntimeFile, RuntimeImportStatus, RuntimeObject, definition_by_type_key};
 
 impl RuntimeFile {
     /// The `FileAsset` handles copied from `BackboardImporter::assets()` when
@@ -62,18 +59,6 @@ impl RuntimeFile {
             return Vec::new();
         }
 
-        self.objects
-            .iter()
-            .take(value_index)
-            .enumerate()
-            .filter_map(|(index, object)| {
-                if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                    return None;
-                }
-
-                let object = object.as_ref()?;
-                cpp_file_assets_contains(object).then_some(object)
-            })
-            .collect()
+        self.cpp_file_assets_for_backboard_owner_before(value)
     }
 }

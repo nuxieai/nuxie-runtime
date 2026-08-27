@@ -3921,6 +3921,70 @@ fn runtime_scroll_physics_match_cpp_backboard_collection_and_constraint_resoluti
 }
 
 #[test]
+fn runtime_backboard_registries_reset_for_each_importer_occurrence() {
+    let file = read_runtime_file(&synthetic_runtime_file(4364, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_image_asset_with_id(bytes, 7);
+        push_empty_image_asset_with_id(bytes, 7);
+        push_empty_object(bytes, "CubicEaseInterpolator");
+        push_empty_object(bytes, "DataConverterRounder");
+        push_object_with_properties(bytes, "DataConverterRangeMapper", |bytes| {
+            push_uint_property(bytes, "DataConverterRangeMapper", "interpolatorId", 0);
+        });
+        push_object_with_properties(bytes, "ElasticScrollPhysics", |bytes| {
+            push_uint_property(bytes, "ElasticScrollPhysics", "constraintId", 100);
+        });
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "Image", |bytes| {
+            push_uint_property(bytes, "Image", "parentId", 0);
+            push_uint_property(bytes, "Image", "assetId", 0);
+        });
+        push_object_with_properties(bytes, "ScrollConstraint", |bytes| {
+            push_uint_property(bytes, "ScrollConstraint", "parentId", 0);
+            push_uint_property(bytes, "ScrollConstraint", "physicsId", 0);
+        });
+        push_object_with_properties(bytes, "DataBind", |bytes| {
+            push_uint_property(bytes, "DataBind", "converterId", 0);
+        });
+
+        push_empty_object(bytes, "Backboard");
+        push_empty_image_asset_with_id(bytes, 7);
+        push_empty_object(bytes, "CubicEaseInterpolator");
+        push_empty_object(bytes, "DataConverterStringTrim");
+        push_object_with_properties(bytes, "DataConverterRangeMapper", |bytes| {
+            push_uint_property(bytes, "DataConverterRangeMapper", "interpolatorId", 0);
+        });
+        push_object_with_properties(bytes, "ElasticScrollPhysics", |bytes| {
+            push_uint_property(bytes, "ElasticScrollPhysics", "constraintId", 200);
+        });
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "Image", |bytes| {
+            push_uint_property(bytes, "Image", "parentId", 0);
+            push_uint_property(bytes, "Image", "assetId", 0);
+        });
+        push_object_with_properties(bytes, "ScrollConstraint", |bytes| {
+            push_uint_property(bytes, "ScrollConstraint", "parentId", 0);
+            push_uint_property(bytes, "ScrollConstraint", "physicsId", 0);
+        });
+        push_object_with_properties(bytes, "DataBind", |bytes| {
+            push_uint_property(bytes, "DataBind", "converterId", 0);
+        });
+    }))
+    .expect("multiple Backboard objects replace and resolve their importers like C++");
+
+    assert_eq!(file.object(2).and_then(|asset| asset.uint_property("assetId")), Some(8));
+    assert_eq!(file.object(12).and_then(|asset| asset.uint_property("assetId")), Some(7));
+    assert_eq!(file.resolved_file_asset_for_object(8).map(|asset| asset.id), Some(1));
+    assert_eq!(file.resolved_file_asset_for_object(18).map(|asset| asset.id), Some(12));
+    assert_eq!(file.resolved_data_converter_for_data_bind(10).map(|value| value.id), Some(4));
+    assert_eq!(file.resolved_data_converter_for_data_bind(20).map(|value| value.id), Some(14));
+    assert_eq!(file.resolved_scroll_physics_for_constraint(9).map(|value| value.id), Some(6));
+    assert_eq!(file.resolved_scroll_physics_for_constraint(19).map(|value| value.id), Some(16));
+    assert_eq!(file.resolved_interpolator_for_data_converter(5).map(|value| value.id), Some(3));
+    assert!(file.resolved_interpolator_for_data_converter(15).is_none());
+}
+
+#[test]
 fn runtime_artboard_data_binds_match_cpp_target_routing() {
     let file = read_runtime_file(&synthetic_runtime_file(4339, |bytes| {
         push_empty_object(bytes, "Backboard");

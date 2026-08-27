@@ -8860,12 +8860,14 @@ impl ArtboardInstance {
             self.objects.property_kind(target_local_id, property_key),
             Some(value.clone()),
         ) {
-            (Some(FieldKind::Double), Some(RuntimeDataBindGraphValue::Number(value))) => {
-                self.set_double_property(target_local_id, property_key, value)
+            (Some(FieldKind::Double), Some(value @ RuntimeDataBindGraphValue::Number(_))) => {
+                crate::context_value_number::number_value(&value).is_some_and(|value| {
+                    self.set_double_property(target_local_id, property_key, value)
+                })
             }
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Number(value))) => {
-                let rounded = if value < 0.0 { 0 } else { value.round() as u64 };
-                self.set_uint_property(target_local_id, property_key, rounded)
+                let value = crate::context_value_number::artboard_core_uint_value(value);
+                self.set_uint_property(target_local_id, property_key, value)
             }
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Enum(value))) => {
                 self.set_uint_property(target_local_id, property_key, value)
@@ -9049,9 +9051,9 @@ impl ArtboardInstance {
                         .artboard_data_bind_values
                         .get(binding.path.as_slice())?;
                     let apply = match value {
-                        RuntimeDataBindGraphValue::Number(value) => {
-                            RuntimeSoloBindingApply::Index(*value)
-                        }
+                        RuntimeDataBindGraphValue::Number(_) => RuntimeSoloBindingApply::Index(
+                            crate::context_value_number::number_value(value)?,
+                        ),
                         RuntimeDataBindGraphValue::String(value) => {
                             RuntimeSoloBindingApply::Name(value.clone())
                         }

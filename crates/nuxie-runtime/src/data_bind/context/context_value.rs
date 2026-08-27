@@ -567,18 +567,6 @@ fn matching_graph_source_value(
     }
 }
 
-/// Defined subset of C++'s `int rounded = value < 0 ? 0 :
-/// std::round(value)` before `CoreRegistry::setUint`.
-///
-/// C++ float→int conversion is undefined for NaN, positive infinity, and
-/// rounded values outside signed-int range. Rust leaves those inputs
-/// unapplied instead of inventing a result; every defined input preserves the
-/// exact negative clamp and halfway-away-from-zero rounding
-/// (`context_value_number.cpp:24-38`; `context_value_any.cpp:30-44`).
-fn cpp_number_to_core_uint(value: f32) -> Option<u64> {
-    crate::context_value_any::number_to_core_uint(value)
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RuntimeDataBindGraphConverter {
     PassThrough,
@@ -11172,22 +11160,10 @@ impl RuntimeDataBindGraphSourceNode {
                 RuntimeDataBindGraphTarget::Number { .. }
                 | RuntimeDataBindGraphTarget::TransitionDuration { .. }
                 | RuntimeDataBindGraphTarget::KeyFrameNumber { .. },
-                RuntimeDataBindGraphValue::Number(value),
-            ) => Some(RuntimeDataBindGraphValue::Number(value)),
-            (
-                RuntimeDataBindGraphTarget::Number { .. }
-                | RuntimeDataBindGraphTarget::TransitionDuration { .. }
-                | RuntimeDataBindGraphTarget::KeyFrameNumber { .. },
-                _,
-            ) => {
-                // `DataBindContextValueNumber::apply` uses
-                // `calculateValue<DataValueNumber, float>`, whose defined
-                // wrong-type result is `DataValueNumber::defaultValue` (0),
-                // and writes that value to the concrete target
-                // (`context_value.hpp:68-99`;
-                // `context_value_number.cpp:11-37`).
-                Some(RuntimeDataBindGraphValue::Number(0.0))
-            }
+                value,
+            ) => Some(RuntimeDataBindGraphValue::Number(
+                crate::context_value_number::calculate_value(&value),
+            )),
             // Both the typed Number and dynamic Any context-value owners use
             // this exact CoreUint branch after conversion. C++ clamps
             // negatives to zero and rounds rather than truncating
@@ -11202,7 +11178,8 @@ impl RuntimeDataBindGraphSourceNode {
                 | RuntimeDataBindGraphTarget::Trigger { .. }
                 | RuntimeDataBindGraphTarget::ViewModel { .. },
                 RuntimeDataBindGraphValue::Number(value),
-            ) => cpp_number_to_core_uint(value).map(RuntimeDataBindGraphValue::Integer),
+            ) => crate::context_value_number::core_uint_value(value)
+                .map(RuntimeDataBindGraphValue::Integer),
             (_, value) => Some(value),
         }
     }

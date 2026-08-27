@@ -39,6 +39,7 @@ impl RuntimeBlendState for crate::state_machine::RuntimeBlendState1D {
 
 impl Drop for crate::state_machine::RuntimeBlendState1D {
     fn drop(&mut self) {
+        RuntimeBlendState1DViewModel::drop_source(&mut self.source);
         self.animations.clear();
     }
 }

@@ -694,9 +694,7 @@ impl RuntimeBlendState1D {
                 input_index: RuntimeBlendState1DInput::from_imported(object),
             },
             "BlendState1DViewModel" => RuntimeBlendState1DSource::BindableProperty {
-                global_id: file
-                    .latest_bindable_property_for_object(object)
-                    .map(|property| property.id as u32),
+                global_id: RuntimeBlendState1DViewModel::from_imported(file, object),
             },
             _ => return None,
         };
@@ -906,9 +904,9 @@ impl BlendState1DInstance {
                     .and_then(StateMachineInputInstance::number_value)
                     .unwrap_or(0.0)
             }
-            RuntimeBlendState1DSource::BindableProperty { global_id } => global_id
-                .and_then(|global_id| bindable_number_value(bindable_numbers, global_id))
-                .unwrap_or(0.0),
+            RuntimeBlendState1DSource::BindableProperty { global_id } => {
+                RuntimeBlendState1DViewModel::value(global_id, bindable_numbers)
+            }
         };
 
         let to_index = self.animation_index(blend_state, value);

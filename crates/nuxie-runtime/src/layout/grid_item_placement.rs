@@ -7,10 +7,21 @@ use crate::{artboard::ArtboardInstance, layout_node_provider, properties::proper
 /// LayoutParticipant child, whose own `markLayoutNodeDirty` forwards to the
 /// owning layout (`layout_participant.cpp:457-469`).
 ///
-/// `layout_node_provider::mark_layout_node_dirty` walks up from this object's
-/// parent and covers both: it marks the parent itself when the parent is a
-/// retained LayoutComponent, and otherwise continues to the owning layout.
+/// Taffy's retained-layout invalidation is the approved adapter for the
+/// provider's virtual `markLayoutNodeDirty`, but provider eligibility remains
+/// literal: resolve it from the placement's immediate authored parent first.
+/// In particular, a bare Text/Image/Shape without a LayoutParticipant must not
+/// fall through to an enclosing LayoutComponent.
 pub(crate) fn mark_owner_dirty(instance: &mut ArtboardInstance, local_id: usize) -> bool {
+    let Some(parent) = instance
+        .component_handle(local_id)
+        .and_then(|placement| instance.component_parent_handle(placement))
+    else {
+        return false;
+    };
+    if layout_node_provider::from(&instance.objects, Some(parent)).is_none() {
+        return false;
+    }
     layout_node_provider::mark_layout_node_dirty(instance, local_id)
 }
 

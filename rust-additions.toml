@@ -49,10 +49,6 @@ path = "crates/nuxie-runtime/src/data_bind_container.rs"
 category = "codegen"
 
 [[addition]]
-path = "crates/nuxie-runtime/src/data_converter.rs"
-category = "codegen"
-
-[[addition]]
 path = "crates/nuxie-runtime/src/focus.rs"
 category = "baseline-adaptation"
 

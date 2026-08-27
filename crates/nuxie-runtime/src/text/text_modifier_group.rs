@@ -99,6 +99,7 @@ impl StaticTextModifierGroup {
         Self::from_registered_locals(
             runtime,
             graph,
+            None,
             local_id,
             &range_locals,
             &modifier_locals,
@@ -136,6 +137,7 @@ impl StaticTextModifierGroup {
         Self::from_registered_locals(
             runtime,
             graph,
+            Some(instance),
             local_id,
             &range_locals,
             &state.modifier_locals(),
@@ -147,6 +149,7 @@ impl StaticTextModifierGroup {
     fn from_registered_locals(
         runtime: &RuntimeFile,
         graph: &ArtboardGraph,
+        instance: Option<&ArtboardInstance>,
         local_id: usize,
         range_locals: &[usize],
         modifier_locals: &[usize],
@@ -160,9 +163,10 @@ impl StaticTextModifierGroup {
         let mut ranges = Vec::new();
         let mut modifiers = Vec::new();
         for range_local in range_locals {
-            ranges.push(StaticTextModifierRange::from_graph(
+            ranges.push(StaticTextModifierRange::from_graph_with_instance(
                 runtime,
                 graph,
+                instance,
                 *range_local,
             )?);
         }
@@ -502,29 +506,6 @@ fn group_has_shape_modifier(instance: &ArtboardInstance, group_local: usize) -> 
         .is_some_and(|group| !group.shape_modifier_locals().is_empty())
 }
 
-fn range_changed(instance: &mut ArtboardInstance, range_local: usize, path_only: bool) -> bool {
-    let Some(group) = instance.component_parent_local(range_local) else {
-        return false;
-    };
-    let Some(text) = modifier_group_text(instance, group) else {
-        return false;
-    };
-    let mut changed = if path_only {
-        crate::text_owner::modifier_shape_dirty(instance, text)
-    } else if group_has_shape_modifier(instance, group) {
-        crate::text_owner::modifier_shape_dirty(instance, text)
-    } else {
-        instance.add_dirt(text, crate::components::ComponentDirt::PAINT, false)
-    };
-    // `rangeTypeChanged`/`rangeChanged` dirty Text first, then their group.
-    changed |= instance.add_dirt(
-        group,
-        crate::components::ComponentDirt::TEXT_COVERAGE,
-        false,
-    );
-    changed
-}
-
 pub(crate) fn text_modifier_group_double_property_changed(
     instance: &mut ArtboardInstance,
     local_id: usize,
@@ -543,7 +524,7 @@ pub(crate) fn text_modifier_group_double_property_changed(
             })
         });
     }
-    (type_name == Some("TextModifierRange")).then(|| range_changed(instance, local_id, false))
+    text_modifier_range_double_property_changed(instance, local_id, type_name)
 }
 
 pub(crate) fn text_modifier_group_bool_property_changed(
@@ -552,9 +533,7 @@ pub(crate) fn text_modifier_group_bool_property_changed(
     type_name: Option<&str>,
     property_key: u16,
 ) -> Option<bool> {
-    (type_name == Some("TextModifierRange")
-        && property_key_for_name("TextModifierRange", "clamp") == Some(property_key))
-    .then(|| range_changed(instance, local_id, false))
+    text_modifier_range_bool_property_changed(instance, local_id, type_name, property_key)
 }
 
 pub(crate) fn text_modifier_group_uint_property_changed(
@@ -570,16 +549,7 @@ pub(crate) fn text_modifier_group_uint_property_changed(
             instance.add_dirt(text, crate::components::ComponentDirt::PAINT, false)
         }));
     }
-    if type_name != Some("TextModifierRange") {
-        return None;
-    }
-    if property_key_for_name("TextModifierRange", "unitsValue") == Some(property_key) {
-        return Some(range_changed(instance, local_id, true));
-    }
-    ["typeValue", "modeValue"]
-        .into_iter()
-        .any(|name| property_key_for_name("TextModifierRange", name) == Some(property_key))
-        .then(|| range_changed(instance, local_id, false))
+    text_modifier_range_uint_property_changed(instance, local_id, type_name, property_key)
 }
 
 #[derive(Debug, Clone)]

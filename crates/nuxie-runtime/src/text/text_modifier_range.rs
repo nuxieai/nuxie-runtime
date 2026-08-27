@@ -17,6 +17,14 @@ struct StaticRangeMap {
     terminal_index: Option<usize>,
 }
 
+fn text_range_std_min(left: f32, right: f32) -> f32 {
+    if right < left { right } else { left }
+}
+
+fn text_range_std_max(left: f32, right: f32) -> f32 {
+    if left < right { right } else { left }
+}
+
 impl StaticRangeMap {
     fn from_words(text: &str, start: usize, end: usize) -> Self {
         Self {
@@ -60,9 +68,10 @@ impl StaticRangeMap {
         if self.unit_character_index_count() == 0 {
             return 0.0;
         }
-        let clamped = unit
-            .max(0.0)
-            .min((self.unit_character_index_count() - 1) as f32);
+        let clamped = text_range_std_min(
+            text_range_std_max(unit, 0.0),
+            (self.unit_character_index_count() - 1) as f32,
+        );
         let integer = clamped as usize;
         let mut characters = self.unit_character_index(integer) as f32;
         if integer < self.unit_count() {
@@ -91,30 +100,38 @@ fn add_range_unit(
     }
 }
 
-trait StaticTextWords {
-    fn split_word_bound_indices(&self) -> Vec<(usize, &str)>;
-}
-
-impl StaticTextWords for str {
-    fn split_word_bound_indices(&self) -> Vec<(usize, &str)> {
-        let mut words = Vec::new();
-        let mut start = None;
-        for (index, ch) in self.char_indices() {
-            if nuxie_render_api::is_white_space(ch) {
-                if let Some(word_start) = start.take() {
-                    words.push((word_start, &self[word_start..index]));
-                }
-            } else if start.is_none() {
-                start = Some(index);
-            }
-        }
-        if let Some(word_start) = start {
-            words.push((word_start, &self[word_start..]));
-        }
-        words
-    }
-}
 impl StaticTextModifierRange {
+    fn from_graph_with_instance(
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        instance: Option<&ArtboardInstance>,
+        local_id: usize,
+    ) -> Result<Self> {
+        let mut range = Self::from_graph(runtime, graph, local_id)?;
+        let Some(instance) = instance else {
+            return Ok(range);
+        };
+        let component = instance.component(local_id).with_context(|| {
+            format!("TextModifierRange local {local_id} occurrence component is missing")
+        })?;
+        range.interpolator = component
+            .children
+            .iter()
+            .filter_map(|child| instance.component_local_id(*child))
+            .filter(|child_local| {
+                instance
+                    .component(*child_local)
+                    .and_then(|child| nuxie_schema::definition_by_name(child.type_name))
+                    .is_some_and(|definition| definition.is_a("CubicInterpolatorComponent"))
+            })
+            .map(|child_local| -> Result<StaticCubicInterpolator> {
+                StaticCubicInterpolator::from_graph(runtime, graph, child_local)
+            })
+            .last()
+            .transpose()?;
+        Ok(range)
+    }
+
     fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
         let global_id = global_for_local(graph, local_id)?;
         let object = runtime
@@ -142,13 +159,12 @@ impl StaticTextModifierRange {
             .children
             .iter()
             .filter(|child_local| {
-                type_for_local(graph, **child_local) == Some("CubicInterpolatorComponent")
+                type_for_local(graph, **child_local)
+                    .and_then(nuxie_schema::definition_by_name)
+                    .is_some_and(|definition| definition.is_a("CubicInterpolatorComponent"))
             })
             .map(|child_local| -> Result<StaticCubicInterpolator> {
-                Ok(StaticCubicInterpolator {
-                    local_id: *child_local,
-                    global_id: global_for_local(graph, *child_local)?,
-                })
+                StaticCubicInterpolator::from_graph(runtime, graph, *child_local)
             })
             .last()
             .transpose()?;
@@ -413,24 +429,31 @@ impl StaticTextModifierRange {
         falloff_from: f32,
         falloff_to: f32,
     ) -> Result<f32> {
-        let (mut c, use_interpolator) = if index_to < index_from || t < index_from || t > index_to {
-            (0.0, false)
-        } else if t < falloff_from {
-            let range = (falloff_from - index_from).max(0.0);
-            if range == 0.0 {
-                (1.0, true)
+        let (mut c, use_interpolator) = if index_to >= index_from {
+            if t < index_from || t > index_to {
+                (0.0, false)
+            } else if t < falloff_from {
+                let range = text_range_std_max(0.0, falloff_from - index_from);
+                if range == 0.0 {
+                    (1.0, true)
+                } else {
+                    (text_range_std_max(0.0, t - index_from) / range, true)
+                }
+            } else if t > falloff_to {
+                let range = text_range_std_max(0.0, index_to - falloff_to);
+                if range == 0.0 {
+                    (1.0, true)
+                } else {
+                    (
+                        1.0 - text_range_std_min(1.0, (t - falloff_to) / range),
+                        true,
+                    )
+                }
             } else {
-                (((t - index_from).max(0.0) / range).max(0.0), true)
-            }
-        } else if t > falloff_to {
-            let range = (index_to - falloff_to).max(0.0);
-            if range == 0.0 {
-                (1.0, true)
-            } else {
-                (1.0 - ((t - falloff_to) / range).min(1.0), true)
+                (1.0, false)
             }
         } else {
-            (1.0, false)
+            (0.0, false)
         };
         if use_interpolator && let Some(interpolator) = self.interpolator {
             c = interpolator.transform(runtime, instance, c)?;
@@ -493,28 +516,99 @@ impl StaticTextModifierRange {
     }
 }
 
+fn text_modifier_range_changed(
+    instance: &mut ArtboardInstance,
+    range_local: usize,
+    range_type_changed: bool,
+) -> bool {
+    let Some(group) = instance.component_parent_local(range_local) else {
+        return false;
+    };
+    let Some(text) = modifier_group_text(instance, group) else {
+        return false;
+    };
+    let mut changed = if range_type_changed || group_has_shape_modifier(instance, group) {
+        crate::text_owner::modifier_shape_dirty(instance, text)
+    } else {
+        instance.add_dirt(text, crate::components::ComponentDirt::PAINT, false)
+    };
+    // Every pinned range callback dirties the Text first, then publishes the
+    // group's TextCoverage dirt.
+    changed |= instance.add_dirt(
+        group,
+        crate::components::ComponentDirt::TEXT_COVERAGE,
+        false,
+    );
+    changed
+}
+
+fn text_modifier_range_double_property_changed(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+) -> Option<bool> {
+    (type_name == Some("TextModifierRange"))
+        .then(|| text_modifier_range_changed(instance, local_id, false))
+}
+
+fn text_modifier_range_bool_property_changed(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> Option<bool> {
+    (type_name == Some("TextModifierRange")
+        && property_key_for_name("TextModifierRange", "clamp") == Some(property_key))
+    .then(|| text_modifier_range_changed(instance, local_id, false))
+}
+
+fn text_modifier_range_uint_property_changed(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> Option<bool> {
+    if type_name != Some("TextModifierRange") {
+        return None;
+    }
+    if property_key_for_name("TextModifierRange", "unitsValue") == Some(property_key) {
+        return Some(text_modifier_range_changed(instance, local_id, true));
+    }
+    ["typeValue", "modeValue"]
+        .into_iter()
+        .any(|name| property_key_for_name("TextModifierRange", name) == Some(property_key))
+        .then(|| text_modifier_range_changed(instance, local_id, false))
+}
+
 #[derive(Debug, Clone, Copy)]
 struct StaticCubicInterpolator {
     local_id: usize,
     global_id: u32,
+    solver: RuntimeCubicInterpolatorComponent,
 }
 
 impl StaticCubicInterpolator {
+    fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
+        let global_id = global_for_local(graph, local_id)?;
+        let object = runtime
+            .object(global_id as usize)
+            .with_context(|| format!("missing CubicInterpolatorComponent global {global_id}"))?;
+        Ok(Self {
+            local_id,
+            global_id,
+            solver: RuntimeCubicInterpolatorComponent::on_added_dirty(
+                object.double_property("x1").unwrap_or(0.42),
+                object.double_property("x2").unwrap_or(0.58),
+            ),
+        })
+    }
+
     fn transform(
         self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         factor: f32,
     ) -> Result<f32> {
-        let x1 = runtime_double_property(
-            runtime,
-            instance,
-            "CubicInterpolatorComponent",
-            self.local_id,
-            self.global_id,
-            "x1",
-            0.42,
-        )?;
         let y1 = runtime_double_property(
             runtime,
             instance,
@@ -523,15 +617,6 @@ impl StaticCubicInterpolator {
             self.global_id,
             "y1",
             0.0,
-        )?;
-        let x2 = runtime_double_property(
-            runtime,
-            instance,
-            "CubicInterpolatorComponent",
-            self.local_id,
-            self.global_id,
-            "x2",
-            0.58,
         )?;
         let y2 = runtime_double_property(
             runtime,
@@ -542,7 +627,6 @@ impl StaticCubicInterpolator {
             "y2",
             1.0,
         )?;
-        let interpolator = RuntimeCubicInterpolatorComponent::on_added_dirty(x1, x2);
-        Ok(interpolator.transform(factor, y1, y2))
+        Ok(self.solver.transform(factor, y1, y2))
     }
 }

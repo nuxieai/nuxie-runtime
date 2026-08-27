@@ -3009,12 +3009,12 @@ impl RuntimeOwnedViewModelInstance {
         file: &RuntimeFile,
         symbol_type: u8,
     ) -> Option<RuntimeViewModelCell> {
-        let view_model = file.view_model(self.view_model_index)?;
+        let view_model = RuntimeAuthoredViewModel::new(file, self.view_model_index)?;
         self.value_order.iter().rev().find_map(|occurrence| {
             if occurrence.kind != RuntimeOwnedViewModelValueKind::Number {
                 return None;
             }
-            let property = view_model.properties.get(occurrence.property_index)?;
+            let property = view_model.property(occurrence.property_index)?;
             if property.uint_property("symbolTypeValue") != Some(u64::from(symbol_type)) {
                 return None;
             }
@@ -3191,8 +3191,9 @@ impl RuntimeOwnedViewModelInstance {
         view_model_index: usize,
         instance_name: &str,
     ) -> Option<Self> {
-        let reference = file.view_model_instance_named(view_model_index, instance_name)?;
-        Self::from_instance(file, view_model_index, reference.instance_index)
+        let instance =
+            RuntimeAuthoredViewModel::new(file, view_model_index)?.instance_named(instance_name)?;
+        Self::from_instance(file, view_model_index, instance.instance_index)
     }
 
     fn from_imported_instance(
@@ -3200,8 +3201,8 @@ impl RuntimeOwnedViewModelInstance {
         view_model_index: usize,
         instance_index: usize,
     ) -> Option<Self> {
-        let view_model = file.view_model(view_model_index)?;
-        let instance = view_model.instances.into_iter().nth(instance_index)?;
+        let instance =
+            RuntimeAuthoredViewModel::new(file, view_model_index)?.instance(instance_index)?;
         Self::from_view_model(file, view_model_index, Some(instance.object))
     }
 

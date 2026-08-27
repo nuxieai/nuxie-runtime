@@ -3592,7 +3592,7 @@ impl RuntimeFile {
     ) -> Option<&RuntimeObject> {
         let view_model = self.view_model(view_model_index)?;
         view_model.properties.into_iter().find(|property| {
-            property.uint_property("symbolTypeValue") == Some(u64::from(symbol_type))
+            property.uint_property("symbolTypeValue").unwrap_or(0) == u64::from(symbol_type)
         })
     }
 

@@ -10,9 +10,12 @@ pub(crate) fn runtime_component_list_order<'a>(
     list: &'a RuntimeConstrainableListState,
 ) -> Ref<'a, RuntimeComponentListOrderCache> {
     let uses_draw_index_sort = list.logical_items.iter().any(|item| {
-        runtime
-            .view_model_property_for_symbol(item.context.borrow().view_model_index(), 16)
-            .is_some()
+        crate::view_model::RuntimeAuthoredViewModel::new(
+            runtime,
+            item.context.borrow().view_model_index(),
+        )
+        .and_then(|view_model| view_model.property_for_symbol(16))
+        .is_some()
     });
     let order_dirty = list.items.iter().any(|item| {
         item.draw_index_sink
@@ -27,15 +30,15 @@ pub(crate) fn runtime_component_list_order<'a>(
             if uses_draw_index_sort {
                 let draw_index = |item_index: usize| {
                     let item = &list.items[item_index];
-                    runtime
-                        .view_model_property_for_symbol(
-                            item.context.borrow().view_model_index(),
-                            16,
-                        )
-                        .and_then(|property| property.string_property("name"))
-                        .and_then(|name| item.context.borrow().number_value_by_property_name(name))
-                        .filter(|value| value.is_finite())
-                        .unwrap_or(0.0)
+                    crate::view_model::RuntimeAuthoredViewModel::new(
+                        runtime,
+                        item.context.borrow().view_model_index(),
+                    )
+                    .and_then(|view_model| view_model.property_for_symbol(16))
+                    .and_then(|property| property.string_property("name"))
+                    .and_then(|name| item.context.borrow().number_value_by_property_name(name))
+                    .filter(|value| value.is_finite())
+                    .unwrap_or(0.0)
                 };
                 order.indices.sort_by(|&left, &right| {
                     draw_index(left)

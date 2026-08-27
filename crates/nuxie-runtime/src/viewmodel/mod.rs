@@ -12,6 +12,7 @@ include!("data_enum.rs");
 include!("data_enum_value.rs");
 include!("property_symbol_dependent.rs");
 include!("viewmodel.rs");
+include!("owned_viewmodel_context.rs");
 include!("viewmodel_instance.rs");
 include!("viewmodel_instance_artboard.rs");
 include!("viewmodel_instance_asset.rs");

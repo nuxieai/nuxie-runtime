@@ -118,9 +118,12 @@ fn component_list_draw_index_sink(
     file: &RuntimeFile,
     context: &RuntimeOwnedViewModelHandle,
 ) -> Option<crate::view_model_cell::RuntimeCellDirtSink> {
-    let property_name = file
-        .view_model_property_for_symbol(context.borrow().view_model_index(), 16)?
-        .string_property("name")?;
+    let property_name = crate::view_model::RuntimeAuthoredViewModel::new(
+        file,
+        context.borrow().view_model_index(),
+    )?
+    .property_for_symbol(16)?
+    .string_property("name")?;
     let cell = context
         .borrow()
         .number_cell_by_property_name(property_name)?;

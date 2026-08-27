@@ -62,18 +62,17 @@ impl ViewModelRuntime {
         self.view_model_index
     }
 
+    fn authored_view_model(&self) -> RuntimeAuthoredViewModel<'_> {
+        RuntimeAuthoredViewModel::new(&self.file, self.view_model_index)
+            .expect("ViewModelRuntime retains a validated ViewModel index")
+    }
+
     pub fn instance_count(&self) -> usize {
-        self.file
-            .view_model(self.view_model_index)
-            .map(|view_model| view_model.instances.len())
-            .unwrap_or(0)
+        self.authored_view_model().instance_count()
     }
 
     pub fn property_count(&self) -> usize {
-        self.file
-            .view_model(self.view_model_index)
-            .map(|view_model| view_model.properties.len())
-            .unwrap_or(0)
+        self.authored_view_model().properties().len()
     }
 
     pub fn name(&self) -> String {
@@ -89,27 +88,26 @@ impl ViewModelRuntime {
     }
 
     pub fn instance_names(&self) -> Vec<String> {
-        self.file
-            .view_model(self.view_model_index)
-            .map(|view_model| {
-                view_model
-                    .instances
-                    .into_iter()
-                    .map(|instance| {
-                        instance
-                            .object
-                            .string_property("name")
-                            .unwrap_or_default()
-                            .to_owned()
-                    })
-                    .collect()
+        self.authored_view_model()
+            .instances()
+            .into_iter()
+            .map(|instance| {
+                instance
+                    .object
+                    .string_property("name")
+                    .unwrap_or_default()
+                    .to_owned()
             })
-            .unwrap_or_default()
+            .collect()
     }
 
     pub fn create_instance_from_index(&self, index: usize) -> Option<ViewModelInstanceRuntime> {
-        let instance =
-            RuntimeOwnedViewModelInstance::from_instance(&self.file, self.view_model_index, index)?;
+        let instance = self.authored_view_model().instance(index)?;
+        let instance = RuntimeOwnedViewModelInstance::from_instance(
+            &self.file,
+            self.view_model_index,
+            instance.instance_index,
+        )?;
         Some(ViewModelInstanceRuntime::from_handle(
             Rc::clone(&self.file),
             RuntimeOwnedViewModelHandle::new(instance),
@@ -117,19 +115,27 @@ impl ViewModelRuntime {
     }
 
     pub fn create_instance_from_name(&self, name: &str) -> Option<ViewModelInstanceRuntime> {
-        let reference = self
-            .file
-            .view_model_instance_named(self.view_model_index, name)?;
-        self.create_instance_from_index(reference.instance_index)
+        let instance = self.authored_view_model().instance_named(name)?;
+        let instance = RuntimeOwnedViewModelInstance::from_instance(
+            &self.file,
+            self.view_model_index,
+            instance.instance_index,
+        )?;
+        Some(ViewModelInstanceRuntime::from_handle(
+            Rc::clone(&self.file),
+            RuntimeOwnedViewModelHandle::new(instance),
+        ))
     }
 
     pub fn create_default_instance(&self) -> Option<ViewModelInstanceRuntime> {
-        self.create_instance_from_index(0)
-            .or_else(|| self.create_instance())
+        match self.authored_view_model().default_instance() {
+            Some(instance) => self.create_instance_from_index(instance.instance_index),
+            None => self.create_instance(),
+        }
     }
 
     pub fn create_instance(&self) -> Option<ViewModelInstanceRuntime> {
-        let instance = RuntimeOwnedViewModelInstance::new(&self.file, self.view_model_index)?;
+        let instance = self.authored_view_model().create_instance()?;
         Some(ViewModelInstanceRuntime::from_handle(
             Rc::clone(&self.file),
             RuntimeOwnedViewModelHandle::new(instance),
@@ -140,10 +146,10 @@ impl ViewModelRuntime {
         file: &RuntimeFile,
         view_model_index: usize,
     ) -> Vec<ViewModelRuntimeProperty> {
-        file.view_model(view_model_index)
+        RuntimeAuthoredViewModel::new(file, view_model_index)
             .map(|view_model| {
                 view_model
-                    .properties
+                    .properties()
                     .into_iter()
                     .map(|property| {
                         let data_type = match property.type_name {

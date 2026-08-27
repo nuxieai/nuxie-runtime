@@ -664,23 +664,19 @@ fn runtime_imported_view_model_property_path_for_type_names(
     if property_name.is_empty() {
         return None;
     }
-    let view_model = file.view_model(view_model_index)?;
-    view_model
-        .properties
+    let view_model = RuntimeAuthoredViewModel::new(file, view_model_index)?;
+    let property = view_model.property_named(property_name)?;
+    if !property_type_names.contains(&property.type_name) {
+        return None;
+    }
+    let property_index = view_model
+        .properties()
         .into_iter()
-        .enumerate()
-        .find_map(|(property_index, property)| {
-            if !property_type_names.contains(&property.type_name) {
-                return None;
-            }
-            if property.string_property("name")? != property_name {
-                return None;
-            }
-            Some(vec![
-                u32::try_from(view_model_index).ok()?,
-                u32::try_from(property_index).ok()?,
-            ])
-        })
+        .position(|candidate| std::ptr::eq(candidate, property))?;
+    Some(vec![
+        u32::try_from(view_model_index).ok()?,
+        u32::try_from(property_index).ok()?,
+    ])
 }
 
 fn runtime_imported_view_model_property_path_for_name_path(

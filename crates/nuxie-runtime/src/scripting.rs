@@ -1193,19 +1193,8 @@ impl ScriptViewModel {
     pub fn named_instance(&self, name: Option<&str>) -> Option<Self> {
         let instance = match name {
             Some(name) => {
-                let view_model = self.file.view_model(self.view_model_index)?;
-                let instance_index = view_model
-                    .instances
-                    .iter()
-                    .position(|instance| instance.object.string_property("name") == Some(name));
-                instance_index
-                    .and_then(|index| {
-                        RuntimeOwnedViewModelInstance::from_instance(
-                            &self.file,
-                            self.view_model_index,
-                            index,
-                        )
-                    })
+                crate::view_model::RuntimeAuthoredViewModel::new(&self.file, self.view_model_index)?
+                    .create_from_instance(name)
                     .or_else(|| {
                         RuntimeOwnedViewModelInstance::new(&self.file, self.view_model_index)
                     })?

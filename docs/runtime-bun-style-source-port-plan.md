@@ -41,9 +41,11 @@ For one complete source file at a time:
    Rust structure visibly comparable to the C++.
 4. When existing Rust behavior differs, recover the pinned behavior from the
    source comparison. Do not invent a fix from a test or downstream symptom.
-5. Give the complete pair one lightweight independent source read. Review the
-   translation itself; do not create a separate rejection receipt, fixture
-   census, consumer topology, or custom evidence campaign.
+5. Give the complete pair one lightweight self-read against the pinned source.
+   Do not dispatch a per-owner independent review, or create a separate
+   rejection receipt, fixture census, consumer topology, or custom evidence
+   campaign. Independent review belongs at a directory or PR-sized batch
+   boundary when it is useful.
 6. Apply concrete review corrections directly and commit the completed source
    pair. Record only a concise commit message and, when necessary, a short
    inline adaptation note.

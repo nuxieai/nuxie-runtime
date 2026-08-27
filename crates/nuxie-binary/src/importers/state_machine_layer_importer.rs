@@ -558,52 +558,30 @@ impl RuntimeFile {
 
             if definition.is_a("StateMachineFireAction") {
                 if let Some(owner) = current_layer_component {
-                    match owner {
+                    let state_machine_index = match owner {
                         RuntimeStateMachineLayerComponentOwner::State {
                             state_machine_index,
-                            layer_index,
-                            state_index,
-                        } => {
-                            let owner_artboard_slots = state_machine_artboard_owners
-                                .get(state_machine_index)
-                                .copied()
-                                .flatten()
-                                .and_then(|index| artboard_local_slots_by_index.get(index))
-                                .map(Vec::as_slice)
-                                .unwrap_or_default();
-                            state_machines[state_machine_index].layers[layer_index].states
-                                [state_index]
-                                .fire_actions
-                                .push(cpp_runtime_state_machine_fire_action(
-                                    object,
-                                    owner_artboard_slots,
-                                    &self.objects,
-                                ));
+                            ..
                         }
-                        RuntimeStateMachineLayerComponentOwner::Transition {
+                        | RuntimeStateMachineLayerComponentOwner::Transition {
                             state_machine_index,
-                            layer_index,
-                            state_index,
-                            transition_index,
-                        } => {
-                            let owner_artboard_slots = state_machine_artboard_owners
-                                .get(state_machine_index)
-                                .copied()
-                                .flatten()
-                                .and_then(|index| artboard_local_slots_by_index.get(index))
-                                .map(Vec::as_slice)
-                                .unwrap_or_default();
-                            state_machines[state_machine_index].layers[layer_index].states
-                                [state_index]
-                                .transitions[transition_index]
-                                .fire_actions
-                                .push(cpp_runtime_state_machine_fire_action(
-                                    object,
-                                    owner_artboard_slots,
-                                    &self.objects,
-                                ));
-                        }
-                    }
+                            ..
+                        } => state_machine_index,
+                    };
+                    let owner_artboard_slots = state_machine_artboard_owners
+                        .get(state_machine_index)
+                        .copied()
+                        .flatten()
+                        .and_then(|index| artboard_local_slots_by_index.get(index))
+                        .map(Vec::as_slice)
+                        .unwrap_or_default();
+                    state_machine_layer_component_importer::add_fire_event(
+                        &mut state_machines,
+                        owner,
+                        object,
+                        owner_artboard_slots,
+                        &self.objects,
+                    );
                 }
                 continue;
             }

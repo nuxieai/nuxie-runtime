@@ -5996,20 +5996,6 @@ fn resolve_runtime_state_machine_transition_targets(
     }
 }
 
-fn cpp_runtime_state_machine_fire_action<'a>(
-    object: &'a RuntimeObject,
-    artboard_local_slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
-) -> RuntimeStateMachineFireAction<'a> {
-    let (event_local_index, event) =
-        cpp_resolved_action_event(object, artboard_local_slots, objects);
-    RuntimeStateMachineFireAction {
-        object,
-        event_local_index,
-        event,
-    }
-}
-
 fn cpp_runtime_listener_action<'a>(
     object: &'a RuntimeObject,
     artboard_local_slots: &[Option<usize>],

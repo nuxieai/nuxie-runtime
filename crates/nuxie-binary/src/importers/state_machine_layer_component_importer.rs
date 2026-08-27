@@ -46,3 +46,38 @@ pub(super) fn update_context(definition: &'static Definition, context: &mut Impo
         context.make_latest(ImportStackKey::StateMachineLayerComponent);
     }
 }
+
+pub(super) fn add_fire_event<'a>(
+    state_machines: &mut [RuntimeStateMachine<'a>],
+    owner: RuntimeStateMachineLayerComponentOwner,
+    object: &'a RuntimeObject,
+    artboard_local_slots: &[Option<usize>],
+    objects: &'a [Option<RuntimeObject>],
+) {
+    let (event_local_index, event) =
+        cpp_resolved_action_event(object, artboard_local_slots, objects);
+    let fire_event = RuntimeStateMachineFireAction {
+        object,
+        event_local_index,
+        event,
+    };
+
+    match owner {
+        RuntimeStateMachineLayerComponentOwner::State {
+            state_machine_index,
+            layer_index,
+            state_index,
+        } => state_machines[state_machine_index].layers[layer_index].states[state_index]
+            .fire_actions
+            .push(fire_event),
+        RuntimeStateMachineLayerComponentOwner::Transition {
+            state_machine_index,
+            layer_index,
+            state_index,
+            transition_index,
+        } => state_machines[state_machine_index].layers[layer_index].states[state_index]
+            .transitions[transition_index]
+            .fire_actions
+            .push(fire_event),
+    }
+}

@@ -1,7 +1,6 @@
 use crate::mechanical_port::source::{
     constraints::constraint::Constraint,
-    generated::constraints::distance_constraint_base::DistanceConstraintBase,
-    math::vec2d::Vec2D,
+    generated::constraints::distance_constraint_base::DistanceConstraintBase, math::vec2d::Vec2D,
     transform_component::TransformComponent,
 };
 

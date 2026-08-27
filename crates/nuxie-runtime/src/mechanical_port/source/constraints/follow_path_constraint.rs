@@ -6,12 +6,8 @@ use crate::mechanical_port::source::{
         FollowPathConstraintBase, TransformSpace,
     },
     math::{
-        math_types,
-        mat2d::Mat2D,
-        path_measure::PathMeasure,
-        raw_path::RawPath,
-        transform_components::TransformComponents,
-        vec2d::Vec2D,
+        mat2d::Mat2D, math_types, path_measure::PathMeasure, raw_path::RawPath,
+        transform_components::TransformComponents, vec2d::Vec2D,
     },
     shapes::{path::Path, path_flags::PathFlags, shape::Shape},
     transform_component::TransformComponent,
@@ -48,9 +44,7 @@ impl FollowPathConstraint {
                 } else if diff < -math_types::PI {
                     diff += math_types::PI * 2.0;
                 }
-                transform_b = Mat2D::from_rotation(
-                    angle_b + diff * self.base.strength(),
-                );
+                transform_b = Mat2D::from_rotation(angle_b + diff * self.base.strength());
             }
             let mut offset_position = Vec2D::default();
             if self.base.offset() && self.base.parent().is::<TransformComponent>() {

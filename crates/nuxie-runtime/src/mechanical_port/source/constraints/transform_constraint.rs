@@ -23,25 +23,39 @@ impl TransformConstraint {
     }
 
     pub fn constrain(&mut self, component: &mut TransformComponent) {
-        let Some(target) = self.base.target() else { return; };
-        if target.is_collapsed() { return; }
+        let Some(target) = self.base.target() else {
+            return;
+        };
+        if target.is_collapsed() {
+            return;
+        }
         let transform_a = *component.world_transform();
         let mut transform_b = self.target_transform();
         if self.base.source_space() == TransformSpace::Local {
-            let Some(inverse) = get_parent_world(target).inverted() else { return; };
+            let Some(inverse) = get_parent_world(target).inverted() else {
+                return;
+            };
             transform_b = inverse * transform_b;
         }
         if self.base.dest_space() == TransformSpace::Local {
             transform_b = *get_parent_world(component) * transform_b;
         }
         Self::constrain_world(
-            component, transform_a, self.components_a, transform_b,
-            self.components_b, self.base.strength(),
+            component,
+            transform_a,
+            self.components_a,
+            transform_b,
+            self.components_b,
+            self.base.strength(),
         );
     }
 
-    pub fn origin_x_changed(&mut self) { self.base.mark_constraint_dirty(); }
-    pub fn origin_y_changed(&mut self) { self.base.mark_constraint_dirty(); }
+    pub fn origin_x_changed(&mut self) {
+        self.base.mark_constraint_dirty();
+    }
+    pub fn origin_y_changed(&mut self) {
+        self.base.mark_constraint_dirty();
+    }
 
     pub fn constrain_world(
         component: &mut TransformComponent,
@@ -56,8 +70,11 @@ impl TransformConstraint {
         let angle_a = components_from.rotation() % (math_types::PI * 2.0);
         let angle_b = components_to.rotation() % (math_types::PI * 2.0);
         let mut diff = angle_b - angle_a;
-        if diff > math_types::PI { diff -= math_types::PI * 2.0; }
-        else if diff < -math_types::PI { diff += math_types::PI * 2.0; }
+        if diff > math_types::PI {
+            diff -= math_types::PI * 2.0;
+        } else if diff < -math_types::PI {
+            diff += math_types::PI * 2.0;
+        }
         let t = strength;
         let ti = 1.0 - t;
         components_to.set_rotation(angle_a + diff * t);

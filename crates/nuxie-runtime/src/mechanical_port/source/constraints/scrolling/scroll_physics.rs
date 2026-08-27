@@ -11,7 +11,10 @@ use crate::mechanical_port::source::{
 };
 
 fn now_micros() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as i64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as i64
 }
 
 pub struct ScrollPhysicsState {
@@ -24,21 +27,35 @@ pub struct ScrollPhysicsState {
 
 impl Default for ScrollPhysicsState {
     fn default() -> Self {
-        Self { last_time: now_micros(), is_running: false, speed: Vec2D::default(), acceleration: Vec2D::default(), direction: DraggableConstraintDirection::Horizontal }
+        Self {
+            last_time: now_micros(),
+            is_running: false,
+            speed: Vec2D::default(),
+            acceleration: Vec2D::default(),
+            direction: DraggableConstraintDirection::Horizontal,
+        }
     }
 }
 
 pub trait ScrollPhysics: ScrollPhysicsBase {
     fn physics_state(&self) -> &ScrollPhysicsState;
     fn physics_state_mut(&mut self) -> &mut ScrollPhysicsState;
-    fn enabled(&self) -> bool { self.is_running() }
-    fn is_running(&self) -> bool { self.physics_state().is_running }
+    fn enabled(&self) -> bool {
+        self.is_running()
+    }
+    fn is_running(&self) -> bool {
+        self.physics_state().is_running
+    }
     fn prepare(&mut self, direction: DraggableConstraintDirection) {
         self.reset();
         self.physics_state_mut().direction = direction;
     }
-    fn clamp(&self, _range_min: Vec2D, _range_max: Vec2D, _value: Vec2D) -> Vec2D { Vec2D::default() }
-    fn advance(&mut self, _elapsed_seconds: f32) -> Vec2D { Vec2D::default() }
+    fn clamp(&self, _range_min: Vec2D, _range_max: Vec2D, _value: Vec2D) -> Vec2D {
+        Vec2D::default()
+    }
+    fn advance(&mut self, _elapsed_seconds: f32) -> Vec2D {
+        Vec2D::default()
+    }
 
     fn accumulate(&mut self, delta: Vec2D, time_stamp: f32) {
         let elapsed_seconds;
@@ -61,7 +78,15 @@ pub trait ScrollPhysics: ScrollPhysicsBase {
         }
     }
 
-    fn run(&mut self, _range_min: Vec2D, _range_max: Vec2D, _value: Vec2D, _snapping_points: Vec<Vec2D>, _content_size: f32, _viewport_size: f32) {
+    fn run(
+        &mut self,
+        _range_min: Vec2D,
+        _range_max: Vec2D,
+        _value: Vec2D,
+        _snapping_points: Vec<Vec2D>,
+        _content_size: f32,
+        _viewport_size: f32,
+    ) {
         self.physics_state_mut().is_running = true;
     }
     fn stop(&mut self) {
@@ -69,16 +94,26 @@ pub trait ScrollPhysics: ScrollPhysicsBase {
         self.physics_state_mut().speed = Vec2D::default();
     }
     fn reset(&mut self) {
-        self.physics_state_mut().last_time = if File::deterministic_mode() { 0 } else { now_micros() };
+        self.physics_state_mut().last_time = if File::deterministic_mode() {
+            0
+        } else {
+            now_micros()
+        };
         self.physics_state_mut().speed = Vec2D::default();
         self.physics_state_mut().acceleration = Vec2D::default();
         self.stop();
     }
-    fn speed(&self) -> Vec2D { self.physics_state().speed }
-    fn clear_velocity(&mut self) { self.physics_state_mut().speed = Vec2D::default(); }
+    fn speed(&self) -> Vec2D {
+        self.physics_state().speed
+    }
+    fn clear_velocity(&mut self) {
+        self.physics_state_mut().speed = Vec2D::default();
+    }
 
     fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
-        if let Some(importer) = import_stack.latest_mut::<BackboardImporter>(BackboardBase::TYPE_KEY) {
+        if let Some(importer) =
+            import_stack.latest_mut::<BackboardImporter>(BackboardBase::TYPE_KEY)
+        {
             importer.add_physics(self.as_scroll_physics_mut_ptr());
         } else {
             return StatusCode::MissingObject;
@@ -86,9 +121,26 @@ pub trait ScrollPhysics: ScrollPhysicsBase {
         StatusCode::Ok
     }
 
-    fn scroll_to_position(&mut self, _current: Vec2D, _target: Vec2D, _range_min: Vec2D, _range_max: Vec2D, _horizontal: bool, _vertical: bool) {}
-    fn target_x(&self) -> f32 { 0.0 }
-    fn target_y(&self) -> f32 { 0.0 }
-    fn has_target_x(&self) -> bool { false }
-    fn has_target_y(&self) -> bool { false }
+    fn scroll_to_position(
+        &mut self,
+        _current: Vec2D,
+        _target: Vec2D,
+        _range_min: Vec2D,
+        _range_max: Vec2D,
+        _horizontal: bool,
+        _vertical: bool,
+    ) {
+    }
+    fn target_x(&self) -> f32 {
+        0.0
+    }
+    fn target_y(&self) -> f32 {
+        0.0
+    }
+    fn has_target_x(&self) -> bool {
+        false
+    }
+    fn has_target_y(&self) -> bool {
+        false
+    }
 }

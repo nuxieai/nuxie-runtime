@@ -1,6 +1,5 @@
 use crate::mechanical_port::source::{
-    constraints::constraint::Constraint,
-    layout::layout_node_provider::LayoutNodeProvider,
+    constraints::constraint::Constraint, layout::layout_node_provider::LayoutNodeProvider,
 };
 
 pub trait LayoutConstraint {

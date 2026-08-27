@@ -20,7 +20,9 @@ pub struct IkConstraint {
     fk_chain: Vec<BoneChainLink>,
 }
 
-fn atan2(v: Vec2D) -> f32 { v.y.atan2(v.x) }
+fn atan2(v: Vec2D) -> f32 {
+    v.y.atan2(v.x)
+}
 
 impl IkConstraint {
     pub fn build_dependencies(&mut self) {
@@ -31,7 +33,9 @@ impl IkConstraint {
     }
 
     pub fn on_added_clean(&mut self, context: &mut CoreContext) -> StatusCode {
-        if !self.base.parent().is::<Bone>() { return StatusCode::InvalidObject; }
+        if !self.base.parent().is::<Bone>() {
+            return StatusCode::InvalidObject;
+        }
         let mut bone_count = self.base.parent_bone_count();
         let mut bone = self.base.parent_mut().as_mut::<Bone>().unwrap() as *mut Bone;
         let mut bones = vec![bone];
@@ -99,7 +103,11 @@ impl IkConstraint {
         let first_child = self.fk_chain[first_child_index].bone;
         let inverse_world = self.fk_chain[first].parent_world_inverse;
         let (mut p_a, mut p_c, mut p_b) = unsafe {
-            ((*b1).world_translation(), (*first_child).world_translation(), (*b2).tip_world_translation())
+            (
+                (*b1).world_translation(),
+                (*first_child).world_translation(),
+                (*b2).tip_world_translation(),
+            )
         };
         let mut p_bt = world_target_translation;
         p_a = inverse_world * p_a;
@@ -112,8 +120,12 @@ impl IkConstraint {
         let a = av.length();
         let b = bv.length();
         let c = cv.length();
-        let angle_a = ((-a * a + b * b + c * c) / (2.0 * b * c)).clamp(-1.0, 1.0).acos();
-        let angle_c = ((a * a + b * b - c * c) / (2.0 * a * b)).clamp(-1.0, 1.0).acos();
+        let angle_a = ((-a * a + b * b + c * c) / (2.0 * b * c))
+            .clamp(-1.0, 1.0)
+            .acos();
+        let angle_c = ((a * a + b * b - c * c) / (2.0 * a * b))
+            .clamp(-1.0, 1.0)
+            .acos();
         let (r1, r2);
         unsafe {
             if (*b2).parent_ptr() != b1.cast() {
@@ -149,7 +161,9 @@ impl IkConstraint {
         self.fk_chain[first_child_index].angle = r2;
     }
 
-    pub fn invert_direction_changed(&mut self) { self.mark_constraint_dirty(); }
+    pub fn invert_direction_changed(&mut self) {
+        self.mark_constraint_dirty();
+    }
 
     fn constrain_rotation(&mut self, index: usize, rotation: f32) {
         let fk = &mut self.fk_chain[index];
@@ -177,8 +191,12 @@ impl IkConstraint {
     }
 
     pub fn constrain(&mut self, _component: &mut TransformComponent) {
-        let Some(target) = self.base.target() else { return; };
-        if target.is_collapsed() { return; }
+        let Some(target) = self.base.target() else {
+            return;
+        };
+        if target.is_collapsed() {
+            return;
+        }
         let world_target_translation = target.world_translation();
         for link in &mut self.fk_chain {
             unsafe {
@@ -201,20 +219,23 @@ impl IkConstraint {
                     let start = self.fk_chain[index].index as usize + 1;
                     for child in start..self.fk_chain.len() - 1 {
                         let bone = self.fk_chain[child].bone;
-                        self.fk_chain[child].parent_world_inverse = unsafe {
-                            get_parent_world(&*bone).invert_or_identity()
-                        };
+                        self.fk_chain[child].parent_world_inverse =
+                            unsafe { get_parent_world(&*bone).invert_or_identity() };
                     }
                 }
             }
         }
         if self.base.strength() != 1.0 {
             for index in 0..self.fk_chain.len() {
-                let from_angle = self.fk_chain[index].transform_components.rotation() % (math_types::PI * 2.0);
+                let from_angle =
+                    self.fk_chain[index].transform_components.rotation() % (math_types::PI * 2.0);
                 let to_angle = self.fk_chain[index].angle % (math_types::PI * 2.0);
                 let mut diff = to_angle - from_angle;
-                if diff > math_types::PI { diff -= math_types::PI * 2.0; }
-                else if diff < -math_types::PI { diff += math_types::PI * 2.0; }
+                if diff > math_types::PI {
+                    diff -= math_types::PI * 2.0;
+                } else if diff < -math_types::PI {
+                    diff += math_types::PI * 2.0;
+                }
                 let angle = from_angle + diff * self.base.strength();
                 self.constrain_rotation(index, angle);
             }

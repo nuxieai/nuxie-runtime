@@ -6,6 +6,7 @@ use crate::ArtboardInstance;
 use crate::components::Mat2D;
 use crate::semantic_data::{SemanticBounds, SemanticNodeHandle};
 use crate::semantic_inference_registry::{resolve_inferred_semantics, supports_inferred_semantics};
+use nuxie_render_api::Vec2D;
 use nuxie_schema::definition_by_name;
 
 fn component_is_a(artboard: &ArtboardInstance, component_local_id: usize, base_type: &str) -> bool {
@@ -13,6 +14,26 @@ fn component_is_a(artboard: &ArtboardInstance, component_local_id: usize, base_t
         .runtime_object_type_name(component_local_id)
         .and_then(definition_by_name)
         .is_some_and(|definition| definition.is_a(base_type))
+}
+
+fn try_node_world_bounds(
+    artboard: &mut ArtboardInstance,
+    component_local_id: usize,
+) -> Option<SemanticBounds> {
+    let layout_bounds = artboard
+        .semantic_layout_world_bounds(component_local_id)
+        .or_else(|| artboard.layout_world_bounds(component_local_id))
+        .map(|(min_x, min_y, max_x, max_y)| SemanticBounds::new(min_x, min_y, max_x, max_y));
+    if let Some(bounds) = layout_bounds {
+        // This is the LayoutComponent's own localBounds path. If it is empty,
+        // tryNodeWorldBounds fails; it must not substitute unrelated geometry
+        // from a second representation of the same node.
+        return (!bounds.is_empty_or_nan()).then_some(bounds);
+    }
+
+    let bounds = artboard.object_world_bounds(component_local_id)?;
+    let bounds = SemanticBounds::new(bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y);
+    (!bounds.is_empty_or_nan()).then_some(bounds)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -61,7 +82,32 @@ impl SemanticProvider {
         artboard: &mut ArtboardInstance,
         component_local_id: usize,
     ) -> SemanticBounds {
-        Self::semantic_bounds_with_root_transform(artboard, component_local_id, Mat2D::IDENTITY)
+        if !component_is_a(artboard, component_local_id, "Node") {
+            return SemanticBounds::default();
+        }
+        let bounds = Self::semantic_bounds_with_root_transform(
+            artboard,
+            component_local_id,
+            Mat2D::IDENTITY,
+        );
+        Self::root_transform_aabb(artboard, bounds)
+    }
+
+    pub fn root_transform_aabb(
+        artboard: &ArtboardInstance,
+        bounds: SemanticBounds,
+    ) -> SemanticBounds {
+        let corners = [
+            artboard.root_transform(Vec2D::new(bounds.min_x, bounds.min_y)),
+            artboard.root_transform(Vec2D::new(bounds.max_x, bounds.min_y)),
+            artboard.root_transform(Vec2D::new(bounds.max_x, bounds.max_y)),
+            artboard.root_transform(Vec2D::new(bounds.min_x, bounds.max_y)),
+        ];
+        let mut bounds = crate::FloatAabb::for_expansion();
+        for point in corners {
+            bounds.expand_to(nuxie_render_api::Vec2D::new(point.x, point.y));
+        }
+        SemanticBounds::new(bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
     }
 
     /// Compute semantic bounds in the outermost artboard's coordinate space.
@@ -82,20 +128,8 @@ impl SemanticProvider {
         // transforms. A LayoutComponent owns its solved border box even when
         // it has no drawable path, so do not replace that box with a merge of
         // inset visual descendants.
-        if let Some((min_x, min_y, max_x, max_y)) = artboard
-            .semantic_layout_world_bounds(component_local_id)
-            .or_else(|| artboard.layout_world_bounds(component_local_id))
-        {
-            return root_transform_bounds(
-                root_transform,
-                SemanticBounds::new(min_x, min_y, max_x, max_y),
-            );
-        }
-        if let Some(bounds) = artboard.object_world_bounds(component_local_id) {
-            return root_transform_bounds(
-                root_transform,
-                SemanticBounds::new(bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
-            );
+        if let Some(bounds) = try_node_world_bounds(artboard, component_local_id) {
+            return transform_bounds(root_transform, bounds);
         }
 
         // Pinned containers merge all visual descendants. The retained arena
@@ -106,50 +140,41 @@ impl SemanticProvider {
             let mut has_descendant_bounds = false;
             let mut stack = artboard
                 .component(component_local_id)
-                .map(|component| component.children.clone())
+                .map(|component| component.children.iter().rev().copied().collect::<Vec<_>>())
                 .unwrap_or_default();
             while let Some(child) = stack.pop() {
                 let Some(child_local) = artboard.component_local_id(child) else {
                     continue;
                 };
-                // C++ asks each descendant Node for its already-retained
-                // `localBounds`. Collapsed Shape paths do not participate in
-                // those bounds (`shape.cpp:374-405`), and a collapsed Solo
-                // branch therefore contributes nothing. Rust's geometry
-                // query can rebuild a deferred path on demand, so preserve
-                // the C++ observation boundary explicitly and prune the
-                // collapsed subtree before querying it.
-                if artboard
-                    .component(child_local)
-                    .is_some_and(|component| component.is_collapsed())
-                {
-                    continue;
-                }
                 if let Some(component) = artboard.component(child_local) {
                     stack.extend(component.children.iter().rev().copied());
                 }
                 if !component_is_a(artboard, child_local, "Node") {
                     continue;
                 }
-                if let Some(bounds) = artboard.object_world_bounds(child_local) {
-                    merged.expand(SemanticBounds::new(
-                        bounds.min_x,
-                        bounds.min_y,
-                        bounds.max_x,
-                        bounds.max_y,
-                    ));
+                if let Some(bounds) = try_node_world_bounds(artboard, child_local) {
+                    merged.expand(bounds);
                     has_descendant_bounds = true;
                 }
             }
             if has_descendant_bounds {
-                return root_transform_bounds(root_transform, merged);
+                return transform_bounds(root_transform, merged);
             }
         }
 
-        let Some(transform) = artboard.object_world_transform(component_local_id) else {
+        let position = artboard
+            .object_world_transform(component_local_id)
+            .map(|transform| (transform.0[4], transform.0[5]))
+            .or_else(|| {
+                artboard.component(component_local_id).map(|component| {
+                    let transform = component.transform.world_transform;
+                    (transform.0[4], transform.0[5])
+                })
+            });
+        let Some((world_x, world_y)) = position else {
             return SemanticBounds::default();
         };
-        let (x, y) = root_transform.transform_point(transform.0[4], transform.0[5]);
+        let (x, y) = root_transform.transform_point(world_x, world_y);
         SemanticBounds::new(x, y, x, y)
     }
 
@@ -182,7 +207,7 @@ impl SemanticProvider {
     }
 }
 
-fn root_transform_bounds(transform: Mat2D, bounds: SemanticBounds) -> SemanticBounds {
+fn transform_bounds(transform: Mat2D, bounds: SemanticBounds) -> SemanticBounds {
     let corners = [
         transform.transform_point(bounds.min_x, bounds.min_y),
         transform.transform_point(bounds.max_x, bounds.min_y),

@@ -23,6 +23,14 @@ pub struct LayoutNodeProviderState {
     layout_constraints: Option<Box<Vec<*mut dyn LayoutConstraint>>>,
 }
 
+impl LayoutNodeProviderState {
+    pub fn layout_constraints(&self) -> &[*mut dyn LayoutConstraint] {
+        self.layout_constraints
+            .as_deref()
+            .map_or(&[], Vec::as_slice)
+    }
+}
+
 pub trait LayoutNodeProvider {
     fn provider_state(&mut self) -> &mut LayoutNodeProviderState;
     #[cfg(feature = "rive-layout")]

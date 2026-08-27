@@ -328,25 +328,22 @@ impl RuntimeOwnedViewModelListValue {
         true
     }
 
-    fn pop_instance(&mut self) -> Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+    fn pop_item(&mut self) -> Option<RuntimeOwnedViewModelListItem> {
         let mut item = self.items.pop()?;
         // Pinned C++ `ViewModelInstanceList::pop()` omits `removeParent`.
         item.disarm_parent_registration();
         self.item_count = self.items.len();
-        item.instance
+        Some(item)
     }
 
-    fn remove_instance_at(
-        &mut self,
-        index: usize,
-    ) -> Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+    fn remove_item_at(&mut self, index: usize) -> Option<RuntimeOwnedViewModelListItem> {
         if index >= self.items.len() {
             return None;
         }
         let mut item = self.items.remove(index);
         self.detach_item(&mut item);
         self.item_count = self.items.len();
-        item.instance
+        Some(item)
     }
 
     fn clear_instances(&mut self) -> bool {
@@ -451,6 +448,10 @@ fn advance_runtime_owned_list_children(lists: &[RuntimeOwnedViewModelList]) {
                 instance.borrow_mut().advanced_data_context();
             }
         }
+        drop(value);
+        // Direct `ViewModelInstanceList::advanced`: children first, then the
+        // inherited ViewModelInstanceValue acknowledgment.
+        list.cell.advanced();
     }
 }
 

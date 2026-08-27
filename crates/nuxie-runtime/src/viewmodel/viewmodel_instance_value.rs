@@ -1,6 +1,37 @@
 // Direct Rust owner for pinned C++ `src/viewmodel/viewmodel_instance_value.cpp`.
 // Common retained cell/dependency identity and structural source dispatch.
 
+/// Dynamic state owned by pinned `ViewModelInstanceValue` itself rather than
+/// by one of its typed subclasses.
+///
+/// `Triggerable::m_usedLayers` stays beside this state in
+/// `RuntimeViewModelCellState`; it needs the state-machine layer identity
+/// type, while the methods below remain the literal bodies owned by
+/// `viewmodel_instance_value.cpp`.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct RuntimeViewModelInstanceValueState {
+    value_changed: bool,
+}
+
+impl RuntimeViewModelInstanceValueState {
+    /// Pinned `ViewModelInstanceValue::hasChanged()`.
+    pub(crate) fn has_changed(self) -> bool {
+        self.value_changed
+    }
+
+    /// Pinned `ViewModelInstanceValue::onValueChanged()` always raises
+    /// `ValueFlags::valueChanged`, including while delegate callbacks are
+    /// suppressed. Delegate recursion is a separate flag in the C++ owner.
+    pub(crate) fn on_value_changed(&mut self) {
+        self.value_changed = true;
+    }
+
+    /// Value-owned half of pinned `ViewModelInstanceValue::advanced()`.
+    pub(crate) fn advanced(&mut self) {
+        self.value_changed = false;
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RuntimeOwnedViewModelValueKind {
     Number,

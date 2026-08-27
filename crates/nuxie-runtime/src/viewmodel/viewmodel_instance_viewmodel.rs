@@ -746,6 +746,15 @@ impl RuntimeOwnedViewModelViewModel {
         &self,
         property_path: &[usize],
     ) -> Option<RuntimeViewModelImage> {
+        if property_path.is_empty() {
+            return None;
+        }
+        if let Some(linked) = self.endpoint.linked_instance() {
+            return linked
+                .try_borrow()
+                .ok()?
+                .runtime_image_by_property_path(property_path);
+        }
         if property_path.len() == 1 {
             return self.active_runtime_image_by_property_index(property_path[0]);
         }
@@ -760,14 +769,17 @@ impl RuntimeOwnedViewModelViewModel {
         &self,
         property_path: &[usize],
     ) -> Option<RuntimeBindableArtboard> {
+        if property_path.is_empty() {
+            return None;
+        }
+        if let Some(linked) = self.endpoint.linked_instance() {
+            return linked
+                .try_borrow()
+                .ok()?
+                .runtime_artboard_by_property_path(property_path);
+        }
         if property_path.len() == 1 {
             let property_index = property_path[0];
-            if let Some(linked) = self.endpoint.linked_instance() {
-                return linked
-                    .try_borrow()
-                    .ok()?
-                    .runtime_artboard_by_property_path(property_path);
-            }
             let artboards = match self.endpoint.value() {
                 RuntimeViewModelPointer::OwnedGenerated { .. } => &self.artboards,
                 RuntimeViewModelPointer::Imported { object_id } => {
@@ -794,14 +806,17 @@ impl RuntimeOwnedViewModelViewModel {
         &self,
         property_path: &[usize],
     ) -> Option<RuntimeOwnedViewModelArtboardBindingSource> {
+        if property_path.is_empty() {
+            return None;
+        }
+        if let Some(linked) = self.endpoint.linked_instance() {
+            return linked
+                .try_borrow()
+                .ok()?
+                .runtime_artboard_binding_source_by_property_path(property_path);
+        }
         if property_path.len() == 1 {
             let property_index = property_path[0];
-            if let Some(linked) = self.endpoint.linked_instance() {
-                return linked
-                    .try_borrow()
-                    .ok()?
-                    .runtime_artboard_binding_source_by_property_path(property_path);
-            }
             let artboards = match self.endpoint.value() {
                 RuntimeViewModelPointer::OwnedGenerated { .. } => &self.artboards,
                 RuntimeViewModelPointer::Imported { object_id } => {

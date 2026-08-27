@@ -45,7 +45,10 @@ pub(crate) struct RuntimeOwnedViewModelAdvanceContext {
 #[derive(Debug, Clone)]
 enum RuntimeOwnedViewModelAdvanceEntry {
     Trigger(RuntimeViewModelCell),
-    List(Rc<RefCell<RuntimeOwnedViewModelListValue>>),
+    List {
+        value: Rc<RefCell<RuntimeOwnedViewModelListValue>>,
+        cell: RuntimeViewModelCell,
+    },
     Artboard {
         cell: RuntimeViewModelCell,
         state: Rc<RefCell<RuntimeOwnedViewModelArtboardState>>,
@@ -69,10 +72,10 @@ impl RuntimeOwnedViewModelAdvanceContext {
                 }
                 RuntimeOwnedViewModelValueKind::List => {
                     if let Some(list) = instance.lists.get(occurrence.slot_index) {
-                        self.entries
-                            .push(RuntimeOwnedViewModelAdvanceEntry::List(Rc::clone(
-                                &list.value,
-                            )));
+                        self.entries.push(RuntimeOwnedViewModelAdvanceEntry::List {
+                            value: Rc::clone(&list.value),
+                            cell: list.cell.clone(),
+                        });
                     }
                 }
                 RuntimeOwnedViewModelValueKind::Artboard => {
@@ -115,9 +118,10 @@ impl RuntimeOwnedViewModelAdvanceContext {
                         }
                         RuntimeOwnedViewModelValueKind::List => {
                             if let Some(list) = child.lists.get(occurrence.slot_index) {
-                                self.entries.push(RuntimeOwnedViewModelAdvanceEntry::List(
-                                    Rc::clone(&list.value),
-                                ));
+                                self.entries.push(RuntimeOwnedViewModelAdvanceEntry::List {
+                                    value: Rc::clone(&list.value),
+                                    cell: list.cell.clone(),
+                                });
                             }
                         }
                         RuntimeOwnedViewModelValueKind::Artboard => {
@@ -159,9 +163,10 @@ impl RuntimeOwnedViewModelAdvanceContext {
                                 .get(&object_id)
                                 .and_then(|values| values.get(occurrence.slot_index))
                             {
-                                self.entries.push(RuntimeOwnedViewModelAdvanceEntry::List(
-                                    Rc::clone(&list.value),
-                                ));
+                                self.entries.push(RuntimeOwnedViewModelAdvanceEntry::List {
+                                    value: Rc::clone(&list.value),
+                                    cell: list.cell.clone(),
+                                });
                             }
                         }
                         RuntimeOwnedViewModelValueKind::Artboard => {
@@ -200,13 +205,14 @@ impl RuntimeOwnedViewModelAdvanceContext {
         for entry in &self.entries {
             match entry {
                 RuntimeOwnedViewModelAdvanceEntry::Trigger(trigger) => trigger.advanced(),
-                RuntimeOwnedViewModelAdvanceEntry::List(list) => {
-                    let list = list.borrow();
+                RuntimeOwnedViewModelAdvanceEntry::List { value, cell } => {
+                    let list = value.borrow();
                     for item in &list.items {
                         if let Some(instance) = item.instance.as_ref() {
                             instance.borrow_mut().advanced_data_context();
                         }
                     }
+                    cell.advanced();
                 }
                 RuntimeOwnedViewModelAdvanceEntry::Artboard { cell, state } => {
                     let bound = state.borrow().bound_view_model_instance.clone();
@@ -4630,9 +4636,9 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
     ) -> Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
         let list = self.list_handle_by_property_path(property_path)?;
-        let item = list.value.borrow_mut().pop_instance()?;
+        let item = list.value.borrow_mut().pop_item()?;
         list.notify_value_changed();
-        Some(item)
+        item.instance
     }
 
     pub(crate) fn shift_list_item_by_property_path(
@@ -4643,9 +4649,9 @@ impl RuntimeOwnedViewModelInstance {
         if list.value.borrow().items.is_empty() {
             return None;
         }
-        let item = list.value.borrow_mut().remove_instance_at(0)?;
+        let item = list.value.borrow_mut().remove_item_at(0)?;
         list.notify_value_changed();
-        Some(item)
+        item.instance
     }
 
     pub(crate) fn swap_list_items_by_property_path(
@@ -4686,7 +4692,7 @@ impl RuntimeOwnedViewModelInstance {
         let Some(list) = self.list_handle_by_property_path(property_path) else {
             return false;
         };
-        if list.value.borrow_mut().remove_instance_at(index).is_none() {
+        if list.value.borrow_mut().remove_item_at(index).is_none() {
             return false;
         }
         list.notify_value_changed();

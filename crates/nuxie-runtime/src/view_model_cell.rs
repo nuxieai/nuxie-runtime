@@ -852,13 +852,13 @@ impl RuntimeViewModelCellValue {
 
 struct RuntimeViewModelCellState {
     value: RuntimeViewModelCellValue,
-    /// C++ `ValueFlags::valueChanged`: set by writes, cleared by `advanced`.
-    value_changed: bool,
+    /// Dynamic flags owned by pinned `ViewModelInstanceValue`.
+    value_state: crate::view_model::RuntimeViewModelInstanceValueState,
     /// C++ `Triggerable::m_usedLayers`: transition conditions consume the
     /// retained source itself once per layer, rather than a copied wrapper.
     used_layers: Vec<u64>,
-    /// C++ `SuppressDelegation` depth: internal writes still cascade dirt to
-    /// dependents but do not count as host-visible changes.
+    /// C++ `SuppressDelegation` depth: internal writes still cascade dirt and
+    /// raise valueChanged, but do not invoke script delegates.
     suppress_depth: u32,
     dependents: Vec<RuntimeCellDependent>,
 }
@@ -882,7 +882,7 @@ impl std::fmt::Debug for RuntimeViewModelCell {
         let state = self.state.borrow();
         f.debug_struct("RuntimeViewModelCell")
             .field("value", &state.value)
-            .field("value_changed", &state.value_changed)
+            .field("value_changed", &state.value_state.has_changed())
             .finish_non_exhaustive()
     }
 }
@@ -892,7 +892,7 @@ impl RuntimeViewModelCell {
         Self {
             state: Rc::new(RefCell::new(RuntimeViewModelCellState {
                 value,
-                value_changed: false,
+                value_state: Default::default(),
                 used_layers: Vec::new(),
                 suppress_depth: 0,
                 dependents: Vec::new(),
@@ -905,7 +905,7 @@ impl RuntimeViewModelCell {
         Self {
             state: Rc::new(RefCell::new(RuntimeViewModelCellState {
                 value: state.value.clone(),
-                value_changed: false,
+                value_state: Default::default(),
                 used_layers: Vec::new(),
                 suppress_depth: 0,
                 dependents: Vec::new(),
@@ -934,7 +934,7 @@ impl RuntimeViewModelCell {
 
     /// C++ `ViewModelInstanceValue::hasChanged` (`ValueFlags::valueChanged`).
     pub fn has_changed(&self) -> bool {
-        self.state.borrow().value_changed
+        self.state.borrow().value_state.has_changed()
     }
 
     fn replace_trigger_payload_for_clone(&self, value: u64) {
@@ -948,7 +948,7 @@ impl RuntimeViewModelCell {
     /// (`state_machine_input_instance.hpp:78-102`).
     pub(crate) fn is_changed_for_layer(&self, layer_id: u64) -> bool {
         let state = self.state.borrow();
-        state.value_changed && !state.used_layers.contains(&layer_id)
+        state.value_state.has_changed() && !state.used_layers.contains(&layer_id)
     }
 
     pub(crate) fn use_in_layer(&self, layer_id: u64) {
@@ -983,9 +983,9 @@ impl RuntimeViewModelCell {
 
     /// Write a same-kind value. Mirrors the concrete C++ setters
     /// (`ViewModelInstanceNumber::propertyValue(..)` →
-    /// `propertyValueChanged()`): a genuine change sets the changed flag
-    /// (unless delegation is suppressed) and cascades `BINDINGS` dirt to
-    /// every dependent. Returns whether the stored value changed.
+    /// `propertyValueChanged()`): a genuine change sets the changed flag and
+    /// cascades `BINDINGS` dirt to every dependent. Delegate suppression does
+    /// not suppress that flag. Returns whether the stored value changed.
     ///
     /// A kind mismatch is a programming error in the caller (C++ types this
     /// statically per subclass) and is rejected without mutation.
@@ -1003,29 +1003,28 @@ impl RuntimeViewModelCell {
             return false;
         }
         state.value = value;
-        let marks_changed = state.suppress_depth == 0;
-        let captured = marks_changed
-            .then(|| state.value.captured_value())
-            .flatten();
+        let invoke_delegates = state.suppress_depth == 0;
+        let captured = state.value.captured_value();
         drop(state);
         if let Some(value) = captured {
             capture_view_model_change(self.capture_identity(), value);
         }
         let cell = self.clone();
         if !defer_host_mutation_notification(move || {
-            cell.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+            cell.publish_value_changed(RuntimeCellDirt::BINDINGS, invoke_delegates);
         }) {
-            self.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+            self.publish_value_changed(RuntimeCellDirt::BINDINGS, invoke_delegates);
         }
         true
     }
 
-    fn publish_value_changed(&self, dirt: RuntimeCellDirt, marks_changed: bool) {
+    fn publish_value_changed(&self, dirt: RuntimeCellDirt, invoke_delegates: bool) {
         let (dependents, suppress_trigger_zero) = {
             let mut state = self.state.borrow_mut();
-            if marks_changed {
-                state.value_changed = true;
-            }
+            // Pinned `onValueChanged()` raises valueChanged before consulting
+            // its delegating guard. SuppressDelegation suppresses callbacks,
+            // not the retained source's changed state.
+            state.value_state.on_value_changed();
             (
                 state.dependents.clone(),
                 matches!(state.value, RuntimeViewModelCellValue::Trigger(0)),
@@ -1035,7 +1034,7 @@ impl RuntimeViewModelCell {
         // just received. Release Rust's RefCell mutation borrow before
         // entering the same extension point, then prune dead weak sinks.
         for dependent in &dependents {
-            dependent.publish_dirt(dirt, marks_changed, suppress_trigger_zero);
+            dependent.publish_dirt(dirt, invoke_delegates, suppress_trigger_zero);
         }
         self.state.borrow_mut().dependents.retain(|dependent| {
             dependent.bits.strong_count() != 0 && dependent.suppressed.strong_count() != 0
@@ -1049,28 +1048,26 @@ impl RuntimeViewModelCell {
     /// observable dependent/listener multiplicity without inventing a
     /// second payload write.
     pub(crate) fn notify_bindings_value_changed(&self) {
-        let marks_changed = self.state.borrow().suppress_depth == 0;
-        if marks_changed && let Some(value) = self.state.borrow().value.captured_value() {
+        let invoke_delegates = self.state.borrow().suppress_depth == 0;
+        if let Some(value) = self.state.borrow().value.captured_value() {
             capture_view_model_change(self.capture_identity(), value);
         }
         let cell = self.clone();
         if !defer_host_mutation_notification(move || {
-            cell.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+            cell.publish_value_changed(RuntimeCellDirt::BINDINGS, invoke_delegates);
         }) {
-            self.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+            self.publish_value_changed(RuntimeCellDirt::BINDINGS, invoke_delegates);
         }
     }
 
     pub(crate) fn notify_structural_value_changed(&self, value: RuntimeViewModelChangeValue) {
-        let marks_changed = self.state.borrow().suppress_depth == 0;
-        if marks_changed {
-            capture_view_model_change(self.capture_identity(), value);
-        }
+        let invoke_delegates = self.state.borrow().suppress_depth == 0;
+        capture_view_model_change(self.capture_identity(), value);
         let cell = self.clone();
         if !defer_host_mutation_notification(move || {
-            cell.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+            cell.publish_value_changed(RuntimeCellDirt::BINDINGS, invoke_delegates);
         }) {
-            self.publish_value_changed(RuntimeCellDirt::BINDINGS, marks_changed);
+            self.publish_value_changed(RuntimeCellDirt::BINDINGS, invoke_delegates);
         }
     }
 
@@ -1180,12 +1177,12 @@ impl RuntimeViewModelCell {
             });
         }
         let mut state = self.state.borrow_mut();
-        state.value_changed = false;
         state.used_layers.clear();
+        state.value_state.advanced();
     }
 
     /// C++ `SuppressDelegation` scope: writes inside `body` cascade dirt but
-    /// do not mark the cell host-visibly changed.
+    /// still raise valueChanged while suppressing delegate callbacks.
     pub fn with_suppressed_delegation(&self, body: impl FnOnce(&Self)) {
         self.state.borrow_mut().suppress_depth += 1;
         body(self);
@@ -2545,7 +2542,7 @@ mod tests {
     }
 
     #[test]
-    fn suppressed_writes_cascade_dirt_but_stay_host_invisible() {
+    fn suppressed_writes_cascade_dirt_and_raise_changed_without_delegating() {
         let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
         let bind = RuntimeCellDirtSink::new();
         cell.add_dependent(&bind);
@@ -2553,7 +2550,10 @@ mod tests {
         cell.with_suppressed_delegation(|cell| {
             assert!(cell.set_value(RuntimeViewModelCellValue::Number(2.0)));
         });
-        assert!(!cell.has_changed(), "suppressed write is not host-visible");
+        assert!(
+            cell.has_changed(),
+            "pinned onValueChanged raises valueChanged before checking delegating"
+        );
         assert!(
             bind.take_dirt().contains(RuntimeCellDirt::BINDINGS),
             "dependents still observe suppressed writes"

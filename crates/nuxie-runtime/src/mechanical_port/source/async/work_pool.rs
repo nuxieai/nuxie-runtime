@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-#[cfg(feature = "with_rive_threading")]
+#[cfg(feature = "threading")]
 use std::{
     collections::HashMap,
     sync::{Condvar, atomic::AtomicI32},
@@ -12,13 +12,13 @@ use std::{
 
 static NEXT_OWNER_ID: AtomicU64 = AtomicU64::new(1);
 
-#[cfg(not(feature = "with_rive_threading"))]
+#[cfg(not(feature = "threading"))]
 pub struct WorkPool {
     work_queue: VecDeque<Box<dyn DynWorkTask>>,
     next_handle: u64,
 }
 
-#[cfg(not(feature = "with_rive_threading"))]
+#[cfg(not(feature = "threading"))]
 impl Default for WorkPool {
     fn default() -> Self {
         Self {
@@ -28,7 +28,7 @@ impl Default for WorkPool {
     }
 }
 
-#[cfg(not(feature = "with_rive_threading"))]
+#[cfg(not(feature = "threading"))]
 impl WorkPool {
     pub fn next_owner_id() -> u64 {
         NEXT_OWNER_ID.fetch_add(1, Ordering::Relaxed)
@@ -84,7 +84,7 @@ impl WorkPool {
     }
 }
 
-#[cfg(not(feature = "with_rive_threading"))]
+#[cfg(not(feature = "threading"))]
 impl Drop for WorkPool {
     fn drop(&mut self) {
         // Only tasks already marked cancelled receive destruction callbacks.
@@ -97,7 +97,7 @@ impl Drop for WorkPool {
     }
 }
 
-#[cfg(feature = "with_rive_threading")]
+#[cfg(feature = "threading")]
 struct QueueState {
     work_queue: VecDeque<Box<dyn DynWorkTask>>,
     cancelled_owners: HashMap<u64, u64>,
@@ -105,7 +105,7 @@ struct QueueState {
     shutdown: bool,
 }
 
-#[cfg(feature = "with_rive_threading")]
+#[cfg(feature = "threading")]
 struct ThreadedState {
     queue: Mutex<QueueState>,
     completed_queue: Mutex<VecDeque<Box<dyn DynWorkTask>>>,
@@ -113,14 +113,14 @@ struct ThreadedState {
     in_flight_count: AtomicI32,
 }
 
-#[cfg(feature = "with_rive_threading")]
+#[cfg(feature = "threading")]
 pub struct WorkPool {
     state: Arc<ThreadedState>,
     threads: Vec<JoinHandle<()>>,
     next_handle: u64,
 }
 
-#[cfg(feature = "with_rive_threading")]
+#[cfg(feature = "threading")]
 impl Default for WorkPool {
     fn default() -> Self {
         let state = Arc::new(ThreadedState {
@@ -152,7 +152,7 @@ impl Default for WorkPool {
     }
 }
 
-#[cfg(feature = "with_rive_threading")]
+#[cfg(feature = "threading")]
 fn worker_loop(state: Arc<ThreadedState>) {
     loop {
         let mut task = {
@@ -193,7 +193,7 @@ fn worker_loop(state: Arc<ThreadedState>) {
     }
 }
 
-#[cfg(feature = "with_rive_threading")]
+#[cfg(feature = "threading")]
 impl WorkPool {
     pub fn next_owner_id() -> u64 {
         NEXT_OWNER_ID.fetch_add(1, Ordering::Relaxed)
@@ -278,7 +278,7 @@ impl WorkPool {
     }
 }
 
-#[cfg(feature = "with_rive_threading")]
+#[cfg(feature = "threading")]
 impl Drop for WorkPool {
     fn drop(&mut self) {
         {

@@ -1,2 +1,3 @@
-#[cfg(not(feature = "rive_internal"))]
-compile_error!("This file should never be included by public headers.");
+// The C++ header rejects inclusion outside the private build. Rust enforces
+// the same boundary with crate visibility rather than a build-definition flag.
+pub(crate) const INTERNAL_ONLY: () = ();

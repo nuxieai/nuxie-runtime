@@ -12709,6 +12709,8 @@ mod tests {
                 34,
                 Some(RuntimeDataBindGraphConverter::SystemOperationValue {
                     global_id: 906,
+                    kind:
+                        crate::data_bind_graph::RuntimeDataBindGraphSystemOperationKind::DegsToRads,
                     operation_type: 2,
                     operation_value: 2.0,
                     reverse: false,

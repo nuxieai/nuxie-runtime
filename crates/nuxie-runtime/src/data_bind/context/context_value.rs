@@ -631,6 +631,7 @@ pub(crate) enum RuntimeDataBindGraphConverter {
     },
     SystemOperationValue {
         global_id: u32,
+        kind: RuntimeDataBindGraphSystemOperationKind,
         operation_type: u64,
         operation_value: f32,
         reverse: bool,
@@ -669,6 +670,12 @@ pub(crate) enum RuntimeDataBindGraphConverter {
     },
     Group(Vec<RuntimeDataBindGraphConverter>),
     Unsupported,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeDataBindGraphSystemOperationKind {
+    DegsToRads,
+    Normalizer,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2888,20 +2895,31 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
         }
         (
             RuntimeDataBindGraphConverter::SystemOperationValue {
+                kind,
                 operation_type,
                 operation_value,
                 reverse,
                 ..
             },
             RuntimeDataBindGraphValue::Number(value),
-        ) => Some(RuntimeDataBindGraphValue::Number(
-            crate::data_converter_system_degs_to_rads::convert(
-                *value,
-                *operation_value,
-                *operation_type,
-                *reverse,
-            ),
-        )),
+        ) => Some(RuntimeDataBindGraphValue::Number(match kind {
+            RuntimeDataBindGraphSystemOperationKind::DegsToRads => {
+                crate::data_converter_system_degs_to_rads::convert(
+                    *value,
+                    *operation_value,
+                    *operation_type,
+                    *reverse,
+                )
+            }
+            RuntimeDataBindGraphSystemOperationKind::Normalizer => {
+                crate::data_converter_system_normalizer::convert(
+                    *value,
+                    *operation_value,
+                    *operation_type,
+                    *reverse,
+                )
+            }
+        })),
         (RuntimeDataBindGraphConverter::SystemOperationValue { .. }, _) => {
             Some(RuntimeDataBindGraphValue::Number(0.0))
         }
@@ -3155,20 +3173,31 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
         (RuntimeDataBindGraphConverter::Rounder { .. }, _) => None,
         (
             RuntimeDataBindGraphConverter::SystemOperationValue {
+                kind,
                 operation_type,
                 operation_value,
                 reverse,
                 ..
             },
             RuntimeDataBindGraphValue::Number(value),
-        ) => Some(RuntimeDataBindGraphValue::Number(
-            crate::data_converter_system_normalizer::reverse(
-                *value,
-                *operation_value,
-                *operation_type,
-                !*reverse,
-            ),
-        )),
+        ) => Some(RuntimeDataBindGraphValue::Number(match kind {
+            RuntimeDataBindGraphSystemOperationKind::DegsToRads => {
+                crate::data_converter_system_degs_to_rads::reverse_convert(
+                    *value,
+                    *operation_value,
+                    *operation_type,
+                    !*reverse,
+                )
+            }
+            RuntimeDataBindGraphSystemOperationKind::Normalizer => {
+                crate::data_converter_system_normalizer::reverse_convert(
+                    *value,
+                    *operation_value,
+                    *operation_type,
+                    !*reverse,
+                )
+            }
+        })),
         (RuntimeDataBindGraphConverter::SystemOperationValue { .. }, _) => {
             Some(RuntimeDataBindGraphValue::Number(0.0))
         }
@@ -3507,6 +3536,11 @@ fn runtime_data_bind_graph_system_operation_value_converter(
         if to_target {
             RuntimeDataBindGraphConverter::SystemOperationValue {
                 global_id: converter.id,
+                kind: if converter.type_name == "DataConverterSystemNormalizer" {
+                    RuntimeDataBindGraphSystemOperationKind::Normalizer
+                } else {
+                    RuntimeDataBindGraphSystemOperationKind::DegsToRads
+                },
                 operation_type: converter.uint_property("operationType").unwrap_or(0),
                 operation_value: converter.double_property("operationValue").unwrap_or(1.0),
                 reverse: flags & 0b1 != 0,

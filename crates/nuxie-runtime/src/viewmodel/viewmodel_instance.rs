@@ -697,6 +697,9 @@ impl RuntimeOwnedViewModelHandle {
         instance.mark_structurally_mutated();
         drop(instance);
         drop(value_instance);
+        if let Some(previous) = previous {
+            previous.borrow().rebind_properties();
+        }
         Ok(true)
     }
 
@@ -778,6 +781,9 @@ impl RuntimeOwnedViewModelHandle {
         RuntimeOwnedViewModelParentRelay::add_parent(&value_relay, &parent_relay);
         root.mark_structurally_mutated();
         drop(value_instance);
+        if let Some(previous) = previous {
+            previous.borrow().rebind_properties();
+        }
         Ok(true)
     }
 
@@ -6305,12 +6311,10 @@ impl RuntimeOwnedViewModelInstance {
             .active_number_value_by_property_path(rest)
     }
 
-    /// The retained property cell at one top-level property index.
-    fn scalar_cell_by_property_index(&self, property_index: usize) -> Option<RuntimeViewModelCell> {
-        let occurrence = self
-            .value_order
-            .iter()
-            .find(|occurrence| occurrence.property_index == property_index)?;
+    fn cell_for_occurrence(
+        &self,
+        occurrence: RuntimeOwnedViewModelValueOccurrence,
+    ) -> Option<RuntimeViewModelCell> {
         Some(match occurrence.kind {
             RuntimeOwnedViewModelValueKind::Number => {
                 self.numbers.get(occurrence.slot_index)?.cell.clone()
@@ -6354,6 +6358,34 @@ impl RuntimeOwnedViewModelInstance {
                 self.view_models.get(occurrence.slot_index)?.endpoint.cell()
             }
         })
+    }
+
+    /// The retained property cell at one top-level property index.
+    fn scalar_cell_by_property_index(&self, property_index: usize) -> Option<RuntimeViewModelCell> {
+        let occurrence = self
+            .value_order
+            .iter()
+            .find(|occurrence| occurrence.property_index == property_index)?;
+        self.cell_for_occurrence(*occurrence)
+    }
+
+    /// Relink every dependent retained by this instance, then recurse into a
+    /// nested ViewModel value after its own value dependents. The authored
+    /// occurrence order is significant and matches C++ `m_PropertyValues`.
+    fn rebind_properties(&self) {
+        for occurrence in self.value_order.iter().copied() {
+            if let Some(cell) = self.cell_for_occurrence(occurrence) {
+                cell.notify_bindings_relinked();
+            }
+            if occurrence.kind == RuntimeOwnedViewModelValueKind::ViewModel
+                && let Some(child) = self
+                    .view_models
+                    .get(occurrence.slot_index)
+                    .and_then(|view_model| view_model.endpoint.linked_instance())
+            {
+                child.borrow().rebind_properties();
+            }
+        }
     }
 
     /// Walk a resolved property path to the retained property cell:

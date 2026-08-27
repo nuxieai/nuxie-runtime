@@ -9,11 +9,11 @@ struct StaticTextModifierGroup {
 }
 
 fn glyph_coverage(coverage: &[f32], char_index: usize, char_len: usize) -> f32 {
-    let end = (char_index + char_len).min(coverage.len());
-    if char_index >= end {
-        return 0.0;
-    }
-    coverage[char_index..end].iter().copied().sum::<f32>() / (end - char_index) as f32
+    assert!(char_len >= 1);
+    let end = char_index
+        .checked_add(char_len)
+        .expect("glyph code-point range overflowed");
+    coverage[char_index..end].iter().copied().sum::<f32>() / char_len as f32
 }
 
 fn apply_text_modifier_transform(
@@ -64,7 +64,17 @@ impl StaticTextModifierGroup {
             .children
             .iter()
             .copied()
-            .filter(|child_local| type_for_local(graph, *child_local) != Some("TextModifierRange"))
+            .filter(|child_local| {
+                type_for_local(graph, *child_local)
+                    .and_then(nuxie_schema::definition_by_name)
+                    .is_some_and(|definition| definition.is_a("TextModifier"))
+            })
+            .collect::<Vec<_>>();
+        let range_locals = component
+            .children
+            .iter()
+            .copied()
+            .filter(|child_local| type_for_local(graph, *child_local) == Some("TextModifierRange"))
             .collect::<Vec<_>>();
         let shape_modifier_locals = modifier_locals
             .iter()
@@ -90,6 +100,7 @@ impl StaticTextModifierGroup {
             runtime,
             graph,
             local_id,
+            &range_locals,
             &modifier_locals,
             &shape_modifier_locals,
             &follow_path_modifier_locals,
@@ -102,16 +113,31 @@ impl StaticTextModifierGroup {
         instance: &ArtboardInstance,
         local_id: usize,
     ) -> Result<Self> {
-        let state = instance
-            .component(local_id)
-            .and_then(|component| component.concrete.text_modifier_group.as_ref())
+        let component = instance.component(local_id).with_context(|| {
+            format!("TextModifierGroup local {local_id} occurrence component is missing")
+        })?;
+        let state = component
+            .concrete
+            .text_modifier_group
+            .as_ref()
             .with_context(|| {
                 format!("TextModifierGroup local {local_id} occurrence state is missing")
             })?;
+        let range_locals = component
+            .children
+            .iter()
+            .filter_map(|child| instance.component_local_id(*child))
+            .filter(|child_local| {
+                instance
+                    .component(*child_local)
+                    .is_some_and(|child| child.type_name == "TextModifierRange")
+            })
+            .collect::<Vec<_>>();
         Self::from_registered_locals(
             runtime,
             graph,
             local_id,
+            &range_locals,
             &state.modifier_locals(),
             &state.shape_modifier_locals(),
             &state.follow_path_modifier_locals(),
@@ -122,45 +148,23 @@ impl StaticTextModifierGroup {
         runtime: &RuntimeFile,
         graph: &ArtboardGraph,
         local_id: usize,
+        range_locals: &[usize],
         modifier_locals: &[usize],
         shape_modifier_locals: &[usize],
         follow_path_modifier_locals: &[usize],
     ) -> Result<Self> {
         let global_id = global_for_local(graph, local_id)?;
-        let object = runtime
+        runtime
             .object(global_id as usize)
             .with_context(|| format!("missing TextModifierGroup global {global_id}"))?;
-        let flags = object.uint_property("modifierFlags").unwrap_or(0);
-        const MODIFY_ORIGIN: u64 = 1 << 0;
-        const MODIFY_TRANSLATION: u64 = 1 << 2;
-        const MODIFY_ROTATION: u64 = 1 << 3;
-        const MODIFY_SCALE: u64 = 1 << 4;
-        const MODIFY_OPACITY: u64 = 1 << 5;
-        const INVERT_OPACITY: u64 = 1 << 6;
-        if flags
-            & !(MODIFY_ORIGIN
-                | MODIFY_TRANSLATION
-                | MODIFY_ROTATION
-                | MODIFY_SCALE
-                | MODIFY_OPACITY
-                | INVERT_OPACITY)
-            != 0
-        {
-            bail!("TextModifierGroup has unsupported modifier flags {flags}");
-        }
-
-        let component = component_for_local(graph, local_id)
-            .with_context(|| format!("TextModifierGroup local {local_id} component is missing"))?;
         let mut ranges = Vec::new();
         let mut modifiers = Vec::new();
-        for child_local in &component.children {
-            if type_for_local(graph, *child_local) == Some("TextModifierRange") {
-                ranges.push(StaticTextModifierRange::from_graph(
-                    runtime,
-                    graph,
-                    *child_local,
-                )?);
-            }
+        for range_local in range_locals {
+            ranges.push(StaticTextModifierRange::from_graph(
+                runtime,
+                graph,
+                *range_local,
+            )?);
         }
         for modifier_local in modifier_locals {
             let type_name = type_for_local(graph, *modifier_local).with_context(|| {
@@ -168,8 +172,8 @@ impl StaticTextModifierGroup {
             })?;
             let modifier = StaticTextModifier::from_group_child(runtime, graph, *modifier_local)?
                 .with_context(|| {
-                    format!("static text subset does not support registered {type_name}")
-                })?;
+                format!("static text subset does not support registered {type_name}")
+            })?;
             modifiers.push(modifier);
         }
         let shape_modifier_indices = shape_modifier_locals

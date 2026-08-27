@@ -1060,6 +1060,21 @@ impl RuntimeViewModelCell {
         }
     }
 
+    /// Ask every retained value-dependent to resolve its source again without
+    /// reporting a value mutation. This is C++
+    /// `ViewModelInstance::rebindProperties()` calling `relinkDataBind()` on
+    /// each `ViewModelInstanceValue` dependent after that instance is
+    /// detached from a parent.
+    pub(crate) fn notify_bindings_relinked(&self) {
+        let dependents = self.state.borrow().dependents.clone();
+        for dependent in &dependents {
+            dependent.add_dirt(RuntimeCellDirt::BINDINGS);
+        }
+        self.state.borrow_mut().dependents.retain(|dependent| {
+            dependent.bits.strong_count() != 0 && dependent.suppressed.strong_count() != 0
+        });
+    }
+
     pub(crate) fn notify_structural_value_changed(&self, value: RuntimeViewModelChangeValue) {
         let invoke_delegates = self.state.borrow().suppress_depth == 0;
         capture_view_model_change(self.capture_identity(), value);

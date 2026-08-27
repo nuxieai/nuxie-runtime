@@ -15,7 +15,6 @@ pub(super) struct RuntimeOwnedViewModelParentRelay {
 #[derive(Debug)]
 struct RuntimeOwnedViewModelParentEdge {
     relay: Weak<RuntimeOwnedViewModelParentRelay>,
-    edge_count: usize,
 }
 
 impl RuntimeOwnedViewModelParentRelay {
@@ -30,19 +29,14 @@ impl RuntimeOwnedViewModelParentRelay {
     fn add_parent(this: &Rc<Self>, parent: &Rc<Self>) {
         let mut parents = this.parents.borrow_mut();
         parents.retain(|candidate| candidate.relay.strong_count() != 0);
-        if let Some(existing) = parents
+        if parents
             .iter()
-            .position(|candidate| candidate.relay.ptr_eq(&Rc::downgrade(parent)))
+            .any(|candidate| candidate.relay.ptr_eq(&Rc::downgrade(parent)))
         {
-            parents[existing].edge_count = parents[existing]
-                .edge_count
-                .checked_add(1)
-                .expect("view-model parent edge count overflowed");
             return;
         }
         parents.push(RuntimeOwnedViewModelParentEdge {
             relay: Rc::downgrade(parent),
-            edge_count: 1,
         });
     }
 
@@ -50,16 +44,7 @@ impl RuntimeOwnedViewModelParentRelay {
         let parent = Rc::downgrade(parent);
         let mut parents = this.parents.borrow_mut();
         parents.retain(|candidate| candidate.relay.strong_count() != 0);
-        if let Some(existing) = parents
-            .iter()
-            .position(|candidate| candidate.relay.ptr_eq(&parent))
-        {
-            if parents[existing].edge_count == 1 {
-                parents.remove(existing);
-            } else {
-                parents[existing].edge_count -= 1;
-            }
-        }
+        parents.retain(|candidate| !candidate.relay.ptr_eq(&parent));
     }
 
     pub(super) fn has_parents(&self) -> bool {
@@ -122,11 +107,7 @@ impl RuntimeOwnedViewModelParentRelay {
     }
 
     fn rebind_dependents_now(this: &Rc<Self>) {
-        fn visit(relay: &Rc<RuntimeOwnedViewModelParentRelay>, visited: &mut BTreeSet<usize>) {
-            let identity = Rc::as_ptr(relay) as usize;
-            if !visited.insert(identity) {
-                return;
-            }
+        fn visit(relay: &Rc<RuntimeOwnedViewModelParentRelay>) {
             relay
                 .dependents
                 .borrow_mut()
@@ -142,11 +123,11 @@ impl RuntimeOwnedViewModelParentRelay {
                 .borrow_mut()
                 .retain(|candidate| candidate.relay.strong_count() != 0);
             for parent in parents {
-                visit(&parent, visited);
+                visit(&parent);
             }
         }
 
-        visit(this, &mut BTreeSet::new());
+        visit(this);
     }
 }
 

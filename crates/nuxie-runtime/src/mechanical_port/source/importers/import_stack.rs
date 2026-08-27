@@ -47,12 +47,17 @@ impl ImportStack {
         core_type: u16,
         object: Option<Box<dyn ImportStackObject>>,
     ) -> StatusCode {
-        if let Some(mut previous) = self.latests.remove(&core_type) {
+        if self.latests.contains_key(&core_type) {
             if let Some(index) = self.last_added.iter().position(|value| *value == core_type) {
                 self.last_added.remove(index);
             }
-            let code = previous.resolve();
+            let code = self
+                .latests
+                .get_mut(&core_type)
+                .expect("the existing latest entry remains live while it resolves")
+                .resolve();
             if code != StatusCode::Ok {
+                self.latests.remove(&core_type);
                 return code;
             }
         }
@@ -60,6 +65,8 @@ impl ImportStack {
         if let Some(object) = object {
             self.last_added.push(core_type);
             self.latests.insert(core_type, object);
+        } else {
+            self.latests.remove(&core_type);
         }
         StatusCode::Ok
     }

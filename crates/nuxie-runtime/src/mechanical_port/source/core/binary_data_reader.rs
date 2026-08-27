@@ -6,8 +6,7 @@ pub struct BinaryDataReader<'a> {
     length: usize,
 }
 impl<'a> BinaryDataReader<'a> {
-    pub fn new(bytes: &'a mut [u8]) -> Self {
-        let length = bytes.len();
+    pub fn new(bytes: &'a mut [u8], length: usize) -> Self {
         Self {
             bytes,
             position: 0,
@@ -34,30 +33,32 @@ impl<'a> BinaryDataReader<'a> {
     }
     pub fn read_var_uint(&mut self) -> u64 {
         let mut value = 0u64;
-        for shift in (0..=63).step_by(7) {
+        let mut shift = 0u8;
+        loop {
             let byte = self.read_byte();
             if self.overflowed {
                 return 0;
             }
-            if shift == 63 && byte > 1 {
-                self.overflow();
-                return 0;
-            }
-            value |= u64::from(byte & 0x7f) << shift;
+            value |= u64::from(byte & 0x7f).wrapping_shl(u32::from(shift));
             if byte & 0x80 == 0 {
                 return value;
             }
+            shift = shift.wrapping_add(7);
         }
-        self.overflow();
-        0
     }
     pub fn read_var_uint32(&mut self) -> u32 {
-        let value = self.read_var_uint();
-        if value > u32::MAX as u64 {
-            self.overflow();
-            0
-        } else {
-            value as u32
+        let mut value = 0u32;
+        let mut shift = 0u8;
+        loop {
+            let byte = self.read_byte();
+            if self.overflowed {
+                return 0;
+            }
+            value |= u32::from(byte & 0x7f).wrapping_shl(u32::from(shift));
+            if byte & 0x80 == 0 {
+                return value;
+            }
+            shift = shift.wrapping_add(7);
         }
     }
     pub fn read_float64(&mut self) -> f64 {
@@ -99,12 +100,14 @@ impl<'a> BinaryDataReader<'a> {
         self.position += N;
         value
     }
-    pub fn complete(&mut self, length: usize) {
+    pub fn complete(&mut self, bytes: &'a mut [u8], length: usize) {
+        self.bytes = bytes;
         self.position = 0;
-        self.end = length.min(self.bytes.len());
+        self.end = length;
         self.length = length;
     }
-    pub fn reset(&mut self, position: usize) {
-        self.position = position.min(self.end);
+    pub fn reset(&mut self, bytes: &'a mut [u8]) {
+        self.bytes = bytes;
+        self.position = 0;
     }
 }

@@ -405,13 +405,9 @@ impl ScriptAsset {
                 );
                 return false;
             }
-            if !self
-                .scripting_vm()
+            self.scripting_vm()
                 .expect("initScriptedObject checked the VM")
-                .push_reference(reference)
-            {
-                return false;
-            }
+                .push_reference(reference);
             if !self.initted {
                 self.optional_methods.set_implemented_methods(
                     (self.base.serialized_implemented_methods()

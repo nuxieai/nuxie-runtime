@@ -42,24 +42,20 @@ impl<'a> BinaryReader<'a> {
     }
     pub fn read_var_uint64(&mut self) -> u64 {
         let mut value = 0u64;
-        for shift in (0..=63).step_by(7) {
+        let mut shift = 0u8;
+        loop {
             if self.position >= self.bytes.len() {
                 self.overflow();
                 return 0;
             }
             let byte = self.bytes[self.position];
             self.position += 1;
-            if shift == 63 && byte > 1 {
-                self.overflow();
-                return 0;
-            }
-            value |= u64::from(byte & 0x7f) << shift;
+            value |= u64::from(byte & 0x7f).wrapping_shl(u32::from(shift));
             if byte & 0x80 == 0 {
                 return value;
             }
+            shift = shift.wrapping_add(7);
         }
-        self.overflow();
-        0
     }
     pub fn read_var_uint_as<T>(&mut self) -> T
     where

@@ -72,7 +72,7 @@ impl BackboardImporter {
             } else {
                 ids.insert(file_asset.asset_id());
                 if file_asset.asset_id() >= next_id {
-                    next_id = file_asset.asset_id() + 1;
+                    next_id = file_asset.asset_id().wrapping_add(1);
                 }
             }
         }

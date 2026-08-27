@@ -401,7 +401,6 @@ impl RuntimeNestedArtboardInstance {
                 continue;
             };
             if occurrence.try_change_state(&mut self.child) {
-                changed = true;
                 changed |=
                     occurrence.advance_with_frame(&mut self.child, local_elapsed_seconds, false);
             }

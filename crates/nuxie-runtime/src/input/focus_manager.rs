@@ -49,6 +49,9 @@ impl FocusManager {
         {
             return false;
         }
+        // Pinned addChild invalidates before it removes/reinserts the node,
+        // including an insertion that leaves the final topology unchanged.
+        self.mark_focusable_content_dirty();
 
         let siblings = parent
             .and_then(|parent| self.nodes.get(&parent).map(|node| &node.children))
@@ -75,7 +78,6 @@ impl FocusManager {
         } else {
             self.roots.insert(index.min(self.roots.len()), child);
         }
-        self.mark_focusable_content_dirty();
         true
     }
 
@@ -139,6 +141,9 @@ impl FocusManager {
         if !self.nodes.contains_key(&node_id) {
             return false;
         }
+        // FocusManager::detachChild invalidates unconditionally before
+        // unlinking because the parent may not itself be manager-attached.
+        self.mark_focusable_content_dirty();
         self.unlink(node_id);
         self.nodes
             .get_mut(&node_id)
@@ -151,10 +156,7 @@ impl FocusManager {
         let Some(subtree) = self.subtree_ids(node_id) else {
             return false;
         };
-        if self
-            .primary_focus
-            .is_some_and(|primary| subtree.contains(&primary))
-        {
+        if self.nodes.get(&node_id).is_some_and(FocusNode::has_focus) {
             self.clear_focus();
         }
         self.detach_subtree(node_id);
@@ -609,7 +611,7 @@ impl FocusManager {
         self.collect_traversable_leaves(&self.roots, &mut candidates);
 
         let mut best = None;
-        let mut best_score = f32::INFINITY;
+        let mut best_score = f32::MAX;
         for candidate in candidates {
             if candidate == current {
                 continue;
@@ -664,9 +666,13 @@ fn score_directional_bounds(
     let (displacement, orthogonal_distance, overlap, orthogonal_weight) = match direction {
         FocusDirection::Left => (
             current.min_x - candidate.max_x,
-            (candidate.min_y - current.max_y)
-                .max(current.min_y - candidate.max_y)
-                .max(0.0),
+            focus_cpp_std_max(
+                0.0,
+                focus_cpp_std_max(
+                    candidate.min_y - current.max_y,
+                    current.min_y - candidate.max_y,
+                ),
+            ),
             axis_overlap(
                 current.min_y,
                 current.max_y,
@@ -677,9 +683,13 @@ fn score_directional_bounds(
         ),
         FocusDirection::Right => (
             candidate.min_x - current.max_x,
-            (candidate.min_y - current.max_y)
-                .max(current.min_y - candidate.max_y)
-                .max(0.0),
+            focus_cpp_std_max(
+                0.0,
+                focus_cpp_std_max(
+                    candidate.min_y - current.max_y,
+                    current.min_y - candidate.max_y,
+                ),
+            ),
             axis_overlap(
                 current.min_y,
                 current.max_y,
@@ -690,9 +700,13 @@ fn score_directional_bounds(
         ),
         FocusDirection::Up => (
             current.min_y - candidate.max_y,
-            (candidate.min_x - current.max_x)
-                .max(current.min_x - candidate.max_x)
-                .max(0.0),
+            focus_cpp_std_max(
+                0.0,
+                focus_cpp_std_max(
+                    candidate.min_x - current.max_x,
+                    current.min_x - candidate.max_x,
+                ),
+            ),
             axis_overlap(
                 current.min_x,
                 current.max_x,
@@ -703,9 +717,13 @@ fn score_directional_bounds(
         ),
         FocusDirection::Down => (
             candidate.min_y - current.max_y,
-            (candidate.min_x - current.max_x)
-                .max(current.min_x - candidate.max_x)
-                .max(0.0),
+            focus_cpp_std_max(
+                0.0,
+                focus_cpp_std_max(
+                    candidate.min_x - current.max_x,
+                    current.min_x - candidate.max_x,
+                ),
+            ),
             axis_overlap(
                 current.min_x,
                 current.max_x,
@@ -716,7 +734,7 @@ fn score_directional_bounds(
         ),
     };
     if displacement < 0.0 {
-        return f32::INFINITY;
+        return f32::MAX;
     }
     displacement + orthogonal_weight * orthogonal_distance - overlap.sqrt()
 }
@@ -735,13 +753,23 @@ fn score_directional_points(
         FocusDirection::Down => (delta_y, delta_x.abs(), 2.0),
     };
     if primary <= 0.0 {
-        return f32::INFINITY;
+        return f32::MAX;
     }
     primary + orthogonal_weight * orthogonal
 }
 
 fn axis_overlap(a_min: f32, a_max: f32, b_min: f32, b_max: f32) -> f32 {
-    (a_max.min(b_max) - a_min.max(b_min)).max(0.0)
+    let overlap_min = focus_cpp_std_max(a_min, b_min);
+    let overlap_max = focus_cpp_std_min(a_max, b_max);
+    focus_cpp_std_max(0.0, overlap_max - overlap_min)
+}
+
+fn focus_cpp_std_max(first: f32, second: f32) -> f32 {
+    if first < second { second } else { first }
+}
+
+fn focus_cpp_std_min(first: f32, second: f32) -> f32 {
+    if second < first { second } else { first }
 }
 
 #[cfg(test)]

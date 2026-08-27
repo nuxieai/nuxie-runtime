@@ -20,11 +20,7 @@ pub(crate) fn double_property_changed(
     let authored_inner = property_key_for_name("Feather", "inner")
         .and_then(|key| artboard.bool_property(local_id, key))
         .unwrap_or(false);
-    let parent_type_name = artboard
-        .component_parent_local(local_id)
-        .and_then(|parent| artboard.runtime_object_type_name(parent));
-    let inner = is_inner(authored_inner, parent_type_name);
-    let dirt = if inner {
+    let dirt = if authored_inner {
         ComponentDirt::PAINT | ComponentDirt::WORLD_TRANSFORM
     } else {
         ComponentDirt::PAINT

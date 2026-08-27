@@ -30,12 +30,8 @@ impl TextSelectionPath {
         }
         self.converter.compute_contours();
 
-        for index in 0..self.converter.contour_count() {
-            append_rounded_path(
-                &mut self.commands,
-                self.converter.contour(index),
-                corner_radius,
-            );
+        for contour in self.converter.contours() {
+            append_rounded_path(&mut self.commands, contour, corner_radius);
         }
     }
 
@@ -60,7 +56,7 @@ fn append_rounded_path(
     if length < 2 {
         return;
     }
-    let reversed = contour.is_clockwise();
+    let reversed = !contour.is_clockwise();
     let point = |index: usize| {
         if reversed {
             contour.point_reversed(index)
@@ -192,5 +188,20 @@ mod tests {
             0.0,
         );
         assert_eq!(commands.len(), 5);
+    }
+
+    #[test]
+    fn finite_rectangle_uses_the_pinned_not_clockwise_reversal() {
+        let commands = update(&[Aabb::new(0.0, 0.0, 10.0, 8.0)], 0.0);
+        assert!(matches!(
+            commands.as_slice(),
+            [
+                RuntimePathCommand::Move { x: 10.0, y: 0.0 },
+                RuntimePathCommand::Line { x: 10.0, y: 8.0 },
+                RuntimePathCommand::Line { x: 0.0, y: 8.0 },
+                RuntimePathCommand::Line { x: 0.0, y: 0.0 },
+                RuntimePathCommand::Close,
+            ]
+        ));
     }
 }

@@ -8,12 +8,19 @@
 //! geometry subsystem.
 
 use std::cmp::Ordering;
+#[cfg(not(test))]
+use std::collections::HashMap;
+use std::ops::Range;
 
 use nuxie_render_api::{Aabb, Vec2D};
 
 #[derive(Debug, Clone, Copy)]
 struct RectEvent {
     index: usize,
+    // Public on the pinned C++ helper and populated by `sortRectEvents`, even
+    // though this pinned algorithm does not subsequently consume it.
+    #[allow(dead_code)]
+    size: f32,
     event_type: u8,
     x: f32,
     y: f32,
@@ -31,7 +38,112 @@ struct ContourPoint {
     direction: u8,
 }
 
-type EdgeMap = Vec<(Vec2D, Vec2D)>;
+/// Mirrors the header's `EdgeMap` switch: unit-test builds use an ordered map
+/// for cross-platform fixture stability, while production uses a hash map.
+#[derive(Debug, Default)]
+struct EdgeMap {
+    #[cfg(test)]
+    entries: Vec<(Vec2D, Vec2D)>,
+    #[cfg(not(test))]
+    entries: HashMap<Vec2DKey, (Vec2D, Vec2D)>,
+}
+
+#[cfg(not(test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Vec2DKey {
+    x: u32,
+    y: u32,
+}
+
+#[cfg(not(test))]
+impl From<Vec2D> for Vec2DKey {
+    fn from(point: Vec2D) -> Self {
+        // C++ `std::hash<float>` must hash equal signed zeroes alike.
+        let bits = |value: f32| if value == 0.0 { 0 } else { value.to_bits() };
+        Self {
+            x: bits(point.x),
+            y: bits(point.y),
+        }
+    }
+}
+
+impl EdgeMap {
+    fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn first_key(&self) -> Option<Vec2D> {
+        #[cfg(test)]
+        {
+            self.entries.first().map(|edge| edge.0)
+        }
+        #[cfg(not(test))]
+        {
+            self.entries.values().next().map(|edge| edge.0)
+        }
+    }
+
+    fn insert(&mut self, key: Vec2D, value: Vec2D) {
+        #[cfg(test)]
+        {
+            match self
+                .entries
+                .binary_search_by(|edge| compare_edge_keys(&edge.0, &key))
+            {
+                Ok(index) => self.entries[index].1 = value,
+                Err(index) => self.entries.insert(index, (key, value)),
+            }
+        }
+        #[cfg(not(test))]
+        {
+            match self.entries.entry(key.into()) {
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    // `unordered_map::operator[]` preserves the originally
+                    // inserted key object when an equal key is assigned.
+                    entry.get_mut().1 = value;
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert((key, value));
+                }
+            }
+        }
+    }
+
+    fn take(&mut self, key: Vec2D) -> Option<Vec2D> {
+        #[cfg(test)]
+        {
+            let index = self
+                .entries
+                .binary_search_by(|edge| compare_edge_keys(&edge.0, &key))
+                .ok()?;
+            Some(self.entries.remove(index).1)
+        }
+        #[cfg(not(test))]
+        {
+            self.entries.remove(&key.into()).map(|edge| edge.1)
+        }
+    }
+
+    fn remove(&mut self, key: Vec2D) {
+        #[cfg(test)]
+        {
+            if let Ok(index) = self
+                .entries
+                .binary_search_by(|edge| compare_edge_keys(&edge.0, &key))
+            {
+                self.entries.remove(index);
+            }
+        }
+        #[cfg(not(test))]
+        {
+            self.entries.remove(&key.into());
+        }
+    }
+}
 
 /// Clone-owned counterpart of C++ `RectanglesToContour`.
 #[derive(Debug, Default)]
@@ -96,8 +208,8 @@ impl RuntimeRectanglesToContour {
             while index < self.sorted_points_y.len() && self.sorted_points_y[index].y == current_y {
                 let first = self.sorted_points_y[index];
                 let second = self.sorted_points_y[index + 1];
-                insert_edge(&mut self.edges_h, first, second);
-                insert_edge(&mut self.edges_h, second, first);
+                self.edges_h.insert(first, second);
+                self.edges_h.insert(second, first);
                 index += 2;
             }
         }
@@ -108,8 +220,8 @@ impl RuntimeRectanglesToContour {
             while index < self.sorted_points_x.len() && self.sorted_points_x[index].x == current_x {
                 let first = self.sorted_points_x[index];
                 let second = self.sorted_points_x[index + 1];
-                insert_edge(&mut self.edges_v, first, second);
-                insert_edge(&mut self.edges_v, second, first);
+                self.edges_v.insert(first, second);
+                self.edges_v.insert(second, first);
                 index += 2;
             }
         }
@@ -138,6 +250,13 @@ impl RuntimeRectanglesToContour {
         }
     }
 
+    /// Mirrors the header-owned `ContourItr` range surface. Keeping the range
+    /// on the nominal owner lets production callers traverse the packed
+    /// contour storage without rebuilding its offset arithmetic themselves.
+    pub(crate) fn contours(&self) -> impl Iterator<Item = RuntimeRectangleContour<'_>> + '_ {
+        (0..self.contour_count()).map(|index| self.contour(index))
+    }
+
     fn subdivide_rectangles(&mut self) {
         self.subdivided_rects.clear();
         self.unique_points.clear();
@@ -146,11 +265,10 @@ impl RuntimeRectanglesToContour {
             return;
         }
 
-        let vertical = sort_rect_events(&self.rects, 0, 1);
-        let horizontal = sort_rect_events(&self.rects, 1, 0);
-        self.rect_events.reserve(vertical.len() + horizontal.len());
-        self.rect_events.extend_from_slice(&vertical);
-        self.rect_events.extend_from_slice(&horizontal);
+        let vertical_range = sort_rect_events(&self.rects, &mut self.rect_events, 0, 1);
+        let horizontal_range = sort_rect_events(&self.rects, &mut self.rect_events, 1, 0);
+        let vertical = &self.rect_events[vertical_range];
+        let horizontal = &self.rect_events[horizontal_range];
 
         self.rect_inclusion_bits.resize(self.rects.len() / 8 + 1, 0);
         self.rect_inclusion_bits.fill(0);
@@ -242,8 +360,14 @@ impl RuntimeRectangleContour<'_> {
     }
 }
 
-fn sort_rect_events(rects: &[Aabb], axis_a: u8, axis_b: u8) -> Vec<RectEvent> {
-    let mut result = Vec::with_capacity(rects.len() * 2);
+fn sort_rect_events(
+    rects: &[Aabb],
+    result: &mut Vec<RectEvent>,
+    axis_a: u8,
+    axis_b: u8,
+) -> Range<usize> {
+    let result_start = result.len();
+    result.reserve(rects.len() * 2);
     for (index, rect) in rects.iter().copied().enumerate() {
         for point_index in 0..2 {
             let point = if point_index == 0 {
@@ -254,6 +378,13 @@ fn sort_rect_events(rects: &[Aabb], axis_a: u8, axis_b: u8) -> Vec<RectEvent> {
             let coordinate = |axis| if axis == 0 { point.x } else { point.y };
             result.push(RectEvent {
                 index,
+                size: if point_index == 0 {
+                    let opposite = if axis_b == 0 { rect.max_x } else { rect.max_y };
+                    opposite - coordinate(axis_b)
+                } else {
+                    let opposite = if axis_b == 0 { rect.min_x } else { rect.min_y };
+                    coordinate(axis_b) - opposite
+                },
                 event_type: point_index,
                 y: if axis_b == 0 {
                     coordinate(axis_a)
@@ -268,9 +399,11 @@ fn sort_rect_events(rects: &[Aabb], axis_a: u8, axis_b: u8) -> Vec<RectEvent> {
             });
         }
     }
-    result.sort_by(|left, right| compare_float(left.value(axis_b), right.value(axis_b)));
-    result.sort_by(|left, right| compare_float(left.value(axis_a), right.value(axis_a)));
-    result
+    result[result_start..]
+        .sort_unstable_by(|left, right| compare_float(left.value(axis_b), right.value(axis_b)));
+    result[result_start..]
+        .sort_unstable_by(|left, right| compare_float(left.value(axis_a), right.value(axis_a)));
+    result_start..result.len()
 }
 
 fn extract_polygons(
@@ -279,9 +412,12 @@ fn extract_polygons(
     edges_h: &mut EdgeMap,
     edges_v: &mut EdgeMap,
 ) {
-    while let Some(start) = edges_h.first().map(|edge| edge.0) {
+    while !edges_h.is_empty() {
+        let start = edges_h
+            .first_key()
+            .expect("non-empty EdgeMap must yield one entry");
         let contour_start = contour_points.len();
-        remove_edge(edges_h, start);
+        edges_h.remove(start);
         let first = ContourPoint {
             point: start,
             direction: 0,
@@ -291,12 +427,12 @@ fn extract_polygons(
         loop {
             let current = contour_points[contour_points.len() - 1];
             let edge = if current.direction == 0 {
-                take_edge(edges_v, current.point).map(|point| ContourPoint {
+                edges_v.take(current.point).map(|point| ContourPoint {
                     point,
                     direction: 1,
                 })
             } else {
-                take_edge(edges_h, current.point).map(|point| ContourPoint {
+                edges_h.take(current.point).map(|point| ContourPoint {
                     point,
                     direction: 0,
                 })
@@ -316,30 +452,9 @@ fn extract_polygons(
             .iter()
             .map(|point| point.point)
         {
-            remove_edge(edges_h, point);
-            remove_edge(edges_v, point);
+            edges_h.remove(point);
+            edges_v.remove(point);
         }
-    }
-}
-
-fn insert_edge(edges: &mut EdgeMap, key: Vec2D, value: Vec2D) {
-    remove_edge(edges, key);
-    let index = edges
-        .binary_search_by(|edge| compare_x_then_y(&edge.0, &key))
-        .unwrap_or_else(|index| index);
-    edges.insert(index, (key, value));
-}
-
-fn take_edge(edges: &mut EdgeMap, key: Vec2D) -> Option<Vec2D> {
-    let index = edges
-        .binary_search_by(|edge| compare_x_then_y(&edge.0, &key))
-        .ok()?;
-    Some(edges.remove(index).1)
-}
-
-fn remove_edge(edges: &mut EdgeMap, key: Vec2D) {
-    if let Ok(index) = edges.binary_search_by(|edge| compare_x_then_y(&edge.0, &key)) {
-        edges.remove(index);
     }
 }
 
@@ -365,15 +480,44 @@ fn is_rect_included(bits: &[u8], index: usize) -> bool {
 }
 
 fn compare_x_then_y(left: &Vec2D, right: &Vec2D) -> Ordering {
-    compare_float(left.x, right.x).then_with(|| compare_float(left.y, right.y))
+    compare_lexicographic(left.x, right.x, left.y, right.y)
 }
 
 fn compare_y_then_x(left: &Vec2D, right: &Vec2D) -> Ordering {
-    compare_float(left.y, right.y).then_with(|| compare_float(left.x, right.x))
+    compare_lexicographic(left.y, right.y, left.x, right.x)
+}
+
+#[cfg(test)]
+fn compare_edge_keys(left: &Vec2D, right: &Vec2D) -> Ordering {
+    compare_lexicographic(left.x, right.x, left.y, right.y)
+}
+
+fn compare_lexicographic(
+    left_primary: f32,
+    right_primary: f32,
+    left_secondary: f32,
+    right_secondary: f32,
+) -> Ordering {
+    if left_primary < right_primary {
+        Ordering::Less
+    } else if right_primary < left_primary {
+        Ordering::Greater
+    } else if left_primary == right_primary {
+        compare_float(left_secondary, right_secondary)
+    } else {
+        // The source comparator returns false in both directions for NaN.
+        Ordering::Equal
+    }
 }
 
 fn compare_float(left: f32, right: f32) -> Ordering {
-    left.total_cmp(&right)
+    if left < right {
+        Ordering::Less
+    } else if right < left {
+        Ordering::Greater
+    } else {
+        Ordering::Equal
+    }
 }
 
 fn cross(left: Vec2D, right: Vec2D) -> f32 {
@@ -393,6 +537,7 @@ mod tests {
         converter.add_rect(Aabb::new(20.0, 10.0, 30.0, 20.0));
         converter.compute_contours();
         assert_eq!(converter.contour_count(), 1);
+        assert_eq!(converter.contours().count(), 1);
         assert_contour(
             converter.contour(0),
             &[(10.0, 10.0), (10.0, 20.0), (30.0, 20.0), (30.0, 10.0)],
@@ -404,6 +549,7 @@ mod tests {
         converter.add_rect(Aabb::new(20.0, 40.0, 30.0, 50.0));
         converter.compute_contours();
         assert_eq!(converter.contour_count(), 2);
+        assert_eq!(converter.contours().count(), 2);
         assert_contour(
             converter.contour(0),
             &[(10.0, 10.0), (10.0, 20.0), (30.0, 20.0), (30.0, 10.0)],
@@ -449,6 +595,36 @@ mod tests {
             },
         ];
         assert!(!RuntimeRectangleContour { points: &points }.is_clockwise());
+    }
+
+    #[test]
+    fn rect_event_ranges_retain_the_pinned_shared_scratch_and_axis_sizes() {
+        let rects = [Aabb::new(0.0, 1.0, 4.0, 7.0)];
+        let mut events = Vec::new();
+        let vertical = sort_rect_events(&rects, &mut events, 0, 1);
+        let horizontal = sort_rect_events(&rects, &mut events, 1, 0);
+        assert_eq!(vertical, 0..2);
+        assert_eq!(horizontal, 2..4);
+        assert!(events[vertical].iter().all(|event| event.size == 6.0));
+        assert!(events[horizontal].iter().all(|event| event.size == 4.0));
+    }
+
+    #[test]
+    fn testing_edge_map_and_sort_comparators_preserve_cpp_float_relations() {
+        assert_eq!(compare_float(-0.0, 0.0), Ordering::Equal);
+        assert_eq!(compare_float(f32::NAN, 1.0), Ordering::Equal);
+        assert_eq!(
+            compare_x_then_y(&Vec2D::new(f32::NAN, 0.0), &Vec2D::new(f32::NAN, 1.0)),
+            Ordering::Equal
+        );
+
+        let negative_zero = Vec2D::new(-0.0, 2.0);
+        let positive_zero = Vec2D::new(0.0, 2.0);
+        let mut edges = EdgeMap::default();
+        edges.insert(negative_zero, Vec2D::new(1.0, 1.0));
+        edges.insert(positive_zero, Vec2D::new(2.0, 2.0));
+        assert_eq!(edges.first_key().unwrap().x.to_bits(), (-0.0_f32).to_bits());
+        assert_eq!(edges.take(positive_zero), Some(Vec2D::new(2.0, 2.0)));
     }
 
     fn assert_contour(contour: RuntimeRectangleContour<'_>, expected: &[(f32, f32)]) {

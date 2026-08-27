@@ -181,8 +181,7 @@ impl RuntimeTextValueRunState {
         let Some(contours) = contours.as_ref() else {
             return false;
         };
-        for index in 0..contours.contour_count() {
-            let contour = contours.contour(index);
+        for contour in contours.contours() {
             let mut points = contour.points();
             let Some(first) = points.next() else {
                 continue;

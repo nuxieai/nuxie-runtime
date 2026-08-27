@@ -36,6 +36,7 @@ include!("animation/cubic_interpolator_solver.rs");
 include!("animation/cubic_ease_interpolator.rs");
 include!("animation/cubic_value_interpolator.rs");
 include!("animation/blend_state_1d.rs");
+include!("animation/blend_animation_1d.rs");
 include!("animation/animation_state.rs");
 include!("animation/animation_state_instance.rs");
 include!("animation/elastic_interpolator.rs");

@@ -732,12 +732,6 @@ pub(crate) enum RuntimeBlendState1DSource {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RuntimeBlendAnimation1D {
-    pub(crate) animation: RuntimeLinearAnimationHandle,
-    pub(crate) value: f32,
-}
-
-#[derive(Debug, Clone)]
 pub(crate) struct RuntimeBlendStateDirect {
     pub(crate) animations: Vec<RuntimeBlendAnimationDirect>,
 }

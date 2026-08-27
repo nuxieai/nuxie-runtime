@@ -3,6 +3,7 @@ use crate::animation::{
     AnimationStateInstance, LinearAnimationInstance, RuntimeInterpolator,
     RuntimeKeyedPropertyTarget, RuntimeLinearAnimation, RuntimeLinearAnimationHandle,
 };
+pub(crate) use crate::animation::RuntimeBlendAnimation1D;
 use crate::components::TransformProperty;
 use crate::data_bind_graph::RuntimeDataBindGraphConverterBuildCache;
 use crate::properties::artboard_index_for_graph;
@@ -147,10 +148,10 @@ use state_machine::RuntimeBlendAnimationHandle;
 pub use state_machine::RuntimeStateMachine;
 use state_machine::next_view_model_trigger_layer_id;
 pub(crate) use state_machine::{
-    BlendState1DInstance, RuntimeBlendAnimation1D, RuntimeBlendAnimationDirect,
-    RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeBlendStateDirect,
-    RuntimeDirectBlendSource, RuntimeTransitionInterpolator, TransitionEvaluationContext,
-    build_state_machines, build_state_machines_with_action_catalog,
+    BlendState1DInstance, RuntimeBlendAnimationDirect, RuntimeBlendState1D,
+    RuntimeBlendState1DSource, RuntimeBlendStateDirect, RuntimeDirectBlendSource,
+    RuntimeTransitionInterpolator, TransitionEvaluationContext, build_state_machines,
+    build_state_machines_with_action_catalog,
 };
 pub(crate) use state_machine_fire_action::{
     RuntimeStateMachineFireAction, StateMachineFireOccurrence, perform_state_machine_fire_actions,

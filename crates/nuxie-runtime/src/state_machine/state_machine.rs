@@ -691,10 +691,7 @@ impl RuntimeBlendState1D {
         let object = state.object?;
         let source = match object.type_name {
             "BlendState1DInput" => RuntimeBlendState1DSource::Input {
-                input_index: object
-                    .uint_property("inputId")
-                    .filter(|input_id| *input_id != u64::from(u32::MAX))
-                    .and_then(|input_id| usize::try_from(input_id).ok()),
+                input_index: RuntimeBlendState1DInput::from_imported(object),
             },
             "BlendState1DViewModel" => RuntimeBlendState1DSource::BindableProperty {
                 global_id: file
@@ -903,10 +900,12 @@ impl BlendState1DInstance {
         }
 
         let value = match blend_state.source {
-            RuntimeBlendState1DSource::Input { input_index } => input_index
-                .and_then(|input_index| inputs.get(input_index))
-                .and_then(StateMachineInputInstance::number_value)
-                .unwrap_or(0.0),
+            RuntimeBlendState1DSource::Input { input_index } => {
+                RuntimeBlendState1DInput::input_index(input_index)
+                    .and_then(|input_index| inputs.get(input_index))
+                    .and_then(StateMachineInputInstance::number_value)
+                    .unwrap_or(0.0)
+            }
             RuntimeBlendState1DSource::BindableProperty { global_id } => global_id
                 .and_then(|global_id| bindable_number_value(bindable_numbers, global_id))
                 .unwrap_or(0.0),

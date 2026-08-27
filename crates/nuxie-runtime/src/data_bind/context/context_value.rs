@@ -828,7 +828,8 @@ impl RuntimeDataBindGraphConverter {
             Self::BooleanNegate => crate::data_converter_boolean_negate::output_type(),
             Self::TriggerIncrement => RuntimeDataType::Trigger,
             Self::NumberToList { .. } => RuntimeDataType::List,
-            Self::ToString { .. } | Self::StringPad { .. } => RuntimeDataType::String,
+            Self::ToString { .. } => RuntimeDataType::String,
+            Self::StringPad { .. } => crate::data_converter_string_pad::output_type(),
             Self::StringTrim { .. } => crate::data_converter_string_trim::output_type(),
             Self::StringRemoveZeros => {
                 crate::data_converter_string_remove_zeros::output_type()
@@ -1095,9 +1096,8 @@ impl RuntimeDataBindGraphConverter {
         match self {
             RuntimeDataBindGraphConverter::StringPad {
                 global_id, length, ..
-            } if *global_id == target_global_id && *length != value => {
-                *length = value;
-                true
+            } if *global_id == target_global_id => {
+                crate::data_converter_string_pad::set_length(length, value)
             }
             RuntimeDataBindGraphConverter::Group(converters) => {
                 let mut changed = false;
@@ -1114,9 +1114,8 @@ impl RuntimeDataBindGraphConverter {
         match self {
             RuntimeDataBindGraphConverter::StringPad {
                 global_id, text, ..
-            } if *global_id == target_global_id && text.as_slice() != value => {
-                *text = value.to_vec();
-                true
+            } if *global_id == target_global_id => {
+                crate::data_converter_string_pad::set_text(text, value)
             }
             RuntimeDataBindGraphConverter::Group(converters) => {
                 let mut changed = false;
@@ -1135,9 +1134,8 @@ impl RuntimeDataBindGraphConverter {
                 global_id,
                 pad_type,
                 ..
-            } if *global_id == target_global_id && *pad_type != value => {
-                *pad_type = value;
-                true
+            } if *global_id == target_global_id => {
+                crate::data_converter_string_pad::set_pad_type(pad_type, value)
             }
             RuntimeDataBindGraphConverter::Group(converters) => {
                 let mut changed = false;
@@ -2990,9 +2988,19 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             },
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(
-            crate::data_converter_string_pad::convert(value, *length, text, *pad_type),
+            crate::data_converter_string_pad::convert(Some(value), *length, text, *pad_type),
         )),
-        (RuntimeDataBindGraphConverter::StringPad { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::StringPad {
+                length,
+                text,
+                pad_type,
+                ..
+            },
+            _,
+        ) => Some(RuntimeDataBindGraphValue::String(
+            crate::data_converter_string_pad::convert(None, *length, text, *pad_type),
+        )),
         (
             RuntimeDataBindGraphConverter::Formula { tokens },
             RuntimeDataBindGraphValue::Number(value),

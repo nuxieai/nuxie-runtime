@@ -1920,21 +1920,19 @@ fn apply_converter_property(
             }),
         (RuntimeDataBindGraphConverter::StringPad { length, .. }, 743) => {
             uint(value).is_some_and(|value| {
-                *length = value;
-                true
+                crate::data_converter_string_pad::set_length(length, value)
             })
         }
         (RuntimeDataBindGraphConverter::StringPad { text, .. }, 744) => {
             string(value).is_some_and(|value| {
-                *text = value;
-                true
+                crate::data_converter_string_pad::set_text(text, &value)
             })
         }
-        (RuntimeDataBindGraphConverter::StringPad { pad_type, .. }, 745) => uint(value)
-            .is_some_and(|value| {
-                *pad_type = value;
-                true
-            }),
+        (RuntimeDataBindGraphConverter::StringPad { pad_type, .. }, 745) => {
+            uint(value).is_some_and(|value| {
+                crate::data_converter_string_pad::set_pad_type(pad_type, value)
+            })
+        }
         (RuntimeDataBindGraphConverter::Formula { tokens }, 887) => {
             uint(value).is_some_and(|value| {
                 for token in tokens {

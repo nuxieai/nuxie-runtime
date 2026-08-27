@@ -74,9 +74,6 @@ pub(crate) fn runtime_draw_live_owned_shape_paint(
 
     if let Some(feather) = feather_state.as_ref() {
         if feather.inner {
-            if feather.inner_path_commands.is_empty() {
-                return Ok(());
-            }
             if !saved {
                 saved = true;
                 renderer.save();

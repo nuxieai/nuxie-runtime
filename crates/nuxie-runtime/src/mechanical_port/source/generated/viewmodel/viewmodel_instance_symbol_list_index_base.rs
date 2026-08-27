@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::viewmodel::viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex;
+
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, view_model_instance_symbol::ViewModelInstanceSymbol,
 };
@@ -26,7 +28,7 @@ impl ViewModelInstanceSymbolListIndexBase {
     pub const PROPERTY_VALUE_PROPERTY_KEY: u16 = 814;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0 | 0 | 10)
+        matches!(type_key, Self::TYPE_KEY | 565 | 428 | 10)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -45,6 +47,14 @@ impl ViewModelInstanceSymbolListIndexBase {
         self.property_value = value;
         callbacks.property_value_changed();
         callbacks.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl ViewModelInstanceSymbolListIndexBaseCallbacks,
+    ) -> ViewModelInstanceSymbolListIndex {
+        let mut cloned = ViewModelInstanceSymbolListIndex::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(
         &mut self,

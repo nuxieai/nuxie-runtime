@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList;
+
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, view_model_instance_value::ViewModelInstanceValue,
 };
@@ -26,7 +28,7 @@ impl ViewModelInstanceListBase {
     pub const LIST_SOURCE_PROPERTY_KEY: u16 = 966;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0 | 10)
+        matches!(type_key, Self::TYPE_KEY | 428 | 10)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -45,6 +47,14 @@ impl ViewModelInstanceListBase {
         self.list_source = value;
         callbacks.list_source_changed();
         callbacks.notify_property_changed(Self::LIST_SOURCE_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl ViewModelInstanceListBaseCallbacks,
+    ) -> ViewModelInstanceList {
+        let mut cloned = ViewModelInstanceList::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ViewModelInstanceListBaseCallbacks) {
         self.list_source = object.list_source;

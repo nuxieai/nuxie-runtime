@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::animation::keyframe_id::KeyFrameId;
+
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, interpolating_key_frame::InterpolatingKeyFrame,
 };
@@ -26,7 +28,7 @@ impl KeyFrameIdBase {
     pub const VALUE_PROPERTY_KEY: u16 = 122;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0 | 0)
+        matches!(type_key, Self::TYPE_KEY | 170 | 29)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -41,6 +43,11 @@ impl KeyFrameIdBase {
         self.value = value;
         callbacks.value_changed();
         callbacks.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+    }
+    pub fn clone_into(&self, callbacks: &mut impl KeyFrameIdBaseCallbacks) -> KeyFrameId {
+        let mut cloned = KeyFrameId::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl KeyFrameIdBaseCallbacks) {
         self.value = object.value;

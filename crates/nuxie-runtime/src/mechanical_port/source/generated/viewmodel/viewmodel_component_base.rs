@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::viewmodel::viewmodel_component::ViewModelComponent;
+
 use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
 
 pub trait ViewModelComponentBaseCallbacks {
@@ -43,6 +45,14 @@ impl ViewModelComponentBase {
         self.name = value;
         callbacks.name_changed();
         callbacks.notify_property_changed(Self::NAME_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl ViewModelComponentBaseCallbacks,
+    ) -> ViewModelComponent {
+        let mut cloned = ViewModelComponent::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ViewModelComponentBaseCallbacks) {
         self.name.clone_from(&object.name);

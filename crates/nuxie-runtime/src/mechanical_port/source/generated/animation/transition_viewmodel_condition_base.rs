@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::animation::transition_viewmodel_condition::TransitionViewModelCondition;
+
 use crate::mechanical_port::source::{
     animation::transition_condition::TransitionCondition, core::binary_reader::BinaryReader,
 };
@@ -45,6 +47,14 @@ impl TransitionViewModelConditionBase {
         self.op_value = value;
         callbacks.op_value_changed();
         callbacks.notify_property_changed(Self::OP_VALUE_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl TransitionViewModelConditionBaseCallbacks,
+    ) -> TransitionViewModelCondition {
+        let mut cloned = TransitionViewModelCondition::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(
         &mut self,

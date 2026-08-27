@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::animation::listener_viewmodel_change::ListenerViewModelChange;
+
 use crate::mechanical_port::source::{
     animation::listener_action::ListenerAction, core::binary_reader::BinaryReader,
 };
@@ -22,5 +24,10 @@ impl ListenerViewModelChangeBase {
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
+    }
+    pub fn clone_into(&self) -> ListenerViewModelChange {
+        let mut cloned = ListenerViewModelChange::default();
+        cloned.base.copy(self);
+        cloned
     }
 }

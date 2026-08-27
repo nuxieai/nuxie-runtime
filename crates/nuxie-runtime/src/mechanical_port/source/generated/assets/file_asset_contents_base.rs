@@ -33,8 +33,7 @@ impl FileAssetContentsBase {
         callbacks: &mut impl FileAssetContentsBaseCallbacks,
     ) -> FileAssetContents {
         let mut cloned = FileAssetContents::default();
-        callbacks.copy_bytes(self);
-        callbacks.copy_signature(self);
+        cloned.base.copy(self, callbacks);
         cloned
     }
 

@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob;
+
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, view_model_instance_asset::ViewModelInstanceAsset,
 };
@@ -18,9 +20,14 @@ impl ViewModelInstanceAssetBlobBase {
     pub const TYPE_KEY: u16 = 1044;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0 | 0 | 10)
+        matches!(type_key, Self::TYPE_KEY | 586 | 428 | 10)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
+    }
+    pub fn clone_into(&self) -> ViewModelInstanceAssetBlob {
+        let mut cloned = ViewModelInstanceAssetBlob::default();
+        cloned.base.copy(self);
+        cloned
     }
 }

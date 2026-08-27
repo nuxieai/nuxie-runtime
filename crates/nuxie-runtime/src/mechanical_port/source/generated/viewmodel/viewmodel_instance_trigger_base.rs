@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger;
+
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, view_model_instance_value::ViewModelInstanceValue,
 };
@@ -28,7 +30,7 @@ impl ViewModelInstanceTriggerBase {
     pub const FIRE_PROPERTY_KEY: u16 = 1016;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0 | 10)
+        matches!(type_key, Self::TYPE_KEY | 428 | 10)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -47,6 +49,14 @@ impl ViewModelInstanceTriggerBase {
         self.property_value = value;
         callbacks.property_value_changed();
         callbacks.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl ViewModelInstanceTriggerBaseCallbacks,
+    ) -> ViewModelInstanceTrigger {
+        let mut cloned = ViewModelInstanceTrigger::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(
         &mut self,

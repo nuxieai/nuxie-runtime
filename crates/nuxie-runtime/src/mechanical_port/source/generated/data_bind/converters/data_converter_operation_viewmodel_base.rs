@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::data_bind::converters::data_converter_operation_viewmodel::DataConverterOperationViewModel;
+
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
     data_bind::converters::data_converter_operation::DataConverterOperation,
@@ -30,6 +32,14 @@ impl DataConverterOperationViewModelBase {
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl DataConverterOperationViewModelBaseCallbacks,
+    ) -> DataConverterOperationViewModel {
+        let mut cloned = DataConverterOperationViewModel::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(
         &mut self,

@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::animation::transition_property_viewmodel_comparator::TransitionPropertyViewModelComparator;
+
 use crate::mechanical_port::source::{
     animation::transition_property_comparator::TransitionPropertyComparator,
     core::binary_reader::BinaryReader,
@@ -23,5 +25,10 @@ impl TransitionPropertyViewModelComparatorBase {
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
+    }
+    pub fn clone_into(&self) -> TransitionPropertyViewModelComparator {
+        let mut cloned = TransitionPropertyViewModelComparator::default();
+        cloned.base.copy(self);
+        cloned
     }
 }

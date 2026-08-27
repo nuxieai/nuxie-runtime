@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::animation::blend_animation_1d::BlendAnimation1D;
+
 use crate::mechanical_port::source::{
     animation::blend_animation::BlendAnimation, core::binary_reader::BinaryReader,
 };
@@ -41,6 +43,14 @@ impl BlendAnimation1DBase {
         self.value = value;
         callbacks.value_changed();
         callbacks.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl BlendAnimation1DBaseCallbacks,
+    ) -> BlendAnimation1D {
+        let mut cloned = BlendAnimation1D::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl BlendAnimation1DBaseCallbacks) {
         self.value = object.value;

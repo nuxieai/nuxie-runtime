@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::animation::listener_types::listener_input_type_viewmodel::ListenerInputTypeViewModel;
+
 use crate::mechanical_port::source::{
     animation::listener_types::listener_input_type::ListenerInputType,
     core::binary_reader::BinaryReader,
@@ -30,6 +32,14 @@ impl ListenerInputTypeViewModelBase {
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl ListenerInputTypeViewModelBaseCallbacks,
+    ) -> ListenerInputTypeViewModel {
+        let mut cloned = ListenerInputTypeViewModel::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(
         &mut self,

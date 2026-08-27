@@ -28,7 +28,7 @@ impl InterpolatingKeyFrameBase {
     pub const INTERPOLATOR_ID_PROPERTY_KEY: u16 = 69;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0)
+        matches!(type_key, Self::TYPE_KEY | 29)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::viewmodel::viewmodel_instance::ViewModelInstance;
+
 use crate::mechanical_port::source::{
     container_component::ContainerComponent, core::binary_reader::BinaryReader,
 };
@@ -45,6 +47,14 @@ impl ViewModelInstanceBase {
         self.view_model_id = value;
         callbacks.view_model_id_changed();
         callbacks.notify_property_changed(Self::VIEW_MODEL_ID_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl ViewModelInstanceBaseCallbacks,
+    ) -> ViewModelInstance {
+        let mut cloned = ViewModelInstance::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ViewModelInstanceBaseCallbacks) {
         self.view_model_id = object.view_model_id;

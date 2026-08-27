@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel;
+
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, view_model_property::ViewModelProperty,
 };
@@ -26,7 +28,7 @@ impl ViewModelPropertyViewModelBase {
     pub const VIEW_MODEL_REFERENCE_ID_PROPERTY_KEY: u16 = 565;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0 | 0)
+        matches!(type_key, Self::TYPE_KEY | 430 | 429)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -45,6 +47,14 @@ impl ViewModelPropertyViewModelBase {
         self.view_model_reference_id = value;
         callbacks.view_model_reference_id_changed();
         callbacks.notify_property_changed(Self::VIEW_MODEL_REFERENCE_ID_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl ViewModelPropertyViewModelBaseCallbacks,
+    ) -> ViewModelPropertyViewModel {
+        let mut cloned = ViewModelPropertyViewModel::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(
         &mut self,

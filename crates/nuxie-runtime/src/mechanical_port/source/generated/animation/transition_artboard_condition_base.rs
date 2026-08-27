@@ -20,7 +20,7 @@ impl TransitionArtboardConditionBase {
     pub const TYPE_KEY: u16 = 497;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0 | 476)
+        matches!(type_key, Self::TYPE_KEY | 482 | 476)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue;
+
 use crate::mechanical_port::source::{component::Component, core::binary_reader::BinaryReader};
 
 pub trait ViewModelInstanceValueBaseCallbacks {
@@ -43,6 +45,14 @@ impl ViewModelInstanceValueBase {
         self.view_model_property_id = value;
         callbacks.view_model_property_id_changed();
         callbacks.notify_property_changed(Self::VIEW_MODEL_PROPERTY_ID_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl ViewModelInstanceValueBaseCallbacks,
+    ) -> ViewModelInstanceValue {
+        let mut cloned = ViewModelInstanceValue::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(
         &mut self,

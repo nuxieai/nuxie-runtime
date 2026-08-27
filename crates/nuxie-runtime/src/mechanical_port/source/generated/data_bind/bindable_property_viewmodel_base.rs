@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::data_bind::bindable_property_viewmodel::BindablePropertyViewModel;
+
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, data_bind::bindable_property_id::BindablePropertyId,
 };
@@ -22,5 +24,10 @@ impl BindablePropertyViewModelBase {
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
+    }
+    pub fn clone_into(&self) -> BindablePropertyViewModel {
+        let mut cloned = BindablePropertyViewModel::default();
+        cloned.base.copy(self);
+        cloned
     }
 }

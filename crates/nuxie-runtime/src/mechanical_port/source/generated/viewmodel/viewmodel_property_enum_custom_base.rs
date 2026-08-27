@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::viewmodel::viewmodel_property_enum_custom::ViewModelPropertyEnumCustom;
+
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, view_model_property_enum::ViewModelPropertyEnum,
 };
@@ -26,7 +28,7 @@ impl ViewModelPropertyEnumCustomBase {
     pub const ENUM_ID_PROPERTY_KEY: u16 = 574;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0 | 0 | 0)
+        matches!(type_key, Self::TYPE_KEY | 509 | 430 | 429)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -45,6 +47,14 @@ impl ViewModelPropertyEnumCustomBase {
         self.enum_id = value;
         callbacks.enum_id_changed();
         callbacks.notify_property_changed(Self::ENUM_ID_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl ViewModelPropertyEnumCustomBaseCallbacks,
+    ) -> ViewModelPropertyEnumCustom {
+        let mut cloned = ViewModelPropertyEnumCustom::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(
         &mut self,

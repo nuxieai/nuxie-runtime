@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::animation::blend_state_1d_input::BlendState1DInput;
+
 use crate::mechanical_port::source::{
     blend_state1_d::BlendState1D, core::binary_reader::BinaryReader,
 };
@@ -26,7 +28,7 @@ impl BlendState1DInputBase {
     pub const INPUT_ID_PROPERTY_KEY: u16 = 167;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 0 | 72 | 60 | 66)
+        matches!(type_key, Self::TYPE_KEY | 527 | 72 | 60 | 66)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -45,6 +47,14 @@ impl BlendState1DInputBase {
         self.input_id = value;
         callbacks.input_id_changed();
         callbacks.notify_property_changed(Self::INPUT_ID_PROPERTY_KEY);
+    }
+    pub fn clone_into(
+        &self,
+        callbacks: &mut impl BlendState1DInputBaseCallbacks,
+    ) -> BlendState1DInput {
+        let mut cloned = BlendState1DInput::default();
+        cloned.base.copy(self, callbacks);
+        cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl BlendState1DInputBaseCallbacks) {
         self.input_id = object.input_id;

@@ -35,6 +35,10 @@ impl RuntimeAudioAssetOwners {
         self.sources.borrow().get(&asset_global).cloned()
     }
 
+    pub(crate) fn insert(&self, asset_global: u32, source: Arc<AudioSource>) {
+        self.replace(asset_global, Some(source));
+    }
+
     /// Decode and atomically replace the concrete source. As in pinned
     /// `AudioAsset::decode`, the Factory argument is ignored. The return value
     /// is import success, not decoder success, and is therefore always true.

@@ -93,6 +93,8 @@ impl ScriptListenerInvocation {
     }
 
     pub fn keyboard(key: u32, modifiers: u32, is_pressed: bool, is_repeat: bool) -> Self {
+        let key = crate::input::Key::from_raw(key).raw();
+        let modifiers = crate::input::KeyModifiers::from_raw(modifiers).bits();
         Self::Keyboard {
             key,
             modifiers,

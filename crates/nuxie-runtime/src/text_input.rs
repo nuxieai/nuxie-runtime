@@ -442,6 +442,8 @@ impl ArtboardInstance {
         is_pressed: bool,
         _is_repeat: bool,
     ) -> bool {
+        let key = crate::input::Key::from_raw(key).raw();
+        let modifiers = crate::input::KeyModifiers::from_raw(modifiers).bits();
         if !is_pressed || !self.ensure_text_input_initialized(local_id) {
             return false;
         }

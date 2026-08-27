@@ -1791,7 +1791,10 @@ fn listener_target_direct_child(
 }
 
 fn listener_uses_report_queue(listener: &RuntimeStateMachineListener) -> bool {
-    listener_types_use_report_queue(&listener.listener_types)
+    listener.has_listeners(&[
+        RuntimeListenerType::Event,
+        RuntimeListenerType::ViewModel,
+    ])
 }
 
 pub(super) fn listener_types_use_report_queue(listener_types: &[RuntimeListenerType]) -> bool {
@@ -4221,6 +4224,26 @@ impl StateMachineInstance {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
+        // The embedder-facing Rust ABI historically accepts integer key
+        // codes. Normalize once to the exact C++ uint16/uint8 carriers before
+        // any focusable observes the event.
+        self.key_input_typed(
+            artboard,
+            crate::input::Key::from_raw(key),
+            crate::input::KeyModifiers::from_raw(modifiers),
+            is_pressed,
+            is_repeat,
+        )
+    }
+
+    pub fn key_input_typed(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        key: crate::input::Key,
+        modifiers: crate::input::KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
         if self.script_error.is_some() {
             return false;
         }
@@ -4240,8 +4263,8 @@ impl StateMachineInstance {
                 self.key_input_at_focus_data(
                     artboard,
                     focus_data_local_id,
-                    key,
-                    modifiers,
+                    key.raw(),
+                    modifiers.bits(),
                     is_pressed,
                     is_repeat,
                 )
@@ -4249,8 +4272,8 @@ impl StateMachineInstance {
                 artboard.dispatch_nested_key_input_at_focus(
                     owner,
                     focus_data_local_id,
-                    key,
-                    modifiers,
+                    key.raw(),
+                    modifiers.bits(),
                     is_pressed,
                     is_repeat,
                 )
@@ -4274,6 +4297,8 @@ impl StateMachineInstance {
         is_pressed: bool,
         is_repeat: bool,
     ) -> RuntimeInputDispatchOutcome {
+        let key = crate::input::Key::from_raw(key).raw();
+        let modifiers = crate::input::KeyModifiers::from_raw(modifiers).bits();
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
         }
@@ -4692,9 +4717,9 @@ impl StateMachineInstance {
                     captured_drag,
                 );
                 if let Some(action_type) = action_type {
-                    let _ = self.perform_listener_actions_with_event_context(
+                    let _ = listener.perform_changes(
+                        self,
                         artboard,
-                        &listener.listener_actions,
                         owned_context.as_deref_mut(),
                         &script_pointer_invocation(pointer, action_type),
                         host,
@@ -5886,9 +5911,9 @@ impl StateMachineInstance {
                 continue;
             }
             hit = true;
-            let _ = self.perform_listener_actions_with_event_context(
+            let _ = listener.perform_changes(
+                self,
                 artboard,
-                &listener.listener_actions,
                 owned_context.as_deref_mut(),
                 &script_pointer_invocation(pointer, listener_type),
                 host,
@@ -6268,9 +6293,9 @@ impl StateMachineInstance {
                 {
                     continue;
                 }
-                let action_changed = self.perform_listener_actions_with_event_context(
+                let action_changed = listener.perform_changes(
+                    self,
                     artboard,
-                    &listener.listener_actions,
                     owned_context.as_deref_mut(),
                     &ScriptListenerInvocation::reported_event(
                         event.event_local_index(),
@@ -6723,7 +6748,11 @@ impl StateMachineInstance {
         let focus_events = std::mem::take(&mut self.queued_focus_events);
         let mut changed = false;
         for event in focus_events {
-            let Some(listener) = self.listener_definitions.get(event.listener_index) else {
+            let Some(listener) = self
+                .listener_definitions
+                .get(event.listener_index)
+                .cloned()
+            else {
                 continue;
             };
             if (event.is_focus && !listener.has_listener(RuntimeListenerType::Focus))
@@ -6731,14 +6760,14 @@ impl StateMachineInstance {
             {
                 continue;
             }
-            let actions = listener.listener_actions.clone();
             let invocation = event.into_invocation();
-            let result = self.perform_listener_actions(
+            let result = listener.perform_changes(
+                self,
                 artboard,
-                &actions,
                 owned_context.as_deref_mut(),
                 &invocation,
                 &mut NoopScriptHost,
+                None,
             );
             changed |= self.retain_script_result(result);
             #[cfg(test)]
@@ -6767,16 +6796,16 @@ impl StateMachineInstance {
             let ScriptListenerInvocation::Semantic { listener_index, .. } = invocation else {
                 unreachable!("typed semantic queue creates semantic invocations");
             };
-            let Some(listener) = self.listener_definitions.get(listener_index) else {
+            let Some(listener) = self.listener_definitions.get(listener_index).cloned() else {
                 continue;
             };
-            let actions = listener.listener_actions.clone();
-            let result = self.perform_listener_actions(
+            let result = listener.perform_changes(
+                self,
                 artboard,
-                &actions,
                 owned_context.as_deref_mut(),
                 &invocation,
                 &mut NoopScriptHost,
+                None,
             );
             changed |= self.retain_script_result(result);
             #[cfg(test)]

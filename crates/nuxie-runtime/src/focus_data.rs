@@ -9,7 +9,7 @@ use crate::components::ComponentHandle;
 use crate::input::FocusEvent;
 use crate::input::{
     FocusBounds, FocusEdgeBehavior, FocusEventKind, FocusManager, FocusNode, FocusNodeId,
-    FocusPoint, RuntimeFocusable,
+    FocusPoint, RuntimeFocusable, RuntimeFocusableCoreKind,
 };
 use crate::parent_traversal::{ParentTraversal, ParentTraversalFrame};
 use crate::properties::property_key_for_name;
@@ -1058,10 +1058,9 @@ fn build_component_focus_tree(
     let local_id = component.local_id;
 
     let mut host_parent = parent_focus.clone();
-    if matches!(
-        component.type_name,
-        "NestedArtboard" | "NestedArtboardLayout" | "NestedArtboardLeaf"
-    ) {
+    if RuntimeFocusableCoreKind::from_core_type_name(Some(component.type_name))
+        == Some(RuntimeFocusableCoreKind::NestedArtboard)
+    {
         let artboard_id_key = property_key_for_name("NestedArtboard", "artboardId");
         let data_bound = artboard_id_key.is_some_and(|property_key| {
             graph.data_binds.iter().any(|data_bind| {

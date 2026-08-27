@@ -10,4 +10,5 @@ pub use focus_node::{
     FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusNode,
     FocusNodeId, FocusPoint,
 };
-pub(crate) use focusable::RuntimeFocusable;
+pub use focusable::{Key, KeyModifiers};
+pub(crate) use focusable::{RuntimeFocusable, RuntimeFocusableCoreKind};

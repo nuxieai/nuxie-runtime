@@ -1,6 +1,8 @@
-use crate::{RuntimeAudioAssetOwners, RuntimeFontAssetOwners, RuntimeImageAssetOwners};
+use crate::{
+    RawTextFont, RuntimeAudioAssetOwners, RuntimeFontAssetOwners, RuntimeImageAssetOwners,
+};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
-use nuxie_render_api::Factory as RenderFactory;
+use nuxie_render_api::{Factory as RenderFactory, RenderImage};
 use std::sync::Arc;
 
 /// The supported concrete owner behind a loader-visible FileAsset.
@@ -72,6 +74,30 @@ impl RuntimeFileAsset {
             RuntimeFileAssetOwner::Audio(owners) => owners.get(self.descriptor.id),
             RuntimeFileAssetOwner::Image(_) | RuntimeFileAssetOwner::Font(_) => None,
         }
+    }
+
+    pub fn set_render_image(&self, image: Box<dyn RenderImage>) -> bool {
+        let RuntimeFileAssetOwner::Image(owners) = &self.owner else {
+            return false;
+        };
+        owners.insert(self.descriptor.id, image);
+        true
+    }
+
+    pub fn set_font(&self, font: RawTextFont) -> bool {
+        let RuntimeFileAssetOwner::Font(owners) = &self.owner else {
+            return false;
+        };
+        owners.insert(self.descriptor.id, font);
+        true
+    }
+
+    pub fn set_audio_source(&self, source: Arc<nuxie_audio::AudioSource>) -> bool {
+        let RuntimeFileAssetOwner::Audio(owners) = &self.owner else {
+            return false;
+        };
+        owners.insert(self.descriptor.id, source);
+        true
     }
 }
 

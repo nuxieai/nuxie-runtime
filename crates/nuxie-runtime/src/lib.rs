@@ -235,7 +235,7 @@ pub use file_asset_loader::{
 };
 pub use focus::{
     FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusManager,
-    FocusNode, FocusNodeId, FocusPoint,
+    FocusNode, FocusNodeId, FocusPoint, Key, KeyModifiers,
 };
 pub use font_asset::RuntimeFontAssetOwners;
 pub use hittest_command_path::{HitTestArea, HitTestCommandPath};

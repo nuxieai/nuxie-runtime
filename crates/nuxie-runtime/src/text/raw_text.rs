@@ -67,6 +67,10 @@ impl std::fmt::Debug for RawTextFont {
 }
 
 impl RawTextFont {
+    pub(crate) fn source_bytes(&self) -> std::sync::Arc<[u8]> {
+        std::sync::Arc::clone(&self.bytes)
+    }
+
     pub fn decode(
         bytes: impl Into<std::sync::Arc<[u8]>>,
     ) -> Result<Self, RawTextFontError> {

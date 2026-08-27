@@ -10,10 +10,9 @@ use super::state_machine_listener_single::{
 };
 use super::{RuntimeScheduledListenerAction, ScriptListenerInvocation, StateMachineEventContext};
 use crate::ArtboardInstance;
-use crate::properties::property_key_for_name;
 use crate::{RuntimeOwnedViewModelInstance, ScriptError, ScriptHost};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
-use nuxie_graph::{ArtboardGraph, ParametricPathNode};
+use nuxie_graph::ArtboardGraph;
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeStateMachineListener {
@@ -30,7 +29,10 @@ pub(crate) struct RuntimeStateMachineListener {
     pub(crate) gamepad_input_types: Vec<RuntimeListenerInputTypeGamepad>,
     pub(crate) keyboard_input_types: Vec<RuntimeListenerInputTypeKeyboard>,
     pub(crate) semantic_input_types: Vec<RuntimeListenerInputTypeSemantic>,
-    pub(crate) hit_paths: Vec<RuntimeListenerHitPath>,
+    // Compatibility slot for existing internal fixture constructors. It is
+    // deliberately always empty: hit lookup belongs to StateMachineInstance
+    // in the pinned source, not StateMachineListener.
+    pub(crate) hit_paths: Vec<()>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
 }
 
@@ -39,17 +41,11 @@ impl RuntimeStateMachineListener {
         self.listener_types.contains(&listener_type)
     }
 
-    pub(crate) fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
-        if artboard
-            .component(self.target_local_id)
-            .is_none_or(|component| component.is_collapsed())
-        {
-            return false;
-        }
-
-        self.hit_paths
+    pub(crate) fn has_listeners(&self, listener_types: &[RuntimeListenerType]) -> bool {
+        listener_types
             .iter()
-            .any(|path| path.hit_test(artboard, x, y))
+            .copied()
+            .any(|listener_type| self.has_listener(listener_type))
     }
 
     pub(crate) fn keyboard_constraints_met(
@@ -105,49 +101,6 @@ impl RuntimeStateMachineListener {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeListenerHitPath {
-    local_id: usize,
-    kind: RuntimeListenerHitPathKind,
-}
-
-impl RuntimeListenerHitPath {
-    fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
-        if artboard
-            .component(self.local_id)
-            .is_none_or(|component| component.is_collapsed())
-        {
-            return false;
-        }
-
-        match self.kind {
-            RuntimeListenerHitPathKind::Rectangle => self.hit_test_rectangle(artboard, x, y),
-        }
-    }
-
-    fn hit_test_rectangle(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
-        let Some(component) = artboard.component(self.local_id) else {
-            return false;
-        };
-        let local = component.transform.world_transform.invert_or_identity();
-        let (local_x, local_y) = local.transform_point(x, y);
-        let width = artboard_double_property(artboard, self.local_id, "Rectangle", "width", 0.0);
-        let height = artboard_double_property(artboard, self.local_id, "Rectangle", "height", 0.0);
-        let origin_x =
-            artboard_double_property(artboard, self.local_id, "Rectangle", "originX", 0.5);
-        let origin_y =
-            artboard_double_property(artboard, self.local_id, "Rectangle", "originY", 0.5);
-        let left = -width * origin_x;
-        let top = -height * origin_y;
-        local_x >= left && local_x <= left + width && local_y >= top && local_y <= top + height
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum RuntimeListenerHitPathKind {
-    Rectangle,
-}
-
 pub(super) fn runtime_state_machine_listener(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -156,8 +109,7 @@ pub(super) fn runtime_state_machine_listener(
     listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
     action_owners: &super::RuntimeActionCoreArena,
 ) -> Option<RuntimeStateMachineListener> {
-    // Mirrors C++ StateMachineListener import/action wiring and the first
-    // simple-shape branch of src/animation/state_machine_instance.cpp.
+    // Mirrors C++ StateMachineListener import/action wiring.
     let target_local_id = usize::try_from(listener.object.uint_property("targetId")?).ok()?;
     let listener_types = runtime_listener_types(listener);
     // Pinned C++ transfers the StateMachineListener owner and its ordered
@@ -166,17 +118,6 @@ pub(super) fn runtime_state_machine_listener(
     // type therefore leaves an inert listener occurrence; it must not compact
     // the listener/action arrays.
 
-    let hit_paths = if listener_types
-        .iter()
-        .any(|listener_type| listener_type.is_pointer_hit())
-    {
-        // C++ retains the listener occurrence and constructs all non-pointer
-        // groups even when `addToHitLookup` cannot produce a pointer target.
-        // An empty pointer lookup therefore disables only pointer hits.
-        runtime_listener_hit_paths(graph, target_local_id)
-    } else {
-        Vec::new()
-    };
     let event_local_indices = runtime_listener_event_local_indices(listener);
     let view_model_path = runtime_listener_single_view_model_path(file, listener);
 
@@ -194,7 +135,7 @@ pub(super) fn runtime_state_machine_listener(
         gamepad_input_types: runtime_listener_input_type_gamepads(listener),
         keyboard_input_types: runtime_listener_input_type_keyboards(listener),
         semantic_input_types: runtime_listener_input_type_semantics(listener),
-        hit_paths,
+        hit_paths: Vec::new(),
         listener_actions: listener
             .actions
             .iter()
@@ -311,65 +252,10 @@ fn runtime_listener_event_local_indices(
         .collect()
 }
 
-fn runtime_listener_hit_paths(
-    graph: &ArtboardGraph,
-    target_local_id: usize,
-) -> Vec<RuntimeListenerHitPath> {
-    let Some(target) = graph
-        .components
-        .iter()
-        .find(|component| component.local_id == target_local_id)
-    else {
-        return Vec::new();
-    };
-    if target.type_name != "Shape" {
-        // TODO(golden): port C++ StateMachineInstance::addToHitLookup for
-        // containers, layout proxies, text runs, and component-provided groups.
-        return Vec::new();
-    }
-
-    let Some(composer) = graph
-        .path_composers
-        .iter()
-        .find(|composer| composer.shape_local == target_local_id)
-    else {
-        return Vec::new();
-    };
-
-    composer
-        .path_locals
-        .iter()
-        .filter_map(|path_local| {
-            let path = graph
-                .paths
-                .iter()
-                .find(|path| path.local_id == *path_local)?;
-            match path.parametric {
-                Some(ParametricPathNode::Rectangle { .. }) => Some(RuntimeListenerHitPath {
-                    local_id: *path_local,
-                    kind: RuntimeListenerHitPathKind::Rectangle,
-                }),
-                _ => None,
-            }
-        })
-        .collect()
-}
-
-fn artboard_double_property(
-    artboard: &ArtboardInstance,
-    local_id: usize,
-    type_name: &str,
-    property_name: &str,
-    default: f32,
-) -> f32 {
-    property_key_for_name(type_name, property_name)
-        .and_then(|key| artboard.double_property(local_id, key))
-        .unwrap_or(default)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::properties::property_key_for_name;
     use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile};
     use nuxie_graph::GraphFile;
 
@@ -591,7 +477,6 @@ mod tests {
 
         assert!(listener.has_listener(RuntimeListenerType::Down));
         assert!(listener.has_listener(RuntimeListenerType::Keyboard));
-        assert!(listener.hit_paths.is_empty());
     }
 
     #[test]

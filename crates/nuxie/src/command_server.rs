@@ -19,6 +19,76 @@ use crate::{
     },
 };
 
+struct SharedRenderImage(Rc<dyn RenderImage>);
+
+impl RenderImage for SharedRenderImage {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self.0.as_any()
+    }
+
+    fn width(&self) -> u32 {
+        self.0.width()
+    }
+
+    fn height(&self) -> u32 {
+        self.0.height()
+    }
+
+    fn uv_transform(&self) -> crate::Mat2D {
+        self.0.uv_transform()
+    }
+}
+
+struct CommandFileAssetLoader<'a> {
+    internal: Option<&'a mut (dyn RuntimeFileAssetLoader + 'a)>,
+    global_images: &'a BTreeMap<String, RenderImageHandle>,
+    global_audio: &'a BTreeMap<String, AudioSourceHandle>,
+    global_fonts: &'a BTreeMap<String, FontHandle>,
+    images: &'a BTreeMap<RenderImageHandle, RenderImageEntry>,
+    audio_sources: &'a BTreeMap<AudioSourceHandle, Arc<crate::AudioSource>>,
+    fonts: &'a BTreeMap<FontHandle, RawTextFont>,
+}
+
+impl RuntimeFileAssetLoader for CommandFileAssetLoader<'_> {
+    fn load_contents(
+        &mut self,
+        asset: &crate::RuntimeFileAsset,
+        in_band: &[u8],
+        factory: &mut dyn Factory,
+    ) -> bool {
+        if self
+            .internal
+            .as_deref_mut()
+            .is_some_and(|loader| loader.load_contents(asset, in_band, factory))
+        {
+            return true;
+        }
+        let Some(name) = asset.descriptor().file_asset_unique_name() else {
+            return false;
+        };
+        match asset.kind() {
+            crate::RuntimeFileAssetKind::Image => self
+                .global_images
+                .get(&name)
+                .and_then(|handle| self.images.get(handle))
+                .and_then(RenderImageEntry::shared)
+                .is_some_and(|image| asset.set_render_image(Box::new(SharedRenderImage(image)))),
+            crate::RuntimeFileAssetKind::Audio => self
+                .global_audio
+                .get(&name)
+                .and_then(|handle| self.audio_sources.get(handle))
+                .cloned()
+                .is_some_and(|source| asset.set_audio_source(source)),
+            crate::RuntimeFileAssetKind::Font => self
+                .global_fonts
+                .get(&name)
+                .and_then(|handle| self.fonts.get(handle))
+                .cloned()
+                .is_some_and(|font| asset.set_font(font)),
+        }
+    }
+}
+
 struct ArtboardEntry {
     file: FileHandle,
     original_size: (f32, f32),
@@ -375,10 +445,19 @@ impl CommandServer {
                     handle,
                     bytes,
                     request_id,
-                } => match if let Some(loader) = self.asset_loader.as_deref_mut() {
-                    File::import_with_asset_loader(&bytes, self.factory.as_mut(), loader)
-                } else {
-                    File::import(&bytes)
+                } => match {
+                    let mut loader = CommandFileAssetLoader {
+                        internal: self.asset_loader.as_mut().map(|loader| {
+                            loader.as_mut() as &mut (dyn RuntimeFileAssetLoader + '_)
+                        }),
+                        global_images: &self.global_images,
+                        global_audio: &self.global_audio,
+                        global_fonts: &self.global_fonts,
+                        images: &self.images,
+                        audio_sources: &self.audio_sources,
+                        fonts: &self.fonts,
+                    };
+                    File::import_with_asset_loader(&bytes, self.factory.as_mut(), &mut loader)
                 } {
                     Ok(file) => {
                         self.files.insert(handle, Arc::new(file));
@@ -1364,7 +1443,13 @@ impl CommandServer {
                 },
                 Command::DeleteImage { handle, request_id } => {
                     self.images.remove(&handle);
-                    self.global_images.retain(|_, value| *value != handle);
+                    if let Some(name) = self
+                        .global_images
+                        .iter()
+                        .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+                    {
+                        self.global_images.remove(&name);
+                    }
                     self.emit(CommandEvent::ImageDeleted { handle, request_id });
                 }
                 Command::DecodeAudio {
@@ -1398,7 +1483,13 @@ impl CommandServer {
                 },
                 Command::DeleteAudio { handle, request_id } => {
                     self.audio_sources.remove(&handle);
-                    self.global_audio.retain(|_, value| *value != handle);
+                    if let Some(name) = self
+                        .global_audio
+                        .iter()
+                        .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+                    {
+                        self.global_audio.remove(&name);
+                    }
                     self.emit(CommandEvent::AudioDeleted { handle, request_id });
                 }
                 Command::DecodeFont {
@@ -1439,7 +1530,13 @@ impl CommandServer {
                 },
                 Command::DeleteFont { handle, request_id } => {
                     self.fonts.remove(&handle);
-                    self.global_fonts.retain(|_, value| *value != handle);
+                    if let Some(name) = self
+                        .global_fonts
+                        .iter()
+                        .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+                    {
+                        self.global_fonts.remove(&name);
+                    }
                     self.emit(CommandEvent::FontDeleted { handle, request_id });
                 }
                 Command::DecodeBlob {

@@ -11,6 +11,7 @@ use super::focused_input_dispatch::RuntimeInputDispatchOutcome;
 use super::instance::StateMachineInstance;
 use super::listener_types::RuntimeListenerType;
 use super::{RuntimeStateMachineListener, ScriptListenerInvocation};
+use crate::input::RuntimeFocusableCoreKind;
 use crate::{ArtboardInstance, NoopScriptHost, ScriptedDrawableInputResult};
 
 /// One occurrence of pinned C++ `KeyboardListenerGroup`.
@@ -61,11 +62,10 @@ impl RuntimeKeyboardListenerGroup {
 
     fn text_input_parent_local(&self, artboard: &ArtboardInstance) -> Option<usize> {
         let parent_local = artboard.component_parent_local(self.focus_data_local_id)?;
-        artboard
-            .runtime_object_type_name(parent_local)
-            .and_then(nuxie_schema::definition_by_name)
-            .is_some_and(|definition| definition.is_a("TextInput"))
-            .then_some(parent_local)
+        (RuntimeFocusableCoreKind::from_core_type_name(
+            artboard.runtime_object_type_name(parent_local),
+        ) == Some(RuntimeFocusableCoreKind::TextInput))
+        .then_some(parent_local)
     }
 
     /// Preserve C++ `KeyboardListenerGroup`'s TextInput-first dispatch

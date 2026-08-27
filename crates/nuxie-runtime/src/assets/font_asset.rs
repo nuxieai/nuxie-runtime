@@ -1,6 +1,6 @@
-use crate::ArtboardInstance;
 #[cfg(test)]
 use crate::ComponentDirt;
+use crate::{ArtboardInstance, RawTextFont};
 use harfrust::{FontRef as HarfFontRef, ShaperData};
 use nuxie_binary::RuntimeFile;
 use nuxie_render_api::{Factory as RenderFactory, NullFactory};
@@ -126,6 +126,20 @@ impl RuntimeFontAssetOwners {
 
     pub fn get(&self, asset_global: u32) -> Option<Arc<[u8]>> {
         self.fonts.borrow().get(&asset_global).cloned()
+    }
+
+    pub(crate) fn insert(&self, asset_global: u32, font: RawTextFont) {
+        self.fonts
+            .borrow_mut()
+            .insert(asset_global, font.source_bytes());
+        self.shaper_data.borrow_mut().remove(&asset_global);
+        self.referencers.borrow_mut().retain(|referencer| {
+            let Some(referencer) = referencer.upgrade() else {
+                return false;
+            };
+            referencer.publish(asset_global);
+            true
+        });
     }
 
     /// Return the shaping tables retained by the decoded FontAsset owner.

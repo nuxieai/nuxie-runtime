@@ -71,7 +71,9 @@ mod transition_duration_binding;
 mod transition_focus_condition;
 mod transition_input_condition;
 mod transition_number_condition;
+mod transition_property_artboard_comparator;
 mod transition_property_comparator;
+mod transition_property_component_comparator;
 mod transition_property_viewmodel_comparator;
 mod transition_trigger_condition;
 mod transition_viewmodel_condition;
@@ -190,9 +192,8 @@ use transition_focus_condition::RuntimeTransitionFocusCondition;
 use transition_input_condition::RuntimeTransitionInputCondition;
 use transition_number_condition::RuntimeTransitionNumberCondition;
 use transition_number_condition::TransitionConditionOp;
-use transition_property_comparator::{
-    RuntimeTransitionPropertyArtboardComparator, RuntimeTransitionPropertyComponentComparator,
-};
+use transition_property_artboard_comparator::RuntimeTransitionPropertyArtboardComparator;
+use transition_property_component_comparator::RuntimeTransitionPropertyComponentComparator;
 use transition_property_viewmodel_comparator::{
     RuntimeTransitionPropertyViewModelComparator, compare_view_model_integer_pair,
 };

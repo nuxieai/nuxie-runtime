@@ -1,6 +1,8 @@
 use nuxie_binary::RuntimeObject;
 use std::sync::Arc;
 
+// Mirrors src/animation/state_machine_input.cpp and
+// include/rive/animation/state_machine_input.hpp.
 #[derive(Debug, Clone)]
 pub struct RuntimeStateMachineInput {
     pub global_id: u32,
@@ -10,6 +12,18 @@ pub struct RuntimeStateMachineInput {
 }
 
 impl RuntimeStateMachineInput {
+    /// Mechanical translation of `StateMachineInput::onAddedDirty`.
+    #[allow(dead_code)]
+    pub(crate) fn on_added_dirty(&self) -> bool {
+        true
+    }
+
+    /// Mechanical translation of `StateMachineInput::onAddedClean`.
+    #[allow(dead_code)]
+    pub(crate) fn on_added_clean(&self) -> bool {
+        true
+    }
+
     pub(crate) fn new_bool(global_id: u32, name: Option<String>, value: bool) -> Self {
         Self {
             global_id,
@@ -41,6 +55,10 @@ impl RuntimeStateMachineInput {
 pub(super) fn runtime_state_machine_input(
     object: &RuntimeObject,
 ) -> Option<RuntimeStateMachineInput> {
+    // `StateMachineInput::import` first requires the latest
+    // `StateMachineImporter`, then transfers the input into that machine.
+    // The binary import-stack pass performs that exact validation and ordered
+    // transfer before this immutable runtime definition is constructed.
     let name = object.string_property("name").map(ToOwned::to_owned);
     match object.type_name {
         "StateMachineBool" => Some(RuntimeStateMachineInput::new_bool(

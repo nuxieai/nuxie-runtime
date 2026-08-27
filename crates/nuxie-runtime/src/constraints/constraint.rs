@@ -8,7 +8,8 @@ pub(crate) fn constraint_double_change_marks_parent_dirty(
 ) -> bool {
     let keys = RUNTIME_CONSTRAINT_PROPERTY_KEYS;
     (keys.strength == property_key && kind != RuntimeConstraintKind::Ik)
-        || (kind == RuntimeConstraintKind::Distance && keys.distance == property_key)
+        || (kind == RuntimeConstraintKind::Distance
+            && distance_constraint::double_property_changed(property_key))
         || (matches!(
             kind,
             RuntimeConstraintKind::FollowPath | RuntimeConstraintKind::ListFollowPath
@@ -33,7 +34,8 @@ pub(crate) fn constraint_uint_change_marks_parent_dirty(
     kind: RuntimeConstraintKind,
     property_key: u16,
 ) -> bool {
-    kind == RuntimeConstraintKind::Distance && RUNTIME_CONSTRAINT_PROPERTY_KEYS.mode == property_key
+    kind == RuntimeConstraintKind::Distance
+        && distance_constraint::uint_property_changed(property_key)
 }
 
 pub(crate) fn apply_constraints(

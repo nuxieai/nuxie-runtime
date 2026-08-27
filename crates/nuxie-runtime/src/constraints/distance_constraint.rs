@@ -2,6 +2,19 @@
 
 use super::*;
 
+pub(super) fn double_property_changed(property_key: u16) -> bool {
+    // Pinned `DistanceConstraint::distanceChanged()` calls
+    // `markConstraintDirty()`. The retained-property dispatcher reaches this
+    // owner only after the generated setter has stored the new value.
+    property_key == RUNTIME_CONSTRAINT_PROPERTY_KEYS.distance
+}
+
+pub(super) fn uint_property_changed(property_key: u16) -> bool {
+    // Pinned `DistanceConstraint::modeValueChanged()` has the same callback
+    // body as `distanceChanged()`.
+    property_key == RUNTIME_CONSTRAINT_PROPERTY_KEYS.mode
+}
+
 pub(super) fn apply(
     artboard: &mut ArtboardInstance,
     component_index: ComponentHandle,

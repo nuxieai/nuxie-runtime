@@ -256,17 +256,17 @@ impl RuntimeKeyedProperty {
 
         let idx = self.closest_frame_index(seconds);
         let value = if idx == 0 {
-            self.key_frames[0].as_uint()?.value
+            self.key_frames[0].unsigned_value()?
         } else if idx < self.key_frames.len() {
-            let from = self.key_frames[idx - 1].as_uint()?;
-            let to = self.key_frames[idx].as_uint()?;
-            if seconds == to.seconds {
-                to.value
+            let from = self.key_frames[idx - 1].unsigned_value()?;
+            let to = self.key_frames[idx].unsigned_value()?;
+            if seconds == self.key_frames[idx].seconds() {
+                to
             } else {
-                from.value
+                from
             }
         } else {
-            self.key_frames.last()?.as_uint()?.value
+            self.key_frames.last()?.unsigned_value()?
         };
 
         Some(value)

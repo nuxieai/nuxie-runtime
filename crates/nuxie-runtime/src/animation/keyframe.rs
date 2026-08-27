@@ -55,6 +55,7 @@ pub enum RuntimeKeyFrame {
     Color(RuntimeKeyFrameColor),
     Bool(RuntimeKeyFrameBool),
     Uint(RuntimeKeyFrameUint),
+    Id(RuntimeKeyFrameId),
     Int(RuntimeKeyFrameInt),
     String(RuntimeKeyFrameString),
     Callback(RuntimeKeyFrameCallback),
@@ -67,6 +68,7 @@ impl RuntimeKeyFrame {
             Self::Color(frame) => frame.global_id,
             Self::Bool(frame) => frame.global_id,
             Self::Uint(frame) => frame.global_id,
+            Self::Id(frame) => frame.global_id,
             Self::Int(frame) => frame.global_id,
             Self::String(frame) => frame.global_id,
             Self::Callback(frame) => frame.global_id,
@@ -79,6 +81,7 @@ impl RuntimeKeyFrame {
             Self::Color(frame) => frame.seconds,
             Self::Bool(frame) => frame.seconds,
             Self::Uint(frame) => frame.seconds,
+            Self::Id(frame) => frame.seconds,
             Self::Int(frame) => frame.seconds,
             Self::String(frame) => frame.seconds,
             Self::Callback(frame) => frame.seconds,
@@ -90,7 +93,7 @@ impl RuntimeKeyFrame {
             Self::Double(_) | Self::Color(_) | Self::Bool(_) | Self::String(_) => {
                 Some(self.global_id())
             }
-            Self::Uint(_) | Self::Int(_) | Self::Callback(_) => None,
+            Self::Uint(_) | Self::Id(_) | Self::Int(_) | Self::Callback(_) => None,
         }
     }
 
@@ -118,6 +121,14 @@ impl RuntimeKeyFrame {
     fn as_uint(&self) -> Option<&RuntimeKeyFrameUint> {
         match self {
             Self::Uint(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    fn unsigned_value(&self) -> Option<u64> {
+        match self {
+            Self::Uint(frame) => Some(frame.value),
+            Self::Id(frame) => Some(frame.applied_value()),
             _ => None,
         }
     }

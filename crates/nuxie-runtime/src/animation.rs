@@ -381,7 +381,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_property_index,
             )
             .key_frames
-            .push(RuntimeKeyFrame::Uint(RuntimeKeyFrameUint {
+            .push(RuntimeKeyFrame::Id(RuntimeKeyFrameId {
                 global_id: global_id as u32,
                 frame,
                 seconds,
@@ -595,6 +595,7 @@ include!("animation/keyframe_double.rs");
 include!("animation/keyframe_color.rs");
 include!("animation/keyframe_bool.rs");
 include!("animation/keyframe_uint.rs");
+include!("animation/keyframe_id.rs");
 include!("animation/keyframe_int.rs");
 include!("animation/keyframe_string.rs");
 include!("animation/keyframe_callback.rs");

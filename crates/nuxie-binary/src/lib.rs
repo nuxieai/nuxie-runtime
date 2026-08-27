@@ -5203,7 +5203,9 @@ impl RuntimeFile {
                 value
             }
             "DataConverterBooleanNegate" => {
-                RuntimeConvertedDataValue::Boolean(!input.as_boolean().unwrap_or(false))
+                RuntimeConvertedDataValue::Boolean(data_converter_boolean_negate_value(
+                    input.as_boolean(),
+                ))
             }
             "DataConverterListToLength" => {
                 RuntimeConvertedDataValue::Number(input.list_len().unwrap_or(0) as f32)
@@ -5373,7 +5375,9 @@ impl RuntimeFile {
                 value
             }
             "DataConverterBooleanNegate" => {
-                RuntimeConvertedDataValue::Boolean(!input.as_boolean().unwrap_or(false))
+                RuntimeConvertedDataValue::Boolean(data_converter_boolean_negate_value(
+                    input.as_boolean(),
+                ))
             }
             "DataConverterOperationValue" => {
                 RuntimeConvertedDataValue::Number(cpp_reverse_convert_operation_value(
@@ -9165,7 +9169,7 @@ fn cpp_data_converter_direct_output_type(
     }
 
     Some(match data_converter.type_name {
-        "DataConverterBooleanNegate" => RuntimeDataType::Boolean,
+        "DataConverterBooleanNegate" => data_converter_boolean_negate_output_type(),
         "DataConverterFormula" => RuntimeDataType::Number,
         "DataConverterInterpolator" => RuntimeDataType::Input,
         "DataConverterListToLength" => RuntimeDataType::Number,
@@ -9458,6 +9462,17 @@ fn cpp_pad_string(value: &[u8], length: u64, text: &[u8], pad_type: u64) -> Vec<
 
 pub fn data_converter_to_number_string_value(value: &[u8]) -> f32 {
     cpp_atof_f32(value)
+}
+
+/// Pinned `DataConverterBooleanNegate::convert` value branch and non-boolean
+/// default branch. `None` represents any non-`DataValueBoolean` input.
+pub fn data_converter_boolean_negate_value(value: Option<bool>) -> bool {
+    value.map(|value| !value).unwrap_or(false)
+}
+
+/// Pinned primary-header `DataConverterBooleanNegate::outputType()` inline.
+pub fn data_converter_boolean_negate_output_type() -> RuntimeDataType {
+    RuntimeDataType::Boolean
 }
 
 /// Pinned `DataConverterRounder::convert` numeric branch. `decimals` is a

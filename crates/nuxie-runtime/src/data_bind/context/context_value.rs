@@ -824,7 +824,7 @@ impl RuntimeDataBindGraphConverter {
                 Some(RuntimeExternalDataOutputType::Object) => RuntimeDataType::Any,
                 None => RuntimeDataType::None,
             },
-            Self::BooleanNegate => RuntimeDataType::Boolean,
+            Self::BooleanNegate => crate::data_converter_boolean_negate::output_type(),
             Self::TriggerIncrement => RuntimeDataType::Trigger,
             Self::NumberToList { .. } => RuntimeDataType::List,
             Self::ToString { .. }
@@ -2709,9 +2709,11 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::BooleanNegate,
             RuntimeDataBindGraphValue::Boolean(value),
         ) => Some(RuntimeDataBindGraphValue::Boolean(
-            crate::data_converter_boolean_negate::convert(*value),
+            crate::data_converter_boolean_negate::convert(Some(*value)),
         )),
-        (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
+        (RuntimeDataBindGraphConverter::BooleanNegate, _) => Some(
+            RuntimeDataBindGraphValue::Boolean(crate::data_converter_boolean_negate::convert(None)),
+        ),
         (RuntimeDataBindGraphConverter::TriggerIncrement, value) => {
             crate::data_converter_trigger_owner::convert(value)
         }
@@ -3046,8 +3048,14 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
         (
             RuntimeDataBindGraphConverter::BooleanNegate,
             RuntimeDataBindGraphValue::Boolean(value),
-        ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
-        (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
+        ) => Some(RuntimeDataBindGraphValue::Boolean(
+            crate::data_converter_boolean_negate::reverse_convert(Some(*value)),
+        )),
+        (RuntimeDataBindGraphConverter::BooleanNegate, _) => Some(
+            RuntimeDataBindGraphValue::Boolean(
+                crate::data_converter_boolean_negate::reverse_convert(None),
+            ),
+        ),
         (RuntimeDataBindGraphConverter::TriggerIncrement, value) => {
             crate::data_converter_trigger_owner::reverse(value)
         }

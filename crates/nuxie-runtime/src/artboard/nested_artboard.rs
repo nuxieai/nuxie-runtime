@@ -400,15 +400,10 @@ impl RuntimeNestedArtboardInstance {
             let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
                 continue;
             };
-            let Some(state_machine) = occurrence.state_machine_mut() else {
-                continue;
-            };
-            if self.child.try_change_state_machine_instance(state_machine) {
+            if occurrence.try_change_state(&mut self.child) {
                 changed = true;
-                changed |= self.child.advance_state_machine_instance_after_state_probe(
-                    state_machine,
-                    local_elapsed_seconds,
-                );
+                changed |=
+                    occurrence.advance_with_frame(&mut self.child, local_elapsed_seconds, false);
             }
         }
         changed |= self

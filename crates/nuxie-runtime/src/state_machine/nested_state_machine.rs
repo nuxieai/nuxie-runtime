@@ -1,4 +1,4 @@
-use super::{StateMachineInputKind, StateMachineInstance};
+use super::{RuntimeHitResult, StateMachineInputKind, StateMachineInstance};
 use crate::ArtboardInstance;
 use crate::RuntimeOwnedViewModelInstance;
 use crate::artboard_data_bind::RuntimeOwnedDataContext;
@@ -347,10 +347,23 @@ impl RuntimeNestedStateMachineInstance {
     }
 
     pub(crate) fn advance(&mut self, child: &mut ArtboardInstance, elapsed_seconds: f32) -> bool {
+        self.advance_with_frame(child, elapsed_seconds, true)
+    }
+
+    pub(crate) fn advance_with_frame(
+        &mut self,
+        child: &mut ArtboardInstance,
+        elapsed_seconds: f32,
+        new_frame: bool,
+    ) -> bool {
         let Some(state_machine) = self.state_machine.as_mut() else {
             return false;
         };
-        child.advance_state_machine_instance(state_machine, elapsed_seconds)
+        if new_frame {
+            child.advance_state_machine_instance(state_machine, elapsed_seconds)
+        } else {
+            child.advance_state_machine_instance_after_state_probe(state_machine, elapsed_seconds)
+        }
     }
 
     pub(crate) fn hit_test(&self, child: &ArtboardInstance, x: f32, y: f32) -> bool {
@@ -366,9 +379,22 @@ impl RuntimeNestedStateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
+        self.pointer_down_hit_result(child, x, y, pointer_id)
+            .is_hit()
+    }
+
+    pub(crate) fn pointer_down_hit_result(
+        &mut self,
+        child: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
         self.state_machine
             .as_mut()
-            .is_some_and(|state_machine| state_machine.pointer_down(child, x, y, pointer_id))
+            .map_or(RuntimeHitResult::None, |state_machine| {
+                state_machine.pointer_down_hit_result(child, x, y, pointer_id, None)
+            })
     }
 
     pub(crate) fn pointer_move(
@@ -379,9 +405,30 @@ impl RuntimeNestedStateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        self.state_machine.as_mut().is_some_and(|state_machine| {
-            state_machine.pointer_move(child, x, y, timestamp_seconds, pointer_id)
-        })
+        self.pointer_move_hit_result(child, x, y, timestamp_seconds, pointer_id)
+            .is_hit()
+    }
+
+    pub(crate) fn pointer_move_hit_result(
+        &mut self,
+        child: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
+        self.state_machine
+            .as_mut()
+            .map_or(RuntimeHitResult::None, |state_machine| {
+                state_machine.pointer_move_hit_result(
+                    child,
+                    x,
+                    y,
+                    timestamp_seconds,
+                    pointer_id,
+                    None,
+                )
+            })
     }
 
     pub(crate) fn pointer_up(
@@ -391,9 +438,21 @@ impl RuntimeNestedStateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
+        self.pointer_up_hit_result(child, x, y, pointer_id).is_hit()
+    }
+
+    pub(crate) fn pointer_up_hit_result(
+        &mut self,
+        child: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
         self.state_machine
             .as_mut()
-            .is_some_and(|state_machine| state_machine.pointer_up(child, x, y, pointer_id))
+            .map_or(RuntimeHitResult::None, |state_machine| {
+                state_machine.pointer_up_hit_result(child, x, y, pointer_id, None)
+            })
     }
 
     pub(crate) fn pointer_exit(
@@ -403,9 +462,22 @@ impl RuntimeNestedStateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
+        self.pointer_exit_hit_result(child, x, y, pointer_id)
+            .is_hit()
+    }
+
+    pub(crate) fn pointer_exit_hit_result(
+        &mut self,
+        child: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
         self.state_machine
             .as_mut()
-            .is_some_and(|state_machine| state_machine.pointer_exit(child, x, y, pointer_id))
+            .map_or(RuntimeHitResult::None, |state_machine| {
+                state_machine.pointer_exit_hit_result(child, x, y, pointer_id, None)
+            })
     }
 
     pub(crate) fn drag_start(
@@ -416,9 +488,23 @@ impl RuntimeNestedStateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        self.state_machine.as_mut().is_some_and(|state_machine| {
-            state_machine.drag_start(child, x, y, timestamp_seconds, pointer_id)
-        })
+        self.drag_start_hit_result(child, x, y, timestamp_seconds, pointer_id)
+            .is_hit()
+    }
+
+    pub(crate) fn drag_start_hit_result(
+        &mut self,
+        child: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
+        self.state_machine
+            .as_mut()
+            .map_or(RuntimeHitResult::None, |state_machine| {
+                state_machine.drag_start_hit_result(child, x, y, timestamp_seconds, pointer_id)
+            })
     }
 
     pub(crate) fn drag_end(
@@ -429,9 +515,23 @@ impl RuntimeNestedStateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        self.state_machine.as_mut().is_some_and(|state_machine| {
-            state_machine.drag_end(child, x, y, timestamp_seconds, pointer_id)
-        })
+        self.drag_end_hit_result(child, x, y, timestamp_seconds, pointer_id)
+            .is_hit()
+    }
+
+    pub(crate) fn drag_end_hit_result(
+        &mut self,
+        child: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
+        self.state_machine
+            .as_mut()
+            .map_or(RuntimeHitResult::None, |state_machine| {
+                state_machine.drag_end_hit_result(child, x, y, timestamp_seconds, pointer_id)
+            })
     }
 
     pub(crate) fn bind_owned_data_context(

@@ -5026,9 +5026,7 @@ impl StateMachineInstance {
             else {
                 return false;
             };
-            occurrence.state_machine().is_some_and(|state_machine| {
-                state_machine.hit_test(&nested.child, position.0, position.1)
-            })
+            occurrence.hit_test(&nested.child, position.0, position.1)
         })
     }
 
@@ -5059,33 +5057,35 @@ impl StateMachineInstance {
                 else {
                     continue;
                 };
-                let Some(state_machine) = occurrence.state_machine_mut() else {
-                    continue;
-                };
                 let routed = if can_hit {
                     match hit_type {
-                        RuntimeListenerType::Down
-                        | RuntimeListenerType::Up
-                        | RuntimeListenerType::Move
-                        | RuntimeListenerType::Exit => state_machine
-                            .update_listeners(
-                                &mut nested.child,
-                                hit_type,
-                                position.0,
-                                position.1,
-                                pointer_id,
-                                if hit_type == RuntimeListenerType::Move {
-                                    timestamp_seconds
-                                } else {
-                                    0.0
-                                },
-                                None,
-                                None,
-                                &mut NoopScriptHost,
-                            )
-                            .unwrap_or(HitResult::None),
+                        RuntimeListenerType::Down => occurrence.pointer_down_hit_result(
+                            &mut nested.child,
+                            position.0,
+                            position.1,
+                            pointer_id,
+                        ),
+                        RuntimeListenerType::Up => occurrence.pointer_up_hit_result(
+                            &mut nested.child,
+                            position.0,
+                            position.1,
+                            pointer_id,
+                        ),
+                        RuntimeListenerType::Move => occurrence.pointer_move_hit_result(
+                            &mut nested.child,
+                            position.0,
+                            position.1,
+                            timestamp_seconds,
+                            pointer_id,
+                        ),
+                        RuntimeListenerType::Exit => occurrence.pointer_exit_hit_result(
+                            &mut nested.child,
+                            position.0,
+                            position.1,
+                            pointer_id,
+                        ),
                         RuntimeListenerType::DragStart => {
-                            let _ = state_machine.drag_start(
+                            let _ = occurrence.drag_start_hit_result(
                                 &mut nested.child,
                                 position.0,
                                 position.1,
@@ -5095,7 +5095,7 @@ impl StateMachineInstance {
                             HitResult::None
                         }
                         RuntimeListenerType::DragEnd => {
-                            let _ = state_machine.drag_end(
+                            let _ = occurrence.drag_end_hit_result(
                                 &mut nested.child,
                                 position.0,
                                 position.1,
@@ -5113,16 +5113,11 @@ impl StateMachineInstance {
                         | RuntimeListenerType::Move
                         | RuntimeListenerType::Exit
                 ) {
-                    let _ = state_machine.update_listeners(
+                    let _ = occurrence.pointer_exit_hit_result(
                         &mut nested.child,
-                        RuntimeListenerType::Exit,
                         position.0,
                         position.1,
                         pointer_id,
-                        0.0,
-                        None,
-                        None,
-                        &mut NoopScriptHost,
                     );
                     HitResult::None
                 } else {
@@ -5727,25 +5722,27 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        self.drag_start_with_pointer_disable(artboard, x, y, timestamp_seconds, true, pointer_id)
+        self.drag_start_hit_result(artboard, x, y, timestamp_seconds, pointer_id)
+            .is_hit()
     }
 
-    fn drag_start_with_pointer_disable(
+    pub(crate) fn drag_start_hit_result(
         &mut self,
         artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         timestamp_seconds: f32,
-        disable_pointer: bool,
         pointer_id: i32,
-    ) -> bool {
-        let result = self.drag_start_with_pointer_disable_and_context_and_script_host(
+    ) -> RuntimeHitResult {
+        let _ = timestamp_seconds;
+        self.disable_pointer_events(pointer_id);
+        let result = self.update_listeners(
             artboard,
+            RuntimeListenerType::DragStart,
             x,
             y,
-            timestamp_seconds,
-            disable_pointer,
             pointer_id,
+            0.0,
             None,
             None,
             &mut NoopScriptHost,
@@ -5792,6 +5789,18 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
+        self.drag_end_hit_result(artboard, x, y, timestamp_seconds, pointer_id)
+            .is_hit()
+    }
+
+    pub(crate) fn drag_end_hit_result(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
         self.enable_pointer_events(pointer_id);
         let result = self.update_listeners(
             artboard,
@@ -5804,7 +5813,7 @@ impl StateMachineInstance {
             None,
             &mut NoopScriptHost,
         );
-        let drag_result = self.retain_script_result(result.map(HitResult::is_hit));
+        let drag_result = self.retain_script_result(result);
         let _ = self.pointer_move(artboard, x, y, timestamp_seconds, pointer_id);
         drag_result
     }

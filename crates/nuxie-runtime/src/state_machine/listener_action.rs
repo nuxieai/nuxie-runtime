@@ -208,13 +208,11 @@ impl RuntimeScheduledListenerAction {
                 graph,
                 state_machine_inputs,
             ),
-            "ListenerTriggerChange" => RuntimeListenerInputTarget::from_object(action.object)
-                .validates_for_import(
-                    graph,
-                    state_machine_inputs,
-                    "StateMachineTrigger",
-                    "NestedTrigger",
-                ),
+            "ListenerTriggerChange" => RuntimeListenerTriggerChange::validates_for_import(
+                RuntimeListenerInputTarget::from_object(action.object),
+                graph,
+                state_machine_inputs,
+            ),
             // `nuxie-binary` exposes only successfully imported actions.
             // C++ requires the BindableProperty importer to exist, but its
             // transferred pointer may already be null after an earlier
@@ -260,11 +258,10 @@ impl RuntimeScheduledListenerAction {
             }
             "ListenerTriggerChange" => {
                 let target = RuntimeListenerInputTarget::from_object(action.object);
-                debug_assert!(target.validates_for_import(
+                debug_assert!(RuntimeListenerTriggerChange::validates_for_import(
+                    target,
                     graph,
                     state_machine_inputs,
-                    "StateMachineTrigger",
-                    "NestedTrigger",
                 ));
                 Self::TriggerChange(RuntimeListenerTriggerChange { action_owner })
             }

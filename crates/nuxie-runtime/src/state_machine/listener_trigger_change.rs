@@ -1,6 +1,16 @@
+//! Direct Rust owner for pinned C++
+//! `src/animation/listener_trigger_change.cpp`.
+//!
+//! The concrete validators retain C++'s null-is-valid compatibility rule;
+//! perform gives a nonempty nested id precedence and otherwise fires the
+//! direct trigger input.
+
 use super::StateMachineInputInstance;
 use super::listener_input_change::RuntimeListenerInputTarget;
 use crate::ArtboardInstance;
+use nuxie_binary::RuntimeObject;
+use nuxie_graph::ArtboardGraph;
+use nuxie_schema::definition_by_name;
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeListenerTriggerChange {
@@ -8,6 +18,40 @@ pub(crate) struct RuntimeListenerTriggerChange {
 }
 
 impl RuntimeListenerTriggerChange {
+    /// Mechanical translation of
+    /// `ListenerTriggerChange::validateInputType`. C++ accepts a null slot for
+    /// forward compatibility and otherwise requires `StateMachineTrigger`.
+    fn validate_input_type(input_type: Option<&str>) -> bool {
+        input_type.is_none_or(|input_type| {
+            definition_by_name(input_type)
+                .is_some_and(|definition| definition.is_a("StateMachineTrigger"))
+        })
+    }
+
+    /// Mechanical translation of
+    /// `ListenerTriggerChange::validateNestedInputType`. The base importer
+    /// calls this only for a resolved `NestedInput`, while the virtual itself
+    /// keeps the pinned null-is-valid contract.
+    fn validate_nested_input_type(input_type: Option<&str>) -> bool {
+        input_type.is_none_or(|input_type| {
+            definition_by_name(input_type)
+                .is_some_and(|definition| definition.is_a("NestedTrigger"))
+        })
+    }
+
+    pub(crate) fn validates_for_import(
+        target: RuntimeListenerInputTarget,
+        graph: &ArtboardGraph,
+        inputs: &[Option<&RuntimeObject>],
+    ) -> bool {
+        target.validates_for_import_with(
+            graph,
+            inputs,
+            Self::validate_input_type,
+            Self::validate_nested_input_type,
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn for_test(flags: u64, target: RuntimeListenerInputTarget) -> Self {
         let action_owner = super::RuntimeActionCoreHandle::for_test("ListenerTriggerChange");

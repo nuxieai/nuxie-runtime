@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    animation::keyframe_interpolator::KeyFrameInterpolator,
     artboard::{Artboard, ArtboardInstance},
     component_dirt::ComponentDirt,
     core_context::CoreContext,
@@ -6,6 +7,7 @@ use crate::mechanical_port::source::{
         NestedArtboardLayoutBase, NestedArtboardLayoutBaseCallbacks,
     },
     layout::{
+        layout_enums::{LayoutDirection, LayoutStyleInterpolation},
         layout_node_provider::{LayoutNodeProvider, LayoutNodeProviderState},
         style_overrider::{StyleOverrideProvider, StyleOverrider},
     },
@@ -64,6 +66,16 @@ impl NestedArtboardLayout {
             artboard.mark_layout_dirty(hosted);
             artboard.mark_layout_style_dirty();
         }
+    }
+
+    #[cfg(feature = "rive_layout")]
+    pub fn layout_node(&mut self, _index: i32) -> *mut core::ffi::c_void {
+        self.base
+            .base
+            .artboard_instance_mut()
+            .map_or(std::ptr::null_mut(), |instance| {
+                &mut instance.take_layout_data().node as *mut _ as *mut core::ffi::c_void
+            })
     }
 
     pub fn mark_layout_node_dirty(&mut self, _force: bool) {
@@ -130,12 +142,35 @@ impl NestedArtboardLayout {
         let _ = animate;
     }
 
+    #[cfg(feature = "rive_layout")]
+    pub fn cascade_layout_style(
+        &mut self,
+        inherited_interpolation: LayoutStyleInterpolation,
+        inherited_interpolator: Option<&mut KeyFrameInterpolator>,
+        inherited_interpolation_time: f32,
+        direction: LayoutDirection,
+    ) -> bool {
+        if let Some(instance) = self.base.base.artboard_instance_mut() {
+            instance.cascade_layout_style(
+                inherited_interpolation,
+                inherited_interpolator,
+                inherited_interpolation_time,
+                direction,
+            );
+        }
+        false
+    }
+
     pub fn layout_bounds(&mut self) -> Aabb {
         #[cfg(feature = "rive_layout")]
         if let Some(instance) = self.base.base.artboard_instance_mut() {
             return instance.layout_bounds();
         }
         Aabb::default()
+    }
+
+    pub fn is_layout_provider(&self) -> bool {
+        true
     }
 
     pub fn update_artboard(&mut self, value: &mut ViewModelInstanceArtboard) {
@@ -223,7 +258,8 @@ impl NestedArtboardLayoutBaseCallbacks for NestedArtboardLayout {
 
 impl StyleOverrideProvider for NestedArtboardLayout {
     fn is_row(&self) -> bool {
-        true
+        let this = self as *const Self as *mut Self;
+        unsafe { &mut *this }.is_row()
     }
     fn instance_height_scale_type(&self) -> u32 {
         self.base.instance_height_scale_type()
@@ -252,6 +288,10 @@ impl LayoutNodeProvider for NestedArtboardLayout {
     fn provider_state(&mut self) -> &mut LayoutNodeProviderState {
         &mut self.provider_state
     }
+    #[cfg(feature = "rive_layout")]
+    fn layout_node(&mut self, index: i32) -> *mut core::ffi::c_void {
+        NestedArtboardLayout::layout_node(self, index)
+    }
     fn transform_component_mut(&mut self) -> Option<&mut TransformComponent> {
         Some(self.base.base.transform_component_mut())
     }
@@ -259,7 +299,8 @@ impl LayoutNodeProvider for NestedArtboardLayout {
         Some(self.base.base.transform_component())
     }
     fn layout_bounds(&self) -> Aabb {
-        Aabb::default()
+        let this = self as *const Self as *mut Self;
+        unsafe { &mut *this }.layout_bounds()
     }
     fn sync_style_changes(&mut self) -> bool {
         NestedArtboardLayout::sync_style_changes(self)
@@ -272,5 +313,21 @@ impl LayoutNodeProvider for NestedArtboardLayout {
     }
     fn num_layout_nodes(&self) -> usize {
         1
+    }
+    #[cfg(feature = "rive_layout")]
+    fn cascade_layout_style(
+        &mut self,
+        interpolation: LayoutStyleInterpolation,
+        interpolator: Option<&mut KeyFrameInterpolator>,
+        time: f32,
+        direction: LayoutDirection,
+    ) -> bool {
+        NestedArtboardLayout::cascade_layout_style(
+            self,
+            interpolation,
+            interpolator,
+            time,
+            direction,
+        )
     }
 }

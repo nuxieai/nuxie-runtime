@@ -283,12 +283,57 @@ pub trait RenderImageDelegate {
 pub struct RenderPath;
 
 impl RenderPath {
+    pub fn add_path_backwards(&mut self, path: &mut dyn CommandPath, transform: &Mat2D) {
+        self.add_render_path(path.render_path(), transform);
+    }
+
     pub fn add_render_path(&mut self, _path: &RenderPath, _transform: &Mat2D) {
         panic!("abstract RenderPath::add_render_path");
     }
     pub fn add_render_path_backwards(&mut self, _path: &RenderPath, _transform: &Mat2D) {}
     pub fn add_raw_path(&mut self, _path: &RawPath) {
         panic!("abstract RenderPath::add_raw_path");
+    }
+}
+
+impl CommandPath for RenderPath {
+    fn rewind(&mut self) {
+        panic!("abstract RenderPath::rewind");
+    }
+
+    fn set_fill_rule(
+        &mut self,
+        _value: crate::mechanical_port::source::math::path_types::FillRule,
+    ) {
+        panic!("abstract RenderPath::set_fill_rule");
+    }
+
+    fn add_path(&mut self, path: &mut dyn CommandPath, transform: &Mat2D) {
+        self.add_render_path(path.render_path(), transform);
+    }
+
+    fn move_to(&mut self, _x: f32, _y: f32) {
+        panic!("abstract RenderPath::move_to");
+    }
+
+    fn line_to(&mut self, _x: f32, _y: f32) {
+        panic!("abstract RenderPath::line_to");
+    }
+
+    fn cubic_to(&mut self, _ox: f32, _oy: f32, _ix: f32, _iy: f32, _x: f32, _y: f32) {
+        panic!("abstract RenderPath::cubic_to");
+    }
+
+    fn close(&mut self) {
+        panic!("abstract RenderPath::close");
+    }
+
+    fn render_path_mut(&mut self) -> &mut RenderPath {
+        self
+    }
+
+    fn render_path(&self) -> &RenderPath {
+        self
     }
 }
 

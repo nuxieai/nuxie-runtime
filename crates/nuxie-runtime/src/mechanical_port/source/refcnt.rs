@@ -139,9 +139,9 @@ impl<T: RefCounted> std::ops::DerefMut for Rcp<T> {
     }
 }
 
-impl<T: RefCounted> PartialEq for Rcp<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.pointer == other.pointer
+impl<T: RefCounted, U: RefCounted> PartialEq<Rcp<U>> for Rcp<T> {
+    fn eq(&self, other: &Rcp<U>) -> bool {
+        self.get().cast::<()>() == other.get().cast::<()>()
     }
 }
 
@@ -168,4 +168,8 @@ pub unsafe fn ref_rcp<T: RefCounted>(pointer: *mut T) -> Rcp<T> {
         pointer,
         marker: PhantomData,
     }
+}
+
+pub unsafe fn static_rcp_cast<U: RefCounted, T: RefCounted>(mut pointer: Rcp<T>) -> Rcp<U> {
+    unsafe { Rcp::from_raw(pointer.release().cast::<U>()) }
 }

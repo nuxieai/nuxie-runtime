@@ -1,7 +1,9 @@
 use crate::mechanical_port::source::{
-    generated::component_origin_base::ComponentOriginBase, layout_component::LayoutComponent,
+    generated::component_origin_base::{ComponentOriginBase, ComponentOriginBaseCallbacks},
+    layout_component::LayoutComponent,
 };
 
+#[derive(Default)]
 pub struct ComponentOrigin {
     pub base: ComponentOriginBase,
 }
@@ -32,5 +34,19 @@ impl ComponentOrigin {
 
     pub fn origin_y_changed(&mut self) {
         self.reapply();
+    }
+}
+
+impl ComponentOriginBaseCallbacks for ComponentOrigin {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base.base.base.notify_property_changed(property_key);
+    }
+
+    fn origin_x_changed(&mut self) {
+        ComponentOrigin::origin_x_changed(self);
+    }
+
+    fn origin_y_changed(&mut self) {
+        ComponentOrigin::origin_y_changed(self);
     }
 }

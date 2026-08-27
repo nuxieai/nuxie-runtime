@@ -3,6 +3,7 @@ use crate::mechanical_port::source::{
     generated::custom_property_group_base::CustomPropertyGroupBase,
 };
 
+#[derive(Default)]
 pub struct CustomPropertyGroup {
     pub base: CustomPropertyGroupBase,
     pub container: CustomPropertyContainerState,

@@ -3,14 +3,29 @@ use crate::mechanical_port::source::{
     core_context::{CoreContext, StatusCode},
     draw_target_placement::DrawTargetPlacement,
     drawable::Drawable,
-    generated::draw_target_base::DrawTargetBase,
+    generated::draw_target_base::{DrawTargetBase, DrawTargetBaseCallbacks},
 };
 
+#[derive(Default)]
 pub struct DrawTarget {
     pub base: DrawTargetBase,
     drawable: Option<*mut Drawable>,
     pub(crate) first: Option<*mut Drawable>,
     pub(crate) last: Option<*mut Drawable>,
+}
+
+impl DrawTargetBaseCallbacks for DrawTarget {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
+
+    fn placement_value_changed(&mut self) {
+        DrawTarget::placement_value_changed(self);
+    }
 }
 
 impl DrawTarget {

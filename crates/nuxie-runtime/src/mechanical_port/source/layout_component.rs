@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::AdvancingComponent,
     animation::keyframe_interpolator::KeyFrameInterpolator,
+    artboard::Artboard,
     component::Component,
     component_dirt::ComponentDirt,
     core::Core,
@@ -245,6 +246,21 @@ impl LayoutComponent {
     }
     pub fn shape_world_transform(&self) -> Mat2D {
         self.base.base.base.base.world_transform()
+    }
+    pub fn get_artboard(&mut self) -> Option<&mut Artboard> {
+        self.base.base.base.base.base.artboard_mut()
+    }
+    pub fn computed_local_x(&self) -> f32 {
+        self.layout.left()
+    }
+    pub fn computed_local_y(&self) -> f32 {
+        self.layout.top()
+    }
+    pub fn computed_width(&self) -> f32 {
+        self.layout.width()
+    }
+    pub fn computed_height(&self) -> f32 {
+        self.layout.height()
     }
     pub fn style(&self) -> Option<&LayoutComponentStyle> {
         self.style.map(|value| unsafe { &*value })

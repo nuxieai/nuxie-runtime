@@ -7,7 +7,10 @@ use crate::mechanical_port::source::{
     core_context::CoreContext,
     data_bind::data_bind::DataBind,
     dependency_helper::{DependencyHelper, DirtDependent},
-    generated::{artboard_base::ArtboardBase, component_base::ComponentBase},
+    generated::{
+        artboard_base::ArtboardBase,
+        component_base::{ComponentBase, ComponentBaseCallbacks},
+    },
     importers::{artboard_importer::ArtboardImporter, import_stack::ImportStack},
     lazy_vector::LazyVector,
     math::vec2d::Vec2D,
@@ -35,6 +38,12 @@ impl Default for Component {
             collapsables: LazyVector::default(),
             dirt: ComponentDirt::FILTHY,
         }
+    }
+}
+
+impl ComponentBaseCallbacks for Component {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base.base.notify_property_changed(property_key);
     }
 }
 

@@ -1,4 +1,6 @@
-use std::{collections::VecDeque, mem::size_of};
+use std::{collections::VecDeque, mem::size_of, ptr::NonNull};
+
+use crate::mechanical_port::source::refcnt::{Rcp, RefCounted};
 
 #[derive(Default)]
 pub struct ObjectStream<T> {
@@ -52,6 +54,17 @@ impl PodStream {
                 .pop_front()
                 .expect("PODStream size assertion guarantees a byte");
         }
+        self
+    }
+
+    pub fn write_rcp<T: RefCounted>(&mut self, mut object: Rcp<T>) -> &mut Self {
+        self.write(object.release())
+    }
+
+    pub fn read_rcp<T: RefCounted>(&mut self, object: &mut Rcp<T>) -> &mut Self {
+        let mut raw = std::ptr::null_mut();
+        self.read(&mut raw);
+        object.reset(NonNull::new(raw));
         self
     }
 }

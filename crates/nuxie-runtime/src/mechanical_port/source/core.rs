@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
-    component_dirt::ComponentDirt, data_bind::data_bind::DataBind,
+    component_dirt::ComponentDirt, core::binary_reader::BinaryReader, core_context::CoreContext,
+    data_bind::data_bind::DataBind, importers::import_stack::ImportStack, status_code::StatusCode,
 };
 
 pub mod binary_data_reader;
@@ -32,6 +33,38 @@ impl Clone for Core {
 impl Core {
     pub const EMPTY_ID: u32 = u32::MAX;
     pub const INVALID_PROPERTY_KEY: i32 = 0;
+
+    pub fn core_type(&self) -> u16 {
+        panic!("abstract Core::core_type");
+    }
+
+    pub fn is_type_of(&self, _type_key: u16) -> bool {
+        panic!("abstract Core::is_type_of");
+    }
+
+    pub fn deserialize(&mut self, _property_key: u16, _reader: &mut BinaryReader<'_>) -> bool {
+        panic!("abstract Core::deserialize");
+    }
+
+    pub fn clone_core(&self) -> Option<Box<Core>> {
+        None
+    }
+
+    pub fn validate(&mut self, _context: &mut dyn CoreContext) -> bool {
+        true
+    }
+
+    pub fn on_added_dirty(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
+        StatusCode::Ok
+    }
+
+    pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
+        StatusCode::Ok
+    }
+
+    pub fn import(&mut self, _import_stack: &mut ImportStack) -> StatusCode {
+        StatusCode::Ok
+    }
 
     pub fn notify_property_changed(&mut self, property_key: u16) {
         let mut observer = self.first_observer;

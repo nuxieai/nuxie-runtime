@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core_context::CoreContext,
     draw_rules::DrawRules,
     drawable_flag::DrawableFlag,
-    generated::drawable_base::DrawableBase,
+    generated::drawable_base::{DrawableBase, DrawableBaseCallbacks},
     hit_info::HitInfo,
     layout_component::LayoutComponent,
     math::{mat2d::Mat2D, vec2d::Vec2D},
@@ -32,6 +32,24 @@ impl Default for Drawable {
             next: None,
             needs_save_operation: true,
         }
+    }
+}
+
+impl DrawableBaseCallbacks for Drawable {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
     }
 }
 

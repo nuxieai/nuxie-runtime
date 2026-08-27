@@ -1,11 +1,24 @@
 use crate::mechanical_port::source::{
     artboard_component_list::ArtboardComponentList,
     core_context::{CoreContext, StatusCode},
-    generated::artboard_list_map_rule_base::ArtboardListMapRuleBase,
+    generated::artboard_list_map_rule_base::{
+        ArtboardListMapRuleBase, ArtboardListMapRuleBaseCallbacks,
+    },
 };
 
+#[derive(Default)]
 pub struct ArtboardListMapRule {
     pub base: ArtboardListMapRuleBase,
+}
+
+impl ArtboardListMapRuleBaseCallbacks for ArtboardListMapRule {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
 }
 
 impl ArtboardListMapRule {

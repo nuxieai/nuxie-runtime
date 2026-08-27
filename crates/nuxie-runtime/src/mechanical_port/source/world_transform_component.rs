@@ -1,12 +1,31 @@
 use crate::mechanical_port::source::{
     component::ComponentDirt,
-    generated::world_transform_component_base::WorldTransformComponentBase,
+    generated::world_transform_component_base::{
+        WorldTransformComponentBase, WorldTransformComponentBaseCallbacks,
+    },
     math::{mat2d::Mat2D, vec2d::Vec2D},
 };
 
+#[derive(Default)]
 pub struct WorldTransformComponent {
     pub base: WorldTransformComponentBase,
     world_transform: Mat2D,
+}
+
+impl WorldTransformComponentBaseCallbacks for WorldTransformComponent {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
+
+    fn opacity_changed(&mut self) {
+        WorldTransformComponent::opacity_changed(self);
+    }
 }
 
 impl WorldTransformComponent {

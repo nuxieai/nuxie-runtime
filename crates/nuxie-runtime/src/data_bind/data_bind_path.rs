@@ -15,17 +15,13 @@ pub(crate) struct RuntimeDataBindPath {
 
 impl RuntimeDataBindPath {
     pub(crate) fn decode_path(&mut self, bytes: &[u8]) -> bool {
-        let Some(path) = decode_varuint_path(bytes) else {
-            return false;
-        };
-        self.path.extend(path);
+        self.path.extend(decode_varuint_path(bytes));
         true
     }
 
     pub(crate) fn decoded_resolved(bytes: &[u8]) -> Option<Self> {
-        let path = decode_varuint_path(bytes)?;
         Some(Self {
-            path,
+            path: decode_varuint_path(bytes),
             resolved: true,
             file_identity: None,
         })
@@ -47,12 +43,25 @@ impl RuntimeDataBindPath {
         }
     }
 
+    pub(crate) fn copy_path(&mut self, object: &Self) {
+        self.path.clone_from(&object.path);
+        self.resolved = object.resolved;
+    }
+
     pub(crate) fn path(&self) -> &[u32] {
         &self.path
     }
 
+    pub(crate) fn path_mut(&mut self) -> &mut Vec<u32> {
+        &mut self.path
+    }
+
     pub(crate) fn is_resolved(&self) -> bool {
         self.resolved
+    }
+
+    pub(crate) fn set_resolved(&mut self, resolved: bool) {
+        self.resolved = resolved;
     }
 
     pub(crate) fn file_identity(&self) -> Option<u64> {
@@ -63,48 +72,71 @@ impl RuntimeDataBindPath {
         self.file_identity = file_identity;
     }
 
+    /// Rust keeps the importing Backboard's stable file identity instead of
+    /// the pinned raw `File*`; base `Core::import` is an unconditional Ok.
+    pub(crate) fn import(&mut self, backboard_file_identity: Option<u64>) -> bool {
+        let Some(file_identity) = backboard_file_identity else {
+            return false;
+        };
+        self.file_identity = Some(file_identity);
+        true
+    }
+
     pub(crate) fn resolved_path(&mut self, resolver: Option<&dyn Fn(u32) -> Vec<u32>>) -> &[u32] {
         if self.resolved {
             return &self.path;
         }
-        let Some(resolver) = resolver else {
-            // C++ leaves the path unresolved when no live File/DataResolver
-            // exists, so a later context can still resolve it.
+        if self.file_identity.is_none() {
+            // Pinned C++ leaves the path unresolved only when there is no
+            // live File, so a later import context can still resolve it.
             return &self.path;
-        };
-        if self.path.len() == 1 {
-            self.path = resolver(self.path[0]);
+        }
+        if let Some(resolver) = resolver {
+            if self.path.len() == 1 {
+                self.path = resolver(self.path[0]);
+            }
         }
         self.resolved = true;
         &self.path
     }
 }
 
-fn decode_varuint_path(bytes: &[u8]) -> Option<Vec<u32>> {
+fn decode_varuint_path(bytes: &[u8]) -> Vec<u32> {
     let mut path = Vec::new();
     let mut cursor = 0;
     while cursor < bytes.len() {
-        let mut value = 0u32;
-        let mut shift = 0;
-        loop {
-            let byte = *bytes.get(cursor)?;
-            cursor += 1;
-            let payload = u32::from(byte & 0x7f);
-            if shift >= 32 || payload.checked_shl(shift)? >> shift != payload {
-                return None;
-            }
-            value |= payload << shift;
-            if byte & 0x80 == 0 {
-                break;
-            }
-            shift += 7;
-            if shift > 28 {
-                return None;
-            }
+        let (value, read) = read_varuint64(&bytes[cursor..]);
+        if read == 0 {
+            // BinaryReader::readVarUint64 returns 0 and moves to the end on
+            // overflow; decodePath pushes that value before reachedEnd().
+            path.push(0);
+            break;
         }
+        cursor += read;
+        let Ok(value) = u32::try_from(value) else {
+            // readVarUintAs<uint32_t> likewise returns and pushes 0 before
+            // its integer-range error makes reachedEnd() true.
+            path.push(0);
+            break;
+        };
         path.push(value);
     }
-    Some(path)
+    path
+}
+
+fn read_varuint64(bytes: &[u8]) -> (u64, usize) {
+    let mut result = 0u64;
+    let mut shift = 0u8;
+
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        result |= u64::from(byte & 0x7f).wrapping_shl(u32::from(shift));
+        shift = shift.wrapping_add(7);
+        if byte & 0x80 == 0 {
+            return (result, index + 1);
+        }
+    }
+
+    (0, 0)
 }
 
 #[cfg(test)]
@@ -115,11 +147,12 @@ mod tests {
     fn decode_copy_and_deferred_resolution_preserve_occurrence_identity() {
         let mut path = RuntimeDataBindPath::default();
         assert!(path.decode_path(&[0xac, 0x02]));
-        path.set_file_identity(Some(17));
-        let mut copied = path.clone();
+        let mut copied = RuntimeDataBindPath::default();
+        copied.copy_path(&path);
 
         assert_eq!(copied.resolved_path(None), &[300]);
         assert!(!copied.is_resolved());
+        assert!(copied.import(Some(17)));
         assert_eq!(
             copied.resolved_path(Some(&|id| vec![id + 1, id + 2])),
             &[301, 302]
@@ -131,9 +164,38 @@ mod tests {
     }
 
     #[test]
-    fn malformed_varuint_does_not_partially_mutate_the_path() {
+    fn malformed_or_out_of_range_varuint_pushes_zero_then_stops() {
         let mut path = RuntimeDataBindPath::authored(vec![7], Some(1));
-        assert!(!path.decode_path(&[0x80]));
-        assert_eq!(path.path(), &[7]);
+        assert!(path.decode_path(&[0x80]));
+        assert_eq!(path.path(), &[7, 0]);
+
+        let mut out_of_range = RuntimeDataBindPath::default();
+        assert!(out_of_range.decode_path(&[0x80, 0x80, 0x80, 0x80, 0x10, 0x01]));
+        assert_eq!(out_of_range.path(), &[0]);
+    }
+
+    #[test]
+    fn a_file_without_a_resolver_still_finishes_resolution() {
+        let mut path = RuntimeDataBindPath::authored(vec![5], Some(9));
+        assert_eq!(path.resolved_path(None), &[5]);
+        assert!(path.is_resolved());
+        assert_eq!(path.resolved_path(Some(&|id| vec![id + 1])), &[5]);
+    }
+
+    #[test]
+    fn copy_path_does_not_copy_the_file_and_import_requires_a_backboard() {
+        let original = RuntimeDataBindPath::resolved(vec![1, 2], Some(9));
+        let mut copied = RuntimeDataBindPath::authored(vec![3], Some(4));
+        copied.copy_path(&original);
+        assert_eq!(copied.path(), &[1, 2]);
+        assert!(copied.is_resolved());
+        assert_eq!(copied.file_identity(), Some(4));
+
+        assert!(!copied.import(None));
+        assert_eq!(copied.file_identity(), Some(4));
+        copied.set_file_identity(None);
+        assert_eq!(copied.file_identity(), None);
+        assert!(copied.import(Some(12)));
+        assert_eq!(copied.file_identity(), Some(12));
     }
 }

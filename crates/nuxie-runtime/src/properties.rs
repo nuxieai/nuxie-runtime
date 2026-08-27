@@ -199,11 +199,14 @@ fn runtime_object_string_property_bytes_by_key(
 }
 
 pub(crate) fn transform_property_for_key(property_key: u16) -> Option<TransformProperty> {
+    if let Some(property) =
+        crate::components::root_bone_transform_property_for_changed_key(property_key)
+    {
+        return Some(property);
+    }
     [
         TransformProperty::X.property_key_for_type("Node"),
         TransformProperty::Y.property_key_for_type("Node"),
-        TransformProperty::X.property_key_for_type("RootBone"),
-        TransformProperty::Y.property_key_for_type("RootBone"),
         TransformProperty::Rotation.property_key_for_type("TransformComponent"),
         TransformProperty::ScaleX.property_key_for_type("TransformComponent"),
         TransformProperty::ScaleY.property_key_for_type("TransformComponent"),
@@ -212,8 +215,6 @@ pub(crate) fn transform_property_for_key(property_key: u16) -> Option<TransformP
     ]
     .into_iter()
     .zip([
-        TransformProperty::X,
-        TransformProperty::Y,
         TransformProperty::X,
         TransformProperty::Y,
         TransformProperty::Rotation,

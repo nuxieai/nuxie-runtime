@@ -38,6 +38,7 @@ mod bones {
 
 pub use crate::math::mat2d::Mat2D;
 use bones::bone::RuntimeBoneState;
+pub(crate) use bones::root_bone::transform_property_for_changed_key as root_bone_transform_property_for_changed_key;
 use bones::root_bone::{
     x_property_key as root_bone_x_property_key, y_property_key as root_bone_y_property_key,
 };

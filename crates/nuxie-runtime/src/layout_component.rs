@@ -7,6 +7,14 @@ pub(crate) fn mark_layout_node_dirty(instance: &mut ArtboardInstance, local_id: 
 }
 
 pub(crate) fn mark_layout_style_dirty(instance: &mut ArtboardInstance, local_id: usize) -> bool {
+    if let Some(layout) = instance
+        .component(local_id)
+        .and_then(|component| component.concrete.layout.as_ref())
+    {
+        // Pinned `markLayoutStyleDirty` clears inherited animation style
+        // before publishing LayoutStyle dirt.
+        layout.set_inherited_animation_style(0, 0.0, None);
+    }
     instance.add_dirt(
         local_id,
         crate::components::ComponentDirt::LAYOUT_STYLE,

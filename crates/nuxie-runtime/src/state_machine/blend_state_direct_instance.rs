@@ -12,7 +12,7 @@ impl BlendStateDirectInstance {
         empty_animation_definition: &Arc<RuntimeLinearAnimation>,
     ) -> Self {
         let animations = blend_state
-            .animations
+            .animations()
             .iter()
             .enumerate()
             .filter_map(|(definition_index, animation)| {
@@ -107,7 +107,10 @@ impl BlendStateDirectInstance {
         bindable_numbers: &[StateMachineBindableNumberInstance],
     ) {
         for animation in &mut self.animations {
-            let Some(definition) = blend_state.animations.get(animation.definition.index()) else {
+            let Some(definition) = blend_state
+                .animations()
+                .get(animation.definition.index())
+            else {
                 continue;
             };
             let value = match definition.source {

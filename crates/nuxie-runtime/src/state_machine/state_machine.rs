@@ -703,22 +703,21 @@ impl RuntimeBlendState1D {
             },
             _ => return None,
         };
-        let animations = state
-            .blend_animations
-            .iter()
-            .filter_map(|animation| {
-                if animation.object.type_name != "BlendAnimation1D" {
-                    return None;
-                }
-                let definition =
-                    blend_animation_from_imported(animation, animation_index_by_global);
-                Some(RuntimeBlendAnimation1D {
-                    animation: definition,
-                    value: animation.object.double_property("value").unwrap_or(0.0),
-                })
-            })
-            .collect::<Vec<_>>();
-        Some(Self { source, animations })
+        let mut blend_state = Self {
+            source,
+            animations: Vec::new(),
+        };
+        for animation in &state.blend_animations {
+            if animation.object.type_name != "BlendAnimation1D" {
+                continue;
+            }
+            let definition = blend_animation_from_imported(animation, animation_index_by_global);
+            blend_state.add_animation(RuntimeBlendAnimation1D {
+                animation: definition,
+                value: animation.object.double_property("value").unwrap_or(0.0),
+            });
+        }
+        Some(blend_state)
     }
 }
 
@@ -743,23 +742,21 @@ impl RuntimeBlendStateDirect {
         if object.type_name != "BlendStateDirect" {
             return None;
         }
-        let animations = state
-            .blend_animations
-            .iter()
-            .filter_map(|animation| {
-                if animation.object.type_name != "BlendAnimationDirect" {
-                    return None;
-                }
-                let definition =
-                    blend_animation_from_imported(animation, animation_index_by_global);
-                Some(RuntimeBlendAnimationDirect::from_imported(
-                    file,
-                    animation.object,
-                    definition,
-                ))
-            })
-            .collect::<Vec<_>>();
-        Some(Self { animations })
+        let mut blend_state = Self {
+            animations: Vec::new(),
+        };
+        for animation in &state.blend_animations {
+            if animation.object.type_name != "BlendAnimationDirect" {
+                continue;
+            }
+            let definition = blend_animation_from_imported(animation, animation_index_by_global);
+            blend_state.add_animation(RuntimeBlendAnimationDirect::from_imported(
+                file,
+                animation.object,
+                definition,
+            ));
+        }
+        Some(blend_state)
     }
 }
 
@@ -793,7 +790,7 @@ impl BlendState1DInstance {
         reset_blend_values: bool,
     ) -> Self {
         let animations: Vec<BlendAnimation1DInstance> = blend_state
-            .animations
+            .animations()
             .iter()
             .enumerate()
             .filter_map(|(definition_index, animation)| {
@@ -923,12 +920,12 @@ impl BlendState1DInstance {
             .map(|animation| animation.definition);
         let to_value = self
             .to
-            .and_then(|handle| blend_state.animations.get(handle.index()))
+            .and_then(|handle| blend_state.animations().get(handle.index()))
             .map(|animation| animation.value)
             .unwrap_or(0.0);
         let from_value = self
             .from
-            .and_then(|handle| blend_state.animations.get(handle.index()))
+            .and_then(|handle| blend_state.animations().get(handle.index()))
             .map(|animation| animation.value)
             .unwrap_or(0.0);
         let (mix, mix_from) = if self.to.is_none() || self.from.is_none() || to_value == from_value
@@ -941,7 +938,7 @@ impl BlendState1DInstance {
 
         for animation in &mut self.animations {
             let animation_value = blend_state
-                .animations
+                .animations()
                 .get(animation.definition.index())
                 .map(|definition| definition.value)
                 .unwrap_or(0.0);
@@ -965,7 +962,7 @@ impl BlendState1DInstance {
             let closest_value = self
                 .animations
                 .get(mid as usize)
-                .and_then(|animation| blend_state.animations.get(animation.definition.index()))
+                .and_then(|animation| blend_state.animations().get(animation.definition.index()))
                 .map(|animation| animation.value)
                 .unwrap_or(0.0);
             if closest_value < value {

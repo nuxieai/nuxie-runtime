@@ -3,26 +3,22 @@
 
 use crate::ArtboardInstance;
 use crate::semantic_data::SemanticRole;
+use nuxie_schema::definition_by_name;
 
 use super::semantic_provider::ResolvedSemanticData;
 
-pub(crate) fn supports_inferred_semantics(
-    artboard: &ArtboardInstance,
-    component_local_id: usize,
-) -> bool {
-    artboard.runtime_object_type_name(component_local_id) == Some("Text")
+type InferSemanticFn = fn(&ArtboardInstance, usize, &mut ResolvedSemanticData) -> bool;
+
+struct InferenceRule {
+    // Rust's generated schema ancestry is the arena equivalent of the C++
+    // `typeKey` passed to `Component::isTypeOf`.
+    type_name: &'static str,
+    infer: InferSemanticFn,
 }
 
-pub(crate) fn resolve_inferred_semantics(
-    artboard: &ArtboardInstance,
-    component_local_id: usize,
-    out: &mut ResolvedSemanticData,
-) -> bool {
-    if !supports_inferred_semantics(artboard, component_local_id) {
-        return false;
-    }
+fn inferred_text_label(artboard: &ArtboardInstance, component_local_id: usize) -> String {
     let Some(component) = artboard.component(component_local_id) else {
-        return false;
+        return String::new();
     };
     let mut label = String::new();
     for child in &component.children {
@@ -45,11 +41,58 @@ pub(crate) fn resolve_inferred_semantics(
             label.push_str(&String::from_utf8_lossy(&text));
         }
     }
+    label
+}
+
+fn infer_text_semantics(
+    artboard: &ArtboardInstance,
+    component_local_id: usize,
+    out: &mut ResolvedSemanticData,
+) -> bool {
+    let label = inferred_text_label(artboard, component_local_id);
     if label.is_empty() {
         return false;
     }
+
     out.has_semantics = true;
     out.role = SemanticRole::Text as u32;
     out.label = label;
     true
+}
+
+const INFERENCE_RULES: &[InferenceRule] = &[InferenceRule {
+    type_name: "Text",
+    infer: infer_text_semantics,
+}];
+
+fn component_is_type_of(
+    artboard: &ArtboardInstance,
+    component_local_id: usize,
+    type_name: &str,
+) -> bool {
+    artboard.component(component_local_id).is_some()
+        && artboard
+            .runtime_object_type_name(component_local_id)
+            .and_then(definition_by_name)
+            .is_some_and(|definition| definition.is_a(type_name))
+}
+
+pub(crate) fn supports_inferred_semantics(
+    artboard: &ArtboardInstance,
+    component_local_id: usize,
+) -> bool {
+    INFERENCE_RULES
+        .iter()
+        .any(|rule| component_is_type_of(artboard, component_local_id, rule.type_name))
+}
+
+pub(crate) fn resolve_inferred_semantics(
+    artboard: &ArtboardInstance,
+    component_local_id: usize,
+    out: &mut ResolvedSemanticData,
+) -> bool {
+    INFERENCE_RULES.iter().any(|rule| {
+        component_is_type_of(artboard, component_local_id, rule.type_name)
+            && (rule.infer)(artboard, component_local_id, out)
+    })
 }

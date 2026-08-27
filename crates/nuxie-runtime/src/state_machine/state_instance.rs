@@ -41,8 +41,8 @@ impl RuntimeStateInstance {
             occurrence.advance(definition, artboard, inputs, bindable_numbers, 0.0);
             RuntimeStateInstanceKind::Blend1D(occurrence)
         } else if let Some(definition) = state.blend_state_direct.as_ref() {
-            let mut occurrence = BlendStateDirectInstance::new(
-                definition,
+            let mut occurrence = definition.make_instance(
+                artboard,
                 animation_definitions,
                 empty_animation_definition,
             );

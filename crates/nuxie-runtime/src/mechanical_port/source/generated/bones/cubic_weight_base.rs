@@ -38,7 +38,7 @@ impl CubicWeightBase {
     pub const OUT_VALUES_PROPERTY_KEY: u16 = 112;
     pub const OUT_INDICES_PROPERTY_KEY: u16 = 113;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 45 | 1)
+        matches!(type_key, Self::TYPE_KEY | 45 | 10)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

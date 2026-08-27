@@ -32,7 +32,7 @@ impl WeightBase {
     pub const INDICES_PROPERTY_KEY: u16 = 103;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 1)
+        matches!(type_key, Self::TYPE_KEY | 10)
     }
 
     pub fn core_type(&self) -> u16 {

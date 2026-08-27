@@ -47,7 +47,7 @@ impl SkinBase {
     pub const TX_PROPERTY_KEY: u16 = 108;
     pub const TY_PROPERTY_KEY: u16 = 109;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 129 | 1)
+        matches!(type_key, Self::TYPE_KEY | 11 | 10)
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

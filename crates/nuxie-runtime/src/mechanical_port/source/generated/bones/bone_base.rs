@@ -27,7 +27,7 @@ impl BoneBase {
     pub const LENGTH_PROPERTY_KEY: u16 = 89;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 39 | 5 | 120 | 129 | 1)
+        matches!(type_key, Self::TYPE_KEY | 39 | 38 | 91 | 11 | 10)
     }
 
     pub fn core_type(&self) -> u16 {

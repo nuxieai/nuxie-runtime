@@ -1,3 +1,22 @@
+/// Mechanical owner for pinned `TextStyleFeature::onAddedDirty` after the
+/// Component Super has linked the retained direct parent. A non-`Ok` Super
+/// never enters this function; the caller propagates that failure unchanged.
+/// The successful branch validates the direct is-a `TextStyle` parent before
+/// appending to its occurrence-owned feature list in authored traversal order.
+pub(crate) fn text_style_feature_on_added_dirty_after_super(
+    local_id: usize,
+    parent_type: &str,
+    add_feature: impl FnOnce(usize),
+) -> Result<()> {
+    if !definition_by_name(parent_type)
+        .is_some_and(|definition| definition.is_a("TextStyle"))
+    {
+        bail!("TextStyleFeature local {local_id} requires a direct TextStyle parent");
+    }
+    add_feature(local_id);
+    Ok(())
+}
+
 /// Retained authored option snapshot for a type-164 TextStyleFeature.
 /// Live key 356/357 writes intentionally do not mutate this snapshot or dirty
 /// text; C++'s generated callbacks are empty.

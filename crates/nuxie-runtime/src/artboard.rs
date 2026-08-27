@@ -1498,19 +1498,17 @@ impl ArtboardInstance {
                         .register_variation(component.local_id);
                 }
                 if component.type_name == "TextStyleFeature" {
-                    if !definition_by_name(parent_type)
-                        .is_some_and(|definition| definition.is_a("TextStyle"))
-                    {
-                        anyhow::bail!(
-                            "TextStyleFeature local {} requires a direct TextStyle parent",
-                            component.local_id
-                        );
-                    }
-                    objects
-                        .component_mut(parent)
-                        .and_then(|parent| parent.concrete.text_style.as_ref())
-                        .expect("TextStyle occurrence state")
-                        .register_feature(component.local_id);
+                    crate::text::text_style_feature_on_added_dirty_after_super(
+                        component.local_id,
+                        parent_type,
+                        |feature_local| {
+                            objects
+                                .component_mut(parent)
+                                .and_then(|parent| parent.concrete.text_style.as_ref())
+                                .expect("TextStyle occurrence state")
+                                .register_feature(feature_local);
+                        },
+                    )?;
                 }
                 // `ShapePaint::onAddedClean` appends the concrete paint to its
                 // direct ShapePaintContainer after Component Super. Retain the

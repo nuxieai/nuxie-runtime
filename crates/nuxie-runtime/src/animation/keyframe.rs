@@ -127,7 +127,7 @@ impl RuntimeKeyFrame {
 
     fn unsigned_value(&self) -> Option<u64> {
         match self {
-            Self::Uint(frame) => Some(frame.value),
+            Self::Uint(frame) => Some(frame.applied_value()),
             Self::Id(frame) => Some(frame.applied_value()),
             _ => None,
         }

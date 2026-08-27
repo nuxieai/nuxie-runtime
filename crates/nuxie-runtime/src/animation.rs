@@ -381,7 +381,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_property_index,
             )
             .key_frames
-            .push(RuntimeKeyFrame::Id(RuntimeKeyFrameId {
+            .push(RuntimeKeyFrame::Uint(RuntimeKeyFrameUint {
                 global_id: global_id as u32,
                 frame,
                 seconds,
@@ -439,7 +439,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_property_index,
             )
             .key_frames
-            .push(RuntimeKeyFrame::Uint(RuntimeKeyFrameUint {
+            .push(RuntimeKeyFrame::Id(RuntimeKeyFrameId {
                 global_id: global_id as u32,
                 frame,
                 seconds,

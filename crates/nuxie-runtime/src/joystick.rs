@@ -27,18 +27,18 @@ pub(crate) struct RuntimeJoystick {
 
 impl Clone for RuntimeJoystick {
     fn clone(&self) -> Self {
-        // Core clone copies generated fields, then reruns Joystick lifecycle
-        // against clone-owned Components. Component slot indices are stable
-        // within the new occurrence, while derived matrices start cold
-        // (`artboard.hpp:548-601`; `src/joystick.cpp:8-47`).
+        // `JoystickBase::clone` constructs a fresh Joystick and copies only
+        // generated/base state. Every private Joystick field therefore starts
+        // at its in-class initializer and is rebuilt by the cloned Artboard's
+        // lifecycle (`src/generated/joystick_base.cpp`; `joystick.hpp`).
         Self {
             component: self.component,
             world_transform: Mat2D::IDENTITY,
             inverse_world_transform: Mat2D::IDENTITY,
-            x_animation: self.x_animation,
-            y_animation: self.y_animation,
-            handle_source: self.handle_source,
-            dependents: self.dependents.clone(),
+            x_animation: None,
+            y_animation: None,
+            handle_source: None,
+            dependents: Vec::new(),
         }
     }
 }
@@ -360,14 +360,24 @@ fn joystick_factor_from(
 ) -> (f32, f32) {
     let left = -width * origin_x;
     let top = -height * origin_y;
-    let x = if width == 0.0 {
+    let right = -width * origin_x + width;
+    let bottom = -height * origin_y + height;
+    let bounds_width = right - left;
+    let bounds_height = bottom - top;
+    let x = if bounds_width == 0.0 {
         0.0
     } else {
-        (local.0 - left) * 2.0 / width - 1.0
+        (local.0 - left) * 2.0 / bounds_width - 1.0
     };
     // Preserve the intentionally asymmetric pinned AABB::factorFrom grouping:
     // only the y delta is guarded, so zero height proceeds through 0 / 0.
-    let y = (if height == 0.0 { 0.0 } else { local.1 - top }) * 2.0 / height - 1.0;
+    let y = (if bounds_height == 0.0 {
+        0.0
+    } else {
+        local.1 - top
+    }) * 2.0
+        / bounds_height
+        - 1.0;
     (x, y)
 }
 
@@ -380,6 +390,13 @@ mod tests {
         let (x, y) = joystick_factor_from((3.0, 4.0), 0.0, 0.0, 0.5, 0.5);
         assert_eq!(x, 0.0);
         assert!(y.is_nan());
+    }
+
+    #[test]
+    fn factor_from_uses_the_constructed_aabb_extent() {
+        let (x, _) = joystick_factor_from((1.0, 0.0), 0.1, 1.0, 2.3, 0.0);
+        assert_eq!(x.to_bits(), 23.599998474121094_f32.to_bits());
+        assert_ne!(x.to_bits(), 23.600000381469727_f32.to_bits());
     }
 
     #[test]

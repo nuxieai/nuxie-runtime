@@ -4015,14 +4015,6 @@ fn runtime_artboard_convert_property_binding_value(
     converter_state.convert_value_with_formula_randoms(converter, &value, formula_random_source)
 }
 
-fn runtime_image_asset_global_for_file_asset_index(
-    file: &RuntimeFile,
-    asset_index: u64,
-) -> Option<u32> {
-    let asset = file.file_asset(usize::try_from(asset_index).ok()?)?;
-    (asset.type_name == "ImageAsset").then_some(asset.id)
-}
-
 pub(super) fn build_artboard_nested_host_bindings(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -8249,15 +8241,17 @@ impl ArtboardInstance {
         };
         match target {
             RuntimeArtboardAssetBindingTarget::Image(target_local_id) => {
-                if runtime_image.is_some() {
-                    return self.set_image_render_override(target_local_id, runtime_image);
+                if let Some(asset_global) = self
+                    .runtime_file()
+                    .and_then(|file| {
+                        crate::context_value_asset_image::file_asset_global(file, *value)
+                    })
+                {
+                    return self.set_image_asset_override(target_local_id, Some(asset_global));
                 }
                 // Mirrors C++ `context_value_asset_image.cpp`: missing values
                 // use the private empty ImageAsset, so Image::draw returns.
-                let asset_global = self
-                    .runtime_file()
-                    .and_then(|file| runtime_image_asset_global_for_file_asset_index(file, *value));
-                self.set_image_asset_override(target_local_id, asset_global)
+                self.set_image_render_override(target_local_id, runtime_image)
             }
             RuntimeArtboardAssetBindingTarget::Font(target_local_id) => {
                 // C++ TextStyle::setAsset swaps the retained FontAsset pointer
@@ -11351,6 +11345,35 @@ mod tests {
         assert!(Rc::ptr_eq(&bound, &image));
         assert_eq!((bound.width(), bound.height()), (13, 17));
         assert_eq!(artboard.resolved_image_asset_global(Some(1), Some(1)), None);
+    }
+
+    #[test]
+    fn valid_file_image_asset_wins_over_the_retained_private_live_image() {
+        let file = image_binding_fixture();
+        let graphs = nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph");
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard");
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("owned Model instance"),
+        );
+
+        artboard.bind_owned_view_model_artboard_handle(&file, &context);
+        while artboard.advance_artboard_data_binds() {}
+
+        let image: Rc<dyn nuxie_render_api::RenderImage> = Rc::new(BoundTestImage(13, 17));
+        assert!(context.borrow_mut().set_runtime_image_by_property_path(
+            &[0],
+            Some(RuntimeViewModelImage::from_render_image(Rc::clone(&image))),
+        ));
+        assert!(context.borrow_mut().set_asset_by_property_path(&[0], 0));
+        while artboard.advance_artboard_data_binds() {}
+
+        assert!(artboard.image_render_overrides.get(&1).is_none());
+        assert_eq!(
+            artboard.resolved_image_asset_global(Some(1), Some(1)),
+            Some(1),
+            "ContextValueAssetImage::fileAsset wins before the private ImageAsset fallback"
+        );
     }
 
     #[test]

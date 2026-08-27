@@ -1,3 +1,4 @@
+use crate::context_value_asset_image::RuntimeImageAssetValue;
 use crate::data_bind_graph::{
     RuntimeDataBindGraphConverterBuildCache,
     runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source,
@@ -114,10 +115,11 @@ pub(crate) struct RuntimeBindableAssetDefaultViewModelSource {
 /// The value retained by C++ `BindablePropertyAsset`.
 ///
 /// `asset_index` is the generated `propertyValue`. The optional typed values
-/// model the separate private Font/Blob assets retained by C++.
+/// model the separate private Image/Font/Blob assets retained by C++.
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeBindableAssetValue {
     asset_index: u64,
+    image_value: Option<RuntimeImageAssetValue>,
     font_value: Option<RuntimeFontAssetValue>,
     blob_value: Option<RuntimeBlobAssetValue>,
 }
@@ -126,6 +128,16 @@ impl RuntimeBindableAssetValue {
     pub(crate) fn from_asset_index(asset_index: u64) -> Self {
         Self {
             asset_index,
+            image_value: None,
+            font_value: None,
+            blob_value: None,
+        }
+    }
+
+    pub(crate) fn from_image_value(image_value: RuntimeImageAssetValue) -> Self {
+        Self {
+            asset_index: image_value.file_asset_index(),
+            image_value: Some(image_value),
             font_value: None,
             blob_value: None,
         }
@@ -134,6 +146,7 @@ impl RuntimeBindableAssetValue {
     pub(crate) fn from_font_value(font_value: RuntimeFontAssetValue) -> Self {
         Self {
             asset_index: font_value.file_asset_index(),
+            image_value: None,
             font_value: Some(font_value),
             blob_value: None,
         }
@@ -142,6 +155,7 @@ impl RuntimeBindableAssetValue {
     pub(crate) fn from_blob_value(blob_value: RuntimeBlobAssetValue) -> Self {
         Self {
             asset_index: blob_value.file_asset_index(),
+            image_value: None,
             font_value: None,
             blob_value: Some(blob_value),
         }
@@ -155,15 +169,25 @@ impl RuntimeBindableAssetValue {
         self.font_value.as_ref()
     }
 
+    pub(crate) fn image_value(&self) -> Option<&RuntimeImageAssetValue> {
+        self.image_value.as_ref()
+    }
+
     pub(crate) fn blob_value(&self) -> Option<&RuntimeBlobAssetValue> {
         self.blob_value.as_ref()
     }
 
     pub(crate) fn data_bind_asset_index(&self) -> u64 {
-        self.font_value
+        self.image_value
             .as_ref()
-            .filter(|font_value| font_value.live_font_bytes_arc().is_some())
-            .map(RuntimeFontAssetValue::file_asset_index)
+            .filter(|image_value| image_value.live_image().is_some())
+            .map(|_| u64::from(u32::MAX))
+            .or_else(|| {
+                self.font_value
+                    .as_ref()
+                    .filter(|font_value| font_value.live_font_bytes_arc().is_some())
+                    .map(RuntimeFontAssetValue::file_asset_index)
+            })
             .or_else(|| {
                 self.blob_value
                     .as_ref()
@@ -171,6 +195,14 @@ impl RuntimeBindableAssetValue {
                     .map(RuntimeBlobAssetValue::file_asset_index)
             })
             .unwrap_or(self.asset_index)
+    }
+
+    pub(crate) fn image_data_bind_value(&self) -> Option<RuntimeImageAssetValue> {
+        let image_value = self.image_value.as_ref()?;
+        Some(RuntimeImageAssetValue::new(
+            self.asset_index,
+            image_value.live_image().cloned(),
+        ))
     }
 
     pub(crate) fn font_data_bind_value(&self) -> Option<RuntimeFontAssetValue> {
@@ -203,6 +235,12 @@ impl RuntimeBindableAssetValue {
         }
     }
 
+    pub(crate) fn mark_as_image(&mut self) {
+        if self.image_value.is_none() {
+            self.image_value = Some(RuntimeImageAssetValue::new(self.asset_index, None));
+        }
+    }
+
     pub(crate) fn mark_as_blob(&mut self) {
         if self.blob_value.is_none() {
             self.blob_value = Some(RuntimeBlobAssetValue::from_file_asset_index(
@@ -227,6 +265,19 @@ impl RuntimeBindableAssetValue {
                 changed = true;
             }
         }
+        changed
+    }
+
+    /// Pinned `ContextValueAssetImage::apply(BindablePropertyAsset*)` copies
+    /// the private live image before writing the independent generated id.
+    pub(crate) fn apply_image_value(&mut self, image_value: &RuntimeImageAssetValue) -> bool {
+        let mut changed = self
+            .image_value
+            .as_ref()
+            .is_none_or(|current| !current.same_runtime_value(image_value));
+        self.image_value = Some(image_value.clone());
+        changed |= self.asset_index != image_value.file_asset_index();
+        self.asset_index = image_value.file_asset_index();
         changed
     }
 
@@ -564,6 +615,10 @@ impl StateMachineBindableAssetInstance {
 
     pub(crate) fn apply_font_value(&mut self, value: &RuntimeFontAssetValue) -> bool {
         self.value.apply_font_value(value)
+    }
+
+    pub(crate) fn apply_image_value(&mut self, value: &RuntimeImageAssetValue) -> bool {
+        self.value.apply_image_value(value)
     }
 
     pub(crate) fn apply_blob_value(&mut self, value: &RuntimeBlobAssetValue) -> bool {
@@ -1510,6 +1565,9 @@ pub(crate) fn runtime_bindable_assets(
             default_instance,
         ) {
             values.entry(target.id).and_modify(|bindable_asset| {
+                if source.value.image_value().is_some() {
+                    bindable_asset.value.mark_as_image();
+                }
                 if source.value.font_value().is_some() {
                     bindable_asset.value.mark_as_font();
                 }
@@ -1540,9 +1598,9 @@ fn runtime_bindable_asset_default_view_model_source(
     }) {
         let asset_index = source.uint_property("propertyValue")?;
         match source.type_name {
-            "ViewModelInstanceAssetImage" => {
-                RuntimeBindableAssetValue::from_asset_index(asset_index)
-            }
+            "ViewModelInstanceAssetImage" => RuntimeBindableAssetValue::from_image_value(
+                RuntimeImageAssetValue::new(asset_index, None),
+            ),
             "ViewModelInstanceAssetFont" => RuntimeBindableAssetValue::from_font_value(
                 RuntimeFontAssetValue::from_file_asset_index(asset_index),
             ),
@@ -1559,7 +1617,10 @@ fn runtime_bindable_asset_default_view_model_source(
             .unwrap_or(u64::from(u32::MAX));
         match property.type_name {
             "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => {
-                RuntimeBindableAssetValue::from_asset_index(asset_index)
+                RuntimeBindableAssetValue::from_image_value(RuntimeImageAssetValue::new(
+                    asset_index,
+                    None,
+                ))
             }
             "ViewModelPropertyAssetFont" => RuntimeBindableAssetValue::from_font_value(
                 RuntimeFontAssetValue::from_file_asset_index(asset_index),
@@ -2273,6 +2334,38 @@ mod tests {
             .expect("font bindable has a font channel");
         assert_eq!(copied_file.file_asset_index(), 5);
         assert_eq!(copied_file.live_font_bytes(), None);
+    }
+
+    #[test]
+    fn bindable_image_copies_private_image_before_independent_property_value() {
+        let live = crate::RuntimeViewModelImage::new(vec![2, 4, 6, 8]);
+        let mut bindable = RuntimeBindableAssetValue::from_image_value(
+            RuntimeImageAssetValue::new(u64::from(u32::MAX), Some(live.clone())),
+        );
+
+        assert!(bindable.set_asset_index(3));
+        let copied = bindable
+            .image_data_bind_value()
+            .expect("image bindable has an image channel");
+        assert_eq!(copied.file_asset_index(), 3);
+        assert!(
+            copied.live_image().is_some_and(|image| image.ptr_eq(&live)),
+            "a generated propertyValue write preserves BindablePropertyAsset::imageValue"
+        );
+        assert_eq!(
+            bindable.data_bind_asset_index(),
+            u64::from(u32::MAX),
+            "a live Image wins when the bindable is applied back to an image source"
+        );
+
+        assert!(bindable.apply_image_value(&RuntimeImageAssetValue::new(1, None)));
+        assert_eq!(bindable.asset_index(), 1);
+        assert!(
+            bindable
+                .image_value()
+                .is_some_and(|value| value.live_image().is_none()),
+            "source-to-target applies the private image channel before the scalar id"
+        );
     }
 
     #[test]

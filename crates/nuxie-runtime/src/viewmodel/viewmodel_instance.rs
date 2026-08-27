@@ -6829,6 +6829,22 @@ impl RuntimeOwnedViewModelInstance {
         self.asset_value_by_property_path(&property_path)
     }
 
+    pub(crate) fn runtime_image_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<RuntimeViewModelImage> {
+        let property_path = self.property_path_for_context_source_path(
+            file,
+            context_path,
+            source_path,
+            name_based,
+        )?;
+        self.runtime_image_by_property_path(&property_path)
+    }
+
     fn font_asset_value_by_property_index(
         &self,
         property_index: usize,

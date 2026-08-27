@@ -491,6 +491,7 @@ impl StateMachineInstance {
                 }
             }
             machine.sync_bindable_font_assets_from_default_context();
+            machine.sync_bindable_image_assets_from_default_context();
             machine.active_file_view_model_binding =
                 machine.default_view_model_index.map(|index| (index, 0));
             machine.needs_advance = true;
@@ -586,6 +587,11 @@ impl StateMachineInstance {
                 view_model_index,
                 instance_index,
             );
+            machine.sync_bindable_image_assets_from_imported_instance(
+                file,
+                view_model_index,
+                instance_index,
+            );
             machine.active_file_view_model_binding = Some((view_model_index, instance_index));
             machine.needs_advance = true;
             true
@@ -619,6 +625,11 @@ impl StateMachineInstance {
                 graph.bind_imported_view_model_context(file, context);
             }
             machine.sync_bindable_font_assets_from_imported_instance(
+                file,
+                context.view_model_index,
+                context.instance_index,
+            );
+            machine.sync_bindable_image_assets_from_imported_instance(
                 file,
                 context.view_model_index,
                 context.instance_index,
@@ -754,6 +765,7 @@ impl StateMachineInstance {
             self.owned_data_bind_context_bind_count += 1;
         }
         self.sync_bindable_font_assets_from_owned_data_context(&data_context);
+        self.sync_bindable_image_assets_from_owned_data_context(&data_context);
         self.bind_view_model_listener_cells_for_data_context(&data_context);
         self.retain_owned_view_model_advance_context(&data_context);
         self.register_owned_view_model_rebind_dependents();
@@ -778,6 +790,7 @@ impl StateMachineInstance {
             changed |= graph.bind_owned_view_model_context(context);
         }
         self.sync_bindable_font_assets_from_owned_context(context);
+        self.sync_bindable_image_assets_from_owned_context(context);
         self.bind_view_model_listener_cells_for_context_chain(context, &[&[]]);
         if changed {
             self.needs_advance = true;
@@ -801,6 +814,7 @@ impl StateMachineInstance {
                 changed |= graph.bind_owned_view_model_context(context);
             }
             machine.sync_bindable_font_assets_from_owned_context(context);
+            machine.sync_bindable_image_assets_from_owned_context(context);
             machine.bind_view_model_listener_cells_for_context_chain(context, &[&[]]);
             if changed {
                 machine.needs_advance = true;
@@ -1241,6 +1255,11 @@ impl StateMachineInstance {
                 context,
                 context_chain,
             );
+            machine.sync_bindable_image_assets_from_owned_context_chain(
+                file,
+                context,
+                context_chain,
+            );
             machine.bind_view_model_listener_cells_for_context_chain(context, context_chain);
             if changed {
                 machine.needs_advance = true;
@@ -1291,6 +1310,121 @@ impl StateMachineInstance {
                 bindable.apply_font_value(&value);
             }
         }
+    }
+    fn sync_bindable_image_assets<F>(&mut self, mut resolve: F)
+    where
+        F: FnMut(
+            &RuntimeBindableAssetDefaultViewModelSource,
+        ) -> Option<crate::context_value_asset_image::RuntimeImageAssetValue>,
+    {
+        for bindable in &mut self.bindable_assets {
+            let value = bindable
+                .default_view_model_sources
+                .iter()
+                .filter(|source| {
+                    data_bind_flags_apply_source_to_target(source.flags)
+                        && source.value.image_value().is_some()
+                })
+                .filter_map(&mut resolve)
+                .last();
+            if let Some(value) = value {
+                bindable.apply_image_value(&value);
+            }
+        }
+    }
+    fn sync_bindable_image_assets_from_default_context(&mut self) {
+        self.sync_bindable_image_assets(|source| source.value.image_data_bind_value());
+    }
+    fn sync_bindable_image_assets_from_imported_instance(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+    ) {
+        let instance_object = file
+            .view_model(view_model_index)
+            .and_then(|view_model| view_model.instances.into_iter().nth(instance_index))
+            .map(|instance| instance.object);
+        self.sync_bindable_image_assets(|source| {
+            let source_object =
+                file.data_context_view_model_property_for_instance(instance_object?, &source.path)?;
+            (source_object.type_name == "ViewModelInstanceAssetImage")
+                .then(|| source_object.uint_property("propertyValue"))
+                .flatten()
+                .map(|value| {
+                    crate::context_value_asset_image::RuntimeImageAssetValue::new(value, None)
+                })
+        });
+    }
+    pub(super) fn sync_bindable_image_assets_from_owned_context(
+        &mut self,
+        context: &RuntimeOwnedViewModelInstance,
+    ) {
+        self.sync_bindable_image_assets(|source| {
+            if source.path.len() < 2
+                || usize::try_from(source.path[0]).ok()? != context.view_model_index
+            {
+                return None;
+            }
+            let property_path = source.path[1..]
+                .iter()
+                .map(|value| usize::try_from(*value).ok())
+                .collect::<Option<Vec<_>>>()?;
+            let value = context.asset_value_by_property_path(&property_path)?;
+            Some(
+                crate::context_value_asset_image::RuntimeImageAssetValue::new(
+                    value,
+                    context.runtime_image_by_property_path(&property_path),
+                ),
+            )
+        });
+    }
+    fn sync_bindable_image_assets_from_owned_context_chain(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[&[usize]],
+    ) {
+        self.sync_bindable_image_assets(|source| {
+            context_chain.iter().find_map(|context_path| {
+                let value = context.asset_value_by_context_source_path(
+                    file,
+                    context_path,
+                    &source.path,
+                    false,
+                )?;
+                Some(
+                    crate::context_value_asset_image::RuntimeImageAssetValue::new(
+                        value,
+                        context.runtime_image_by_context_source_path(
+                            file,
+                            context_path,
+                            &source.path,
+                            false,
+                        ),
+                    ),
+                )
+            })
+        });
+    }
+    pub(super) fn sync_bindable_image_assets_from_owned_data_context(
+        &mut self,
+        data_context: &RuntimeOwnedDataContext,
+    ) {
+        self.sync_bindable_image_assets(|source| {
+            data_context.resolved_property_path(&source.path).and_then(
+                |(context, property_path)| {
+                    let context = context.borrow();
+                    let value = context.asset_value_by_property_path(&property_path)?;
+                    Some(
+                        crate::context_value_asset_image::RuntimeImageAssetValue::new(
+                            value,
+                            context.runtime_image_by_property_path(&property_path),
+                        ),
+                    )
+                },
+            )
+        });
     }
     fn sync_bindable_font_assets_from_default_context(&mut self) {
         self.sync_bindable_font_assets(|source| source.value.font_value().cloned());

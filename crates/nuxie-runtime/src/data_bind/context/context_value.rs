@@ -14,6 +14,7 @@ use nuxie_binary::{RuntimeDataType, RuntimeDataValue, RuntimeFile, RuntimeObject
 use crate::artboard_data_bind::{
     RuntimeOwnedDataContext, runtime_owned_view_model_binding_value_for_property_path,
 };
+use crate::context_value_asset_image::RuntimeImageAssetValue;
 use crate::data_bind_container::RuntimeDataBindContainerQueue;
 use crate::data_converter::RuntimeDataConverterDataBindState;
 use crate::data_converter_interpolator::RuntimeDataConverterInterpolatorState;
@@ -33,8 +34,9 @@ use crate::{
     RuntimeDataContext, RuntimeExternalDataContext, RuntimeExternalDataOutputType,
     RuntimeExternalDataProgramHandle, RuntimeExternalDataResolver, RuntimeExternalDataState,
     RuntimeExternalDataValue, RuntimeExternalDataValuePath, RuntimeExternalViewModelReference,
-    RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance, RuntimeStateMachine,
-    RuntimeTransitionInterpolator, RuntimeViewModelPointer, StateMachineBindableArtboardInstance,
+    RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, RuntimeStateMachine, RuntimeTransitionInterpolator,
+    RuntimeViewModelImage, RuntimeViewModelPointer, StateMachineBindableArtboardInstance,
     StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
     StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
     StateMachineBindableIntegerInstance, StateMachineBindableListInstance,
@@ -268,6 +270,14 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
     /// same snapshot in `DataBindContextTargetValue` so target-to-source dirt
     /// can ignore notifications whose value did not actually change.
     target_value: Option<RuntimeDataBindGraphValue>,
+    /// Private `ImageAsset` payload retained beside an image source's scalar
+    /// `propertyValue`. C++ retains the concrete source object itself; Rust
+    /// retains its owned instance and exact property path.
+    retained_image_source: Option<RuntimeRetainedImageSource>,
+    retained_image_value: Option<RuntimeImageAssetValue>,
+    /// Last concrete target `DataValueAssetImage` snapshot. Image identity is
+    /// independent of its integer payload and participates in target dirt.
+    target_image_value: Option<RuntimeImageAssetValue>,
     /// Every source owns exactly one C++-shaped direction engine. Keep this
     /// field before converter occurrence state: Rust drops fields in
     /// declaration order, matching `DataBind::~DataBind` clearing the outer
@@ -301,6 +311,29 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
     /// only the dependency identity; values are read from this object after
     /// dirt, matching C++ ContextValueList/ContextValueViewModel ownership.
     pub(crate) retained_structural_source: Option<RuntimeOwnedViewModelStructuralSource>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeRetainedImageSource {
+    owner: RuntimeOwnedViewModelHandle,
+    property_path: Vec<usize>,
+}
+
+impl RuntimeRetainedImageSource {
+    fn value(&self, file_asset_index: u64) -> RuntimeImageAssetValue {
+        RuntimeImageAssetValue::new(
+            file_asset_index,
+            self.owner
+                .borrow()
+                .runtime_image_by_property_path(&self.property_path),
+        )
+    }
+
+    fn apply(&self, image: Option<RuntimeViewModelImage>) -> bool {
+        self.owner
+            .borrow_mut()
+            .set_runtime_image_by_property_path(&self.property_path, image)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -6353,6 +6386,9 @@ impl RuntimeDataBindGraph {
             source_to_target_dirty_after_immediate: false,
             source_to_target_dirty_after_target_to_source: false,
             target_value: None,
+            retained_image_source: None,
+            retained_image_value: None,
+            target_image_value: None,
             converter,
             converter_state,
             converter_data_binds: RuntimeDataConverterDataBindState::default(),
@@ -6461,6 +6497,8 @@ impl RuntimeDataBindGraph {
         }
         self.clear_retained_binds();
         for source in &mut self.sources {
+            source.retained_image_source = None;
+            source.retained_image_value = None;
             if !source.context_bindable {
                 source.bound = false;
                 continue;
@@ -6519,6 +6557,8 @@ impl RuntimeDataBindGraph {
 
         self.clear_retained_binds();
         for source in &mut self.sources {
+            source.retained_image_source = None;
+            source.retained_image_value = None;
             if !source.context_bindable {
                 source.bound = false;
                 continue;
@@ -6647,8 +6687,29 @@ impl RuntimeDataBindGraph {
                 .resolve_from_owned_view_model_instance(context, &source.path)
             {
                 source.value = value;
+                source.retained_image_source = None;
+                source.retained_image_value = match &source.value {
+                    RuntimeDataBindGraphValue::Asset(value) => source.path[1..]
+                        .iter()
+                        .map(|property_index| usize::try_from(*property_index).ok())
+                        .collect::<Option<Vec<_>>>()
+                        .filter(|property_path| {
+                            context
+                                .asset_value_by_property_path(property_path)
+                                .is_some()
+                        })
+                        .map(|property_path| {
+                            RuntimeImageAssetValue::new(
+                                *value,
+                                context.runtime_image_by_property_path(&property_path),
+                            )
+                        }),
+                    _ => None,
+                };
                 source.bound = true;
             } else {
+                source.retained_image_source = None;
+                source.retained_image_value = None;
                 source.bound = false;
             }
             if let Some(converter) = source.converter.as_mut() {
@@ -6689,8 +6750,37 @@ impl RuntimeDataBindGraph {
                 )
             }) {
                 source.value = value;
+                source.retained_image_source = None;
+                source.retained_image_value = match &source.value {
+                    RuntimeDataBindGraphValue::Asset(value) => context_chain
+                        .iter()
+                        .find(|context_path| {
+                            context
+                                .asset_value_by_context_source_path(
+                                    file,
+                                    context_path,
+                                    &source.path,
+                                    source.name_based,
+                                )
+                                .is_some()
+                        })
+                        .map(|context_path| {
+                            RuntimeImageAssetValue::new(
+                                *value,
+                                context.runtime_image_by_context_source_path(
+                                    file,
+                                    context_path,
+                                    &source.path,
+                                    source.name_based,
+                                ),
+                            )
+                        }),
+                    _ => None,
+                };
                 source.bound = true;
             } else {
+                source.retained_image_source = None;
+                source.retained_image_value = None;
                 source.bound = false;
             }
             if let Some(converter) = source.converter.as_mut() {
@@ -6751,6 +6841,27 @@ impl RuntimeDataBindGraph {
             source.bound = false;
             return false;
         }
+        let resolved_image_source = file
+            .filter(|_| source.name_based)
+            .and_then(|file| {
+                data_context.resolved_property_path_with_manifest(
+                    file,
+                    &source.authored_path,
+                    true,
+                    true,
+                )
+            })
+            .or_else(|| data_context.resolved_property_path(&source.path))
+            .filter(|(owner, property_path)| {
+                owner
+                    .borrow()
+                    .asset_value_by_property_path(property_path)
+                    .is_some()
+            })
+            .map(|(owner, property_path)| RuntimeRetainedImageSource {
+                owner,
+                property_path,
+            });
         let resolved = file
             .filter(|_| source.name_based)
             .and_then(|file| {
@@ -6803,6 +6914,17 @@ impl RuntimeDataBindGraph {
                 }
                 source.retained_structural_source = structural_source;
                 source.value = value;
+                source.retained_image_source = resolved_image_source;
+                source.retained_image_value =
+                    source
+                        .retained_image_source
+                        .as_ref()
+                        .and_then(|image_source| match &source.value {
+                            RuntimeDataBindGraphValue::Asset(value) => {
+                                Some(image_source.value(*value))
+                            }
+                            _ => None,
+                        });
                 source.bound = true;
                 source.attach_converter_parent();
                 source.mark_reconcile_dirty();
@@ -6821,6 +6943,8 @@ impl RuntimeDataBindGraph {
                         .unbind(converter, &mut source.converter_state);
                 }
                 source.retained_structural_source = None;
+                source.retained_image_source = None;
+                source.retained_image_value = None;
                 source.bound = false;
                 source.attach_converter_parent();
                 false
@@ -10365,7 +10489,12 @@ impl RuntimeDataBindGraph {
             return Ok(false);
         }
 
-        let mut updates = Vec::<(usize, Vec<u32>, RuntimeDataBindGraphValue)>::new();
+        let mut updates = Vec::<(
+            usize,
+            Vec<u32>,
+            RuntimeDataBindGraphValue,
+            Option<RuntimeImageAssetValue>,
+        )>::new();
         let mut applied_target_to_source = false;
         let mut formula_random_source = std::mem::take(&mut self.formula_random_source);
 
@@ -10386,13 +10515,17 @@ impl RuntimeDataBindGraph {
             let Some(target_value) = targets.current_value(target_kind, &source.value) else {
                 continue;
             };
+            let target_image_value = matches!(source.value, RuntimeDataBindGraphValue::Asset(_))
+                .then(|| targets.current_image_value(target_kind))
+                .flatten();
             let target_to_source_dirty = source.target_to_source_dirty
                 || (include_deferred_main_to_target
                     && source.source_to_target_dirty_after_immediate);
             if !target_to_source_dirty {
                 continue;
             }
-            let target_changed = source.sync_target_value(target_value.clone());
+            let target_changed = source.sync_target_value(target_value.clone())
+                | source.sync_target_image_value(target_image_value.clone());
             if !target_changed && !include_deferred_main_to_target {
                 source.target_to_source_dirty = false;
                 continue;
@@ -10414,13 +10547,29 @@ impl RuntimeDataBindGraph {
             if include_deferred_main_to_target {
                 source.source_to_target_dirty_after_immediate = false;
             }
-            let Some(value) = converted
+            let Some(mut value) = converted
                 .as_ref()
                 .and_then(|value| matching_graph_source_value(&source.value, value))
             else {
                 continue;
             };
             applied_target_to_source = true;
+
+            if let Some(image_value) = target_image_value.as_ref() {
+                if let Some(image_source) = source.retained_image_source.as_ref() {
+                    image_source.apply(image_value.live_image().cloned());
+                }
+                if image_value.live_image().is_some() {
+                    value = RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX));
+                }
+                source.retained_image_value = Some(RuntimeImageAssetValue::new(
+                    match &value {
+                        RuntimeDataBindGraphValue::Asset(value) => *value,
+                        _ => image_value.file_asset_index(),
+                    },
+                    image_value.live_image().cloned(),
+                ));
+            }
 
             // The retained cell is the C++ source owner. Write it while this
             // occurrence suppresses its own notification; sibling DataBinds
@@ -10431,11 +10580,16 @@ impl RuntimeDataBindGraph {
             {
                 source.retained_bind.update_source_binding_value(cell_value);
             }
-            updates.push((binding.source.0, source.path.clone(), value));
+            updates.push((
+                binding.source.0,
+                source.path.clone(),
+                value,
+                target_image_value,
+            ));
         }
 
         let mut changed = false;
-        for (origin_source_index, path, value) in updates {
+        for (origin_source_index, path, value, image_value) in updates {
             let mut source_changed_for_path = false;
             for source in &mut self.sources {
                 if !source.bound || source.path != path {
@@ -10444,6 +10598,13 @@ impl RuntimeDataBindGraph {
                 source_changed_for_path |=
                     assign_matching_scalar_graph_value(&mut source.value, &value)
                         | assign_matching_scalar_graph_value(&mut source.default_value, &value);
+                if let Some(image_value) = image_value.as_ref()
+                    && source
+                        .current_image_value(image_value.file_asset_index())
+                        .is_some()
+                {
+                    source.retained_image_value = Some(image_value.clone());
+                }
             }
             if source_changed_for_path {
                 if let Some(origin) = self.sources.get_mut(origin_source_index) {
@@ -10506,7 +10667,14 @@ impl RuntimeDataBindGraph {
         include_view_models: bool,
         phase: RuntimeDataBindGraphApplyPhase,
         only_data_bind_index: Option<usize>,
-    ) -> Result<Vec<(RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue)>, ScriptError> {
+    ) -> Result<
+        Vec<(
+            RuntimeDataBindGraphTarget,
+            RuntimeDataBindGraphValue,
+            Option<RuntimeImageAssetValue>,
+        )>,
+        ScriptError,
+    > {
         if !self.default_view_model_context_bound()
             || (only_data_bind_index.is_none() && !self.default_view_model_bindings_dirty)
         {
@@ -10696,7 +10864,11 @@ impl RuntimeDataBindGraph {
             if source.applies_target_to_source() {
                 source.target_value = Some(value.clone());
             }
-            updates.push((target.target, value));
+            let image_value = match &value {
+                RuntimeDataBindGraphValue::Asset(value) => source.current_image_value(*value),
+                _ => None,
+            };
+            updates.push((target.target, value, image_value));
             source.source_to_target_dirty_after_immediate = false;
             source.source_to_target_dirty_after_target_to_source = false;
             source.reconcile_pending = false;
@@ -10712,7 +10884,11 @@ impl RuntimeDataBindGraph {
         include_view_models: bool,
         phase: RuntimeDataBindGraphApplyPhase,
         only_data_bind_index: Option<usize>,
-    ) -> Vec<(RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue)> {
+    ) -> Vec<(
+        RuntimeDataBindGraphTarget,
+        RuntimeDataBindGraphValue,
+        Option<RuntimeImageAssetValue>,
+    )> {
         self.take_default_view_model_binding_updates_with_script_errors(
             include_view_models,
             phase,
@@ -10727,12 +10903,14 @@ impl RuntimeDataBindGraph {
         phase: RuntimeDataBindGraphApplyPhase,
     ) -> Result<(), ScriptError> {
         let include_view_models = targets.include_view_models;
-        for (target, value) in self.take_default_view_model_binding_updates_with_script_errors(
-            include_view_models,
-            phase,
-            None,
-        )? {
-            targets.apply_default_view_model_binding(&target, &value);
+        for (target, value, image_value) in self
+            .take_default_view_model_binding_updates_with_script_errors(
+                include_view_models,
+                phase,
+                None,
+            )?
+        {
+            targets.apply_default_view_model_binding(&target, &value, image_value.as_ref());
         }
         Ok(())
     }
@@ -10754,8 +10932,8 @@ impl RuntimeDataBindGraph {
             Some(data_bind_index),
         )?;
         self.clear_retained_data_bind_occurrence_dirt(data_bind_index);
-        for (target, value) in updates {
-            targets.apply_default_view_model_binding(&target, &value);
+        for (target, value, image_value) in updates {
+            targets.apply_default_view_model_binding(&target, &value, image_value.as_ref());
         }
         Ok(())
     }
@@ -10781,8 +10959,8 @@ impl RuntimeDataBindGraph {
                 Some(data_bind_index),
             )?;
             self.clear_retained_data_bind_occurrence_dirt(data_bind_index);
-            for (target, value) in updates {
-                targets.apply_default_view_model_binding(&target, &value);
+            for (target, value, image_value) in updates {
+                targets.apply_default_view_model_binding(&target, &value, image_value.as_ref());
             }
         }
         Ok(())
@@ -10859,8 +11037,8 @@ impl RuntimeDataBindGraph {
         )?;
 
         self.clear_retained_data_bind_occurrence_dirt(data_bind_index);
-        for (target, value) in updates {
-            targets.apply_default_view_model_binding(&target, &value);
+        for (target, value, image_value) in updates {
+            targets.apply_default_view_model_binding(&target, &value, image_value.as_ref());
         }
 
         if wants_target_to_source && source_runs_first {
@@ -10925,7 +11103,7 @@ impl RuntimeDataBindGraph {
     ) -> Vec<(RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue)> {
         self.take_default_view_model_binding_updates(false, phase, None)
             .into_iter()
-            .filter(|(target, _)| {
+            .filter(|(target, _, _)| {
                 matches!(
                     target,
                     RuntimeDataBindGraphTarget::KeyFrameNumber { .. }
@@ -10934,14 +11112,36 @@ impl RuntimeDataBindGraph {
                         | RuntimeDataBindGraphTarget::KeyFrameString { .. }
                 )
             })
+            .map(|(target, value, _)| (target, value))
             .collect()
     }
 }
 
 impl RuntimeDataBindGraphSourceNode {
+    fn current_image_value(&self, file_asset_index: u64) -> Option<RuntimeImageAssetValue> {
+        self.retained_image_source
+            .as_ref()
+            .map(|source| source.value(file_asset_index))
+            .or_else(|| {
+                self.retained_image_value.as_ref().map(|value| {
+                    RuntimeImageAssetValue::new(file_asset_index, value.live_image().cloned())
+                })
+            })
+    }
+
     fn sync_target_value(&mut self, value: RuntimeDataBindGraphValue) -> bool {
         let changed = self.target_value.as_ref() != Some(&value);
         self.target_value = Some(value);
+        changed
+    }
+
+    fn sync_target_image_value(&mut self, value: Option<RuntimeImageAssetValue>) -> bool {
+        let changed = match (&self.target_image_value, &value) {
+            (Some(current), Some(next)) => !current.same_runtime_value(next),
+            (None, None) => false,
+            _ => true,
+        };
+        self.target_image_value = value;
         changed
     }
 
@@ -11365,6 +11565,20 @@ impl RuntimeDataBindGraphSourceNode {
 }
 
 impl RuntimeDataBindGraphTargetsMut<'_> {
+    fn current_image_value(
+        &self,
+        target: RuntimeDataBindGraphTarget,
+    ) -> Option<RuntimeImageAssetValue> {
+        let RuntimeDataBindGraphTarget::Asset { global_id } = target else {
+            return None;
+        };
+        self.assets
+            .iter()
+            .find(|target| target.global_id == global_id)?
+            .value
+            .image_data_bind_value()
+    }
+
     fn current_value(
         &self,
         target: RuntimeDataBindGraphTarget,
@@ -11462,6 +11676,7 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
         &mut self,
         target: &RuntimeDataBindGraphTarget,
         value: &RuntimeDataBindGraphValue,
+        image_value: Option<&RuntimeImageAssetValue>,
     ) {
         match (target, value) {
             (
@@ -11557,7 +11772,11 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                     .iter_mut()
                     .find(|target| target.global_id == *global_id)
                 {
-                    target.set_value(*value);
+                    if let Some(image_value) = image_value {
+                        target.apply_image_value(image_value);
+                    } else {
+                        target.set_value(*value);
+                    }
                 }
             }
             (
@@ -13286,6 +13505,7 @@ mod tests {
             [(
                 RuntimeDataBindGraphTarget::Number { global_id: 7 },
                 RuntimeDataBindGraphValue::Number(8.0),
+                None,
             )]
         ));
 
@@ -13310,9 +13530,10 @@ mod tests {
             None,
         );
 
-        let [(target, value)] = updates.as_slice() else {
+        let [(target, value, image_value)] = updates.as_slice() else {
             panic!("expected one source-to-target update");
         };
+        assert!(image_value.is_none());
         assert!(matches!(
             target,
             RuntimeDataBindGraphTarget::Number { global_id: 7 }

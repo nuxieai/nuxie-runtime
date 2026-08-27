@@ -171,6 +171,7 @@ impl StateMachineInstance {
             );
         }
         self.sync_bindable_font_assets_from_owned_data_context(data_context);
+        self.sync_bindable_image_assets_from_owned_data_context(data_context);
         changed
     }
     /// Mirrors C++ `DataBindContainer::updateDataBinds(false)`. Dirty

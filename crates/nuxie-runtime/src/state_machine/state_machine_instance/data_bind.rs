@@ -33,6 +33,7 @@ impl StateMachineInstance {
         // same frame. Refresh the full Font payload now; the scalar graph only
         // carries the generated propertyValue index.
         self.sync_bindable_font_assets_from_owned_context(context);
+        self.sync_bindable_image_assets_from_owned_context(context);
         true
     }
     pub(super) fn set_owned_view_model_context_blob_asset_source_for_data_bind(

@@ -292,7 +292,7 @@ impl RuntimeFile {
         // These two cursors mirror the distinct ImportStack keys. A transition
         // does not replace the latest LayerState, and a new StateMachine does
         // not replace either key.
-        let mut current_layer_state: Option<(usize, usize, usize, Option<usize>)> = None;
+        let mut current_layer_state = None::<layer_state_importer::LayerStateImporter>;
         let mut current_transition: Option<state_transition_importer::StateTransitionImporter> =
             None;
         // ImportStack retains the latest importer independently for every
@@ -493,12 +493,19 @@ impl RuntimeFile {
                         .states
                         .len()
                         - 1;
-                    current_layer_state = Some((
+                    let next_layer_state_importer = layer_state_importer::LayerStateImporter::new(
                         owner_state_machine_index,
                         layer_index,
                         state_index,
-                        layer_artboard_index,
-                    ));
+                    );
+                    // File installs the new importer only after LayerState::import
+                    // has appended the new state, so replacement resolves the
+                    // previously retained state at this exact point.
+                    if let Some(previous_layer_state_importer) =
+                        current_layer_state.replace(next_layer_state_importer)
+                    {
+                        previous_layer_state_importer.resolve(&mut state_machines);
+                    }
                     current_layer_component = Some(
                         state_machine_layer_component_importer::StateMachineLayerComponentImporter::new(
                             RuntimeStateMachineLayerComponentOwner::State {
@@ -514,9 +521,7 @@ impl RuntimeFile {
             }
 
             if definition.is_a("BlendAnimation") {
-                if let Some((owner_state_machine_index, layer_index, state_index, _)) =
-                    current_layer_state
-                {
+                if let Some(layer_state_importer) = current_layer_state {
                     // BlendAnimation::import resolves against the Artboard
                     // importer that is latest for this record, unlike the
                     // enclosing layer's deferred AnimationState resolution
@@ -532,22 +537,24 @@ impl RuntimeFile {
                     let animation = animation_index
                         .and_then(|index| current_artboard_animations.get(index))
                         .copied();
-                    state_machines[owner_state_machine_index].layers[layer_index].states
-                        [state_index]
-                        .blend_animations
-                        .push(RuntimeBlendAnimation {
+                    let accepted = layer_state_importer.add_blend_animation(
+                        &mut state_machines,
+                        RuntimeBlendAnimation {
                             object,
                             animation_index,
                             animation,
-                        });
+                        },
+                    );
+                    debug_assert!(accepted);
                 }
                 continue;
             }
 
             if definition.is_a("StateTransition") {
-                if let Some((owner_state_machine_index, layer_index, state_index, _)) =
-                    current_layer_state
-                {
+                if let Some(layer_state_importer) = current_layer_state {
+                    let owner_state_machine_index = layer_state_importer.state_machine_index;
+                    let layer_index = layer_state_importer.layer_index;
+                    let state_index = layer_state_importer.state_index;
                     let owner_artboard_range = state_machine_artboard_owners
                         .get(owner_state_machine_index)
                         .copied()
@@ -571,10 +578,9 @@ impl RuntimeFile {
                             )
                         });
 
-                    state_machines[owner_state_machine_index].layers[layer_index].states
-                        [state_index]
-                        .transitions
-                        .push(RuntimeStateTransition {
+                    let transition_index = layer_state_importer.add_transition(
+                        &mut state_machines,
+                        RuntimeStateTransition {
                             object,
                             state_to_index: None,
                             state_to: None,
@@ -586,13 +592,8 @@ impl RuntimeFile {
                             fire_actions: Vec::new(),
                             listener_actions: Vec::new(),
                             conditions: Vec::new(),
-                        });
-                    let transition_index = state_machines[owner_state_machine_index].layers
-                        [layer_index]
-                        .states[state_index]
-                        .transitions
-                        .len()
-                        - 1;
+                        },
+                    );
                     let next_transition_importer =
                         state_transition_importer::StateTransitionImporter::new(
                             owner_state_machine_index,
@@ -764,6 +765,9 @@ impl RuntimeFile {
         }
         if let Some(transition_importer) = current_transition {
             transition_importer.resolve();
+        }
+        if let Some(layer_state_importer) = current_layer_state {
+            layer_state_importer.resolve(&mut state_machines);
         }
         if let Some(gamepad_importer) = current_gamepad_input_type {
             let _ = gamepad_importer.resolve();

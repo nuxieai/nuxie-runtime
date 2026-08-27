@@ -5638,22 +5638,6 @@ fn resolve_runtime_state_machine_transition_targets(
                 .collect::<Vec<_>>();
 
             for state in &mut layer.states {
-                let state_is_blend = state.object.is_some_and(|object| {
-                    definition_by_type_key(object.type_key)
-                        .is_some_and(|definition| definition.is_a("BlendState"))
-                });
-                let blend_animations = state
-                    .blend_animations
-                    .iter()
-                    .map(|animation| {
-                        (
-                            animation.object,
-                            animation.animation_index,
-                            animation.animation,
-                        )
-                    })
-                    .collect::<Vec<_>>();
-
                 for transition in &mut state.transitions {
                     // StateMachineLayerImporter resolves only the transitions
                     // present when it is replaced (or at EOF). A transition
@@ -5674,28 +5658,6 @@ fn resolve_runtime_state_machine_transition_targets(
                         .flatten();
                     transition.state_to_index = state_to_index;
                     transition.state_to = state_to_index.and_then(|index| state_objects[index]);
-
-                    let transition_is_blend = definition_by_type_key(transition.object.type_key)
-                        .is_some_and(|definition| definition.is_a("BlendStateTransition"));
-                    if !state_is_blend || !transition_is_blend {
-                        continue;
-                    }
-
-                    let exit_blend_animation_index = usize::try_from(
-                        transition
-                            .object
-                            .uint_property("exitBlendAnimationId")
-                            .unwrap_or(u64::MAX),
-                    )
-                    .ok()
-                    .filter(|index| *index < blend_animations.len());
-                    if let Some(index) = exit_blend_animation_index {
-                        let (blend_animation, animation_index, animation) = blend_animations[index];
-                        transition.exit_blend_animation_index = Some(index);
-                        transition.exit_blend_animation = Some(blend_animation);
-                        transition.exit_animation_index = animation_index;
-                        transition.exit_animation = animation;
-                    }
                 }
             }
         }

@@ -1,0 +1,23 @@
+use crate::mechanical_port::source::{backboard::Backboard, core::binary_reader::BinaryReader};
+
+#[derive(Default)]
+pub struct BackboardBase;
+
+impl BackboardBase {
+    pub const TYPE_KEY: u16 = 23;
+    pub fn is_type_of(type_key: u16) -> bool {
+        type_key == Self::TYPE_KEY
+    }
+    pub fn core_type(&self) -> u16 {
+        Self::TYPE_KEY
+    }
+    pub fn copy(&mut self, _object: &Self) {}
+    pub fn deserialize(&mut self, _property_key: u16, _reader: &mut BinaryReader<'_>) -> bool {
+        false
+    }
+    pub fn clone_into(&self) -> Backboard {
+        let mut cloned = Backboard::default();
+        cloned.base.copy(self);
+        cloned
+    }
+}

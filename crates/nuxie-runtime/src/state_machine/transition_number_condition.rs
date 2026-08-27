@@ -9,6 +9,9 @@ pub(super) enum TransitionConditionOp {
     GreaterThanOrEqual,
     LessThan,
     GreaterThan,
+    /// Pinned `TransitionViewModelCondition::operation` returns the base
+    /// no-op operation for every unrecognized serialized value.
+    Unsupported,
 }
 
 impl TransitionConditionOp {
@@ -19,7 +22,8 @@ impl TransitionConditionOp {
             3 => Self::GreaterThanOrEqual,
             4 => Self::LessThan,
             5 => Self::GreaterThan,
-            _ => Self::Equal,
+            0 => Self::Equal,
+            _ => Self::Unsupported,
         }
     }
 
@@ -31,6 +35,7 @@ impl TransitionConditionOp {
             Self::GreaterThanOrEqual => input_value >= value,
             Self::LessThan => input_value < value,
             Self::GreaterThan => input_value > value,
+            Self::Unsupported => false,
         }
     }
 
@@ -100,6 +105,7 @@ impl RuntimeTransitionNumberCondition {
                 TransitionConditionOp::GreaterThanOrEqual => 3,
                 TransitionConditionOp::LessThan => 4,
                 TransitionConditionOp::GreaterThan => 5,
+                TransitionConditionOp::Unsupported => u32::MAX,
             },
             value,
         }

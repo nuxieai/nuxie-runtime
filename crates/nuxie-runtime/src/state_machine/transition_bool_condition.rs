@@ -42,6 +42,7 @@ impl RuntimeTransitionBoolCondition {
                 TransitionConditionOp::GreaterThanOrEqual => 3,
                 TransitionConditionOp::LessThan => 4,
                 TransitionConditionOp::GreaterThan => 5,
+                TransitionConditionOp::Unsupported => u32::MAX,
             },
         }
     }

@@ -8,10 +8,8 @@ impl RuntimeBlendState1DInput {
     }
 
     pub(crate) fn from_imported(object: &RuntimeObject) -> Option<usize> {
-        object
-            .uint_property("inputId")
-            .filter(|input_id| *input_id != u64::from(u32::MAX))
-            .and_then(|input_id| usize::try_from(input_id).ok())
+        let input_id = u32::try_from(object.uint_property("inputId")?).ok()?;
+        (input_id != u32::MAX).then_some(input_id as usize)
     }
 
     pub(crate) fn input_index(input_index: Option<usize>) -> Option<usize> {

@@ -10481,10 +10481,16 @@ fn blend_input_is_invalid(
         let Some(input_id) = object.uint_property("inputId") else {
             return false;
         };
-        if input_id == u64::from(u32::MAX) {
+        // Generated `BlendState1DInputBase::m_InputId` is a `uint32_t`.
+        // Pinned `readVarUintAs<unsigned int>` rejects an oversized value
+        // before the concrete owner's empty-id, range, and input-kind checks.
+        let Ok(input_id) = u32::try_from(input_id) else {
+            return true;
+        };
+        if input_id == u32::MAX {
             return false;
         }
-        return state_machine_input_is_not_number(context, input_id);
+        return state_machine_input_is_not_number(context, u64::from(input_id));
     }
 
     if definition.name == "BlendAnimationDirect" && object.uint_property("blendSource") == Some(0) {

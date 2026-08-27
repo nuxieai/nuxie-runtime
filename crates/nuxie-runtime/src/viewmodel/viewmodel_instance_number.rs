@@ -30,9 +30,10 @@ impl RuntimeOwnedViewModelNumber {
         }
     }
 
-    /// Same change contract as the replaced `value` field comparison: returns
-    /// whether the stored value changed (NaN writes always report a change,
-    /// exactly like the old `!=` guard).
+    /// Rust spelling of the generated `propertyValue(float)` setter followed
+    /// by `propertyValueChanged()`: retain the exact equality guard, then let
+    /// the shared cell publish `Bindings` dirt and `onValueChanged` state.
+    /// NaN writes therefore always report a change, as in the pinned setter.
     fn set_value(&mut self, value: f32) -> bool {
         if self.value() == value {
             return false;
@@ -40,6 +41,14 @@ impl RuntimeOwnedViewModelNumber {
         self.cell
             .set_value(RuntimeViewModelCellValue::Number(value));
         true
+    }
+
+    /// `ViewModelInstanceNumber::applyValue(DataValueNumber*)`.
+    ///
+    /// Binary `DataValueNumber` ownership ends at the crate boundary, so the
+    /// decoded numeric payload is passed directly to the same property setter.
+    fn apply_value(&mut self, data_value: f32) -> bool {
+        self.set_value(data_value)
     }
 }
 

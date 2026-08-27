@@ -1242,7 +1242,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if !number.set_value(value) {
+        if !number.apply_value(value) {
             return false;
         }
         true

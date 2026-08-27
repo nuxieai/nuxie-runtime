@@ -59,7 +59,12 @@ impl RuntimeInterpolator {
                 let t = cubic_interpolator_get_t(factor, x1, x2);
                 cubic_interpolator_calc_cubic_value(t, value_from, y1, y2, value_to)
             }
-            _ => value_from + (value_to - value_from) * self.transform(factor),
+            Self::Elastic {
+                amplitude,
+                period,
+                easing_value,
+            } => RuntimeElasticInterpolator::on_added_dirty(easing_value, amplitude, period)
+                .transform_value(value_from, value_to, factor),
         }
     }
 

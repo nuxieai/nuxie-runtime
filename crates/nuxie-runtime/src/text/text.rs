@@ -101,13 +101,18 @@ fn mark_shape_dirty_with_layout(
     text_local_id: usize,
     send_to_layout: bool,
 ) -> bool {
-    if !matches!(
-        instance
-            .component(text_local_id)
-            .map(|component| component.type_name),
-        Some("Text" | "TextInput")
-    ) {
-        return false;
+    match instance
+        .component(text_local_id)
+        .map(|component| component.type_name)
+    {
+        // `TextStyle` reaches this shared seam through `TextInterface`, but
+        // C++ virtual dispatch selects `TextInput::markShapeDirty`, not this
+        // owner's broader `Text::markShapeDirty(bool)` body.
+        Some("TextInput") => {
+            return instance.add_dirt(text_local_id, ComponentDirt::TEXT_SHAPE, false);
+        }
+        Some("Text") => {}
+        _ => return false,
     }
     let modifier_group_locals = instance
         .component(text_local_id)
@@ -192,7 +197,7 @@ pub(crate) fn modifier_shape_dirty(instance: &mut ArtboardInstance, text_local_i
         instance
             .component(text_local_id)
             .map(|component| component.type_name),
-        Some("Text" | "TextInput")
+        Some("Text")
     ) {
         return false;
     }

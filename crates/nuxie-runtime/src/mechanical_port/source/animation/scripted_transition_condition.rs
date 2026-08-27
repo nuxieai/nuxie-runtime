@@ -13,7 +13,7 @@ pub trait ScriptedConditionRuntime {
     fn register_referencer(&mut self, stack: &mut ImportStack) -> StatusCode;
     fn add_scripted_object(&mut self, stack: &mut ImportStack, object: *mut ()) -> StatusCode;
     fn clone_base(&self, base: &ScriptedTransitionConditionBase)
-        -> ScriptedTransitionConditionBase;
+    -> ScriptedTransitionConditionBase;
     fn clone_runtime(&self) -> Box<dyn ScriptedConditionRuntime>;
     fn clone_properties_to(
         &self,

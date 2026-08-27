@@ -18,7 +18,7 @@ pub trait TransitionRuntime {
     fn condition_added_dirty(&mut self, c: &mut TransitionCondition) -> StatusCode;
     fn condition_added_clean(&mut self, c: &mut TransitionCondition) -> StatusCode;
     fn evaluate_condition(&self, c: &TransitionCondition, machine: *mut (), layer: *mut ())
-        -> bool;
+    -> bool;
     fn use_condition_in_layer(&self, c: &TransitionCondition, machine: *mut (), layer: *mut ());
     fn animation_duration(&self, state: &LayerState) -> Option<f32>;
     fn exit_animation(&self, state: &LayerState) -> Option<(f32, f32)>;

@@ -3485,6 +3485,8 @@ impl ArtboardInstance {
                 // Preserve the pre-ListPath component-list boundary: a
                 // converter leaving the list domain clears mounted rows.
                 if let Some(items) = update.items {
+                    let items = crate::context_value_list::apply_to_consumer(Some(items))
+                        .expect("a resolved ArtboardComponentList delivery is a concrete list");
                     changed |= self.sync_component_list_items(file, update.target_local_id, items);
                 }
             }
@@ -3635,12 +3637,12 @@ pub(super) fn build_artboard_list_bindings<'a>(
         .into_iter()
         .enumerate()
         .filter_map(|(data_bind_index, data_bind)| {
+            if !data_bind_flags_apply_source_to_target(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
             let target = data_bind.target?;
-            let target_kind = list_item_consumer_from_target(
-                target.type_name,
-                data_bind.object.uint_property("propertyKey"),
-            )?;
-            let target_local_id = data_bind.target_local_id?;
             let path_is_name_based = file
                 .data_bind_is_name_based_for_object(data_bind.object)
                 .unwrap_or(false);
@@ -3654,30 +3656,37 @@ pub(super) fn build_artboard_list_bindings<'a>(
                 file.data_context_view_model_property_for_instance(default_instance.object, &path)
             });
             let source_is_unresolved_name_based = path_is_name_based && source.is_none();
-            let converts_number_to_list = converter
-                .as_ref()
-                .and_then(RuntimeDataBindGraphConverter::number_to_list_view_model_id)
-                .is_some();
             let default_value = source
-                .and_then(|source| {
-                    if converts_number_to_list {
-                        runtime_created_view_model_value_for_source(file, source)
-                    } else if converter.is_none() {
-                        file.view_model_instance_list_size_for_object(source)
-                            .map(|item_count| RuntimeDataBindGraphValue::List { item_count })
-                    } else {
-                        None
-                    }
-                })
+                .and_then(|source| runtime_created_view_model_value_for_source(file, source))
                 .or_else(|| {
-                    if converts_number_to_list {
-                        Some(RuntimeDataBindGraphValue::Number(0.0))
-                    } else if converter.is_none() {
-                        Some(RuntimeDataBindGraphValue::List { item_count: 0 })
-                    } else {
-                        None
+                    if path_is_name_based {
+                        return None;
                     }
-                })?;
+                    runtime_created_view_model_value_for_declared_path(file, &path)
+                })
+                .unwrap_or(RuntimeDataBindGraphValue::Untyped);
+            let unresolved_source_can_select_list = source_is_unresolved_name_based
+                && matches!(
+                    converter
+                        .as_ref()
+                        .map(RuntimeDataBindGraphConverter::cpp_output_data_type),
+                    None | Some(RuntimeDataType::None | RuntimeDataType::Input)
+                );
+            if !crate::context_value_list::owns_output(&default_value, converter.as_ref())
+                && !unresolved_source_can_select_list
+            {
+                return None;
+            }
+
+            // Pinned `DataBind::bind` chooses the concrete List owner above;
+            // only `ContextValueList::apply` then crosses the target's typed
+            // consumer boundary (`data_bind.cpp:251-299`;
+            // `context_value_list.cpp:12-30`).
+            let target_kind = list_item_consumer_from_target(
+                target.type_name,
+                data_bind.object.uint_property("propertyKey"),
+            )?;
+            let target_local_id = data_bind.target_local_id?;
 
             Some(RuntimeArtboardListBindingInstance {
                 data_bind_index,

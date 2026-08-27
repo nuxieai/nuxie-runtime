@@ -1,0 +1,5 @@
+rive-golden-stream-v1
+frameSize width=64 height=64
+clearColor value=0xffff00ff
+drawPath path={id=1,fillRule=0,path={verbs=[move,line,line,line,close],points=[(0,0),(64,0),(64,64),(0,64)]}} paint={id=1,style=fill,color=0xff3366aa,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+frame

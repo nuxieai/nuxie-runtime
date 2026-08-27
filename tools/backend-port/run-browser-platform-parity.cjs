@@ -6,6 +6,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const { chromium, firefox } = require("./browser-platform/node_modules/playwright");
+const { runWebgpuContentProbe } = require("./webgpu-content-probe.cjs");
 
 const repo = path.resolve(__dirname, "../..");
 const [backend, browserName] = process.argv.slice(2);
@@ -245,7 +246,7 @@ async function main() {
     await page.goto(workerUrl, { waitUntil: "domcontentloaded", timeout: 180_000 });
     return page;
   };
-  await Promise.all([
+  const [, candidatePage] = await Promise.all([
     openWorker(configuration.sourcePort, "source"),
     openWorker(configuration.candidatePort, "candidate"),
   ]);
@@ -257,6 +258,10 @@ async function main() {
     throw new Error("source and candidate workers do not share one browser identity");
   }
   if (pageErrors.length !== 0) throw new Error(`browser worker errors:\n${pageErrors.join("\n")}`);
+
+  const contentProbe = backend === "webgpu"
+    ? await runWebgpuContentProbe(candidatePage, repo)
+    : undefined;
 
   const log = await runCorpus(
     replayCommand(configuration.sourceClient, "source"),
@@ -291,6 +296,7 @@ async function main() {
     corpus_log: path.relative(repo, logPath).replaceAll(path.sep, "/"),
     corpus_log_sha256: sha256(log),
     no_renderer_fallback: true,
+    ...(contentProbe ? { content_probe: contentProbe } : {}),
   };
   fs.writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
   process.stdout.write(`browser-platform-evidence=${evidencePath}\n`);

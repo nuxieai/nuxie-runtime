@@ -51,10 +51,8 @@ impl RuntimeStateTransitionHandle {
         layer: &'a super::RuntimeStateMachineLayer,
     ) -> Option<&'a RuntimeStateTransition> {
         layer
-            .states
-            .get(self.state_index)?
-            .transitions
-            .get(self.transition_index)
+            .state(self.state_index)?
+            .transition(self.transition_index)
     }
 }
 

@@ -1,5 +1,11 @@
 use super::RuntimeLayerState;
-use anyhow::{Result, ensure};
+
+// `StateMachineLayer::import`, `addState`, `onAddedDirty`, and
+// `onAddedClean` execute while the file still owns mutable Core objects.
+// `nuxie-binary` preserves that phase: it attaches each layer to the latest
+// StateMachine, appends states in authored order, runs their lifecycle before
+// validating Any/Entry/Exit, and records whether the owner Artboard had
+// already completed initialization. This runtime owner is the immutable result.
 
 /// Immutable authored state-machine layer definition.
 ///
@@ -9,6 +15,9 @@ use anyhow::{Result, ensure};
 pub struct RuntimeStateMachineLayer {
     pub global_id: u32,
     pub name: Option<String>,
+    // C++ deletes every retained `LayerState*` in
+    // `~StateMachineLayer`. Rust's owned Vec performs the same ownership
+    // teardown automatically.
     pub states: Vec<RuntimeLayerState>,
     pub(crate) entry_state_index: Option<usize>,
     pub(crate) any_state_index: Option<usize>,
@@ -19,56 +28,41 @@ impl RuntimeStateMachineLayer {
     pub(crate) fn resolve_system_state_indices(
         states: &[RuntimeLayerState],
     ) -> (Option<usize>, Option<usize>, Option<usize>) {
-        (
-            states
-                .iter()
-                .rposition(|state| state.type_name == Some("EntryState")),
-            states
-                .iter()
-                .rposition(|state| state.type_name == Some("AnyState")),
-            states
-                .iter()
-                .rposition(|state| state.type_name == Some("ExitState")),
-        )
-    }
-
-    /// Validate the references finalized by pinned C++
-    /// `StateMachineLayer::onAddedDirty` and
-    /// `StateMachineLayerImporter::resolve`.
-    ///
-    /// Keeping this on the focused layer owner prevents malformed layers from
-    /// becoming partially live Rust definitions whose missing transitions are
-    /// silently skipped during advance.
-    pub(crate) fn validate_imported_references(&self) -> Result<()> {
-        ensure!(
-            self.any_state_index.is_some(),
-            "state-machine layer {} is missing AnyState",
-            self.global_id
-        );
-        ensure!(
-            self.entry_state_index.is_some(),
-            "state-machine layer {} is missing EntryState",
-            self.global_id
-        );
-        ensure!(
-            self.exit_state_index.is_some(),
-            "state-machine layer {} is missing ExitState",
-            self.global_id
-        );
-        for (state_index, state) in self.states.iter().enumerate() {
-            for (transition_index, transition) in state.transitions.iter().enumerate() {
-                ensure!(
-                    transition
-                        .state_to_index
-                        .is_some_and(|target| target < self.states.len()),
-                    "state-machine layer {} state {} transition {} has an invalid target",
-                    self.global_id,
-                    state_index,
-                    transition_index
-                );
+        let mut any_state_index = None;
+        let mut entry_state_index = None;
+        let mut exit_state_index = None;
+        for (state_index, state) in states.iter().enumerate() {
+            match state.type_name {
+                Some("AnyState") => any_state_index = Some(state_index),
+                Some("EntryState") => entry_state_index = Some(state_index),
+                Some("ExitState") => exit_state_index = Some(state_index),
+                _ => {}
             }
         }
-        Ok(())
+        (entry_state_index, any_state_index, exit_state_index)
+    }
+
+    pub(crate) fn any_state_index(&self) -> Option<usize> {
+        self.any_state_index
+    }
+
+    pub(crate) fn entry_state_index(&self) -> Option<usize> {
+        self.entry_state_index
+    }
+
+    pub(crate) fn exit_state_index(&self) -> Option<usize> {
+        self.exit_state_index
+    }
+
+    pub(crate) fn state_count(&self) -> usize {
+        self.states.len()
+    }
+
+    pub(crate) fn state(&self, index: usize) -> Option<&RuntimeLayerState> {
+        if index < self.state_count() {
+            return self.states.get(index);
+        }
+        None
     }
 }
 
@@ -92,29 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn required_system_states_are_independent_and_last_authored_wins() {
-        for missing in ["AnyState", "EntryState", "ExitState"] {
-            let states = ["AnyState", "EntryState", "ExitState"]
-                .into_iter()
-                .filter(|type_name| *type_name != missing)
-                .map(|type_name| state(Some(type_name)))
-                .collect::<Vec<_>>();
-            let (entry_state_index, any_state_index, exit_state_index) =
-                RuntimeStateMachineLayer::resolve_system_state_indices(&states);
-            let layer = RuntimeStateMachineLayer {
-                global_id: 17,
-                name: None,
-                states,
-                entry_state_index,
-                any_state_index,
-                exit_state_index,
-            };
-            assert!(
-                layer.validate_imported_references().is_err(),
-                "{missing} must be required independently"
-            );
-        }
-
+    fn last_authored_system_state_wins() {
         let states = vec![
             state(Some("AnyState")),
             state(Some("EntryState")),

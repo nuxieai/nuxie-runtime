@@ -83,7 +83,7 @@ impl StateMachineLayerInstance {
                     .collect(),
             );
         });
-        let mut any_state = layer.any_state_index.and_then(|state_index| {
+        let mut any_state = layer.any_state_index().and_then(|state_index| {
             RuntimeStateInstance::make(
                 layer,
                 state_index,
@@ -94,7 +94,7 @@ impl StateMachineLayerInstance {
                 bindable_numbers,
             )
         });
-        let mut current_state = layer.entry_state_index.and_then(|state_index| {
+        let mut current_state = layer.entry_state_index().and_then(|state_index| {
             RuntimeStateInstance::make(
                 layer,
                 state_index,
@@ -306,7 +306,7 @@ impl StateMachineLayerInstance {
         self.state_from = None;
         self.current_state = None;
 
-        let Some(entry_state_index) = layer.entry_state_index else {
+        let Some(entry_state_index) = layer.entry_state_index() else {
             return Ok(());
         };
         self.current_state = RuntimeStateInstance::make(
@@ -411,7 +411,7 @@ impl StateMachineLayerInstance {
         let Some(state_index) = state_index else {
             return Ok(false);
         };
-        let Some(state) = layer.states.get(state_index) else {
+        let Some(state) = layer.state(state_index) else {
             return Ok(false);
         };
 
@@ -668,7 +668,7 @@ impl StateMachineLayerInstance {
             .unwrap_or(0.0);
         let previous_mix = self.transition_mix;
         if let Some(previous_state) =
-            previous_state_index.and_then(|state_index| layer.states.get(state_index))
+            previous_state_index.and_then(|state_index| layer.state(state_index))
         {
             previous_state.perform_fire_actions(
                 StateMachineFireOccurrence::AtEnd,
@@ -699,7 +699,7 @@ impl StateMachineLayerInstance {
                 crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
             );
         }
-        if let Some(current_state) = layer.states.get(state_to_index) {
+        if let Some(current_state) = layer.state(state_to_index) {
             current_state.perform_fire_actions(
                 StateMachineFireOccurrence::AtStart,
                 artboard,
@@ -846,7 +846,7 @@ impl StateMachineLayerInstance {
         layer: &'a RuntimeStateMachineLayer,
         state_index: usize,
     ) -> &'a str {
-        let Some(state) = layer.states.get(state_index) else {
+        let Some(state) = layer.state(state_index) else {
             return "(null)";
         };
         match state.type_name {

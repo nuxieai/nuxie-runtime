@@ -170,15 +170,6 @@ fn validate_cpp_state_machine_layer_transitions(
     objects: &[Option<RuntimeObject>],
     import_statuses: &[RuntimeImportStatus],
 ) -> Result<()> {
-    if (layer.object_id as usize) < layer.owner_artboard_resolve_boundary
-        && (!layer.has_any_state || !layer.has_entry_state || !layer.has_exit_state)
-    {
-        bail!(
-            "state machine layer {} is missing required AnyState/EntryState/ExitState objects",
-            layer.object_id
-        );
-    }
-
     // LayerState::onAddedDirty visits retained transitions in authored order
     // and returns the first StateTransition lifecycle error. Conditions have
     // no-op dirty/clean hooks at this pin; the only fallible transition hook
@@ -218,6 +209,17 @@ fn validate_cpp_state_machine_layer_transitions(
                 );
             }
         }
+    }
+
+    // StateMachineLayer checks its required system-state pointers only after
+    // every retained state's dirty lifecycle has completed.
+    if (layer.object_id as usize) < layer.owner_artboard_resolve_boundary
+        && (!layer.has_any_state || !layer.has_entry_state || !layer.has_exit_state)
+    {
+        bail!(
+            "state machine layer {} is missing required AnyState/EntryState/ExitState objects",
+            layer.object_id
+        );
     }
 
     for transition in &layer.transitions {
@@ -445,7 +447,17 @@ impl RuntimeFile {
                 // StateMachineLayer::import appends through the retained
                 // StateMachineImporter before File replaces/resolves the
                 // previous StateMachineLayerImporter.
-                let layer_index = state_machine_importer.add_layer(&mut state_machines, object);
+                let lifecycle_applied = state_machine_artboard_owners
+                    .get(state_machine_index)
+                    .copied()
+                    .flatten()
+                    .and_then(|index| artboard_ranges.get(index))
+                    .is_some_and(|(_, end)| file_index < *end);
+                let layer_index = state_machine_importer.add_layer(
+                    &mut state_machines,
+                    object,
+                    lifecycle_applied,
+                );
                 if let Some((previous_state_machine_index, previous_layer_index, _)) = current_layer
                 {
                     layer_importer_resolve_boundaries[previous_state_machine_index]

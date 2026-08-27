@@ -30,7 +30,7 @@ impl RuntimeStateInstance {
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
     ) -> Option<Self> {
-        let state = layer.states.get(state_index)?;
+        let state = layer.state(state_index)?;
         let kind = if let Some(definition) = state.blend_state_1d.as_ref() {
             let mut occurrence = definition.make_instance(
                 artboard,
@@ -69,7 +69,7 @@ impl RuntimeStateInstance {
         &self,
         layer: &'a RuntimeStateMachineLayer,
     ) -> Option<&'a RuntimeLayerState> {
-        layer.states.get(self.state_index)
+        layer.state(self.state_index)
     }
 
     pub(super) fn is_same_definition(&self, state_index: usize) -> bool {
@@ -93,7 +93,7 @@ impl RuntimeStateInstance {
         elapsed_seconds: f32,
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
-        let Some(state) = layer.states.get(self.state_index) else {
+        let Some(state) = layer.state(self.state_index) else {
             return false;
         };
         match &mut self.kind {

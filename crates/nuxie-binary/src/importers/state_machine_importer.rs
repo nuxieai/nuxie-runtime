@@ -69,10 +69,12 @@ impl StateMachineImporter {
         self,
         state_machines: &mut [RuntimeStateMachine<'a>],
         layer: &'a RuntimeObject,
+        lifecycle_applied: bool,
     ) -> usize {
         let machine = &mut state_machines[self.state_machine_index];
         machine.layers.push(RuntimeStateMachineLayer {
             object: layer,
+            lifecycle_applied,
             state_count: 0,
             states: Vec::new(),
         });

@@ -583,8 +583,13 @@ pub(crate) fn build_state_machines_with_action_catalog<'a>(
                                 }
                             })
                             .collect::<Vec<_>>();
-                        let (entry_state_index, any_state_index, exit_state_index) =
-                            RuntimeStateMachineLayer::resolve_system_state_indices(&states);
+                        let (entry_state_index, any_state_index, exit_state_index) = if layer
+                            .lifecycle_applied
+                        {
+                            RuntimeStateMachineLayer::resolve_system_state_indices(&states)
+                        } else {
+                            (None, None, None)
+                        };
                         RuntimeStateMachineLayer {
                             global_id: layer.object.id,
                             name: layer.object.string_property("name").map(ToOwned::to_owned),

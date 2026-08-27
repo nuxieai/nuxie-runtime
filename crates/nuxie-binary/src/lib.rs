@@ -6727,6 +6727,9 @@ pub struct RuntimeScriptedObject<'a> {
 #[derive(Debug, Clone)]
 pub struct RuntimeStateMachineLayer<'a> {
     pub object: &'a RuntimeObject,
+    /// Whether the owning Artboard reached this layer during its one-time
+    /// StateMachine dirty/clean lifecycle.
+    pub lifecycle_applied: bool,
     pub state_count: usize,
     pub states: Vec<RuntimeLayerState<'a>>,
 }

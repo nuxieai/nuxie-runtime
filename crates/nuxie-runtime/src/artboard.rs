@@ -2791,11 +2791,6 @@ impl ArtboardInstance {
             &mut converter_cache,
             &state_machine_actions,
         );
-        for state_machine in &state_machines {
-            for layer in state_machine.layers.iter() {
-                layer.validate_imported_references()?;
-            }
-        }
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
         let mut artboard_authored_data_bind_states =
             build_artboard_authored_data_bind_states(file, graph, &objects);

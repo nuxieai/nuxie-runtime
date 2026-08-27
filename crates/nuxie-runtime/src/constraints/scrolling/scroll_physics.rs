@@ -1,6 +1,5 @@
-//! Shared direct owner for pinned `src/constraints/scrolling/scroll_physics.cpp`
-//! and its inseparable `clamped_scroll_physics.cpp` / `elastic_scroll_physics.cpp`
-//! variant branches.
+//! Direct owner for pinned `src/constraints/scrolling/scroll_physics.cpp` and
+//! dispatcher for its concrete physics variants.
 
 use super::super::*;
 
@@ -141,10 +140,9 @@ impl RuntimeScrollPhysicsState {
         value: (f32, f32),
     ) -> (f32, f32) {
         match &self.kind {
-            crate::components::RuntimeScrollPhysicsKind::Clamped { .. } => (
-                rive_math_clamp(value.0, range_min.0, range_max.0),
-                rive_math_clamp(value.1, range_min.1, range_max.1),
-            ),
+            crate::components::RuntimeScrollPhysicsKind::Clamped { .. } => {
+                self.clamped_clamp(range_min, range_max, value)
+            }
             crate::components::RuntimeScrollPhysicsKind::Elastic { x, y } => (
                 x.as_ref().map_or(0.0, |helper| {
                     helper.clamp(range_min.0, range_max.0, value.0)
@@ -165,14 +163,30 @@ impl RuntimeScrollPhysicsState {
         content_size: f32,
         viewport_size: f32,
     ) {
-        self.is_running = true;
+        if matches!(
+            &self.kind,
+            crate::components::RuntimeScrollPhysicsKind::Clamped { .. }
+        ) {
+            self.clamped_run(
+                range_min,
+                range_max,
+                value,
+                snapping_points,
+                content_size,
+                viewport_size,
+            );
+            return;
+        }
+
+        self.scroll_physics_run(
+            range_min,
+            range_max,
+            value,
+            snapping_points,
+            content_size,
+            viewport_size,
+        );
         match &mut self.kind {
-            crate::components::RuntimeScrollPhysicsKind::Clamped { value: retained } => {
-                *retained = (
-                    rive_math_clamp(value.0, range_min.0, range_max.0),
-                    rive_math_clamp(value.1, range_min.1, range_max.1),
-                );
-            }
             crate::components::RuntimeScrollPhysicsKind::Elastic { x, y } => {
                 let x_points = snapping_points
                     .iter()
@@ -205,16 +219,31 @@ impl RuntimeScrollPhysicsState {
                     );
                 }
             }
+            crate::components::RuntimeScrollPhysicsKind::Clamped { .. } => unreachable!(),
         }
     }
 
+    pub(in crate::constraints) fn scroll_physics_run(
+        &mut self,
+        _range_min: (f32, f32),
+        _range_max: (f32, f32),
+        _value: (f32, f32),
+        _snapping_points: &[(f32, f32)],
+        _content_size: f32,
+        _viewport_size: f32,
+    ) {
+        self.is_running = true;
+    }
+
     pub(in crate::constraints) fn advance(&mut self, elapsed_seconds: f32) -> (f32, f32) {
+        if matches!(
+            &self.kind,
+            crate::components::RuntimeScrollPhysicsKind::Clamped { .. }
+        ) {
+            return self.clamped_advance(elapsed_seconds);
+        }
+
         match &mut self.kind {
-            crate::components::RuntimeScrollPhysicsKind::Clamped { value } => {
-                let result = *value;
-                self.stop();
-                result
-            }
             crate::components::RuntimeScrollPhysicsKind::Elastic { x, y } => {
                 let previous = (
                     x.as_ref().map_or(0.0, |helper| helper.current),
@@ -239,6 +268,7 @@ impl RuntimeScrollPhysicsState {
                 }
                 result
             }
+            crate::components::RuntimeScrollPhysicsKind::Clamped { .. } => unreachable!(),
         }
     }
 }

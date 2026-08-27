@@ -32,6 +32,7 @@ mod transform_constraint;
 mod translation_constraint;
 
 pub(crate) mod scrolling {
+    pub(crate) mod clamped_scroll_physics;
     pub(crate) mod elastic_scroll_physics;
     pub(crate) mod scroll_bar_constraint;
     pub(crate) mod scroll_bar_constraint_proxy;

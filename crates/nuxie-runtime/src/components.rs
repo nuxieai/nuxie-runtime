@@ -685,20 +685,6 @@ pub(crate) struct RuntimeScrollPhysicsState {
 }
 
 impl RuntimeScrollPhysicsState {
-    pub(crate) fn clamped() -> Self {
-        Self {
-            kind: RuntimeScrollPhysicsKind::Clamped { value: (0.0, 0.0) },
-            last_time_micros: 0,
-            is_running: false,
-            speed: (0.0, 0.0),
-            acceleration: (0.0, 0.0),
-            direction: 1,
-            friction: 8.0,
-            speed_multiplier: 1.0,
-            elastic_factor: 0.66,
-        }
-    }
-
     pub(crate) fn elastic(friction: f32, speed_multiplier: f32, elastic_factor: f32) -> Self {
         Self {
             kind: RuntimeScrollPhysicsKind::Elastic { x: None, y: None },

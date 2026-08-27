@@ -1,5 +1,6 @@
 use crate::animation::RuntimeInterpolator;
 use crate::artboard::{RuntimeComponentListItemInstance, RuntimeComponentListLogicalItem};
+use crate::constraints::rotation_constraint::RuntimeRotationConstraintState;
 use crate::draw::{RuntimePathCommand, RuntimePathMeasure};
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
@@ -838,10 +839,7 @@ impl RuntimeIkState {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RuntimeConstraintScratch {
     None,
-    Rotation {
-        components_a: TransformComponents,
-        components_b: TransformComponents,
-    },
+    Rotation(RuntimeRotationConstraintState),
     Scale {
         components_a: TransformComponents,
         components_b: TransformComponents,
@@ -1829,10 +1827,9 @@ impl Default for RuntimeConstraintBoundsKind {
 impl RuntimeConstraintScratch {
     pub(crate) fn for_kind(kind: RuntimeConstraintKind) -> Self {
         match kind {
-            RuntimeConstraintKind::Rotation => Self::Rotation {
-                components_a: TransformComponents::default(),
-                components_b: TransformComponents::default(),
-            },
+            RuntimeConstraintKind::Rotation => {
+                Self::Rotation(RuntimeRotationConstraintState::default())
+            }
             RuntimeConstraintKind::Scale => Self::Scale {
                 components_a: TransformComponents::default(),
                 components_b: TransformComponents::default(),
@@ -1868,10 +1865,11 @@ impl RuntimeConstraintState {
         Self {
             kind,
             targeted: type_is_a(type_name, "TargetedConstraint"),
-            requires_target: !matches!(
-                type_name,
-                "RotationConstraint" | "ScaleConstraint" | "TranslationConstraint"
-            ),
+            requires_target: if type_name == "RotationConstraint" {
+                crate::constraints::rotation_constraint::requires_target()
+            } else {
+                !matches!(type_name, "ScaleConstraint" | "TranslationConstraint")
+            },
             target: None,
             scratch: RuntimeConstraintScratch::for_kind(kind),
         }
@@ -2719,7 +2717,7 @@ mod constraint_state_tests {
                     (expected_kind, state.scratch),
                     (
                         RuntimeConstraintKind::Rotation,
-                        RuntimeConstraintScratch::Rotation { .. }
+                        RuntimeConstraintScratch::Rotation(_)
                     ) | (
                         RuntimeConstraintKind::Scale,
                         RuntimeConstraintScratch::Scale { .. }
@@ -2761,7 +2759,7 @@ mod constraint_state_tests {
             .constraint
             .expect("rotation state");
         state.target = Some(super::ComponentHandle::from_index(17));
-        state.scratch = RuntimeConstraintScratch::Rotation {
+        state.scratch = RuntimeConstraintScratch::Rotation(RuntimeRotationConstraintState {
             components_a: TransformComponents {
                 rotation: 1.0,
                 ..TransformComponents::default()
@@ -2770,15 +2768,15 @@ mod constraint_state_tests {
                 scale_x: 2.0,
                 ..TransformComponents::default()
             },
-        };
+        });
 
         let cloned = state.clone_for_occurrence();
         assert_eq!(cloned.target, None);
         match cloned.scratch {
-            RuntimeConstraintScratch::Rotation {
+            RuntimeConstraintScratch::Rotation(RuntimeRotationConstraintState {
                 components_a,
                 components_b,
-            } => {
+            }) => {
                 assert_eq!(components_a, TransformComponents::default());
                 assert_eq!(components_b, TransformComponents::default());
             }

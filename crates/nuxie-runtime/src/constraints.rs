@@ -25,7 +25,7 @@ pub(crate) mod follow_path_constraint;
 mod ik_constraint;
 mod list_constraint;
 mod list_follow_path_constraint;
-mod rotation_constraint;
+pub(crate) mod rotation_constraint;
 mod scale_constraint;
 pub(crate) mod targeted_constraint;
 mod transform_constraint;
@@ -2696,11 +2696,10 @@ fn retain_constraint_component_a(
         return;
     };
     match &mut state.scratch {
-        RuntimeConstraintScratch::Rotation {
-            components_a: retained_a,
-            ..
+        RuntimeConstraintScratch::Rotation(rotation) => {
+            rotation.retain_components_a(components);
         }
-        | RuntimeConstraintScratch::Scale {
+        RuntimeConstraintScratch::Scale {
             components_a: retained_a,
             ..
         } => {
@@ -2723,11 +2722,10 @@ fn retain_constraint_component_b(
         return;
     };
     match &mut state.scratch {
-        RuntimeConstraintScratch::Rotation {
-            components_b: retained_b,
-            ..
+        RuntimeConstraintScratch::Rotation(rotation) => {
+            rotation.retain_components_b(components);
         }
-        | RuntimeConstraintScratch::Scale {
+        RuntimeConstraintScratch::Scale {
             components_b: retained_b,
             ..
         } => {

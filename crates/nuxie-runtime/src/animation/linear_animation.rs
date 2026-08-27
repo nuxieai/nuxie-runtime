@@ -139,35 +139,26 @@ impl RuntimeLinearAnimation {
                 // matching C++ KeyedProperty's single virtual apply dispatch.
                 match &keyed_property.target {
                     RuntimeKeyedPropertyTarget::Double { transform_property } => {
-                        let Some(frame_value) = keyed_property
-                            .double_frame_value_at_with_script_context(
-                                seconds,
-                                key_frame_values,
-                                Some(effective_scripted_interpolation_context(
-                                    animation_instance,
-                                    &*instance,
-                                )),
-                            )
-                        else {
-                            continue;
-                        };
-                        let Some(value) =
-                            apply_key_frame_double_mix(
-                                frame_value,
-                                mix,
-                                || match transform_property {
-                                    Some(property) => instance.transform_property_with_key(
-                                        keyed_object.target_local_id,
-                                        *property,
-                                        keyed_property.property_key,
-                                    ),
-                                    None => instance.double_property(
-                                        keyed_object.target_local_id,
-                                        keyed_property.property_key,
-                                    ),
-                                },
-                            )
-                        else {
+                        let Some(value) = keyed_property.double_value_at_with_script_context(
+                            seconds,
+                            mix,
+                            key_frame_values,
+                            Some(effective_scripted_interpolation_context(
+                                animation_instance,
+                                &*instance,
+                            )),
+                            || match transform_property {
+                                Some(property) => instance.transform_property_with_key(
+                                    keyed_object.target_local_id,
+                                    *property,
+                                    keyed_property.property_key,
+                                ),
+                                None => instance.double_property(
+                                    keyed_object.target_local_id,
+                                    keyed_property.property_key,
+                                ),
+                            },
+                        ) else {
                             continue;
                         };
                         changed |= match transform_property {

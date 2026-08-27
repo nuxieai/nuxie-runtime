@@ -37,14 +37,6 @@ fn closest_key_frame_index_with_exact_offset(
     start
 }
 
-fn frame_mix(seconds: f32, from_seconds: f32, to_seconds: f32) -> f32 {
-    if to_seconds == from_seconds {
-        1.0
-    } else {
-        (seconds - from_seconds) / (to_seconds - from_seconds)
-    }
-}
-
 /// The concrete keyframe occurrence owned by a `RuntimeKeyedProperty`.
 ///
 /// Mirrors C++ `KeyedProperty::m_keyFrames`: concrete subclasses share one

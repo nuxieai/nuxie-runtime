@@ -71,6 +71,68 @@ FORBIDDEN_DEPENDENCIES.update(UNPROTECTED_WORKSPACE_PACKAGES)
 # package is protected, while the C consumer is restricted to this exact edge
 # and approved symbols.
 PORTABLE_ABI_FACADE_EDGE = ("nux-capi", "nuxie")
+ANDROID_PRODUCT_DATA_EDGE = ("nux-capi", "nuxie-project-data")
+ANDROID_PRODUCT_IMPORT_ALLOWED_SYMBOLS = {
+    "crates/nux-capi/src/android_product_import.rs": set(),
+    "crates/nux-capi/tests/android_project_data_import.rs": {
+        "ProjectDataConverterCatalog",
+        "ProjectDataConverterDefinition",
+        "ProjectDataConverterEasing",
+        "ProjectDataConverterKind",
+        "ProjectDataConverterOutputType",
+        "ProjectDataConverterSpec",
+    },
+}
+ANDROID_PRODUCT_IMPORT_ALLOWED_DEBT_MARKERS = {
+    "crates/nux-capi/tests/android_project_data_import.rs": {"ProjectData"},
+}
+ANDROID_PRODUCT_IMPORT_ALLOWED_VOCABULARY = {
+    "crates/nux-capi/src/android_product_import.rs": {"nuxie_project_data"},
+    "crates/nux-capi/tests/android_project_data_import.rs": {
+        "nuxie_project_data",
+        "ProjectDO",
+        *ANDROID_PRODUCT_IMPORT_ALLOWED_SYMBOLS[
+            "crates/nux-capi/tests/android_project_data_import.rs"
+        ],
+    },
+}
+ANDROID_PRODUCT_IMPORT_ALLOWED_PRODUCT_LINES = {
+    "crates/nux-capi/src/android_product_import.rs": {
+        "nuxie_project_data::install_runtime_adapter();"
+    },
+    "crates/nux-capi/tests/android_project_data_import.rs": {
+        "use nuxie_project_data::{"
+    },
+}
+ANDROID_PRODUCT_IMPORT_EXPECTED_SNIPPETS = {
+    "crates/nux-capi/src/lib.rs": (
+        '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+        "mod android_product_import;"
+    ),
+    "crates/nux-capi/src/asset_hooks.rs": (
+        '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+        "    super::android_product_import::prepare_configured_import_runtime();"
+    ),
+    "crates/nux-capi/src/android_product_import.rs": (
+        "pub(crate) fn prepare_configured_import_runtime() {\n"
+        "    nuxie_project_data::install_runtime_adapter();\n"
+        "}"
+    ),
+    "crates/nux-capi/tests/android_project_data_import.rs": (
+        "use nuxie_project_data::{\n"
+        "    ProjectDataConverterCatalog, ProjectDataConverterDefinition, "
+        "ProjectDataConverterEasing,\n"
+        "    ProjectDataConverterKind, ProjectDataConverterOutputType, "
+        "ProjectDataConverterSpec,\n"
+        "};"
+    ),
+}
+ANDROID_PRODUCT_IMPORT_EXCLUSIVE_TOKENS = {
+    "crates/nux-capi/src/lib.rs": "android_product_import",
+    "crates/nux-capi/src/asset_hooks.rs": "android_product_import",
+    "crates/nux-capi/src/android_product_import.rs": "nuxie_project_data",
+    "crates/nux-capi/tests/android_project_data_import.rs": "nuxie_project_data",
+}
 PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {
     "renderer",
     "renderer-metal",
@@ -745,6 +807,30 @@ def portable_abi_facade_edge_error(
     return None
 
 
+def android_product_data_edge_error(
+    package_name: str,
+    table_path: tuple[str, ...],
+    dependency_name: str,
+    resolved_name: str,
+    specification: object,
+    resolved_path: str | None,
+) -> str | None:
+    if (package_name, normalized_package_name(resolved_name)) != ANDROID_PRODUCT_DATA_EDGE:
+        return "not-approved"
+    if table_path != ("dependencies",) or not isinstance(specification, dict):
+        return "Android product-data edge is only approved in [dependencies]"
+    if normalized_package_name(dependency_name) != "nuxie-project-data":
+        return "Android product-data edge must use dependency key 'nuxie-project-data'"
+    if resolved_path != "crates/nuxie-project-data":
+        return "Android product-data edge must resolve to local crates/nuxie-project-data"
+    if specification.get("optional") is not True:
+        return "Android product-data edge must remain optional"
+    features = specification.get("features", [])
+    if features not in (None, []) and features != ():
+        return "Android product-data edge cannot enable dependency features"
+    return None
+
+
 def nuxie_self_test_dependency_error(
     package_name: str,
     package_path: str,
@@ -1060,6 +1146,24 @@ def portable_abi_facade_feature_errors(
     if not isinstance(features, dict):
         return [f"{package}/Cargo.toml: [features] must be a table"]
     errors = []
+    product_data_activations = {
+        feature_name
+        for feature_name, activations in features.items()
+        if isinstance(activations, list)
+        and "dep:nuxie-project-data" in activations
+    }
+    dependencies = manifest.get("dependencies", {})
+    declares_product_data = isinstance(dependencies, dict) and any(
+        normalized_package_name(name) == "nuxie-project-data"
+        for name in dependencies
+    )
+    if (declares_product_data or product_data_activations) and product_data_activations != {
+        "android-vulkan"
+    }:
+        errors.append(
+            f"{package}/Cargo.toml: optional nuxie-project-data must be activated "
+            "only by feature 'android-vulkan'"
+        )
     for feature_name, activations in features.items():
         if not isinstance(activations, list):
             errors.append(
@@ -1085,6 +1189,27 @@ def portable_abi_facade_feature_errors(
                     f"forbidden portable ABI facade feature {match.group(1)!r}"
                 )
     return errors
+
+
+def manifest_declares_android_product_data(manifest: dict[str, object]) -> bool:
+    dependencies = manifest.get("dependencies", {})
+    return isinstance(dependencies, dict) and any(
+        normalized_package_name(name) == "nuxie-project-data"
+        for name in dependencies
+    )
+
+
+def android_product_import_boundary_errors(relative: str, source: str) -> list[str]:
+    expected = ANDROID_PRODUCT_IMPORT_EXPECTED_SNIPPETS.get(relative)
+    if expected is None:
+        return []
+    exclusive = ANDROID_PRODUCT_IMPORT_EXCLUSIVE_TOKENS[relative]
+    if source.count(expected) != 1 or source.count(exclusive) != 1:
+        return [
+            f"{relative}: Android product import must retain its exact "
+            "android-vulkan + scripting configured-import boundary"
+        ]
+    return []
 
 
 def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
@@ -1263,6 +1388,8 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
                 "approved baseline facade surface"
             )
     for match in PORTABLE_ABI_FACADE_PRODUCT_METHOD.finditer(source):
+        if match.group(0) in ANDROID_PRODUCT_IMPORT_ALLOWED_SYMBOLS.get(relative, set()):
+            continue
         if (
             match.group(0) in PORTABLE_ABI_FACADE_TEST_ONLY_FILE_ASSOCIATED_ITEMS
             and inside_test_module(match)
@@ -1301,6 +1428,10 @@ def portable_abi_vocabulary_errors(
             errors.append(f"{relative}: cannot read portable ABI contract: {error}")
             continue
         for match in PORTABLE_ABI_FORBIDDEN_VOCABULARY.finditer(source):
+            if match.group(0) in ANDROID_PRODUCT_IMPORT_ALLOWED_VOCABULARY.get(
+                relative, set()
+            ):
+                continue
             if (
                 relative in APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES
                 and APPLE_PLATFORM_EXTENSION_VOCABULARY.fullmatch(match.group(0))
@@ -1706,6 +1837,16 @@ def check_repository(
         )
         if package_name == PORTABLE_ABI_FACADE_EDGE[0]:
             errors.extend(portable_abi_vocabulary_errors(repo_root, package_root))
+            if manifest_declares_android_product_data(manifest):
+                for relative in ANDROID_PRODUCT_IMPORT_EXPECTED_SNIPPETS:
+                    try:
+                        boundary_source = (repo_root / relative).read_text()
+                    except OSError as error:
+                        errors.append(f"{relative}: cannot read Android product boundary: {error}")
+                        continue
+                    errors.extend(
+                        android_product_import_boundary_errors(relative, boundary_source)
+                    )
 
         for table_path, dependencies in dependency_tables(manifest):
             dependency_table_count += 1
@@ -1793,6 +1934,22 @@ def check_repository(
                             f"{dependency_name!r} through [{table}]"
                         )
                         continue
+                    android_edge_error = android_product_data_edge_error(
+                        package_name,
+                        table_path,
+                        dependency_name,
+                        resolved_name,
+                        effective_specification,
+                        resolved_path,
+                    )
+                    if android_edge_error is None:
+                        continue
+                    if android_edge_error != "not-approved":
+                        errors.append(
+                            f"{package}/Cargo.toml: {android_edge_error}: "
+                            f"{dependency_name!r} through [{table}]"
+                        )
+                        continue
                     self_edge_error = nuxie_self_test_dependency_error(
                         package_name,
                         package,
@@ -1843,7 +2000,11 @@ def check_repository(
             test_module_ranges = cfg_test_module_ranges(source)
             lines = source.splitlines()
             for line_number, line in enumerate(lines, 1):
-                if EXPLICIT_PRODUCT_PATH.search(line) or LOCAL_PRODUCT_MODULE.search(line):
+                if (
+                    EXPLICIT_PRODUCT_PATH.search(line) or LOCAL_PRODUCT_MODULE.search(line)
+                ) and line.strip() not in ANDROID_PRODUCT_IMPORT_ALLOWED_PRODUCT_LINES.get(
+                    relative, set()
+                ):
                     errors.append(
                         f"{relative}:{line_number}: protected source imports a "
                         f"product/authoring module: {line.strip()}"
@@ -1851,6 +2012,12 @@ def check_repository(
             for family, marker in INTERNAL_DEBT_MARKERS.items():
                 matches = list(marker.finditer(source))
                 if not matches:
+                    continue
+                if family == "project-data" and all(
+                    match.group(0)
+                    in ANDROID_PRODUCT_IMPORT_ALLOWED_DEBT_MARKERS.get(relative, set())
+                    for match in matches
+                ):
                     continue
                 if relative in APPROVED_NEUTRAL_MECHANICS_FILES.get(family, set()):
                     continue

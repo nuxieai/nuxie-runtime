@@ -19,8 +19,8 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 - `nuxie-scripting`: optional pure-Rust Luau integration
 - `nux-capi`: the sole static-library distribution root, exposing the portable
   C API plus narrow Apple Metal and headless Android Vulkan extensions
-- `nuxie-project-data`: authoring/project conversion kept outside the shipped
-  runtime dependency closure
+- `nuxie-project-data`: authoring/project conversion kept outside baseline
+  runtime closures and composed only into product distribution roots
 
 ## Development
 

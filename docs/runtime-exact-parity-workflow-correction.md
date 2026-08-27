@@ -1,5 +1,12 @@
 # Runtime exact-parity workflow correction
 
+> **Superseded for execution on 2026-08-26.** The per-pair certification
+> workflow below again accumulated the bookkeeping and bespoke-proof overhead
+> it was intended to remove. Continue the campaign using
+> `docs/runtime-bun-style-source-port-plan.md`. This document remains as a
+> historical record of the completed Phase 1A transition and the source-pair
+> work already accepted; it is no longer the active execution loop.
+
 Decision date: 2026-08-26
 
 This document corrects the execution workflow in

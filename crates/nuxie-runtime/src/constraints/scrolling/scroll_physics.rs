@@ -3,6 +3,15 @@
 
 use super::super::*;
 
+pub(super) fn high_resolution_clock_micros() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let micros = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_micros());
+    i64::try_from(micros).unwrap_or(i64::MAX)
+}
+
 impl RuntimeScrollPhysicsState {
     pub(in crate::constraints) fn enabled(&self) -> bool {
         match &self.kind {
@@ -29,7 +38,11 @@ impl RuntimeScrollPhysicsState {
     }
 
     pub(in crate::constraints) fn reset(&mut self) {
-        self.last_time_micros = 0;
+        self.last_time_micros = if crate::math::random::runtime_deterministic_mode() {
+            0
+        } else {
+            high_resolution_clock_micros()
+        };
         self.speed = (0.0, 0.0);
         self.acceleration = (0.0, 0.0);
         self.stop();
@@ -118,11 +131,16 @@ impl RuntimeScrollPhysicsState {
     }
 
     pub(in crate::constraints) fn accumulate(&mut self, delta: (f32, f32), timestamp: f32) {
-        // Canonical runtime/probe execution uses C++ deterministicMode: the
-        // pointer timestamp is the clock and reset seeds zero
-        // (`scroll_physics.cpp:8-34,36-51`).
-        let elapsed_seconds = timestamp - self.last_time_micros as f32;
-        self.last_time_micros = timestamp as i64;
+        let elapsed_seconds = if crate::math::random::runtime_deterministic_mode() {
+            let elapsed = timestamp - self.last_time_micros as f32;
+            self.last_time_micros = timestamp as i64;
+            elapsed
+        } else {
+            let now = high_resolution_clock_micros();
+            let elapsed = now.saturating_sub(self.last_time_micros) as f32 / 1_000_000.0;
+            self.last_time_micros = now;
+            elapsed
+        };
         if elapsed_seconds > 0.0 {
             let last_speed = self.speed;
             self.speed = (delta.0 / elapsed_seconds, delta.1 / elapsed_seconds);

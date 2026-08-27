@@ -6,10 +6,15 @@ animation/blend_state_1d.cpp	translated	crates/nuxie-runtime/src/animation/blend
 animation/animation_state.cpp	translated	crates/nuxie-runtime/src/animation/animation_state.rs	complete pinned owner translated
 animation/animation_state_instance.cpp	translated	crates/nuxie-runtime/src/animation/animation_state_instance.rs	complete pinned owner translated
 animation/blend_animation_1d.cpp	translated	crates/nuxie-runtime/src/animation/blend_animation_1d.rs	complete pinned owner translated
+animation/blend_animation.cpp	translated	crates/nuxie-runtime/src/animation/blend_animation.rs	complete pinned owner translated
+animation/blend_animation_direct.cpp	translated	crates/nuxie-runtime/src/animation/blend_animation_direct.rs	complete pinned owner translated
 animation/blend_state_direct.cpp	translated	crates/nuxie-runtime/src/animation/blend_state_direct.rs	complete pinned owner translated
 assets/blob_asset.cpp	translated	crates/nuxie-runtime/src/assets/blob_asset.rs	complete pinned owner translated
+assets/file_asset_contents.cpp	translated	crates/nuxie-binary/src/assets/file_asset_contents.rs	complete pinned owner translated under owned-byte representation
 constraints/scrolling/clamped_scroll_physics.cpp	translated	crates/nuxie-runtime/src/constraints/scrolling/clamped_scroll_physics.rs	complete pinned owner translated
+constraints/scrolling/scroll_physics.cpp	translated	crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs	complete pinned owner translated with deterministic and wall-clock branches
 importers/state_transition_importer.cpp	translated	crates/nuxie-binary/src/importers/state_transition_importer.rs	complete pinned owner translated
+importers/keyed_property_importer.cpp	translated	crates/nuxie-binary/src/importers/keyed_property_importer.rs	complete pinned owner translated
 importers/transition_viewmodel_condition_importer.cpp	translated	crates/nuxie-binary/src/importers/transition_viewmodel_condition_importer.rs	complete pinned owner translated
 core/binary_data_reader.cpp	translated	crates/nuxie-binary/src/binary_data_reader.rs	complete pinned owner translated under safe slice-plus-offset representation
 core/binary_writer.cpp	translated	crates/nuxie-binary/src/binary_writer.rs	complete pinned owner translated under borrowed stream and explicit little-endian representation

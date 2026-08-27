@@ -11,7 +11,7 @@ impl RuntimeScrollPhysicsState {
             kind: crate::components::RuntimeScrollPhysicsKind::Clamped {
                 value: (0.0, 0.0),
             },
-            last_time_micros: 0,
+            last_time_micros: super::scroll_physics::high_resolution_clock_micros(),
             is_running: false,
             speed: (0.0, 0.0),
             acceleration: (0.0, 0.0),

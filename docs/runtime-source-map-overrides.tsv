@@ -6,6 +6,7 @@ animation/blend_state_1d.cpp	translated	crates/nuxie-runtime/src/animation/blend
 animation/animation_state.cpp	translated	crates/nuxie-runtime/src/animation/animation_state.rs	complete pinned owner translated
 animation/animation_state_instance.cpp	translated	crates/nuxie-runtime/src/animation/animation_state_instance.rs	complete pinned owner translated
 animation/blend_animation_1d.cpp	translated	crates/nuxie-runtime/src/animation/blend_animation_1d.rs	complete pinned owner translated
+animation/focus_action_clear.cpp	translated	crates/nuxie-runtime/src/state_machine/focus_action_clear.rs,crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs	complete pinned null-safe state-machine and focus-manager dispatch invocation ignore and clearFocus body translated under live-instance ownership and changed-result adaptation
 animation/blend_animation.cpp	translated	crates/nuxie-runtime/src/animation/blend_animation.rs	complete pinned owner translated
 animation/blend_animation_direct.cpp	translated	crates/nuxie-runtime/src/animation/blend_animation_direct.rs	complete pinned owner translated
 animation/blend_state_direct.cpp	translated	crates/nuxie-runtime/src/animation/blend_state_direct.rs	complete pinned owner translated

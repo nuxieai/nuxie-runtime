@@ -6,11 +6,10 @@ use nuxie_schema::{
     core_registry_setter_field_kind_by_property_key, definition_by_name, definition_by_type_key,
     property_by_key_in_hierarchy,
 };
-use std::collections::BTreeSet;
-
 use crate::components::{
     ComponentHandle, DataBindHandle, GraphOrder, RuntimeComponent, RuntimeWeightState,
 };
+use crate::dependency_sorter::DependencySorter;
 use crate::math::bit_field_loc::bitmask_field_mask;
 
 mod generated_objects {
@@ -622,44 +621,13 @@ impl InstanceObjectArena {
             self.set_dependency_order(Vec::new());
             return true;
         };
-        let mut permanent = BTreeSet::new();
-        let mut temporary = BTreeSet::new();
-        let mut order = Vec::new();
-        let complete = self.visit_dependency(root, &mut permanent, &mut temporary, &mut order);
+        let (order, complete) = DependencySorter::default().sort(root, self);
         // Pinned `DependencySorter::sort` ignores `visit`'s cycle result and
         // publishes whatever order completed before the cycle
         // (`src/dependency_sorter.cpp:6-10`). Artboard initialization
         // continues with that partial schedule.
         self.set_dependency_order(order);
         complete
-    }
-
-    fn visit_dependency(
-        &self,
-        handle: ComponentHandle,
-        permanent: &mut BTreeSet<ComponentHandle>,
-        temporary: &mut BTreeSet<ComponentHandle>,
-        order: &mut Vec<ComponentHandle>,
-    ) -> bool {
-        if permanent.contains(&handle) {
-            return true;
-        }
-        if !temporary.insert(handle) {
-            return false;
-        }
-        let dependent_count = self.dependent_len(handle);
-        for index in 0..dependent_count {
-            let Some(dependent) = self.dependent_at(handle, index) else {
-                continue;
-            };
-            if !self.visit_dependency(dependent, permanent, temporary, order) {
-                return false;
-            }
-        }
-        temporary.remove(&handle);
-        permanent.insert(handle);
-        order.insert(0, handle);
-        true
     }
 
     pub(crate) fn property_kind(&self, local_id: usize, property_key: u16) -> Option<FieldKind> {

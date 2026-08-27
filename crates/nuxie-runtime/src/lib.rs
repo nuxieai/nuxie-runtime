@@ -95,6 +95,7 @@ mod data_converter_to_string;
 mod data_converter_trigger;
 #[path = "data_bind/converters/data_converter_trigger.rs"]
 mod data_converter_trigger_owner;
+mod dependency_sorter;
 mod draw;
 mod draw_rules;
 mod draw_target;

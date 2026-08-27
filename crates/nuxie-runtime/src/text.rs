@@ -912,13 +912,17 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
         graph,
         layout_bounds,
     );
+    let shape_world = text_input_drawable::shape_world_transform(
+        instance.runtime_component_world_transform_with_bounds(
+            drawable_local,
+            graph,
+            layout_bounds,
+        ),
+    );
     let render_opacity = instance
         .component(drawable_local)
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
-    if !text_input_drawable::will_draw(true, render_opacity) {
-        return Ok(Vec::new());
-    }
     let needs_save_operation = true;
 
     let path_buckets = match container.type_name {
@@ -941,7 +945,7 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
                 text_input_world,
                 filter,
             )?;
-            let shape_world = text_input_world.multiply(render_data.local_transform);
+            let draw_transform = text_input_world.multiply(render_data.local_transform);
             return slice.text_input_paint_commands(
                 instance,
                 container,
@@ -949,6 +953,7 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
                 needs_save_operation,
                 render_opacity,
                 shape_world,
+                draw_transform,
                 render_data
                     .style_paths
                     .into_iter()
@@ -986,6 +991,7 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
         container_index,
         needs_save_operation,
         render_opacity,
+        shape_world,
         text_input_world,
         path_buckets,
     )
@@ -5123,17 +5129,14 @@ impl StaticTextSlice {
         needs_save_operation: bool,
         render_opacity: f32,
         shape_world: Mat2D,
+        draw_transform: Mat2D,
         path_buckets: Vec<StaticTextInputPathBucket>,
     ) -> Result<Vec<RuntimeShapePaintCommand>> {
         let mut commands = Vec::new();
-        for path_bucket in order_text_input_opacity_buckets(path_buckets) {
-            for (paint_index, paint) in container.paints.iter().enumerate() {
-                let mut path_commands = path_bucket.commands.clone();
-                if runtime_live_shape_paint_path_kind(instance, paint)
-                    == Some(RuntimeShapePaintPathKind::World)
-                {
-                    transform_path_commands(&mut path_commands, shape_world);
-                }
+        let path_buckets = order_text_input_opacity_buckets(path_buckets);
+        for (paint_index, paint) in container.paints.iter().enumerate() {
+            for path_bucket in &path_buckets {
+                let path_commands = path_bucket.commands.clone();
                 let Some(mut command) = runtime_shape_paint_command(
                     instance,
                     paint,
@@ -5148,7 +5151,10 @@ impl StaticTextSlice {
                 ) else {
                     continue;
                 };
-                command.shape_world_override = Some(shape_world);
+                if command.path_kind == RuntimeShapePaintPathKind::World {
+                    text_input_drawable::world_path();
+                }
+                command.shape_world_override = Some(draw_transform);
                 if command.paint_type == RuntimeShapePaintKind::Fill {
                     command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
                 }

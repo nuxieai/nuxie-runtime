@@ -40,13 +40,20 @@ pub(crate) enum RuntimeScriptInputArtboardApply {
 
 impl RuntimeScriptInputArtboardOccurrence {
     pub(crate) fn from_imported(file: &RuntimeFile, input: &RuntimeObject) -> Self {
-        let authored_id = input
-            .uint_property("artboardId")
-            .unwrap_or(u64::from(u32::MAX));
         Self {
             referenced_artboard: file
                 .resolved_artboard_for_referencer_object(input)
-                .map(|_| ScriptArtboardSource::File(authored_id)),
+                .and_then(|resolved| {
+                    // Backboard lookup ids retain missing-artboard holes, but
+                    // the resolved C++ state is the Artboard pointer itself.
+                    // Store its dense File::artboard index so later sync uses
+                    // that same object rather than reusing the lookup key.
+                    file.artboards()
+                        .into_iter()
+                        .position(|artboard| artboard.id == resolved.id)
+                })
+                .and_then(|artboard_id| u64::try_from(artboard_id).ok())
+                .map(ScriptArtboardSource::File),
             // `File::import` installs this before Backboard resolution,
             // including when the authored id cannot resolve.
             file_attached: true,

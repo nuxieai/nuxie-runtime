@@ -1,5 +1,7 @@
 //! TextInput drawable ownership ported from `src/text/text_input_drawable.cpp`.
 
+use crate::Mat2D;
+
 pub(super) fn is_concrete(type_name: &str) -> bool {
     matches!(
         type_name,
@@ -11,8 +13,15 @@ pub(super) fn valid_parent(parent_type: Option<&str>) -> bool {
     parent_type == Some("TextInput")
 }
 
-pub(super) fn will_draw(super_will_draw: bool, render_opacity: f32) -> bool {
-    super_will_draw && render_opacity != 0.0
+/// `TextInputDrawable::worldPath` is deliberately unreachable. A Stroke that
+/// does not let its transform affect the stroke asks for this path in pinned
+/// C++; preserve that invalid authored combination at the concrete owner.
+pub(super) fn world_path() -> ! {
+    unreachable!("TextInputDrawable::worldPath is unreachable")
+}
+
+pub(super) fn shape_world_transform(world_transform: Mat2D) -> Mat2D {
+    world_transform
 }
 
 #[cfg(test)]
@@ -20,11 +29,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn upstream_parent_validation_and_will_draw_are_ported() {
+    fn upstream_parent_validation_is_ported() {
         assert!(valid_parent(Some("TextInput")));
         assert!(!valid_parent(Some("Text")));
-        assert!(will_draw(true, 1.0));
-        assert!(!will_draw(true, 0.0));
         assert!(is_concrete("TextInputSelection"));
     }
 }

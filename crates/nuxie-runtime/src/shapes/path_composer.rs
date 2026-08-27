@@ -36,8 +36,8 @@ impl ArtboardInstance {
         };
         shape.world_bounds.set(None);
         shape.world_length.set(None);
-        let _path_flags = self.runtime_shape_paint_container_path_flags(shape_local);
-        for (_flag, path_kind, runtime_kind) in [
+        let path_flags = self.runtime_shape_paint_container_path_flags(shape_local);
+        for (flag, path_kind, runtime_kind) in [
             (
                 crate::shapes::shape_paint_container::PATH_FLAG_LOCAL,
                 ShapePaintPathKind::Local,
@@ -54,11 +54,9 @@ impl ArtboardInstance {
                 RuntimeShapePaintPathKind::World,
             ),
         ] {
-            // C++ materializes only spaces named by `pathFlags`. Rust's
-            // renderer-neutral geometry and hit-test APIs share these three
-            // retained CPU slots, so they remain eagerly available even when
-            // no current paint selects one. The aggregate above is still the
-            // authoritative Shape::isFlagged value used by deferral.
+            if path_flags & flag == 0 {
+                continue;
+            }
             let mut commands = self.runtime_shape_path_commands_from_owners(
                 shape_local,
                 path_kind,

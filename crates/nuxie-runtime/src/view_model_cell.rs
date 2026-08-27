@@ -695,7 +695,7 @@ impl RuntimeBlobAssetValue {
         true
     }
 
-    fn set_live_blob_bytes(&mut self, bytes: Option<Arc<[u8]>>) -> bool {
+    pub(crate) fn set_live_blob_bytes(&mut self, bytes: Option<Arc<[u8]>>) -> bool {
         let same = match (&self.live_blob_asset, &bytes) {
             (Some(current), Some(next)) => current.bytes_arc_ptr_eq(next),
             (None, None) => true,
@@ -710,7 +710,7 @@ impl RuntimeBlobAssetValue {
         true
     }
 
-    fn set_live_blob_asset(&mut self, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
+    pub(crate) fn set_live_blob_asset(&mut self, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
         let same = match (&self.live_blob_asset, &asset) {
             (Some(current), Some(next)) => Arc::ptr_eq(current, next),
             (None, None) => true,
@@ -1126,45 +1126,19 @@ impl RuntimeViewModelCell {
     }
 
     pub(crate) fn set_blob_asset_index(&self, file_asset_index: u64) -> bool {
-        let RuntimeViewModelCellValue::AssetBlob(mut value) = self.value() else {
-            debug_assert!(false, "set_blob_asset_index on non-blob cell");
-            return false;
-        };
-        if !value.set_file_asset_index(file_asset_index) {
-            return false;
-        }
-        self.set_value(RuntimeViewModelCellValue::AssetBlob(value))
+        crate::view_model::view_model_instance_asset_blob_property_value(self, file_asset_index)
     }
 
     pub(crate) fn set_live_blob_bytes(&self, bytes: Option<Arc<[u8]>>) -> bool {
-        let RuntimeViewModelCellValue::AssetBlob(mut value) = self.value() else {
-            debug_assert!(false, "set_live_blob_bytes on non-blob cell");
-            return false;
-        };
-        if !value.set_live_blob_bytes(bytes) {
-            return false;
-        }
-        self.set_value(RuntimeViewModelCellValue::AssetBlob(value))
+        crate::view_model::view_model_instance_asset_blob_value_bytes(self, bytes)
     }
 
     pub(crate) fn set_live_blob_asset(&self, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
-        let RuntimeViewModelCellValue::AssetBlob(mut value) = self.value() else {
-            debug_assert!(false, "set_live_blob_asset on non-blob cell");
-            return false;
-        };
-        if !value.set_live_blob_asset(asset) {
-            return false;
-        }
-        self.set_value(RuntimeViewModelCellValue::AssetBlob(value))
+        crate::view_model::view_model_instance_asset_blob_value(self, asset)
     }
 
     pub(crate) fn apply_blob_asset_data_bind_value(&self, value: &RuntimeBlobAssetValue) -> bool {
-        if let Some(asset) = value.live_blob_asset() {
-            return self.set_live_blob_asset(Some(Arc::clone(asset)));
-        }
-        let mut changed = self.set_live_blob_bytes(None);
-        changed |= self.set_blob_asset_index(value.file_asset_index());
-        changed
+        crate::view_model::view_model_instance_asset_blob_apply_value(self, value)
     }
 
     /// C++ `ViewModelInstanceTrigger::trigger()` analog: increment the

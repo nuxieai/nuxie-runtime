@@ -18,6 +18,19 @@ fn cubic_measure_segment_count(points: [(f32, f32); 4], inv_tolerance: f32) -> u
         .min(TRIM_CONTOUR_MAX_SEGMENTS as f32) as u32
 }
 
+fn quadratic_measure_segment_count(points: [(f32, f32); 3], inv_tolerance: f32) -> u32 {
+    wangs_quadratic(points, inv_tolerance)
+        .ceil()
+        .min(TRIM_CONTOUR_MAX_SEGMENTS as f32) as u32
+}
+
+fn wangs_quadratic(points: [(f32, f32); 3], precision: f32) -> f32 {
+    let x = -2.0 * points[1].0 + points[0].0 + points[2].0;
+    let y = -2.0 * points[1].1 + points[0].1 + points[2].1;
+    let length_term_pow2 = 4.0 / 64.0 * precision * precision;
+    (x.mul_add(x, y * y) * length_term_pow2).sqrt().sqrt()
+}
+
 fn wangs_cubic(points: [(f32, f32); 4], precision: f32) -> f32 {
     let first = vector_length_squared((
         points[0].0 - 2.0 * points[1].0 + points[2].0,
@@ -28,7 +41,28 @@ fn wangs_cubic(points: [(f32, f32); 4], precision: f32) -> f32 {
         points[1].1 - 2.0 * points[2].1 + points[3].1,
     ));
     let length_term_pow2 = 9.0 * 4.0 / 64.0 * precision * precision;
-    (first.max(second) * length_term_pow2).sqrt().sqrt()
+    (contour_cpp_std_max(first, second) * length_term_pow2)
+        .sqrt()
+        .sqrt()
+}
+
+fn contour_cpp_std_max(first: f32, second: f32) -> f32 {
+    if first < second { second } else { first }
+}
+
+fn contour_cpp_std_min(first: f32, second: f32) -> f32 {
+    if second < first { second } else { first }
+}
+
+fn quad_position_tangent(points: [(f32, f32); 3], t: f32) -> ((f32, f32), (f32, f32)) {
+    let eval = EvalQuad::new(points);
+    (
+        eval.evaluate(t),
+        normalized_vector((
+            (eval.a.0 + eval.a.0).mul_add(t, eval.b.0),
+            (eval.a.1 + eval.a.1).mul_add(t, eval.b.1),
+        )),
+    )
 }
 
 fn eval_cubic(points: [(f32, f32); 4], t: f32) -> (f32, f32) {
@@ -73,6 +107,11 @@ enum TrimSegmentKind {
     Line {
         from: (f32, f32),
         to: (f32, f32),
+    },
+    Quad {
+        p0: (f32, f32),
+        p1: (f32, f32),
+        p2: (f32, f32),
     },
     Cubic {
         p0: (f32, f32),
@@ -217,17 +256,10 @@ impl TrimContour {
                         break;
                     };
                     point_index += 2;
-                    let p3 = (point.x, point.y);
-                    let p1 = (
-                        p0.0 + (control.x - p0.0) * (2.0 / 3.0),
-                        p0.1 + (control.y - p0.1) * (2.0 / 3.0),
-                    );
-                    let p2 = (
-                        p3.0 + (control.x - p3.0) * (2.0 / 3.0),
-                        p3.1 + (control.y - p3.1) * (2.0 / 3.0),
-                    );
-                    raw_segments.push(TrimSegmentKind::Cubic { p0, p1, p2, p3 });
-                    current = Some(p3);
+                    let p1 = (control.x, control.y);
+                    let p2 = (point.x, point.y);
+                    raw_segments.push(TrimSegmentKind::Quad { p0, p1, p2 });
+                    current = Some(p2);
                 }
                 RenderPathVerb::Cubic => {
                     let (Some(control_out), Some(control_in), Some(point), Some(p0)) = (
@@ -286,6 +318,36 @@ impl TrimContour {
                         t: 1.0,
                     });
                 }
+                TrimSegmentKind::Quad { p0, p1, p2 } => {
+                    let segment_count =
+                        quadratic_measure_segment_count([p0, p1, p2], inv_tolerance);
+                    if segment_count == 0 {
+                        continue;
+                    }
+                    let dt = 1.0 / segment_count as f32;
+                    let eval = EvalQuad::new([p0, p1, p2]);
+                    let mut t = dt;
+                    let mut previous = p0;
+                    for _ in 1..segment_count {
+                        let next = eval.evaluate(t);
+                        distance_so_far += distance(previous, next);
+                        segments.push(TrimMeasuredSegment {
+                            original_index,
+                            kind: segment,
+                            distance: distance_so_far,
+                            t: trim_contour_dot30_t(t),
+                        });
+                        previous = next;
+                        t += dt;
+                    }
+                    distance_so_far += distance(previous, p2);
+                    segments.push(TrimMeasuredSegment {
+                        original_index,
+                        kind: segment,
+                        distance: distance_so_far,
+                        t: 1.0,
+                    });
+                }
                 TrimSegmentKind::Cubic { p0, p1, p2, p3 } => {
                     let segment_count =
                         cubic_measure_segment_count([p0, p1, p2, p3], inv_tolerance);
@@ -327,13 +389,23 @@ impl TrimContour {
 
     pub(crate) fn get_segment(
         &self,
-        mut start_distance: f32,
-        mut end_distance: f32,
+        start_distance: f32,
+        end_distance: f32,
         commands: &mut Vec<RuntimePathCommand>,
         start_with_move: bool,
     ) {
-        start_distance = start_distance.max(0.0);
-        end_distance = end_distance.min(self.length);
+        self.get_segment_into(start_distance, end_distance, commands, start_with_move);
+    }
+
+    fn get_segment_into<S: TrimSegmentSink>(
+        &self,
+        mut start_distance: f32,
+        mut end_distance: f32,
+        destination: &mut S,
+        start_with_move: bool,
+    ) {
+        start_distance = contour_cpp_std_max(0.0, start_distance);
+        end_distance = contour_cpp_std_min(self.length, end_distance);
         if start_distance >= end_distance {
             return;
         }
@@ -353,28 +425,35 @@ impl TrimContour {
         if start.original_index == end.original_index {
             start
                 .kind
-                .extract(commands, start_t, end_t, start_with_move);
+                .extract(destination, start_t, end_t, start_with_move);
             return;
         }
 
-        start.kind.extract(commands, start_t, 1.0, start_with_move);
+        start
+            .kind
+            .extract(destination, start_t, 1.0, start_with_move);
 
         let mut original_index = start.original_index + 1;
         while original_index < end.original_index {
             if let Some(segment) = self.first_segment_for_original(original_index) {
-                segment.kind.extract_full(commands);
+                segment.kind.extract_full(destination);
             }
             original_index += 1;
         }
 
-        end.kind.extract(commands, 0.0, end_t, false);
+        end.kind.extract(destination, 0.0, end_t, false);
     }
 
     fn find_segment(&self, distance: f32) -> usize {
-        self.segments
+        let mut index = self
+            .segments
             .iter()
             .position(|segment| segment.distance >= distance)
-            .unwrap_or_else(|| self.segments.len() - 1)
+            .unwrap_or_else(|| self.segments.len() - 1);
+        while self.segments[index].distance == 0.0 && index + 1 < self.segments.len() {
+            index += 1;
+        }
+        index
     }
 
     fn compute_t(&self, index: usize, distance: f32) -> f32 {
@@ -406,7 +485,13 @@ impl TrimContour {
     }
 
     fn position_tangent_at_distance(&self, distance: f32) -> ((f32, f32), (f32, f32)) {
-        let distance = distance.clamp(0.0, self.length);
+        let mut distance = distance;
+        if distance > self.length {
+            distance = self.length;
+        }
+        if distance < 0.0 {
+            distance = 0.0;
+        }
         let index = self.find_segment(distance);
         let segment = &self.segments[index];
 
@@ -424,6 +509,9 @@ impl TrimContour {
                 };
                 let tan = normalized_vector((to.0 - from.0, to.1 - from.1));
                 (lerp_point(from, to, rel_d), tan)
+            }
+            TrimSegmentKind::Quad { p0, p1, p2 } => {
+                quad_position_tangent([p0, p1, p2], self.compute_t(index, distance))
             }
             TrimSegmentKind::Cubic { p0, p1, p2, p3 } => {
                 cubic_position_tangent([p0, p1, p2, p3], self.compute_t(index, distance))
@@ -464,10 +552,8 @@ impl RuntimeContourMeasure {
         destination: &mut RawPath,
         start_with_move: bool,
     ) {
-        let mut commands = Vec::new();
         self.contour
-            .get_segment(start, end, &mut commands, start_with_move);
-        runtime_append_path_commands(destination, &commands);
+            .get_segment_into(start, end, destination, start_with_move);
     }
 
     pub fn segment(&self, start: f32, end: f32, start_with_move: bool) -> RawPath {
@@ -478,9 +564,9 @@ impl RuntimeContourMeasure {
 }
 
 impl TrimSegmentKind {
-    fn extract(
+    fn extract<S: TrimSegmentSink>(
         self,
-        commands: &mut Vec<RuntimePathCommand>,
+        destination: &mut S,
         start_t: f32,
         end_t: f32,
         move_to: bool,
@@ -490,46 +576,105 @@ impl TrimSegmentKind {
                 let start = weighted_lerp_point(from, to, start_t);
                 let end = weighted_lerp_point(from, to, end_t);
                 if move_to {
-                    commands.push(RuntimePathCommand::Move {
-                        x: start.0,
-                        y: start.1,
-                    });
+                    destination.move_to(start);
                 }
-                commands.push(RuntimePathCommand::Line { x: end.0, y: end.1 });
+                destination.line_to(end);
+            }
+            Self::Quad { p0, p1, p2 } => {
+                let [start, control, end] = quad_extract([p0, p1, p2], start_t, end_t);
+                if move_to {
+                    destination.move_to(start);
+                }
+                destination.quad_to(start, control, end);
             }
             Self::Cubic { p0, p1, p2, p3 } => {
                 let [start, control_1, control_2, end] =
                     cubic_extract([p0, p1, p2, p3], start_t, end_t);
                 if move_to {
-                    commands.push(RuntimePathCommand::Move {
-                        x: start.0,
-                        y: start.1,
-                    });
+                    destination.move_to(start);
                 }
-                commands.push(RuntimePathCommand::Cubic {
-                    x1: control_1.0,
-                    y1: control_1.1,
-                    x2: control_2.0,
-                    y2: control_2.1,
-                    x3: end.0,
-                    y3: end.1,
-                });
+                destination.cubic_to(control_1, control_2, end);
             }
         }
     }
 
-    fn extract_full(self, commands: &mut Vec<RuntimePathCommand>) {
+    fn extract_full<S: TrimSegmentSink>(self, destination: &mut S) {
         match self {
-            Self::Line { to, .. } => commands.push(RuntimePathCommand::Line { x: to.0, y: to.1 }),
-            Self::Cubic { p1, p2, p3, .. } => commands.push(RuntimePathCommand::Cubic {
-                x1: p1.0,
-                y1: p1.1,
-                x2: p2.0,
-                y2: p2.1,
-                x3: p3.0,
-                y3: p3.1,
-            }),
+            Self::Line { to, .. } => destination.line_to(to),
+            Self::Quad { p0, p1, p2 } => destination.quad_to(p0, p1, p2),
+            Self::Cubic { p1, p2, p3, .. } => destination.cubic_to(p1, p2, p3),
         }
+    }
+}
+
+trait TrimSegmentSink {
+    fn move_to(&mut self, point: (f32, f32));
+    fn line_to(&mut self, point: (f32, f32));
+    fn quad_to(&mut self, start: (f32, f32), control: (f32, f32), end: (f32, f32));
+    fn cubic_to(&mut self, control_1: (f32, f32), control_2: (f32, f32), end: (f32, f32));
+}
+
+impl TrimSegmentSink for RawPath {
+    fn move_to(&mut self, point: (f32, f32)) {
+        self.move_to(point.0, point.1);
+    }
+
+    fn line_to(&mut self, point: (f32, f32)) {
+        self.line_to(point.0, point.1);
+    }
+
+    fn quad_to(&mut self, _start: (f32, f32), control: (f32, f32), end: (f32, f32)) {
+        self.quad_to(control.0, control.1, end.0, end.1);
+    }
+
+    fn cubic_to(&mut self, control_1: (f32, f32), control_2: (f32, f32), end: (f32, f32)) {
+        self.cubic_to(
+            control_1.0,
+            control_1.1,
+            control_2.0,
+            control_2.1,
+            end.0,
+            end.1,
+        );
+    }
+}
+
+impl TrimSegmentSink for Vec<RuntimePathCommand> {
+    fn move_to(&mut self, point: (f32, f32)) {
+        self.push(RuntimePathCommand::Move {
+            x: point.0,
+            y: point.1,
+        });
+    }
+
+    fn line_to(&mut self, point: (f32, f32)) {
+        self.push(RuntimePathCommand::Line {
+            x: point.0,
+            y: point.1,
+        });
+    }
+
+    fn quad_to(&mut self, start: (f32, f32), control: (f32, f32), end: (f32, f32)) {
+        let control_1 = (
+            start.0 + (control.0 - start.0) * (2.0 / 3.0),
+            start.1 + (control.1 - start.1) * (2.0 / 3.0),
+        );
+        let control_2 = (
+            end.0 + (control.0 - end.0) * (2.0 / 3.0),
+            end.1 + (control.1 - end.1) * (2.0 / 3.0),
+        );
+        self.cubic_to(control_1, control_2, end);
+    }
+
+    fn cubic_to(&mut self, control_1: (f32, f32), control_2: (f32, f32), end: (f32, f32)) {
+        self.push(RuntimePathCommand::Cubic {
+            x1: control_1.0,
+            y1: control_1.1,
+            x2: control_2.0,
+            y2: control_2.1,
+            x3: end.0,
+            y3: end.1,
+        });
     }
 }
 

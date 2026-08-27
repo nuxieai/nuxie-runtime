@@ -102,11 +102,11 @@ impl RuntimePathMeasure {
         RuntimePathSample::default()
     }
 
-    fn get_segment(
+    fn get_segment<S: TrimSegmentSink>(
         &self,
         start_distance: f32,
         end_distance: f32,
-        commands: &mut Vec<RuntimePathCommand>,
+        destination: &mut S,
         start_with_move: bool,
     ) {
         if self.contours.is_empty() {
@@ -132,10 +132,10 @@ impl RuntimePathMeasure {
                 let local_start = path_measure_cpp_std_max(0.0, start_distance - contour_start);
                 let local_end =
                     path_measure_cpp_std_min(contour_length, end_distance - contour_start);
-                contour.get_segment(
+                contour.get_segment_into(
                     local_start,
                     local_end,
-                    commands,
+                    destination,
                     !is_first_segment || start_with_move,
                 );
                 is_first_segment = false;
@@ -175,9 +175,7 @@ impl RuntimePathMeasure {
         destination: &mut RawPath,
         start_with_move: bool,
     ) {
-        let mut commands = Vec::new();
-        self.get_segment(start, end, &mut commands, start_with_move);
-        runtime_append_path_commands(destination, &commands);
+        self.get_segment(start, end, destination, start_with_move);
     }
 
     pub fn segment(&self, start: f32, end: f32, start_with_move: bool) -> RawPath {

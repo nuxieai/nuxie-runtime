@@ -1,5 +1,14 @@
 use crate::{ArtboardInstance, properties::property_key_for_name};
 
+/// The generated `RectangleBase::linkCornerRadiusChanged` callback is empty.
+///
+/// Returning an owned no-op keeps the generic property fallback from
+/// invalidating prepared output for a setter that pinned C++ only publishes
+/// through `notifyPropertyChanged`.
+pub(crate) fn bool_property_changed(property_key: u16) -> Option<bool> {
+    (property_key_for_name("Rectangle", "linkCornerRadius") == Some(property_key)).then_some(false)
+}
+
 pub(crate) fn property_changed(
     artboard: &mut ArtboardInstance,
     local_id: usize,

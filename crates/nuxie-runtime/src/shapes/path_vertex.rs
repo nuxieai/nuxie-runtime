@@ -1,4 +1,4 @@
-use crate::{ArtboardInstance, ComponentDirt};
+use crate::ArtboardInstance;
 
 /// `PathVertex::markGeometryDirty`: the vertex dirties its concrete parent
 /// Path, never itself. PointsPath additionally dirties its retained Skin.
@@ -7,7 +7,12 @@ pub(crate) fn mark_geometry_dirty(artboard: &mut ArtboardInstance, local_id: usi
         // Parametric paths own unparented virtual vertices.
         return false;
     };
-    let mut changed = artboard.mark_points_path_skin_dirty(path_local);
-    changed |= artboard.add_dirt(path_local, ComponentDirt::PATH, false);
-    changed
+    if artboard
+        .component(path_local)
+        .is_some_and(|component| component.type_name == "PointsPath")
+    {
+        super::points_path::mark_path_dirty(artboard, path_local, true)
+    } else {
+        super::mark_path_dirty(artboard, path_local)
+    }
 }

@@ -12,9 +12,8 @@ use crate::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeLayoutBounds,
     components::ComponentHandle,
     draw::{
-        RuntimeOwnedPath, WeightedPathContext, cubic_vertex_points,
-        parametric_path_with_control_size, path_commands, runtime_path_geometry,
-        vertex_translation,
+        RuntimeOwnedPath, WeightedPathContext, parametric_path_with_control_size, path_commands,
+        runtime_path_geometry,
     },
     math::raw_path::{prune_empty_path_segments, runtime_raw_path_from_commands},
     properties::property_key_for_name,
@@ -165,15 +164,7 @@ impl ArtboardInstance {
         }
 
         let runtime_path = self.runtime_path_geometry_with_layout_control(path, layout_bounds);
-        if self.runtime_skinnable_handle_has_skin(path_handle) {
-            for vertex in &runtime_path.vertices {
-                self.deform_runtime_vertex_weight(
-                    vertex.local_id,
-                    vertex_translation(vertex),
-                    cubic_vertex_points(vertex),
-                );
-            }
-        }
+        super::points_path::update(self, path_handle, dirt, &runtime_path);
         let weighted_context = self
             .runtime_skinnable_handle_has_skin(path_handle)
             .then_some(WeightedPathContext { instance: self });

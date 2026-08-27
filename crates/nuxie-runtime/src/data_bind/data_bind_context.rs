@@ -8280,7 +8280,7 @@ impl ArtboardInstance {
                 .get(binding.path.as_slice())
                 .cloned()
         })?;
-        let (converted, string_owned) = if let Some(shared) = self
+        let (converted, string_owned, boolean_owned) = if let Some(shared) = self
             .artboard_authored_data_bind_states
             .get_mut(binding.data_bind_index)
             .and_then(|state| state.shared_converter.as_mut())
@@ -8294,6 +8294,10 @@ impl ArtboardInstance {
                     &mut self.artboard_formula_random_source,
                 ),
                 crate::context_value_string::owns_output(
+                    &binding.default_value,
+                    Some(&shared.converter),
+                ),
+                crate::context_value_boolean::owns_output(
                     &binding.default_value,
                     Some(&shared.converter),
                 ),
@@ -8311,16 +8315,25 @@ impl ArtboardInstance {
                     &binding.default_value,
                     Some(converter),
                 ),
+                crate::context_value_boolean::owns_output(
+                    &binding.default_value,
+                    Some(converter),
+                ),
             )
         } else {
             (
                 Some(value),
                 crate::context_value_string::owns_output(&binding.default_value, None),
+                crate::context_value_boolean::owns_output(&binding.default_value, None),
             )
         };
         let converted = converted?;
         let converted = if string_owned {
             RuntimeDataBindGraphValue::String(crate::context_value_string::calculate_value(
+                &converted,
+            ))
+        } else if boolean_owned {
+            RuntimeDataBindGraphValue::Boolean(crate::context_value_boolean::calculate_value(
                 &converted,
             ))
         } else {

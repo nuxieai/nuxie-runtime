@@ -11155,26 +11155,26 @@ impl RuntimeDataBindGraphSourceNode {
         target: RuntimeDataBindGraphTarget,
         value: RuntimeDataBindGraphValue,
     ) -> Option<RuntimeDataBindGraphValue> {
+        // C++ selects the concrete DataBindContextValue subclass from
+        // DataBind::outputType before apply sees the target property. Preserve
+        // that ordering so a wrong-kind converter result takes the typed
+        // owner's default even when the target field has another kind.
+        let value = if crate::context_value_string::owns_output(
+            &self.default_value,
+            self.converter.as_ref(),
+        ) {
+            RuntimeDataBindGraphValue::String(crate::context_value_string::calculate_value(&value))
+        } else if crate::context_value_boolean::owns_output(
+            &self.default_value,
+            self.converter.as_ref(),
+        ) {
+            RuntimeDataBindGraphValue::Boolean(crate::context_value_boolean::calculate_value(
+                &value,
+            ))
+        } else {
+            value
+        };
         match (target, value) {
-            (
-                RuntimeDataBindGraphTarget::String { .. }
-                | RuntimeDataBindGraphTarget::KeyFrameString { .. },
-                value,
-            ) if crate::context_value_string::owns_output(
-                &self.default_value,
-                self.converter.as_ref(),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                crate::context_value_string::calculate_value(&value),
-            )),
-            (
-                RuntimeDataBindGraphTarget::Boolean { .. }
-                | RuntimeDataBindGraphTarget::KeyFrameBoolean { .. },
-                value,
-            ) if matches!(self.default_value, RuntimeDataBindGraphValue::Boolean(_)) => {
-                Some(RuntimeDataBindGraphValue::Boolean(
-                    crate::context_value_boolean::calculate_value(&value),
-                ))
-            }
             (RuntimeDataBindGraphTarget::Color { .. }, value)
                 if matches!(self.default_value, RuntimeDataBindGraphValue::Color(_)) =>
             {
@@ -12067,6 +12067,7 @@ mod tests {
         for target in [
             RuntimeDataBindGraphTarget::String { global_id: 7 },
             RuntimeDataBindGraphTarget::KeyFrameString { global_id: 8 },
+            RuntimeDataBindGraphTarget::Boolean { global_id: 9 },
         ] {
             assert_eq!(
                 source.source_to_target_value_for_concrete_target(
@@ -12078,8 +12079,24 @@ mod tests {
             );
         }
 
+        source.default_value = RuntimeDataBindGraphValue::Boolean(true);
+        source.converter = Some(RuntimeDataBindGraphConverter::ToString {
+            global_id: 10,
+            flags: 0,
+            decimals: 0,
+            color_format: Vec::new(),
+        });
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::Boolean { global_id: 9 },
+                RuntimeDataBindGraphValue::Boolean(true),
+            ),
+            Some(RuntimeDataBindGraphValue::String(Vec::new())),
+            "converter-selected ContextValueString defaults before target-kind dispatch",
+        );
+
         source.converter = Some(RuntimeDataBindGraphConverter::Scripted {
-            global_id: 9,
+            global_id: 11,
             serialized_implemented_methods: 0,
             definition: Default::default(),
             instance: None,
@@ -12104,6 +12121,7 @@ mod tests {
         for target in [
             RuntimeDataBindGraphTarget::Boolean { global_id: 7 },
             RuntimeDataBindGraphTarget::KeyFrameBoolean { global_id: 8 },
+            RuntimeDataBindGraphTarget::String { global_id: 9 },
         ] {
             assert_eq!(
                 source.source_to_target_value_for_concrete_target(
@@ -12115,7 +12133,19 @@ mod tests {
             );
         }
 
+        source.default_value = RuntimeDataBindGraphValue::String(b"source".to_vec());
+        source.converter = Some(RuntimeDataBindGraphConverter::BooleanNegate);
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::String { global_id: 9 },
+                RuntimeDataBindGraphValue::Number(1.0),
+            ),
+            Some(RuntimeDataBindGraphValue::Boolean(false)),
+            "converter-selected ContextValueBoolean defaults before target-kind dispatch",
+        );
+
         source.default_value = RuntimeDataBindGraphValue::Untyped;
+        source.converter = None;
         source.value = RuntimeDataBindGraphValue::Boolean(true);
         assert_eq!(
             source.source_to_target_value_for_concrete_target(

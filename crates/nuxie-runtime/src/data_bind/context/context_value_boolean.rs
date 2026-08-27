@@ -4,7 +4,9 @@
 //! The shared context owner synchronizes the source and runs the converter;
 //! this module owns the concrete Boolean result and its CoreBool projection.
 
-use crate::data_bind_graph::RuntimeDataBindGraphValue;
+use nuxie_binary::RuntimeDataType;
+
+use crate::data_bind_graph::{RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue};
 
 pub(crate) fn matching(next: &RuntimeDataBindGraphValue) -> Option<RuntimeDataBindGraphValue> {
     match next {
@@ -12,6 +14,22 @@ pub(crate) fn matching(next: &RuntimeDataBindGraphValue) -> Option<RuntimeDataBi
             Some(RuntimeDataBindGraphValue::Boolean(*value))
         }
         _ => None,
+    }
+}
+
+/// Whether pinned `DataBind::bind` selects `DataBindContextValueBoolean` for
+/// this occurrence. A concrete converter output wins; `none` and `input`
+/// fall back to the live source type, while `any` stays dynamically typed.
+pub(crate) fn owns_output(
+    source: &RuntimeDataBindGraphValue,
+    converter: Option<&RuntimeDataBindGraphConverter>,
+) -> bool {
+    match converter.map(RuntimeDataBindGraphConverter::cpp_output_data_type) {
+        Some(RuntimeDataType::Boolean) => true,
+        None | Some(RuntimeDataType::None | RuntimeDataType::Input) => {
+            matches!(source, RuntimeDataBindGraphValue::Boolean(_))
+        }
+        _ => false,
     }
 }
 

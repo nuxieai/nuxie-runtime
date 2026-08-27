@@ -105,7 +105,12 @@ impl RuntimeScriptInputProperties {
         Self {
             name: self.name.clone(),
             parent_id: self.parent_id,
-            value: self.value.clone(),
+            value: match self.value.as_ref() {
+                Some(RuntimeDataBindGraphValue::Boolean(_)) => Some(
+                    crate::script_input_boolean::clone_property_value(self.value.as_ref()),
+                ),
+                _ => self.value.clone(),
+            },
             artboard: self
                 .artboard
                 .as_ref()
@@ -136,6 +141,11 @@ impl RuntimeScriptInputProperties {
                 .as_ref()
                 .and_then(RuntimeScriptInputArtboardOccurrence::referenced_artboard_id)
                 .map(RuntimeDataBindGraphValue::Artboard);
+        }
+        if kind == ScriptListenerInputKind::Boolean {
+            return Some(crate::script_input_boolean::scripted_value(
+                self.value.as_ref(),
+            ));
         }
         self.value.clone()
     }
@@ -240,6 +250,17 @@ impl RuntimeScriptInputProperties {
                 let Some(next) = coerce_script_input_value(kind, value) else {
                     return RuntimeScriptInputTargetApply::Rejected;
                 };
+                if kind == ScriptListenerInputKind::Boolean {
+                    let RuntimeDataBindGraphValue::Boolean(next) = next else {
+                        unreachable!("ScriptInputBoolean coercion returns a Boolean value")
+                    };
+                    return if crate::script_input_boolean::set_property_value(&mut self.value, next)
+                    {
+                        RuntimeScriptInputTargetApply::ChangedWithTableProjection
+                    } else {
+                        RuntimeScriptInputTargetApply::Unchanged
+                    };
+                }
                 let Some(current) = self.value.as_ref() else {
                     return RuntimeScriptInputTargetApply::Rejected;
                 };

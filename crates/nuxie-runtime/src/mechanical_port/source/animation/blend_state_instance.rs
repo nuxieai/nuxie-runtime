@@ -9,7 +9,7 @@ pub trait BlendAnimationDefinition {
 }
 
 pub trait BlendStateDefinition<T> {
-    fn animations(&self) -> &[T];
+    fn animations(&self) -> Vec<&T>;
     fn flags(&self) -> u8;
 }
 
@@ -56,8 +56,9 @@ where
     T: BlendAnimationDefinition,
 {
     pub fn new(blend_state: &'a K, instance: *mut ()) -> Self {
-        let mut animation_instances = Vec::with_capacity(blend_state.animations().len());
-        for blend_animation in blend_state.animations() {
+        let animations = blend_state.animations();
+        let mut animation_instances = Vec::with_capacity(animations.len());
+        for blend_animation in animations {
             animation_instances.push(BlendStateAnimationInstance::new(blend_animation, instance));
         }
 
@@ -66,7 +67,7 @@ where
         if blend_state.flags() & (1 << 1) != 0 {
             let animations: Vec<_> = blend_state
                 .animations()
-                .iter()
+                .into_iter()
                 .map(BlendAnimationDefinition::animation)
                 .collect();
             drop(animations);

@@ -1146,12 +1146,12 @@ impl ArtboardInstance {
             .advancing_components
             .iter()
             .filter_map(|entry| {
-                Some(RuntimeAdvancingComponent {
-                    local_id: entry.local_id,
-                    object: objects.object_handle(entry.local_id)?,
-                    component: objects.component_handle(entry.local_id),
-                    kind: entry.kind,
-                })
+                RuntimeAdvancingComponent::from(
+                    entry.local_id,
+                    entry.type_name,
+                    objects.object_handle(entry.local_id)?,
+                    objects.component_handle(entry.local_id),
+                )
             })
             .collect();
         let resetting = graph

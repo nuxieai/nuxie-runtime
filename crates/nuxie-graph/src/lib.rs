@@ -817,6 +817,17 @@ pub struct DashNode {
     pub length_is_percentage: bool,
 }
 
+impl DashNode {
+    fn new(local_id: usize, global_id: u32, length: f32, length_is_percentage: bool) -> Self {
+        Self {
+            local_id,
+            global_id,
+            length,
+            length_is_percentage,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GradientStopNode {
     pub local_id: usize,
@@ -2619,12 +2630,12 @@ fn dash_path_dashes(
                 return None;
             }
 
-            Some(DashNode {
-                local_id: local_object.local_id,
-                global_id: local_object.global_id,
-                length: object.double_property("length").unwrap_or(0.0),
-                length_is_percentage: object.bool_property("lengthIsPercentage").unwrap_or(false),
-            })
+            Some(DashNode::new(
+                local_object.local_id,
+                local_object.global_id,
+                object.double_property("length").unwrap_or(0.0),
+                object.bool_property("lengthIsPercentage").unwrap_or(false),
+            ))
         })
         .collect()
 }

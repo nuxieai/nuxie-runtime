@@ -10484,7 +10484,7 @@ impl RuntimeDataBindGraph {
         &mut self,
         targets: &RuntimeDataBindGraphTargetsMut<'_>,
     ) -> Result<bool, ScriptError> {
-        self.apply_default_view_model_targets_to_sources_with_options(targets, false, None)
+        self.apply_default_view_model_targets_to_sources_with_options(targets, false, false, None)
     }
 
     pub(crate) fn apply_default_view_model_target_to_source_for_data_bind(
@@ -10492,9 +10492,15 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         targets: &RuntimeDataBindGraphTargetsMut<'_>,
     ) -> Result<bool, ScriptError> {
+        // ListenerViewModelChange calls `updateSourceBinding(true)`: the
+        // explicit `true` invalidates `DataBindContextValue::m_isValid`, so
+        // conversion and source application run even when the target cache
+        // compares equal (`listener_viewmodel_change.cpp:73-76`;
+        // `data_bind.cpp:479-490`; `context_value.hpp:81-99`).
         self.apply_default_view_model_targets_to_sources_with_options(
             targets,
             false,
+            true,
             Some(data_bind_index),
         )
     }
@@ -10511,6 +10517,7 @@ impl RuntimeDataBindGraph {
         self.apply_default_view_model_targets_to_sources_with_options(
             targets,
             true,
+            true,
             Some(data_bind_index),
         )
     }
@@ -10519,6 +10526,7 @@ impl RuntimeDataBindGraph {
         &mut self,
         targets: &RuntimeDataBindGraphTargetsMut<'_>,
         include_deferred_main_to_target: bool,
+        force_reapply: bool,
         only_data_bind_index: Option<usize>,
     ) -> Result<bool, ScriptError> {
         if !self.default_view_model_context_bound() {
@@ -10562,7 +10570,7 @@ impl RuntimeDataBindGraph {
             }
             let target_changed = source.sync_target_value(target_value.clone())
                 | source.sync_target_image_value(target_image_value.clone());
-            if !target_changed && !include_deferred_main_to_target {
+            if !target_changed && !force_reapply {
                 source.target_to_source_dirty = false;
                 continue;
             }
@@ -10894,16 +10902,21 @@ impl RuntimeDataBindGraph {
                 skipped_dirty_binding = true;
                 continue;
             }
-            // Source-to-target just wrote this value. Refresh the target-side
-            // snapshot so a later genuine edit back to the pre-write value is
-            // still detected (`ContextValue::refreshTargetValue`).
-            if source.applies_target_to_source() {
-                source.target_value = Some(value.clone());
-            }
             let image_value = match &value {
                 RuntimeDataBindGraphValue::Asset(value) => source.current_image_value(*value),
                 _ => None,
             };
+            // Source-to-target just wrote this value. Refresh the complete
+            // target-side snapshot so a later genuine edit back to the
+            // pre-write value is still detected. Pinned `refreshTargetValue`
+            // calls `DataBindContextTargetValue::syncTargetValue`, which
+            // refreshes both the integer id and the private live image for a
+            // `DataValueAssetImage` (`context_value.hpp:38-45`;
+            // `context_target_value.cpp:123-157`).
+            if source.applies_target_to_source() {
+                source.target_value = Some(value.clone());
+                source.target_image_value = image_value.clone();
+            }
             updates.push((target.target, value, image_value));
             source.source_to_target_dirty_after_immediate = false;
             source.source_to_target_dirty_after_target_to_source = false;
@@ -11128,6 +11141,7 @@ impl RuntimeDataBindGraph {
         self.apply_default_view_model_targets_to_sources_with_options(
             targets,
             true,
+            false,
             Some(data_bind_index),
         )?;
         Ok(())
@@ -13581,6 +13595,116 @@ mod tests {
         assert!(
             !graph.sources[0].sync_target_value(RuntimeDataBindGraphValue::Number(3.0)),
             "an unchanged target is still filtered by the refreshed cache"
+        );
+    }
+
+    #[test]
+    fn bidirectional_image_apply_refreshes_the_private_image_baseline() {
+        let mut sources = Vec::new();
+        let mut targets = Vec::new();
+        let mut bindings = Vec::new();
+        RuntimeDataBindGraph::push_default_view_model_binding(
+            &mut sources,
+            &mut targets,
+            &mut bindings,
+            0,
+            &[1],
+            DATA_BIND_FLAG_TWO_WAY,
+            None,
+            RuntimeDataBindGraphTarget::Asset { global_id: 7 },
+            RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX)),
+        );
+        let mut graph = RuntimeDataBindGraph {
+            context_kind: RuntimeDataBindGraphContextKind::DefaultViewModel,
+            default_view_model_bindings_dirty: true,
+            formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
+            sources,
+            targets,
+            default_view_model_bindings: bindings,
+            imported_view_model_context: None,
+            imported_view_model_overrides: BTreeMap::new(),
+            key_frame_source_revision: 0,
+        };
+        let old_image = RuntimeViewModelImage::new(vec![1]);
+        let written_image = RuntimeViewModelImage::new(vec![2]);
+        let old_target = RuntimeImageAssetValue::new(u64::from(u32::MAX), Some(old_image.clone()));
+        graph.sources[0].retained_image_value = Some(RuntimeImageAssetValue::new(
+            u64::from(u32::MAX),
+            Some(written_image.clone()),
+        ));
+        assert!(
+            graph.sources[0]
+                .sync_target_value(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX)))
+        );
+        assert!(graph.sources[0].sync_target_image_value(Some(old_target.clone())));
+        graph.sources[0].source_to_target_dirty_after_target_to_source = true;
+
+        let updates = graph.take_default_view_model_binding_updates(
+            true,
+            RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+            None,
+        );
+        let [(_, _, Some(applied_image))] = updates.as_slice() else {
+            panic!("expected one image source-to-target update");
+        };
+        assert!(
+            applied_image
+                .live_image()
+                .is_some_and(|image| image.ptr_eq(&written_image))
+        );
+
+        assert!(
+            graph.sources[0].sync_target_image_value(Some(old_target.clone())),
+            "returning to the private image from before our own write is a genuine target change"
+        );
+        assert!(
+            !graph.sources[0].sync_target_image_value(Some(old_target)),
+            "an unchanged private target image is filtered by the refreshed cache"
+        );
+    }
+
+    #[test]
+    fn listener_invalidation_reapplies_an_unchanged_target_value() {
+        let mut graph = graph_with_number_binding(DATA_BIND_FLAG_DIRECTION_TO_SOURCE);
+        graph.sources[0].target_value = Some(RuntimeDataBindGraphValue::Number(3.0));
+        graph.sources[0].target_to_source_dirty = true;
+        let mut numbers = vec![StateMachineBindableNumberInstance {
+            global_id: 7,
+            data_bind_indices: vec![0],
+            value: 3.0,
+        }];
+        let mut integers = Vec::new();
+        let mut booleans = Vec::new();
+        let mut strings = Vec::new();
+        let mut colors = Vec::new();
+        let mut enums = Vec::new();
+        let mut assets = Vec::new();
+        let mut artboards = Vec::new();
+        let mut lists = Vec::new();
+        let mut triggers = Vec::new();
+        let mut view_models = Vec::new();
+        let mut transition_durations = Vec::new();
+        let targets = RuntimeDataBindGraphTargetsMut {
+            numbers: &mut numbers,
+            integers: &mut integers,
+            booleans: &mut booleans,
+            strings: &mut strings,
+            colors: &mut colors,
+            enums: &mut enums,
+            assets: &mut assets,
+            artboards: &mut artboards,
+            lists: &mut lists,
+            triggers: &mut triggers,
+            view_models: &mut view_models,
+            transition_durations: &mut transition_durations,
+            include_view_models: true,
+        };
+
+        assert!(
+            graph
+                .apply_default_view_model_target_to_source_for_data_bind(0, &targets)
+                .expect("listener target-to-source apply"),
+            "updateSourceBinding(true) invalidates the context value and applies even when the target cache compares equal"
         );
     }
 

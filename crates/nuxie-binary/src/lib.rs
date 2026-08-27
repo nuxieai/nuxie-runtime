@@ -10348,17 +10348,6 @@ fn validate_cpp_paint_effects(
             continue;
         };
 
-        if definition.name == "Dash" {
-            let Some(parent) =
-                local_object_reference(slots, objects, object.uint_property("parentId"))
-            else {
-                continue;
-            };
-            if !runtime_object_is_cpp_dash_path(parent) {
-                bail!("dash object {} has parent that is not DashPath", object.id);
-            }
-        }
-
         if cpp_stroke_effect_requires_effects_container(definition) {
             let Some(parent) =
                 local_object_reference(slots, objects, object.uint_property("parentId"))
@@ -11344,10 +11333,6 @@ fn runtime_object_is_cpp_skinnable(object: &RuntimeObject) -> bool {
 fn runtime_object_is_cpp_nested_artboard(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key)
         .is_some_and(|definition| definition.is_a("NestedArtboard"))
-}
-
-fn runtime_object_is_cpp_dash_path(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key).is_some_and(|definition| definition.name == "DashPath")
 }
 
 fn runtime_object_is_cpp_effects_container(object: &RuntimeObject) -> bool {

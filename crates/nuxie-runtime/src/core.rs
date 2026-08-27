@@ -9,6 +9,11 @@ use std::collections::BTreeMap;
 /// structure-preserving owner key. Registration is construction/lifecycle
 /// work; generated setters only take the empty fast path and visit the exact
 /// property's retained observers.
+///
+/// The arena owns targets, bindings, and this table as one occurrence. Dropping
+/// it releases the complete table, so no observer can retain a dangling target;
+/// cloning the occurrence rebuilds the same index relationships against the
+/// cloned targets rather than copying pointers from the source `Core`.
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeCorePropertyObservers<T> {
     by_core_property: BTreeMap<(usize, u16), Vec<T>>,
@@ -40,7 +45,9 @@ impl<T: PartialEq> RuntimeCorePropertyObservers<T> {
         if observers.contains(&observer) {
             return;
         }
-        observers.push(observer);
+        // C++ prepends to the intrusive chain. Preserve that newest-first
+        // visitation order because the callback appends dirt to live queues.
+        observers.insert(0, observer);
     }
 
     pub(crate) fn observes_property(&self, local_id: usize, property_key: u16) -> bool {
@@ -104,7 +111,7 @@ mod tests {
         observers.add_property_observer(8, 11, 4_u8);
 
         assert!(observers.notify_property_changed(7, 11, |observer| notified.push(*observer)));
-        assert_eq!(notified, vec![1, 2]);
+        assert_eq!(notified, vec![2, 1]);
         assert!(observers.observes_property(7, 11));
         assert!(!observers.observes_property(9, 11));
     }

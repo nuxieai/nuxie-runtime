@@ -3225,6 +3225,46 @@ fn runtime_artboard_convert_list_value(
             });
     }
 
+    if let RuntimeDataBindGraphConverter::NumberToList {
+        view_model_id,
+        view_model_count,
+        ..
+    } = converter
+    {
+        let input = match converted.value {
+            RuntimeDataBindGraphValue::List { item_count } => {
+                crate::data_converter_number_to_list::RuntimeDataConverterNumberToListInput::List {
+                    item_count,
+                }
+            }
+            RuntimeDataBindGraphValue::Number(value) => {
+                crate::data_converter_number_to_list::RuntimeDataConverterNumberToListInput::Number(
+                    value,
+                )
+            }
+            _ => crate::data_converter_number_to_list::RuntimeDataConverterNumberToListInput::Other,
+        };
+        return match crate::data_converter_number_to_list::convert(
+            input,
+            *view_model_id,
+            *view_model_count,
+        )? {
+            crate::data_converter_number_to_list::RuntimeDataConverterNumberToListOutput::PassthroughList {
+                item_count,
+            } => Some(RuntimeArtboardListConvertedValue {
+                value: RuntimeDataBindGraphValue::List { item_count },
+                generated_view_model_id: converted.generated_view_model_id,
+            }),
+            crate::data_converter_number_to_list::RuntimeDataConverterNumberToListOutput::GeneratedList {
+                item_count,
+                view_model_id,
+            } => Some(RuntimeArtboardListConvertedValue {
+                value: RuntimeDataBindGraphValue::List { item_count },
+                generated_view_model_id: Some(view_model_id),
+            }),
+        };
+    }
+
     let input_was_number = matches!(converted.value, RuntimeDataBindGraphValue::Number(_));
     let input_was_list = matches!(converted.value, RuntimeDataBindGraphValue::List { .. });
     let value = runtime_data_bind_graph_convert_value(converter, &converted.value)?;
@@ -3273,13 +3313,14 @@ impl RuntimeArtboardListBindingInstance {
         target_size: usize,
         generated_view_model_id: u64,
     ) -> RuntimeArtboardListResolvedUpdate {
-        let view_model_id = usize::try_from(generated_view_model_id)
-            .ok()
-            .filter(|&index| index < file.view_models().len());
+        let view_model_id = crate::data_converter_number_to_list::resolved_view_model_index(
+            generated_view_model_id,
+            file.view_models().len(),
+        );
 
         let mut cache_changed = false;
         if self.generated_view_model_id != view_model_id {
-            self.generated_items.clear();
+            crate::data_converter_number_to_list::clear_items(&mut self.generated_items);
             self.generated_view_model_id = view_model_id;
             cache_changed = true;
         }
@@ -3404,7 +3445,7 @@ impl RuntimeArtboardListBindingInstance {
 
         let cache_changed =
             !self.generated_items.is_empty() || self.generated_view_model_id.take().is_some();
-        self.generated_items.clear();
+        crate::data_converter_number_to_list::clear_items(&mut self.generated_items);
         let source_list_size = match &source_value {
             RuntimeDataBindGraphValue::List { item_count } => Some(*item_count),
             _ => None,
@@ -7999,9 +8040,23 @@ impl ArtboardInstance {
         target_global_id: u32,
         value: u64,
     ) -> bool {
-        self.refresh_artboard_converter_dependents(|converter| {
+        let changed = self.refresh_artboard_converter_dependents(|converter| {
             converter.set_number_to_list_view_model_id(target_global_id, value)
-        })
+        });
+        if changed {
+            for binding in &mut self.artboard_list_bindings {
+                if binding.converter.as_ref().is_some_and(|converter| {
+                    runtime_data_bind_graph_converter_contains_global_id(
+                        converter,
+                        target_global_id,
+                    )
+                }) {
+                    crate::data_converter_number_to_list::clear_items(&mut binding.generated_items);
+                    binding.generated_view_model_id = None;
+                }
+            }
+        }
+        changed
     }
 
     fn artboard_shape_length(&self, shape_local_id: usize, graph: &ArtboardGraph) -> Option<f32> {

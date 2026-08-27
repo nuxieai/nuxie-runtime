@@ -827,7 +827,7 @@ impl RuntimeDataBindGraphConverter {
             },
             Self::BooleanNegate => crate::data_converter_boolean_negate::output_type(),
             Self::TriggerIncrement => RuntimeDataType::Trigger,
-            Self::NumberToList { .. } => RuntimeDataType::List,
+            Self::NumberToList { .. } => crate::data_converter_number_to_list::output_type(),
             Self::ToString { .. } => RuntimeDataType::String,
             Self::StringPad { .. } => crate::data_converter_string_pad::output_type(),
             Self::StringTrim { .. } => crate::data_converter_string_trim::output_type(),
@@ -1216,9 +1216,8 @@ impl RuntimeDataBindGraphConverter {
                 global_id,
                 view_model_id,
                 ..
-            } if *global_id == target_global_id && *view_model_id != value => {
-                *view_model_id = value;
-                true
+            } if *global_id == target_global_id => {
+                crate::data_converter_number_to_list::set_view_model_id(view_model_id, value)
             }
             RuntimeDataBindGraphConverter::Group(converters) => {
                 let mut changed = false;
@@ -2758,27 +2757,33 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphValue::Number(crate::data_converter_list_to_length::convert(None)),
         ),
         (
-            RuntimeDataBindGraphConverter::NumberToList { .. },
-            RuntimeDataBindGraphValue::List { item_count },
-        ) => Some(RuntimeDataBindGraphValue::List {
-            item_count: *item_count,
-        }),
-        (
             RuntimeDataBindGraphConverter::NumberToList {
                 view_model_id,
                 view_model_count,
                 ..
             },
-            RuntimeDataBindGraphValue::Number(value),
-        ) => Some(RuntimeDataBindGraphValue::List {
-            item_count: crate::data_converter_number_to_list::convert(
-                *value,
-                usize::try_from(*view_model_id)
-                    .ok()
-                    .is_some_and(|index| index < *view_model_count),
-            ),
-        }),
-        (RuntimeDataBindGraphConverter::NumberToList { .. }, _) => None,
+            value,
+        ) => {
+            let input = match value {
+                RuntimeDataBindGraphValue::List { item_count } => crate::data_converter_number_to_list::RuntimeDataConverterNumberToListInput::List {
+                    item_count: *item_count,
+                },
+                RuntimeDataBindGraphValue::Number(value) => crate::data_converter_number_to_list::RuntimeDataConverterNumberToListInput::Number(*value),
+                _ => crate::data_converter_number_to_list::RuntimeDataConverterNumberToListInput::Other,
+            };
+            crate::data_converter_number_to_list::convert(
+                input,
+                *view_model_id,
+                *view_model_count,
+            )
+            .map(|output| {
+                let item_count = match output {
+                    crate::data_converter_number_to_list::RuntimeDataConverterNumberToListOutput::PassthroughList { item_count }
+                    | crate::data_converter_number_to_list::RuntimeDataConverterNumberToListOutput::GeneratedList { item_count, .. } => item_count,
+                };
+                RuntimeDataBindGraphValue::List { item_count }
+            })
+        }
         (
             RuntimeDataBindGraphConverter::ToString {
                 flags, decimals, ..

@@ -1831,8 +1831,7 @@ fn apply_converter_property(
     match (converter, property_key) {
         (RuntimeDataBindGraphConverter::NumberToList { view_model_id, .. }, 816) => uint(value)
             .is_some_and(|value| {
-                *view_model_id = value;
-                true
+                crate::data_converter_number_to_list::set_view_model_id(view_model_id, value)
             }),
         (RuntimeDataBindGraphConverter::ToString { flags, .. }, 764) => {
             uint(value).is_some_and(|value| {

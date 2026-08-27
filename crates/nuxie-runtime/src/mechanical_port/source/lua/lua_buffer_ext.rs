@@ -61,8 +61,8 @@ fn float_to_half(value: f32) -> u16 {
     sign | ((exp as u16) << 10) | mant as u16
 }
 fn read_f16(s: &mut LuaState) -> i32 {
+    let buffer = s.check_buffer(1).to_vec();
     let offset = s.check_integer(2);
-    let buffer = s.check_buffer(1);
     if offset < 0 || offset as usize + 2 > buffer.len() {
         return s.error("buffer access out of bounds");
     }
@@ -74,25 +74,26 @@ fn read_f16(s: &mut LuaState) -> i32 {
     1
 }
 fn write_f16(s: &mut LuaState) -> i32 {
+    let buffer_len = s.check_buffer(1).len();
     let offset = s.check_integer(2);
     let value = s.check_number(3) as f32;
-    let buffer = s.check_buffer_mut(1);
-    if offset < 0 || offset as usize + 2 > buffer.len() {
+    if offset < 0 || offset as usize + 2 > buffer_len {
         return s.error("buffer access out of bounds");
     }
+    let buffer = s.check_buffer_mut(1);
     buffer[offset as usize..offset as usize + 2]
         .copy_from_slice(&float_to_half(value).to_ne_bytes());
     0
 }
 fn strided_copy(s: &mut LuaState) -> i32 {
-    let (dst_off, dst_stride, src_off, src_stride, size, count) = (
-        s.check_integer(2),
-        s.check_integer(3),
-        s.check_integer(5),
-        s.check_integer(6),
-        s.check_integer(7),
-        s.check_integer(8),
-    );
+    let dst_len = s.check_buffer(1).len();
+    let dst_off = s.check_integer(2);
+    let dst_stride = s.check_integer(3);
+    let src = s.check_buffer(4).to_vec();
+    let src_off = s.check_integer(5);
+    let src_stride = s.check_integer(6);
+    let size = s.check_integer(7);
+    let count = s.check_integer(8);
     if size < 0 {
         return s.error("elementSize must be non-negative");
     }
@@ -105,13 +106,12 @@ fn strided_copy(s: &mut LuaState) -> i32 {
     if src_stride < size || dst_stride < size {
         return s.error("stride must be >= elementSize");
     }
-    let src = s.check_buffer(4).to_vec();
-    let dst = s.check_buffer_mut(1);
     let src_end = src_off as i64 + (count - 1) as i64 * src_stride as i64 + size as i64;
     let dst_end = dst_off as i64 + (count - 1) as i64 * dst_stride as i64 + size as i64;
-    if src_off < 0 || src_end > src.len() as i64 || dst_off < 0 || dst_end > dst.len() as i64 {
+    if src_off < 0 || src_end > src.len() as i64 || dst_off < 0 || dst_end > dst_len as i64 {
         return s.error("buffer access out of bounds");
     }
+    let dst = s.check_buffer_mut(1);
     for i in 0..count as usize {
         let so = src_off as usize + i * src_stride as usize;
         let d = dst_off as usize + i * dst_stride as usize;
@@ -190,13 +190,16 @@ fn write(p: &mut [u8], f: Format, v: f64) {
     }
 }
 fn convert(s: &mut LuaState) -> i32 {
+    let dst_len = s.check_buffer(1).len();
     let dst_off = s.check_integer(2);
-    let dst_format =
-        Format::parse(&s.check_string(3)).unwrap_or_else(|| s.error("unknown buffer format"));
+    let dst_format_name = s.check_string(3);
+    let dst_format = Format::parse(&dst_format_name)
+        .unwrap_or_else(|| s.error(format!("unknown buffer format '{dst_format_name}'")));
     let src = s.check_buffer(4).to_vec();
     let src_off = s.check_integer(5);
-    let src_format =
-        Format::parse(&s.check_string(6)).unwrap_or_else(|| s.error("unknown buffer format"));
+    let src_format_name = s.check_string(6);
+    let src_format = Format::parse(&src_format_name)
+        .unwrap_or_else(|| s.error(format!("unknown buffer format '{src_format_name}'")));
     let count = s.check_integer(7);
     let components = s.opt_integer(8, 1);
     let ds = dst_format.size() as i32;
@@ -217,15 +220,18 @@ fn convert(s: &mut LuaState) -> i32 {
     }
     let src_span = components * ss;
     let dst_span = components * ds;
-    if (src_stride > 0 && src_stride < src_span) || (dst_stride > 0 && dst_stride < dst_span) {
-        return s.error("stride must be >= components * element size");
+    if src_stride > 0 && src_stride < src_span {
+        return s.error("srcStride must be >= components * element size");
     }
-    let dst = s.check_buffer_mut(1);
+    if dst_stride > 0 && dst_stride < dst_span {
+        return s.error("dstStride must be >= components * element size");
+    }
     let src_end = src_off as i64 + (count - 1) as i64 * src_stride as i64 + src_span as i64;
     let dst_end = dst_off as i64 + (count - 1) as i64 * dst_stride as i64 + dst_span as i64;
-    if src_off < 0 || src_end > src.len() as i64 || dst_off < 0 || dst_end > dst.len() as i64 {
+    if src_off < 0 || src_end > src.len() as i64 || dst_off < 0 || dst_end > dst_len as i64 {
         return s.error("buffer access out of bounds");
     }
+    let dst = s.check_buffer_mut(1);
     if src_format == dst_format && src_stride == src_span && dst_stride == dst_span {
         let bytes = count as usize * components as usize * ss as usize;
         dst[dst_off as usize..dst_off as usize + bytes]

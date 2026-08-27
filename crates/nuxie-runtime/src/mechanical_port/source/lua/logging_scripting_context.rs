@@ -4,11 +4,12 @@ use crate::mechanical_port::source::{
     lua::rive_lua_libs::{CPPRuntimeScriptingContext, LuaState, ScriptingContext},
 };
 
+#[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ScriptingLogLevel {
-    Info,
-    Warn,
-    Error,
+    Info = 0,
+    Warn = 1,
+    Error = 2,
 }
 
 pub type ScriptingLogSink = Box<dyn FnMut(ScriptingLogLevel, &[u8])>;
@@ -17,7 +18,7 @@ pub type ScriptingLogSink = Box<dyn FnMut(ScriptingLogLevel, &[u8])>;
 pub struct LoggingScriptingContext {
     pub base: CPPRuntimeScriptingContext,
     sink: ScriptingLogSink,
-    line: String,
+    line: Vec<u8>,
 }
 
 #[cfg(feature = "rive_scripting")]
@@ -26,7 +27,7 @@ impl LoggingScriptingContext {
         Self {
             base: CPPRuntimeScriptingContext::new(factory),
             sink,
-            line: String::new(),
+            line: Vec::new(),
         }
     }
 }
@@ -38,11 +39,11 @@ impl ScriptingContext for LoggingScriptingContext {
     }
 
     fn print(&mut self, data: &[u8]) {
-        self.line.push_str(std::str::from_utf8(data).unwrap());
+        self.line.extend_from_slice(data);
     }
 
     fn print_end_line(&mut self) {
-        (self.sink)(ScriptingLogLevel::Info, self.line.as_bytes());
+        (self.sink)(ScriptingLogLevel::Info, &self.line);
         self.line.clear();
     }
 

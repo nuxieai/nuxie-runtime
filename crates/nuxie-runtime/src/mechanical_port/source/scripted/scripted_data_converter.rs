@@ -17,51 +17,78 @@ pub struct ScriptedDataConverter {
     data_context: Option<usize>,
     data_value: Option<DataValue>,
     properties: Vec<usize>,
-    advance_active: bool,
     converter_dirty: bool,
+    data_binds: Vec<usize>,
 }
 impl ScriptedDataConverter {
-    fn number(v: &DataValue) -> Option<f32> {
-        match v {
-            DataValue::Number(v) => Some(*v),
-            DataValue::Integer(v) => Some(*v as f32),
-            _ => None,
+    pub fn did_hydrate_script_inputs(&mut self) {
+        self.converter_dirty = true;
+    }
+    fn script_value(value: &DataValue) -> Option<ScriptValue> {
+        match value {
+            DataValue::Boolean(value) => Some(ScriptValue::Boolean(*value)),
+            DataValue::Number(value) => Some(ScriptValue::Number(*value)),
+            DataValue::String(value) => Some(ScriptValue::String(value.clone())),
+            DataValue::Color(value) => Some(ScriptValue::Color(*value)),
+            DataValue::None | DataValue::Integer(_) | DataValue::List(_) => None,
         }
     }
     fn apply_conversion(&mut self, v: DataValue, m: &str) -> DataValue {
-        if let Some(n) = Self::number(&v) {
-            self.scripted
-                .call_number(m, &[n])
-                .map(DataValue::Number)
-                .unwrap_or(v)
-        } else {
-            v
+        if self.scripted.self_ref() == 0 {
+            return v;
         }
+        let Some(input) = Self::script_value(&v) else {
+            return self.data_value.clone().unwrap_or(DataValue::None);
+        };
+        if let Some(result) = self.scripted.call_value(m, &input) {
+            self.data_value = Some(match result {
+                ScriptValue::Boolean(value) => DataValue::Boolean(value),
+                ScriptValue::Color(value) => DataValue::Color(value),
+                ScriptValue::Integer(value) => DataValue::Integer(value),
+                ScriptValue::Number(value) => DataValue::Number(value),
+                ScriptValue::String(value) => DataValue::String(value),
+                ScriptValue::Artboard(_) | ScriptValue::ViewModel(_) | ScriptValue::Trigger => {
+                    DataValue::None
+                }
+            });
+        }
+        self.data_value.clone().unwrap_or(DataValue::None)
     }
     pub fn convert(&mut self, v: DataValue) -> DataValue {
+        if !self.scripted.data_converts() {
+            return v;
+        }
         let out = self.apply_conversion(v, "convert");
-        self.data_value = Some(out.clone());
         out
     }
     pub fn reverse_convert(&mut self, v: DataValue) -> DataValue {
+        if !self.scripted.data_reverse_converts() {
+            return v;
+        }
         let out = self.apply_conversion(v, "reverseConvert");
-        self.data_value = Some(out.clone());
         out
     }
     pub fn bind_from_context(&mut self, c: Option<usize>) {
         self.data_context = c;
         self.scripted.set_data_context(c);
+        self.scripted.reinit();
         self.converter_dirty = true
     }
-    pub fn advance_component(&mut self, e: f32, animate: bool) -> bool {
-        if !animate {
-            return false;
+    pub fn advance_component(&mut self, mut e: f32, advance_nested: bool) -> bool {
+        if !advance_nested {
+            e = 0.0;
         }
         self.advance(e)
     }
     pub fn advance(&mut self, e: f32) -> bool {
-        self.advance_active = self.scripted.script_advance(e);
-        self.advance_active
+        if e == 0.0 {
+            return false;
+        }
+        let needs_advance = self.scripted.script_advance(e);
+        if needs_advance {
+            self.converter_dirty = true;
+        }
+        needs_advance
     }
     pub fn add_property(&mut self, p: usize) {
         self.properties.push(p)
@@ -80,5 +107,9 @@ impl ScriptedDataConverter {
             DataValue::String(v) => self.scripted.set_string_input(name, v.clone()),
             _ => self.scripted.set_string_input(name, String::new()),
         }
+    }
+    pub fn add_data_bind_from_scripted_object(&mut self, data_bind: usize) -> bool {
+        self.data_binds.push(data_bind);
+        true
     }
 }

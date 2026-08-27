@@ -86,7 +86,7 @@ pub use crate::mechanical_port::source::{
 pub use crate::mechanical_port::source::r#async::work_pool::WorkPool;
 #[cfg(feature = "rive_audio")]
 pub use crate::mechanical_port::source::audio::{
-    audio_engine::AudioEngine, audio_sound::AudioSound, audio_source::AudioSource,
+    audio_engine::AudioEngine, audio_sound::AudioSoundRef, audio_source::AudioSource,
 };
 
 pub const MAX_C_STACK: i32 = 8_000;
@@ -96,24 +96,28 @@ pub const LUA_MIN_STACK: i32 = 20;
 pub const LUA_NOREF: i32 = -2;
 pub const LUA_OK: i32 = 0;
 pub const LUA_YIELD: i32 = 1;
-pub const LUA_T_COUNT: u8 = 10;
+pub const LUA_T_COUNT: u8 = 14;
 
 pub type LuaFunction = fn(&mut LuaState) -> i32;
 
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LuaType {
-    None,
-    Nil,
-    Boolean,
-    LightUserdata,
-    Number,
-    Vector,
-    String,
-    Table,
-    Function,
-    Userdata,
-    Thread,
-    Buffer,
+    None = -1,
+    Nil = 0,
+    Boolean = 1,
+    LightUserdata = 2,
+    Number = 3,
+    Integer = 4,
+    Vector = 5,
+    String = 6,
+    Table = 7,
+    Function = 8,
+    Userdata = 9,
+    Thread = 10,
+    Buffer = 11,
+    Class = 12,
+    Object = 13,
 }
 
 #[derive(Clone, Copy)]
@@ -558,10 +562,6 @@ const ATOMS: &[LuaAtomName] = &[
     LuaAtomName {
         name: "type",
         atom: LuaAtoms::Type,
-    },
-    LuaAtomName {
-        name: "points",
-        atom: LuaAtoms::Points,
     },
     LuaAtomName {
         name: "invert",
@@ -1138,7 +1138,7 @@ impl_lua_rive!(ScriptedAudio, 40, "Audio");
 #[cfg(feature = "rive_audio")]
 #[derive(Default)]
 pub struct ScriptedAudioSource {
-    pub source: Option<AudioSource>,
+    pub source: Option<Rc<AudioSource>>,
 }
 
 #[cfg(feature = "rive_audio")]
@@ -1146,7 +1146,7 @@ impl_lua_rive!(ScriptedAudioSource, 38, "AudioSource");
 
 #[cfg(feature = "rive_audio")]
 pub struct ScriptedAudioSound {
-    pub sound: Option<AudioSound>,
+    pub sound: Option<AudioSoundRef>,
     pub artboard: Option<*mut Artboard>,
 }
 
@@ -1318,11 +1318,12 @@ pub struct ScriptedGPUTextureView {
 #[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPUTextureView, 51, "GPUTextureView", no_metatable);
 
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum CanvasState {
     #[default]
-    Idle,
-    Rendering,
+    Idle = 0,
+    Rendering = 1,
 }
 
 #[cfg(feature = "rive_canvas")]
@@ -1351,13 +1352,14 @@ pub struct ScriptedGPUCanvas {
 #[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPUCanvas, 47, "GPUCanvas");
 
+#[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum PromiseState {
     #[default]
-    Pending,
-    Fulfilled,
-    Rejected,
-    Cancelled,
+    Pending = 0,
+    Fulfilled = 1,
+    Rejected = 2,
+    Cancelled = 3,
 }
 
 pub struct ThenCallback {

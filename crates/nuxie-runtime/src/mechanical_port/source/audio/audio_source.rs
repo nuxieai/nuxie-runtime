@@ -24,7 +24,7 @@ impl AudioSource {
             backing: AudioBacking::Encoded(bytes),
             channels: 0,
             sample_rate: 0,
-            duration: 0.0,
+            duration: -1.0,
             format,
         }))
     }
@@ -34,21 +34,18 @@ impl AudioSource {
             backing: AudioBacking::Borrowed(bytes.as_ptr(), bytes.len()),
             channels: 0,
             sample_rate: 0,
-            duration: 0.0,
+            duration: -1.0,
             format,
         }
     }
     pub fn buffered(samples: Rc<[f32]>, channels: u32, sample_rate: u32) -> Self {
-        let duration = if channels == 0 || sample_rate == 0 {
-            0.0
-        } else {
-            samples.len() as f32 / channels as f32 / sample_rate as f32
-        };
+        assert!(channels != 0);
+        assert!(sample_rate != 0);
         Self {
             backing: AudioBacking::Buffered(samples),
             channels,
             sample_rate,
-            duration,
+            duration: -1.0,
             format: AudioFormat::Buffered,
         }
     }
@@ -59,7 +56,21 @@ impl AudioSource {
         self.sample_rate
     }
     pub fn duration(&self) -> f32 {
-        self.duration
+        if self.duration >= 0.0 {
+            return self.duration;
+        }
+        match &self.backing {
+            AudioBacking::Buffered(samples) => {
+                samples.len() as f32 / (self.channels * self.sample_rate) as f32
+            }
+            AudioBacking::Encoded(_) | AudioBacking::Borrowed(_, _) => {
+                if self.sample_rate == 0 {
+                    0.0
+                } else {
+                    0.0 / self.sample_rate as f32
+                }
+            }
+        }
     }
     pub fn format(&self) -> AudioFormat {
         self.format

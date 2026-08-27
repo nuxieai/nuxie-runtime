@@ -7,12 +7,12 @@ pub struct ScriptedInterpolator {
 impl ScriptedInterpolator {
     pub fn transform(&mut self, factor: f32) -> f32 {
         self.scripted
-            .call_number("interpolate", &[factor])
+            .call_number("transform", &[factor])
             .unwrap_or(factor)
     }
     pub fn transform_value(&mut self, from: f32, to: f32, factor: f32) -> f32 {
         self.scripted
-            .call_number("interpolateValue", &[from, to, factor])
+            .call_number("transformValue", &[from, to, factor])
             .unwrap_or(from + (to - from) * factor)
     }
     pub fn add_property(&mut self, p: usize) {

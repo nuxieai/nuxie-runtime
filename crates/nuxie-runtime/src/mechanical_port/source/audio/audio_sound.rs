@@ -34,7 +34,7 @@ impl AudioSound {
             playing: false,
             completed: false,
             volume: 1.0,
-            cursor: start,
+            cursor: sound_start,
             start_frame: start,
             end_frame: end,
             sound_start_frame: sound_start,
@@ -54,41 +54,54 @@ impl AudioSound {
         self.volume = v
     }
     pub fn completed(&self) -> bool {
-        self.completed
+        self.disposed || self.completed
     }
     pub fn stop(&mut self, _fade_frames: u64) {
-        self.playing = false;
-        self.completed = true
+        if self.disposed {
+            return;
+        }
+        self.playing = false
     }
     pub fn play(&mut self) {
+        if self.disposed {
+            return;
+        }
+        self.cursor = 0;
+        self.playing = true;
+        self.completed = false
+    }
+    pub(crate) fn start_internal(&mut self) {
         if !self.disposed {
             self.playing = true;
-            self.completed = false
         }
     }
     pub fn pause(&mut self) {
         self.playing = false
     }
     pub fn resume(&mut self) {
-        if !self.disposed && !self.completed {
-            self.playing = true
+        if self.disposed {
+            return;
         }
+        self.playing = true
     }
     pub fn seek(&mut self, frame: u64) -> bool {
-        if frame > self.end_frame {
+        if self.disposed {
             return false;
         }
         self.cursor = frame;
         true
     }
     pub fn seek_seconds(&mut self, t: f32) -> bool {
+        if self.disposed {
+            return false;
+        }
         self.seek((t * self.source.sample_rate() as f32) as u64)
     }
     pub fn time_in_frames(&self) -> u64 {
-        self.cursor
+        if self.disposed { 0 } else { self.cursor }
     }
     pub fn time_in_seconds(&self) -> f32 {
-        if self.source.sample_rate() == 0 {
+        if self.disposed || self.source.sample_rate() == 0 {
             0.0
         } else {
             self.cursor as f32 / self.source.sample_rate() as f32
@@ -111,8 +124,5 @@ impl AudioSound {
 impl Drop for AudioSound {
     fn drop(&mut self) {
         self.dispose();
-        if let Some(engine) = self.engine.upgrade() {
-            engine.borrow_mut().remove_disposed();
-        }
     }
 }

@@ -14,7 +14,6 @@ pub enum HitResult {
     Hit,
     HitOpaque,
 }
-#[derive(Default)]
 pub struct ScriptedDrawable {
     pub scripted: ScriptedObject,
     pub properties: Vec<usize>,
@@ -25,28 +24,60 @@ pub struct ScriptedDrawable {
     pub opacity: f32,
     is_advance_active: bool,
     needs_update: bool,
+    paint_dirty: bool,
+}
+impl Default for ScriptedDrawable {
+    fn default() -> Self {
+        Self {
+            scripted: ScriptedObject::default(),
+            properties: Vec::new(),
+            children: Vec::new(),
+            inverse_world: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            hidden: false,
+            collapsed: false,
+            opacity: 1.0,
+            is_advance_active: true,
+            needs_update: false,
+            paint_dirty: false,
+        }
+    }
 }
 impl ScriptedDrawable {
     pub fn did_hydrate_script_inputs(&mut self) {
-        self.wake_advance();
-        self.mark_needs_update()
+        self.is_advance_active = true;
+        self.paint_dirty = true;
     }
     pub fn draw(&mut self) {
-        self.scripted.script_draw_canvas()
+        if self.scripted.draws() && self.scripted.self_ref() != 0 {
+            self.scripted.script_draw()
+        }
     }
     pub fn update(&mut self) {
         self.scripted.script_update();
+        self.is_advance_active = true;
         self.needs_update = false
     }
     pub fn will_draw(&self) -> bool {
-        !self.hidden && !self.collapsed && self.opacity > 0.0
+        !self.hidden
+            && !self.collapsed
+            && self.opacity > 0.0
+            && self.scripted.self_ref() != 0
+            && self.scripted.draws()
     }
-    pub fn advance_component(&mut self, e: f32, animate: bool) -> bool {
-        if !animate || !self.is_advance_active {
+    pub fn advance_component(&mut self, mut e: f32, advance_nested: bool) -> bool {
+        if e == 0.0 || !self.is_advance_active || self.collapsed {
             return false;
         }
-        self.is_advance_active = self.scripted.script_advance(e);
-        self.is_advance_active
+        self.is_advance_active = false;
+        if !advance_nested {
+            e = 0.0;
+        }
+        let advanced = self.scripted.script_advance(e);
+        if advanced {
+            self.is_advance_active = true;
+            self.paint_dirty = true;
+        }
+        advanced
     }
     pub fn add_scripted_dirt(&mut self) {
         self.mark_needs_update()
@@ -55,6 +86,9 @@ impl ScriptedDrawable {
         self.properties.push(p)
     }
     pub fn mark_needs_update(&mut self) {
+        if self.scripted.in_update_phase() {
+            return;
+        }
         self.needs_update = true
     }
     pub fn world_to_local(&self, w: Vec2) -> Option<Vec2> {
@@ -63,32 +97,38 @@ impl ScriptedDrawable {
         if det == 0.0 {
             return None;
         }
+        let inverse_det = 1.0 / det;
         Some(Vec2 {
-            x: m[0] * w.x + m[2] * w.y + m[4],
-            y: m[1] * w.x + m[3] * w.y + m[5],
+            x: (m[3] * w.x - m[2] * w.y + m[2] * m[5] - m[3] * m[4]) * inverse_det,
+            y: (-m[1] * w.x + m[0] * w.y + m[1] * m[4] - m[0] * m[5]) * inverse_det,
         })
     }
     pub fn key_input(&mut self, k: Key, m: KeyModifiers, p: bool, r: bool) -> bool {
-        let method = if p { "keyDown" } else { "keyUp" };
-        let handled = self
-            .scripted
-            .call_number(method, &[k as u16 as f32, m.0 as f32, r as u8 as f32])
-            .is_some();
-        if handled {
-            self.wake_advance()
+        if !self.scripted.wants_keyboard_input() {
+            return false;
         }
-        handled
+        let handled = self.scripted.call_boolean(
+            "keyboardEvent",
+            &[k as u16 as f32, m.0 as f32, p as u8 as f32, r as u8 as f32],
+        );
+        if handled.is_some() {
+            self.wake_advance();
+        }
+        handled.unwrap_or(false)
     }
     pub fn text_input(&mut self, text: &str) -> bool {
-        self.scripted.set_string_input("text".into(), text.into());
-        let handled = self.scripted.call_number("textInput", &[]).is_some();
-        if handled {
-            self.wake_advance()
+        if !self.scripted.wants_text_input() {
+            return false;
         }
-        handled
+        let handled = self.scripted.call_boolean_with_string("textEvent", text);
+        if handled.is_some() {
+            self.wake_advance();
+        }
+        handled.unwrap_or(false)
     }
     pub fn wake_advance(&mut self) {
-        self.is_advance_active = true
+        self.is_advance_active = true;
+        self.paint_dirty = true
     }
     pub fn script_protocol(&self) -> ScriptProtocol {
         ScriptProtocol::Node
@@ -102,20 +142,29 @@ impl HitScriptedDrawable<'_> {
         true
     }
     pub fn process_event(&mut self, p: Vec2, event: &str, can_hit: bool) -> HitResult {
-        if !can_hit {
+        let handles = if can_hit {
+            match event {
+                "pointerDown" => self.drawable.scripted.wants_pointer_down(),
+                "pointerUp" => self.drawable.scripted.wants_pointer_up(),
+                "pointerMove" => self.drawable.scripted.wants_pointer_move(),
+                _ => false,
+            }
+        } else {
+            event == "pointerExit" && self.drawable.scripted.wants_pointer_exit()
+        };
+        if !handles {
             return HitResult::None;
         }
         let Some(local) = self.drawable.world_to_local(p) else {
             return HitResult::None;
         };
-        if self
-            .drawable
-            .scripted
-            .call_number(event, &[local.x, local.y])
-            .is_some()
-        {
+        if let Some(result) = self.drawable.scripted.call_pointer(event, local.x, local.y) {
             self.drawable.wake_advance();
-            HitResult::Hit
+            match result {
+                1 => HitResult::Hit,
+                2 => HitResult::HitOpaque,
+                _ => HitResult::None,
+            }
         } else {
             HitResult::None
         }

@@ -8,6 +8,14 @@ struct StaticTextModifierGroup {
     follow_path_modifiers: Vec<StaticTextFollowPathModifier>,
 }
 
+fn glyph_coverage(coverage: &[f32], char_index: usize, char_len: usize) -> f32 {
+    let end = (char_index + char_len).min(coverage.len());
+    if char_index >= end {
+        return 0.0;
+    }
+    coverage[char_index..end].iter().copied().sum::<f32>() / (end - char_index) as f32
+}
+
 fn apply_text_modifier_transform(
     transform: Mat2D,
     mut ctm: Mat2D,

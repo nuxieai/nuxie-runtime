@@ -63,6 +63,20 @@ struct TextGlyph {
     renderer_breaks_after: u8,
     renderer_joiners: Vec<u32>,
 }
+
+fn glyph_character_len(text: &str, glyphs: &[TextGlyph], glyph_index: usize) -> usize {
+    let char_index = character_index_for_cluster(text, glyphs[glyph_index].cluster);
+    let next_char_index = glyphs
+        .iter()
+        .skip(glyph_index + 1)
+        .find_map(|glyph| {
+            (glyph.cluster != glyphs[glyph_index].cluster)
+                .then_some(character_index_for_cluster(text, glyph.cluster))
+        })
+        .unwrap_or_else(|| text.chars().count());
+    next_char_index.saturating_sub(char_index).max(1)
+}
+
 fn harfrust_script_for_unicode_script(script: UnicodeScript) -> HarfScript {
     HarfScript::from_iso15924_tag(HarfTag::from_u32(script.as_iso15924_tag()))
         .unwrap_or(harfrust::script::UNKNOWN)

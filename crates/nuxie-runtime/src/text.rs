@@ -5600,13 +5600,17 @@ include!("text/utf.rs");
 include!("text/glyph_lookup.rs");
 
 fn styled_glyph_lookup_counts(character_count: usize, glyphs: &[StyledTextGlyph]) -> Vec<usize> {
-    let mut counts = vec![0; character_count];
-    for glyph in glyphs {
-        if let Some(count) = counts.get_mut(glyph.char_index) {
-            *count = glyph.char_len;
-        }
-    }
-    counts
+    let text_indices = glyphs
+        .iter()
+        .map(|glyph| u32::try_from(glyph.char_index).expect("glyph text index fits u32"))
+        .collect::<Vec<_>>();
+    let mut lookup = GlyphLookup::default();
+    lookup.compute(character_count, &text_indices);
+    (0..character_count)
+        .map(|index| {
+            lookup.count(u32::try_from(index).expect("code point index fits u32")) as usize
+        })
+        .collect()
 }
 
 include!("text/line_breaker.rs");

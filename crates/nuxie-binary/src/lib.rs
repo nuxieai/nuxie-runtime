@@ -7265,6 +7265,13 @@ pub struct RuntimeKeyedObject<'a> {
 pub struct RuntimeKeyedProperty<'a> {
     pub object: &'a RuntimeObject,
     pub first_key_frame: Option<&'a RuntimeObject>,
+    pub key_frames: Vec<RuntimeImportedKeyFrame<'a>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RuntimeImportedKeyFrame<'a> {
+    pub object: &'a RuntimeObject,
+    pub seconds: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

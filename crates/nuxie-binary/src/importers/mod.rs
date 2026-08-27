@@ -78,6 +78,10 @@ impl ImportContext {
             Some(NullObjectConsumer::Artboard) => {
                 self.artboard_local_nested_inputs.push(None);
             }
+            Some(NullObjectConsumer::KeyedProperty) => {
+                let consumed = keyed_property_importer::read_null_object();
+                debug_assert!(consumed);
+            }
             Some(NullObjectConsumer::StateMachine) => self.state_machine_inputs.push(None),
             _ => {}
         }
@@ -99,6 +103,7 @@ mod data_converter_group_importer;
 mod enum_importer;
 mod file_asset_importer;
 mod keyed_object_importer;
+mod keyed_property_importer;
 mod layer_state_importer;
 mod linear_animation_importer;
 mod listener_input_type_gamepad_importer;
@@ -246,7 +251,10 @@ fn object_imports_successfully(
             return viewmodel_importer::imports_successfully(object, definition, context)
                 .expect("ViewModel is owned by ViewModelImporter");
         }
-        "KeyedProperty" => return context.latest(ImportStackKey::KeyedObject),
+        "KeyedProperty" => {
+            return keyed_property_importer::imports_successfully(object, definition, context)
+                .expect("KeyedProperty is owned by KeyedPropertyImporter");
+        }
         "StateMachine" => return context.latest(ImportStackKey::Artboard),
         "BlendState1DViewModel"
         | "ListenerViewModelChange"
@@ -310,6 +318,11 @@ fn object_imports_successfully(
     }
     if let Some(decision) =
         keyed_object_importer::dispatch_imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) =
+        keyed_property_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
@@ -414,7 +427,7 @@ pub(crate) fn update_import_context(
 ) {
     match definition.name {
         "Backboard" => backboard_importer::update_context(definition, context),
-        "KeyedProperty" => context.make_latest(ImportStackKey::KeyedProperty),
+        "KeyedProperty" => keyed_property_importer::update_context(definition, context),
         "StateMachine" => {
             context.state_machine_inputs.clear();
             context.make_latest(ImportStackKey::StateMachine);

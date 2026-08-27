@@ -11,12 +11,6 @@ pub(super) fn dispatch_imports_successfully(
                 .expect("KeyedObject is owned by KeyedObjectImporter"),
         );
     }
-    if definition.is_a("KeyFrame") {
-        return Some(
-            imports_successfully(object, definition, context)
-                .expect("KeyFrame is owned through KeyedObjectImporter"),
-        );
-    }
     None
 }
 
@@ -34,12 +28,8 @@ pub(super) fn imports_successfully(
     definition: &'static Definition,
     context: &ImportContext,
 ) -> Option<bool> {
-    if definition.name == "KeyedObject" {
-        return Some(context.latest(ImportStackKey::LinearAnimation));
-    }
-    definition
-        .is_a("KeyFrame")
-        .then(|| context.latest(ImportStackKey::KeyedProperty))
+    (definition.name == "KeyedObject")
+        .then(|| context.latest(ImportStackKey::LinearAnimation))
 }
 
 pub(super) fn update_context(definition: &'static Definition, context: &mut ImportContext) {

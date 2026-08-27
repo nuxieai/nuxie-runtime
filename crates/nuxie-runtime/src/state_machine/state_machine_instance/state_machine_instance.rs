@@ -4648,9 +4648,8 @@ impl StateMachineInstance {
                 if captured_drag {
                     group.mark_dragged();
                 }
-                let click_matched = pointer_state.clicked
-                    && !pointer_state.drag_ended
-                    && listener.has_listener(RuntimeListenerType::Click);
+                let click_matched =
+                    pointer_state.clicked && listener.has_listener(RuntimeListenerType::Click);
                 if hit_type == RuntimeListenerType::Down && is_hovered {
                     if listener.has_listener(RuntimeListenerType::Click)
                         || listener.has_listener(RuntimeListenerType::Drag)

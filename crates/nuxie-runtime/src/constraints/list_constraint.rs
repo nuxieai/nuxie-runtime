@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// Exact `ListConstraint::from` type dispatch. The pinned runtime recognizes
+/// only the concrete ListFollowPathConstraint subtype.
+pub(super) fn from(kind: RuntimeConstraintKind) -> bool {
+    kind == RuntimeConstraintKind::ListFollowPath
+}
+
 pub(super) fn constrain_component_list_item_transforms(
     artboard: &ArtboardInstance,
     list_local: usize,

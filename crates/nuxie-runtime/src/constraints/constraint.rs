@@ -54,7 +54,7 @@ pub(crate) fn apply_constraints(
                 .objects
                 .component(constraint)
                 .and_then(|component| component.concrete.constraint)
-                .is_some_and(|state| state.kind == RuntimeConstraintKind::ListFollowPath)
+                .is_some_and(|state| list_constraint::from(state.kind))
         {
             continue;
         }

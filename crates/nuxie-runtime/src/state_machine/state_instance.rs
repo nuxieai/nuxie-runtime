@@ -51,14 +51,12 @@ impl RuntimeStateInstance {
             );
             occurrence.advance(definition, artboard, inputs, bindable_numbers, 0.0);
             RuntimeStateInstanceKind::BlendDirect(occurrence)
-        } else if let Some(handle) = state.animation {
-            let mut occurrence = LinearAnimationInstance::new(
-                handle,
-                Arc::clone(animation_definitions),
-                Arc::clone(empty_animation_definition),
-                state.speed,
+        } else if state.animation().is_some() {
+            let (occurrence, keep_going) = state.make_animation_instance(
+                artboard,
+                animation_definitions,
+                empty_animation_definition,
             )?;
-            let keep_going = occurrence.advance(0.0);
             RuntimeStateInstanceKind::Animation {
                 animation: occurrence,
                 keep_going,

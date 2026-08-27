@@ -830,8 +830,10 @@ impl RuntimeDataBindGraphConverter {
             Self::NumberToList { .. } => RuntimeDataType::List,
             Self::ToString { .. }
             | Self::StringTrim { .. }
-            | Self::StringRemoveZeros
             | Self::StringPad { .. } => RuntimeDataType::String,
+            Self::StringRemoveZeros => {
+                crate::data_converter_string_remove_zeros::output_type()
+            }
             Self::Interpolator { .. } => RuntimeDataType::Input,
             Self::Group(converters) => converters
                 .iter()
@@ -2970,9 +2972,13 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::StringRemoveZeros,
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(
-            crate::data_converter_string_remove_zeros::convert(value),
+            crate::data_converter_string_remove_zeros::convert(Some(value)),
         )),
-        (RuntimeDataBindGraphConverter::StringRemoveZeros, _) => None,
+        (RuntimeDataBindGraphConverter::StringRemoveZeros, _) => {
+            Some(RuntimeDataBindGraphValue::String(
+                crate::data_converter_string_remove_zeros::convert(None),
+            ))
+        }
         (
             RuntimeDataBindGraphConverter::StringPad {
                 length,

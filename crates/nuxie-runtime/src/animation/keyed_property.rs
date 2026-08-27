@@ -233,6 +233,7 @@ impl RuntimeKeyedProperty {
     fn string_value_at(
         &self,
         seconds: f32,
+        mix: f32,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
     ) -> Option<Vec<u8>> {
         if self.key_frames.is_empty() {
@@ -240,17 +241,28 @@ impl RuntimeKeyedProperty {
         }
 
         let idx = self.closest_frame_index(seconds);
-        let key_frame = if idx == 0 {
-            self.key_frames[0].as_string()?
+        let value = if idx == 0 {
+            self.key_frames[0]
+                .as_string()?
+                .apply(mix, key_frame_values)
         } else if idx < self.key_frames.len() {
             let from = self.key_frames[idx - 1].as_string()?;
             let to = self.key_frames[idx].as_string()?;
-            if seconds == to.seconds { to } else { from }
+            if seconds == to.seconds {
+                to.apply(mix, key_frame_values)
+            } else if from.interpolation_type == 0 {
+                from.apply(mix, key_frame_values)
+            } else {
+                from.apply_interpolation(seconds, to, mix, key_frame_values)
+            }
         } else {
-            self.key_frames.last()?.as_string()?
+            self.key_frames
+                .last()?
+                .as_string()?
+                .apply(mix, key_frame_values)
         };
 
-        Some(key_frame.effective_value(key_frame_values))
+        Some(value)
     }
 
     fn report_keyed_callbacks(

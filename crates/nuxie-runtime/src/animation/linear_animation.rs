@@ -251,7 +251,8 @@ impl RuntimeLinearAnimation {
                         );
                     }
                     RuntimeKeyedPropertyTarget::String => {
-                        let Some(value) = keyed_property.string_value_at(seconds, key_frame_values)
+                        let Some(value) =
+                            keyed_property.string_value_at(seconds, mix, key_frame_values)
                         else {
                             continue;
                         };

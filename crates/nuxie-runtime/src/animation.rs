@@ -968,7 +968,7 @@ mod tests {
         ];
 
         assert_eq!(
-            property.string_value_at(0.5, instance.key_frame_value_context()),
+            property.string_value_at(0.5, 1.0, instance.key_frame_value_context()),
             Some(b"bound start".to_vec())
         );
     }

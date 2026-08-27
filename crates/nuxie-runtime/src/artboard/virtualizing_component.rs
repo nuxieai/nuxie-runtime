@@ -1,8 +1,20 @@
 use super::ArtboardInstance;
-use crate::components::Mat2D;
+use crate::components::{ComponentHandle, Mat2D};
 use nuxie_binary::RuntimeFile;
 
 impl ArtboardInstance {
+    /// Mechanical translation of pinned `VirtualizingComponent::from`.
+    /// `RuntimeConstrainableListState` is constructed only for the concrete
+    /// `ArtboardComponentList` type, matching the C++ `coreType()` switch.
+    pub(crate) fn virtualizing_component_from(
+        &self,
+        component: ComponentHandle,
+    ) -> Option<usize> {
+        let local_id = self.objects.component_local_id(component)?;
+        self.component_list_state(local_id)?;
+        Some(local_id)
+    }
+
     /// Literal Rust surface for the pinned `VirtualizingComponent` interface
     /// (`include/rive/virtualizing_component.hpp:24-39`).
     pub(crate) fn virtualizing_component_has_item(

@@ -113,7 +113,7 @@ pub(crate) fn constrain_scroll_virtualizer(
         .unwrap_or_default();
     let provider_locals = providers
         .iter()
-        .map(|provider| artboard.objects.component_local_id(*provider))
+        .map(|provider| artboard.virtualizing_component_from(*provider))
         .collect::<Vec<_>>();
     for provider_local in provider_locals.iter().flatten().copied() {
         if artboard.component_list_state(provider_local).is_some() {
@@ -280,6 +280,7 @@ pub(crate) fn component_list_virtualization(
     list_local: usize,
 ) -> Option<()> {
     let list = artboard.component_handle(list_local)?;
+    artboard.virtualizing_component_from(list)?;
     let constraint = artboard
         .objects
         .component(list)?
@@ -322,11 +323,7 @@ pub(in crate::constraints) fn virtualized_provider_item_sizes(
             let Some(provider_local) = artboard.objects.component_local_id(*provider) else {
                 return Vec::new();
             };
-            if artboard
-                .objects
-                .component(*provider)
-                .is_some_and(|component| component.concrete.constrainable_list.is_some())
-            {
+            if artboard.virtualizing_component_from(*provider).is_some() {
                 if current_list.is_some_and(|(list_local, _)| provider_local == list_local) {
                     current_list
                         .map(|(_, item_sizes)| item_sizes.to_vec())

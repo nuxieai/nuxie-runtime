@@ -1,4 +1,4 @@
-use crate::{ArtboardInstance, ComponentDirt};
+use crate::ArtboardInstance;
 
 /// Direct `Axis::onAddedDirty` body after Component Super has linked the
 /// occurrence to its retained parent. Only the two concrete
@@ -22,7 +22,7 @@ pub(crate) fn offset_changed(instance: &mut ArtboardInstance, axis_local: usize)
                 .map(|component| component.type_name)
             {
                 Some("NSlicedNode") => super::n_sliced_node::axis_changed(instance, details_local),
-                Some("NSlicer") => instance.add_dirt(details_local, ComponentDirt::N_SLICER, false),
+                Some("NSlicer") => super::n_slicer::axis_changed(instance, details_local),
                 _ => false,
             }
         })

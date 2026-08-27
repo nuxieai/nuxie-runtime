@@ -1,5 +1,28 @@
+use super::slice_mesh::RuntimeSliceMeshOwner;
 use super::*;
 use crate::ArtboardInstance;
+use std::cell::RefCell;
+
+// The backend-late realization belongs to SliceMesh. Re-export the live
+// bridge here because the protected draw owner still calls it through the
+// historical NSlicer module boundary.
+pub(super) use super::slice_mesh::runtime_prepare_slice_meshes;
+
+/// Direct `NSlicer::NSlicer`: each occurrence uniquely owns one SliceMesh.
+pub(crate) fn new_slice_mesh(local_id: usize) -> RefCell<RuntimeSliceMeshOwner> {
+    RefCell::new(RuntimeSliceMeshOwner::new(local_id))
+}
+
+/// Direct `NSlicer::image`: resolve the live parent and downcast it to Image.
+pub(crate) fn image_parent(instance: &ArtboardInstance, local_id: usize) -> Option<usize> {
+    instance
+        .component_parent_local(local_id)
+        .filter(|parent_local| {
+            instance
+                .component(*parent_local)
+                .is_some_and(|component| component.type_name == "Image")
+        })
+}
 
 /// Direct `NSlicer::onAddedDirty`: validate the Image parent and install the
 /// NSlicer's uniquely owned SliceMesh through `Image::setMesh`.
@@ -21,109 +44,20 @@ pub(crate) fn on_added_dirty(
     Ok(())
 }
 
-/// Direct `NSlicer::validate` parent contract.
-pub(crate) fn image_parent(instance: &ArtboardInstance, local_id: usize) -> Option<usize> {
-    instance
-        .component_parent_local(local_id)
-        .filter(|parent_local| {
-            instance
-                .component(*parent_local)
-                .is_some_and(|component| component.type_name == "Image")
-        })
+/// Direct `NSlicer::axisChanged`.
+pub(crate) fn axis_changed(instance: &mut ArtboardInstance, local_id: usize) -> bool {
+    instance.add_dirt(local_id, ComponentDirt::N_SLICER, false)
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(super) fn runtime_prepare_slice_meshes(
-    runtime: &RuntimeFile,
-    instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    factory: &mut dyn RenderFactory,
-    path_cache: &mut RuntimeArtboardPathState,
-) -> Result<()> {
-    let Some(backend_context_id) = instance.runtime_image_backend_context_id() else {
-        return Ok(());
-    };
-    for details in graph.n_slicer_details.iter().filter(|details| {
-        super::n_slicer_details::is_details(details.type_name) && details.type_name == "NSlicer"
-    }) {
-        let Some(image_local) = runtime_nslicer_image_local(instance, details) else {
-            continue;
-        };
-        let authored_image_asset_global = instance
-            .runtime_drawables
-            .iter()
-            .find(|drawable| {
-                drawable.type_name == "Image" && drawable.local_id == Some(image_local)
-            })
-            .and_then(|drawable| drawable.resolved_image_asset_global);
-        let resolved_image_asset_global =
-            instance.resolved_image_asset_global(Some(image_local), authored_image_asset_global);
-        let Some(image) = resolved_image_asset_global
-            .and_then(|asset_global| instance.runtime_render_image(asset_global))
-        else {
-            continue;
-        };
-        let Some(owner) = instance.runtime_meshes.slice(details.local_id) else {
-            continue;
-        };
-        let Some(registered_details) = instance.runtime_meshes.details(details.local_id) else {
-            continue;
-        };
-        let needs_update = {
-            let owner = owner.borrow();
-            owner.dirty
-                || owner.context_id != Some(backend_context_id)
-                || owner.settled_update.is_none()
-        };
-        if !needs_update {
-            continue;
-        }
-        let layout_state = path_cache.image_layout_world_transform_with_bounds(
-            runtime,
-            instance,
-            graph,
-            image_local,
-            layout_bounds,
-        )?;
-        let render_scale_x = layout_state
-            .map(|state| state.render_scale_x)
-            .unwrap_or_else(|| {
-                instance
-                    .transform_property(image_local, TransformProperty::ScaleX)
-                    .unwrap_or(1.0)
-            });
-        let render_scale_y = layout_state
-            .map(|state| state.render_scale_y)
-            .unwrap_or_else(|| {
-                instance
-                    .transform_property(image_local, TransformProperty::ScaleY)
-                    .unwrap_or(1.0)
-            });
-        let mut owner = owner.borrow_mut();
-        if owner.dirty || owner.settled_update.is_none() {
-            let geometry = super::slice_mesh::runtime_slice_mesh_geometry(
-                runtime,
-                instance,
-                registered_details,
-                image.width() as f32,
-                image.height() as f32,
-                render_scale_x.abs(),
-                render_scale_y.abs(),
-            );
-            owner.settled_update = Some(super::slice_mesh::runtime_slice_mesh_update(
-                geometry,
-                image.uv_transform(),
-            ));
-            owner.dirty = false;
-        }
-        super::slice_mesh::runtime_update_slice_mesh_render_buffers(
-            factory,
-            &mut owner,
-            backend_context_id,
-        );
+/// Direct `NSlicer::update` dirt gate. SliceMesh realization is retained on
+/// the occurrence and performed by `runtime_prepare_slice_meshes` once Rust's
+/// factory-late render image and backend context are available.
+pub(crate) fn update(owner: Option<&RefCell<RuntimeSliceMeshOwner>>, value: ComponentDirt) {
+    if !(value & (ComponentDirt::N_SLICER | ComponentDirt::WORLD_TRANSFORM)).is_empty()
+        && let Some(owner) = owner
+    {
+        owner.borrow_mut().dirty = true;
     }
-    Ok(())
 }
 
 pub(super) fn runtime_nslicer_image_local(

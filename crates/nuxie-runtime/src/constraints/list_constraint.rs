@@ -37,7 +37,7 @@ pub(super) fn constrain_component_list_item_transforms(
         else {
             continue;
         };
-        changed |= list_follow_path_constraint::apply_to_transforms(
+        changed |= list_follow_path_constraint::constrain_list(
             artboard,
             list_component_index,
             constraint,

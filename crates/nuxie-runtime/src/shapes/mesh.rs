@@ -127,7 +127,7 @@ impl RuntimeMeshList {
                 .filter(|details| details.type_name == "NSlicer")
             {
                 owners.slices_by_local[details.local_id] =
-                    Some(RefCell::new(RuntimeSliceMeshOwner::new(details.local_id)));
+                    Some(super::n_slicer::new_slice_mesh(details.local_id));
             }
         }
         owners
@@ -139,11 +139,10 @@ impl RuntimeMeshList {
         {
             mesh.vertex_render_buffer_dirty.set(true);
         }
-        if !(dirt & (ComponentDirt::N_SLICER | ComponentDirt::WORLD_TRANSFORM)).is_empty()
-            && let Some(slice) = self.slices_by_local.get(local_id).and_then(Option::as_ref)
-        {
-            slice.borrow_mut().dirty = true;
-        }
+        super::n_slicer::update(
+            self.slices_by_local.get(local_id).and_then(Option::as_ref),
+            dirt,
+        );
     }
 
     pub(crate) fn mesh(&self, local_id: usize) -> Option<&RuntimeMeshOwner> {

@@ -1,62 +1,89 @@
-//! Direct owner for pinned `src/constraints/scrolling/scroll_constraint_proxy.cpp`.
+//! Direct owner for pinned `src/constraints/scrolling/scroll_constraint_proxy.cpp`
+//! and its handwritten `scroll_constraint_proxy.hpp` bodies.
 
-use super::super::*;
+use super::{super::*, scroll_constraint};
 
-pub(in crate::constraints) fn start(
-    artboard: &mut ArtboardInstance,
-    proxy: &mut RuntimeDraggableProxy,
-    position: (f32, f32),
-) {
-    let local = artboard.component_at(proxy.constraint).local_id;
-    if !constraint_bool(artboard, local, "ScrollConstraint", "interactive", true) {
-        return;
-    }
-    proxy.viewport_is_dragging = false;
-    proxy.last_position = position;
-    let direction = constraint_uint(artboard, local, "DraggableConstraint", "directionValue", 1);
-    if let Some(scroll) = artboard
-        .objects
-        .component_mut(proxy.constraint)
-        .and_then(|component| component.concrete.scroll.as_mut())
-    {
-        scroll.is_dragging = true;
-        scroll.intent_x = None;
-        scroll.intent_y = None;
-        scroll.last_frame_offset_x = scroll.offset_x;
-        scroll.last_frame_offset_y = scroll.offset_y;
-        if let Some(physics) = scroll.physics.as_mut() {
-            physics.prepare(direction);
-        }
-    }
+// The unified Rust draggable proxy retains the C++ owner's `m_constraint`,
+// `m_lastPosition`, and `m_isDragging` state. Rust's drop is the empty
+// destructor.
+pub(in crate::constraints) fn new(
+    constraint: ComponentHandle,
+    hittable: ComponentHandle,
+) -> RuntimeDraggableProxy {
+    RuntimeDraggableProxy::new(
+        constraint,
+        hittable,
+        RuntimeDraggableProxyKind::Viewport,
+        false,
+    )
 }
 
 pub(in crate::constraints) fn drag(
     artboard: &mut ArtboardInstance,
     proxy: &mut RuntimeDraggableProxy,
     position: (f32, f32),
-    delta: (f32, f32),
+    _dispatcher_delta: (f32, f32),
     timestamp: f32,
 ) -> bool {
     let local = artboard.component_at(proxy.constraint).local_id;
     if !constraint_bool(artboard, local, "ScrollConstraint", "interactive", true) {
         return false;
     }
+    // The shared Rust dispatcher precomputes a delta for every proxy kind;
+    // this owner deliberately derives it again at the pinned ownership site.
+    let delta = (
+        position.0 - proxy.last_position.0,
+        position.1 - proxy.last_position.1,
+    );
     if !proxy.viewport_is_dragging {
         let direction =
             constraint_uint(artboard, local, "DraggableConstraint", "directionValue", 1);
         let threshold = constraint_double(artboard, local, "ScrollConstraint", "threshold", 0.0);
-        let crossed = match direction {
-            0 => delta.0.abs() > threshold,
-            1 => delta.1.abs() > threshold,
-            2 => delta.0.hypot(delta.1) > threshold,
-            _ => false,
-        };
-        if !crossed {
-            return false;
+        match direction {
+            0 => {
+                if delta.0.abs() > threshold {
+                    proxy.viewport_is_dragging = true;
+                } else {
+                    return false;
+                }
+            }
+            1 => {
+                if delta.1.abs() > threshold {
+                    proxy.viewport_is_dragging = true;
+                } else {
+                    return false;
+                }
+            }
+            2 => {
+                if (delta.0 * delta.0 + delta.1 * delta.1).sqrt() > threshold {
+                    proxy.viewport_is_dragging = true;
+                } else {
+                    return false;
+                }
+            }
+            // The pinned enum conversion does not validate the authored byte;
+            // an unknown value simply takes no switch case and falls through.
+            _ => {}
         }
-        proxy.viewport_is_dragging = true;
     }
-    drag_view(artboard, proxy.constraint, delta, timestamp);
+    scroll_constraint::drag_view(artboard, proxy.constraint, delta, timestamp);
+    proxy.last_position = position;
+    true
+}
+
+pub(in crate::constraints) fn start(
+    artboard: &mut ArtboardInstance,
+    proxy: &mut RuntimeDraggableProxy,
+    position: (f32, f32),
+) -> bool {
+    // The upstream timestamp is unused; the shared dispatcher elides it for
+    // this proxy kind.
+    let local = artboard.component_at(proxy.constraint).local_id;
+    if !constraint_bool(artboard, local, "ScrollConstraint", "interactive", true) {
+        return false;
+    }
+    proxy.viewport_is_dragging = false;
+    scroll_constraint::init_physics(artboard, proxy.constraint);
     proxy.last_position = position;
     true
 }
@@ -64,122 +91,12 @@ pub(in crate::constraints) fn drag(
 pub(in crate::constraints) fn end(
     artboard: &mut ArtboardInstance,
     proxy: &mut RuntimeDraggableProxy,
-) {
+) -> bool {
+    // Both upstream arguments are unused; the shared dispatcher elides them.
     let local = artboard.component_at(proxy.constraint).local_id;
     if !constraint_bool(artboard, local, "ScrollConstraint", "interactive", true) {
-        return;
+        return false;
     }
-    run_physics(artboard, proxy.constraint);
-}
-fn drag_view(
-    artboard: &mut ArtboardInstance,
-    constraint: ComponentHandle,
-    delta: (f32, f32),
-    timestamp: f32,
-) {
-    let local = artboard.component_at(constraint).local_id;
-    let multiplier = constraint_double(artboard, local, "ScrollConstraint", "dragMultiplier", 1.0);
-    let scaled = (delta.0 * multiplier, delta.1 * multiplier);
-    let Some((mut offset_x, mut offset_y, has_physics)) = artboard
-        .objects
-        .component_mut(constraint)
-        .and_then(|component| component.concrete.scroll.as_mut())
-        .map(|scroll| {
-            if let Some(physics) = scroll.physics.as_mut() {
-                physics.accumulate(scaled, timestamp);
-            }
-            (
-                scroll.offset_x + scaled.0,
-                scroll.offset_y + scaled.1,
-                scroll.physics.is_some(),
-            )
-        })
-    else {
-        return;
-    };
-    if !has_physics {
-        let metrics = artboard
-            .objects
-            .component(constraint)
-            .and_then(|component| component.concrete.scroll.as_ref())
-            .map(|scroll| {
-                runtime_scroll_layout_metrics(artboard, constraint, scroll, false).unwrap_or_else(
-                    || {
-                        build_runtime_scroll_layout_metrics(
-                            artboard, constraint, scroll, None, false,
-                        )
-                    },
-                )
-            });
-        if let Some(metrics) = metrics
-            && !metrics.infinite
-        {
-            // Without physics no later owner pulls the stored offset back
-            // into range. Clamp now so overscroll cannot eat the next drag.
-            offset_x = rive_math_clamp(offset_x, metrics.max_offset(RuntimeScrollAxis::X), 0.0);
-            offset_y = rive_math_clamp(offset_y, metrics.max_offset(RuntimeScrollAxis::Y), 0.0);
-        }
-    }
-    set_scroll_offset(artboard, constraint, RuntimeScrollAxis::X, offset_x);
-    set_scroll_offset(artboard, constraint, RuntimeScrollAxis::Y, offset_y);
-}
-fn run_physics(artboard: &mut ArtboardInstance, constraint: ComponentHandle) {
-    let local = artboard.component_at(constraint).local_id;
-    let Some(scroll) = artboard
-        .objects
-        .component(constraint)
-        .and_then(|component| component.concrete.scroll.as_ref())
-    else {
-        return;
-    };
-    let snap = constraint_bool(artboard, local, "ScrollConstraint", "snap", false);
-    let metrics =
-        runtime_scroll_layout_metrics(artboard, constraint, scroll, snap).unwrap_or_else(|| {
-            build_runtime_scroll_layout_metrics(artboard, constraint, scroll, None, snap)
-        });
-    let snapping_points = if snap {
-        metrics
-            .item_bounds
-            .iter()
-            .filter(|bounds| !metrics.bounds_collapsed(**bounds))
-            .map(|bounds| (bounds.x, bounds.y))
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    let range_min = (
-        metrics.max_offset(RuntimeScrollAxis::X),
-        metrics.max_offset(RuntimeScrollAxis::Y),
-    );
-    let range_max = (
-        metrics.min_offset(RuntimeScrollAxis::X),
-        metrics.min_offset(RuntimeScrollAxis::Y),
-    );
-    let content_size = if metrics.main_axis_horizontal {
-        metrics.content_width
-    } else {
-        metrics.content_height
-    };
-    let viewport_size = if metrics.main_axis_horizontal {
-        metrics.viewport_width
-    } else {
-        metrics.viewport_height
-    };
-    if let Some(scroll) = artboard
-        .objects
-        .component_mut(constraint)
-        .and_then(|component| component.concrete.scroll.as_mut())
-    {
-        scroll.is_dragging = false;
-        if let Some(physics) = scroll.physics.as_mut() {
-            physics.run(
-                range_min,
-                range_max,
-                (scroll.offset_x, scroll.offset_y),
-                &snapping_points,
-                content_size,
-                viewport_size,
-            );
-        }
-    }
+    scroll_constraint::run_physics(artboard, proxy.constraint);
+    true
 }

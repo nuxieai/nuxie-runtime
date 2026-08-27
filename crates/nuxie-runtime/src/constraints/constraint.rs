@@ -32,12 +32,9 @@ pub(crate) fn constraint_double_change_marks_parent_dirty(
         || (matches!(
             kind,
             RuntimeConstraintKind::FollowPath | RuntimeConstraintKind::ListFollowPath
-        ) && matches!(
-            property_key,
-            FOLLOW_PATH_DISTANCE_PROPERTY_KEY
-                | LIST_FOLLOW_PATH_DISTANCE_END_PROPERTY_KEY
-                | LIST_FOLLOW_PATH_DISTANCE_OFFSET_PROPERTY_KEY
-        ))
+        ) && (property_key == FOLLOW_PATH_DISTANCE_PROPERTY_KEY
+            || (kind == RuntimeConstraintKind::ListFollowPath
+                && list_follow_path_constraint::double_property_changed(property_key))))
         || (kind == RuntimeConstraintKind::Transform
             && transform_constraint::double_property_changed(property_key))
 }

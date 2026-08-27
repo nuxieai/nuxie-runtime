@@ -11156,7 +11156,9 @@ impl RuntimeDataBindGraphSourceNode {
         value: RuntimeDataBindGraphValue,
     ) -> Option<RuntimeDataBindGraphValue> {
         match (target, value) {
-            (RuntimeDataBindGraphTarget::Color { .. }, value) => {
+            (RuntimeDataBindGraphTarget::Color { .. }, value)
+                if matches!(self.default_value, RuntimeDataBindGraphValue::Color(_)) =>
+            {
                 Some(RuntimeDataBindGraphValue::Color(
                     crate::context_value_color::calculate_value(&value),
                 ))
@@ -12006,6 +12008,34 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn color_default_zero_is_owned_only_by_typed_color_contexts() {
+        let mut graph = graph_with_number_binding(0);
+        let source = &mut graph.sources[0];
+        source.default_value = RuntimeDataBindGraphValue::Color(0xff00_ff00);
+        source.value = RuntimeDataBindGraphValue::Color(0xff00_ff00);
+
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::Color { global_id: 7 },
+                RuntimeDataBindGraphValue::Boolean(true),
+            ),
+            Some(RuntimeDataBindGraphValue::Color(0)),
+            "typed ContextValueColor uses DataValueColor::defaultValue",
+        );
+
+        source.default_value = RuntimeDataBindGraphValue::Untyped;
+        source.value = RuntimeDataBindGraphValue::Color(0xff00_ff00);
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::Color { global_id: 7 },
+                RuntimeDataBindGraphValue::Boolean(true),
+            ),
+            Some(RuntimeDataBindGraphValue::Boolean(true)),
+            "ContextValueAny preserves the wrong concrete value so CoreColor dispatch no-ops",
+        );
     }
 
     #[test]

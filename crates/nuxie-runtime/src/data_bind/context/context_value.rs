@@ -11156,6 +11156,25 @@ impl RuntimeDataBindGraphSourceNode {
         value: RuntimeDataBindGraphValue,
     ) -> Option<RuntimeDataBindGraphValue> {
         match (target, value) {
+            (
+                RuntimeDataBindGraphTarget::String { .. }
+                | RuntimeDataBindGraphTarget::KeyFrameString { .. },
+                value,
+            ) if crate::context_value_string::owns_output(
+                &self.default_value,
+                self.converter.as_ref(),
+            ) => Some(RuntimeDataBindGraphValue::String(
+                crate::context_value_string::calculate_value(&value),
+            )),
+            (
+                RuntimeDataBindGraphTarget::Boolean { .. }
+                | RuntimeDataBindGraphTarget::KeyFrameBoolean { .. },
+                value,
+            ) if matches!(self.default_value, RuntimeDataBindGraphValue::Boolean(_)) => {
+                Some(RuntimeDataBindGraphValue::Boolean(
+                    crate::context_value_boolean::calculate_value(&value),
+                ))
+            }
             (RuntimeDataBindGraphTarget::Color { .. }, value)
                 if matches!(self.default_value, RuntimeDataBindGraphValue::Color(_)) =>
             {
@@ -12035,6 +12054,39 @@ mod tests {
             ),
             Some(RuntimeDataBindGraphValue::Boolean(true)),
             "ContextValueAny preserves the wrong concrete value so CoreColor dispatch no-ops",
+        );
+    }
+
+    #[test]
+    fn boolean_default_false_is_owned_only_by_typed_boolean_contexts() {
+        let mut graph = graph_with_number_binding(0);
+        let source = &mut graph.sources[0];
+        source.default_value = RuntimeDataBindGraphValue::Boolean(true);
+        source.value = RuntimeDataBindGraphValue::Boolean(true);
+
+        for target in [
+            RuntimeDataBindGraphTarget::Boolean { global_id: 7 },
+            RuntimeDataBindGraphTarget::KeyFrameBoolean { global_id: 8 },
+        ] {
+            assert_eq!(
+                source.source_to_target_value_for_concrete_target(
+                    target,
+                    RuntimeDataBindGraphValue::Number(1.0),
+                ),
+                Some(RuntimeDataBindGraphValue::Boolean(false)),
+                "typed ContextValueBoolean uses DataValueBoolean::defaultValue for {target:?}",
+            );
+        }
+
+        source.default_value = RuntimeDataBindGraphValue::Untyped;
+        source.value = RuntimeDataBindGraphValue::Boolean(true);
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::Boolean { global_id: 7 },
+                RuntimeDataBindGraphValue::Number(1.0),
+            ),
+            Some(RuntimeDataBindGraphValue::Number(1.0)),
+            "ContextValueAny preserves the wrong concrete value so CoreBool dispatch no-ops",
         );
     }
 

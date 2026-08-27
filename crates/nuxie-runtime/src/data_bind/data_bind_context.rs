@@ -8280,29 +8280,52 @@ impl ArtboardInstance {
                 .get(binding.path.as_slice())
                 .cloned()
         })?;
-        let converted = if let Some(shared) = self
+        let (converted, string_owned) = if let Some(shared) = self
             .artboard_authored_data_bind_states
             .get_mut(binding.data_bind_index)
             .and_then(|state| state.shared_converter.as_mut())
         {
-            runtime_artboard_convert_property_binding_value(
-                &shared.converter,
-                &mut shared.converter_state,
-                value,
-                &binding.enum_value_names,
-                &mut self.artboard_formula_random_source,
+            (
+                runtime_artboard_convert_property_binding_value(
+                    &shared.converter,
+                    &mut shared.converter_state,
+                    value,
+                    &binding.enum_value_names,
+                    &mut self.artboard_formula_random_source,
+                ),
+                crate::context_value_string::owns_output(
+                    &binding.default_value,
+                    Some(&shared.converter),
+                ),
             )
         } else if let Some(converter) = binding.converter.as_ref() {
-            runtime_artboard_convert_property_binding_value(
-                converter,
-                &mut binding.converter_state,
-                value,
-                &binding.enum_value_names,
-                &mut self.artboard_formula_random_source,
+            (
+                runtime_artboard_convert_property_binding_value(
+                    converter,
+                    &mut binding.converter_state,
+                    value,
+                    &binding.enum_value_names,
+                    &mut self.artboard_formula_random_source,
+                ),
+                crate::context_value_string::owns_output(
+                    &binding.default_value,
+                    Some(converter),
+                ),
             )
         } else {
-            Some(value)
-        }?;
+            (
+                Some(value),
+                crate::context_value_string::owns_output(&binding.default_value, None),
+            )
+        };
+        let converted = converted?;
+        let converted = if string_owned {
+            RuntimeDataBindGraphValue::String(crate::context_value_string::calculate_value(
+                &converted,
+            ))
+        } else {
+            converted
+        };
         Some((
             binding.data_bind_index,
             binding.target_local_id,
@@ -8884,16 +8907,20 @@ impl ArtboardInstance {
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::ViewModel(value))) => self
                 .view_model_instance_index_for_target_pointer(target_local_id, value)
                 .is_some_and(|value| self.set_uint_property(target_local_id, property_key, value)),
-            (Some(FieldKind::Bool), Some(RuntimeDataBindGraphValue::Boolean(value))) => {
-                self.set_bool_property(target_local_id, property_key, value)
+            (Some(FieldKind::Bool), Some(value @ RuntimeDataBindGraphValue::Boolean(_))) => {
+                crate::context_value_boolean::boolean_value(&value).is_some_and(|value| {
+                    self.set_bool_property(target_local_id, property_key, value)
+                })
             }
             (Some(FieldKind::Color), Some(value @ RuntimeDataBindGraphValue::Color(_))) => {
                 crate::context_value_color::color_value(&value).is_some_and(|value| {
                     self.set_color_property(target_local_id, property_key, value)
                 })
             }
-            (Some(FieldKind::String), Some(RuntimeDataBindGraphValue::String(value))) => {
-                self.set_string_property(target_local_id, property_key, value)
+            (Some(FieldKind::String), Some(value @ RuntimeDataBindGraphValue::String(_))) => {
+                crate::context_value_string::string_value(&value).is_some_and(|value| {
+                    self.set_string_property(target_local_id, property_key, value.to_vec())
+                })
             }
             _ => false,
         }
@@ -9055,9 +9082,9 @@ impl ArtboardInstance {
                         RuntimeDataBindGraphValue::Number(_) => RuntimeSoloBindingApply::Index(
                             crate::context_value_number::number_value(value)?,
                         ),
-                        RuntimeDataBindGraphValue::String(value) => {
-                            RuntimeSoloBindingApply::Name(value.clone())
-                        }
+                        RuntimeDataBindGraphValue::String(_) => RuntimeSoloBindingApply::Name(
+                            crate::context_value_string::string_value(value)?.to_vec(),
+                        ),
                         RuntimeDataBindGraphValue::Enum(value) => {
                             let value = usize::try_from(*value).ok()?;
                             RuntimeSoloBindingApply::Name(

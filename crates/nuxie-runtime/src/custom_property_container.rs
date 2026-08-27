@@ -58,37 +58,58 @@ pub(crate) struct RuntimeArtboardCustomPropertyBindingInstance {
 }
 
 impl ArtboardInstance {
+    /// Rust graph correspondence for `syncCustomProperties` and
+    /// `customProperties`: rebuild the occurrence-local collection from the
+    /// container's direct children, preserving child order and accepting every
+    /// type derived from `CustomProperty`.
+    ///
+    /// The C++ mixin keeps a second pointer vector and mutates it through
+    /// `addProperty`/`removeProperty`. Rust's component graph is the retained
+    /// owner, so structural insertion/removal is observed by rebuilding this
+    /// projection instead of duplicating membership state.
+    fn synced_custom_property_local_ids(&self, container_local_id: usize) -> Vec<usize> {
+        let Some(container) = self.component_handle(container_local_id) else {
+            return Vec::new();
+        };
+        (0..self.component_child_len(container))
+            .filter_map(|index| self.component_child_at(container, index))
+            .filter_map(|child| {
+                let component = self.objects.component(child)?;
+                nuxie_schema::definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("CustomProperty"))
+                    .then_some(component.local_id)
+            })
+            .collect()
+    }
+
     /// Snapshot authored custom properties attached to one event, preserving
     /// their component/local order.
     pub fn event_properties(&self, event_local_id: usize) -> Vec<RuntimeEventProperty> {
-        let Some(event) = self.component_handle(event_local_id) else {
-            return Vec::new();
-        };
-        (0..self.component_child_len(event))
-            .filter_map(|index| self.component_child_at(event, index))
+        self.synced_custom_property_local_ids(event_local_id)
+            .into_iter()
+            .filter_map(|local_id| self.component_handle(local_id))
             .filter_map(|handle| self.objects.component(handle))
             .filter_map(|component| {
                 let key = property_key_for_name(component.type_name, "propertyValue")?;
-                let value = match component.type_name {
-                    "CustomPropertyNumber" => RuntimeEventPropertyValue::Number(
+                let definition = nuxie_schema::definition_by_name(component.type_name)?;
+                let value = if definition.is_a("CustomPropertyNumber") {
+                    RuntimeEventPropertyValue::Number(
                         self.double_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyBoolean" => RuntimeEventPropertyValue::Bool(
-                        self.bool_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyString" => RuntimeEventPropertyValue::String(
+                    )
+                } else if definition.is_a("CustomPropertyBoolean") {
+                    RuntimeEventPropertyValue::Bool(self.bool_property(component.local_id, key)?)
+                } else if definition.is_a("CustomPropertyString") {
+                    RuntimeEventPropertyValue::String(
                         self.string_property(component.local_id, key)?.to_vec(),
-                    ),
-                    "CustomPropertyColor" => RuntimeEventPropertyValue::Color(
-                        self.color_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyEnum" => RuntimeEventPropertyValue::Enum(
-                        self.uint_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyTrigger" => RuntimeEventPropertyValue::Trigger(
-                        self.uint_property(component.local_id, key)?,
-                    ),
-                    _ => return None,
+                    )
+                } else if definition.is_a("CustomPropertyColor") {
+                    RuntimeEventPropertyValue::Color(self.color_property(component.local_id, key)?)
+                } else if definition.is_a("CustomPropertyEnum") {
+                    RuntimeEventPropertyValue::Enum(self.uint_property(component.local_id, key)?)
+                } else if definition.is_a("CustomPropertyTrigger") {
+                    RuntimeEventPropertyValue::Trigger(self.uint_property(component.local_id, key)?)
+                } else {
+                    return None;
                 };
                 let name_key = property_key_for_name(component.type_name, "name")?;
                 Some(RuntimeEventProperty {

@@ -11,6 +11,33 @@ impl HitDrawable {
 }
 
 impl StateMachineInstance {
+    /// Mechanical focus step from
+    /// `TextInputListenerGroup::processEvent`: select the first direct
+    /// `FocusData` child before applying double/triple-click selection.
+    pub(in crate::state_machine) fn focus_text_input_before_selection(
+        &mut self,
+        artboard: &ArtboardInstance,
+        text_input_local_id: usize,
+    ) {
+        let focus_data = artboard
+            .component_handle(text_input_local_id)
+            .and_then(|owner| {
+                (0..artboard.component_child_len(owner)).find_map(|index| {
+                    let child = artboard.component_child_at(owner, index)?;
+                    let local = artboard.component_local_id(child)?;
+                    artboard
+                        .runtime_object_type_name(local)
+                        .and_then(nuxie_schema::definition_by_name)
+                        .is_some_and(|definition| definition.is_a("FocusData"))
+                        .then_some(local)
+                })
+            });
+        if let Some(focus_data) = focus_data {
+            self.focus
+                .set_focus_target_before_topology(artboard, text_input_local_id, focus_data);
+        }
+    }
+
     /// Dispatch owned committed text to the currently focused listener groups.
     pub fn text_input(&mut self, artboard: &mut ArtboardInstance, text: &str) -> bool {
         if self.script_error.is_some() {
@@ -77,7 +104,10 @@ impl StateMachineInstance {
         let focused_local_id = self.focus.focused_listener_chain().into_iter().find_map(
             |(owner_identity, target_local_id, _)| {
                 (owner_identity == artboard_identity
-                    && artboard.runtime_object_type_name(target_local_id) == Some("TextInput"))
+                    && artboard
+                        .runtime_object_type_name(target_local_id)
+                        .and_then(nuxie_schema::definition_by_name)
+                        .is_some_and(|definition| definition.is_a("TextInput")))
                 .then_some(target_local_id)
             },
         );

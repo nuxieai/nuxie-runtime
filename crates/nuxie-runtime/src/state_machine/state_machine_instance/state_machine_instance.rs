@@ -4753,31 +4753,13 @@ impl StateMachineInstance {
                     return Ok((false, None));
                 };
                 let result = text_input.process_event(
+                    self,
                     artboard,
                     pointer_state,
                     position,
                     hit_type,
                     timestamp_seconds,
                 );
-                if result.focus_requested {
-                    let focus_data = artboard
-                        .component_handle(text_input.text_input_local_id)
-                        .and_then(|owner| {
-                            (0..artboard.component_child_len(owner)).find_map(|index| {
-                                let child = artboard.component_child_at(owner, index)?;
-                                let local = artboard.component_local_id(child)?;
-                                (artboard.runtime_object_type_name(local) == Some("FocusData"))
-                                    .then_some(local)
-                            })
-                        });
-                    if let Some(focus_data) = focus_data {
-                        self.focus.set_focus_target_before_topology(
-                            artboard,
-                            text_input.text_input_local_id,
-                            focus_data,
-                        );
-                    }
-                }
                 group.text_input = Some(text_input);
                 group.record_position(pointer_id, position);
                 group.is_consumed |= result.blocks;

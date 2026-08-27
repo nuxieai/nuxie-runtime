@@ -2,6 +2,7 @@
 //! `src/animation/text_input_listener_group.cpp`.
 
 use super::RuntimeListenerType;
+use super::instance::StateMachineInstance;
 use crate::ArtboardInstance;
 use crate::listener_group::ListenerPointerState;
 use std::sync::OnceLock;
@@ -44,6 +45,7 @@ impl RuntimeTextInputListenerGroup {
 
     pub(crate) fn process_event(
         &mut self,
+        machine: &mut StateMachineInstance,
         artboard: &mut ArtboardInstance,
         pointer: ListenerPointerState,
         position: (f32, f32),
@@ -52,11 +54,11 @@ impl RuntimeTextInputListenerGroup {
     ) -> TextInputEventResult {
         if !pointer.phase_was_down && pointer.phase_is_down {
             let now = click_timestamp_micros(timestamp_seconds);
-            let dt = now.saturating_sub(self.last_click_time_us);
+            let dt = now.checked_sub(self.last_click_time_us);
             let dx = position.0 - self.last_click_position.0;
             let dy = position.1 - self.last_click_position.1;
             let distance = (dx * dx + dy * dy).sqrt();
-            self.click_count = if (0..=MULTI_CLICK_INTERVAL_US).contains(&dt)
+            self.click_count = if dt.is_some_and(|dt| (0..=MULTI_CLICK_INTERVAL_US).contains(&dt))
                 && distance <= MULTI_CLICK_DISTANCE
             {
                 if self.click_count >= 3 {
@@ -71,38 +73,29 @@ impl RuntimeTextInputListenerGroup {
             self.last_click_position = position;
             artboard.text_input_start_drag(self.text_input_local_id, position);
             self.is_dragging = true;
+            machine.focus_text_input_before_selection(artboard, self.text_input_local_id);
             if self.click_count == 2 {
                 artboard.text_input_select_word(self.text_input_local_id);
             } else if self.click_count == 3 {
                 artboard.text_input_select_line(self.text_input_local_id);
             }
-            return TextInputEventResult {
-                blocks: true,
-                focus_requested: true,
-            };
+            return TextInputEventResult { blocks: true };
         }
         if hit_type == RuntimeListenerType::Move && pointer.phase_is_down && self.is_dragging {
             artboard.text_input_drag(self.text_input_local_id, position);
-            return TextInputEventResult {
-                blocks: true,
-                focus_requested: false,
-            };
+            return TextInputEventResult { blocks: true };
         }
         if pointer.phase_was_down && !pointer.phase_is_down && self.is_dragging {
             artboard.text_input_end_drag(self.text_input_local_id);
             self.is_dragging = false;
         }
-        TextInputEventResult {
-            blocks: false,
-            focus_requested: false,
-        }
+        TextInputEventResult { blocks: false }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TextInputEventResult {
     pub(crate) blocks: bool,
-    pub(crate) focus_requested: bool,
 }
 
 #[cfg(test)]

@@ -178,7 +178,9 @@ impl RuntimeCoreObjectListener {
         for property in self.properties.drain(..) {
             property.remove_dependent(&self.sink);
         }
-        self.sink.take_dirt();
+        // Do not clear `sink`: C++ has already delivered `addDirt` to the
+        // listener's core object before `deleteProperties` tears down the old
+        // subscriptions, so a remap cannot retract that pending dirty state.
     }
 
     pub(crate) fn take_changed(&self) -> bool {
@@ -210,6 +212,22 @@ mod property_symbol_listener_tests {
         old.notify_bindings_value_changed();
         assert!(!listener.take_changed());
         next.notify_bindings_value_changed();
+        assert!(listener.take_changed());
+    }
+
+    #[test]
+    fn replacing_properties_preserves_old_source_dirt_already_delivered_to_the_listener() {
+        let old = RuntimeViewModelCell::new(RuntimeViewModelCellValue::String(Vec::new().into()));
+        let next = RuntimeViewModelCell::new(RuntimeViewModelCellValue::String(Vec::new().into()));
+        let mut listener = RuntimeCoreObjectListener::default();
+
+        listener.create_properties([old.clone()]);
+        old.notify_bindings_value_changed();
+        listener.create_properties([next]);
+
+        // C++ `PropertySymbolDependent::addDirt` calls `markDirty` before
+        // `CoreObjectListener::remap` deletes the old dependents. Replacing
+        // subscriptions must not retract that already-delivered dirt.
         assert!(listener.take_changed());
     }
 }

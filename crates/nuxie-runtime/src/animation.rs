@@ -50,6 +50,7 @@ include!("animation/animation_state.rs");
 include!("animation/animation_state_instance.rs");
 include!("animation/elastic_interpolator.rs");
 include!("animation/elastic_ease.rs");
+include!("animation/key_frame_value_context.rs");
 
 fn callback_event_for_keyed_property(
     target_local_id: usize,
@@ -183,13 +184,15 @@ pub(crate) fn build_linear_animations<'a>(
                 )
             };
 
-            let keyed_objects = Arc::make_mut(&mut animations[animation_index].keyed_objects);
-            keyed_objects.push(RuntimeKeyedObject::new(
+            animations[animation_index].add_keyed_object(RuntimeKeyedObject::new(
                 global_id as u32,
                 object_id,
                 target_local_id,
             ));
-            current_keyed_object = Some((animation_index, keyed_objects.len() - 1));
+            current_keyed_object = Some((
+                animation_index,
+                animations[animation_index].num_keyed_objects() - 1,
+            ));
             continue;
         }
 
@@ -771,24 +774,23 @@ mod tests {
 
     #[test]
     fn closest_frame_index_matches_cpp_exact_offsets_and_duplicates() {
-        let frames = vec![
-            callback_frame(10, 0, 0.0),
-            callback_frame(20, 10, 1.0),
-            callback_frame(30, 10, 1.0),
-            callback_frame(40, 20, 2.0),
-        ];
+        let property = RuntimeKeyedProperty {
+            global_id: 0,
+            property_key: 0,
+            target: RuntimeKeyedPropertyTarget::Bool,
+            key_frames: vec![
+                callback_frame(10, 0, 0.0),
+                callback_frame(20, 10, 1.0),
+                callback_frame(30, 10, 1.0),
+                callback_frame(40, 20, 2.0),
+            ],
+        };
 
-        assert_eq!(closest_key_frame_index(&frames, -1.0), 0);
-        assert_eq!(closest_key_frame_index(&frames, 0.5), 1);
-        assert_eq!(
-            closest_key_frame_index_with_exact_offset(&frames, 1.0, 0),
-            1
-        );
-        assert_eq!(
-            closest_key_frame_index_with_exact_offset(&frames, 1.0, 1),
-            2
-        );
-        assert_eq!(closest_key_frame_index(&frames, 2.1), frames.len());
+        assert_eq!(property.closest_frame_index(-1.0), 0);
+        assert_eq!(property.closest_frame_index(0.5), 1);
+        assert_eq!(property.closest_frame_index_with_exact_offset(1.0, 0), 1);
+        assert_eq!(property.closest_frame_index_with_exact_offset(1.0, 1), 2);
+        assert_eq!(property.closest_frame_index(2.1), property.key_frames.len());
     }
 
     #[test]
@@ -1749,10 +1751,10 @@ mod tests {
     }
 
     #[test]
-    fn ping_pong_zero_duration_keeps_the_unguarded_cpp_arithmetic_shape() {
-        // linear_animation.cpp:132-144 has no zero-duration branch. Rust float
-        // remainder therefore produces NaN directly; its float-to-int cast is
-        // defined and memory-safe, while C++'s corresponding cast is undefined.
+    fn ping_pong_zero_duration_matches_the_source_assertion_mode() {
+        // linear_animation.cpp:127 asserts the positive-modulus range in
+        // assertion-enabled builds. Release builds continue into the pinned
+        // unguarded float arithmetic and produce NaN.
         let animation = RuntimeLinearAnimation {
             global_id: 1,
             name: None,
@@ -1771,11 +1773,21 @@ mod tests {
 
         assert_eq!(animation.duration_seconds(), 0.0);
         for seconds in [-2.0_f32, -0.5, 0.0, 0.5, 2.0, 1000.0] {
-            let local = animation.global_to_local_seconds(seconds);
-            assert!(
-                local.is_nan(),
-                "local time unexpectedly finite for {seconds}"
-            );
+            if cfg!(debug_assertions) {
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        animation.global_to_local_seconds(seconds)
+                    }))
+                    .is_err(),
+                    "zero-duration positive_mod did not assert for {seconds}"
+                );
+            } else {
+                let local = animation.global_to_local_seconds(seconds);
+                assert!(
+                    local.is_nan(),
+                    "local time unexpectedly finite for {seconds}"
+                );
+            }
         }
     }
 }

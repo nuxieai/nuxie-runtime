@@ -247,6 +247,17 @@ fn object_imports_successfully(
         return false;
     }
 
+    // ScriptedListenerAction::import and ScriptedTransitionCondition::import
+    // both require the enclosing StateMachineImporter after registering their
+    // file-asset reference, then continue through their normal Super import.
+    if matches!(
+        definition.name,
+        "ScriptedListenerAction" | "ScriptedTransitionCondition"
+    ) && !context.latest(ImportStackKey::StateMachine)
+    {
+        return false;
+    }
+
     if let Some(decision) =
         enum_importer::dispatch_imports_successfully(object, definition, context)
     {

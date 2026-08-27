@@ -16,10 +16,6 @@ impl AnimationLoop {
     }
 }
 
-fn positive_mod(value: f32, range: f32) -> f32 {
-    ((value % range) + range) % range
-}
-
 /// Stable typed identity for one definition in an Artboard's immutable
 /// LinearAnimation arena. C++ occurrences retain `const LinearAnimation*`;
 /// Rust retains this non-dereferenceable handle and resolves it only through

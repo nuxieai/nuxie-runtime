@@ -236,6 +236,30 @@ fn scripting_reader_gives_script_and_shader_contents_their_file_asset_importers(
 }
 
 #[test]
+fn scripted_state_machine_objects_require_a_state_machine_importer() {
+    let bytes = synthetic_runtime_file(4400, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "ScriptedListenerAction");
+        push_empty_object(bytes, "ScriptedTransitionCondition");
+    });
+
+    let file = read_runtime_file(&bytes).expect("synthetic scripted-owner file imports");
+    assert_eq!(file.import_status(0), Some(RuntimeImportStatus::Imported));
+    assert_eq!(
+        file.import_status(1),
+        Some(RuntimeImportStatus::Dropped {
+            reason: RuntimeImportDropReason::MissingObject,
+        })
+    );
+    assert_eq!(
+        file.import_status(2),
+        Some(RuntimeImportStatus::Dropped {
+            reason: RuntimeImportDropReason::MissingObject,
+        })
+    );
+}
+
+#[test]
 fn scripting_file_asset_catalog_uses_importer_ownership_not_adjacency() {
     let bytes = synthetic_runtime_file(4401, |bytes| {
         push_empty_object(bytes, "Backboard");

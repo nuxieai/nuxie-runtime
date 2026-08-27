@@ -10,6 +10,31 @@ use crate::{
 };
 
 impl ArtboardInstance {
+    /// Direct port of `Shape::isEmpty` for the exact source Shape occurrence
+    /// retained by `ClippingShape::m_Shapes`. Geometry emptiness is not the
+    /// predicate: an authored empty path still makes the Shape non-empty when
+    /// it is neither hidden nor collapsed.
+    fn runtime_clipping_source_shape_is_empty(&self, shape_local: usize) -> bool {
+        let Some(shape) = self
+            .component(shape_local)
+            .and_then(|component| component.concrete.shape.as_ref())
+        else {
+            return true;
+        };
+        shape.paths.iter().all(|path| {
+            let Some(path_local) = self.component_local_id(*path) else {
+                return true;
+            };
+            let Some(component) = self.component(path_local) else {
+                return true;
+            };
+            let hidden = property_key_for_name(component.type_name, "pathFlags")
+                .and_then(|key| self.uint_property(path_local, key))
+                .is_some_and(|flags| flags & 1 != 0);
+            hidden || component.is_collapsed()
+        })
+    }
+
     /// Direct port of pinned C++ `ClippingShape::update`
     /// (`src/shapes/clipping_shape.cpp:151-173`). The dependency node rewinds
     /// its occurrence-owned world path only under Path/WorldTransform/NSlicer
@@ -33,6 +58,9 @@ impl ArtboardInstance {
         path.rewind();
         let mut has_path = false;
         for shape_local in &owner.shape_locals {
+            if self.runtime_clipping_source_shape_is_empty(*shape_local) {
+                continue;
+            }
             let Some(shape) = self.runtime_shapes.get(*shape_local) else {
                 continue;
             };
@@ -43,9 +71,6 @@ impl ArtboardInstance {
             let Some(world_path) = world_path.as_ref() else {
                 continue;
             };
-            if world_path.raw_path.verbs().is_empty() {
-                continue;
-            }
             path.add_path(world_path.raw_path.as_ref(), RenderMat2D::IDENTITY);
             has_path = true;
         }

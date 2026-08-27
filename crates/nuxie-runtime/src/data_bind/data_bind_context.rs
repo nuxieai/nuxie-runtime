@@ -8180,17 +8180,11 @@ impl ArtboardInstance {
     ) -> Option<f32> {
         match property {
             RuntimeLayoutComputedProperty::RootX | RuntimeLayoutComputedProperty::RootY => {
-                let x = self.runtime_layout_computed_property(
+                let (x, y) = self.runtime_node_computed_root_position(
                     target_local_id,
-                    RuntimeLayoutComputedProperty::WorldX,
                     graph,
+                    root_transform,
                 )?;
-                let y = self.runtime_layout_computed_property(
-                    target_local_id,
-                    RuntimeLayoutComputedProperty::WorldY,
-                    graph,
-                )?;
-                let (x, y) = root_transform.transform_point(x, y);
                 match property {
                     RuntimeLayoutComputedProperty::RootX => Some(x),
                     RuntimeLayoutComputedProperty::RootY => Some(y),

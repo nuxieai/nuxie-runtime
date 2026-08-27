@@ -48,23 +48,24 @@ impl ArtboardInstance {
         if !object_changed && !image_scale_changed {
             return false;
         }
-        self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
-
         match property {
             TransformProperty::Opacity => {
                 self.add_dirt(local_id, ComponentDirt::RENDER_OPACITY, true);
             }
-            TransformProperty::X
-            | TransformProperty::Y
-            | TransformProperty::Rotation
-            | TransformProperty::ScaleX
-            | TransformProperty::ScaleY => {
+            TransformProperty::X | TransformProperty::Y => {
+                let handle = self
+                    .component_handle(local_id)
+                    .expect("validated Transform has a Component handle");
+                self.runtime_node_position_changed(handle);
+            }
+            TransformProperty::Rotation | TransformProperty::ScaleX | TransformProperty::ScaleY => {
                 let handle = self
                     .component_handle(local_id)
                     .expect("validated Transform has a Component handle");
                 self.mark_transform_dirty_handle(handle);
             }
         }
+        self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         true
     }
 

@@ -102,25 +102,13 @@ impl ArtboardInstance {
 
     pub(crate) fn apply_keyed_callback(&mut self, callback: RuntimeKeyedCallback) -> bool {
         let _seconds_delay = callback.seconds_delay;
+        // Pinned `CoreRegistry::setCallback` dispatches these three concrete
+        // trigger callbacks before its `EventBase::trigger` case. The caller
+        // performs that event report immediately after this property phase.
         match self
             .slot(callback.target_local_id)
             .and_then(|slot| slot.type_name)
         {
-            Some("CustomPropertyTrigger")
-                if property_key_for_name("CustomPropertyTrigger", "fire")
-                    == Some(callback.property_key) =>
-            {
-                let Some(property_value_key) =
-                    property_key_for_name("CustomPropertyTrigger", "propertyValue")
-                else {
-                    return false;
-                };
-                let value = self
-                    .uint_property(callback.target_local_id, property_value_key)
-                    .unwrap_or(0)
-                    + 1;
-                self.set_uint_property(callback.target_local_id, property_value_key, value)
-            }
             Some("ViewModelInstanceTrigger")
                 if property_key_for_name("ViewModelInstanceTrigger", "fire")
                     == Some(callback.property_key) =>
@@ -135,6 +123,27 @@ impl ArtboardInstance {
                     .unwrap_or(0)
                     .wrapping_add(1);
                 self.set_uint_property(callback.target_local_id, property_value_key, value)
+            }
+            Some("CustomPropertyTrigger")
+                if property_key_for_name("CustomPropertyTrigger", "fire")
+                    == Some(callback.property_key) =>
+            {
+                let Some(property_value_key) =
+                    property_key_for_name("CustomPropertyTrigger", "propertyValue")
+                else {
+                    return false;
+                };
+                let value = self
+                    .uint_property(callback.target_local_id, property_value_key)
+                    .unwrap_or(0)
+                    .wrapping_add(1);
+                self.set_uint_property(callback.target_local_id, property_value_key, value)
+            }
+            Some("NestedTrigger")
+                if property_key_for_name("NestedTrigger", "fire")
+                    == Some(callback.property_key) =>
+            {
+                self.fire_nested_trigger_input(callback.target_local_id)
             }
             _ => false,
         }

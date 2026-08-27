@@ -8849,7 +8849,9 @@ impl ArtboardInstance {
         let RuntimeViewModelPointer::Imported { object_id } = value else {
             return None;
         };
-        if self.slot(target_local_id)?.type_name != Some("ViewModelInstanceViewModel") {
+        if !crate::data_bind_viewmodel_consumer::from(
+            self.slot(target_local_id)?.type_name,
+        ) {
             return None;
         }
         let parent_key = runtime_data_bind_component_parent_id_key()?;

@@ -528,13 +528,7 @@ fn assign_matching_scalar_graph_value(
     let Some(next) = matching_graph_source_value(current, next) else {
         return false;
     };
-    let changed = match (&*current, &next) {
-        (
-            RuntimeDataBindGraphValue::ViewModel(previous),
-            RuntimeDataBindGraphValue::ViewModel(next),
-        ) => crate::data_bind_viewmodel_consumer::changed(*previous, *next),
-        _ => crate::context_target_value::changed(current, &next),
-    };
+    let changed = crate::context_target_value::changed(current, &next);
     if !changed {
         return false;
     }

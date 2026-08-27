@@ -1,6 +1,8 @@
 // Direct Rust owner for pinned C++ `src/viewmodel/viewmodel_property.cpp`.
 // Authored property paths, typed source handles, lookup, and ordered schema access.
 
+pub use nuxie_binary::RuntimeViewModelPropertyDirection;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelNumberSourceHandle {
     property_path: Vec<usize>,

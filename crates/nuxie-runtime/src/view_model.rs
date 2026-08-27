@@ -1625,6 +1625,7 @@ pub use authored_viewmodel::{
     RuntimeOwnedViewModelTransaction, RuntimeOwnedViewModelTriggerSourceHandle,
     RuntimeOwnedViewModelViewModelSourceHandle, RuntimeViewModelChange,
     RuntimeViewModelGraphTransactionError, RuntimeViewModelLinkError,
+    RuntimeViewModelPropertyDirection,
     runtime_global_view_model_indices, runtime_global_view_model_names,
 };
 

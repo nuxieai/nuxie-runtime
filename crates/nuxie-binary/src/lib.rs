@@ -37,6 +37,9 @@ use assets::{
 
 mod core;
 
+mod viewmodel;
+pub use viewmodel::RuntimeViewModelPropertyDirection;
+
 use core::{
     binary_reader::BinaryReader,
     field_types::{
@@ -4372,7 +4375,7 @@ impl RuntimeFile {
 
     pub fn view_model_instance_value_name_for_object(&self, value: &RuntimeObject) -> Option<&str> {
         self.view_model_property_for_instance_value_object(value)?
-            .string_property("name")
+            .view_model_property_const_name()
     }
 
     pub fn view_model_instance_value_data_type(&self, value_id: usize) -> Option<RuntimeDataType> {

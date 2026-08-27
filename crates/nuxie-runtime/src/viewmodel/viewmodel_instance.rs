@@ -2684,19 +2684,7 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        let same = match (&asset.runtime_state.borrow().live_image, &image) {
-            (Some(current), Some(next)) => current.ptr_eq(next),
-            (None, None) => true,
-            _ => false,
-        };
-        if same {
-            return false;
-        }
-        asset.runtime_state.borrow_mut().live_image = image;
-        if !asset.set_value(u64::from(u32::MAX)) {
-            asset.cell.notify_bindings_value_changed();
-        }
-        true
+        set_runtime_view_model_image(&asset.cell, &asset.runtime_state, image)
     }
 
     pub(crate) fn runtime_image_by_property_path(

@@ -66,6 +66,34 @@ pub(crate) struct RuntimeOwnedViewModelImageState {
     pub(crate) live_image: Option<RuntimeViewModelImage>,
 }
 
+/// Pinned `ViewModelInstanceAssetImage::value(RenderImage*)`.
+///
+/// A same-image assignment only writes the serialized sentinel. A different
+/// image first replaces the private `ImageAsset::renderImage`, then writes the
+/// sentinel, and finally publishes the explicit second dirt/value-changed
+/// notification from the handwritten method. When the scalar was already the
+/// sentinel, that explicit notification is the only one
+/// (`viewmodel_instance_asset_image.cpp:29-62`).
+pub(crate) fn set_runtime_view_model_image(
+    cell: &RuntimeViewModelCell,
+    runtime_state: &Rc<RefCell<RuntimeOwnedViewModelImageState>>,
+    image: Option<RuntimeViewModelImage>,
+) -> bool {
+    let same_image = match (&runtime_state.borrow().live_image, &image) {
+        (Some(current), Some(next)) => current.ptr_eq(next),
+        (None, None) => true,
+        _ => false,
+    };
+    if same_image {
+        return cell.set_value(RuntimeViewModelCellValue::AssetImage(u32::MAX));
+    }
+
+    runtime_state.borrow_mut().live_image = image;
+    cell.set_value(RuntimeViewModelCellValue::AssetImage(u32::MAX));
+    cell.notify_bindings_value_changed();
+    true
+}
+
 #[derive(Debug)]
 struct RuntimeOwnedViewModelAsset {
     property_index: usize,

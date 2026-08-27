@@ -24,26 +24,7 @@ impl ViewModelInstanceAssetImageRuntime {
     }
 
     pub fn set_value(&self, image: Option<RuntimeViewModelImage>) -> bool {
-        let same_image = match (&self.runtime_state.borrow().live_image, &image) {
-            (Some(current), Some(next)) => current.ptr_eq(next),
-            (None, None) => true,
-            _ => false,
-        };
-        if same_image {
-            return self
-                .value
-                .cell()
-                .set_value(RuntimeViewModelCellValue::AssetImage(u32::MAX));
-        }
-        self.runtime_state.borrow_mut().live_image = image;
-        let changed = self
-            .value
-            .cell()
-            .set_value(RuntimeViewModelCellValue::AssetImage(u32::MAX));
-        if !changed {
-            self.value.cell().notify_bindings_value_changed();
-        }
-        true
+        set_runtime_view_model_image(self.value.cell(), &self.runtime_state, image)
     }
 
     #[cfg(test)]

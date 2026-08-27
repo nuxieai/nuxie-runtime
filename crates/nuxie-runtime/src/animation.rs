@@ -33,6 +33,7 @@ pub(crate) enum RuntimeKeyFrameDataBindEnrollment {
 include!("animation/keyframe_interpolator.rs");
 include!("animation/cubic_interpolator.rs");
 include!("animation/cubic_interpolator_solver.rs");
+include!("animation/cubic_interpolator_component.rs");
 include!("animation/cubic_ease_interpolator.rs");
 include!("animation/cubic_value_interpolator.rs");
 include!("animation/blend_animation.rs");

@@ -23,6 +23,7 @@ use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 use unicode_script::{Script as UnicodeScript, UnicodeScript as UnicodeScriptProperty};
 
 use crate::data_bind_flags_apply_source_to_target;
+use crate::animation::RuntimeCubicInterpolatorComponent;
 use crate::draw::{
     RuntimeLayoutBounds, RuntimePathMeasure, RuntimeTextPaintPoolSpec, RuntimeTextPaintPoolUse,
     runtime_live_shape_paint_path_kind, runtime_path_geometry_commands,

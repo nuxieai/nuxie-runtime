@@ -11661,7 +11661,9 @@ impl RuntimeDrawableList {
             let Some(target_drawable) = self.draw_targets[target_index].drawable_index else {
                 continue;
             };
-            let placement = self.draw_targets[target_index].placement_value;
+            // `DrawTarget::placement()` casts the generated uint32 through
+            // `DrawTargetPlacement : unsigned char` before this switch.
+            let placement = self.draw_targets[target_index].placement_value as u8;
             match placement {
                 0 => {
                     let target_prev = self.drawables[target_drawable].prev;

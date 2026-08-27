@@ -1,6 +1,6 @@
 use super::*;
 use nuxie_graph::NSlicerTileModeNode;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 /// Clone-owned `NSlicerDetails` callback state. The binary graph is only the
 /// import seed; Axis and tile-mode children register here in authored order,
@@ -12,7 +12,7 @@ pub(crate) struct RuntimeNSlicerDetailsOwner {
     pub(crate) type_name: &'static str,
     pub(crate) x_axes: Vec<NSlicerAxisNode>,
     pub(crate) y_axes: Vec<NSlicerAxisNode>,
-    pub(crate) tile_modes: BTreeMap<u64, NSlicerTileModeNode>,
+    pub(crate) tile_modes: HashMap<u64, NSlicerTileModeNode>,
 }
 
 impl RuntimeNSlicerDetailsOwner {
@@ -26,7 +26,7 @@ impl RuntimeNSlicerDetailsOwner {
             type_name: details.type_name,
             x_axes: Vec::new(),
             y_axes: Vec::new(),
-            tile_modes: BTreeMap::new(),
+            tile_modes: HashMap::new(),
         };
         for axis in &details.x_axes {
             super::axis_x::on_added_dirty(&mut owner, axis, Some(details.local_id))?;

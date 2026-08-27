@@ -1,6 +1,11 @@
-use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType, data_value::DataValue, data_value_color::DataValueColor,
-    data_value_number::DataValueNumber,
+use crate::mechanical_port::source::{
+    data_bind::data_values::{
+        data_type::DataType, data_value::DataValue, data_value_color::DataValueColor,
+        data_value_number::DataValueNumber,
+    },
+    generated::data_bind::converters::data_converter_interpolator_base::{
+        DataConverterInterpolatorBase, DataConverterInterpolatorBaseCallbacks,
+    },
 };
 pub trait KeyFrameInterpolator {
     fn transform(&self, value: f32) -> f32;
@@ -123,23 +128,33 @@ impl InterpolatorAdvancer {
     }
 }
 pub struct DataConverterInterpolator {
+    pub base: DataConverterInterpolatorBase,
     interpolator: Option<*mut dyn KeyFrameInterpolator>,
-    duration: f32,
     output: Option<Box<dyn DataValue>>,
     advance_count: u8,
     advancer: InterpolatorAdvancer,
-    dirty: bool,
 }
-impl DataConverterInterpolator {
-    pub fn new(duration: f32) -> Self {
+
+impl Default for DataConverterInterpolator {
+    fn default() -> Self {
         Self {
+            base: DataConverterInterpolatorBase::default(),
             interpolator: None,
-            duration,
             output: None,
             advance_count: 0,
             advancer: InterpolatorAdvancer::default(),
-            dirty: false,
         }
+    }
+}
+
+impl DataConverterInterpolator {
+    pub fn new(duration: f32) -> Self {
+        let mut converter = Self::default();
+        converter.base.set_duration(
+            duration,
+            &mut DataConverterInterpolatorInitializationCallbacks,
+        );
+        converter
     }
     pub fn output_type(&self) -> DataType {
         DataType::Input
@@ -166,12 +181,17 @@ impl DataConverterInterpolator {
         }
         let previous = self.advancer.current().elapsed_seconds;
         self.advance_animation_data(elapsed);
-        if previous < self.duration {
-            self.dirty = true;
+        if previous < self.base.duration() {
+            self.base.base.mark_converter_dirty();
         }
-        self.advancer.current().elapsed_seconds < self.duration
+        self.advancer.current().elapsed_seconds < self.base.duration()
     }
     fn advance_animation_data(&mut self, elapsed: f32) {
+        let animation_data = if self.advancer.is_smoothing {
+            &mut self.advancer.animation_b as *mut InterpolatorAnimationData
+        } else {
+            &mut self.advancer.animation_a as *mut InterpolatorAnimationData
+        };
         let transform = |mut f: f32, interpolator: Option<*mut dyn KeyFrameInterpolator>| {
             if let Some(interpolator) = interpolator {
                 f = unsafe { (&*interpolator).transform(f) }
@@ -179,8 +199,8 @@ impl DataConverterInterpolator {
             f
         };
         if self.advancer.is_smoothing {
-            let mut f = (if self.duration > 0.0 {
-                self.advancer.animation_a.elapsed_seconds / self.duration
+            let mut f = (if self.base.duration() > 0.0 {
+                self.advancer.animation_a.elapsed_seconds / self.base.duration()
             } else {
                 1.0
             })
@@ -198,8 +218,8 @@ impl DataConverterInterpolator {
                 self.advancer.animation_a.elapsed_seconds += elapsed;
             }
         }
-        let current = self.advancer.current_mut();
-        if current.elapsed_seconds >= self.duration {
+        let current = unsafe { &mut *animation_data };
+        if current.elapsed_seconds >= self.base.duration() {
             current
                 .to
                 .as_ref()
@@ -218,8 +238,8 @@ impl DataConverterInterpolator {
             return;
         }
         current.elapsed_seconds += elapsed;
-        let mut f = (if self.duration > 0.0 {
-            current.elapsed_seconds / self.duration
+        let mut f = (if self.base.duration() > 0.0 {
+            current.elapsed_seconds / self.base.duration()
         } else {
             1.0
         })
@@ -228,7 +248,7 @@ impl DataConverterInterpolator {
         current.interpolate(f, self.advancer.current_value.as_deref_mut().unwrap());
     }
     pub fn convert<'a>(&'a mut self, input: &'a dyn DataValue) -> &'a dyn DataValue {
-        if self.duration == 0.0 && self.advancer.initialized {
+        if self.base.duration() == 0.0 && self.advancer.initialized {
             self.advancer.reset_to_start(input);
             return input;
         }
@@ -262,9 +282,32 @@ impl DataConverterInterpolator {
     }
     pub fn copy(&mut self, other: &Self) {
         self.interpolator = other.interpolator;
-        self.duration = other.duration
+        self.base.copy(
+            &other.base,
+            &mut DataConverterInterpolatorInitializationCallbacks,
+        )
     }
     pub fn duration_changed(&mut self) {
-        self.dirty = true
+        self.base.base.mark_converter_dirty()
     }
+}
+
+impl DataConverterInterpolatorBaseCallbacks for DataConverterInterpolator {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
+
+    fn duration_changed(&mut self) {
+        Self::duration_changed(self);
+    }
+}
+
+struct DataConverterInterpolatorInitializationCallbacks;
+
+impl DataConverterInterpolatorBaseCallbacks for DataConverterInterpolatorInitializationCallbacks {
+    fn notify_property_changed(&mut self, _property_key: u16) {}
 }

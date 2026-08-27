@@ -13,11 +13,15 @@ pub trait FormulaImportStack {
     fn import_formula_token_super(&mut self, token: &mut FormulaToken) -> StatusCode;
 }
 pub struct FormulaToken {
+    pub base: FormulaTokenBase,
     formula: Option<*mut dyn DataConverterFormula>,
 }
 impl Default for FormulaToken {
     fn default() -> Self {
-        Self { formula: None }
+        Self {
+            base: FormulaTokenBase::default(),
+            formula: None,
+        }
     }
 }
 impl FormulaToken {
@@ -38,3 +42,4 @@ impl FormulaToken {
         }
     }
 }
+use crate::mechanical_port::source::generated::data_bind::converters::formula::formula_token_base::FormulaTokenBase;

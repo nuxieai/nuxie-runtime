@@ -18,9 +18,9 @@ pub trait ContextConverter {
 }
 pub const RECONCILE_DIRT: u32 = 3;
 pub struct DataBindContext {
+    pub base: DataBindContextBase,
     source_path_ids: Vec<u32>,
     is_path_resolved: bool,
-    is_name_based: bool,
     file: Option<*mut dyn ContextFile>,
     source: Option<*mut dyn BoundSource>,
     converter: Option<*mut dyn ContextConverter>,
@@ -30,9 +30,9 @@ pub struct DataBindContext {
 impl Default for DataBindContext {
     fn default() -> Self {
         Self {
+            base: DataBindContextBase::default(),
             source_path_ids: Vec::new(),
             is_path_resolved: false,
-            is_name_based: false,
             file: None,
             source: None,
             converter: None,
@@ -64,7 +64,7 @@ impl DataBindContext {
         self.is_path_resolved = other.is_path_resolved
     }
     fn resolve_path(&mut self) {
-        if !self.is_name_based || self.is_path_resolved {
+        if !self.base.base.is_name_based() || self.is_path_resolved {
             return;
         }
         self.is_path_resolved = true;
@@ -82,7 +82,7 @@ impl DataBindContext {
             return;
         };
         self.resolve_path();
-        let source = if self.is_name_based {
+        let source = if self.base.base.is_name_based() {
             self.file
                 .and_then(|file| unsafe { (&*file).data_resolver() })
                 .and_then(|resolver| {
@@ -112,6 +112,14 @@ impl DataBindContext {
         &self.source_path_ids
     }
 }
+
+impl DataBindContextBaseCallbacks for DataBindContext {
+    fn decode_source_path_ids(&mut self, value: &[u8]) {
+        Self::decode_source_path_ids(self, value);
+    }
+
+    fn copy_source_path_ids(&mut self, _object: &DataBindContextBase) {}
+}
 fn same_ptr<T: ?Sized>(a: Option<*mut T>, b: Option<*mut T>) -> bool {
     match (a, b) {
         (Some(a), Some(b)) => core::ptr::addr_eq(a, b),
@@ -119,3 +127,6 @@ fn same_ptr<T: ?Sized>(a: Option<*mut T>, b: Option<*mut T>) -> bool {
         _ => false,
     }
 }
+use crate::mechanical_port::source::generated::data_bind::data_bind_context_base::{
+    DataBindContextBase, DataBindContextBaseCallbacks,
+};

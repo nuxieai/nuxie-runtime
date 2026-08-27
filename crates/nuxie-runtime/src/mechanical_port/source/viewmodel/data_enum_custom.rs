@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::generated::viewmodel::data_enum_custom_base::DataEnumCustomBase;
 
+#[derive(Default)]
 pub struct DataEnumCustom {
     pub base: DataEnumCustomBase,
 }

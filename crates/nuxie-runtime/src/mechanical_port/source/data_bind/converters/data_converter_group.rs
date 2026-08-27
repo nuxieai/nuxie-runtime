@@ -1,6 +1,7 @@
 use super::data_converter_group_item::DataConverterGroupItem;
-use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType, data_value::DataValue,
+use crate::mechanical_port::source::{
+    data_bind::data_values::{data_type::DataType, data_value::DataValue},
+    generated::data_bind::converters::data_converter_group_base::DataConverterGroupBase,
 };
 pub trait GroupConverter {
     fn convert(&mut self, value: Box<dyn DataValue>, data_bind: *mut ()) -> Box<dyn DataValue>;
@@ -19,6 +20,7 @@ pub trait GroupConverter {
 }
 #[derive(Default)]
 pub struct DataConverterGroup {
+    pub base: DataConverterGroupBase,
     items: Vec<Box<DataConverterGroupItem>>,
 }
 impl DataConverterGroup {
@@ -65,6 +67,7 @@ impl DataConverterGroup {
     }
     pub fn clone_group(&self) -> Self {
         let mut cloned = Self::default();
+        cloned.base.base.copy(&self.base.base);
         for item in &self.items {
             if item.converter().is_some() {
                 cloned.add_item(Box::new(item.clone_item()));

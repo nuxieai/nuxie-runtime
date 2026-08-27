@@ -1,9 +1,13 @@
 use crate::mechanical_port::source::{
-    animation::state_machine_input_instance::CallbackData, component::ComponentDirt,
+    animation::state_machine_input_instance::CallbackData,
+    component::ComponentDirt,
     data_bind::data_values::data_value_integer::DataValueInteger,
-    generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase,
+    generated::viewmodel::viewmodel_instance_trigger_base::{
+        ViewModelInstanceTriggerBase, ViewModelInstanceTriggerBaseCallbacks,
+    },
 };
 
+#[derive(Default)]
 pub struct ViewModelInstanceTrigger {
     pub base: ViewModelInstanceTriggerBase,
     #[cfg(feature = "rive_tools")]
@@ -34,10 +38,27 @@ impl ViewModelInstanceTrigger {
         self.base.set_property_value(self.base.property_value() + 1);
     }
     pub fn apply_value(&mut self, value: &DataValueInteger) {
-        self.base.set_property_value(value.value());
+        let this = self as *mut Self;
+        unsafe { (*this).base.set_property_value(value.value(), &mut *this) };
     }
     #[cfg(feature = "rive_tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self, u32)>) {
         self.changed_callback = callback;
+    }
+}
+
+impl ViewModelInstanceTriggerBaseCallbacks for ViewModelInstanceTrigger {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
+
+    fn property_value_changed(&mut self) {
+        Self::property_value_changed(self);
     }
 }

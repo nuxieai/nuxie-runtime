@@ -1,41 +1,57 @@
-use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
-    data_value_symbol_list_index::DataValueSymbolListIndex,
+use crate::mechanical_port::source::{
+    data_bind::data_values::{
+        data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
+        data_value_symbol_list_index::DataValueSymbolListIndex,
+    },
+    generated::data_bind::converters::data_converter_operation_base::{
+        DataConverterOperationBase, DataConverterOperationBaseCallbacks,
+    },
 };
+#[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArithmeticOperation {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Modulo,
-    SquareRoot,
-    Power,
-    Exp,
-    Log,
-    Cosine,
-    Sine,
-    Tangent,
-    Acosine,
-    Asine,
-    Atangent,
-    Atangent2,
-    Round,
-    Floor,
-    Ceil,
+    Add = 0,
+    Subtract = 1,
+    Multiply = 2,
+    Divide = 3,
+    Modulo = 4,
+    SquareRoot = 5,
+    Power = 6,
+    Exp = 7,
+    Log = 8,
+    Cosine = 9,
+    Sine = 10,
+    Tangent = 11,
+    Acosine = 12,
+    Asine = 13,
+    Atangent = 14,
+    Atangent2 = 15,
+    Round = 16,
+    Floor = 17,
+    Ceil = 18,
 }
 pub struct DataConverterOperation {
-    operation: ArithmeticOperation,
+    pub base: DataConverterOperationBase,
     output: DataValueNumber,
-    dirty: bool,
 }
+
+impl Default for DataConverterOperation {
+    fn default() -> Self {
+        Self {
+            base: DataConverterOperationBase::default(),
+            output: DataValueNumber::default(),
+        }
+    }
+}
+
 impl DataConverterOperation {
     pub fn new(operation: ArithmeticOperation) -> Self {
-        Self {
-            operation,
-            output: DataValueNumber::default(),
-            dirty: false,
-        }
+        let mut converter = Self::default();
+        converter.base.set_operation_type(
+            operation as u32,
+            &mut DataConverterOperationInitializationCallbacks,
+        );
+        converter
     }
     pub fn output_type(&self) -> DataType {
         DataType::Number
@@ -54,7 +70,7 @@ impl DataConverterOperation {
     }
     pub fn convert_value(&mut self, input: &dyn DataValue, value: f32) -> &DataValueNumber {
         let result = Self::input_number(input).map_or(DataValueNumber::DEFAULT_VALUE, |input| {
-            match self.operation {
+            match self.operation() {
                 ArithmeticOperation::Add => input + value,
                 ArithmeticOperation::Subtract => input - value,
                 ArithmeticOperation::Multiply => input * value,
@@ -93,7 +109,7 @@ impl DataConverterOperation {
             .downcast_ref::<DataValueNumber>()
             .map(DataValueNumber::value)
         {
-            let result = match self.operation {
+            let result = match self.operation() {
                 ArithmeticOperation::Add => input - value,
                 ArithmeticOperation::Subtract => input + value,
                 ArithmeticOperation::Multiply => input / value,
@@ -119,6 +135,46 @@ impl DataConverterOperation {
         output
     }
     pub fn mark_converter_dirty(&mut self) {
-        self.dirty = true
+        self.base.base.mark_converter_dirty()
     }
+
+    pub fn operation(&self) -> ArithmeticOperation {
+        match self.base.operation_type() {
+            1 => ArithmeticOperation::Subtract,
+            2 => ArithmeticOperation::Multiply,
+            3 => ArithmeticOperation::Divide,
+            4 => ArithmeticOperation::Modulo,
+            5 => ArithmeticOperation::SquareRoot,
+            6 => ArithmeticOperation::Power,
+            7 => ArithmeticOperation::Exp,
+            8 => ArithmeticOperation::Log,
+            9 => ArithmeticOperation::Cosine,
+            10 => ArithmeticOperation::Sine,
+            11 => ArithmeticOperation::Tangent,
+            12 => ArithmeticOperation::Acosine,
+            13 => ArithmeticOperation::Asine,
+            14 => ArithmeticOperation::Atangent,
+            15 => ArithmeticOperation::Atangent2,
+            16 => ArithmeticOperation::Round,
+            17 => ArithmeticOperation::Floor,
+            18 => ArithmeticOperation::Ceil,
+            _ => ArithmeticOperation::Add,
+        }
+    }
+}
+
+impl DataConverterOperationBaseCallbacks for DataConverterOperation {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
+}
+
+struct DataConverterOperationInitializationCallbacks;
+
+impl DataConverterOperationBaseCallbacks for DataConverterOperationInitializationCallbacks {
+    fn notify_property_changed(&mut self, _property_key: u16) {}
 }

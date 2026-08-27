@@ -10,6 +10,12 @@ pub struct ViewModelInstanceAssetImage {
     image_asset: RiveRc<ImageAsset>,
 }
 
+impl Default for ViewModelInstanceAssetImage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ViewModelInstanceAssetImage {
     pub fn new() -> Self {
         Self {

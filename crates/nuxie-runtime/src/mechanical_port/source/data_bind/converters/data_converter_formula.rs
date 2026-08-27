@@ -1,14 +1,21 @@
 use super::data_converter_operation::ArithmeticOperation;
-use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
-    data_value_symbol_list_index::DataValueSymbolListIndex,
+use crate::mechanical_port::source::{
+    data_bind::data_values::{
+        data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
+        data_value_symbol_list_index::DataValueSymbolListIndex,
+    },
+    generated::data_bind::converters::data_converter_formula_base::{
+        DataConverterFormulaBase, DataConverterFormulaBaseCallbacks,
+    },
+    math::random::RandomProvider,
 };
 use std::{collections::HashMap, rc::Rc};
+#[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RandomMode {
-    Always,
-    SourceChange,
-    Other,
+    Once = 0,
+    Always = 1,
+    SourceChange = 2,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FunctionType {
@@ -56,6 +63,7 @@ pub trait FormulaDataBind {
     fn set_target_token_id(&mut self, id: usize);
 }
 pub struct DataConverterFormula {
+    pub base: DataConverterFormulaBase,
     tokens: Vec<Rc<FormulaToken>>,
     output_queue: Vec<Rc<FormulaToken>>,
     randoms: Vec<f32>,
@@ -63,13 +71,13 @@ pub struct DataConverterFormula {
     is_instance: bool,
     source: Option<*mut dyn FormulaSource>,
     output: DataValueNumber,
-    random_mode: RandomMode,
-    random_provider: fn() -> f32,
     data_binds: Vec<Box<dyn FormulaDataBind>>,
 }
-impl DataConverterFormula {
-    pub fn new(random_mode: RandomMode, random_provider: fn() -> f32) -> Self {
+
+impl Default for DataConverterFormula {
+    fn default() -> Self {
         Self {
+            base: DataConverterFormulaBase::default(),
             tokens: Vec::new(),
             output_queue: Vec::new(),
             randoms: Vec::new(),
@@ -77,10 +85,19 @@ impl DataConverterFormula {
             is_instance: false,
             source: None,
             output: DataValueNumber::default(),
-            random_mode,
-            random_provider,
             data_binds: Vec::new(),
         }
+    }
+}
+
+impl DataConverterFormula {
+    pub fn new(random_mode: RandomMode) -> Self {
+        let mut formula = Self::default();
+        formula.base.set_random_mode_value(
+            random_mode as u32,
+            &mut DataConverterFormulaInitializationCallbacks,
+        );
+        formula
     }
     pub fn output_type(&self) -> DataType {
         DataType::Number
@@ -184,11 +201,11 @@ impl DataConverterFormula {
         }
     }
     fn get_random(&mut self, index: usize) -> f32 {
-        if self.random_mode == RandomMode::Always {
-            return (self.random_provider)();
+        if self.base.random_mode_value() == RandomMode::Always as u32 {
+            return RandomProvider::generate_random_float();
         }
         while self.randoms.len() <= index {
-            self.randoms.push((self.random_provider)());
+            self.randoms.push(RandomProvider::generate_random_float());
         }
         self.randoms[index]
     }
@@ -294,7 +311,11 @@ impl DataConverterFormula {
         self.output_queue.push(token)
     }
     pub fn clone_formula(&self) -> Self {
-        let mut clone = Self::new(self.random_mode, self.random_provider);
+        let mut clone = Self::new(match self.base.random_mode_value() {
+            1 => RandomMode::Always,
+            2 => RandomMode::SourceChange,
+            _ => RandomMode::Once,
+        });
         clone.is_instance = true;
         for token in &self.output_queue {
             let cloned = Rc::new((**token).clone());
@@ -319,7 +340,7 @@ impl DataConverterFormula {
         }
     }
     pub fn add_dirt(&mut self, _value: u32, _recurse: bool) {
-        if self.random_mode == RandomMode::SourceChange {
+        if self.base.random_mode_value() == RandomMode::SourceChange as u32 {
             self.randoms.clear();
         }
     }
@@ -333,6 +354,12 @@ impl DataConverterFormula {
     pub fn set_is_instance(&mut self, value: bool) {
         self.is_instance = value
     }
+}
+
+struct DataConverterFormulaInitializationCallbacks;
+
+impl DataConverterFormulaBaseCallbacks for DataConverterFormulaInitializationCallbacks {
+    fn notify_property_changed(&mut self, _property_key: u16) {}
 }
 impl Drop for DataConverterFormula {
     fn drop(&mut self) {

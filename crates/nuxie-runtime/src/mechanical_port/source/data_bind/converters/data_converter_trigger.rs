@@ -1,9 +1,13 @@
-use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType, data_value::DataValue, data_value_integer::DataValueInteger,
-    data_value_trigger::DataValueTrigger,
+use crate::mechanical_port::source::{
+    data_bind::data_values::{
+        data_type::DataType, data_value::DataValue, data_value_integer::DataValueInteger,
+        data_value_trigger::DataValueTrigger,
+    },
+    generated::data_bind::converters::data_converter_trigger_base::DataConverterTriggerBase,
 };
 #[derive(Default)]
 pub struct DataConverterTrigger {
+    pub base: DataConverterTriggerBase,
     output: DataValueTrigger,
 }
 impl DataConverterTrigger {

@@ -1,17 +1,22 @@
-use crate::mechanical_port::source::data_bind::{
-    converters::data_converter_string_remove_zeros::DataConverterStringRemoveZeros,
-    data_values::{
-        data_type::DataType, data_value::DataValue, data_value_boolean::DataValueBoolean,
-        data_value_color::DataValueColor, data_value_enum::DataValueEnum,
-        data_value_number::DataValueNumber, data_value_string::DataValueString,
-        data_value_symbol_list_index::DataValueSymbolListIndex,
-        data_value_trigger::DataValueTrigger,
+use crate::mechanical_port::source::{
+    data_bind::{
+        converters::data_converter_string_remove_zeros::DataConverterStringRemoveZeros,
+        data_values::{
+            data_type::DataType, data_value::DataValue, data_value_boolean::DataValueBoolean,
+            data_value_color::DataValueColor, data_value_enum::DataValueEnum,
+            data_value_number::DataValueNumber, data_value_string::DataValueString,
+            data_value_symbol_list_index::DataValueSymbolListIndex,
+            data_value_trigger::DataValueTrigger,
+        },
+    },
+    generated::data_bind::converters::data_converter_to_string_base::{
+        DataConverterToStringBase, DataConverterToStringBaseCallbacks,
     },
 };
 
-pub const ROUND: u16 = 1;
-pub const TRAILING_ZEROS: u16 = 2;
-pub const FORMAT_WITH_COMMAS: u16 = 4;
+pub const ROUND: u32 = 1;
+pub const TRAILING_ZEROS: u32 = 2;
+pub const FORMAT_WITH_COMMAS: u32 = 4;
 
 #[derive(Default)]
 pub struct ColorConverter {
@@ -114,24 +119,31 @@ impl ColorConverter {
 }
 
 pub struct DataConverterToString {
-    decimals: usize,
-    color_format: String,
-    flags: u16,
+    pub base: DataConverterToStringBase,
     output: DataValueString,
     converter: ColorConverter,
-    dirty: bool,
+}
+
+impl Default for DataConverterToString {
+    fn default() -> Self {
+        Self {
+            base: DataConverterToStringBase::default(),
+            output: DataValueString::default(),
+            converter: ColorConverter::default(),
+        }
+    }
 }
 
 impl DataConverterToString {
-    pub fn new(decimals: usize, color_format: String, flags: u16) -> Self {
-        Self {
-            decimals,
-            color_format,
-            flags,
-            output: DataValueString::default(),
-            converter: ColorConverter::default(),
-            dirty: false,
-        }
+    pub fn new(decimals: usize, color_format: String, flags: u32) -> Self {
+        let mut converter = Self::default();
+        let mut callbacks = DataConverterToStringInitializationCallbacks;
+        converter.base.set_decimals(decimals as u32, &mut callbacks);
+        converter
+            .base
+            .set_color_format(color_format, &mut callbacks);
+        converter.base.set_flags(flags, &mut callbacks);
+        converter
     }
 
     pub fn output_type(&self) -> DataType {
@@ -154,22 +166,22 @@ impl DataConverterToString {
     }
 
     fn convert_number(&mut self, value: f32) {
-        let mut output = if self.flags & ROUND == ROUND {
-            format!("{:.*}", self.decimals, value)
+        let mut output = if self.base.flags() & ROUND == ROUND {
+            format!("{:.*}", self.base.decimals() as usize, value)
         } else {
             format!("{value:.6}")
         };
-        if self.flags & TRAILING_ZEROS == TRAILING_ZEROS {
+        if self.base.flags() & TRAILING_ZEROS == TRAILING_ZEROS {
             output = DataConverterStringRemoveZeros::remove_zeros(output);
         }
-        if self.flags & FORMAT_WITH_COMMAS == FORMAT_WITH_COMMAS {
+        if self.base.flags() & FORMAT_WITH_COMMAS == FORMAT_WITH_COMMAS {
             output = Self::format_with_commas(&output);
         }
         self.output.set_value(output);
     }
 
     fn convert_color(&mut self, value: i32) {
-        if self.color_format.is_empty() {
+        if self.base.color_format().is_empty() {
             self.output.set_value(value.to_string());
             return;
         }
@@ -178,7 +190,7 @@ impl DataConverterToString {
         let mut output = String::new();
         let mut escaped = false;
         let mut marker = false;
-        for character in self.color_format.chars() {
+        for character in self.base.color_format().chars() {
             if escaped {
                 output.push(character);
                 escaped = false;
@@ -234,10 +246,34 @@ impl DataConverterToString {
     }
 
     pub fn decimals_changed(&mut self) {
-        self.dirty = true;
+        self.base.base.mark_converter_dirty();
     }
 
     pub fn color_format_changed(&mut self) {
-        self.dirty = true;
+        self.base.base.mark_converter_dirty();
     }
+}
+
+impl DataConverterToStringBaseCallbacks for DataConverterToString {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
+
+    fn decimals_changed(&mut self) {
+        Self::decimals_changed(self);
+    }
+
+    fn color_format_changed(&mut self) {
+        Self::color_format_changed(self);
+    }
+}
+
+struct DataConverterToStringInitializationCallbacks;
+
+impl DataConverterToStringBaseCallbacks for DataConverterToStringInitializationCallbacks {
+    fn notify_property_changed(&mut self, _property_key: u16) {}
 }

@@ -34,16 +34,15 @@ pub struct DataBindContainer {
     data_context: Option<*mut ()>,
     is_processing: bool,
 }
-impl Drop for DataBindContainer {
-    fn drop(&mut self) {
+impl DataBindContainer {
+    pub fn delete_data_binds(&mut self) {
         for bind in self.data_binds.drain(..) {
             unsafe {
                 drop(Box::from_raw(bind));
             }
         }
     }
-}
-impl DataBindContainer {
+
     pub fn unbind_data_binds(&mut self) {
         for bind in &self.data_binds {
             unsafe {
@@ -207,7 +206,13 @@ impl DataBindContainer {
             (&mut *bind).set_in_dirty_list(true);
         }
     }
-    pub fn data_binds(&self) -> &[*mut dyn ContainerDataBind] {
-        &self.data_binds
+    pub fn data_binds(&self) -> Vec<*mut dyn ContainerDataBind> {
+        self.data_binds.clone()
     }
+
+    pub fn rebind(&mut self) {}
+
+    pub fn relink_data_context(&mut self) {}
+
+    pub fn rebuild_data_bind(&mut self, _data_bind: *mut dyn ContainerDataBind) {}
 }

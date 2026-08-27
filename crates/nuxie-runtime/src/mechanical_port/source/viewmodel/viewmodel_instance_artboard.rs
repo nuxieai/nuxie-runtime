@@ -7,6 +7,7 @@ use crate::mechanical_port::source::{
 
 use super::viewmodel_instance::ViewModelInstance;
 
+#[derive(Default)]
 pub struct ViewModelInstanceArtboard {
     pub base: ViewModelInstanceArtboardBase,
     bindable_artboard: Option<RiveRc<BindableArtboard>>,

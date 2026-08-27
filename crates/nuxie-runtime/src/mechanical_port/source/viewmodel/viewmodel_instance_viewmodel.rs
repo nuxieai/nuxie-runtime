@@ -14,6 +14,7 @@ use crate::mechanical_port::source::{
 
 use super::viewmodel_instance::ViewModelInstance;
 
+#[derive(Default)]
 pub struct ViewModelInstanceViewModel {
     pub base: ViewModelInstanceViewModelBase,
     reference_view_model_instance: Option<RiveRc<ViewModelInstance>>,

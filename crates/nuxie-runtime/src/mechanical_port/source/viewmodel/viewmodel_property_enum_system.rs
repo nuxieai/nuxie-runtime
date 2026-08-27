@@ -4,6 +4,7 @@ use crate::mechanical_port::source::generated::viewmodel::viewmodel_property_enu
 
 use super::data_enum::DataEnum;
 
+#[derive(Default)]
 pub struct ViewModelPropertyEnumSystem {
     pub base: ViewModelPropertyEnumSystemBase,
 }

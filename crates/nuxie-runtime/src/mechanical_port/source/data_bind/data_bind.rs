@@ -1,4 +1,7 @@
-use crate::mechanical_port::source::data_bind::data_values::data_type::DataType;
+use crate::mechanical_port::source::{
+    data_bind::data_values::data_type::DataType,
+    generated::data_bind::data_bind_base::{DataBindBase, DataBindBaseCallbacks},
+};
 
 pub const DEPENDENTS: u32 = 1;
 pub const BINDINGS: u32 = 2;
@@ -80,8 +83,8 @@ pub enum StatusCode {
 }
 
 pub struct DataBind {
+    pub base: DataBindBase,
     flags_byte: u8,
-    bind_flags: u32,
     dirt: u32,
     next_observer: Option<*mut DataBind>,
     target: Option<*mut dyn BindTarget>,
@@ -90,16 +93,15 @@ pub struct DataBind {
     converter: Option<*mut dyn BindConverter>,
     container: Option<*mut dyn BindContainer>,
     file: Option<*mut ()>,
-    property_key: u32,
     display_property_key: u32,
     changed_callback: Option<fn()>,
 }
 
-impl DataBind {
-    pub fn new(bind_flags: u32, property_key: u32, display_property_key: u32) -> Self {
+impl Default for DataBind {
+    fn default() -> Self {
         Self {
+            base: DataBindBase::default(),
             flags_byte: 0,
-            bind_flags,
             dirt: 0,
             next_observer: None,
             target: None,
@@ -108,10 +110,22 @@ impl DataBind {
             converter: None,
             container: None,
             file: None,
-            property_key,
-            display_property_key,
+            display_property_key: 0,
             changed_callback: None,
         }
+    }
+}
+
+impl DataBind {
+    pub fn new(bind_flags: u32, property_key: u32, display_property_key: u32) -> Self {
+        let mut data_bind = Self::default();
+        let mut callbacks = DataBindInitializationCallbacks;
+        data_bind.base.set_flags(bind_flags, &mut callbacks);
+        data_bind
+            .base
+            .set_property_key(property_key, &mut callbacks);
+        data_bind.display_property_key = display_property_key;
+        data_bind
     }
 
     fn has_flag(&self, flag: u8) -> bool {
@@ -241,13 +255,13 @@ impl DataBind {
 
     pub fn target_supports_push(&self) -> bool {
         self.target
-            .is_some_and(|target| unsafe { (&*target).supports_push(self.property_key) })
+            .is_some_and(|target| unsafe { (&*target).supports_push(self.base.property_key()) })
     }
 
     pub fn can_skip(&self) -> bool {
         self.target
             .is_some_and(|target| unsafe { (&*target).is_component() && (&*target).is_collapsed() })
-            && self.property_key != self.display_property_key
+            && self.base.property_key() != self.display_property_key
     }
 
     pub fn update(&mut self, value: u32) {
@@ -261,7 +275,7 @@ impl DataBind {
             let target = self.target;
             let bind = self as *mut Self;
             let context = self.context_value.as_mut().unwrap();
-            context.apply(target, self.property_key, is_main, bind);
+            context.apply(target, self.base.property_key(), is_main, bind);
             context.refresh_target_value(bind);
             self.set_flag(SUPPRESS_DIRT, false);
         }
@@ -283,17 +297,17 @@ impl DataBind {
                 if invalidate {
                     context.invalidate();
                 }
-                context.apply_to_source(target, self.property_key, is_main, bind);
+                context.apply_to_source(target, self.base.property_key(), is_main, bind);
             }
         }
     }
 
     pub fn is_main_to_source(&self) -> bool {
-        self.bind_flags & DIRECTION == TO_SOURCE
+        self.base.flags() & DIRECTION == TO_SOURCE
     }
 
     pub fn source_to_target_runs_first(&self) -> bool {
-        self.bind_flags & SOURCE_TO_TARGET_FIRST == SOURCE_TO_TARGET_FIRST
+        self.base.flags() & SOURCE_TO_TARGET_FIRST == SOURCE_TO_TARGET_FIRST
     }
 
     pub fn reconcile_dirt(&self) -> u32 {
@@ -341,19 +355,19 @@ impl DataBind {
     }
 
     pub fn binds_once(&self) -> bool {
-        self.bind_flags & ONCE != 0
+        self.base.flags() & ONCE != 0
     }
 
     pub fn to_source(&self) -> bool {
-        self.bind_flags & (TWO_WAY | TO_SOURCE) != 0
+        self.base.flags() & (TWO_WAY | TO_SOURCE) != 0
     }
 
     pub fn to_target(&self) -> bool {
-        self.bind_flags & TWO_WAY != 0 || self.bind_flags & TO_SOURCE == 0
+        self.base.flags() & TWO_WAY != 0 || self.base.flags() & TO_SOURCE == 0
     }
 
     pub fn is_name_based(&self) -> bool {
-        self.bind_flags & NAME_BASED != 0
+        self.base.flags() & NAME_BASED != 0
     }
 
     pub fn advance(&mut self, elapsed: f32) -> bool {
@@ -368,7 +382,7 @@ impl DataBind {
 
     pub fn collapse(&mut self, collapsed: bool) {
         if self.has_flag(COLLAPSED) == collapsed
-            || self.property_key == self.display_property_key
+            || self.base.property_key() == self.display_property_key
             || !self.target_supports_push()
         {
             return;
@@ -406,6 +420,26 @@ impl DataBind {
         self.has_flag(TARGET_ORIGIN)
     }
 
+    pub fn property_key(&self) -> u32 {
+        self.base.property_key()
+    }
+
+    pub fn target(&self) -> Option<*mut dyn BindTarget> {
+        self.target
+    }
+
+    pub fn source(&self) -> Option<*mut dyn BindSource> {
+        self.source
+    }
+
+    pub fn converter(&self) -> Option<*mut dyn BindConverter> {
+        self.converter
+    }
+
+    pub fn suppress_dirt(&mut self, value: bool) {
+        self.set_flag(SUPPRESS_DIRT, value);
+    }
+
     pub fn in_dirty_list(&self) -> bool {
         self.has_flag(IN_DIRTY)
     }
@@ -437,6 +471,26 @@ impl DataBind {
     pub fn set_next_observer(&mut self, value: Option<*mut DataBind>) {
         self.next_observer = value;
     }
+
+    pub fn next_observer(&self) -> Option<*mut DataBind> {
+        self.next_observer
+    }
+
+    pub fn next_observer_ref(&mut self) -> &mut Option<*mut DataBind> {
+        &mut self.next_observer
+    }
+}
+
+impl DataBindBaseCallbacks for DataBind {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base.base.notify_property_changed(property_key);
+    }
+}
+
+struct DataBindInitializationCallbacks;
+
+impl DataBindBaseCallbacks for DataBindInitializationCallbacks {
+    fn notify_property_changed(&mut self, _property_key: u16) {}
 }
 
 impl Drop for DataBind {

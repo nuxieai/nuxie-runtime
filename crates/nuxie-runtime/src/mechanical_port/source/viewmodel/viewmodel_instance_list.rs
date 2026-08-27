@@ -9,6 +9,7 @@ use super::{
     viewmodel_instance::ViewModelInstance, viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
 
+#[derive(Default)]
 pub struct ViewModelInstanceList {
     pub base: ViewModelInstanceListBase,
     list_items: Vec<RiveRc<ViewModelInstanceListItem>>,

@@ -10,6 +10,12 @@ pub struct ViewModelInstanceAssetFont {
     font_asset: RiveRc<FontAsset>,
 }
 
+impl Default for ViewModelInstanceAssetFont {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ViewModelInstanceAssetFont {
     pub fn new() -> Self {
         Self {

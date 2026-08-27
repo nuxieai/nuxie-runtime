@@ -1,5 +1,8 @@
-use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType, data_value::DataValue,
+use crate::mechanical_port::source::{
+    data_bind::data_values::{data_type::DataType, data_value::DataValue},
+    generated::data_bind::converters::data_converter_base::{
+        DataConverterBase, DataConverterBaseCallbacks,
+    },
 };
 pub const DEPENDENTS: u32 = 1;
 pub const BINDINGS: u32 = 2;
@@ -26,6 +29,7 @@ pub trait ConverterImporter {
     fn import_super(&mut self, converter: &mut DataConverter) -> StatusCode;
 }
 pub struct DataConverter {
+    pub base: DataConverterBase,
     parent_data_bind: Option<*mut dyn ParentDataBind>,
     data_binds: Vec<Box<dyn DataBindNode>>,
     dirty_data_binds: Vec<*mut dyn DataBindNode>,
@@ -33,6 +37,7 @@ pub struct DataConverter {
 impl Default for DataConverter {
     fn default() -> Self {
         Self {
+            base: DataConverterBase::default(),
             parent_data_bind: None,
             data_binds: Vec::new(),
             dirty_data_binds: Vec::new(),
@@ -99,9 +104,23 @@ impl DataConverter {
             clone.copy_file_from(data_bind.as_ref());
             self.data_binds.push(clone);
         }
+        self.base
+            .copy(&object.base, &mut DataConverterCopyCallbacks);
     }
     pub fn advance(&mut self, _elapsed_time: f32) -> bool {
         false
     }
     pub fn reset(&mut self) {}
+}
+
+impl DataConverterBaseCallbacks for DataConverter {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base.base.notify_property_changed(property_key);
+    }
+}
+
+struct DataConverterCopyCallbacks;
+
+impl DataConverterBaseCallbacks for DataConverterCopyCallbacks {
+    fn notify_property_changed(&mut self, _property_key: u16) {}
 }

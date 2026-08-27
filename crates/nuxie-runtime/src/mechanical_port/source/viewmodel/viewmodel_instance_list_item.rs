@@ -14,6 +14,7 @@ use super::{
     viewmodel_instance::ViewModelInstance, viewmodel_instance_list::ViewModelInstanceList,
 };
 
+#[derive(Default)]
 pub struct ViewModelInstanceListItem {
     pub base: ViewModelInstanceListItemBase,
     view_model_instance: Option<RiveRc<ViewModelInstance>>,

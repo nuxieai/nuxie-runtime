@@ -1,3 +1,4 @@
+use crate::mechanical_port::source::generated::data_bind::bindable_property_asset_base::BindablePropertyAssetBase;
 use std::{cell::RefCell, rc::Rc};
 pub trait RenderImage {}
 pub trait Font {}
@@ -9,6 +10,7 @@ pub struct FontAsset {
     value: RefCell<Option<Rc<dyn Font>>>,
 }
 pub struct BindablePropertyAsset {
+    pub base: BindablePropertyAssetBase,
     file_asset: Rc<ImageAsset>,
     font_asset: Rc<FontAsset>,
     blob_asset: Option<Rc<dyn BlobAsset>>,
@@ -16,6 +18,7 @@ pub struct BindablePropertyAsset {
 impl Default for BindablePropertyAsset {
     fn default() -> Self {
         Self {
+            base: BindablePropertyAssetBase::default(),
             file_asset: Rc::new(ImageAsset {
                 value: RefCell::new(None),
             }),

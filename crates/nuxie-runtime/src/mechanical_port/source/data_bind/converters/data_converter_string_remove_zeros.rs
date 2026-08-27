@@ -1,8 +1,12 @@
-use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType, data_value::DataValue, data_value_string::DataValueString,
+use crate::mechanical_port::source::{
+    data_bind::data_values::{
+        data_type::DataType, data_value::DataValue, data_value_string::DataValueString,
+    },
+    generated::data_bind::converters::data_converter_string_remove_zeros_base::DataConverterStringRemoveZerosBase,
 };
 #[derive(Default)]
 pub struct DataConverterStringRemoveZeros {
+    pub base: DataConverterStringRemoveZerosBase,
     output: DataValueString,
 }
 impl DataConverterStringRemoveZeros {

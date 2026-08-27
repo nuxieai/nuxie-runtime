@@ -5,6 +5,7 @@ use crate::mechanical_port::source::{
 };
 use std::ptr::NonNull;
 
+#[derive(Default)]
 pub struct DataEnumValue {
     pub base: DataEnumValueBase,
 }

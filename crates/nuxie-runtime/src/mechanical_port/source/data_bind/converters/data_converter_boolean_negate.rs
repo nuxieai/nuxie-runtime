@@ -1,8 +1,12 @@
-use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType, data_value::DataValue, data_value_boolean::DataValueBoolean,
+use crate::mechanical_port::source::{
+    data_bind::data_values::{
+        data_type::DataType, data_value::DataValue, data_value_boolean::DataValueBoolean,
+    },
+    generated::data_bind::converters::data_converter_boolean_negate_base::DataConverterBooleanNegateBase,
 };
 #[derive(Default)]
 pub struct DataConverterBooleanNegate {
+    pub base: DataConverterBooleanNegateBase,
     output: DataValueBoolean,
 }
 impl DataConverterBooleanNegate {

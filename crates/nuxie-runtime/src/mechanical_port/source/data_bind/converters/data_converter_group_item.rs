@@ -1,17 +1,20 @@
 use super::data_converter::StatusCode;
 use super::data_converter_group::GroupConverter;
+use crate::mechanical_port::source::generated::data_bind::converters::data_converter_group_item_base::DataConverterGroupItemBase;
 pub trait GroupItemImporter {
     fn add_group_item_referencer(&mut self, item: *mut DataConverterGroupItem);
     fn add_item_to_group(&mut self, item: *mut DataConverterGroupItem) -> bool;
     fn import_super(&mut self, item: &mut DataConverterGroupItem) -> StatusCode;
 }
 pub struct DataConverterGroupItem {
+    pub base: DataConverterGroupItemBase,
     data_converter: Option<*mut dyn GroupConverter>,
     owns_converter: bool,
 }
 impl Default for DataConverterGroupItem {
     fn default() -> Self {
         Self {
+            base: DataConverterGroupItemBase::default(),
             data_converter: None,
             owns_converter: false,
         }
@@ -52,6 +55,7 @@ impl DataConverterGroupItem {
         if let Some(converter) = self.data_converter {
             let cloned = unsafe { (&*converter).clone_box() };
             Self {
+                base: DataConverterGroupItemBase::default(),
                 data_converter: Some(Box::into_raw(cloned)),
                 owns_converter: true,
             }

@@ -13,6 +13,12 @@ pub struct ViewModelInstanceAssetBlob {
     blob_asset: Option<RiveRc<BlobAsset>>,
 }
 
+impl Default for ViewModelInstanceAssetBlob {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ViewModelInstanceAssetBlob {
     pub fn new() -> Self {
         Self {

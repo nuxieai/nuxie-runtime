@@ -18,6 +18,7 @@ use super::{
     viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
 };
 
+#[derive(Default)]
 pub struct ViewModelInstance {
     pub base: ViewModelInstanceBase,
     property_values: Vec<RiveRc<ViewModelInstanceValue>>,

@@ -1,8 +1,11 @@
-use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType, data_value::DataValue, data_value_boolean::DataValueBoolean,
-    data_value_color::DataValueColor, data_value_enum::DataValueEnum,
-    data_value_number::DataValueNumber, data_value_string::DataValueString,
-    data_value_symbol_list_index::DataValueSymbolListIndex,
+use crate::mechanical_port::source::{
+    data_bind::data_values::{
+        data_type::DataType, data_value::DataValue, data_value_boolean::DataValueBoolean,
+        data_value_color::DataValueColor, data_value_enum::DataValueEnum,
+        data_value_number::DataValueNumber, data_value_string::DataValueString,
+        data_value_symbol_list_index::DataValueSymbolListIndex,
+    },
+    generated::data_bind::converters::data_converter_to_number_base::DataConverterToNumberBase,
 };
 use std::ffi::{CString, c_char, c_double};
 unsafe extern "C" {
@@ -10,6 +13,7 @@ unsafe extern "C" {
 }
 #[derive(Default)]
 pub struct DataConverterToNumber {
+    pub base: DataConverterToNumberBase,
     output: DataValueNumber,
 }
 impl DataConverterToNumber {

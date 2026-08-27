@@ -6,6 +6,7 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 
+#[derive(Default)]
 pub struct ViewModelInstanceAsset {
     pub base: ViewModelInstanceAssetBase,
     assets: Vec<RiveRc<FileAsset>>,

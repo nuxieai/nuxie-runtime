@@ -4,6 +4,7 @@ use crate::mechanical_port::source::{
 
 use super::data_enum::DataEnum;
 
+#[derive(Default)]
 pub struct ViewModelPropertyEnum {
     pub base: ViewModelPropertyEnumBase,
     data_enum: Option<RiveRc<DataEnum>>,

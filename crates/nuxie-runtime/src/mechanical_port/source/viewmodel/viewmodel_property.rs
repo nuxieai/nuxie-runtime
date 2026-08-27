@@ -14,6 +14,7 @@ pub enum Direction {
     Both = 3,
 }
 
+#[derive(Default)]
 pub struct ViewModelProperty {
     pub base: ViewModelPropertyBase,
 }

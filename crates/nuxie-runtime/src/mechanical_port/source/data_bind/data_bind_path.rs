@@ -13,8 +13,8 @@ pub trait PathImporter {
     fn file(&mut self) -> Option<*mut dyn PathFile>;
     fn import_super(&mut self, path: &mut DataBindPath) -> StatusCode;
 }
-#[derive(Clone)]
 pub struct DataBindPath {
+    pub base: DataBindPathBase,
     path_buffer: Vec<u32>,
     file: Option<*mut dyn PathFile>,
     resolved: bool,
@@ -22,6 +22,7 @@ pub struct DataBindPath {
 impl Default for DataBindPath {
     fn default() -> Self {
         Self {
+            base: DataBindPathBase::default(),
             path_buffer: Vec::new(),
             file: None,
             resolved: false,
@@ -60,6 +61,9 @@ impl DataBindPath {
     pub fn path(&mut self) -> &mut Vec<u32> {
         &mut self.path_buffer
     }
+    pub fn is_relative(&self) -> bool {
+        self.base.is_relative()
+    }
     pub fn resolved_path(&mut self) -> &[u32] {
         if !self.resolved {
             let Some(file) = self.file else {
@@ -84,3 +88,18 @@ impl DataBindPath {
         self.resolved = value
     }
 }
+
+impl DataBindPathBaseCallbacks for DataBindPath {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base.base.notify_property_changed(property_key);
+    }
+
+    fn decode_path(&mut self, value: &[u8]) {
+        Self::decode_path(self, value);
+    }
+
+    fn copy_path(&mut self, _object: &DataBindPathBase) {}
+}
+use crate::mechanical_port::source::generated::data_bind::data_bind_path_base::{
+    DataBindPathBase, DataBindPathBaseCallbacks,
+};

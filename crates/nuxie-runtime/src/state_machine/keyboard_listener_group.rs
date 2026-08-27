@@ -1,3 +1,12 @@
+//! Direct Rust owner for pinned C++
+//! `src/animation/keyboard_listener_group.cpp`.
+//!
+//! C++ registers raw group pointers on `FocusData` in the constructor and
+//! removes them in the destructor. Rust retains the same per-occurrence
+//! registration as membership in `StateMachineInstance::keyboard_listener_groups`;
+//! removing an occurrence and rebuilding the focus capabilities is the
+//! ownership-safe equivalent of those paired pointer mutations.
+
 use super::focused_input_dispatch::RuntimeInputDispatchOutcome;
 use super::instance::StateMachineInstance;
 use super::listener_types::RuntimeListenerType;
@@ -52,7 +61,10 @@ impl RuntimeKeyboardListenerGroup {
 
     fn text_input_parent_local(&self, artboard: &ArtboardInstance) -> Option<usize> {
         let parent_local = artboard.component_parent_local(self.focus_data_local_id)?;
-        (artboard.runtime_object_type_name(parent_local) == Some("TextInput"))
+        artboard
+            .runtime_object_type_name(parent_local)
+            .and_then(nuxie_schema::definition_by_name)
+            .is_some_and(|definition| definition.is_a("TextInput"))
             .then_some(parent_local)
     }
 

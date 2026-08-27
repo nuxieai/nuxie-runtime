@@ -111,6 +111,7 @@ mod keyed_object_importer;
 mod keyed_property_importer;
 mod layer_state_importer;
 mod linear_animation_importer;
+mod listener_input_type;
 mod listener_input_type_gamepad_importer;
 mod listener_input_type_keyboard_importer;
 mod listener_input_type_semantic_importer;
@@ -380,6 +381,10 @@ fn object_imports_successfully(
     if let Some(decision) =
         state_machine_importer::dispatch_imports_successfully(object, definition, context)
     {
+        return decision;
+    }
+
+    if let Some(decision) = listener_input_type::imports_successfully(definition, context) {
         return decision;
     }
 

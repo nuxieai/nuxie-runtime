@@ -11,12 +11,6 @@ pub(super) fn dispatch_imports_successfully(
                 .expect("listener is owned by StateMachineListenerImporter"),
         );
     }
-    if definition.is_a("ListenerInputType") {
-        return Some(
-            imports_successfully(object, definition, context)
-                .expect("ListenerInputType is owned by StateMachineListenerImporter"),
-        );
-    }
     if definition.is_a("ListenerAction") && listener_action_parent_kind_is_listener(object) {
         return Some(
             imports_successfully(object, definition, context)
@@ -42,9 +36,6 @@ pub(super) fn imports_successfully(
 ) -> Option<bool> {
     if definition.is_a("StateMachineListener") {
         return Some(context.latest(ImportStackKey::StateMachine));
-    }
-    if definition.is_a("ListenerInputType") {
-        return Some(context.latest(ImportStackKey::StateMachineListener));
     }
     (definition.is_a("ListenerAction") && listener_action_parent_kind_is_listener(object))
         .then(|| listener_action_imports_successfully(object, context))

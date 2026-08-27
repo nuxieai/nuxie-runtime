@@ -710,15 +710,11 @@ impl RuntimeFile {
 
             if definition.is_a("ListenerInputType") {
                 if let Some(owner) = current_listener {
-                    let listener = &mut state_machines[owner.state_machine_index].listeners
-                        [owner.listener_index];
-                    listener.listener_input_types.push(object);
-                    listener.listener_input_type_inputs.push(Vec::new());
-                    let input_owner = Some(RuntimeStateMachineListenerInputTypeOwner {
-                        state_machine_index: owner.state_machine_index,
-                        listener_index: owner.listener_index,
-                        input_type_index: listener.listener_input_types.len() - 1,
-                    });
+                    let input_owner = Some(listener_input_type::import(
+                        &mut state_machines,
+                        owner,
+                        object,
+                    ));
                     match definition.name {
                         "ListenerInputTypeKeyboard" => {
                             current_keyboard_input_type = input_owner;

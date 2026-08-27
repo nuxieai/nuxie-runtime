@@ -121,7 +121,7 @@ mod state_machine_layer_component_importer;
 mod state_machine_layer_importer;
 mod state_machine_listener_importer;
 mod state_transition_importer;
-mod text_asset_importer;
+pub(crate) mod text_asset_importer;
 pub(super) mod transition_viewmodel_condition_importer;
 mod viewmodel_importer;
 mod viewmodel_instance_importer;

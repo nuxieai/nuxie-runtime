@@ -14,6 +14,9 @@ pub struct RuntimeFileAssetContents<'a> {
     pub contents: Option<&'a [u8]>,
     /// Signature selected from the same imported contents record.
     pub signature: Option<&'a [u8]>,
+    /// Aggregate signature result published by the scripting TextAsset
+    /// importer. Non-text and unsigned assets remain false.
+    pub verified: bool,
 }
 
 impl<'a> RuntimeFileAssetContents<'a> {
@@ -24,10 +27,14 @@ impl<'a> RuntimeFileAssetContents<'a> {
     pub fn signature(&self) -> Option<&'a [u8]> {
         self.signature
     }
+
+    pub fn verified(&self) -> bool {
+        self.verified
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
-enum ImportedFileAssetRecord<'a> {
+pub(crate) enum ImportedFileAssetRecord<'a> {
     Asset {
         asset: &'a RuntimeObject,
         creates_importer: bool,
@@ -77,6 +84,8 @@ impl RuntimeFile {
         &self,
         max_assets: usize,
     ) -> Option<Vec<RuntimeFileAssetContents<'_>>> {
+        let verified_text_assets =
+            crate::importers::text_asset_importer::verified_text_asset_ids(self);
         let mut assets = Vec::<RuntimeFileAssetContents<'_>>::new();
         let mut latest_ordinal = None;
         for record in self.imported_file_asset_records() {
@@ -95,6 +104,7 @@ impl RuntimeFile {
                         has_contents_record: false,
                         contents: None,
                         signature: None,
+                        verified: verified_text_assets.contains(&asset.id),
                     });
                     if creates_importer {
                         latest_ordinal = Some(ordinal);
@@ -146,7 +156,9 @@ impl RuntimeFile {
         selected_contents
     }
 
-    fn imported_file_asset_records(&self) -> impl Iterator<Item = ImportedFileAssetRecord<'_>> {
+    pub(crate) fn imported_file_asset_records(
+        &self,
+    ) -> impl Iterator<Item = ImportedFileAssetRecord<'_>> {
         self.objects
             .iter()
             .enumerate()
@@ -175,6 +187,8 @@ impl RuntimeFile {
         &'a self,
         assets: Vec<&'a RuntimeObject>,
     ) -> Vec<RuntimeFileAssetContents<'a>> {
+        let verified_text_assets =
+            crate::importers::text_asset_importer::verified_text_asset_ids(self);
         let ordinals_by_global = assets
             .iter()
             .enumerate()
@@ -224,6 +238,7 @@ impl RuntimeFile {
                 has_contents_record: has_contents_record.get(ordinal).copied().unwrap_or(false),
                 contents: contents.get(ordinal).copied().flatten(),
                 signature: signatures.get(ordinal).copied().flatten(),
+                verified: verified_text_assets.contains(&asset.id),
             })
             .collect()
     }

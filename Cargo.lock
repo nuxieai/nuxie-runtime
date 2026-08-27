@@ -1152,6 +1152,7 @@ name = "nuxie-binary"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libhydrogen",
  "nuxie-schema",
  "serde",
  "serde_json",

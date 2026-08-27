@@ -110,7 +110,6 @@ impl ShaderAsset {
             });
         }
         let mut texture_sampler_pairs = Vec::new();
-        let mut has_texture_sampler_pairs = false;
         #[cfg(any(feature = "apple-authored-msl", test))]
         let mut supplemental_reflection = None;
         for _ in 0..section_count {
@@ -118,13 +117,7 @@ impl ShaderAsset {
             let length = usize::from(cursor.read_u16("section length")?);
             let section = cursor.read_bytes(length, "section payload")?;
             if tag == TEXTURE_SAMPLER_PAIR_SECTION {
-                if has_texture_sampler_pairs {
-                    return Err(Error::runtime(
-                        "RSTB contains duplicate texture/sampler pair sections",
-                    ));
-                }
-                has_texture_sampler_pairs = true;
-                texture_sampler_pairs = decode_texture_sampler_pairs(name, section)?;
+                append_texture_sampler_pairs(section, &mut texture_sampler_pairs);
             }
             #[cfg(any(feature = "apple-authored-msl", test))]
             if tag == SUPPLEMENTAL_REFLECTION_SECTION {
@@ -513,27 +506,26 @@ fn validate_gl_fixup(name: &str, stage: &str, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn decode_texture_sampler_pairs(
-    name: &str,
-    bytes: &[u8],
-) -> Result<Vec<GpuCanvasShaderTextureSamplerPair>> {
-    let mut cursor = Cursor::new(bytes);
-    let count = usize::from(cursor.read_u8("texture/sampler pair count")?);
-    let mut pairs = Vec::with_capacity(count);
-    for _ in 0..count {
+fn append_texture_sampler_pairs(bytes: &[u8], pairs: &mut Vec<GpuCanvasShaderTextureSamplerPair>) {
+    let Some((&count, payload)) = bytes.split_first() else {
+        return;
+    };
+    let count = usize::from(count);
+    let Some(required) = count.checked_mul(4) else {
+        return;
+    };
+    if payload.len() < required {
+        return;
+    }
+
+    for pair in payload[..required].chunks_exact(4) {
         pairs.push(GpuCanvasShaderTextureSamplerPair {
-            texture_group: cursor.read_u8("texture pair group")?,
-            texture_binding: cursor.read_u8("texture pair binding")?,
-            sampler_group: cursor.read_u8("sampler pair group")?,
-            sampler_binding: cursor.read_u8("sampler pair binding")?,
+            texture_group: pair[0],
+            texture_binding: pair[1],
+            sampler_group: pair[2],
+            sampler_binding: pair[3],
         });
     }
-    if cursor.remaining() != 0 {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' texture/sampler pair section has trailing bytes"
-        )));
-    }
-    Ok(pairs)
 }
 
 fn decode_whole_module_source(

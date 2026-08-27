@@ -16,7 +16,14 @@ pub fn ieee_float_divide(a: f32, b: f32) -> f32 {
     a / b
 }
 
-pub fn bit_cast<Dst: Copy, Src: Copy>(source: Src) -> Dst {
+/// Reinterpret the source bytes as `Dst`, matching pinned C++ `bit_cast`.
+///
+/// # Safety
+///
+/// Every bit pattern in `source` must be a valid `Dst` value. C++ constrains
+/// this operation through its trivially-copyable type system; Rust's `Copy`
+/// bound alone does not make arbitrary destination bit patterns valid.
+pub unsafe fn bit_cast<Dst: Copy, Src: Copy>(source: Src) -> Dst {
     assert_eq!(size_of::<Dst>(), size_of::<Src>());
     let mut destination = MaybeUninit::<Dst>::uninit();
     unsafe {
@@ -25,7 +32,7 @@ pub fn bit_cast<Dst: Copy, Src: Copy>(source: Src) -> Dst {
             destination.as_mut_ptr().cast::<u8>(),
             size_of::<Src>(),
         );
-        destination.assume_init()
+        unsafe { destination.assume_init() }
     }
 }
 
@@ -92,7 +99,16 @@ pub fn round_up_to_multiple_of<const N: usize, T: RoundWord>(value: T) -> T {
     (value + T::from_usize(N - 1)) & !T::from_usize(N - 1)
 }
 pub fn clamp(value: f32, low: f32, high: f32) -> f32 {
-    low.max(value).min(high)
+    let value = if low < value || low.is_nan() {
+        value
+    } else {
+        low
+    };
+    if high < value || value.is_nan() {
+        high
+    } else {
+        value
+    }
 }
 pub fn positive_mod(value: f32, mut range: f32) -> f32 {
     if range < 0.0 {

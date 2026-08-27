@@ -19,7 +19,8 @@ impl EvalQuad {
         }
     }
     pub fn at(self, t: f32) -> Vec2D {
-        (self.a * t + self.b) * t + self.c
+        let value = Vec2D::scale_and_add(self.b, self.a, t);
+        Vec2D::scale_and_add(self.c, value, t)
     }
 }
 
@@ -40,12 +41,14 @@ impl EvalCubic {
         }
     }
     pub fn at(self, t: f32) -> Vec2D {
-        ((self.a * t + self.b) * t + self.c) * t + self.d
+        let value = Vec2D::scale_and_add(self.b, self.a, t);
+        let value = Vec2D::scale_and_add(self.c, value, t);
+        Vec2D::scale_and_add(self.d, value, t)
     }
 }
 
 fn lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
-    a * (1.0 - t) + b * t
+    Vec2D::new(a.x.mul_add(1.0 - t, b.x * t), a.y.mul_add(1.0 - t, b.y * t))
 }
 
 pub fn quad_subdivide(src: &[Vec2D; 3], t: f32, dst: &mut [Vec2D; 5]) {

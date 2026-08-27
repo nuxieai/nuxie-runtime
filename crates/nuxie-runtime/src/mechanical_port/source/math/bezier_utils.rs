@@ -12,7 +12,7 @@ impl CubicCoeffs {
         let d = points[2] - points[1];
         let e = points[3] - points[0];
         Self {
-            a: -3.0 * d + e,
+            a: Vec2D::scale_and_add(e, d, -3.0),
             b: d - c,
             c,
         }
@@ -39,7 +39,9 @@ impl EvalCubic {
         }
     }
     pub fn at(self, t: f32) -> Vec2D {
-        ((self.a * t + self.b) * t + self.c) * t + self.d
+        let value = Vec2D::scale_and_add(self.b, self.a, t);
+        let value = Vec2D::scale_and_add(self.c, value, t);
+        Vec2D::scale_and_add(self.d, value, t)
     }
     pub fn at_pair(self, t: [f32; 2]) -> [Vec2D; 2] {
         [self.at(t[0]), self.at(t[1])]
@@ -55,7 +57,7 @@ pub fn eval_cubic_at(points: &[Vec2D; 4], t: f32) -> Vec2D {
 }
 
 fn mix(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
-    a + (b - a) * t
+    Vec2D::lerp(a, b, t)
 }
 
 pub fn chop_cubic_at(src: &[Vec2D; 4], dst: &mut [Vec2D; 7], t: f32) {
@@ -175,7 +177,7 @@ pub fn find_cubic_convex_180_chops(
     let mut a = Vec2D::cross(coeffs.a, coeffs.b);
     let mut b_over_minus_2 = -0.5 * Vec2D::cross(coeffs.a, coeffs.c);
     let mut c = Vec2D::cross(coeffs.b, coeffs.c);
-    let mut discriminant_over_4 = b_over_minus_2 * b_over_minus_2 - a * c;
+    let mut discriminant_over_4 = b_over_minus_2.mul_add(b_over_minus_2, -(a * c));
     let cusp_threshold = (a * (TESS_EPSILON / 2.0)).powi(2);
     if discriminant_over_4 < -cusp_threshold {
         *are_cusps = false;
@@ -198,7 +200,7 @@ pub fn find_cubic_convex_180_chops(
             return 0;
         }
         let base = points[3] - points[0];
-        let dots = points.map(|point| point.x * base.x + point.y * base.y);
+        let dots = points.map(|point| Vec2D::dot(point, base));
         if dots[1] > dots[0] && dots[2] > dots[1] && dots[3] > dots[2] {
             *are_cusps = false;
             return 0;
@@ -211,7 +213,7 @@ pub fn find_cubic_convex_180_chops(
         a = Vec2D::dot(tangent0, coeffs.a);
         b_over_minus_2 = -Vec2D::dot(tangent0, coeffs.b);
         c = Vec2D::dot(tangent0, coeffs.c);
-        discriminant_over_4 = cpp_max(b_over_minus_2 * b_over_minus_2 - a * c, 0.0);
+        discriminant_over_4 = cpp_max(b_over_minus_2.mul_add(b_over_minus_2, -(a * c)), 0.0);
     }
     let mut q = discriminant_over_4.sqrt().copysign(b_over_minus_2);
     q += b_over_minus_2;

@@ -309,13 +309,19 @@ fn quick_reject_cubic(height: f32, a: Vec2D, b: Vec2D, c: Vec2D, d: Vec2D) -> bo
 struct CubicChop([Vec2D; 7]);
 impl CubicChop {
     fn new(a: Vec2D, b: Vec2D, c: Vec2D, d: Vec2D) -> Self {
-        let ab = Vec2D::lerp(a, b, 0.5);
-        let bc = Vec2D::lerp(b, c, 0.5);
-        let cd = Vec2D::lerp(c, d, 0.5);
-        let abc = Vec2D::lerp(ab, bc, 0.5);
-        let bcd = Vec2D::lerp(bc, cd, 0.5);
-        Self([a, ab, abc, Vec2D::lerp(abc, bcd, 0.5), bcd, cd, d])
+        let ab = average(a, b);
+        let bc = average(b, c);
+        let cd = average(c, d);
+        let abc = average(ab, bc);
+        let bcd = average(bc, cd);
+        Self([a, ab, abc, average(abc, bcd), bcd, cd, d])
     }
+}
+
+fn average(a: Vec2D, b: Vec2D) -> Vec2D {
+    // Pinned `ave` instantiates generic `lerp(a, b, .5)`, whose expression is
+    // `a * (1 - t) + b * t`, not `Vec2D::lerp`'s `a + (b - a) * t`.
+    Vec2D::new(a.x * 0.5 + b.x * 0.5, a.y * 0.5 + b.y * 0.5)
 }
 impl core::ops::Index<usize> for CubicChop {
     type Output = Vec2D;

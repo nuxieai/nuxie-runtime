@@ -53,11 +53,11 @@ impl VectorXform {
     }
 
     pub fn transform2(self, vector: Float2) -> Float2 {
-        self.scale.xy() * vector + self.skew.xy() * vector.yx()
+        simd::mul_add(self.scale.xy(), vector, self.skew.xy() * vector.yx())
     }
 
     pub fn transform4(self, vectors: Float4) -> Float4 {
-        self.scale * vectors + self.skew * vectors.yxwz()
+        simd::mul_add(self.scale, vectors, self.skew * vectors.yxwz())
     }
 }
 
@@ -80,7 +80,7 @@ pub fn quadratic_pow4_points(
     precision: f32,
     vector_xform: VectorXform,
 ) -> f32 {
-    let mut v = p1 * -2.0 + p0 + p2;
+    let mut v = simd::mul_add(p1, GVec::splat(-2.0), p0) + p2;
     v = vector_xform.transform2(v);
     let vv = v * v;
     (vv[0] + vv[1]) * length_term_pow2::<2>(precision)
@@ -108,7 +108,7 @@ pub fn cubic_pow4(pts: &[Vec2D], precision: f32, vector_xform: VectorXform) -> f
     let p01 = GVec::from_array([pts[0].x, pts[0].y, pts[1].x, pts[1].y]);
     let p12 = GVec::from_array([pts[1].x, pts[1].y, pts[2].x, pts[2].y]);
     let p23 = GVec::from_array([pts[2].x, pts[2].y, pts[3].x, pts[3].y]);
-    let mut v = p12 * -2.0 + p01 + p23;
+    let mut v = simd::mul_add(p12, GVec::splat(-2.0), p01) + p23;
     v = vector_xform.transform4(v);
     let vv = v * v;
     std_max(vv[0] + vv[1], vv[2] + vv[3]) * length_term_pow2::<3>(precision)
@@ -157,10 +157,10 @@ pub fn conic_pow2_points(
         std_max(simd::dot(p1, p1), simd::dot(p2, p2)),
     )
     .sqrt();
-    let dp = p1 * (-2.0 * w) + p0 + p2;
+    let dp = simd::mul_add(p1, GVec::splat(-2.0 * w), p0) + p2;
     let dw = (-2.0 * w + 2.0).abs();
-    let rp_minus_1 = std_max(0.0, max_len * precision - 1.0);
-    let numer = simd::dot(dp, dp).sqrt() * precision + rp_minus_1 * dw;
+    let rp_minus_1 = std_max(0.0, max_len.mul_add(precision, -1.0));
+    let numer = simd::dot(dp, dp).sqrt().mul_add(precision, rp_minus_1 * dw);
     let denom = 4.0 * std_min(w, 1.0);
     numer / denom
 }

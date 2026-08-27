@@ -4,6 +4,36 @@ use super::aabb::Aabb;
 use super::transform_components::TransformComponents;
 use super::vec2d::Vec2D;
 
+#[inline(always)]
+fn simd_min(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() | second.to_bits())
+    } else if second < first {
+        second
+    } else {
+        first
+    }
+}
+
+#[inline(always)]
+fn simd_max(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() & second.to_bits())
+    } else if first < second {
+        second
+    } else {
+        first
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
 pub struct Mat2D {
@@ -59,41 +89,82 @@ impl Mat2D {
         if self.buffer[1] == 0.0 && self.buffer[2] == 0.0 {
             for (out, point) in dst.iter_mut().zip(points) {
                 *out = Vec2D::new(
-                    self.buffer[0] * point.x + self.buffer[4],
-                    self.buffer[3] * point.y + self.buffer[5],
+                    point.x.mul_add(self.buffer[0], self.buffer[4]),
+                    point.y.mul_add(self.buffer[3], self.buffer[5]),
                 );
             }
         } else {
             for (out, point) in dst.iter_mut().zip(points) {
-                *out = *self * *point;
+                let skewed_x = point.y.mul_add(self.buffer[2], self.buffer[4]);
+                let skewed_y = point.x.mul_add(self.buffer[1], self.buffer[5]);
+                *out = Vec2D::new(
+                    point.x.mul_add(self.buffer[0], skewed_x),
+                    point.y.mul_add(self.buffer[3], skewed_y),
+                );
             }
         }
     }
     pub fn map_bounding_box_points(&self, points: &[Vec2D]) -> Aabb {
-        let mut min_x = f32::INFINITY;
-        let mut min_y = f32::INFINITY;
-        let mut max_x = f32::NEG_INFINITY;
-        let mut max_y = f32::NEG_INFINITY;
-        for point in points {
-            let x = self.buffer[0] * point.x + self.buffer[2] * point.y;
-            let y = self.buffer[1] * point.x + self.buffer[3] * point.y;
-            if !x.is_nan() {
-                min_x = min_x.min(x);
-                max_x = max_x.max(x);
-            }
-            if !y.is_nan() {
-                min_y = min_y.min(y);
-                max_y = max_y.max(y);
-            }
+        let [scale_x, skew_y, skew_x, scale_y, translate_x, translate_y] = self.buffer;
+        let no_skew = skew_y == 0.0 && skew_x == 0.0;
+        let mut mins = [f32::INFINITY; 4];
+        let mut maxes = [f32::NEG_INFINITY; 4];
+        let mut index = 0;
+
+        if points.len() & 1 != 0 {
+            let point = points[0];
+            let mapped = if no_skew {
+                [scale_x * point.x, scale_y * point.y]
+            } else {
+                [
+                    point.x.mul_add(scale_x, skew_x * point.y),
+                    point.y.mul_add(scale_y, skew_y * point.x),
+                ]
+            };
+            mins[0] = mapped[0];
+            mins[1] = mapped[1];
+            maxes[0] = mapped[0];
+            maxes[1] = mapped[1];
+            index = 1;
         }
+
+        while index < points.len() {
+            let first = points[index];
+            let second = points[index + 1];
+            let mapped = if no_skew {
+                [
+                    scale_x * first.x,
+                    scale_y * first.y,
+                    scale_x * second.x,
+                    scale_y * second.y,
+                ]
+            } else {
+                [
+                    first.x.mul_add(scale_x, skew_x * first.y),
+                    first.y.mul_add(scale_y, skew_y * first.x),
+                    second.x.mul_add(scale_x, skew_x * second.y),
+                    second.y.mul_add(scale_y, skew_y * second.x),
+                ]
+            };
+            for lane in 0..4 {
+                mins[lane] = simd_min(mapped[lane], mins[lane]);
+                maxes[lane] = simd_max(mapped[lane], maxes[lane]);
+            }
+            index += 2;
+        }
+
+        let min_x = simd_min(mins[0], mins[2]);
+        let min_y = simd_min(mins[1], mins[3]);
+        let max_x = simd_max(maxes[0], maxes[2]);
+        let max_y = simd_max(maxes[1], maxes[3]);
         if !((max_x - min_x) >= 0.0 && (max_y - min_y) >= 0.0) {
             return Aabb::default();
         }
         let result = Aabb::new(
-            min_x + self.buffer[4],
-            min_y + self.buffer[5],
-            max_x + self.buffer[4],
-            max_y + self.buffer[5],
+            min_x + translate_x,
+            min_y + translate_y,
+            max_x + translate_x,
+            max_y + translate_y,
         );
         assert!(result.width() >= 0.0);
         assert!(result.height() >= 0.0);
@@ -109,7 +180,7 @@ impl Mat2D {
     }
     pub fn invert(&self, result: &mut Self) -> bool {
         let (aa, ab, ac, ad, atx, aty) = (self[0], self[1], self[2], self[3], self[4], self[5]);
-        let mut det = aa * ad - ab * ac;
+        let mut det = aa.mul_add(ad, -(ab * ac));
         if det == 0.0 {
             return false;
         }
@@ -119,8 +190,8 @@ impl Mat2D {
             -ab * det,
             -ac * det,
             aa * det,
-            (ac * aty - ad * atx) * det,
-            (ab * atx - aa * aty) * det,
+            ac.mul_add(aty, -(ad * atx)) * det,
+            ab.mul_add(atx, -(aa * aty)) * det,
         );
         true
     }
@@ -132,14 +203,14 @@ impl Mat2D {
     pub fn decompose(&self) -> TransformComponents {
         let (m0, m1, m2, m3) = (self[0], self[1], self[2], self[3]);
         let rotation = m1.atan2(m0);
-        let denom = m0 * m0 + m1 * m1;
+        let denom = m0.mul_add(m0, m1 * m1);
         let scale_x = denom.sqrt();
         let scale_y = if scale_x == 0.0 {
             0.0
         } else {
-            (m0 * m3 - m2 * m1) / scale_x
+            m0.mul_add(m3, -(m2 * m1)) / scale_x
         };
-        let skew = (m0 * m2 + m1 * m3).atan2(denom);
+        let skew = m0.mul_add(m2, m1 * m3).atan2(denom);
         let mut result = TransformComponents::default();
         result.set_x(self[4]);
         result.set_y(self[5]);
@@ -156,8 +227,8 @@ impl Mat2D {
         result = result.scale(components.scale());
         let skew = components.skew();
         if skew != 0.0 {
-            result[2] = result[0] * skew + result[2];
-            result[3] = result[1] * skew + result[3];
+            result[2] = result[0].mul_add(skew, result[2]);
+            result[3] = result[1].mul_add(skew, result[3]);
         }
         result
     }
@@ -183,12 +254,12 @@ impl Mat2D {
     }
     pub fn multiply(a: Self, b: Self) -> Self {
         Self::new(
-            a[0] * b[0] + a[2] * b[1],
-            a[1] * b[0] + a[3] * b[1],
-            a[0] * b[2] + a[2] * b[3],
-            a[1] * b[2] + a[3] * b[3],
-            a[0] * b[4] + a[2] * b[5] + a[4],
-            a[1] * b[4] + a[3] * b[5] + a[5],
+            a[0].mul_add(b[0], a[2] * b[1]),
+            a[1].mul_add(b[0], a[3] * b[1]),
+            a[0].mul_add(b[2], a[2] * b[3]),
+            a[1].mul_add(b[2], a[3] * b[3]),
+            a[0].mul_add(b[4], a[2] * b[5]) + a[4],
+            a[1].mul_add(b[4], a[3] * b[5]) + a[5],
         )
     }
     pub fn xx(self) -> f32 {
@@ -231,7 +302,7 @@ impl Mat2D {
         Vec2D::new(self[4], self[5])
     }
     pub fn determinant(self) -> f32 {
-        self[0] * self[3] - self[2] * self[1]
+        self[0].mul_add(self[3], -(self[2] * self[1]))
     }
 }
 
@@ -261,8 +332,8 @@ impl Mul<Vec2D> for Mat2D {
     type Output = Vec2D;
     fn mul(self, value: Vec2D) -> Vec2D {
         Vec2D::new(
-            self[0] * value.x + self[2] * value.y + self[4],
-            self[1] * value.x + self[3] * value.y + self[5],
+            self[0].mul_add(value.x, self[2] * value.y) + self[4],
+            self[1].mul_add(value.x, self[3] * value.y) + self[5],
         )
     }
 }

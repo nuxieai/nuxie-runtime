@@ -3,7 +3,7 @@ use super::mat2d::Mat2D;
 const EPSILON: f32 = 1.0 / 4096.0;
 
 fn scalar_dot(a: f32, b: f32, c: f32, d: f32) -> f32 {
-    a * b + c * d
+    a.mul_add(b, c * d)
 }
 
 fn cpp_max(a: f32, b: f32) -> f32 {
@@ -25,7 +25,7 @@ impl Mat2D {
         } else {
             let a_minus_c = a - c;
             let a_plus_c_over_2 = (a + c) * 0.5;
-            let x = (a_minus_c * a_minus_c + 4.0 * b_squared).sqrt() * 0.5;
+            let x = a_minus_c.mul_add(a_minus_c, 4.0 * b_squared).sqrt() * 0.5;
             a_plus_c_over_2 + x
         };
         if !result.is_finite() {

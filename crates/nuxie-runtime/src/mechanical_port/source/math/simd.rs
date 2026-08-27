@@ -67,13 +67,39 @@ pub fn if_then_else<T: Copy, M: Truthy, const N: usize>(
     }
 }
 pub trait SimdMinMax: Copy + PartialOrd {
-    fn is_nan(self) -> bool {
-        false
+    fn simd_min(self, other: Self) -> Self {
+        if other < self { other } else { self }
+    }
+    fn simd_max(self, other: Self) -> Self {
+        if self < other { other } else { self }
     }
 }
 impl SimdMinMax for f32 {
-    fn is_nan(self) -> bool {
-        self.is_nan()
+    fn simd_min(self, other: Self) -> Self {
+        if self.is_nan() {
+            other
+        } else if other.is_nan() {
+            self
+        } else if self == 0.0 && other == 0.0 {
+            Self::from_bits(self.to_bits() | other.to_bits())
+        } else if other < self {
+            other
+        } else {
+            self
+        }
+    }
+    fn simd_max(self, other: Self) -> Self {
+        if self.is_nan() {
+            other
+        } else if other.is_nan() {
+            self
+        } else if self == 0.0 && other == 0.0 {
+            Self::from_bits(self.to_bits() & other.to_bits())
+        } else if self < other {
+            other
+        } else {
+            self
+        }
     }
 }
 macro_rules! minmax{($($ty:ty),*$(,)?)=>{$(impl SimdMinMax for $ty{})*};}
@@ -82,24 +108,12 @@ minmax!(
 );
 pub fn min<T: SimdMinMax, const N: usize>(a: GVec<T, N>, b: GVec<T, N>) -> GVec<T, N> {
     GVec {
-        data: core::array::from_fn(|i| {
-            if b[i] < a[i] || a[i].is_nan() {
-                b[i]
-            } else {
-                a[i]
-            }
-        }),
+        data: core::array::from_fn(|i| a[i].simd_min(b[i])),
     }
 }
 pub fn max<T: SimdMinMax, const N: usize>(a: GVec<T, N>, b: GVec<T, N>) -> GVec<T, N> {
     GVec {
-        data: core::array::from_fn(|i| {
-            if a[i] < b[i] || a[i].is_nan() {
-                b[i]
-            } else {
-                a[i]
-            }
-        }),
+        data: core::array::from_fn(|i| a[i].simd_max(b[i])),
     }
 }
 pub fn clamp<T: SimdMinMax, const N: usize>(
@@ -114,7 +128,7 @@ pub trait SimdAbs: Copy {
 }
 impl SimdAbs for f32 {
     fn simd_abs(self) -> Self {
-        if self < 0.0 { -self } else { self }
+        self.abs()
     }
 }
 macro_rules! abs_signed{($($ty:ty),*$(,)?)=>{$(impl SimdAbs for $ty{fn simd_abs(self)->Self{if self<0{self.wrapping_neg()}else{self}}})*};}
@@ -295,21 +309,30 @@ pub fn cross(a: Float2, b: Float2) -> f32 {
     let c = a * b.yx();
     c[0] - c[1]
 }
+pub fn mul_add<const N: usize>(
+    a: GVec<f32, N>,
+    b: GVec<f32, N>,
+    addend: GVec<f32, N>,
+) -> GVec<f32, N> {
+    GVec {
+        data: core::array::from_fn(|i| a[i].mul_add(b[i], addend[i])),
+    }
+}
 pub fn mix<const N: usize>(a: GVec<f32, N>, b: GVec<f32, N>, t: GVec<f32, N>) -> GVec<f32, N> {
     assert!(t.data.iter().all(|v| *v >= 0.0 && *v < 1.0));
-    (b - a) * t + a
+    mul_add(b - a, t, a)
 }
 pub fn unchecked_mix<const N: usize>(
     a: GVec<f32, N>,
     b: GVec<f32, N>,
     t: GVec<f32, N>,
 ) -> GVec<f32, N> {
-    (b - a) * t + a
+    mul_add(b - a, t, a)
 }
 pub fn precise_mix<const N: usize>(
     a: GVec<f32, N>,
     b: GVec<f32, N>,
     t: GVec<f32, N>,
 ) -> GVec<f32, N> {
-    a * (GVec::splat(1.0) - t) + b * t
+    mul_add(a, GVec::splat(1.0) - t, b * t)
 }

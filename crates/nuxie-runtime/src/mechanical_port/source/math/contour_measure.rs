@@ -169,7 +169,7 @@ impl ContourMeasure {
         } else {
             0.0
         };
-        let t = previous_t * (1.0 - relative_distance) + segment.get_t() * relative_distance;
+        let t = previous_t.mul_add(1.0 - relative_distance, segment.get_t() * relative_distance);
         assert!((0.0..=1.0).contains(&t));
         if segment.segment_type == SegmentType::Quad {
             eval_quad(
@@ -239,14 +239,14 @@ impl ContourMeasure {
             (0.0, 0.0)
         };
         let ratio = (distance - previous_distance) / (segment.distance - previous_distance);
-        let t = previous_t * (1.0 - ratio) + segment.get_t() * ratio;
+        let t = previous_t.mul_add(1.0 - ratio, segment.get_t() * ratio);
         clamp(t, previous_t, segment.get_t())
     }
     pub fn warp(&self, source: Vec2D) -> Vec2D {
         let result = self.get_pos_tan(source.x);
         Vec2D::new(
-            result.pos.x - result.tan.y * source.y,
-            result.pos.y + result.tan.x * source.y,
+            (-result.tan.y).mul_add(source.y, result.pos.x),
+            result.tan.x.mul_add(source.y, result.pos.y),
         )
     }
     pub fn dump(&self) {
@@ -273,7 +273,7 @@ fn eval_quad(points: &[Vec2D; 3], t: f32) -> PosTan {
     let eval = EvalQuad::new(points);
     PosTan {
         pos: eval.at(t),
-        tan: (2.0 * eval.a * t + eval.b).normalized(),
+        tan: Vec2D::scale_and_add(eval.b, 2.0 * eval.a, t).normalized(),
     }
 }
 fn eval_cubic(points: &[Vec2D; 4], t: f32) -> PosTan {
@@ -304,9 +304,10 @@ fn eval_cubic(points: &[Vec2D; 4], t: f32) -> PosTan {
         };
     }
     let eval = EvalCubic::new(points);
+    let tangent = Vec2D::scale_and_add(2.0 * eval.b, 3.0 * eval.a, t);
     PosTan {
         pos: eval.at(t),
-        tan: ((3.0 * eval.a * t + 2.0 * eval.b) * t + eval.c).normalized(),
+        tan: Vec2D::scale_and_add(eval.c, tangent, t).normalized(),
     }
 }
 fn next_segment_beginning(segments: &[Segment], mut index: usize) -> usize {
@@ -589,10 +590,22 @@ fn quadratic_wangs(points: &[Vec2D; 3], precision: f32) -> f32 {
 fn cubic_wangs(points: &[Vec2D; 4], precision: f32) -> f32 {
     let v0 = points[0] - 2.0 * points[1] + points[2];
     let v1 = points[1] - 2.0 * points[2] + points[3];
-    (v0.length_squared().max(v1.length_squared()) * (81.0 / 16.0) * precision * precision)
+    (cpp_max(v0.length_squared(), v1.length_squared()) * (9.0 / 16.0) * precision * precision)
         .sqrt()
         .sqrt()
 }
 fn clamp(value: f32, low: f32, high: f32) -> f32 {
-    low.max(value).min(high)
+    let value = if low < value || low.is_nan() {
+        value
+    } else {
+        low
+    };
+    if high < value || value.is_nan() {
+        high
+    } else {
+        value
+    }
+}
+fn cpp_max(first: f32, second: f32) -> f32 {
+    if first < second { second } else { first }
 }

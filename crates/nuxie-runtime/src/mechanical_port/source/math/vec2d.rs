@@ -16,7 +16,7 @@ impl Vec2D {
     }
 
     pub fn length_squared(self) -> f32 {
-        self.x * self.x + self.y * self.y
+        self.x.mul_add(self.x, self.y * self.y)
     }
 
     pub fn length(self) -> f32 {
@@ -39,35 +39,35 @@ impl Vec2D {
     }
 
     pub fn lerp(a: Self, b: Self, t: f32) -> Self {
-        a + (b - a) * t
+        Self::new((b.x - a.x).mul_add(t, a.x), (b.y - a.y).mul_add(t, a.y))
     }
 
     pub fn transform_dir(a: Self, m: &Mat2D) -> Self {
         Self {
-            x: m[0] * a.x + m[2] * a.y,
-            y: m[1] * a.x + m[3] * a.y,
+            x: m[0].mul_add(a.x, m[2] * a.y),
+            y: m[1].mul_add(a.x, m[3] * a.y),
         }
     }
 
     pub fn transform_mat2d(a: Self, m: &Mat2D) -> Self {
         Self {
-            x: m[0] * a.x + m[2] * a.y + m[4],
-            y: m[1] * a.x + m[3] * a.y + m[5],
+            x: m[0].mul_add(a.x, m[2] * a.y) + m[4],
+            y: m[1].mul_add(a.x, m[3] * a.y) + m[5],
         }
     }
 
     pub fn dot(a: Self, b: Self) -> f32 {
-        a.x * b.x + a.y * b.y
+        a.x.mul_add(b.x, a.y * b.y)
     }
 
     pub fn cross(a: Self, b: Self) -> f32 {
-        a.x * b.y - a.y * b.x
+        a.x.mul_add(b.y, -(a.y * b.x))
     }
 
     pub fn scale_and_add(a: Self, b: Self, scale: f32) -> Self {
         Self {
-            x: a.x + b.x * scale,
-            y: a.y + b.y * scale,
+            x: b.x.mul_add(scale, a.x),
+            y: b.y.mul_add(scale, a.y),
         }
     }
 

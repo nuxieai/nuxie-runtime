@@ -62,7 +62,10 @@ impl TransitionConditionOp {
 #[derive(Debug, Clone, Copy)]
 pub(super) struct RuntimeTransitionNumberCondition {
     input: RuntimeTransitionInputCondition,
-    op: TransitionConditionOp,
+    // Pinned `TransitionValueCondition::op()` casts the retained uint property
+    // without normalizing unknown values. Keep that raw value so the switch in
+    // `TransitionNumberCondition::evaluate` reaches its final `return false`.
+    op_value: u32,
     value: f32,
 }
 
@@ -71,13 +74,17 @@ impl RuntimeTransitionNumberCondition {
         state_machine_inputs: &[Option<&RuntimeObject>],
         object: &RuntimeObject,
     ) -> Option<Self> {
+        let op_value = match object.uint_property("opValue") {
+            Some(value) => u32::try_from(value).ok()?,
+            None => 0,
+        };
         Some(Self {
             input: RuntimeTransitionInputCondition::from_object(
                 state_machine_inputs,
                 "StateMachineNumber",
                 object,
             )?,
-            op: TransitionConditionOp::from_value(object.uint_property("opValue").unwrap_or(0)),
+            op_value,
             value: object.double_property("value").unwrap_or(0.0),
         })
     }
@@ -86,7 +93,14 @@ impl RuntimeTransitionNumberCondition {
     pub(super) fn new(input_index: usize, op: TransitionConditionOp, value: f32) -> Self {
         Self {
             input: RuntimeTransitionInputCondition::new(input_index),
-            op,
+            op_value: match op {
+                TransitionConditionOp::Equal => 0,
+                TransitionConditionOp::NotEqual => 1,
+                TransitionConditionOp::LessThanOrEqual => 2,
+                TransitionConditionOp::GreaterThanOrEqual => 3,
+                TransitionConditionOp::LessThan => 4,
+                TransitionConditionOp::GreaterThan => 5,
+            },
             value,
         }
     }
@@ -98,6 +112,42 @@ impl RuntimeTransitionNumberCondition {
         else {
             return true;
         };
-        self.op.compare(input_value, self.value)
+        match self.op_value {
+            0 => input_value == self.value,
+            1 => input_value != self.value,
+            2 => input_value <= self.value,
+            3 => input_value >= self.value,
+            4 => input_value < self.value,
+            5 => input_value > self.value,
+            _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::state_machine_input::RuntimeStateMachineInput;
+    use super::*;
+    use std::sync::Arc;
+
+    fn number_input(value: f32) -> StateMachineInputInstance {
+        StateMachineInputInstance::new(
+            0,
+            Arc::new(vec![Some(RuntimeStateMachineInput::new_number(
+                1, None, value,
+            ))]),
+        )
+    }
+
+    #[test]
+    fn unknown_operation_does_not_normalize_to_equal() {
+        let condition = RuntimeTransitionNumberCondition {
+            input: RuntimeTransitionInputCondition::new(0),
+            op_value: 6,
+            value: 7.0,
+        };
+
+        assert!(!condition.evaluate(&[number_input(7.0)]));
+        assert!(!condition.evaluate(&[number_input(8.0)]));
     }
 }

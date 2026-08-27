@@ -25,18 +25,28 @@ pub(crate) fn property_changed(
         if !visited.insert(parent_local) {
             break;
         }
-        match artboard.runtime_object_type_name(parent_local) {
-            Some("LayoutComponent") => {
-                changed |= artboard.mark_layout_node_changed(parent_local);
-                break;
-            }
-            Some("Shape") => {
-                parent = artboard.component_parent_local(parent_local);
-            }
-            // A non-Shape Node (and any malformed parent) is the group
-            // boundary in pinned `markPathDirty(sendToLayout=true)`.
-            _ => break,
+        let Some(definition) = artboard
+            .runtime_object_type_name(parent_local)
+            .and_then(nuxie_schema::definition_by_name)
+        else {
+            break;
+        };
+        if definition.is_a("LayoutComponent") {
+            changed |= artboard.mark_layout_node_changed(parent_local);
+            break;
         }
+        if definition.is_a("Node") {
+            if definition.is_a("Shape") {
+                // `Path::shape()` is the first Shape ancestor. Reaching one
+                // before another Node boundary therefore identifies the same
+                // owner that pinned C++ permits the walk to cross.
+                parent = artboard.component_parent_local(parent_local);
+                continue;
+            }
+            break;
+        }
+        // Non-Node ContainerComponents do not form a group boundary.
+        parent = artboard.component_parent_local(parent_local);
     }
     Some(changed)
 }

@@ -7,18 +7,16 @@ impl crate::state_machine::RuntimeLayerState {
 
     pub(crate) fn make_animation_instance(
         &self,
-        _instance: &ArtboardInstance,
+        instance: &ArtboardInstance,
         animation_definitions: &Arc<Vec<RuntimeLinearAnimation>>,
         empty_animation_definition: &Arc<RuntimeLinearAnimation>,
-    ) -> Option<(LinearAnimationInstance, bool)> {
-        let mut animation = LinearAnimationInstance::new(
-            self.animation()?,
-            Arc::clone(animation_definitions),
-            Arc::clone(empty_animation_definition),
-            self.speed,
-        )?;
-        let keep_going = animation.advance(0.0);
-        Some((animation, keep_going))
+    ) -> Option<AnimationStateInstance> {
+        AnimationStateInstance::new(
+            self,
+            instance,
+            animation_definitions,
+            empty_animation_definition,
+        )
     }
 
     #[cfg(test)]

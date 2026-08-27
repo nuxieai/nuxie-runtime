@@ -15,10 +15,7 @@ pub(super) struct RuntimeStateInstance {
 #[derive(Debug, Clone)]
 enum RuntimeStateInstanceKind {
     System(RuntimeSystemStateInstance),
-    Animation {
-        animation: LinearAnimationInstance,
-        keep_going: bool,
-    },
+    Animation(AnimationStateInstance),
     Blend1D(BlendState1DInstance),
     BlendDirect(BlendStateDirectInstance),
 }
@@ -51,16 +48,13 @@ impl RuntimeStateInstance {
             );
             occurrence.advance(definition, artboard, inputs, bindable_numbers, 0.0);
             RuntimeStateInstanceKind::BlendDirect(occurrence)
-        } else if state.animation().is_some() {
-            let (occurrence, keep_going) = state.make_animation_instance(
+        } else if state.type_name == Some("AnimationState") {
+            let occurrence = state.make_animation_instance(
                 artboard,
                 animation_definitions,
                 empty_animation_definition,
             )?;
-            RuntimeStateInstanceKind::Animation {
-                animation: occurrence,
-                keep_going,
-            }
+            RuntimeStateInstanceKind::Animation(occurrence)
         } else {
             RuntimeStateInstanceKind::System(RuntimeSystemStateInstance)
         };
@@ -85,7 +79,7 @@ impl RuntimeStateInstance {
     pub(super) fn keep_going(&self) -> bool {
         match &self.kind {
             RuntimeStateInstanceKind::System(_) => false,
-            RuntimeStateInstanceKind::Animation { keep_going, .. } => *keep_going,
+            RuntimeStateInstanceKind::Animation(instance) => instance.keep_going(),
             RuntimeStateInstanceKind::Blend1D(_) | RuntimeStateInstanceKind::BlendDirect(_) => true,
         }
     }
@@ -104,16 +98,8 @@ impl RuntimeStateInstance {
         };
         match &mut self.kind {
             RuntimeStateInstanceKind::System(instance) => instance.advance(),
-            RuntimeStateInstanceKind::Animation {
-                animation,
-                keep_going,
-            } => {
-                *keep_going = artboard.advance_linear_animation_instance_with_events(
-                    animation,
-                    elapsed_seconds * state.speed,
-                    reported_events,
-                );
-                *keep_going
+            RuntimeStateInstanceKind::Animation(instance) => {
+                instance.advance(state, artboard, elapsed_seconds, reported_events)
             }
             RuntimeStateInstanceKind::Blend1D(instance) => {
                 let Some(definition) = state.blend_state_1d.as_ref() else {
@@ -147,7 +133,7 @@ impl RuntimeStateInstance {
     pub(super) fn apply(&mut self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
         match &mut self.kind {
             RuntimeStateInstanceKind::System(instance) => instance.apply(),
-            RuntimeStateInstanceKind::Animation { animation, .. } => animation.apply(artboard, mix),
+            RuntimeStateInstanceKind::Animation(instance) => instance.apply(artboard, mix),
             RuntimeStateInstanceKind::Blend1D(instance) => instance.apply(artboard, mix),
             RuntimeStateInstanceKind::BlendDirect(instance) => instance.apply(artboard, mix),
         }
@@ -155,14 +141,16 @@ impl RuntimeStateInstance {
 
     pub(super) fn plain_animation(&self) -> Option<&LinearAnimationInstance> {
         match &self.kind {
-            RuntimeStateInstanceKind::Animation { animation, .. } => Some(animation),
+            RuntimeStateInstanceKind::Animation(instance) => Some(instance.animation_instance()),
             _ => None,
         }
     }
 
     pub(super) fn plain_animation_mut(&mut self) -> Option<&mut LinearAnimationInstance> {
         match &mut self.kind {
-            RuntimeStateInstanceKind::Animation { animation, .. } => Some(animation),
+            RuntimeStateInstanceKind::Animation(instance) => {
+                Some(instance.animation_instance_mut())
+            }
             _ => None,
         }
     }
@@ -172,7 +160,7 @@ impl RuntimeStateInstance {
         blend_animation_index: Option<usize>,
     ) -> Option<&LinearAnimationInstance> {
         match &self.kind {
-            RuntimeStateInstanceKind::Animation { animation, .. } => Some(animation),
+            RuntimeStateInstanceKind::Animation(instance) => Some(instance.animation_instance()),
             RuntimeStateInstanceKind::Blend1D(instance) => {
                 instance.animation_instance(blend_animation_index?)
             }
@@ -190,8 +178,8 @@ impl RuntimeStateInstance {
     }
 
     pub(super) fn clear_spilled_time(&mut self) {
-        if let Some(animation) = self.plain_animation_mut() {
-            animation.clear_spilled_time();
+        if let RuntimeStateInstanceKind::Animation(instance) = &mut self.kind {
+            instance.clear_spilled_time();
         }
     }
 
@@ -298,7 +286,9 @@ impl RuntimeStateInstance {
     ) {
         match &mut self.kind {
             RuntimeStateInstanceKind::System(_) => {}
-            RuntimeStateInstanceKind::Animation { animation, .. } => callback(animation),
+            RuntimeStateInstanceKind::Animation(instance) => {
+                instance.for_each_animation_instance_mut(callback)
+            }
             RuntimeStateInstanceKind::Blend1D(instance) => {
                 instance.for_each_animation_instance_mut(callback)
             }

@@ -279,17 +279,17 @@ impl RuntimeKeyedProperty {
 
         let idx = self.closest_frame_index(seconds);
         let value = if idx == 0 {
-            self.key_frames[0].as_int()?.value
+            self.key_frames[0].as_int()?.applied_value()
         } else if idx < self.key_frames.len() {
             let from = self.key_frames[idx - 1].as_int()?;
             let to = self.key_frames[idx].as_int()?;
             if seconds == to.seconds {
-                to.value
+                to.applied_value()
             } else {
-                from.value
+                from.applied_value()
             }
         } else {
-            self.key_frames.last()?.as_int()?.value
+            self.key_frames.last()?.as_int()?.applied_value()
         };
 
         Some(value)

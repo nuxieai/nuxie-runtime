@@ -335,26 +335,21 @@ impl ArtboardInstance {
         child.artboard_owned_view_model_context = Some(
             RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
         );
-        let selected_machine_indices = artboard_list_map_rule_for_view_model(
-            &component_list.map_rules,
-            context.borrow().view_model_index(),
-        )
-        .filter(|rule| !rule.state_machine_ids.is_empty())
-        .map(|rule| rule.state_machine_ids.clone())
-        .unwrap_or_else(|| {
-            let default_state_machine_index = file
-                .object(child_graph.global_id as usize)
-                .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
-            vec![component_list_default_state_machine_index(
+        // Pinned `createStateMachineInstance` always mounts exactly the
+        // mapped artboard's default state machine. `ArtboardListMapRule`
+        // selects only an artboard; authored `NestedStateMachine` children
+        // cannot extend it because `NestedAnimation::validate` requires a
+        // `NestedArtboard` parent.
+        let default_state_machine_index = file
+            .object(child_graph.global_id as usize)
+            .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
+        let mut state_machines = Vec::with_capacity(1);
+        if let Some(mut state_machine) =
+            child.state_machine_instance(component_list_default_state_machine_index(
                 default_state_machine_index,
                 child.state_machines.len(),
-            )]
-        });
-        let mut state_machines = Vec::with_capacity(selected_machine_indices.len());
-        for state_machine_index in selected_machine_indices {
-            let Some(mut state_machine) = child.state_machine_instance(state_machine_index) else {
-                continue;
-            };
+            ))
+        {
             state_machine.bind_owned_view_model_data_context(&child_data_context);
             // C++ `ArtboardComponentList::linkStateMachineToArtboard` installs
             // the row DataContext and immediately runs `updateDataBinds(false)`

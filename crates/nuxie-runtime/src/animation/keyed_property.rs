@@ -1,3 +1,12 @@
+// Mirrors src/animation/keyed_property.cpp and
+// include/rive/animation/keyed_property.hpp.
+//
+// The approved AF-7 own-by-value/import-time-devirtualization adaptation runs
+// `import`, `onAddedDirty`, and `onAddedClean` while flattening RuntimeFile:
+// KeyedPropertyImporter transfers each imported frame in authored order,
+// build_linear_animations resolves every InterpolatingKeyFrame and propagates
+// a failed resolution through the owning KeyedObject, and no pinned KeyFrame
+// subtype adds an onAddedClean body beyond the successful inherited callback.
 #[derive(Debug, Clone)]
 pub struct RuntimeKeyedProperty {
     pub global_id: u32,
@@ -43,6 +52,54 @@ impl RuntimeKeyedPropertyTarget {
 }
 
 impl RuntimeKeyedProperty {
+    pub(crate) fn new(
+        global_id: u32,
+        property_key: u16,
+        target: RuntimeKeyedPropertyTarget,
+    ) -> Self {
+        Self {
+            global_id,
+            property_key,
+            target,
+            key_frames: Vec::new(),
+        }
+    }
+
+    pub(crate) fn add_key_frame(&mut self, key_frame: RuntimeKeyFrame) {
+        self.key_frames.push(key_frame);
+    }
+
+    fn closest_frame_index(&self, seconds: f32) -> usize {
+        self.closest_frame_index_with_exact_offset(seconds, 0)
+    }
+
+    fn closest_frame_index_with_exact_offset(&self, seconds: f32, exact_offset: usize) -> usize {
+        let last = self.key_frames.len() - 1;
+        if seconds > self.key_frames[last].seconds() {
+            return self.key_frames.len();
+        }
+
+        let mut start = 0;
+        let mut end = last;
+        while start <= end {
+            let mid = (start + end) >> 1;
+            let closest_seconds = self.key_frames[mid].seconds();
+            if closest_seconds < seconds {
+                start = mid + 1;
+            } else if closest_seconds > seconds {
+                // C++ uses a signed end index. This is the equivalent
+                // underflow guard for Rust's slice index type.
+                if mid == 0 {
+                    break;
+                }
+                end = mid - 1;
+            } else {
+                return mid + exact_offset;
+            }
+        }
+        start
+    }
+
     pub(crate) fn first_double_value(&self) -> Option<f32> {
         self.key_frames
             .first()?
@@ -161,9 +218,7 @@ impl RuntimeKeyedProperty {
 
         let idx = self.closest_frame_index(seconds);
         let value = if idx == 0 {
-            self.key_frames[0]
-                .as_bool()?
-                .apply(mix, key_frame_values)
+            self.key_frames[0].as_bool()?.apply(mix, key_frame_values)
         } else if idx < self.key_frames.len() {
             let from = self.key_frames[idx - 1].as_bool()?;
             let to = self.key_frames[idx].as_bool()?;
@@ -242,9 +297,7 @@ impl RuntimeKeyedProperty {
 
         let idx = self.closest_frame_index(seconds);
         let value = if idx == 0 {
-            self.key_frames[0]
-                .as_string()?
-                .apply(mix, key_frame_values)
+            self.key_frames[0].as_string()?.apply(mix, key_frame_values)
         } else if idx < self.key_frames.len() {
             let from = self.key_frames[idx - 1].as_string()?;
             let to = self.key_frames[idx].as_string()?;
@@ -288,16 +341,8 @@ impl RuntimeKeyedProperty {
             from_exact_offset = 1;
         }
 
-        let mut index = closest_key_frame_index_with_exact_offset(
-            &self.key_frames,
-            seconds_from,
-            from_exact_offset,
-        );
-        let mut index_to = closest_key_frame_index_with_exact_offset(
-            &self.key_frames,
-            seconds_to,
-            to_exact_offset,
-        );
+        let mut index = self.closest_frame_index_with_exact_offset(seconds_from, from_exact_offset);
+        let mut index_to = self.closest_frame_index_with_exact_offset(seconds_to, to_exact_offset);
         if index_to < index {
             std::mem::swap(&mut index, &mut index_to);
         }
@@ -315,7 +360,176 @@ impl RuntimeKeyedProperty {
         }
     }
 
-    fn closest_frame_index(&self, seconds: f32) -> usize {
-        closest_key_frame_index(&self.key_frames, seconds)
+    fn apply(
+        &self,
+        instance: &mut ArtboardInstance,
+        target_local_id: usize,
+        seconds: f32,
+        mix: f32,
+        key_frame_values: RuntimeKeyFrameValueContext<'_>,
+        animation_instance: Option<&LinearAnimationInstance>,
+    ) -> bool {
+        // Pinned C++ asserts this precondition and then indexes the vector.
+        // Rust cannot continue through the corresponding out-of-bounds path.
+        if self.key_frames.is_empty() {
+            return false;
+        }
+
+        // CoreRegistry assigns exactly one field type per property, matching
+        // the pinned virtual dispatch through InterpolatingKeyFrame::apply.
+        let actual_mix =
+            keyed_property_actual_mix(&*instance, target_local_id, self.property_key, mix);
+        match &self.target {
+            RuntimeKeyedPropertyTarget::Double { transform_property } => {
+                let Some(value) = self.double_value_at_with_script_context(
+                    seconds,
+                    actual_mix,
+                    key_frame_values,
+                    Some(effective_scripted_interpolation_context(
+                        animation_instance,
+                        &*instance,
+                    )),
+                    || match transform_property {
+                        Some(transform_property) => instance.transform_property_with_key(
+                            target_local_id,
+                            *transform_property,
+                            self.property_key,
+                        ),
+                        None => instance.double_property(target_local_id, self.property_key),
+                    },
+                ) else {
+                    return false;
+                };
+                match transform_property {
+                    Some(transform_property) => instance.set_transform_property_with_key(
+                        target_local_id,
+                        *transform_property,
+                        self.property_key,
+                        value,
+                    ),
+                    None => instance.set_keyed_double_property(
+                        target_local_id,
+                        self.property_key,
+                        value,
+                    ),
+                }
+            }
+            RuntimeKeyedPropertyTarget::Color {
+                solid_color_property,
+                data_bind_observed,
+            } => {
+                let Some(frame_value) = self.color_frame_value_at_with_script_context(
+                    seconds,
+                    key_frame_values,
+                    Some(effective_scripted_interpolation_context(
+                        animation_instance,
+                        &*instance,
+                    )),
+                ) else {
+                    return false;
+                };
+                let Some(value) = apply_key_frame_color_mix(frame_value, actual_mix, || {
+                    if *solid_color_property {
+                        instance.solid_color_value(target_local_id)
+                    } else {
+                        instance.color_property(target_local_id, self.property_key)
+                    }
+                }) else {
+                    return false;
+                };
+                if *solid_color_property {
+                    instance.set_keyed_solid_color_property(
+                        target_local_id,
+                        self.property_key,
+                        *data_bind_observed,
+                        value,
+                    )
+                } else {
+                    instance.set_keyed_color_property(target_local_id, self.property_key, value)
+                }
+            }
+            RuntimeKeyedPropertyTarget::Bool => {
+                let Some(value) = self.bool_value_at(seconds, actual_mix, key_frame_values) else {
+                    return false;
+                };
+                instance.set_bool_property(target_local_id, self.property_key, value)
+            }
+            RuntimeKeyedPropertyTarget::Uint => {
+                let Some(value) = self.uint_value_at(seconds) else {
+                    return false;
+                };
+                instance.set_uint_property(target_local_id, self.property_key, value)
+            }
+            RuntimeKeyedPropertyTarget::Int => {
+                let Some(value) = self.int_value_at(seconds) else {
+                    return false;
+                };
+                instance.set_int_property(target_local_id, self.property_key, value)
+            }
+            RuntimeKeyedPropertyTarget::String => {
+                let Some(value) = self.string_value_at(seconds, actual_mix, key_frame_values)
+                else {
+                    return false;
+                };
+                instance.set_string_property(target_local_id, self.property_key, value)
+            }
+            RuntimeKeyedPropertyTarget::Callback { .. } => false,
+        }
+    }
+
+    pub(crate) fn first(&self) -> Option<&RuntimeKeyFrame> {
+        self.key_frames.first()
+    }
+
+    pub(crate) fn num_key_frames(&self) -> usize {
+        self.key_frames.len()
+    }
+
+    pub(crate) fn get_key_frame(&self, index: usize) -> Option<&RuntimeKeyFrame> {
+        self.key_frames.get(index)
+    }
+}
+
+/// Mirrors `InterpolatorHost::from` followed by
+/// `InterpolatorHost::overridesKeyedInterpolation` in `KeyedProperty::apply`.
+///
+/// The pinned static dispatch checks `coreType()` rather than `isTypeOf()`, so
+/// only the concrete `LayoutComponent` type is an interpolator host. Its
+/// implementation overrides the caller's keyed mix for width and height only
+/// while the component's own layout animation is active.
+fn interpolator_host_overrides_keyed_interpolation(
+    artboard: &ArtboardInstance,
+    target_local_id: usize,
+    property_key: u16,
+) -> bool {
+    let Some(component) = artboard.component(target_local_id) else {
+        return false;
+    };
+    if component.type_name != "LayoutComponent" {
+        return false;
+    }
+    let Some(layout) = component.concrete.layout.as_ref() else {
+        return false;
+    };
+
+    layout.animates()
+        && ["width", "height"].into_iter().any(|property_name| {
+            crate::properties::property_key_for_name("LayoutComponent", property_name)
+                == Some(property_key)
+        })
+}
+
+/// Pinned `KeyedProperty::apply` forces a host-owned property to its complete
+/// keyed value, leaving the host to perform its own interpolation.
+fn keyed_property_actual_mix(
+    artboard: &ArtboardInstance,
+    target_local_id: usize,
+    property_key: u16,
+    mix: f32,
+) -> f32 {
+    if interpolator_host_overrides_keyed_interpolation(artboard, target_local_id, property_key) {
+        1.0
+    } else {
+        mix
     }
 }

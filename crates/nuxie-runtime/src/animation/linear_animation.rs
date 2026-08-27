@@ -134,143 +134,8 @@ impl RuntimeLinearAnimation {
 
         let mut changed = false;
         for keyed_object in self.keyed_objects.iter() {
-            for keyed_property in &keyed_object.keyed_properties {
-                let actual_mix = keyed_property_actual_mix(
-                    &*instance,
-                    keyed_object.target_local_id,
-                    keyed_property.property_key,
-                    mix,
-                );
-                // CoreRegistry assigns exactly one field type per property,
-                // matching C++ KeyedProperty's single virtual apply dispatch.
-                match &keyed_property.target {
-                    RuntimeKeyedPropertyTarget::Double { transform_property } => {
-                        let Some(value) = keyed_property.double_value_at_with_script_context(
-                            seconds,
-                            actual_mix,
-                            key_frame_values,
-                            Some(effective_scripted_interpolation_context(
-                                animation_instance,
-                                &*instance,
-                            )),
-                            || match transform_property {
-                                Some(property) => instance.transform_property_with_key(
-                                    keyed_object.target_local_id,
-                                    *property,
-                                    keyed_property.property_key,
-                                ),
-                                None => instance.double_property(
-                                    keyed_object.target_local_id,
-                                    keyed_property.property_key,
-                                ),
-                            },
-                        ) else {
-                            continue;
-                        };
-                        changed |= match transform_property {
-                            Some(property) => instance.set_transform_property_with_key(
-                                keyed_object.target_local_id,
-                                *property,
-                                keyed_property.property_key,
-                                value,
-                            ),
-                            None => instance.set_keyed_double_property(
-                                keyed_object.target_local_id,
-                                keyed_property.property_key,
-                                value,
-                            ),
-                        };
-                    }
-                    RuntimeKeyedPropertyTarget::Color {
-                        solid_color_property,
-                        data_bind_observed,
-                    } => {
-                        let Some(frame_value) = keyed_property
-                            .color_frame_value_at_with_script_context(
-                                seconds,
-                                key_frame_values,
-                                Some(effective_scripted_interpolation_context(
-                                    animation_instance,
-                                    &*instance,
-                                )),
-                            )
-                        else {
-                            continue;
-                        };
-                        let Some(value) = apply_key_frame_color_mix(frame_value, actual_mix, || {
-                            if *solid_color_property {
-                                instance.solid_color_value(keyed_object.target_local_id)
-                            } else {
-                                instance.color_property(
-                                    keyed_object.target_local_id,
-                                    keyed_property.property_key,
-                                )
-                            }
-                        }) else {
-                            continue;
-                        };
-                        changed |= if *solid_color_property {
-                            instance.set_keyed_solid_color_property(
-                                keyed_object.target_local_id,
-                                keyed_property.property_key,
-                                *data_bind_observed,
-                                value,
-                            )
-                        } else {
-                            instance.set_keyed_color_property(
-                                keyed_object.target_local_id,
-                                keyed_property.property_key,
-                                value,
-                            )
-                        };
-                    }
-                    RuntimeKeyedPropertyTarget::Bool => {
-                        let Some(value) =
-                            keyed_property.bool_value_at(seconds, actual_mix, key_frame_values)
-                        else {
-                            continue;
-                        };
-                        changed |= instance.set_bool_property(
-                            keyed_object.target_local_id,
-                            keyed_property.property_key,
-                            value,
-                        );
-                    }
-                    RuntimeKeyedPropertyTarget::Uint => {
-                        let Some(value) = keyed_property.uint_value_at(seconds) else {
-                            continue;
-                        };
-                        changed |= instance.set_uint_property(
-                            keyed_object.target_local_id,
-                            keyed_property.property_key,
-                            value,
-                        );
-                    }
-                    RuntimeKeyedPropertyTarget::Int => {
-                        let Some(value) = keyed_property.int_value_at(seconds) else {
-                            continue;
-                        };
-                        changed |= instance.set_int_property(
-                            keyed_object.target_local_id,
-                            keyed_property.property_key,
-                            value,
-                        );
-                    }
-                    RuntimeKeyedPropertyTarget::String => {
-                        let Some(value) =
-                            keyed_property.string_value_at(seconds, actual_mix, key_frame_values)
-                        else {
-                            continue;
-                        };
-                        changed |= instance.set_string_property(
-                            keyed_object.target_local_id,
-                            keyed_property.property_key,
-                            value,
-                        );
-                    }
-                    RuntimeKeyedPropertyTarget::Callback { .. } => {}
-                }
-            }
+            changed |=
+                keyed_object.apply(instance, seconds, mix, key_frame_values, animation_instance);
         }
         changed
     }
@@ -291,15 +156,12 @@ impl RuntimeLinearAnimation {
         }
 
         for keyed_object in self.keyed_objects.iter() {
-            for keyed_property in &keyed_object.keyed_properties {
-                keyed_property.report_keyed_callbacks(
-                    keyed_object.target_local_id,
-                    seconds_from,
-                    seconds_to,
-                    is_at_start_frame,
-                    callback_sink,
-                );
-            }
+            keyed_object.report_keyed_callbacks(
+                seconds_from,
+                seconds_to,
+                is_at_start_frame,
+                callback_sink,
+            );
         }
     }
 

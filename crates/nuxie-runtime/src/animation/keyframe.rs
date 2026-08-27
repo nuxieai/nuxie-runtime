@@ -4,39 +4,6 @@ fn retained_key_frame_seconds(frame: u64, fps: u64) -> f32 {
     frame as f32 / fps as f32
 }
 
-fn closest_key_frame_index(key_frames: &[RuntimeKeyFrame], seconds: f32) -> usize {
-    closest_key_frame_index_with_exact_offset(key_frames, seconds, 0)
-}
-
-fn closest_key_frame_index_with_exact_offset(
-    key_frames: &[RuntimeKeyFrame],
-    seconds: f32,
-    exact_offset: usize,
-) -> usize {
-    let last = key_frames.len() - 1;
-    if seconds > key_frames[last].seconds() {
-        return key_frames.len();
-    }
-
-    let mut start = 0;
-    let mut end = last;
-    while start <= end {
-        let mid = (start + end) >> 1;
-        let closest = key_frames[mid].seconds();
-        if closest < seconds {
-            start = mid + 1;
-        } else if closest > seconds {
-            if mid == 0 {
-                break;
-            }
-            end = mid - 1;
-        } else {
-            return mid + exact_offset;
-        }
-    }
-    start
-}
-
 /// The concrete keyframe occurrence owned by a `RuntimeKeyedProperty`.
 ///
 /// Mirrors C++ `KeyedProperty::m_keyFrames`: concrete subclasses share one

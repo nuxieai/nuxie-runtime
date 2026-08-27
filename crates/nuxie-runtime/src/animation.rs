@@ -184,12 +184,11 @@ pub(crate) fn build_linear_animations<'a>(
             };
 
             let keyed_objects = Arc::make_mut(&mut animations[animation_index].keyed_objects);
-            keyed_objects.push(RuntimeKeyedObject {
-                global_id: global_id as u32,
+            keyed_objects.push(RuntimeKeyedObject::new(
+                global_id as u32,
                 object_id,
                 target_local_id,
-                keyed_properties: Vec::new(),
-            });
+            ));
             current_keyed_object = Some((animation_index, keyed_objects.len() - 1));
             continue;
         }
@@ -236,14 +235,11 @@ pub(crate) fn build_linear_animations<'a>(
             };
 
             let keyed_objects = Arc::make_mut(&mut animations[owner_animation_index].keyed_objects);
-            keyed_objects[keyed_object_index]
-                .keyed_properties
-                .push(RuntimeKeyedProperty {
-                    global_id: global_id as u32,
-                    property_key,
-                    target,
-                    key_frames: Vec::new(),
-                });
+            keyed_objects[keyed_object_index].add_keyed_property(RuntimeKeyedProperty::new(
+                global_id as u32,
+                property_key,
+                target,
+            ));
             current_keyed_property = Some((
                 owner_animation_index,
                 keyed_object_index,
@@ -291,8 +287,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_object_index,
                 keyed_property_index,
             )
-            .key_frames
-            .push(RuntimeKeyFrame::Double(RuntimeKeyFrameDouble {
+            .add_key_frame(RuntimeKeyFrame::Double(RuntimeKeyFrameDouble {
                 global_id: global_id as u32,
                 frame,
                 seconds,
@@ -321,8 +316,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_object_index,
                 keyed_property_index,
             )
-            .key_frames
-            .push(RuntimeKeyFrame::Color(RuntimeKeyFrameColor {
+            .add_key_frame(RuntimeKeyFrame::Color(RuntimeKeyFrameColor {
                 global_id: global_id as u32,
                 frame,
                 seconds,
@@ -351,8 +345,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_object_index,
                 keyed_property_index,
             )
-            .key_frames
-            .push(RuntimeKeyFrame::Bool(RuntimeKeyFrameBool {
+            .add_key_frame(RuntimeKeyFrame::Bool(RuntimeKeyFrameBool {
                 global_id: global_id as u32,
                 frame,
                 seconds,
@@ -380,8 +373,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_object_index,
                 keyed_property_index,
             )
-            .key_frames
-            .push(RuntimeKeyFrame::Uint(RuntimeKeyFrameUint {
+            .add_key_frame(RuntimeKeyFrame::Uint(RuntimeKeyFrameUint {
                 global_id: global_id as u32,
                 frame,
                 seconds,
@@ -409,8 +401,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_object_index,
                 keyed_property_index,
             )
-            .key_frames
-            .push(RuntimeKeyFrame::Int(RuntimeKeyFrameInt {
+            .add_key_frame(RuntimeKeyFrame::Int(RuntimeKeyFrameInt {
                 global_id: global_id as u32,
                 frame,
                 seconds,
@@ -438,8 +429,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_object_index,
                 keyed_property_index,
             )
-            .key_frames
-            .push(RuntimeKeyFrame::Id(RuntimeKeyFrameId {
+            .add_key_frame(RuntimeKeyFrame::Id(RuntimeKeyFrameId {
                 global_id: global_id as u32,
                 frame,
                 seconds,
@@ -467,8 +457,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_object_index,
                 keyed_property_index,
             )
-            .key_frames
-            .push(RuntimeKeyFrame::String(RuntimeKeyFrameString {
+            .add_key_frame(RuntimeKeyFrame::String(RuntimeKeyFrameString {
                 global_id: global_id as u32,
                 frame,
                 seconds,
@@ -500,8 +489,7 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_object_index,
                 keyed_property_index,
             )
-            .key_frames
-            .push(RuntimeKeyFrame::Callback(RuntimeKeyFrameCallback {
+            .add_key_frame(RuntimeKeyFrame::Callback(RuntimeKeyFrameCallback {
                 global_id: global_id as u32,
                 frame,
                 seconds,

@@ -1,0 +1,62 @@
+use crate::mechanical_port::source::{
+    component::ComponentDirt,
+    generated::shapes::star_base::StarBase,
+    math::math_types,
+    shapes::{polygon::PolygonState, straight_vertex::StraightVertex},
+};
+pub struct Star {
+    pub base: StarBase,
+    pub polygon: PolygonState,
+}
+impl Star {
+    pub fn new(base: StarBase) -> Self {
+        Self {
+            base,
+            polygon: PolygonState::default(),
+        }
+    }
+    pub fn inner_radius_changed(&mut self) {
+        self.base.mark_path_dirty();
+    }
+    pub fn vertex_count(&self) -> usize {
+        self.base.points() as usize * 2
+    }
+    pub fn build_polygon(&mut self) {
+        let half_width = self.base.width() / 2.0;
+        let half_height = self.base.height() / 2.0;
+        let inner_half_width = self.base.width() * self.base.inner_radius() / 2.0;
+        let inner_half_height = self.base.height() * self.base.inner_radius() / 2.0;
+        let ox = -self.base.origin_x() * self.base.width() + half_width;
+        let oy = -self.base.origin_y() * self.base.height() + half_height;
+        let length = self.vertex_count();
+        let mut angle = -math_types::PI / 2.0;
+        let increment = 2.0 * math_types::PI / length as f32;
+        for index in (0..length).step_by(2) {
+            let outer = &mut self.polygon.vertices[index];
+            outer.base.set_x(ox + angle.cos() * half_width);
+            outer.base.set_y(oy + angle.sin() * half_height);
+            outer.base.set_radius(self.base.corner_radius());
+            angle += increment;
+            let inner = &mut self.polygon.vertices[index + 1];
+            inner.base.set_x(ox + angle.cos() * inner_half_width);
+            inner.base.set_y(oy + angle.sin() * inner_half_height);
+            inner.base.set_radius(self.base.corner_radius());
+            angle += increment;
+        }
+    }
+    pub fn update(&mut self, value: ComponentDirt) {
+        if self.base.has_dirt(ComponentDirt::PATH) {
+            if self.polygon.vertices.len() != self.vertex_count() {
+                self.polygon
+                    .vertices
+                    .resize_with(self.vertex_count(), StraightVertex::default);
+                self.base.clear_vertices();
+                for vertex in &mut self.polygon.vertices {
+                    self.base.add_vertex(vertex);
+                }
+            }
+            self.build_polygon();
+        }
+        self.base.update(value);
+    }
+}

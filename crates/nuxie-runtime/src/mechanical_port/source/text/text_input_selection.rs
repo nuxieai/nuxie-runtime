@@ -10,7 +10,7 @@ impl TextInputSelection {
         None
     }
     pub fn local_clockwise_path(&mut self) -> Option<&mut ShapePaintPath> {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
             return Some(
                 self.base
@@ -19,7 +19,7 @@ impl TextInputSelection {
                     .selection_path(),
             );
         }
-        #[cfg(not(feature = "rive_text"))]
+        #[cfg(not(feature = "with_rive_text"))]
         {
             None
         }

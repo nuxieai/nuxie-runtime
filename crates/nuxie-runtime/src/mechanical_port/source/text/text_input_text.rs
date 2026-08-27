@@ -10,11 +10,11 @@ impl TextInputText {
         None
     }
     pub fn local_clockwise_path(&mut self) -> Option<&mut ShapePaintPath> {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
             return Some(self.base.text_input_mut().raw_text_input_mut().text_path());
         }
-        #[cfg(not(feature = "rive_text"))]
+        #[cfg(not(feature = "with_rive_text"))]
         {
             None
         }

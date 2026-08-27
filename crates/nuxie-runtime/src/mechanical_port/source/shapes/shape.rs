@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    artboard::Artboard,
     component::{Component, ComponentDirt, has_dirt},
     core::{Core, CoreContext, StatusCode},
     drawable::DrawableFlag,
@@ -31,6 +32,12 @@ pub struct Shape {
 }
 
 impl Shape {
+    fn get_artboard(&self) -> &Artboard {
+        self.base.artboard()
+    }
+    pub fn shape_world_transform(&self) -> &Mat2D {
+        self.base.world_transform()
+    }
     pub fn new() -> Self {
         let mut value = Self {
             base: ShapeBase::default(),
@@ -309,7 +316,7 @@ impl Shape {
             self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.bits(),
         );
         self.world_length = -1.0;
-        #[cfg(feature = "rive_layout")]
+        #[cfg(feature = "with_rive_layout")]
         if let Some(participant) = self.layout_participant_mut() {
             participant.mark_layout_node_dirty();
         }
@@ -339,6 +346,9 @@ impl Shape {
     }
     pub fn compute_local_bounds(&self) -> Aabb {
         self.compute_world_bounds(Some(self.base.world_transform().invert_or_identity()))
+    }
+    pub fn local_bounds(&self) -> Aabb {
+        self.compute_local_bounds()
     }
 
     pub fn compute_intrinsic_bounds(&self) -> Aabb {
@@ -398,7 +408,7 @@ impl Shape {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
-        #[cfg(feature = "rive_layout")]
+        #[cfg(feature = "with_rive_layout")]
         if self.is_participating_in_layout() {
             let bounds = self.compute_intrinsic_bounds();
             return Vec2D::new(bounds.width(), bounds.height());
@@ -417,7 +427,7 @@ impl Shape {
         height: LayoutScaleType,
         direction: LayoutDirection,
     ) {
-        #[cfg(feature = "rive_layout")]
+        #[cfg(feature = "with_rive_layout")]
         if self.is_participating_in_layout() {
             self.update_layout_scale(size);
             return;
@@ -457,7 +467,7 @@ impl Shape {
         self.layout_participant().is_some()
     }
     pub fn compose_world_transform(&mut self) {
-        #[cfg(feature = "rive_layout")]
+        #[cfg(feature = "with_rive_layout")]
         if let (Some(participant), Some(parent)) = (
             self.layout_participant(),
             self.base.parent_transform_component(),

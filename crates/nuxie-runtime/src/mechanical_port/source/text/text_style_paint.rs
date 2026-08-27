@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    artboard::Artboard,
     color::ColorInt,
     generated::text::text_style_paint_base::TextStylePaintBase,
     math::{mat2d::Mat2D, raw_path::RawPath},
@@ -17,6 +18,9 @@ pub struct TextStylePaint {
     has_contents: bool,
 }
 impl TextStylePaint {
+    fn get_artboard(&self) -> &Artboard {
+        self.base.artboard()
+    }
     pub fn new() -> Self {
         Self {
             base: TextStylePaintBase::default(),

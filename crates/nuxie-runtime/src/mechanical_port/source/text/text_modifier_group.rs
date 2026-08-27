@@ -153,6 +153,21 @@ impl TextModifierGroup {
                 .0 as u32)
             != 0
     }
+    pub fn modifies_opacity(&self) -> bool {
+        self.has(TextModifierFlags::MODIFY_OPACITY)
+    }
+    pub fn modifies_rotation(&self) -> bool {
+        self.has(TextModifierFlags::MODIFY_ROTATION)
+    }
+    pub fn modifies_translation(&self) -> bool {
+        self.has(TextModifierFlags::MODIFY_TRANSLATION)
+    }
+    pub fn modifies_scale(&self) -> bool {
+        self.has(TextModifierFlags::MODIFY_SCALE)
+    }
+    pub fn modifies_origin(&self) -> bool {
+        self.has(TextModifierFlags::MODIFY_ORIGIN)
+    }
     fn has(&self, f: TextModifierFlags) -> bool {
         self.base.modifier_flags() & f.0 as u32 != 0
     }

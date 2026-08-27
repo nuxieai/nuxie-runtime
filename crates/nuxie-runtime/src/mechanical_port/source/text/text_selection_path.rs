@@ -1,4 +1,4 @@
-#![cfg(feature = "rive_text")]
+#![cfg(feature = "with_rive_text")]
 use crate::mechanical_port::source::{
     math::{
         aabb::Aabb,

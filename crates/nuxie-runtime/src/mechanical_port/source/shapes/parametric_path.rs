@@ -50,7 +50,7 @@ impl ParametricPath {
     }
     pub fn mark_path_dirty(&mut self, send_to_layout: bool) {
         self.base.super_mark_path_dirty();
-        #[cfg(feature = "rive-layout")]
+        #[cfg(feature = "with_rive_layout")]
         if send_to_layout {
             let mut parent = self.base.parent_mut().map(|p| p as *mut ContainerComponent);
             while let Some(pointer) = parent {

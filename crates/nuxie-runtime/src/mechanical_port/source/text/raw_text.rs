@@ -1,4 +1,4 @@
-#![cfg(feature = "rive_text")]
+#![cfg(feature = "with_rive_text")]
 use super::text::Text;
 use crate::mechanical_port::source::{
     color::ColorInt,
@@ -33,6 +33,7 @@ pub struct RawText {
     styled: StyledText,
     factory: *mut Factory,
     styles: Vec<RenderStyle>,
+    render_styles: Vec<usize>,
     dirty: bool,
     paragraph_spacing: f32,
     origin: TextOrigin,
@@ -56,6 +57,7 @@ impl RawText {
             styled: StyledText::default(),
             factory,
             styles: Vec::new(),
+            render_styles: Vec::new(),
             dirty: false,
             paragraph_spacing: 0.0,
             origin: TextOrigin::Top,
@@ -169,6 +171,7 @@ impl RawText {
             style.path.rewind();
             style.is_empty = true;
         }
+        self.render_styles.clear();
         self.draw_commands.clear();
         if self.styled.empty() {
             return;
@@ -185,7 +188,6 @@ impl RawText {
             self.align,
             self.wrap,
         );
-        self.ordered_lines.clear();
         self.ellipsis_run = GlyphRun::default();
         if self.shape.is_empty() {
             self.bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
@@ -299,6 +301,7 @@ impl RawText {
                             .add_path_clockwise_with_transform(&path, &transform);
                         if self.styles[style].is_empty {
                             self.styles[style].is_empty = false;
+                            self.render_styles.push(style);
                             self.draw_commands.push(DrawCommand::Style(style));
                         }
                     }

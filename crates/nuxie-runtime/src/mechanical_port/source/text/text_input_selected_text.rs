@@ -15,7 +15,7 @@ impl TextInputSelectedText {
         if code != StatusCode::Ok {
             return code;
         }
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         self.base
             .text_input_mut()
             .raw_text_input_mut()
@@ -23,7 +23,7 @@ impl TextInputSelectedText {
         StatusCode::Ok
     }
     pub fn local_clockwise_path(&mut self) -> Option<&mut ShapePaintPath> {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
             return Some(
                 self.base
@@ -32,7 +32,7 @@ impl TextInputSelectedText {
                     .selected_text_path(),
             );
         }
-        #[cfg(not(feature = "rive_text"))]
+        #[cfg(not(feature = "with_rive_text"))]
         {
             None
         }

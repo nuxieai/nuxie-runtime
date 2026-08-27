@@ -272,6 +272,18 @@ impl TextModifierRange {
         }
         c
     }
+    fn offset_modify_from(&self) -> f32 {
+        self.base.modify_from() + self.base.offset()
+    }
+    fn offset_modify_to(&self) -> f32 {
+        self.base.modify_to() + self.base.offset()
+    }
+    fn offset_falloff_from(&self) -> f32 {
+        self.base.falloff_from() + self.base.offset()
+    }
+    fn offset_falloff_to(&self) -> f32 {
+        self.base.falloff_to() + self.base.offset()
+    }
     pub fn compute_coverage(&mut self, coverage: &mut [f32]) {
         if self.mapper.empty() {
             return;
@@ -282,10 +294,10 @@ impl TextModifierRange {
         } else {
             1.0
         };
-        self.index_from = scale * (self.base.modify_from() + self.base.offset());
-        self.index_to = scale * (self.base.modify_to() + self.base.offset());
-        self.index_falloff_from = scale * (self.base.falloff_from() + self.base.offset());
-        self.index_falloff_to = scale * (self.base.falloff_to() + self.base.offset());
+        self.index_from = scale * self.offset_modify_from();
+        self.index_to = scale * self.offset_modify_to();
+        self.index_falloff_from = scale * self.offset_falloff_from();
+        self.index_falloff_to = scale * self.offset_falloff_to();
         for unit in 0..count {
             let len = self.mapper.unit_length(unit);
             let index = self.mapper.unit_character_index(unit);

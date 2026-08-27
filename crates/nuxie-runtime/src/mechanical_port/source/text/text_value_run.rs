@@ -2,7 +2,7 @@ use super::{text::Text, text_style_paint::TextStylePaint, utf::Utf};
 use crate::mechanical_port::source::{
     component::Component,
     core_context::CoreContext,
-    generated::text::text_value_run_base::TextValueRunBase,
+    generated::text::text_value_run_base::{TextValueRunBase, TextValueRunBaseCallbacks},
     hittest_command_path::HitTestCommandPath,
     math::{aabb::Aabb, mat2d::Mat2D, rectangles_to_contour::RectanglesToContour, vec2d::Vec2D},
     status_code::StatusCode,
@@ -18,7 +18,45 @@ pub struct TextValueRun {
     length: u32,
     text_component: Option<NonNull<Text>>,
 }
+
+impl Default for TextValueRun {
+    fn default() -> Self {
+        Self {
+            base: TextValueRunBase::default(),
+            rectangles: None,
+            local_bounds: Aabb::default(),
+            is_hit_target: false,
+            glyph_hit_rects: Vec::new(),
+            style: None,
+            length: u32::MAX,
+            text_component: None,
+        }
+    }
+}
+
+impl TextValueRunBaseCallbacks for TextValueRun {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
+
+    fn style_id_changed(&mut self) {
+        Self::style_id_changed(self);
+    }
+
+    fn text_changed(&mut self) {
+        Self::text_changed(self);
+    }
+}
+
 impl TextValueRun {
+    pub fn set_bound_text(&mut self, value: String) {
+        let base = &mut self.base as *mut TextValueRunBase;
+        unsafe { (*base).set_text(value, self) };
+    }
     pub fn text_changed(&mut self) {
         self.length = u32::MAX;
         unsafe { self.text_component().as_mut() }.mark_shape_dirty();
@@ -88,7 +126,7 @@ impl TextValueRun {
         self.length
     }
     pub fn offset(&mut self) -> u32 {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
             let this = self as *const _;
             let mut offset = 0;
@@ -104,13 +142,15 @@ impl TextValueRun {
             }
             offset
         }
-        #[cfg(not(feature = "rive_text"))]
+        #[cfg(not(feature = "with_rive_text"))]
         {
             0
         }
     }
     fn can_hit_test(&self) -> bool {
-        self.is_hit_target && !self.local_bounds.is_empty_or_nan()
+        self.is_hit_target
+            && (self.text_component.is_some() || self.base.parent_as_text().is_some())
+            && !self.local_bounds.is_empty_or_nan()
     }
     pub fn reset_hit_test(&mut self) {
         self.glyph_hit_rects.clear();

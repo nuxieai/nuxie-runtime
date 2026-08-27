@@ -232,7 +232,7 @@ impl Image {
     }
 
     pub fn compose_world_transform(&mut self) {
-        #[cfg(feature = "rive_layout")]
+        #[cfg(feature = "with_rive_layout")]
         if let (Some(participant), Some(parent)) = (
             self.layout_participant(),
             self.base.parent_transform_component(),

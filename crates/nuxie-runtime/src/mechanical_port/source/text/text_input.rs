@@ -1,19 +1,21 @@
-use super::{raw_text_input::RawTextInput, text_interface::TextInterface, text_style::TextStyle};
+#[cfg(feature = "with_rive_text")]
+use super::raw_text_input::{Flags, RawTextInput};
+use super::{text_interface::TextInterface, text_style::TextStyle};
 use crate::mechanical_port::source::{
     advancing_component::{AdvanceFlags, AdvancingComponent},
     animation::listener_invocation::ListenerInvocation,
+    artboard::Artboard,
     component_dirt::ComponentDirt,
+    constraints::scrolling::scroll_constraint::ScrollConstraint,
     core::CoreHandle,
     core_context::CoreContext,
     generated::text::text_input_base::TextInputBase,
-    input::{
-        focusable::Focusable,
-        key::{Key, KeyModifiers},
-    },
+    input::focusable::{Focusable, Key, KeyModifiers},
     layout::{LayoutDirection, LayoutMeasureMode, LayoutScaleType},
     math::{aabb::Aabb, vec2d::Vec2D},
     renderer::Renderer,
     status_code::StatusCode,
+    text_engine::TextSizing,
 };
 use std::ptr::NonNull;
 pub struct TextInput {
@@ -21,24 +23,52 @@ pub struct TextInput {
     world_bounds: Aabb,
     source_text: String,
     text_style: Option<NonNull<TextStyle>>,
-    scroll_constraint: Option<crate::mechanical_port::source::core::CoreHandle>,
+    scroll_constraint: Option<NonNull<ScrollConstraint>>,
     is_dragging: bool,
     focused: bool,
     last_drag_world_position: Vec2D,
     scroll_x: f32,
     scroll_y: f32,
     layout_width: f32,
-    #[cfg(feature = "rive_text")]
+    #[cfg(feature = "with_rive_text")]
     raw_text_input: RawTextInput,
 }
+
+impl Default for TextInput {
+    fn default() -> Self {
+        Self {
+            base: TextInputBase::default(),
+            world_bounds: Aabb::default(),
+            source_text: String::new(),
+            text_style: None,
+            scroll_constraint: None,
+            is_dragging: false,
+            focused: false,
+            last_drag_world_position: Vec2D::new(f32::NAN, f32::NAN),
+            scroll_x: 0.0,
+            scroll_y: 0.0,
+            layout_width: f32::NAN,
+            #[cfg(feature = "with_rive_text")]
+            raw_text_input: RawTextInput::default(),
+        }
+    }
+}
+
 impl TextInput {
     pub fn draw(&mut self, _renderer: &mut Renderer) {}
     pub fn hit_test(&self) -> Option<CoreHandle> {
         None
     }
     pub fn hit_test_point(&self, position: Vec2D, skip: bool, primary: bool) -> bool {
+        let Some(inverse_world) = self.base.world_transform().inverse() else {
+            return false;
+        };
+        if !self.local_bounds().contains(inverse_world * position) {
+            return false;
+        }
         self.base.component_hit_test_point(position, skip, primary)
     }
+    #[cfg(feature = "with_rive_text")]
     pub fn raw_text_input(&mut self) -> &mut RawTextInput {
         &mut self.raw_text_input
     }
@@ -49,39 +79,113 @@ impl TextInput {
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE);
     }
     pub fn local_bounds(&self) -> Aabb {
-        self.base.layout_bounds()
+        #[cfg(feature = "with_rive_text")]
+        {
+            self.raw_text_input.bounds()
+        }
+        #[cfg(not(feature = "with_rive_text"))]
+        {
+            Aabb::default()
+        }
     }
     pub fn on_added_clean(&mut self, context: &mut CoreContext) -> StatusCode {
-        let code = self.base.on_added_clean(context);
-        if code != StatusCode::Ok {
-            return code;
-        }
+        self.base.on_added_clean(context);
         self.source_text = self.base.text().to_owned();
-        self.text_style = context
-            .resolve(self.base.style_id())
-            .and_then(|v| v.as_text_style());
-        if self.text_style.is_none() {
-            return StatusCode::MissingObject;
-        }
-        #[cfg(feature = "rive_text")]
+        self.text_style = self
+            .base
+            .children_mut()
+            .iter_mut()
+            .find_map(|child| child.as_text_style_mut())
+            .map(NonNull::from);
+        #[cfg(feature = "with_rive_text")]
         {
-            self.raw_text_input.set_text(self.displayed_text());
-            self.raw_text_input.set_multiline(self.base.multiline());
-            self.raw_text_input
-                .set_selection_radius(self.base.selection_radius());
+            if let Some(mut style) = self.text_style {
+                let style = unsafe { style.as_mut() };
+                if let Some(font) = style.font() {
+                    self.raw_text_input.set_font(Some(font));
+                    self.raw_text_input.set_font_size(style.base.font_size());
+                }
+            }
+            self.sync_displayed_text_from_source(false);
         }
-        StatusCode::Ok
+        self.scroll_constraint = self
+            .base
+            .parent()
+            .and_then(|parent| parent.parent())
+            .and_then(|parent| parent.as_transform_component())
+            .and_then(|parent| {
+                parent
+                    .constraints_mut()
+                    .find_map(|constraint| constraint.as_scroll_constraint_mut())
+            })
+            .map(NonNull::from);
+        self.update_multiline(false);
+        if self.text_style.is_none() {
+            StatusCode::MissingObject
+        } else {
+            StatusCode::Ok
+        }
     }
     pub fn update(&mut self, value: ComponentDirt) {
-        #[cfg(feature = "rive_text")]
+        self.base.update(value);
+        #[cfg(feature = "with_rive_text")]
         if value.intersects(ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT) {
             let style = unsafe { self.text_style.expect("TextInput style").as_mut() };
-            self.raw_text_input.set_style(style);
-            self.raw_text_input.shape(self.layout_width);
-            self.world_bounds = self
-                .base
-                .world_transform()
-                .map_aabb(self.raw_text_input.bounds());
+            self.raw_text_input.set_font_size(style.base.font_size());
+            let changed = self.raw_text_input.update(self.base.artboard().factory());
+            if changed & Flags::ShapeDirty as u8 != 0 {
+                self.world_bounds = self
+                    .base
+                    .world_transform()
+                    .map_aabb(self.raw_text_input.bounds());
+                #[cfg(feature = "with_rive_layout")]
+                if self.raw_text_input.sizing() == TextSizing::AutoHeight {
+                    self.base.mark_layout_node_dirty();
+                }
+            }
+            if changed & Flags::SelectionDirty as u8 != 0 {
+                for child in self.base.children_mut() {
+                    if let Some(drawable) = child.as_text_input_drawable_mut() {
+                        drawable.paints.invalidate_stroke_effects();
+                    }
+                }
+            }
+
+            if self.scroll_x == 0.0 && self.scroll_y == 0.0 && !self.is_dragging {
+                if let Some(mut scroll) = self.scroll_constraint {
+                    let scroll = unsafe { scroll.as_mut() };
+                    let cursor = self.raw_text_input.cursor_visual_position();
+                    let viewport_width = scroll.viewport_width();
+                    let viewport_height = scroll.viewport_height();
+                    let viewport_x = cursor.x() + scroll.authored_scroll_offset_x();
+                    let viewport_top = cursor.top() + scroll.authored_scroll_offset_y();
+                    let viewport_bottom = cursor.bottom() + scroll.authored_scroll_offset_y();
+                    let horizontal = !self.base.multiline() && scroll.base.constrains_horizontal();
+                    let vertical = self.base.multiline() && scroll.base.constrains_vertical();
+                    if horizontal && viewport_x < 0.0 {
+                        scroll.stop_physics();
+                        scroll.set_authored_scroll_offset_x(
+                            scroll.authored_scroll_offset_x() - viewport_x,
+                        );
+                    } else if horizontal && viewport_x > viewport_width - 1.0 {
+                        scroll.stop_physics();
+                        scroll.set_authored_scroll_offset_x(
+                            scroll.authored_scroll_offset_x() - (viewport_x - viewport_width + 1.0),
+                        );
+                    }
+                    if vertical && viewport_top < 0.0 {
+                        scroll.stop_physics();
+                        scroll.set_authored_scroll_offset_y(
+                            scroll.authored_scroll_offset_y() - viewport_top,
+                        );
+                    } else if vertical && viewport_bottom > viewport_height {
+                        scroll.stop_physics();
+                        scroll.set_authored_scroll_offset_y(
+                            scroll.authored_scroll_offset_y() - (viewport_bottom - viewport_height),
+                        );
+                    }
+                }
+            }
         }
     }
     pub fn measure_layout(
@@ -91,30 +195,24 @@ impl TextInput {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
             let max_width = if width_mode == LayoutMeasureMode::Undefined {
-                f32::INFINITY
+                f32::MAX
             } else {
                 width
             };
-            let measured = self.raw_text_input.measure(max_width);
-            return Vec2D::new(
-                if width_mode == LayoutMeasureMode::Exactly {
-                    width
-                } else {
-                    measured.x
-                },
-                if height_mode == LayoutMeasureMode::Exactly {
-                    height
-                } else {
-                    measured.y
-                },
-            );
+            let max_height = if height_mode == LayoutMeasureMode::Undefined {
+                f32::MAX
+            } else {
+                height
+            };
+            return self.raw_text_input.measure(max_width, max_height).size();
         }
-        #[cfg(not(feature = "rive_text"))]
+        #[cfg(not(feature = "with_rive_text"))]
         {
-            Vec2D::new(width, height)
+            let _ = (width, width_mode, height, height_mode);
+            Vec2D::default()
         }
     }
     pub fn control_size(
@@ -124,26 +222,41 @@ impl TextInput {
         _h: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
-        if self.layout_width != size.x {
-            self.layout_width = size.x;
-            self.mark_shape_dirty();
-        }
+        self.layout_width = size.x;
+        self.update_multiline(false);
     }
     pub fn text_changed(&mut self) {
         self.source_text = self.base.text().to_owned();
-        self.sync_displayed_text_from_source(true);
+        self.sync_displayed_text_from_source(false);
+        #[cfg(feature = "with_rive_layout")]
+        self.base.mark_layout_node_dirty();
+        self.mark_shape_dirty();
     }
     pub fn selection_radius_changed(&mut self) {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         self.raw_text_input
-            .set_selection_radius(self.base.selection_radius());
-        self.mark_paint_dirty();
+            .set_selection_corner_radius(self.base.selection_radius());
+        #[cfg(feature = "with_rive_text")]
+        self.mark_shape_dirty();
     }
     pub fn multiline_changed(&mut self) {
         self.update_multiline(true);
     }
     fn stripped_line_breaks(text: &str) -> String {
-        text.chars().filter(|c| *c != '\n' && *c != '\r').collect()
+        let mut stripped = String::with_capacity(text.len());
+        let mut in_line_break = false;
+        for character in text.chars() {
+            if character == '\n' || character == '\r' {
+                if !in_line_break {
+                    stripped.push(' ');
+                    in_line_break = true;
+                }
+            } else {
+                stripped.push(character);
+                in_line_break = false;
+            }
+        }
+        stripped
     }
     fn displayed_text(&self) -> String {
         if self.base.multiline() {
@@ -153,70 +266,172 @@ impl TextInput {
         }
     }
     fn sync_displayed_text_from_source(&mut self, preserve_cursor: bool) {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
-            let cursor = preserve_cursor.then(|| self.raw_text_input.cursor());
-            self.raw_text_input.set_text(self.displayed_text());
-            if let Some(cursor) = cursor {
-                self.raw_text_input.set_cursor(cursor);
+            let next_display_text = self.displayed_text();
+            if self.raw_text_input.text() == next_display_text {
+                return;
+            }
+            if preserve_cursor {
+                self.raw_text_input
+                    .set_text_preserve_cursor(next_display_text);
+            } else {
+                self.raw_text_input.set_text(next_display_text);
             }
         }
         self.mark_shape_dirty();
     }
     fn sync_source_text_from_raw(&mut self) {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
-            let displayed = self.raw_text_input.text().to_owned();
-            self.source_text = if self.base.multiline() {
-                displayed
-            } else {
-                displayed
-            };
+            let mut displayed = self.raw_text_input.text();
+            if !self.base.multiline() {
+                let single_line = Self::stripped_line_breaks(&displayed);
+                if single_line != displayed {
+                    self.raw_text_input
+                        .set_text_preserve_cursor(single_line.clone());
+                    displayed = single_line;
+                }
+            }
+            self.source_text = displayed;
             self.base.set_text(self.source_text.clone());
         }
     }
     fn update_multiline(&mut self, sync: bool) {
-        #[cfg(feature = "rive_text")]
-        self.raw_text_input.set_multiline(self.base.multiline());
+        #[cfg(feature = "with_rive_text")]
+        if self.base.multiline() {
+            self.raw_text_input.set_max_width(self.layout_width);
+            self.raw_text_input.set_sizing(TextSizing::AutoHeight);
+        } else {
+            self.raw_text_input.set_max_width(0.0);
+            self.raw_text_input.set_sizing(TextSizing::AutoWidth);
+        }
+        if let Some(mut scroll) = self.scroll_constraint {
+            let scroll = unsafe { scroll.as_mut() };
+            if self.base.multiline() && scroll.authored_scroll_offset_x() != 0.0 {
+                scroll.stop_physics();
+                scroll.set_authored_scroll_offset_x(0.0);
+            } else if !self.base.multiline() && scroll.authored_scroll_offset_y() != 0.0 {
+                scroll.stop_physics();
+                scroll.set_authored_scroll_offset_y(0.0);
+            }
+        }
         if sync {
             self.sync_displayed_text_from_source(true);
         }
+        #[cfg(feature = "with_rive_layout")]
+        self.base.mark_layout_node_dirty();
+        self.base.add_dirt(ComponentDirt::TEXT_SHAPE);
     }
     pub fn key_input(
         &mut self,
         key: Key,
         modifiers: KeyModifiers,
         pressed: bool,
-        repeat: bool,
+        _repeat: bool,
     ) -> bool {
-        if !pressed {
-            return false;
-        }
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
-            let handled = self.raw_text_input.key_input(key, modifiers, repeat);
-            if handled {
-                self.sync_source_text_from_raw();
-                self.mark_shape_dirty();
+            if pressed {
+                let system_modifier = if cfg!(target_os = "windows") {
+                    KeyModifiers::CTRL.0
+                } else {
+                    KeyModifiers::META.0
+                };
+                let select = modifiers.0 & KeyModifiers::SHIFT.0 != 0;
+                let boundary = if modifiers.0 & KeyModifiers::META.0 != 0 {
+                    super::raw_text_input::CursorBoundary::Line
+                } else if modifiers.0 & KeyModifiers::ALT.0 != 0 {
+                    if modifiers.0 & KeyModifiers::CTRL.0 != 0 {
+                        super::raw_text_input::CursorBoundary::SubWord
+                    } else {
+                        super::raw_text_input::CursorBoundary::Word
+                    }
+                } else {
+                    super::raw_text_input::CursorBoundary::Character
+                };
+                match key {
+                    Key::Z
+                        if modifiers.0 & (system_modifier | KeyModifiers::SHIFT.0)
+                            == system_modifier | KeyModifiers::SHIFT.0 =>
+                    {
+                        self.raw_text_input.redo();
+                        self.sync_source_text_from_raw();
+                        self.mark_shape_dirty();
+                        return true;
+                    }
+                    Key::Z if modifiers.0 & system_modifier != 0 => {
+                        self.raw_text_input.undo();
+                        self.sync_source_text_from_raw();
+                        self.mark_shape_dirty();
+                        return true;
+                    }
+                    Key::A if modifiers.0 & system_modifier != 0 => {
+                        self.raw_text_input.select_all();
+                        self.mark_paint_dirty();
+                        return true;
+                    }
+                    Key::Home => self
+                        .raw_text_input
+                        .cursor_left(super::raw_text_input::CursorBoundary::Line, select),
+                    Key::End => self
+                        .raw_text_input
+                        .cursor_right(super::raw_text_input::CursorBoundary::Line, select),
+                    Key::Backspace => {
+                        self.raw_text_input.backspace(-1);
+                        self.sync_source_text_from_raw();
+                        self.mark_shape_dirty();
+                        return true;
+                    }
+                    Key::DeleteKey => {
+                        self.raw_text_input.backspace(1);
+                        self.sync_source_text_from_raw();
+                        self.mark_shape_dirty();
+                        return true;
+                    }
+                    Key::Left => self.raw_text_input.cursor_left(boundary, select),
+                    Key::Right => self.raw_text_input.cursor_right(boundary, select),
+                    Key::Up => self.raw_text_input.cursor_up(select),
+                    Key::Down => self.raw_text_input.cursor_down(select),
+                    Key::Enter if self.base.multiline() => {
+                        self.raw_text_input.insert("\n");
+                        self.sync_source_text_from_raw();
+                        self.mark_paint_dirty();
+                        return true;
+                    }
+                    Key::Enter => return false,
+                    _ => return false,
+                }
+                self.mark_paint_dirty();
+                return true;
             }
-            return handled;
         }
-        #[cfg(not(feature = "rive_text"))]
+        #[cfg(not(feature = "with_rive_text"))]
         {
-            false
+            let _ = (key, modifiers, pressed);
         }
+        false
     }
     pub fn text_input(&mut self, value: &str) -> bool {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
-            self.raw_text_input.insert(value);
+            let value = if self.base.multiline() {
+                value.to_owned()
+            } else {
+                Self::stripped_line_breaks(value)
+            };
+            if value.is_empty() {
+                return true;
+            }
+            self.raw_text_input.insert(&value);
             self.sync_source_text_from_raw();
             self.mark_shape_dirty();
             true
         }
-        #[cfg(not(feature = "rive_text"))]
+        #[cfg(not(feature = "with_rive_text"))]
         {
-            false
+            let _ = value;
+            true
         }
     }
     pub fn gamepad_dispatch(&mut self, _invocation: &ListenerInvocation) -> bool {
@@ -228,23 +443,44 @@ impl TextInput {
     }
     pub fn blurred(&mut self) {
         self.focused = false;
-        self.is_dragging = false;
+        #[cfg(feature = "with_rive_text")]
+        self.raw_text_input.clear_selection();
         self.mark_paint_dirty();
     }
-    pub fn world_position(&self, out: &mut Vec2D) -> bool {
-        *out = self.base.world_transform() * Vec2D::new(0.0, 0.0);
+    pub fn world_position(&mut self, out: &mut Vec2D) -> bool {
+        let local = self.base.world_transform() * Vec2D::new(0.0, 0.0);
+        *out = self
+            .base
+            .artboard_mut()
+            .map_or(local, |artboard| artboard.root_transform(local));
         true
     }
-    pub fn world_bounds(&self, out: &mut Aabb) -> bool {
-        *out = self.world_bounds;
+    pub fn world_bounds(&mut self, out: &mut Aabb) -> bool {
+        if self.world_bounds.is_empty_or_nan() {
+            return false;
+        }
+        if let Some(artboard) = self.base.artboard_mut() {
+            let minimum = artboard.root_transform(self.world_bounds.min());
+            let maximum = artboard.root_transform(self.world_bounds.max());
+            *out = Aabb::new(minimum.x, minimum.y, maximum.x, maximum.y);
+        } else {
+            *out = self.world_bounds;
+        }
         true
     }
     fn edge_scroll_speed_for_distance(&self, d: f32) -> f32 {
-        let sign = if d < 0.0 { -1.0 } else { 1.0 };
-        sign * (d.abs() * 12.0).min(1200.0)
+        const EDGE_SCROLL_BASE_SPEED: f32 = 45.0;
+        const EDGE_SCROLL_MAX_SPEED: f32 = 400.0;
+        const EDGE_SCROLL_SPEED_RAMP: f32 = 4.0;
+        (EDGE_SCROLL_BASE_SPEED + d * EDGE_SCROLL_SPEED_RAMP)
+            .clamp(EDGE_SCROLL_BASE_SPEED, EDGE_SCROLL_MAX_SPEED)
     }
     fn edge_activation_distance(&self, position: f32, edge: f32) -> f32 {
-        position - edge
+        if position >= edge {
+            0.0
+        } else {
+            edge - position
+        }
     }
     fn world_to_local_with_viewport(
         &mut self,
@@ -252,27 +488,66 @@ impl TextInput {
         out: &mut Vec2D,
         enable_scroll: bool,
     ) -> bool {
+        self.scroll_x = 0.0;
+        self.scroll_y = 0.0;
         let Some(inv) = self.base.world_transform().inverse() else {
             return false;
         };
-        *out = inv * world;
-        if enable_scroll {
-            self.scroll_x = self.edge_scroll_speed_for_distance(
-                self.edge_activation_distance(out.x, self.world_bounds.max_x),
-            );
-            self.scroll_y = self.edge_scroll_speed_for_distance(
-                self.edge_activation_distance(out.y, self.world_bounds.max_y),
-            );
+        let mut local = inv * world;
+        if let Some(mut scroll) = self.scroll_constraint {
+            let scroll = unsafe { scroll.as_mut() };
+            let viewport_width = scroll.viewport_width();
+            let viewport_height = scroll.viewport_height();
+            let scroll_offset_x = scroll.authored_scroll_offset_x();
+            let scroll_offset_y = scroll.authored_scroll_offset_y();
+            const EDGE_THRESHOLD: f32 = 20.0;
+            let horizontal = !self.base.multiline() && scroll.base.constrains_horizontal();
+            let vertical = self.base.multiline() && scroll.base.constrains_vertical();
+            if horizontal {
+                let viewport_x = local.x + scroll_offset_x;
+                let left_distance = self.edge_activation_distance(viewport_x, EDGE_THRESHOLD);
+                let right_distance =
+                    self.edge_activation_distance(viewport_width - viewport_x, EDGE_THRESHOLD);
+                if enable_scroll && left_distance > 0.0 {
+                    self.scroll_x = self.edge_scroll_speed_for_distance(left_distance);
+                    if viewport_x < 0.0 {
+                        local.x = -scroll_offset_x;
+                    }
+                } else if enable_scroll && right_distance > 0.0 {
+                    self.scroll_x = -self.edge_scroll_speed_for_distance(right_distance);
+                    if viewport_x > viewport_width {
+                        local.x = viewport_width - scroll_offset_x;
+                    }
+                }
+            }
+            if vertical {
+                let viewport_y = local.y + scroll_offset_y;
+                let top_distance = self.edge_activation_distance(viewport_y, EDGE_THRESHOLD);
+                let bottom_distance =
+                    self.edge_activation_distance(viewport_height - viewport_y, EDGE_THRESHOLD);
+                if enable_scroll && top_distance > 0.0 {
+                    self.scroll_y = self.edge_scroll_speed_for_distance(top_distance);
+                    if viewport_y < 0.0 {
+                        local.y = -scroll_offset_y;
+                    }
+                } else if enable_scroll && bottom_distance > 0.0 {
+                    self.scroll_y = -self.edge_scroll_speed_for_distance(bottom_distance);
+                    if viewport_y > viewport_height {
+                        local.y = viewport_height - scroll_offset_y;
+                    }
+                }
+            }
         }
+        *out = local;
         true
     }
     pub fn start_drag(&mut self, world: Vec2D) {
+        self.is_dragging = true;
+        self.last_drag_world_position = world;
         let mut local = Vec2D::default();
-        if self.world_to_local_with_viewport(world, &mut local, true) {
-            self.is_dragging = true;
-            self.last_drag_world_position = world;
-            #[cfg(feature = "rive_text")]
-            self.raw_text_input.start_drag(local);
+        if self.world_to_local_with_viewport(world, &mut local, false) {
+            #[cfg(feature = "with_rive_text")]
+            self.raw_text_input.move_cursor_to(local, false);
             self.mark_paint_dirty();
         }
     }
@@ -283,38 +558,72 @@ impl TextInput {
         let mut local = Vec2D::default();
         if self.world_to_local_with_viewport(world, &mut local, true) {
             self.last_drag_world_position = world;
-            #[cfg(feature = "rive_text")]
-            self.raw_text_input.drag(local);
+            #[cfg(feature = "with_rive_text")]
+            self.raw_text_input.move_cursor_to(local, true);
             self.mark_paint_dirty();
         }
     }
-    pub fn end_drag(&mut self, world: Vec2D) {
-        self.drag(world);
+    pub fn end_drag(&mut self, _world: Vec2D) {
         self.is_dragging = false;
+        self.last_drag_world_position = Vec2D::new(f32::NAN, f32::NAN);
         self.scroll_x = 0.0;
         self.scroll_y = 0.0;
     }
     pub fn select_word(&mut self) {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         self.raw_text_input.select_word();
         self.mark_paint_dirty();
     }
     pub fn select_line(&mut self) {
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         self.raw_text_input.select_line();
         self.mark_paint_dirty();
     }
     pub fn advance_drag(&mut self, elapsed: f32) -> bool {
-        if !self.is_dragging || (self.scroll_x == 0.0 && self.scroll_y == 0.0) {
+        if !self.is_dragging {
+            self.scroll_x = 0.0;
+            self.scroll_y = 0.0;
             return false;
         }
-        #[cfg(feature = "rive_text")]
+        #[cfg(feature = "with_rive_text")]
         {
-            self.raw_text_input
-                .scroll_by(Vec2D::new(self.scroll_x * elapsed, self.scroll_y * elapsed));
-            self.drag(self.last_drag_world_position);
+            let Some(mut scroll) = self.scroll_constraint else {
+                return false;
+            };
+            if self.scroll_x == 0.0 && self.scroll_y == 0.0 {
+                return false;
+            }
+            let scroll = unsafe { scroll.as_mut() };
+            scroll.stop_physics();
+            if self.scroll_x != 0.0 {
+                let mut offset = scroll.authored_scroll_offset_x() + self.scroll_x * elapsed;
+                if !scroll.infinite() {
+                    offset = offset.clamp(scroll.max_offset_x(), 0.0);
+                }
+                scroll.set_authored_scroll_offset_x(offset);
+            }
+            if self.scroll_y != 0.0 {
+                let mut offset = scroll.authored_scroll_offset_y() + self.scroll_y * elapsed;
+                if !scroll.infinite() {
+                    offset = offset.clamp(scroll.max_offset_y(), 0.0);
+                }
+                scroll.set_authored_scroll_offset_y(offset);
+            }
+            if self.last_drag_world_position.x.is_finite()
+                && self.last_drag_world_position.y.is_finite()
+            {
+                let mut local = Vec2D::default();
+                if self.world_to_local_with_viewport(
+                    self.last_drag_world_position,
+                    &mut local,
+                    true,
+                ) {
+                    self.raw_text_input.move_cursor_to(local, true);
+                    self.mark_paint_dirty();
+                }
+            }
         }
-        true
+        self.is_dragging
     }
     pub fn advance_component(&mut self, elapsed: f32, _flags: AdvanceFlags) -> bool {
         self.advance_drag(elapsed)
@@ -327,5 +636,8 @@ impl TextInput {
     }
     pub fn accepts_keyboard_input(&self) -> bool {
         true
+    }
+    pub fn focusable_artboard(&self) -> &Artboard {
+        self.base.artboard()
     }
 }

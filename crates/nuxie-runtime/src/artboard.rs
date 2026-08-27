@@ -1158,11 +1158,11 @@ impl ArtboardInstance {
             .resetting_components
             .iter()
             .filter_map(|entry| {
-                Some(RuntimeResettingComponent {
-                    local_id: entry.local_id,
-                    component: objects.component_handle(entry.local_id)?,
-                    kind: entry.kind,
-                })
+                RuntimeResettingComponent::from(
+                    entry.local_id,
+                    entry.type_name,
+                    objects.component_handle(entry.local_id)?,
+                )
             })
             .collect();
         let component_lists = objects

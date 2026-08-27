@@ -11,6 +11,32 @@ pub(crate) struct RuntimeResettingComponent {
     pub(crate) kind: ResettingComponentKind,
 }
 
+impl RuntimeResettingComponent {
+    /// Mechanical translation of pinned `ResettingComponent::from(Component*)`.
+    ///
+    /// `ComponentHandle` is the Rust identity for the already-validated
+    /// component pointer retained by the Artboard reset schedule.
+    pub(crate) fn from(
+        local_id: usize,
+        type_name: &str,
+        component: ComponentHandle,
+    ) -> Option<Self> {
+        let kind = match type_name {
+            "NestedArtboardLeaf" => ResettingComponentKind::NestedArtboard,
+            "NestedArtboardLayout" => ResettingComponentKind::NestedArtboard,
+            "NestedArtboard" => ResettingComponentKind::NestedArtboard,
+            "ArtboardComponentList" => ResettingComponentKind::ArtboardComponentList,
+            "CustomPropertyTrigger" => ResettingComponentKind::CustomPropertyTrigger,
+            _ => return None,
+        };
+        Some(Self {
+            local_id,
+            component,
+            kind,
+        })
+    }
+}
+
 impl ArtboardInstance {
     pub(crate) fn reset_retained_components_for_state_machine_settlement(&mut self) {
         if self.resetting_components.is_empty() {

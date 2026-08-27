@@ -79,7 +79,8 @@ pub(super) fn apply(
                     world_target_translation,
                     invert_direction,
                 );
-                for child_index in (index + 1)..tip_index {
+                let first_child_index = chain[index].index + 1;
+                for child_index in first_child_index..tip_index {
                     let bone_index = chain[child_index].bone;
                     chain[child_index].parent_world_inverse =
                         parent_world_transform(artboard, bone_index).invert_or_identity();
@@ -134,8 +135,9 @@ fn solve_ik1(
         .parent_world_inverse
         .transform_direction(to_target.0, to_target.1);
     let rotation = point_atan2(to_target_local);
+    let changed = constrain_ik_rotation(artboard, &chain[index], rotation);
     chain[index].angle = rotation;
-    constrain_ik_rotation(artboard, &chain[index], rotation)
+    changed
 }
 
 fn solve_ik2(
@@ -174,15 +176,19 @@ fn solve_ik2(
     let b = point_length(bv);
     let c = point_length(cv);
 
-    let angle_a = ((-a * a + b * b + c * c) / (2.0 * b * c))
-        .clamp(-1.0, 1.0)
-        .acos();
-    let angle_c = ((a * a + b * b - c * c) / (2.0 * a * b))
-        .clamp(-1.0, 1.0)
-        .acos();
+    let angle_a = cpp_std_max(
+        -1.0,
+        cpp_std_min(1.0, (-a * a + b * b + c * c) / (2.0 * b * c)),
+    )
+    .acos();
+    let angle_c = cpp_std_max(
+        -1.0,
+        cpp_std_min(1.0, (a * a + b * b - c * c) / (2.0 * a * b)),
+    )
+    .acos();
 
     let (r1, r2) = if artboard.component_parent_handle(b2_index) != Some(b1_index) {
-        let second_child_index = fk1_index + 2;
+        let second_child_index = chain[fk1_index].index + 2;
         let second_child_world_inverse = chain[second_child_index].parent_world_inverse;
         let p_c_world = world_translation(
             artboard

@@ -37,13 +37,7 @@ pub(crate) fn runtime_trim_path_line_effect_commands(
     source: &[RuntimePathCommand],
 ) -> Option<Vec<RuntimePathCommand>> {
     let mode = runtime_trim_path_mode_value(artboard, effect)?;
-    if !matches!(mode, 1 | 2) {
-        return None;
-    }
     let contours = TrimContour::from_commands(source);
-    if contours.is_empty() {
-        return Some(Vec::new());
-    }
 
     let render_offset = positive_unit_mod(runtime_trim_path_double_property(
         artboard,
@@ -70,7 +64,7 @@ pub(crate) fn runtime_trim_path_line_effect_commands(
             render_offset,
             close_shape,
         )),
-        _ => None,
+        _ => unreachable!("invalid TrimPath modeValue"),
     }
 }
 

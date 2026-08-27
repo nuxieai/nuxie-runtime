@@ -2457,11 +2457,11 @@ fn write_world_transform(
         .transform
         .world_transform
         .0;
-    if *world == transform.0 {
-        return false;
-    }
+    // Pinned constraints assign mutable transforms unconditionally. Compare
+    // first only for Rust's update report; still replace equal signed zeros.
+    let changed = *world != transform.0;
     *world = transform.0;
-    true
+    changed
 }
 
 fn write_local_transform(
@@ -2474,11 +2474,9 @@ fn write_local_transform(
         .transform
         .local_transform
         .0;
-    if *local == transform.0 {
-        return false;
-    }
+    let changed = *local != transform.0;
     *local = transform.0;
-    true
+    changed
 }
 
 fn write_local_world_transform(

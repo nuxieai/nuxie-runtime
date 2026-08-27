@@ -352,7 +352,80 @@ pub trait Font: Any {
         text: &[Unichar],
         runs: &[TextRun],
         text_direction_flag: i32,
-    ) -> Vec<Paragraph>;
+    ) -> Vec<Paragraph> {
+        debug_assert!({
+            let count: usize = runs
+                .iter()
+                .map(|run| {
+                    assert!(run.unichar_count > 0);
+                    run.unichar_count as usize
+                })
+                .sum();
+            count <= text.len()
+        });
+
+        let mut paragraphs = self.on_shape_text(text, runs, text_direction_flag);
+        let mut want_white_space = false;
+        let reserve_size = text.len() / 4;
+        let mut breaks = Vec::with_capacity(reserve_size);
+        let mut joiners = Vec::with_capacity(reserve_size);
+        let mut last_run: Option<*mut GlyphRun> = None;
+
+        for paragraph in &mut paragraphs {
+            for glyph_run in &mut paragraph.runs {
+                if let Some(previous) = last_run {
+                    unsafe {
+                        (*previous).breaks =
+                            std::mem::replace(&mut breaks, Vec::with_capacity(reserve_size));
+                        (*previous).joiners =
+                            std::mem::replace(&mut joiners, Vec::with_capacity(reserve_size));
+                    }
+                }
+
+                for (glyph_index, offset) in glyph_run.text_indices.iter().copied().enumerate() {
+                    let unicode = text[offset as usize];
+                    if unicode == u32::from(b'\n') || unicode == 0x2028 {
+                        breaks.push(glyph_index as u32);
+                        breaks.push(glyph_index as u32);
+                    }
+                    if unicode == 0x2060 {
+                        joiners.push(offset);
+                    }
+                    if want_white_space == is_white_space(unicode) {
+                        breaks.push(glyph_index as u32);
+                        want_white_space = !want_white_space;
+                    }
+                }
+
+                last_run = Some(glyph_run as *mut GlyphRun);
+            }
+        }
+
+        if let Some(last_run) = last_run {
+            unsafe {
+                if want_white_space {
+                    breaks.push((*last_run).glyphs.len() as u32);
+                } else {
+                    let last_break = breaks.last().copied().unwrap_or(0);
+                    breaks.push(last_break);
+                    breaks.push((*last_run).glyphs.len() as u32);
+                }
+                (*last_run).breaks = breaks;
+                (*last_run).joiners = joiners;
+            }
+        }
+
+        debug_assert!(
+            paragraphs
+                .iter()
+                .all(
+                    |paragraph| paragraph.runs.iter().all(|run| !run.glyphs.is_empty()
+                        && run.glyphs.len() == run.text_indices.len()
+                        && run.glyphs.len() + 1 == run.xpos.len())
+                )
+        );
+        paragraphs
+    }
 }
 
 pub type FontRef = Rc<dyn Font>;

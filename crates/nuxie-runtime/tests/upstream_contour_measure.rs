@@ -89,18 +89,22 @@ fn contour_basics() {
         RuntimePathSample {
             pos: (width / 2.0, 0.0),
             tan: (1.0, 0.0),
+            ..RuntimePathSample::default()
         },
         RuntimePathSample {
             pos: (width, height / 2.0),
             tan: (0.0, 1.0),
+            ..RuntimePathSample::default()
         },
         RuntimePathSample {
             pos: (width / 2.0, height),
             tan: (-1.0, 0.0),
+            ..RuntimePathSample::default()
         },
         RuntimePathSample {
             pos: (0.0, height / 2.0),
             tan: (0.0, -1.0),
+            ..RuntimePathSample::default()
         },
     ];
     for (distance, expected) in mid_distances.into_iter().zip(mid_points) {

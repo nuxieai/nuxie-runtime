@@ -15,17 +15,13 @@ pub trait PathImporter {
 }
 pub struct DataBindPath {
     pub base: DataBindPathBase,
-    path_buffer: Vec<u32>,
     file: Option<*mut dyn PathFile>,
-    resolved: bool,
 }
 impl Default for DataBindPath {
     fn default() -> Self {
         Self {
             base: DataBindPathBase::default(),
-            path_buffer: Vec::new(),
             file: None,
-            resolved: false,
         }
     }
 }
@@ -44,12 +40,12 @@ impl DataBindPath {
                 }
                 shift += 7;
             }
-            self.path_buffer.push(value);
+            self.base.path_buffer.push(value);
         }
     }
     pub fn copy_path(&mut self, other: &Self) {
-        self.path_buffer = other.path_buffer.clone();
-        self.resolved = other.resolved
+        self.base.path_buffer.clone_from(&other.base.path_buffer);
+        self.base.resolved = other.base.resolved
     }
     pub fn import(&mut self, importer: Option<&mut dyn PathImporter>) -> StatusCode {
         let Some(importer) = importer else {
@@ -59,24 +55,24 @@ impl DataBindPath {
         importer.import_super(self)
     }
     pub fn path(&mut self) -> &mut Vec<u32> {
-        &mut self.path_buffer
+        &mut self.base.path_buffer
     }
     pub fn is_relative(&self) -> bool {
         self.base.is_relative()
     }
     pub fn resolved_path(&mut self) -> &[u32] {
-        if !self.resolved {
+        if !self.base.resolved {
             let Some(file) = self.file else {
-                return &self.path_buffer;
+                return &self.base.path_buffer;
             };
-            if self.path_buffer.len() == 1 {
+            if self.base.path_buffer.len() == 1 {
                 if let Some(resolver) = unsafe { (&*file).data_resolver() } {
-                    self.path_buffer = resolver.resolve_path(self.path_buffer[0]);
+                    self.base.path_buffer = resolver.resolve_path(self.base.path_buffer[0]);
                 }
             }
-            self.resolved = true;
+            self.base.resolved = true;
         }
-        &self.path_buffer
+        &self.base.path_buffer
     }
     pub fn set_file(&mut self, file: Option<*mut dyn PathFile>) {
         self.file = file
@@ -85,7 +81,7 @@ impl DataBindPath {
         self.file
     }
     pub fn set_resolved(&mut self, value: bool) {
-        self.resolved = value
+        self.base.resolved = value
     }
 }
 
@@ -98,7 +94,10 @@ impl DataBindPathBaseCallbacks for DataBindPath {
         Self::decode_path(self, value);
     }
 
-    fn copy_path(&mut self, _object: &DataBindPathBase) {}
+    fn copy_path(&mut self, object: &DataBindPathBase) {
+        self.base.path_buffer.clone_from(&object.path_buffer);
+        self.base.resolved = object.resolved;
+    }
 }
 use crate::mechanical_port::source::generated::data_bind::data_bind_path_base::{
     DataBindPathBase, DataBindPathBaseCallbacks,

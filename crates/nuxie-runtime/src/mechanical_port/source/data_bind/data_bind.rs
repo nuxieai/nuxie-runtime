@@ -1,6 +1,31 @@
 use crate::mechanical_port::source::{
     data_bind::data_values::data_type::DataType,
-    generated::data_bind::data_bind_base::{DataBindBase, DataBindBaseCallbacks},
+    generated::{
+        animation::{
+            state_transition_base::StateTransitionBase,
+            transition_property_viewmodel_comparator_base::TransitionPropertyViewModelComparatorBase,
+        },
+        constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
+        data_bind::{
+            bindable_property_artboard_base::BindablePropertyArtboardBase,
+            bindable_property_asset_base::BindablePropertyAssetBase,
+            bindable_property_boolean_base::BindablePropertyBooleanBase,
+            bindable_property_color_base::BindablePropertyColorBase,
+            bindable_property_enum_base::BindablePropertyEnumBase,
+            bindable_property_integer_base::BindablePropertyIntegerBase,
+            bindable_property_list_base::BindablePropertyListBase,
+            bindable_property_number_base::BindablePropertyNumberBase,
+            bindable_property_string_base::BindablePropertyStringBase,
+            bindable_property_trigger_base::BindablePropertyTriggerBase,
+            bindable_property_viewmodel_base::BindablePropertyViewModelBase,
+            data_bind_base::{DataBindBase, DataBindBaseCallbacks},
+        },
+        layout::layout_sizing_style_base::LayoutSizingStyleBase,
+        node_base::NodeBase,
+        shapes::shape_base::ShapeBase,
+        solo_base::SoloBase,
+        viewmodel::viewmodel_instance_viewmodel_base::ViewModelInstanceViewModelBase,
+    },
 };
 
 pub const DEPENDENTS: u32 = 1;
@@ -23,11 +48,48 @@ const TARGET_ORIGIN: u8 = 32;
 pub trait BindTarget {
     fn add_property_observer(&mut self, bind: *mut DataBind);
     fn remove_property_observer(&mut self, bind: *mut DataBind);
-    fn supports_push(&self, property_key: u32) -> bool;
+    fn core_type(&self) -> u16 {
+        0
+    }
     fn is_component(&self) -> bool;
     fn is_collapsed(&self) -> bool;
     fn add_collapsable(&mut self, bind: *mut DataBind);
     fn should_reset_instances(&mut self, value: bool);
+    fn script_input(&mut self) -> Option<&mut dyn BindScriptInput> {
+        None
+    }
+    fn add_data_bind_to_converter(&mut self, _bind: *mut DataBind) -> bool {
+        false
+    }
+    fn add_data_bind_to_formula_token(&mut self, _bind: *mut DataBind) -> bool {
+        false
+    }
+    fn add_data_bind_to_parent_artboard(&mut self, _bind: *mut DataBind) -> bool {
+        false
+    }
+}
+
+pub trait BindScriptInput {
+    fn scripted_object(&mut self) -> Option<&mut dyn BindScriptedObject>;
+    fn set_data_bind(&mut self, bind: *mut DataBind, owns_data_bind: bool);
+}
+
+pub trait BindScriptedObject {
+    fn has_component(&self) -> bool;
+    fn add_data_bind_from_scripted_object(&mut self, bind: *mut DataBind) -> bool;
+}
+
+pub trait DataBindAddedContext {
+    fn on_added_dirty_super(&mut self, bind: &mut DataBind) -> StatusCode;
+}
+
+pub trait DataBindImportStack {
+    fn backboard_file(&mut self) -> Option<*mut ()>;
+    fn add_data_converter_referencer(&mut self, bind: *mut DataBind);
+    fn has_artboard_importer(&self) -> bool;
+    fn add_artboard_data_bind(&mut self, bind: *mut DataBind);
+    fn add_state_machine_data_bind(&mut self, bind: *mut DataBind) -> bool;
+    fn import_super(&mut self, bind: &mut DataBind) -> StatusCode;
 }
 
 pub trait BindSource {
@@ -93,7 +155,6 @@ pub struct DataBind {
     converter: Option<*mut dyn BindConverter>,
     container: Option<*mut dyn BindContainer>,
     file: Option<*mut ()>,
-    display_property_key: u32,
     changed_callback: Option<fn()>,
 }
 
@@ -110,21 +171,19 @@ impl Default for DataBind {
             converter: None,
             container: None,
             file: None,
-            display_property_key: 0,
             changed_callback: None,
         }
     }
 }
 
 impl DataBind {
-    pub fn new(bind_flags: u32, property_key: u32, display_property_key: u32) -> Self {
+    pub fn new(bind_flags: u32, property_key: u32, _display_property_key: u32) -> Self {
         let mut data_bind = Self::default();
         let mut callbacks = DataBindInitializationCallbacks;
         data_bind.base.set_flags(bind_flags, &mut callbacks);
         data_bind
             .base
             .set_property_key(property_key, &mut callbacks);
-        data_bind.display_property_key = display_property_key;
         data_bind
     }
 
@@ -138,6 +197,77 @@ impl DataBind {
         } else {
             self.flags_byte &= !flag;
         }
+    }
+
+    pub fn on_added_dirty(&mut self, context: &mut dyn DataBindAddedContext) -> StatusCode {
+        let code = context.on_added_dirty_super(self);
+        if code != StatusCode::Ok {
+            return code;
+        }
+        StatusCode::Ok
+    }
+
+    pub fn import(&mut self, import_stack: &mut dyn DataBindImportStack) -> StatusCode {
+        let Some(file) = import_stack.backboard_file() else {
+            return StatusCode::MissingObject;
+        };
+        self.set_file(Some(file));
+        let bind = self as *mut Self;
+        import_stack.add_data_converter_referencer(bind);
+
+        let Some(target_ptr) = self.target else {
+            return import_stack.import_super(self);
+        };
+        let target = unsafe { &mut *target_ptr };
+        self.initialize();
+        if let Some(input) = target.script_input() {
+            let mut owns_data_bind = true;
+            if let Some(scripted_object) = input.scripted_object() {
+                if scripted_object.has_component() {
+                    if import_stack.has_artboard_importer() {
+                        owns_data_bind = false;
+                        import_stack.add_artboard_data_bind(bind);
+                    }
+                } else if scripted_object.add_data_bind_from_scripted_object(bind) {
+                    owns_data_bind = false;
+                }
+            }
+            input.set_data_bind(bind, owns_data_bind);
+        } else if target.add_data_bind_to_converter(bind) {
+        } else if target.add_data_bind_to_formula_token(bind) {
+        } else if Self::state_machine_owned_type(target.core_type()) {
+            if import_stack.add_state_machine_data_bind(bind) {
+                return import_stack.import_super(self);
+            }
+        } else {
+            if target.is_component() && target.add_data_bind_to_parent_artboard(bind) {
+                return import_stack.import_super(self);
+            }
+            if import_stack.has_artboard_importer() {
+                import_stack.add_artboard_data_bind(bind);
+                return import_stack.import_super(self);
+            }
+        }
+        import_stack.import_super(self)
+    }
+
+    fn state_machine_owned_type(type_key: u16) -> bool {
+        matches!(
+            type_key,
+            BindablePropertyNumberBase::TYPE_KEY
+                | BindablePropertyStringBase::TYPE_KEY
+                | BindablePropertyBooleanBase::TYPE_KEY
+                | BindablePropertyEnumBase::TYPE_KEY
+                | BindablePropertyArtboardBase::TYPE_KEY
+                | BindablePropertyColorBase::TYPE_KEY
+                | BindablePropertyTriggerBase::TYPE_KEY
+                | BindablePropertyIntegerBase::TYPE_KEY
+                | BindablePropertyAssetBase::TYPE_KEY
+                | BindablePropertyViewModelBase::TYPE_KEY
+                | BindablePropertyListBase::TYPE_KEY
+                | TransitionPropertyViewModelComparatorBase::TYPE_KEY
+                | StateTransitionBase::TYPE_KEY
+        )
     }
 
     pub fn output_type(&self) -> DataType {
@@ -254,14 +384,46 @@ impl DataBind {
     }
 
     pub fn target_supports_push(&self) -> bool {
-        self.target
-            .is_some_and(|target| unsafe { (&*target).supports_push(self.base.property_key()) })
+        let Some(target) = self.target else {
+            return false;
+        };
+        let key = self.base.property_key() as u16;
+        if matches!(
+            key,
+            SoloBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY
+                | NodeBase::COMPUTED_LOCAL_X_PROPERTY_KEY
+                | NodeBase::COMPUTED_LOCAL_Y_PROPERTY_KEY
+                | NodeBase::COMPUTED_WORLD_X_PROPERTY_KEY
+                | NodeBase::COMPUTED_WORLD_Y_PROPERTY_KEY
+                | NodeBase::COMPUTED_ROOT_X_PROPERTY_KEY
+                | NodeBase::COMPUTED_ROOT_Y_PROPERTY_KEY
+                | NodeBase::COMPUTED_WIDTH_PROPERTY_KEY
+                | NodeBase::COMPUTED_HEIGHT_PROPERTY_KEY
+                | ShapeBase::LENGTH_PROPERTY_KEY
+                | ScrollConstraintBase::SCROLL_INDEX_PROPERTY_KEY
+                | ScrollConstraintBase::SCROLL_PERCENT_X_PROPERTY_KEY
+                | ScrollConstraintBase::SCROLL_PERCENT_Y_PROPERTY_KEY
+                | ScrollConstraintBase::VELOCITY_X_PROPERTY_KEY
+                | ScrollConstraintBase::VELOCITY_Y_PROPERTY_KEY
+                | ScrollConstraintBase::SCROLL_ACTIVE_PROPERTY_KEY
+                | ScrollConstraintBase::COMPUTED_CONTENT_WIDTH_PROPERTY_KEY
+                | ScrollConstraintBase::COMPUTED_CONTENT_HEIGHT_PROPERTY_KEY
+        ) {
+            return false;
+        }
+        !matches!(
+            unsafe { (&*target).core_type() },
+            BindablePropertyAssetBase::TYPE_KEY
+                | BindablePropertyViewModelBase::TYPE_KEY
+                | ViewModelInstanceViewModelBase::TYPE_KEY
+        )
     }
 
     pub fn can_skip(&self) -> bool {
         self.target
             .is_some_and(|target| unsafe { (&*target).is_component() && (&*target).is_collapsed() })
-            && self.base.property_key() != self.display_property_key
+            && self.base.property_key()
+                != u32::from(LayoutSizingStyleBase::DISPLAY_VALUE_PROPERTY_KEY)
     }
 
     pub fn update(&mut self, value: u32) {
@@ -382,7 +544,8 @@ impl DataBind {
 
     pub fn collapse(&mut self, collapsed: bool) {
         if self.has_flag(COLLAPSED) == collapsed
-            || self.base.property_key() == self.display_property_key
+            || self.base.property_key()
+                == u32::from(LayoutSizingStyleBase::DISPLAY_VALUE_PROPERTY_KEY)
             || !self.target_supports_push()
         {
             return;

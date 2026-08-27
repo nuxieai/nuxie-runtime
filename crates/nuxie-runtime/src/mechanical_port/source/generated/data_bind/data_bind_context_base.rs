@@ -11,12 +11,16 @@ pub trait DataBindContextBaseCallbacks {
 
 pub struct DataBindContextBase {
     pub base: DataBind,
+    pub source_path_ids_buffer: Vec<u32>,
+    pub is_path_resolved: bool,
 }
 
 impl Default for DataBindContextBase {
     fn default() -> Self {
         Self {
             base: DataBind::default(),
+            source_path_ids_buffer: Vec::new(),
+            is_path_resolved: false,
         }
     }
 }

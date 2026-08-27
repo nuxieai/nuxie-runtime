@@ -13,6 +13,8 @@ pub trait DataBindPathBaseCallbacks {
 pub struct DataBindPathBase {
     pub base: Core,
     is_relative: bool,
+    pub path_buffer: Vec<u32>,
+    pub resolved: bool,
 }
 
 impl Default for DataBindPathBase {
@@ -20,6 +22,8 @@ impl Default for DataBindPathBase {
         Self {
             base: Core::default(),
             is_relative: false,
+            path_buffer: Vec::new(),
+            resolved: false,
         }
     }
 }

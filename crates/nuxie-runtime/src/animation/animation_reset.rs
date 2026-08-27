@@ -10,6 +10,7 @@ pub(crate) struct AnimationReset {
 #[derive(Debug)]
 pub(super) struct AnimationResetStorage {
     pub(super) entries: Vec<AnimationResetEntry>,
+    pub(super) data: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -18,14 +19,14 @@ pub(super) enum AnimationResetEntry {
         local_id: usize,
         property_key: u16,
         transform_property: Option<TransformProperty>,
-        value: f32,
+        value: Option<f32>,
     },
     Color {
         local_id: usize,
         property_key: u16,
         solid_color_property: bool,
         data_bind_observed: bool,
-        value: AnimationResetColorValue,
+        value: Option<AnimationResetColorValue>,
     },
 }
 
@@ -59,51 +60,94 @@ impl AnimationResetColorValue {
             Self::SaturatingFloatToInt(value) => (value as i32) as u32,
         }
     }
+
+    pub(super) fn encoded(self) -> f32 {
+        match self {
+            Self::DefinedFloat(value) | Self::SaturatingFloatToInt(value) => value,
+        }
+    }
+
+    fn replay_encoded(value: f32) -> u32 {
+        (value as i32) as u32
+    }
 }
 
 impl AnimationReset {
-    /// Applies the completed reset stream in object/property order. Rust keeps
-    /// the decoded entries in owner-safe storage rather than replaying a raw
-    /// byte reader, while retaining C++'s Double/Color-only dispatch.
+    /// Applies the completed reset stream in object/property order.
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance) -> bool {
+        if self.storage.data.is_empty() {
+            return false;
+        }
+
         let mut changed = false;
-        for entry in &self.storage.entries {
-            match entry {
-                AnimationResetEntry::Double {
-                    local_id,
-                    property_key,
-                    transform_property,
-                    value,
-                } => {
-                    changed |= match transform_property {
-                        Some(transform_property) => artboard.set_transform_property_with_key(
-                            *local_id,
-                            *transform_property,
-                            *property_key,
-                            *value,
-                        ),
-                        None => {
-                            artboard.set_keyed_double_property(*local_id, *property_key, *value)
-                        }
-                    };
-                }
-                AnimationResetEntry::Color {
-                    local_id,
-                    property_key,
-                    solid_color_property,
-                    data_bind_observed,
-                    value,
-                } => {
-                    changed |= if *solid_color_property {
-                        artboard.set_keyed_solid_color_property(
-                            *local_id,
-                            *property_key,
-                            *data_bind_observed,
-                            value.replay(),
-                        )
-                    } else {
-                        artboard.set_keyed_color_property(*local_id, *property_key, value.replay())
-                    };
+        let mut reader = nuxie_binary::BinaryDataReader::new(&self.storage.data);
+        while !reader.is_eof() {
+            let local_id = reader.read_var_uint32() as usize;
+            let total_properties = reader.read_var_uint32();
+            for _ in 0..total_properties {
+                let property_key = reader.read_var_uint32();
+                let property_value = reader.read_float32();
+                let Ok(property_key) = u16::try_from(property_key) else {
+                    continue;
+                };
+                match nuxie_schema::core_registry_field_kind_by_property_key(property_key) {
+                    Some(nuxie_schema::CoreRegistryFieldKind::Double) => {
+                        let transform_property =
+                            self.storage.entries.iter().find_map(|entry| match entry {
+                                AnimationResetEntry::Double {
+                                    local_id: entry_local_id,
+                                    property_key: entry_property_key,
+                                    transform_property,
+                                    ..
+                                } if *entry_local_id == local_id
+                                    && *entry_property_key == property_key =>
+                                {
+                                    Some(*transform_property)
+                                }
+                                _ => None,
+                            });
+                        changed |= match transform_property.flatten() {
+                            Some(transform_property) => artboard.set_transform_property_with_key(
+                                local_id,
+                                transform_property,
+                                property_key,
+                                property_value,
+                            ),
+                            None => artboard.set_keyed_double_property(
+                                local_id,
+                                property_key,
+                                property_value,
+                            ),
+                        };
+                    }
+                    Some(nuxie_schema::CoreRegistryFieldKind::Color) => {
+                        let routing = self.storage.entries.iter().find_map(|entry| match entry {
+                            AnimationResetEntry::Color {
+                                local_id: entry_local_id,
+                                property_key: entry_property_key,
+                                solid_color_property,
+                                data_bind_observed,
+                                ..
+                            } if *entry_local_id == local_id
+                                && *entry_property_key == property_key =>
+                            {
+                                Some((*solid_color_property, *data_bind_observed))
+                            }
+                            _ => None,
+                        });
+                        let value = AnimationResetColorValue::replay_encoded(property_value);
+                        changed |= match routing {
+                            Some((true, data_bind_observed)) => artboard
+                                .set_keyed_solid_color_property(
+                                    local_id,
+                                    property_key,
+                                    data_bind_observed,
+                                    value,
+                                ),
+                            _ => artboard.set_keyed_color_property(local_id, property_key, value),
+                        };
+                    }
+                    _ => {}
                 }
             }
         }

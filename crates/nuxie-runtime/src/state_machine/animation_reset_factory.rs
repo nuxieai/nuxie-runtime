@@ -3,14 +3,15 @@ use super::*;
 impl Drop for AnimationResetStorage {
     fn drop(&mut self) {
         let mut entries = std::mem::take(&mut self.entries);
+        let mut data = std::mem::take(&mut self.data);
         entries.clear();
+        data.clear();
         animation_reset_pool()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push(entries);
+            .push((entries, data));
     }
 }
-
 
 #[derive(Debug)]
 struct AnimationResetObjectData {
@@ -31,8 +32,8 @@ impl AnimationResetObjectData {
 
 pub(crate) struct AnimationResetFactory;
 
-fn animation_reset_pool() -> &'static Mutex<Vec<Vec<AnimationResetEntry>>> {
-    static POOL: OnceLock<Mutex<Vec<Vec<AnimationResetEntry>>>> = OnceLock::new();
+fn animation_reset_pool() -> &'static Mutex<Vec<(Vec<AnimationResetEntry>, Vec<u8>)>> {
+    static POOL: OnceLock<Mutex<Vec<(Vec<AnimationResetEntry>, Vec<u8>)>>> = OnceLock::new();
     POOL.get_or_init(|| Mutex::new(Vec::new()))
 }
 
@@ -42,12 +43,13 @@ impl AnimationResetFactory {
         animation_instances: impl IntoIterator<Item = &'a LinearAnimationInstance>,
         use_first_as_baseline: bool,
     ) -> AnimationReset {
-        let mut entries = animation_reset_pool()
+        let (mut entries, mut data) = animation_reset_pool()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .pop()
             .unwrap_or_default();
         debug_assert!(entries.is_empty());
+        debug_assert!(data.is_empty());
         let mut objects = Vec::<AnimationResetObjectData>::new();
 
         for (animation_order, animation_instance) in animation_instances.into_iter().enumerate() {
@@ -71,23 +73,24 @@ impl AnimationResetFactory {
                                 continue;
                             }
                             let value = if use_baseline {
-                                Some(keyed_property.first_double_value().unwrap_or(0.0))
+                                keyed_property.first_double_value()
                             } else {
-                                current_animation_reset_double_value(
-                                    artboard,
-                                    keyed_object.target_local_id,
-                                    keyed_property.property_key,
-                                    *transform_property,
+                                Some(
+                                    current_animation_reset_double_value(
+                                        artboard,
+                                        keyed_object.target_local_id,
+                                        keyed_property.property_key,
+                                        *transform_property,
+                                    )
+                                    .unwrap_or(0.0),
                                 )
                             };
-                            if let Some(value) = value {
-                                object.entries.push(AnimationResetEntry::Double {
-                                    local_id: keyed_object.target_local_id,
-                                    property_key: keyed_property.property_key,
-                                    transform_property: *transform_property,
-                                    value,
-                                });
-                            }
+                            object.entries.push(AnimationResetEntry::Double {
+                                local_id: keyed_object.target_local_id,
+                                property_key: keyed_property.property_key,
+                                transform_property: *transform_property,
+                                value,
+                            });
                         }
                         RuntimeKeyedPropertyTarget::Color {
                             solid_color_property,
@@ -97,24 +100,32 @@ impl AnimationResetFactory {
                                 continue;
                             }
                             let value = if use_baseline {
-                                Some(keyed_property.first_color_value().unwrap_or(0))
+                                keyed_property
+                                    .first_color_value()
+                                    .map(AnimationResetColorValue::from_color)
                             } else if *solid_color_property {
-                                artboard.solid_color_value(keyed_object.target_local_id)
+                                Some(AnimationResetColorValue::from_color(
+                                    artboard
+                                        .solid_color_value(keyed_object.target_local_id)
+                                        .unwrap_or(0),
+                                ))
                             } else {
-                                artboard.color_property(
-                                    keyed_object.target_local_id,
-                                    keyed_property.property_key,
-                                )
+                                Some(AnimationResetColorValue::from_color(
+                                    artboard
+                                        .color_property(
+                                            keyed_object.target_local_id,
+                                            keyed_property.property_key,
+                                        )
+                                        .unwrap_or(0),
+                                ))
                             };
-                            if let Some(value) = value {
-                                object.entries.push(AnimationResetEntry::Color {
-                                    local_id: keyed_object.target_local_id,
-                                    property_key: keyed_property.property_key,
-                                    solid_color_property: *solid_color_property,
-                                    data_bind_observed: *data_bind_observed,
-                                    value: AnimationResetColorValue::from_color(value),
-                                });
-                            }
+                            object.entries.push(AnimationResetEntry::Color {
+                                local_id: keyed_object.target_local_id,
+                                property_key: keyed_property.property_key,
+                                solid_color_property: *solid_color_property,
+                                data_bind_observed: *data_bind_observed,
+                                value,
+                            });
                         }
                         RuntimeKeyedPropertyTarget::Bool
                         | RuntimeKeyedPropertyTarget::Uint
@@ -126,11 +137,43 @@ impl AnimationResetFactory {
             }
         }
 
-        for object in objects {
-            entries.extend(object.entries);
+        {
+            let mut writer = nuxie_binary::BinaryWriter::new(&mut data);
+            for object in objects {
+                if artboard.slot(object.local_id).is_none() || object.entries.is_empty() {
+                    continue;
+                }
+                writer.write_var_uint32(object.local_id as u32);
+                writer.write_var_uint32(object.entries.len() as u32);
+                for entry in &object.entries {
+                    match entry {
+                        AnimationResetEntry::Double {
+                            property_key,
+                            value,
+                            ..
+                        } => {
+                            writer.write_var_uint32(u32::from(*property_key));
+                            if let Some(value) = value {
+                                writer.write_float(*value);
+                            }
+                        }
+                        AnimationResetEntry::Color {
+                            property_key,
+                            value,
+                            ..
+                        } => {
+                            writer.write_var_uint32(u32::from(*property_key));
+                            if let Some(value) = value {
+                                writer.write_float(value.encoded());
+                            }
+                        }
+                    }
+                }
+                entries.extend(object.entries);
+            }
         }
         AnimationReset {
-            storage: Arc::new(AnimationResetStorage { entries }),
+            storage: Arc::new(AnimationResetStorage { entries, data }),
         }
     }
 }

@@ -4,6 +4,12 @@ use super::state_machine_input::{
 };
 use std::sync::Arc;
 
+// Mirrors src/animation/state_machine_input_instance.cpp and
+// include/rive/animation/state_machine_input_instance.hpp. The C++ owner
+// retains a raw machine pointer so `valueChanged()` can mark it directly.
+// Rust reports the same edge as the bool returned by each mutation; the
+// owning StateMachineInstance or listener executor consumes that edge and
+// marks the machine without introducing a self-referential pointer.
 #[derive(Debug, Clone)]
 pub struct StateMachineInputInstance {
     index: usize,
@@ -44,6 +50,22 @@ impl StateMachineInputInstance {
         self.definition
             .definition()
             .map_or(0, |definition| definition.global_id)
+    }
+
+    /// Mechanical translation of `SMIInput::input()` through the retained
+    /// immutable input arena.
+    pub(super) fn input(&self) -> Option<&RuntimeStateMachineInput> {
+        self.definition.definition()
+    }
+
+    /// Mechanical translation of `SMIInput::inputCoreType()`.
+    pub fn input_core_type(&self) -> u16 {
+        match self.kind() {
+            // Pinned generated `StateMachine*Base::typeKey` values.
+            StateMachineInputKind::Bool => 59,
+            StateMachineInputKind::Number => 56,
+            StateMachineInputKind::Trigger => 58,
+        }
     }
 
     pub fn name(&self) -> Option<&str> {
@@ -143,8 +165,19 @@ impl StateMachineInputInstance {
 
     pub(crate) fn trigger_is_fireable_for_layer(&self, layer_index: usize) -> Option<bool> {
         match &self.value {
-            StateMachineInputInstanceValue::Trigger { fired, used_layers } => {
-                Some(*fired && !used_layers.contains(&layer_index))
+            StateMachineInputInstanceValue::Trigger { fired, .. } => {
+                Some(*fired && !self.trigger_is_used_in_layer(layer_index).unwrap_or(false))
+            }
+            _ => None,
+        }
+    }
+
+    /// Mechanical translation of `Triggerable::isUsedInLayer`. Layer indexes
+    /// are the Rust occurrence identity corresponding to C++ layer pointers.
+    pub(crate) fn trigger_is_used_in_layer(&self, layer_index: usize) -> Option<bool> {
+        match &self.value {
+            StateMachineInputInstanceValue::Trigger { used_layers, .. } => {
+                Some(used_layers.contains(&layer_index))
             }
             _ => None,
         }

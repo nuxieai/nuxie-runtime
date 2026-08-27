@@ -27,7 +27,9 @@ impl RuntimeStateMachineInput {
     pub(crate) fn new_bool(global_id: u32, name: Option<String>, value: bool) -> Self {
         Self {
             global_id,
-            name,
+            // `CoreString` defaults to the empty string in pinned C++; keep a
+            // present retained name even when the property was omitted.
+            name: Some(name.unwrap_or_default()),
             kind: StateMachineInputKind::Bool,
             value: StateMachineInputDefaultValue::Bool(value),
         }
@@ -36,7 +38,7 @@ impl RuntimeStateMachineInput {
     pub(crate) fn new_number(global_id: u32, name: Option<String>, value: f32) -> Self {
         Self {
             global_id,
-            name,
+            name: Some(name.unwrap_or_default()),
             kind: StateMachineInputKind::Number,
             value: StateMachineInputDefaultValue::Number(value),
         }
@@ -45,7 +47,7 @@ impl RuntimeStateMachineInput {
     pub(crate) fn new_trigger(global_id: u32, name: Option<String>) -> Self {
         Self {
             global_id,
-            name,
+            name: Some(name.unwrap_or_default()),
             kind: StateMachineInputKind::Trigger,
             value: StateMachineInputDefaultValue::Trigger,
         }

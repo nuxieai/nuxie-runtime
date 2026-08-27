@@ -73,7 +73,10 @@ impl RuntimeStateMachineListener {
     }
 
     pub(crate) fn semantic_constraints_met(&self, action_type: u32) -> bool {
-        RuntimeListenerInputTypeSemantic::constraints_met(&self.semantic_input_types, action_type)
+        RuntimeListenerInputTypeSemantic::semantic_listener_constraints_met(
+            &self.semantic_input_types,
+            action_type,
+        )
     }
 
     /// Run every retained action occurrence in authored order.

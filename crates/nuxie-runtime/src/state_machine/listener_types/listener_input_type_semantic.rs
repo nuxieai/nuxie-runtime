@@ -13,14 +13,17 @@ impl RuntimeListenerInputTypeSemantic {
         input_type: &RuntimeObject,
         inputs: &[&RuntimeObject],
     ) -> Self {
-        Self {
+        let mut owner = Self {
             global_id: input_type.id,
-            semantic_inputs: inputs
-                .iter()
-                .filter(|input| input.type_name == "SemanticInput")
-                .map(|input| RuntimeSemanticInput::from_imported(input))
-                .collect(),
+            semantic_inputs: Vec::new(),
+        };
+        for input in inputs
+            .iter()
+            .filter(|input| input.type_name == "SemanticInput")
+        {
+            owner.add_semantic_input(RuntimeSemanticInput::from_imported(input));
         }
+        owner
     }
 
     pub(crate) fn semantic_input_count(&self) -> usize {
@@ -31,7 +34,21 @@ impl RuntimeListenerInputTypeSemantic {
         self.semantic_inputs.get(index)
     }
 
-    pub(crate) fn constraints_met(input_types: &[Self], action_type: u32) -> bool {
+    fn add_semantic_input(&mut self, input: RuntimeSemanticInput) {
+        if self
+            .semantic_inputs
+            .iter()
+            .any(|existing| existing.global_id == input.global_id)
+        {
+            return;
+        }
+        self.semantic_inputs.push(input);
+    }
+
+    pub(crate) fn semantic_listener_constraints_met(
+        input_types: &[Self],
+        action_type: u32,
+    ) -> bool {
         for input_type in input_types {
             if input_type.semantic_inputs.is_empty() {
                 return true;
@@ -69,14 +86,13 @@ mod tests {
             global_id: 3,
             semantic_inputs: vec![semantic_input(4, 2)],
         };
-        assert!(RuntimeListenerInputTypeSemantic::constraints_met(
-            &[first.clone(), second],
-            2,
-        ));
-        assert!(!RuntimeListenerInputTypeSemantic::constraints_met(
-            &[first],
-            1,
-        ));
+        assert!(
+            RuntimeListenerInputTypeSemantic::semantic_listener_constraints_met(
+                &[first.clone(), second],
+                2,
+            )
+        );
+        assert!(!RuntimeListenerInputTypeSemantic::semantic_listener_constraints_met(&[first], 1,));
     }
 
     #[test]
@@ -85,10 +101,9 @@ mod tests {
             global_id: 1,
             semantic_inputs: Vec::new(),
         };
-        assert!(RuntimeListenerInputTypeSemantic::constraints_met(
-            &[catch_all],
-            99,
-        ));
-        assert!(!RuntimeListenerInputTypeSemantic::constraints_met(&[], 0));
+        assert!(
+            RuntimeListenerInputTypeSemantic::semantic_listener_constraints_met(&[catch_all], 99,)
+        );
+        assert!(!RuntimeListenerInputTypeSemantic::semantic_listener_constraints_met(&[], 0));
     }
 }

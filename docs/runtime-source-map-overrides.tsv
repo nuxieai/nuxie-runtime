@@ -71,3 +71,5 @@ animation/system_state_instance.cpp	translated	crates/nuxie-runtime/src/state_ma
 viewmodel/viewmodel_property_enum_system.cpp	translated	crates/nuxie-runtime/src/viewmodel/viewmodel_property_enum_system.rs	complete pinned static empty system-enum catalog translated under system-enum classification adaptation
 animation/blend_state_transition.cpp	translated	crates/nuxie-runtime/src/state_machine/blend_state_transition.rs	complete pinned owner translated under stable occurrence and retained animation handles
 importers/bindable_property_importer.cpp	translated	crates/nuxie-binary/src/importers/bindable_property_importer.rs	complete pinned single-use retained-property transfer translated through import-stack handles
+constraints/list_constraint.cpp	translated	crates/nuxie-runtime/src/constraints/list_constraint.rs	complete pinned ListFollowPath-only subtype dispatch translated with virtual list application routed through the nominal owner
+importers/enum_importer.cpp	translated	crates/nuxie-binary/src/importers/enum_importer.rs	complete pinned retained enum/value registration and always-successful resolve translated through import-stack handles

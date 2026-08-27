@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 mod animation_reset_factory;
+include!("animation/animation_reset.rs");
 mod bindables;
 mod blend_state_direct_instance;
 mod data_bind_template;
@@ -77,7 +78,7 @@ mod transition_property_component_comparator;
 mod transition_property_viewmodel_comparator;
 mod transition_trigger_condition;
 mod transition_viewmodel_condition;
-pub(crate) use animation_reset_factory::{AnimationReset, AnimationResetFactory};
+pub(crate) use animation_reset_factory::AnimationResetFactory;
 #[cfg(test)]
 use animation_reset_factory::{AnimationResetColorValue, AnimationResetEntry};
 pub(crate) use bindables::{

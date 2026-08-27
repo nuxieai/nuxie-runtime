@@ -71,8 +71,13 @@ impl RuntimeTextValueRunState {
         self.length.set(None);
     }
 
-    /// `TextValueRun::length`: count UTF-8 code points before the first NUL
-    /// and retain the result until `textChanged` invalidates it.
+    /// `TextValueRun::length`: count pinned `UTF::NextUTF8` sequences before
+    /// the first NUL and retain the result until `textChanged` invalidates it.
+    ///
+    /// C++ derives each sequence width from the lead byte and does not apply
+    /// Unicode scalar-value validation. In particular, overlong sequences and
+    /// encoded surrogate values still count as one entry. Keep the source's
+    /// byte-level behavior instead of routing through Rust `str::chars`.
     pub(crate) fn length(&self, text: &[u8]) -> Option<u32> {
         if let Some(length) = self.length.get() {
             return Some(length);
@@ -81,7 +86,26 @@ impl RuntimeTextValueRunState {
             .iter()
             .position(|byte| *byte == 0)
             .unwrap_or(text.len());
-        let length = u32::try_from(std::str::from_utf8(&text[..end]).ok()?.chars().count()).ok()?;
+        let mut offset = 0usize;
+        let mut length = 0u32;
+        while offset < end {
+            let width = match text[offset] {
+                0x00..=0x7f => 1,
+                0xc0..=0xdf => 2,
+                0xe0..=0xef => 3,
+                0xf0..=0xf7 => 4,
+                // Pinned C++ asserts on a continuation or 0xff lead byte.
+                // Reject it at Rust's safe boundary rather than translating
+                // the release build's out-of-bounds behavior.
+                _ => return None,
+            };
+            offset = offset.checked_add(width)?;
+            if offset > end {
+                // `NextUTF8` would read beyond the NUL-terminated payload.
+                return None;
+            }
+            length = length.checked_add(1)?;
+        }
         self.length.set(Some(length));
         Some(length)
     }

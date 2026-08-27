@@ -6,6 +6,12 @@ pub(crate) struct RuntimeBlendAnimation1D {
     pub(crate) value: f32,
 }
 
+impl RuntimeBlendAnimation for RuntimeBlendAnimation1D {
+    fn retained_animation(&self) -> RuntimeLinearAnimationHandle {
+        self.animation
+    }
+}
+
 impl Default for RuntimeBlendAnimation1D {
     fn default() -> Self {
         Self {

@@ -6,6 +6,12 @@ pub(crate) struct RuntimeBlendAnimationDirect {
     pub(crate) source: RuntimeDirectBlendSource,
 }
 
+impl RuntimeBlendAnimation for RuntimeBlendAnimationDirect {
+    fn retained_animation(&self) -> RuntimeLinearAnimationHandle {
+        self.animation
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RuntimeDirectBlendSource {
     Input { input_index: usize },

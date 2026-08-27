@@ -1,7 +1,8 @@
 use crate::ArtboardInstance;
 use crate::animation::{
-    AnimationStateInstance, LinearAnimationInstance, RuntimeInterpolator,
+    AnimationStateInstance, LinearAnimationInstance, RuntimeBlendAnimation, RuntimeInterpolator,
     RuntimeKeyedPropertyTarget, RuntimeLinearAnimation, RuntimeLinearAnimationHandle,
+    blend_animation_from_imported,
 };
 pub(crate) use crate::animation::RuntimeBlendAnimation1D;
 pub(crate) use crate::animation::{RuntimeBlendAnimationDirect, RuntimeDirectBlendSource};

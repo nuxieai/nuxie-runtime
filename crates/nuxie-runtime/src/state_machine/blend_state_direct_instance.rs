@@ -19,7 +19,7 @@ impl BlendStateDirectInstance {
                 Some(BlendAnimationDirectInstance {
                     definition: RuntimeBlendAnimationHandle::new(definition_index),
                     animation: LinearAnimationInstance::new(
-                        animation.animation,
+                        animation.animation(),
                         Arc::clone(animation_definitions),
                         Arc::clone(empty_animation_definition),
                         1.0,

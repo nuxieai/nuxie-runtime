@@ -710,11 +710,8 @@ impl RuntimeBlendState1D {
                 if animation.object.type_name != "BlendAnimation1D" {
                     return None;
                 }
-                let definition = animation
-                    .animation
-                    .and_then(|animation| animation_index_by_global.get(&animation.id).copied())
-                    .map(RuntimeLinearAnimationHandle::new)
-                    .unwrap_or_else(RuntimeLinearAnimationHandle::empty);
+                let definition =
+                    blend_animation_from_imported(animation, animation_index_by_global);
                 Some(RuntimeBlendAnimation1D {
                     animation: definition,
                     value: animation.object.double_property("value").unwrap_or(0.0),
@@ -753,11 +750,8 @@ impl RuntimeBlendStateDirect {
                 if animation.object.type_name != "BlendAnimationDirect" {
                     return None;
                 }
-                let definition = animation
-                    .animation
-                    .and_then(|animation| animation_index_by_global.get(&animation.id).copied())
-                    .map(RuntimeLinearAnimationHandle::new)
-                    .unwrap_or_else(RuntimeLinearAnimationHandle::empty);
+                let definition =
+                    blend_animation_from_imported(animation, animation_index_by_global);
                 Some(RuntimeBlendAnimationDirect::from_imported(
                     file,
                     animation.object,
@@ -806,7 +800,7 @@ impl BlendState1DInstance {
                 Some(BlendAnimation1DInstance {
                     definition: RuntimeBlendAnimationHandle::new(definition_index),
                     animation: LinearAnimationInstance::new(
-                        animation.animation,
+                        animation.animation(),
                         Arc::clone(animation_definitions),
                         Arc::clone(empty_animation_definition),
                         1.0,

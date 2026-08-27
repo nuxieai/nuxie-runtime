@@ -52,6 +52,9 @@ impl RuntimeInterpolator {
     pub(crate) fn transform_value(self, value_from: f32, value_to: f32, factor: f32) -> f32 {
         match self {
             Self::Scripted { .. } => value_from + (value_to - value_from) * factor,
+            Self::CubicEase { x1, y1, x2, y2 } => cubic_ease_interpolator_transform_value(
+                value_from, value_to, factor, x1, y1, x2, y2,
+            ),
             Self::CubicValue { x1, y1, x2, y2 } => {
                 let t = cubic_interpolator_get_t(factor, x1, x2);
                 cubic_interpolator_calc_cubic_value(t, value_from, y1, y2, value_to)
@@ -64,8 +67,7 @@ impl RuntimeInterpolator {
         match self {
             Self::Scripted { .. } => factor,
             Self::CubicEase { x1, y1, x2, y2 } => {
-                let t = cubic_interpolator_get_t(factor, x1, x2);
-                cubic_interpolator_calc_bezier(t, y1, y2)
+                cubic_ease_interpolator_transform(factor, x1, y1, x2, y2)
             }
             Self::CubicValue { .. } => factor,
             Self::Elastic {

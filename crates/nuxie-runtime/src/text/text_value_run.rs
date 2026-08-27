@@ -89,21 +89,7 @@ impl RuntimeTextValueRunState {
         let mut offset = 0usize;
         let mut length = 0u32;
         while offset < end {
-            let width = match text[offset] {
-                0x00..=0x7f => 1,
-                0xc0..=0xdf => 2,
-                0xe0..=0xef => 3,
-                0xf0..=0xf7 => 4,
-                // Pinned C++ asserts on a continuation or 0xff lead byte.
-                // Reject it at Rust's safe boundary rather than translating
-                // the release build's out-of-bounds behavior.
-                _ => return None,
-            };
-            offset = offset.checked_add(width)?;
-            if offset > end {
-                // `NextUTF8` would read beyond the NUL-terminated payload.
-                return None;
-            }
+            crate::text::next_utf8(&text[..end], &mut offset)?;
             length = length.checked_add(1)?;
         }
         self.length.set(Some(length));

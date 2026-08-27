@@ -356,10 +356,14 @@ pub(crate) fn build_state_machines_with_action_catalog<'a>(
                 .collect();
             RuntimeStateMachine {
                 global_id: state_machine.object.id,
-                name: state_machine
-                    .object
-                    .string_property("name")
-                    .map(Arc::<str>::from),
+                // Generated `StateMachineComponentBase::m_Name` starts as an
+                // owned empty string even when the property is absent.
+                name: Some(Arc::<str>::from(
+                    state_machine
+                        .object
+                        .string_property("name")
+                        .unwrap_or_default(),
+                )),
                 default_view_model_index,
                 inputs: Arc::new(
                     state_machine
@@ -592,7 +596,16 @@ pub(crate) fn build_state_machines_with_action_catalog<'a>(
                         };
                         RuntimeStateMachineLayer {
                             global_id: layer.object.id,
-                            name: layer.object.string_property("name").map(ToOwned::to_owned),
+                            // `StateMachineComponentBase::m_Name` has the same
+                            // concrete empty-string default for layers. This
+                            // matters to `StateMachine::layer("")`.
+                            name: Some(
+                                layer
+                                    .object
+                                    .string_property("name")
+                                    .unwrap_or_default()
+                                    .to_owned(),
+                            ),
                             states,
                             entry_state_index,
                             any_state_index,

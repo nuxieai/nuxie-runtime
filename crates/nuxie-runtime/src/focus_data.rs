@@ -1391,9 +1391,14 @@ fn authored_focus_node(
             .is_none_or(|parent_local| component_and_ancestors_allow_focus(artboard, parent_local));
     node.set_eligible(eligible);
     if let Some(parent) = parent_local.and_then(|parent_local| artboard.component(parent_local)) {
-        let parent_to_root = root_transform.multiply(parent.transform.world_transform);
-        let (x, y) = parent_to_root.transform_point(0.0, 0.0);
-        node.set_position(Some(FocusPoint::new(x, y)));
+        // `FocusData::worldPosition` succeeds only when the direct parent is a
+        // WorldTransformComponent. Components without that concrete base must
+        // leave the directional fallback position unavailable.
+        if parent.capabilities.world_transform {
+            let parent_to_root = root_transform.multiply(parent.transform.world_transform);
+            let (x, y) = parent_to_root.transform_point(0.0, 0.0);
+            node.set_position(Some(FocusPoint::new(x, y)));
+        }
         if let Some((min_x, min_y, max_x, max_y)) =
             parent_local.and_then(|local| artboard.layout_world_bounds(local))
         {

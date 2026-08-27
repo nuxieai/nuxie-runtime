@@ -1757,6 +1757,16 @@ pub(crate) struct RuntimeOwnedViewModelBindingSource {
 }
 
 impl RuntimeOwnedViewModelBindingSource {
+    fn same_identity(&self, other: &Self) -> bool {
+        match (&self.cell, &other.cell) {
+            (Some(current), Some(next)) => current.ptr_eq(next),
+            (None, None) => {
+                self.context.ptr_eq(&other.context) && self.property_path == other.property_path
+            }
+            _ => false,
+        }
+    }
+
     fn value(&self, kind: Option<&RuntimeDataBindGraphValue>) -> Option<RuntimeDataBindGraphValue> {
         if let (Some(cell), Some(kind)) = (&self.cell, kind)
             && let Some(value) = runtime_graph_value_from_cell_value(&cell.value(), kind)
@@ -5505,7 +5515,7 @@ impl ArtboardInstance {
         scripting_manifest: bool,
     ) {
         for data_bind_index in 0..self.artboard_authored_data_bind_states.len() {
-            {
+            let (source_changed, source_resolved) = {
                 let state = &mut self.artboard_authored_data_bind_states[data_bind_index];
                 let source = runtime_owned_view_model_binding_source_for_data_context(
                     file,
@@ -5514,35 +5524,85 @@ impl ArtboardInstance {
                     state.path_is_name_based,
                     scripting_manifest,
                 );
-                let next_cell = source.as_ref().and_then(|source| source.cell.as_ref());
-                let same_cell = state
-                    .retained
-                    .source()
-                    .zip(next_cell)
-                    .is_some_and(|(current, next)| current.ptr_eq(next));
-                if !same_cell {
-                    if let Some(cell) = next_cell {
+                let source_resolved = source.is_some();
+                let same_source = state
+                    .source
+                    .as_ref()
+                    .zip(source.as_ref())
+                    .is_some_and(|(current, next)| current.same_identity(next));
+                if !same_source {
+                    // C++ A -> B performs clearSource/source/bind. Detach the
+                    // departed value before retaining the replacement; the
+                    // converter reset itself follows below once this borrow
+                    // of the authored state has ended.
+                    state.retained.clear_source();
+                    if let Some(cell) = source.as_ref().and_then(|source| source.cell.as_ref()) {
                         state.retained.set_source(cell.clone());
-                    } else {
-                        state.retained.clear_source();
                     }
                 }
                 state.source = source;
+                (!same_source, source_resolved)
+            };
+            if source_resolved {
+                if source_changed {
+                    // DataBind::bind resets its concrete converter after a
+                    // source identity replacement. Formula/base converters
+                    // deliberately retain their state; the state helper
+                    // applies only the virtual reset implementations present
+                    // in the pinned converter hierarchy.
+                    self.reset_artboard_data_bind_converter_for_rebind(data_bind_index);
+                }
+                // A -> B runs `bind()` while A -> A directly adds reconcile
+                // dirt. Both paths therefore reconcile every supported
+                // direction in authored favor order, but only A -> B resets
+                // the converter above.
+                self.artboard_authored_data_bind_states
+                    .mark_rebind_reconcile(data_bind_index);
+                // A target-to-source-only bind has no source-dirt occurrence,
+                // so schedule its concrete favored direction as part of the
+                // same bind operation.
+                self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
             }
-            // Even an explicit same-source bind is C++ `DataBind::bind()`:
-            // reconcile both supported directions in authored favor order
-            // (`data_bind_context.cpp:80-85`, `data_bind.cpp:483-547`).
-            self.artboard_authored_data_bind_states
-                .mark_rebind_reconcile(data_bind_index);
-            // C++ `DataBind::bind()` schedules its complete reconcile in the
-            // owning container. The retained dirt latch alone is not enough:
-            // a target-to-source-only bind has no source-dirt occurrence, so
-            // route the favored direction through its concrete execution
-            // queue as part of this same bind operation.
-            self.enqueue_artboard_authored_data_bind_direction(data_bind_index);
+            // A missing source is C++ `unbind()`, not `bind()`: leave the
+            // occurrence detached and do not invent reconcile dirt/work.
         }
         self.artboard_formula_token_bindings
             .bind_sources(file, data_context, scripting_manifest);
+    }
+
+    fn reset_artboard_data_bind_converter_for_rebind(&mut self, data_bind_index: usize) {
+        if let Some(shared) = self
+            .artboard_authored_data_bind_states
+            .get_mut(data_bind_index)
+            .and_then(|state| state.shared_converter.as_mut())
+        {
+            shared
+                .converter_state
+                .reset_for_data_bind_rebind(&shared.converter);
+            return;
+        }
+        for binding in self
+            .artboard_property_bindings
+            .iter_mut()
+            .filter(|binding| binding.data_bind_index == data_bind_index)
+        {
+            if let Some(converter) = binding.converter.as_ref() {
+                binding
+                    .converter_state
+                    .reset_for_data_bind_rebind(converter);
+            }
+        }
+        for binding in self
+            .artboard_custom_property_bindings
+            .iter_mut()
+            .filter(|binding| binding.data_bind_index == data_bind_index)
+        {
+            if let Some(converter) = binding.converter.as_ref() {
+                binding
+                    .converter_state
+                    .reset_for_data_bind_rebind(converter);
+            }
+        }
     }
 
     fn register_artboard_owned_view_model_rebind_dependents(&self) {
@@ -10085,6 +10145,79 @@ mod tests {
             vec![0],
             "C++ DataBind::bind schedules a pure target-to-source reconcile even without a shared converter"
         );
+    }
+
+    #[test]
+    fn unresolved_context_source_unbinds_without_reconcile_dirt() {
+        let file = font_binding_fixture();
+        let graphs = nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph");
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard");
+        artboard.artboard_authored_data_bind_states =
+            RuntimeArtboardAuthoredDataBindStates::new(vec![
+                RuntimeArtboardAuthoredDataBindState {
+                    target: None,
+                    path: Arc::from([u32::MAX]),
+                    path_is_name_based: false,
+                    retained: RuntimeRetainedDataBind::new(DATA_BIND_FLAG_TWO_WAY, false),
+                    source: None,
+                    shared_converter: None,
+                    suppress_target_notifications: false,
+                },
+            ]);
+
+        artboard.bind_artboard_authored_data_bind_sources(
+            &file,
+            &RuntimeOwnedDataContext::default(),
+            true,
+        );
+
+        assert!(
+            artboard.artboard_authored_data_bind_states[0]
+                .source
+                .is_none()
+        );
+        assert!(
+            artboard.artboard_authored_data_bind_states[0]
+                .retained
+                .pending_dirt()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn source_identity_replacement_resets_interpolator_converter_state() {
+        let file = font_binding_fixture();
+        let graphs = nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph");
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard");
+        let converter = RuntimeDataBindGraphConverter::Interpolator {
+            global_id: 44,
+            duration: 1.0,
+            interpolator: None,
+        };
+        let mut binding = property_binding(0, 0);
+        binding.converter_state =
+            RuntimeDataBindGraphConverterState::for_converter(Some(&converter));
+        binding.converter = Some(converter);
+        let RuntimeDataBindGraphConverterState::Interpolator(state) = &mut binding.converter_state
+        else {
+            panic!("interpolator converter state");
+        };
+        state
+            .convert(1.0, None, &RuntimeDataBindGraphValue::Number(5.0))
+            .expect("numeric interpolation");
+        assert!(state.is_initialized());
+        artboard.artboard_property_bindings = vec![binding];
+
+        artboard.reset_artboard_data_bind_converter_for_rebind(0);
+
+        let RuntimeDataBindGraphConverterState::Interpolator(state) =
+            &artboard.artboard_property_bindings[0].converter_state
+        else {
+            panic!("interpolator converter state");
+        };
+        assert!(!state.is_initialized());
     }
 
     #[test]

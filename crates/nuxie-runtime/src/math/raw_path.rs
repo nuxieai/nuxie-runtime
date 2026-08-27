@@ -191,7 +191,6 @@ pub(crate) fn prune_empty_path_segments_from(commands: &mut Vec<RuntimePathComma
     let mut current = None::<(f32, f32)>;
     let mut write = start;
     let mut pruned = false;
-    let mut multi_contour = None::<bool>;
     for read in start..commands.len() {
         let command = commands[read];
         let keep = match command {
@@ -214,18 +213,7 @@ pub(crate) fn prune_empty_path_segments_from(commands: &mut Vec<RuntimePathComma
             } => {
                 let exact_empty =
                     current == Some((x1, y1)) && (x1, y1) == (x2, y2) && (x2, y2) == (x3, y3);
-                // Rust-side reverse/transform assembly can leave sub-ulp cancellation
-                // noise in multi-contour paths that C++ has already collapsed.
-                let near_empty = !exact_empty
-                    && current.is_some_and(|current| {
-                        path_points_match(current, (x1, y1))
-                            && path_points_match(current, (x2, y2))
-                            && path_points_match(current, (x3, y3))
-                    })
-                    && *multi_contour.get_or_insert_with(|| {
-                        path_commands_have_multiple_contours(commands, start)
-                    });
-                if !exact_empty && !near_empty {
+                if !exact_empty {
                     current = Some((x3, y3));
                     true
                 } else {
@@ -247,21 +235,6 @@ pub(crate) fn prune_empty_path_segments_from(commands: &mut Vec<RuntimePathComma
     if pruned {
         commands.truncate(write);
     }
-}
-
-fn path_commands_have_multiple_contours(commands: &[RuntimePathCommand], start: usize) -> bool {
-    commands
-        .get(start..)
-        .unwrap_or_default()
-        .iter()
-        .filter(|command| matches!(command, RuntimePathCommand::Move { .. }))
-        .take(2)
-        .count()
-        >= 2
-}
-
-fn path_points_match(left: (f32, f32), right: (f32, f32)) -> bool {
-    (left.0 - right.0).abs() <= f32::EPSILON && (left.1 - right.1).abs() <= f32::EPSILON
 }
 
 fn raw_path_parts(commands: &[RuntimePathCommand]) -> (Vec<RawPathVerb>, Vec<(f32, f32)>) {

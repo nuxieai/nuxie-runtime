@@ -95,13 +95,13 @@ pub(crate) fn runtime_draw_live_owned_shape(
 pub(crate) fn can_defer_path_update(
     render_opacity: f32,
     clipping_or_never_defer: bool,
-    has_skinned_path_dependent: bool,
-    follow_path_consumer: bool,
+    has_skinned_path_dependent: impl FnOnce() -> bool,
 ) -> bool {
-    render_opacity == 0.0
-        && !clipping_or_never_defer
-        && !has_skinned_path_dependent
-        && !follow_path_consumer
+    let can_defer = render_opacity == 0.0 && !clipping_or_never_defer;
+    if can_defer && has_skinned_path_dependent() {
+        return false;
+    }
+    can_defer
 }
 
 pub(crate) fn needs_save_operation(container_needs_save: bool, paint_count: usize) -> bool {

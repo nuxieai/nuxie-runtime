@@ -370,6 +370,7 @@ struct StandaloneRenderStyle {
     is_empty: bool,
     raw_path: nuxie_render_api::RawPath,
     render_path: Option<Box<dyn nuxie_render_api::RenderPath>>,
+    render_path_dirty: bool,
 }
 
 impl std::fmt::Debug for StandaloneRenderStyle {
@@ -381,6 +382,7 @@ impl std::fmt::Debug for StandaloneRenderStyle {
             .field("is_empty", &self.is_empty)
             .field("raw_path", &self.raw_path)
             .field("has_render_path", &self.render_path.is_some())
+            .field("render_path_dirty", &self.render_path_dirty)
             .finish()
     }
 }
@@ -515,6 +517,7 @@ impl<'factory> RawText<'factory> {
                     is_empty: true,
                     raw_path: nuxie_render_api::RawPath::new(),
                     render_path: None,
+                    render_path_dirty: true,
                 });
                 self.styles.len() - 1
             });
@@ -634,19 +637,40 @@ impl<'factory> RawText<'factory> {
                 renderer.clip_path(path);
             }
         }
-        for command in &self.draw_commands {
+        for command in self.draw_commands.clone() {
             match command {
                 StandaloneDrawCommand::Style(style_index) => {
-                    let Some(style) = self.styles.get(*style_index) else {
+                    let Some(style) = self.styles.get_mut(style_index) else {
                         continue;
                     };
-                    let Some(path) = style.render_path.as_deref() else {
+                    let paint = override_paint.cloned().or_else(|| style.paint.clone());
+                    let Some(paint) = paint else {
                         continue;
                     };
-                    if let Some(paint) = override_paint.or(style.paint.as_ref()) {
-                        let paint = paint.inner.paint.borrow();
-                        renderer.draw_path(path, paint.as_ref());
+
+                    if style.render_path.is_none() {
+                        let mut render_path = self.factory.make_empty_render_path();
+                        render_path.add_raw_path(&style.raw_path);
+                        render_path.fill_rule(nuxie_render_api::FillRule::Clockwise);
+                        style.render_path = Some(render_path);
+                        style.render_path_dirty = false;
+                    } else if style.render_path_dirty {
+                        let render_path = style
+                            .render_path
+                            .as_deref_mut()
+                            .expect("checked retained render path above");
+                        render_path.rewind();
+                        render_path.add_raw_path(&style.raw_path);
+                        style.render_path_dirty = false;
                     }
+                    let paint = paint.inner.paint.borrow();
+                    renderer.draw_path(
+                        style
+                            .render_path
+                            .as_deref()
+                            .expect("retained render path materialized above"),
+                        paint.as_ref(),
+                    );
                 }
                 StandaloneDrawCommand::Color(command) => {
                     let layers = command
@@ -660,17 +684,15 @@ impl<'factory> RawText<'factory> {
                     for layer in &layers {
                         let color = match layer.paint {
                             RuntimeColorGlyphPaint::Solid { color } => color,
-                            RuntimeColorGlyphPaint::Image { .. } => {
-                                // Binding ruling 1: standalone RawText never
-                                // decodes or draws bitmap glyph layers.
-                                continue;
-                            }
-                            RuntimeColorGlyphPaint::LinearGradient { .. }
+                            RuntimeColorGlyphPaint::Image { .. }
+                            | RuntimeColorGlyphPaint::LinearGradient { .. }
                             | RuntimeColorGlyphPaint::RadialGradient { .. }
                             | RuntimeColorGlyphPaint::SweepGradient { .. } => {
-                                // C++ RawText consumes only the flat layer
-                                // color field, whose unsupported-metadata
-                                // fallback is opaque black.
+                                // Pinned RawText ignores the paint kind and
+                                // consumes ColorGlyphLayer::color, whose
+                                // non-solid default is opaque black. That
+                                // includes emitting an empty black path for
+                                // bitmap layers.
                                 0xff00_0000
                             }
                         };
@@ -749,6 +771,7 @@ impl<'factory> RawText<'factory> {
         for style in &mut self.styles {
             style.raw_path = nuxie_render_api::RawPath::new();
             style.is_empty = true;
+            style.render_path_dirty = true;
         }
         self.render_styles.clear();
         self.draw_commands.clear();
@@ -867,17 +890,6 @@ impl<'factory> RawText<'factory> {
             }
         }
 
-        for style in &mut self.styles {
-            if style.is_empty {
-                continue;
-            }
-            let render_path = style.render_path.get_or_insert_with(|| {
-                self.factory.make_empty_render_path()
-            });
-            render_path.rewind();
-            render_path.fill_rule(nuxie_render_api::FillRule::Clockwise);
-            render_path.add_raw_path(&style.raw_path);
-        }
     }
 
     fn append_monochrome_glyph(

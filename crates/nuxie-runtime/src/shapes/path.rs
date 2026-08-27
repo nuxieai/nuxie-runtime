@@ -51,31 +51,30 @@ impl ArtboardInstance {
                     | crate::components::RuntimeShapeState::NEVER_DEFER_UPDATE,
             )
             != 0;
-        let has_skinned_path_dependent =
-            shape_component.dependents.iter().copied().any(|dependent| {
-                self.objects.component(dependent).is_some_and(|component| {
-                    component.type_name == "PointsPath"
-                        && component
-                            .concrete
-                            .skinnable
-                            .as_ref()
-                            .and_then(|skinnable| skinnable.skin)
-                            .is_some()
-                })
-            });
-        let follow_path_consumer = container_path_flags
-            & u64::from(crate::components::RuntimeShapeState::FOLLOW_PATH)
-            != 0
-            || path.is_flagged(
-                crate::components::RuntimePathState::FOLLOW_PATH
-                    | crate::components::RuntimePathState::CLIPPING,
-            );
-        crate::shapes::shape::can_defer_path_update(
+        if !crate::shapes::shape::can_defer_path_update(
             shape_component.transform.render_opacity,
             clipping_or_never_defer,
-            has_skinned_path_dependent,
-            follow_path_consumer,
-        )
+            || {
+                shape_component.dependents.iter().copied().any(|dependent| {
+                    self.objects.component(dependent).is_some_and(|component| {
+                        component.type_name == "PointsPath"
+                            && component
+                                .concrete
+                                .skinnable
+                                .as_ref()
+                                .and_then(|skinnable| skinnable.skin)
+                                .is_some()
+                    })
+                })
+            },
+        ) {
+            return false;
+        }
+        container_path_flags & u64::from(crate::components::RuntimeShapeState::FOLLOW_PATH) == 0
+            && !path.is_flagged(
+                crate::components::RuntimePathState::FOLLOW_PATH
+                    | crate::components::RuntimePathState::CLIPPING,
+            )
     }
 
     /// Direct port of pinned C++ `Path::update`

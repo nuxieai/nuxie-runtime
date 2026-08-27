@@ -1,14 +1,51 @@
 use super::{
     RuntimeScheduledListenerAction, RuntimeScheduledListenerActionExecutor,
     RuntimeScheduledListenerActionTargetsMut, RuntimeStateMachineFireAction,
-    RuntimeTransitionCondition, RuntimeTransitionInterpolator, StateMachineFireOccurrence,
-    StateMachineInputInstance, StateMachineReportedEvent, StateMachineTransitionDurationInstance,
-    TransitionEvaluationContext, perform_scheduled_listener_actions,
-    perform_state_machine_fire_actions,
+    RuntimeTransitionCondition, StateMachineFireOccurrence, StateMachineInputInstance,
+    StateMachineReportedEvent, StateMachineTransitionDurationInstance, TransitionEvaluationContext,
+    perform_scheduled_listener_actions, perform_state_machine_fire_actions,
 };
 use crate::ArtboardInstance;
-use crate::animation::{AnimationLoop, LinearAnimationInstance, RuntimeLinearAnimation};
+use crate::ScriptInterpolatorMethod;
+use crate::animation::{
+    AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeLinearAnimation,
+};
 use crate::scripting::ScriptError;
+use nuxie_binary::RuntimeObject;
+
+/// Exact `KeyFrameInterpolator*` retained by one pinned StateTransition.
+///
+/// This is intentionally distinct from the older generic data-converter
+/// interpolation representation: StateTransition accepts every concrete
+/// KeyFrameInterpolator, and a ScriptedInterpolator is the shared Artboard
+/// object rather than a per-keyframe clone.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct RuntimeStateTransitionInterpolator(RuntimeInterpolator);
+
+impl RuntimeStateTransitionInterpolator {
+    pub(super) fn from_object(object: &RuntimeObject) -> Option<Self> {
+        RuntimeInterpolator::from_object(object).map(Self)
+    }
+
+    pub(super) fn transform(
+        self,
+        artboard: &ArtboardInstance,
+        transition_global_id: u32,
+        factor: f32,
+    ) -> f32 {
+        match self.0 {
+            RuntimeInterpolator::Scripted { global_id } => artboard
+                .evaluate_shared_scripted_interpolator(
+                    transition_global_id,
+                    global_id,
+                    ScriptInterpolatorMethod::Transform,
+                    &[factor],
+                    factor,
+                ),
+            interpolator => interpolator.transform(factor),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeStateTransition {
@@ -23,7 +60,7 @@ pub(crate) struct RuntimeStateTransition {
     pub(super) direct_input_conditions_only: bool,
     pub(crate) fire_actions: Vec<RuntimeStateMachineFireAction>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
-    pub(crate) interpolator: Option<RuntimeTransitionInterpolator>,
+    pub(super) interpolator: Option<RuntimeStateTransitionInterpolator>,
     pub(crate) has_unsupported_interpolator: bool,
 }
 
@@ -84,6 +121,9 @@ impl RuntimeStateTransition {
         executor: &dyn RuntimeScheduledListenerActionExecutor,
         animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
     ) -> TransitionAllowance {
+        if self.flags & Self::DISABLED == Self::DISABLED {
+            return TransitionAllowance::No;
+        }
         for condition in &self.conditions {
             if !condition.evaluate(context, artboard, inputs, executor) {
                 return TransitionAllowance::No;
@@ -99,6 +139,9 @@ impl RuntimeStateTransition {
         inputs: &[StateMachineInputInstance],
         animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
     ) -> TransitionAllowance {
+        if self.flags & Self::DISABLED == Self::DISABLED {
+            return TransitionAllowance::No;
+        }
         debug_assert!(self.direct_input_conditions_only);
         for condition in &self.conditions {
             if !condition

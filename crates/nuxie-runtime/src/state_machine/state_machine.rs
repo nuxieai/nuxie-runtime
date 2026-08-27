@@ -500,7 +500,7 @@ pub(crate) fn build_state_machines_with_action_catalog<'a>(
                                         .into_iter()
                                         .map(|transition| {
                                             let interpolator = transition.interpolator.and_then(
-                                                RuntimeTransitionInterpolator::from_object,
+                                                RuntimeStateTransitionInterpolator::from_object,
                                             );
                                             let conditions = transition
                                                 .conditions

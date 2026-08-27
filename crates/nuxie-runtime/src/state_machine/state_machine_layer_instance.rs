@@ -1014,20 +1014,28 @@ impl StateMachineLayerInstance {
         if let Some(animation) = self.hold_animation.take() {
             changed |= animation.apply(artboard, self.transition_mix_from);
         }
-        let interpolator = self
+        let transition_interpolator = self
             .active_transition
             .and_then(|handle| handle.resolve(layer))
-            .and_then(|transition| transition.interpolator);
+            .and_then(|transition| {
+                transition
+                    .interpolator
+                    .map(|interpolator| (interpolator, transition.global_id))
+            });
         if self.state_from.is_some() && self.transition_mix < 1.0 {
-            let mix_from = interpolator
-                .map(|interpolator| interpolator.transform(self.transition_mix_from))
+            let mix_from = transition_interpolator
+                .map(|(interpolator, transition_global_id)| {
+                    interpolator.transform(artboard, transition_global_id, self.transition_mix_from)
+                })
                 .unwrap_or(self.transition_mix_from);
             if let Some(state_from) = self.state_from.as_mut() {
                 changed |= state_from.apply(artboard, mix_from);
             }
         }
-        let mix = interpolator
-            .map(|interpolator| interpolator.transform(self.transition_mix))
+        let mix = transition_interpolator
+            .map(|(interpolator, transition_global_id)| {
+                interpolator.transform(artboard, transition_global_id, self.transition_mix)
+            })
             .unwrap_or(self.transition_mix);
         if let Some(current_state) = self.current_state.as_mut() {
             changed |= current_state.apply(artboard, mix);

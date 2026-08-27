@@ -179,6 +179,7 @@ pub use state_machine_layer::RuntimeStateMachineLayer;
 pub(crate) use state_machine_layer_instance::StateMachineLayerInstance;
 pub(crate) use state_machine_listener::RuntimeStateMachineListener;
 use state_machine_listener::runtime_state_machine_listener;
+use state_transition::RuntimeStateTransitionInterpolator;
 use state_transition::{
     RuntimeStateTransition, RuntimeStateTransitionHandle, RuntimeTransitionAnimationRef,
     TransitionAllowance, transition_duration_value,

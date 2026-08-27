@@ -6988,6 +6988,13 @@ impl ArtboardInstance {
                 .as_slice()
                 .to_vec()
             };
+            // `DataContext::tryGetViewModelInstance` accepts every path
+            // segment only when it names a non-null ViewModel-valued
+            // property. A syntactically well-formed absolute path to a
+            // missing or scalar property is unresolved and must fall through
+            // to the inherited DataContext rather than materializing a null
+            // scoped context node.
+            context.view_model_index_by_property_path(&child_scope)?;
             Some((handle.clone(), child_scope))
         });
         child.map_or_else(

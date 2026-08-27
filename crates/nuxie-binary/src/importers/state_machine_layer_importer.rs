@@ -243,7 +243,9 @@ impl RuntimeFile {
         // does not replace the latest LayerState, and a new StateMachine does
         // not replace either key.
         let mut current_layer_state: Option<(usize, usize, usize, Option<usize>)> = None;
-        let mut current_transition: Option<(usize, usize, usize, usize)> = None;
+        let mut current_transition: Option<
+            state_transition_importer::StateTransitionImporter,
+        > = None;
         // ImportStack retains the latest importer independently for every
         // type key. Listener and ListenerInputType ownership therefore
         // survives unrelated records, layer/state changes, and even a later
@@ -526,12 +528,17 @@ impl RuntimeFile {
                         .transitions
                         .len()
                         - 1;
-                    current_transition = Some((
-                        owner_state_machine_index,
-                        layer_index,
-                        state_index,
-                        transition_index,
-                    ));
+                    let next_transition_importer =
+                        state_transition_importer::StateTransitionImporter::new(
+                            owner_state_machine_index,
+                            layer_index,
+                            state_index,
+                            transition_index,
+                        );
+                    if let Some(previous_transition_importer) = current_transition.take() {
+                        previous_transition_importer.resolve();
+                    }
+                    current_transition = Some(next_transition_importer);
                     current_layer_component =
                         Some(RuntimeStateMachineLayerComponentOwner::Transition {
                             state_machine_index: owner_state_machine_index,
@@ -596,18 +603,8 @@ impl RuntimeFile {
             }
 
             if definition.is_a("TransitionCondition") {
-                if let Some((
-                    owner_state_machine_index,
-                    layer_index,
-                    state_index,
-                    transition_index,
-                )) = current_transition
-                {
-                    state_machines[owner_state_machine_index].layers[layer_index].states
-                        [state_index]
-                        .transitions[transition_index]
-                        .conditions
-                        .push(object);
+                if let Some(transition_importer) = current_transition.as_ref() {
+                    transition_importer.add_condition(&mut state_machines, object);
                 }
                 continue;
             }
@@ -747,6 +744,10 @@ impl RuntimeFile {
             {
                 state_machines[state_machine_index].data_binds.push(object);
             }
+        }
+
+        if let Some(transition_importer) = current_transition {
+            transition_importer.resolve();
         }
 
         resolve_runtime_state_machine_transition_targets(

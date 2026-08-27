@@ -108,6 +108,7 @@ mod scripted_object_importer;
 mod state_machine_layer_component_importer;
 mod state_machine_layer_importer;
 mod state_machine_listener_importer;
+mod state_transition_importer;
 mod text_asset_importer;
 mod viewmodel_importer;
 mod viewmodel_instance_importer;
@@ -317,6 +318,11 @@ fn object_imports_successfully(
         return decision;
     }
     if let Some(decision) =
+        state_transition_importer::dispatch_imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) =
         data_converter_group_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
@@ -331,14 +337,6 @@ fn object_imports_successfully(
         file_asset_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
-    }
-
-    if definition.is_a("StateTransition") {
-        return context.latest(ImportStackKey::LayerState);
-    }
-
-    if definition.is_a("TransitionCondition") {
-        return context.latest(ImportStackKey::StateTransition);
     }
 
     if definition.is_a("TransitionComparator") {
@@ -431,6 +429,7 @@ pub(crate) fn update_import_context(
     linear_animation_importer::dispatch_update_context(definition, context);
     keyed_object_importer::dispatch_update_context(definition, context);
     state_machine_layer_importer::dispatch_update_context(definition, context);
+    state_transition_importer::dispatch_update_context(definition, context);
     enum_importer::dispatch_update_context(definition, context);
     data_converter_group_importer::dispatch_update_context(definition, context);
     data_converter_formula_importer::dispatch_update_context(definition, context);
@@ -443,9 +442,6 @@ pub(crate) fn update_import_context(
     listener_input_type_keyboard_importer::dispatch_update_context(definition, context);
     listener_input_type_semantic_importer::dispatch_update_context(definition, context);
     state_machine_layer_component_importer::dispatch_update_context(definition, context);
-    if definition.is_a("StateTransition") {
-        context.make_latest(ImportStackKey::StateTransition);
-    }
     layer_state_importer::dispatch_update_context(definition, context);
     state_machine_listener_importer::dispatch_update_context(definition, context);
     if let Some(kind) = state_machine_input_kind(definition) {

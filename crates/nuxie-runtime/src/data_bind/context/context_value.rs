@@ -2961,8 +2961,8 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
-            runtime_data_bind_graph_convert_range_mapper(
-                *value,
+            crate::data_converter_range_mapper::convert(
+                Some(*value),
                 *min_input,
                 *max_input,
                 *min_output,
@@ -2972,9 +2972,30 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
                 *interpolator,
             ),
         )),
-        (RuntimeDataBindGraphConverter::RangeMapper { .. }, _) => {
-            Some(RuntimeDataBindGraphValue::Number(0.0))
-        }
+        (
+            RuntimeDataBindGraphConverter::RangeMapper {
+                min_input,
+                max_input,
+                min_output,
+                max_output,
+                flags,
+                interpolation_type,
+                interpolator,
+                ..
+            },
+            _,
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            crate::data_converter_range_mapper::convert(
+                None,
+                *min_input,
+                *max_input,
+                *min_output,
+                *max_output,
+                *flags,
+                *interpolation_type,
+                *interpolator,
+            ),
+        )),
         (
             RuntimeDataBindGraphConverter::StringTrim { trim_type, .. },
             RuntimeDataBindGraphValue::String(value),
@@ -3187,18 +3208,41 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
-            runtime_data_bind_graph_convert_range_mapper(
-                *value,
-                *min_output,
-                *max_output,
+            crate::data_converter_range_mapper::reverse_convert(
+                Some(*value),
                 *min_input,
                 *max_input,
+                *min_output,
+                *max_output,
                 *flags,
                 *interpolation_type,
                 *interpolator,
             ),
         )),
-        (RuntimeDataBindGraphConverter::RangeMapper { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::RangeMapper {
+                min_input,
+                max_input,
+                min_output,
+                max_output,
+                flags,
+                interpolation_type,
+                interpolator,
+                ..
+            },
+            _,
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            crate::data_converter_range_mapper::reverse_convert(
+                None,
+                *min_input,
+                *max_input,
+                *min_output,
+                *max_output,
+                *flags,
+                *interpolation_type,
+                *interpolator,
+            ),
+        )),
         (
             RuntimeDataBindGraphConverter::Rounder { .. },
             RuntimeDataBindGraphValue::Number(value),
@@ -3496,28 +3540,6 @@ fn runtime_data_bind_graph_convert_operation_value(
     operation_type: u64,
 ) -> f32 {
     crate::data_converter_operation_value::convert(input, operation_value, operation_type)
-}
-
-fn runtime_data_bind_graph_convert_range_mapper(
-    input: f32,
-    min_input: f32,
-    max_input: f32,
-    min_output: f32,
-    max_output: f32,
-    flags: u64,
-    interpolation_type: u64,
-    interpolator: Option<RuntimeTransitionInterpolator>,
-) -> f32 {
-    crate::data_converter_range_mapper::convert(
-        input,
-        min_input,
-        max_input,
-        min_output,
-        max_output,
-        flags,
-        interpolation_type,
-        interpolator,
-    )
 }
 
 pub(crate) fn runtime_data_bind_graph_converter_starts_with_to_string(

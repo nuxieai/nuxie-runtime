@@ -211,3 +211,8 @@ test("replay schedules explicit capture before yielding the surface texture", ()
   assert.ok(captureIndex >= 0);
   assert.ok(waitIndex > captureIndex);
 });
+
+test("replay exposes the captured center pixel to content probes", () => {
+  assert.match(replayHtml, /const sampledRgba = Array\.from\(/);
+  assert.match(replayHtml, /sampledRgba,/);
+});

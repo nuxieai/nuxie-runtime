@@ -9,11 +9,15 @@ use nux_capi::*;
 use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::ProtocolObject;
 use objc2_core_foundation::CGSize;
-use objc2_metal::{MTLDevice, MTLPixelFormat};
-use objc2_quartz_core::CAMetalLayer;
+use objc2_metal::{MTLDevice, MTLPixelFormat, MTLRegion, MTLTexture};
+use objc2_quartz_core::{CAMetalDrawable, CAMetalLayer};
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr;
+
+#[path = "support/solid_fill.rs"]
+mod solid_fill;
+use solid_fill::{ARTBOARD_SIZE, FILL_RGBA, solid_fill_artboard};
 
 #[cfg(feature = "scripting")]
 #[path = "support/composed_import.rs"]
@@ -211,6 +215,42 @@ fn layer(renderer: *mut NuxRenderer, width: u32, height: u32) -> Retained<CAMeta
     layer
 }
 
+fn live_metal_test_required() -> bool {
+    std::env::var_os("NUXIE_REQUIRE_LIVE_METAL_TESTS").as_deref() == Some(std::ffi::OsStr::new("1"))
+}
+
+fn readable_layer(renderer: *mut NuxRenderer, width: u32, height: u32) -> Retained<CAMetalLayer> {
+    let layer = layer(renderer, width, height);
+    layer.setFramebufferOnly(false);
+    layer
+}
+
+fn read_drawable_bgra(
+    drawable: &ProtocolObject<dyn CAMetalDrawable>,
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    let texture = drawable.texture();
+    let mut pixels = vec![0; width as usize * height as usize * 4];
+    let region = MTLRegion {
+        origin: objc2_metal::MTLOrigin { x: 0, y: 0, z: 0 },
+        size: objc2_metal::MTLSize {
+            width: width as usize,
+            height: height as usize,
+            depth: 1,
+        },
+    };
+    unsafe {
+        texture.getBytes_bytesPerRow_fromRegion_mipmapLevel(
+            std::ptr::NonNull::new(pixels.as_mut_ptr().cast()).expect("pixel buffer"),
+            width as usize * 4,
+            region,
+            0,
+        );
+    }
+    pixels
+}
+
 fn operation(state: NuxMetalDrawableState, drawable: *mut c_void) -> NuxMetalRenderOperation {
     NuxMetalRenderOperation {
         drawable_state: state,
@@ -270,6 +310,112 @@ fn scheduling(player: *mut NuxPlayer, elapsed_seconds: f32) -> NuxPlayerScheduli
         NuxStatus::Ok
     );
     scheduling
+}
+
+#[test]
+fn solid_fill_renders_authored_pixels_on_metal() {
+    autoreleasepool(|_| {
+        let required = live_metal_test_required();
+        let bytes = solid_fill_artboard();
+        let mut file = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &raw mut file) },
+            NuxStatus::Ok
+        );
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, &raw mut artboard) },
+            NuxStatus::Ok
+        );
+        let mut player = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_new_static(artboard, &raw mut player) },
+            NuxStatus::Ok
+        );
+
+        let mut renderer = ptr::null_mut();
+        let mut result = ptr::null_mut();
+        let create_status = unsafe {
+            nux_renderer_new_metal(
+                ARTBOARD_SIZE,
+                ARTBOARD_SIZE,
+                &raw mut renderer,
+                &raw mut result,
+            )
+        };
+        if create_status != NuxStatus::Ok && !required {
+            if !result.is_null() {
+                assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
+            }
+            assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+            assert_eq!(
+                unsafe { nux_artboard_instance_free(artboard) },
+                NuxStatus::Ok
+            );
+            assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+            return;
+        }
+        assert_eq!(create_status, NuxStatus::Ok);
+        unsafe { assert_result(result, NuxStatus::Ok) };
+
+        let surface = readable_layer(renderer, ARTBOARD_SIZE, ARTBOARD_SIZE);
+        let Some(drawable) = surface.nextDrawable() else {
+            assert!(!required, "required live Metal drawable is unavailable");
+            assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
+            assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+            assert_eq!(
+                unsafe { nux_artboard_instance_free(artboard) },
+                NuxStatus::Ok
+            );
+            assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+            return;
+        };
+        let outcome = unsafe {
+            render(
+                renderer,
+                player,
+                operation(
+                    NUX_METAL_DRAWABLE_STATE_AVAILABLE,
+                    Retained::as_ptr(&drawable).cast_mut().cast(),
+                ),
+                NuxStatus::Ok,
+            )
+        };
+        assert_eq!(outcome.disposition, NUX_RENDERER_DISPOSITION_PRESENTED);
+        assert!(outcome.draw_calls > 0, "solid fill must submit draw work");
+
+        let pixels = read_drawable_bgra(&drawable, ARTBOARD_SIZE, ARTBOARD_SIZE);
+        let center =
+            (ARTBOARD_SIZE as usize / 2 * ARTBOARD_SIZE as usize + ARTBOARD_SIZE as usize / 2) * 4;
+        let [blue, green, red, alpha] = pixels
+            .get(center..)
+            .and_then(|tail| tail.first_chunk::<4>())
+            .copied()
+            .expect("Metal drawable contains its center pixel");
+        let sampled_rgba = [red, green, blue, alpha];
+        eprintln!("METAL_SOLID_FILL_SAMPLE: rgba={sampled_rgba:?} expected={FILL_RGBA:?}");
+        let tolerance = 2;
+        assert_ne!(
+            sampled_rgba,
+            [0, 0, 0, 0xff],
+            "non-black authored fill regressed to opaque black"
+        );
+        assert!(
+            sampled_rgba
+                .iter()
+                .zip(FILL_RGBA)
+                .all(|(actual, expected)| actual.abs_diff(expected) <= tolerance),
+            "Metal center pixel {sampled_rgba:?} did not match authored fill {FILL_RGBA:?}"
+        );
+
+        assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+    });
 }
 
 #[test]

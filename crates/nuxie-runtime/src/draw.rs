@@ -36187,40 +36187,134 @@ mod tests {
 
     #[test]
     fn owned_solid_paint_realization_does_not_clear_after_setting_color() {
-        let bytes = synthetic_solid_fill_riv();
-        let file = read_runtime_file(&bytes).expect("synthetic solid fill imports");
-        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic solid fill graphs");
-        let graph = graphs.artboards.first().expect("synthetic artboard");
-        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
-        instance.update_components();
-        let stats = Rc::new(CountingStats::default());
-        let mut factory = CountingFactory {
-            stats: Rc::clone(&stats),
-            next_path_id: 0,
-        };
+        let cases = [
+            ("shape fill", synthetic_solid_fill_riv()),
+            ("shape stroke", synthetic_dashed_stroke_riv()),
+            (
+                "text style",
+                include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv").to_vec(),
+            ),
+        ];
+        for (case, bytes) in cases {
+            let file = read_runtime_file(&bytes)
+                .unwrap_or_else(|error| panic!("{case} solid paint imports: {error}"));
+            let graphs = GraphFile::from_runtime_file(&file)
+                .unwrap_or_else(|error| panic!("{case} solid paint graphs: {error}"));
+            let graph = graphs
+                .artboards
+                .first()
+                .unwrap_or_else(|| panic!("{case} has an artboard"));
+            let mut instance = ArtboardInstance::from_graph(&file, graph)
+                .unwrap_or_else(|error| panic!("{case} instance builds: {error}"));
+            instance.update_components();
+            let stats = Rc::new(CountingStats::default());
+            let mut factory = CountingFactory {
+                stats: Rc::clone(&stats),
+                next_path_id: 0,
+            };
 
-        instance
-            .synchronize_artboard_renderer(
-                &file,
-                graph,
-                &graphs.artboards,
-                &BTreeMap::new(),
-                &mut factory,
-                None,
-            )
-            .expect("solid paint realization succeeds");
+            instance
+                .synchronize_artboard_renderer(
+                    &file,
+                    graph,
+                    &graphs.artboards,
+                    &BTreeMap::new(),
+                    &mut factory,
+                    None,
+                )
+                .unwrap_or_else(|error| panic!("{case} solid paint realization succeeds: {error}"));
 
-        let operations = stats.paint_ops.borrow();
-        let last_color = operations
-            .iter()
-            .rposition(|operation| *operation == "color")
-            .unwrap_or_else(|| panic!("solid paint receives its authored color: {operations:?}"));
-        assert!(
-            !operations[last_color + 1..]
+            let operations = stats.paint_ops.borrow();
+            let last_color = operations
                 .iter()
-                .any(|operation| *operation == "shader"),
-            "ownership transfer must not clear the shader after setting the solid color: {operations:?}"
-        );
+                .rposition(|operation| *operation == "color")
+                .unwrap_or_else(|| {
+                    panic!("{case} solid paint receives its authored color: {operations:?}")
+                });
+            assert!(
+                !operations[last_color + 1..]
+                    .iter()
+                    .any(|operation| *operation == "shader"),
+                "{case} ownership transfer must not clear the shader after setting the solid color: {operations:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn late_factory_owned_solid_paint_realization_does_not_clear_after_setting_color() {
+        let cases = [
+            ("shape fill", synthetic_solid_fill_riv()),
+            ("shape stroke", synthetic_dashed_stroke_riv()),
+            (
+                "text style",
+                include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv").to_vec(),
+            ),
+        ];
+        for (case, bytes) in cases {
+            let file = read_runtime_file(&bytes)
+                .unwrap_or_else(|error| panic!("{case} solid paint imports: {error}"));
+            let graphs = GraphFile::from_runtime_file(&file)
+                .unwrap_or_else(|error| panic!("{case} solid paint graphs: {error}"));
+            let graph = graphs
+                .artboards
+                .first()
+                .unwrap_or_else(|| panic!("{case} has an artboard"));
+            let mut instance = ArtboardInstance::from_graph(&file, graph)
+                .unwrap_or_else(|error| panic!("{case} instance builds: {error}"));
+            instance.update_components();
+            let stats = Rc::new(CountingStats::default());
+            let mut factory = CountingFactory {
+                stats: Rc::clone(&stats),
+                next_path_id: 0,
+            };
+            let mut empty_backend_paints = RuntimeRenderPaints::default();
+
+            runtime_realize_owned_shape_paints(
+                &file,
+                &instance,
+                &mut factory,
+                &mut empty_backend_paints,
+            )
+            .unwrap_or_else(|error| {
+                panic!("{case} late-factory solid paint realization succeeds: {error}")
+            });
+
+            let operations = stats.paint_ops.borrow();
+            let allocations = operations
+                .iter()
+                .enumerate()
+                .filter_map(|(index, operation)| (*operation == "make").then_some(index))
+                .collect::<Vec<_>>();
+            assert!(
+                !allocations.is_empty(),
+                "{case} realizes at least one paint through the late factory: {operations:?}"
+            );
+            let mut solid_paint_count = 0;
+            for (allocation_index, start) in allocations.iter().copied().enumerate() {
+                let end = allocations
+                    .get(allocation_index + 1)
+                    .copied()
+                    .unwrap_or(operations.len());
+                let paint_operations = &operations[start + 1..end];
+                let Some(last_color) = paint_operations
+                    .iter()
+                    .rposition(|operation| *operation == "color")
+                else {
+                    continue;
+                };
+                solid_paint_count += 1;
+                assert!(
+                    !paint_operations[last_color + 1..]
+                        .iter()
+                        .any(|operation| *operation == "shader"),
+                    "{case} late-factory realization must not clear the shader after setting the solid color: {paint_operations:?}"
+                );
+            }
+            assert!(
+                solid_paint_count > 0,
+                "{case} realizes at least one solid paint through the late factory: {operations:?}"
+            );
+        }
     }
 
     fn synthetic_dashed_stroke_riv() -> Vec<u8> {

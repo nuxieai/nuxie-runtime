@@ -41,13 +41,15 @@ The builds use Rust 1.94.1 and `wasm-bindgen-cli` 0.2.126. Raw sizes use
 | Historical WebGPU core (`wasm32-unknown-emscripten`) | replay Wasm + generated JS | 2,223,220 | 756,464 |
 | Current WebGPU core (`wasm32-unknown-unknown`) | replay Wasm + wasm-bindgen JS | 1,963,207 | 661,028 |
 | Historical WebGPU complete browser root | core + replay HTML | 2,228,603 | 758,239 |
-| Current WebGPU complete browser root | core + direct WebGPU host + HTML | 2,005,952 | 671,386 |
+| Current WebGPU complete browser root | core + direct WebGPU host + HTML | 2,006,297 | 671,485 |
 | Current WebGL2 complete browser root (`wasm32-unknown-unknown`) | replay Wasm + wasm-bindgen JS + HTML | 1,800,650 | 674,479 |
 
 The like-for-like WebGPU core is 260,013 raw bytes (11.70%) and 95,436 gzip
 bytes (12.62%) smaller. The complete browser root, including the platform host
-and HTML in both cases, is 222,651 raw bytes (9.99%) and 86,853 gzip bytes
-(11.45%) smaller.
+and HTML in both cases, is 222,306 raw bytes (9.98%) and 86,754 gzip bytes
+(11.44%) smaller. The current-root update keeps the frozen core/host
+measurements and remeasures the changed replay HTML: 7,185 raw and 2,442 gzip
+bytes, up from 6,840 raw and 2,343 gzip bytes at the prior checked revision.
 
 Current WebGPU files are
 `tools/webgpu-renderer-replay/pkg/webgpu_renderer_replay_bg.wasm`,

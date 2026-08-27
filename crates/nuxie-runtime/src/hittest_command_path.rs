@@ -42,6 +42,12 @@ impl HitTestCommandPath {
         self.fill_rule = value;
     }
 
+    // Pinned `addPath` and both `renderPath` overloads exist only to satisfy
+    // the abstract C++ CommandPath interface and immediately `assert(false)`.
+    // Rust has no parallel CommandPath base interface: live callers replay
+    // primitive commands through `add_runtime_commands`, so exposing callable
+    // panic-only methods here would be a dead transliteration.
+
     pub fn move_to(&mut self, x: f32, y: f32) {
         self.tester.move_to(self.transform.transform_point(x, y));
     }

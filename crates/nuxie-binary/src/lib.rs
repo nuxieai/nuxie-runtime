@@ -10744,7 +10744,11 @@ fn validate_cpp_paint_effects(
                 continue;
             };
             if !runtime_object_is_cpp_shape_paint(parent) {
-                continue;
+                bail!(
+                    "shape paint mutator object {} ({}) has parent that is not ShapePaint",
+                    object.id,
+                    object.type_name
+                );
             }
             if !paint_mutators.insert(parent_local_index) {
                 bail!(
@@ -12720,6 +12724,24 @@ mod file_global_state_machine_import_tests {
             error
                 .to_string()
                 .contains("missing required AnyState/EntryState/ExitState"),
+            "{error:#}",
+        );
+    }
+
+    #[test]
+    fn shape_paint_mutator_rejects_a_non_shape_paint_parent() {
+        let error = RuntimeFile::from_fixture_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            uint_record("Node", "parentId", 0),
+            uint_record("SolidColor", "parentId", 1),
+        ])
+        .expect_err("ShapePaintMutator::initPaintMutator rejects a non-ShapePaint parent");
+
+        assert!(
+            error
+                .to_string()
+                .contains("has parent that is not ShapePaint"),
             "{error:#}",
         );
     }

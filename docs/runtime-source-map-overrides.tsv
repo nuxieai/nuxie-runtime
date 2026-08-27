@@ -32,3 +32,8 @@ core/field_types/core_string_type.cpp	translated	crates/nuxie-binary/src/core/fi
 core/field_types/core_uint_type.cpp	translated	crates/nuxie-binary/src/core/field_types/core_uint_type.rs	runtime profile exact with checked u32 narrowing; ID is schema-owned and WITH_RIVE_TOOLS is excluded
 layout/layout_participant.cpp	needs source correction	crates/nuxie-runtime/src/components.rs,crates/nuxie-runtime/src/artboard.rs,crates/nuxie-runtime/src/draw.rs	complete extraction overlaps active user-dirty consumers; no partial owner landed
 simple_array.cpp	blocked by an approved adaptation decision	Rust Vec and owned-slice owners	approved Rust collection/ownership adaptation; C++ translation unit contains TESTING allocator counters only
+animation/blend_state_1d_input.cpp	translated	crates/nuxie-runtime/src/animation/blend_state_1d_input.rs	complete pinned owner translated
+animation/blend_state_1d_viewmodel.cpp	translated	crates/nuxie-runtime/src/animation/blend_state_1d_viewmodel.rs	complete pinned owner translated under flattened bindable-property identity
+assets/file_asset.cpp	translated	crates/nuxie-binary/src/assets/file_asset.rs	complete pinned owner translated under schema-owned field IDs
+event.cpp	translated	crates/nuxie-runtime/src/event.rs	complete pinned owner translated under owner-safe queued event representation
+importers/state_machine_importer.cpp	translated	crates/nuxie-binary/src/importers/state_machine_importer.rs	complete pinned owner translated

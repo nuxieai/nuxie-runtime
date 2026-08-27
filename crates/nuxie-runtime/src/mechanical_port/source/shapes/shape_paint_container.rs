@@ -77,6 +77,10 @@ impl ShapePaintContainer {
         &self.shape_paints
     }
 
+    pub fn shape_paints_mut(&mut self) -> &mut [ShapePaint] {
+        &mut self.shape_paints
+    }
+
     pub fn world_path(&mut self) -> Option<&mut ShapePaintPath> {
         None
     }

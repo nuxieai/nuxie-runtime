@@ -1,4 +1,11 @@
+use super::system_state_instance::RuntimeSystemStateInstance;
 use super::*;
+
+// `LayerState::import`, `onAddedDirty`, and `onAddedClean` run while the file
+// still owns mutable Core objects. The Rust binary stage preserves that split:
+// `nuxie-binary`'s layer/state-transition importers attach transitions to the
+// latest state, then resolve their dirty/clean lifecycle in authored order
+// before this immutable runtime projection is built.
 
 /// Immutable authored state definition.
 ///
@@ -16,6 +23,8 @@ pub struct RuntimeLayerState {
     pub(crate) flags: u64,
     pub(crate) fire_actions: Vec<RuntimeStateMachineFireAction>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
+    // C++ deletes every retained `StateTransition*` in `~LayerState`. Rust's
+    // owned Vec performs that same ordered ownership teardown automatically.
     pub(crate) transitions: Vec<RuntimeStateTransition>,
 }
 
@@ -33,6 +42,23 @@ impl RuntimeLayerState {
     pub fn core_type(&self) -> Option<u32> {
         nuxie_schema::definition_by_name(self.type_name.unwrap_or("LayerState"))
             .map(|definition| u32::from(definition.type_key.int))
+    }
+
+    /// Authored transitions in the same insertion order established by
+    /// `LayerStateImporter::addTransition` during binary import.
+    pub(crate) fn transition_count(&self) -> usize {
+        self.transitions.len()
+    }
+
+    pub(crate) fn transition(&self, index: usize) -> Option<&RuntimeStateTransition> {
+        self.transitions.get(index)
+    }
+
+    /// Base `LayerState::makeInstance` implementation. Derived animation and
+    /// blend definitions dispatch to their corresponding Rust occurrence
+    /// constructors before this base fallback is selected.
+    pub(super) fn make_instance(&self, _instance: &ArtboardInstance) -> RuntimeSystemStateInstance {
+        RuntimeSystemStateInstance
     }
 
     pub(super) fn uses_random_transition_selection(&self) -> bool {

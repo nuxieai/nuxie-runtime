@@ -460,7 +460,10 @@ impl StateMachineLayerInstance {
             return Ok(true);
         }
 
-        for (transition_index, transition) in state.transitions.iter().enumerate() {
+        for transition_index in 0..state.transition_count() {
+            let Some(transition) = state.transition(transition_index) else {
+                continue;
+            };
             if !transition.is_simple_supported() {
                 continue;
             }
@@ -532,10 +535,13 @@ impl StateMachineLayerInstance {
         executor: &dyn RuntimeScheduledListenerActionExecutor,
     ) -> Option<(usize, usize)> {
         self.evaluated_random_weights
-            .resize(state.transitions.len(), 0);
+            .resize(state.transition_count(), 0);
         self.evaluated_random_weights.fill(0);
         let mut total_weight = 0_u32;
-        for (transition_index, transition) in state.transitions.iter().enumerate() {
+        for transition_index in 0..state.transition_count() {
+            let Some(transition) = state.transition(transition_index) else {
+                continue;
+            };
             if !transition.is_simple_supported() {
                 continue;
             }
@@ -587,7 +593,10 @@ impl StateMachineLayerInstance {
         let random_weight =
             f64::from(RuntimeRandomProvider::generate_random_float()) * f64::from(total_weight);
         let mut current_weight = 0.0_f64;
-        for (transition_index, transition) in state.transitions.iter().enumerate() {
+        for transition_index in 0..state.transition_count() {
+            let Some(transition) = state.transition(transition_index) else {
+                continue;
+            };
             let transition_weight = self.evaluated_random_weights[transition_index];
             let next_weight = current_weight + f64::from(transition_weight);
             if next_weight > random_weight {

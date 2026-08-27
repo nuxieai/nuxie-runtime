@@ -56,7 +56,7 @@ impl RuntimeStateInstance {
             )?;
             RuntimeStateInstanceKind::Animation(occurrence)
         } else {
-            RuntimeStateInstanceKind::System(RuntimeSystemStateInstance)
+            RuntimeStateInstanceKind::System(state.make_instance(artboard))
         };
         Some(Self { state_index, kind })
     }

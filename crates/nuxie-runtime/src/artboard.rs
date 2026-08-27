@@ -1463,6 +1463,12 @@ impl ArtboardInstance {
                     .is_some_and(|definition| definition.is_a("ShapePaint"))
                     && definition_by_name(parent_type)
                         .is_some_and(|definition| definition.is_a("TextStylePaint"))
+                    && graph
+                        .shape_paint_containers
+                        .iter()
+                        .flat_map(|container| container.paints.iter())
+                        .find(|paint| paint.local_id == component.local_id)
+                        .is_some_and(|paint| paint.mutator_local.is_some())
                 {
                     objects
                         .component_mut(parent)

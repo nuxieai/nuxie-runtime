@@ -7696,6 +7696,13 @@ mod tests {
                     ),
                 ],
             ),
+            // Pinned ShapePaint::onAddedClean does not append a child whose
+            // retained PaintMutator is null. Keep the generic Component link
+            // while excluding this Fill from TextStylePaint::m_ShapePaints.
+            fixture_record(
+                "Fill",
+                vec![property("Fill", "parentId", FixtureValue::Uint(2))],
+            ),
         ])
         .expect("TextStylePaint lifecycle fixture imports");
         let graphs = GraphFile::from_runtime_file(&runtime)
@@ -7706,6 +7713,8 @@ mod tests {
 
         assert_eq!(source.runtime_shapes.text_style_paint_locals(2), [3]);
         assert_eq!(source.runtime_shapes.text_style_paint_locals(7), [8]);
+        assert_eq!(source.component_parent_local(11), Some(2));
+        assert!(source.runtime_shapes.text_style_paint_owner(11).is_none());
         let source_a = StaticTextSlice::from_instance(&runtime, graph, &source, 1)
             .expect("source A production topology");
         let source_b = StaticTextSlice::from_instance(&runtime, graph, &source, 6)
@@ -7721,6 +7730,8 @@ mod tests {
         let clone = source.clone();
         assert!(clone.runtime_shapes.text_style_paint_locals(2).is_empty());
         assert_eq!(clone.runtime_shapes.text_style_paint_locals(7), [3, 8]);
+        assert_eq!(clone.component_parent_local(11), Some(2));
+        assert!(clone.runtime_shapes.text_style_paint_owner(11).is_none());
         let clone_a = StaticTextSlice::from_instance(&runtime, graph, &clone, 1)
             .expect("clone A production topology");
         let clone_b = StaticTextSlice::from_instance(&runtime, graph, &clone, 6)

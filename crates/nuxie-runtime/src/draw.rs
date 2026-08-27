@@ -18562,14 +18562,27 @@ fn runtime_configure_text_pooled_paint(
     instance: &ArtboardInstance,
     object: &RuntimeObject,
     paint: &RuntimeShapePaintCommand,
+    live_blend_mode_value: u32,
 ) -> Result<()> {
-    let instance_epoch = runtime_paint_configuration_epoch(instance, paint);
-    let configuration = runtime_render_paint_configuration(instance, object, paint)?;
+    // `ShapePaint::applyTo` copies the blend previously resolved by the
+    // per-child `ShapePaint::blendMode(Text::blendMode())` call. Commands are
+    // retained across draws, so bind that one live value into the transient
+    // application view instead of consuming the command's stale snapshot.
+    let mut live_paint = paint.clone();
+    live_paint.render_blend_mode_value = live_blend_mode_value;
+    let instance_epoch = runtime_paint_configuration_epoch(instance, &live_paint);
+    let configuration = runtime_render_paint_configuration(instance, object, &live_paint)?;
     // Pinned TextStylePaint resets paintIndex for every ShapePaint and calls
     // ShapePaint::applyTo on the shared pooled paint unconditionally. An
     // epoch-only cache would let child paint #2 inherit child paint #1's
     // color/shader/feather when both are visited in the same update epoch.
-    runtime_configure_paint(backend.paint.as_mut(), instance, object, paint, None)?;
+    runtime_configure_paint(
+        backend.paint.as_mut(),
+        instance,
+        object,
+        &live_paint,
+        None,
+    )?;
     backend.paint.shader(authored_shader);
     backend.configuration = Some(RuntimeCachedRenderPaintConfiguration {
         instance_epoch,
@@ -18700,6 +18713,7 @@ fn runtime_draw_live_text_family(
         renderer.clip_path(path);
     }
 
+    let mut blended_text_style_paints = BTreeSet::new();
     for item in retained.replay.iter().copied() {
         let paint = match item {
             RuntimeTextReplay::Paint(index) => retained
@@ -18729,14 +18743,6 @@ fn runtime_draw_live_text_family(
                 let Some(style) = instance.runtime_shapes.get(style_local) else {
                     continue;
                 };
-                let text_blend_mode = instance
-                    .component_parent_local(style_local)
-                    .and_then(|text_local| {
-                        runtime_draw_property_key_for_name("Drawable", "blendModeValue")
-                            .and_then(|key| instance.uint_property(text_local, key))
-                    })
-                    .and_then(|value| u32::try_from(value).ok())
-                    .unwrap_or(0);
                 for paint in &style.paint_owners {
                     if !runtime_owned_shape_paint_is_visible(instance, paint)
                         || !runtime_shape_paint_state_is_effectively_visible(
@@ -18759,7 +18765,9 @@ fn runtime_draw_live_text_family(
                             paint.paint_local
                         )
                     })?;
-                    render_paint.blend_mode(runtime_blend_mode(text_blend_mode)?);
+                    let live_blend_mode_value =
+                        runtime_live_owned_shape_paint_blend_mode_value(instance, paint);
+                    render_paint.blend_mode(runtime_blend_mode(live_blend_mode_value)?);
                 }
                 continue;
             }
@@ -18795,7 +18803,9 @@ fn runtime_draw_live_text_family(
                     paint.paint_local
                 )
             })?;
-        let paint_backend = paint_owner.backend.value.borrow();
+        let live_blend_mode_value =
+            runtime_live_owned_shape_paint_blend_mode_value(instance, paint_owner);
+        let mut paint_backend = paint_owner.backend.value.borrow_mut();
         if paint_backend.context_id != Some(backend_context_id) {
             anyhow::bail!(
                 "TextStylePaint local {} was not realized for backend context {}",
@@ -18803,12 +18813,18 @@ fn runtime_draw_live_text_family(
                 backend_context_id
             );
         }
-        let authored_paint = paint_backend.paint.as_deref().with_context(|| {
-            format!(
-                "TextStylePaint local {} has no occurrence-owned RenderPaint",
-                paint.paint_local
-            )
-        })?;
+        if blended_text_style_paints.insert(paint.paint_local) {
+            paint_backend
+                .paint
+                .as_mut()
+                .with_context(|| {
+                    format!(
+                        "TextStylePaint local {} has no occurrence-owned RenderPaint",
+                        paint.paint_local
+                    )
+                })?
+                .blend_mode(runtime_blend_mode(live_blend_mode_value)?);
+        }
 
         if let Some(pool_use) = paint.text_paint_pool {
             let key = (pool_use.spec.style_local, pool_use.paint_index);
@@ -18828,7 +18844,14 @@ fn runtime_draw_live_text_family(
             let pooled = pooled_paints
                 .get_mut(&key)
                 .context("TextStylePaint pool allocation did not retain its paint")?;
-            runtime_configure_text_pooled_paint(pooled, authored_shader, instance, object, paint)?;
+            runtime_configure_text_pooled_paint(
+                pooled,
+                authored_shader,
+                instance,
+                object,
+                paint,
+                live_blend_mode_value,
+            )?;
         }
 
         let paint_world =
@@ -18973,7 +18996,12 @@ fn runtime_draw_live_text_family(
                 .paint
                 .as_ref()
         } else {
-            authored_paint
+            paint_backend.paint.as_deref().with_context(|| {
+                format!(
+                    "TextStylePaint local {} has no occurrence-owned RenderPaint",
+                    paint.paint_local
+                )
+            })?
         };
         renderer.draw_path(path.path.as_ref(), render_paint);
         if saved && paint.needs_save_operation {
@@ -27475,7 +27503,14 @@ mod tests {
             ),
             fixture_record(
                 "Fill",
-                vec![fixture_property("Fill", "parentId", FixtureValue::Uint(2))],
+                vec![
+                    fixture_property("Fill", "parentId", FixtureValue::Uint(2)),
+                    fixture_property(
+                        "ShapePaint",
+                        "blendModeValue",
+                        FixtureValue::Uint(14),
+                    ),
+                ],
             ),
             fixture_record(
                 "SolidColor",
@@ -27574,7 +27609,166 @@ mod tests {
         assert!(renderer.draw_paths.is_empty());
         assert!(
             stats.paint_ops.borrow().contains(&"blend_mode"),
-            "TextStylePaint::draw still copies the Text blend mode before finding no opacity bucket"
+            "TextStylePaint::draw still resolves the child blend before finding no opacity bucket"
+        );
+        assert_eq!(
+            stats.paint_blend_modes.borrow().last().copied(),
+            Some(RenderBlendMode::Screen),
+            "the explicit child blend wins over the parent Text Multiply blend on EmptyStyle"
+        );
+    }
+
+    #[test]
+    fn text_style_paint_resolves_live_parent_and_explicit_child_blends_once_per_draw() {
+        let runtime = RuntimeFile::from_fixture_records(vec![
+            fixture_record("Backboard", Vec::new()),
+            fixture_record(
+                "FontAsset",
+                vec![fixture_property(
+                    "FontAsset",
+                    "assetId",
+                    FixtureValue::Uint(0),
+                )],
+            ),
+            fixture_record(
+                "FileAssetContents",
+                vec![fixture_property(
+                    "FileAssetContents",
+                    "bytes",
+                    FixtureValue::Bytes(
+                        include_bytes!("../../../fixtures/fonts/roboto-a.ttf").to_vec(),
+                    ),
+                )],
+            ),
+            fixture_record("Artboard", Vec::new()),
+            fixture_record(
+                "Text",
+                vec![fixture_property(
+                    "Drawable",
+                    "blendModeValue",
+                    FixtureValue::Uint(3),
+                )],
+            ),
+            fixture_record(
+                "TextStylePaint",
+                vec![
+                    fixture_property("TextStylePaint", "parentId", FixtureValue::Uint(1)),
+                    fixture_property("TextStylePaint", "fontAssetId", FixtureValue::Uint(0)),
+                    fixture_property("TextStylePaint", "fontSize", FixtureValue::Double(20.0)),
+                ],
+            ),
+            fixture_record(
+                "Fill",
+                vec![
+                    fixture_property("Fill", "parentId", FixtureValue::Uint(2)),
+                    fixture_property(
+                        "ShapePaint",
+                        "blendModeValue",
+                        FixtureValue::Uint(127),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "SolidColor",
+                vec![
+                    fixture_property("SolidColor", "parentId", FixtureValue::Uint(3)),
+                    fixture_property(
+                        "SolidColor",
+                        "colorValue",
+                        FixtureValue::Color(0xff11_2233),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "Fill",
+                vec![
+                    fixture_property("Fill", "parentId", FixtureValue::Uint(2)),
+                    fixture_property(
+                        "ShapePaint",
+                        "blendModeValue",
+                        FixtureValue::Uint(16),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "SolidColor",
+                vec![
+                    fixture_property("SolidColor", "parentId", FixtureValue::Uint(5)),
+                    fixture_property(
+                        "SolidColor",
+                        "colorValue",
+                        FixtureValue::Color(0xffaa_bbcc),
+                    ),
+                ],
+            ),
+            fixture_record(
+                "TextValueRun",
+                vec![
+                    fixture_property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                    fixture_property("TextValueRun", "styleId", FixtureValue::Uint(2)),
+                    fixture_property(
+                        "TextValueRun",
+                        "text",
+                        FixtureValue::String("A".into()),
+                    ),
+                ],
+            ),
+        ])
+        .expect("opaque TextStylePaint blend fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .expect("opaque TextStylePaint blend graph builds");
+        let graph = &graphs.artboards[0];
+        let mut instance = ArtboardInstance::from_graph_with_artboards(
+            &runtime,
+            graph,
+            &graphs.artboards,
+        )
+        .expect("opaque TextStylePaint blend occurrence constructs");
+        instance.update_pass();
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut renderer = PathGeometryRecordingRenderer::default();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("initial opaque TextStylePaint draw succeeds");
+
+        stats.paint_blend_modes.borrow_mut().clear();
+        let text_blend_key = property_key_for_name("Drawable", "blendModeValue").unwrap();
+        let paint_blend_key = property_key_for_name("ShapePaint", "blendModeValue").unwrap();
+        assert!(instance.set_uint_property(1, text_blend_key, 24));
+        assert!(instance.set_uint_property(5, paint_blend_key, 15));
+        instance.update_pass();
+        stats.paint_blend_modes.borrow_mut().clear();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("live-blend opaque TextStylePaint draw succeeds");
+
+        let blend_modes = stats.paint_blend_modes.borrow();
+        assert!(
+            blend_modes.ends_with(&[RenderBlendMode::Multiply, RenderBlendMode::Overlay]),
+            "the per-draw child blends end with inherited parent first and explicit child second; backend realization may assign an earlier initial blend: {blend_modes:?}"
         );
     }
 
@@ -34711,6 +34905,7 @@ mod tests {
         lines: Cell<usize>,
         closes: Cell<usize>,
         paint_ops: RefCell<Vec<&'static str>>,
+        paint_blend_modes: RefCell<Vec<RenderBlendMode>>,
         linear_gradients: RefCell<Vec<[f32; 4]>>,
         linear_gradient_colors: RefCell<Vec<Vec<ColorInt>>>,
         image_decode_attempts: Cell<usize>,
@@ -35071,8 +35266,9 @@ mod tests {
         fn feather(&mut self, _value: f32) {
             self.stats.paint_ops.borrow_mut().push("feather");
         }
-        fn blend_mode(&mut self, _value: RenderBlendMode) {
+        fn blend_mode(&mut self, value: RenderBlendMode) {
             self.stats.paint_ops.borrow_mut().push("blend_mode");
+            self.stats.paint_blend_modes.borrow_mut().push(value);
         }
         fn shader(&mut self, shader: Option<&dyn RenderShader>) {
             self.stats.paint_ops.borrow_mut().push("shader");

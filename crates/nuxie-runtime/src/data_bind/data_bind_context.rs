@@ -3340,7 +3340,7 @@ impl RuntimeArtboardListBindingInstance {
     ) -> RuntimeArtboardListResolvedUpdate {
         let (source_handle, source_value) = match source {
             RuntimeArtboardListResolvedSource::List(source) => {
-                let item_count = source.items().len();
+                let item_count = source.item_count();
                 (Some(source), RuntimeDataBindGraphValue::List { item_count })
             }
             RuntimeArtboardListResolvedSource::Value(source_value) => (None, source_value),

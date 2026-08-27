@@ -51,7 +51,11 @@ impl RuntimeOwnedViewModelListHandle {
             .borrow()
             .items
             .iter()
-            .map(|item| item.instance.borrow().instance_identity())
+            .filter_map(|item| {
+                item.instance
+                    .as_ref()
+                    .map(|instance| instance.borrow().instance_identity())
+            })
             .collect();
         self.cell
             .notify_structural_value_changed(RuntimeViewModelChangeValue::List(identities));
@@ -62,8 +66,41 @@ impl RuntimeOwnedViewModelListHandle {
             .borrow()
             .items
             .iter()
-            .map(|item| RuntimeOwnedViewModelHandle::from_shared(Rc::clone(&item.instance)))
+            .filter_map(|item| {
+                item.instance
+                    .as_ref()
+                    .map(|instance| RuntimeOwnedViewModelHandle::from_shared(Rc::clone(instance)))
+            })
             .collect()
+    }
+
+    pub(crate) fn item_count(&self) -> usize {
+        self.value.borrow().items.len()
+    }
+
+    pub(crate) fn item_at(&self, index: usize) -> Option<RuntimeOwnedViewModelHandle> {
+        let value = self.value.borrow();
+        let instance = value.items.get(index)?.instance.as_ref()?;
+        Some(RuntimeOwnedViewModelHandle::from_shared(Rc::clone(
+            instance,
+        )))
+    }
+
+    pub(crate) fn item_entry_at(&self, index: usize) -> Option<RuntimeOwnedViewModelListItemEntry> {
+        let value = self.value.borrow();
+        let item = value.items.get(index)?;
+        Some(RuntimeOwnedViewModelListItemEntry {
+            occurrence_identity: item.occurrence_identity,
+            instance: RuntimeOwnedViewModelHandle::from_shared(Rc::clone(item.instance.as_ref()?)),
+        })
+    }
+
+    pub(crate) fn occurrence_identity_at(&self, index: usize) -> Option<u64> {
+        self.value
+            .borrow()
+            .items
+            .get(index)
+            .map(|item| item.occurrence_identity)
     }
 
     fn transaction_snapshot_items(&self) -> Vec<RuntimeOwnedViewModelListItem> {
@@ -74,7 +111,7 @@ impl RuntimeOwnedViewModelListHandle {
             .map(|item| {
                 let mut snapshot = RuntimeOwnedViewModelListItem::copy_identity_from(
                     item,
-                    Rc::clone(&item.instance),
+                    item.instance.as_ref().map(Rc::clone),
                 );
                 snapshot.parent_registered = item.parent_registered;
                 snapshot
@@ -94,7 +131,9 @@ impl RuntimeOwnedViewModelListHandle {
                 // snapshot already has that exact bit, so add only the relay
                 // edge that was removed with the staged topology.
                 if let Some(parent) = value.parent_relay.upgrade() {
-                    RuntimeOwnedViewModelParentRelay::add_parent(&item.child_relay, &parent);
+                    if let Some(child_relay) = item.child_relay.as_ref() {
+                        RuntimeOwnedViewModelParentRelay::add_parent(child_relay, &parent);
+                    }
                 }
             }
         }
@@ -107,9 +146,13 @@ impl RuntimeOwnedViewModelListHandle {
             .borrow()
             .items
             .iter()
-            .map(|item| RuntimeOwnedViewModelListItemEntry {
-                occurrence_identity: item.occurrence_identity,
-                instance: RuntimeOwnedViewModelHandle::from_shared(Rc::clone(&item.instance)),
+            .filter_map(|item| {
+                Some(RuntimeOwnedViewModelListItemEntry {
+                    occurrence_identity: item.occurrence_identity,
+                    instance: RuntimeOwnedViewModelHandle::from_shared(Rc::clone(
+                        item.instance.as_ref()?,
+                    )),
+                })
             })
             .collect()
     }
@@ -128,13 +171,14 @@ impl RuntimeOwnedViewModelListHandle {
             .items
             .iter()
             .enumerate()
-            .map(|(index, item)| {
-                let instance = RuntimeOwnedViewModelHandle::from_shared(Rc::clone(&item.instance));
+            .filter_map(|(index, item)| {
+                let instance =
+                    RuntimeOwnedViewModelHandle::from_shared(Rc::clone(item.instance.as_ref()?));
                 set_component_list_item_index(file, &mut instance.borrow_mut(), index);
-                RuntimeOwnedViewModelListItemEntry {
+                Some(RuntimeOwnedViewModelListItemEntry {
                     occurrence_identity: item.occurrence_identity,
                     instance,
-                }
+                })
             })
             .collect()
     }
@@ -144,8 +188,8 @@ impl RuntimeOwnedViewModelListHandle {
             .borrow()
             .items
             .iter()
-            .map(|item| {
-                let item = item.instance.borrow();
+            .filter_map(|item| {
+                let item = item.instance.as_ref()?.borrow();
                 // `TextValueRunListener::createProperties` creates and
                 // initially writes style before content. Read in the same
                 // order while retaining absent properties as absent.
@@ -155,7 +199,7 @@ impl RuntimeOwnedViewModelListHandle {
                 let text = item
                     .string_value_by_property_name("textContent")
                     .map(|value| value.to_vec());
-                RuntimeTextListRun { text, style }
+                Some(RuntimeTextListRun { text, style })
             })
             .collect()
     }
@@ -213,6 +257,9 @@ impl RuntimeOwnedViewModelListValue {
             for item in &mut removed {
                 self.detach_item(item);
             }
+        } else {
+            self.items
+                .resize_with(item_count, RuntimeOwnedViewModelListItem::empty);
         }
         self.item_count = item_count;
         true
@@ -267,7 +314,11 @@ impl RuntimeOwnedViewModelListValue {
         let Some(current) = self.items.get(index) else {
             return false;
         };
-        if Rc::ptr_eq(&current.instance, &instance) {
+        if current
+            .instance
+            .as_ref()
+            .is_some_and(|current| Rc::ptr_eq(current, &instance))
+        {
             return false;
         }
         let mut replacement = RuntimeOwnedViewModelListItem::new(instance);
@@ -282,7 +333,7 @@ impl RuntimeOwnedViewModelListValue {
         // Pinned C++ `ViewModelInstanceList::pop()` omits `removeParent`.
         item.disarm_parent_registration();
         self.item_count = self.items.len();
-        Some(item.instance)
+        item.instance
     }
 
     fn remove_instance_at(
@@ -295,7 +346,7 @@ impl RuntimeOwnedViewModelListValue {
         let mut item = self.items.remove(index);
         self.detach_item(&mut item);
         self.item_count = self.items.len();
-        Some(item.instance)
+        item.instance
     }
 
     fn clear_instances(&mut self) -> bool {
@@ -318,7 +369,11 @@ impl RuntimeOwnedViewModelListValue {
         let mut changed = false;
         let mut index = 0;
         while index < self.items.len() {
-            if Rc::ptr_eq(&self.items[index].instance, instance) {
+            if self.items[index]
+                .instance
+                .as_ref()
+                .is_some_and(|item| Rc::ptr_eq(item, instance))
+            {
                 let mut item = self.items.remove(index);
                 self.detach_item(&mut item);
                 changed = true;
@@ -383,7 +438,7 @@ fn collect_runtime_owned_list_children(
                 .borrow()
                 .items
                 .iter()
-                .map(|item| Rc::clone(&item.instance)),
+                .filter_map(|item| item.instance.as_ref().map(Rc::clone)),
         );
     }
 }
@@ -392,7 +447,9 @@ fn advance_runtime_owned_list_children(lists: &[RuntimeOwnedViewModelList]) {
     for list in lists {
         let value = list.value.borrow();
         for item in &value.items {
-            item.instance.borrow_mut().advanced_data_context();
+            if let Some(instance) = item.instance.as_ref() {
+                instance.borrow_mut().advanced_data_context();
+            }
         }
     }
 }
@@ -470,16 +527,30 @@ fn runtime_owned_view_model_lists_for_instance(
                         let item_count = items.len();
                         let hydrated = items
                             .into_iter()
-                            .filter_map(|item| {
-                                let reference =
-                                    file.referenced_view_model_instance_for_list_item_object(item)?;
-                                runtime_owned_view_model_list_item_instance(file, reference).map(
-                                    |(instance, source_object_id)| {
-                                        RuntimeOwnedViewModelListItem::from_authored(
-                                            Rc::new(RefCell::new(instance)),
-                                            source_object_id,
-                                        )
-                                    },
+                            .map(|item| {
+                                let view_model_id = item
+                                    .uint_property("viewModelId")
+                                    .and_then(|value| u32::try_from(value).ok())
+                                    .unwrap_or(u32::MAX);
+                                let view_model_instance_id = item
+                                    .uint_property("viewModelInstanceId")
+                                    .and_then(|value| u32::try_from(value).ok())
+                                    .unwrap_or(u32::MAX);
+                                let resolved = file
+                                    .referenced_view_model_instance_for_list_item_object(item)
+                                    .and_then(|reference| {
+                                        runtime_owned_view_model_list_item_instance(file, reference)
+                                    });
+                                let source_object_id = resolved
+                                    .as_ref()
+                                    .map(|(_, source_object_id)| *source_object_id);
+                                let instance =
+                                    resolved.map(|(instance, _)| Rc::new(RefCell::new(instance)));
+                                RuntimeOwnedViewModelListItem::from_authored(
+                                    view_model_id,
+                                    view_model_instance_id,
+                                    instance,
+                                    source_object_id,
                                 )
                             })
                             .collect::<Vec<_>>();
@@ -553,7 +624,10 @@ fn runtime_owned_list_matches_string_boolean_handle(
 ) -> bool {
     !list.items.is_empty()
         && list.items.iter().all(|item| {
-            let item = item.instance.borrow();
+            let Some(instance) = item.instance.as_ref() else {
+                return false;
+            };
+            let item = instance.borrow();
             item.view_model_index == handle.item_view_model_index
                 && item
                     .strings

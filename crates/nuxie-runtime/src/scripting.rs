@@ -1721,9 +1721,7 @@ impl ScriptViewModel {
             .root_handle()
             .borrow()
             .list_handle_by_property_path(&path)?
-            .items()
-            .get(index)
-            .cloned()?;
+            .item_at(index)?;
         let view_model_index = item.borrow().view_model_index();
         build_script_view_model_shared_with_blob_assets_and_callbacks(
             Rc::clone(&self.file),

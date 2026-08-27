@@ -168,7 +168,9 @@ impl RuntimeOwnedViewModelAdvanceContext {
                 RuntimeOwnedViewModelAdvanceEntry::List(list) => {
                     let list = list.borrow();
                     for item in &list.items {
-                        item.instance.borrow_mut().advanced_data_context();
+                        if let Some(instance) = item.instance.as_ref() {
+                            instance.borrow_mut().advanced_data_context();
+                        }
                     }
                 }
             }
@@ -306,8 +308,10 @@ impl RuntimeOwnedViewModelHandle {
                 .collect::<Vec<_>>();
             for list in &instance.lists {
                 let items = list.value.try_borrow().ok()?;
-                children.extend(items.items.iter().map(|item| RuntimeOwnedViewModelHandle {
-                    instance: Rc::clone(&item.instance),
+                children.extend(items.items.iter().filter_map(|item| {
+                    Some(RuntimeOwnedViewModelHandle {
+                        instance: Rc::clone(item.instance.as_ref()?),
+                    })
                 }));
             }
             drop(instance);
@@ -433,8 +437,11 @@ impl RuntimeOwnedViewModelHandle {
         for list in &instance.lists {
             let items = list.value.try_borrow().ok()?;
             for item in &items.items {
+                let Some(instance) = item.instance.as_ref() else {
+                    continue;
+                };
                 if let Some(found) = (Self {
-                    instance: Rc::clone(&item.instance),
+                    instance: Rc::clone(instance),
                 })
                 .change_owner_for_cell(cell_identity, visited)
                 {
@@ -1064,7 +1071,11 @@ impl RuntimeOwnedViewModelGraphTransaction {
                         cell: list.cell.clone(),
                     };
                     let items = handle.transaction_snapshot_items();
-                    descendants.extend(items.iter().map(|item| Rc::clone(&item.instance)));
+                    descendants.extend(
+                        items
+                            .iter()
+                            .filter_map(|item| item.instance.as_ref().map(Rc::clone)),
+                    );
                     self.undo.push_bounded(
                         RuntimeOwnedViewModelUndo::List(handle, items),
                         maximum_entries,
@@ -1462,7 +1473,9 @@ fn remap_owned_view_model_lists(
             .map(|item| {
                 let mut cloned_item = RuntimeOwnedViewModelListItem::copy_identity_from(
                     item,
-                    clone_owned_view_model_graph(&item.instance, memo),
+                    item.instance
+                        .as_ref()
+                        .map(|instance| clone_owned_view_model_graph(instance, memo)),
                 );
                 if item.parent_registered {
                     cloned_item.attach_parent(parent_relay);
@@ -1630,10 +1643,7 @@ mod upstream_viewmodel_instance_contract_tests {
                 RuntimeBlobAssetValue::MISSING_FILE_ASSET_INDEX,
             ),
         );
-        let blob = Arc::new(RuntimeBlobAsset::new(
-            "payload",
-            Arc::from(&[5, 6, 7][..]),
-        ));
+        let blob = Arc::new(RuntimeBlobAsset::new("payload", Arc::from(&[5, 6, 7][..])));
         let data_value = RuntimeBlobAssetValue::from_live_asset(Arc::clone(&blob));
         assert!(
             data_value
@@ -2430,7 +2440,9 @@ fn detach_owned_view_model_list_storage(
                 .map(|item| {
                     let mut detached = RuntimeOwnedViewModelListItem::copy_identity_from(
                         item,
-                        Rc::new(RefCell::new(item.instance.borrow().clone())),
+                        item.instance
+                            .as_ref()
+                            .map(|instance| Rc::new(RefCell::new(instance.borrow().clone()))),
                     );
                     if item.parent_registered {
                         detached.attach_parent(parent_relay);
@@ -2469,7 +2481,12 @@ fn collect_owned_view_model_list_graph_edges(
         let Ok(value) = list.value.try_borrow() else {
             return false;
         };
-        edges.extend(value.items.iter().map(|item| Rc::clone(&item.instance)));
+        edges.extend(
+            value
+                .items
+                .iter()
+                .filter_map(|item| item.instance.as_ref().map(Rc::clone)),
+        );
     }
     true
 }
@@ -3215,42 +3232,64 @@ impl RuntimeOwnedViewModelInstance {
                     .map(|item| {
                         (
                             item.occurrence_identity,
+                            item.view_model_id,
+                            item.view_model_instance_id,
                             item.authored_source_object_id,
-                            Rc::clone(&item.instance),
+                            item.instance.as_ref().map(Rc::clone),
                             item.parent_registered,
+                            item.artboard_identity,
                         )
                     })
                     .collect::<Vec<_>>();
                 (value.item_count, items)
             };
             let mut items = Vec::with_capacity(source_items.len());
-            for (occurrence_identity, source_object_id, source_instance, parent_registered) in
-                source_items
+            for (
+                occurrence_identity,
+                view_model_id,
+                view_model_instance_id,
+                source_object_id,
+                source_instance,
+                parent_registered,
+                artboard_identity,
+            ) in source_items
             {
-                let linked = if let Some(source_object_id) = source_object_id {
-                    if let Some(linked) = instances_map.get(&source_object_id) {
-                        Rc::clone(linked)
-                    } else {
-                        instances_map.insert(source_object_id, Rc::clone(&source_instance));
-                        {
-                            let mut linked_instance = source_instance.try_borrow_mut().ok()?;
-                            Self::complete_imported_view_model_links(
-                                &mut linked_instance,
-                                instances_map,
-                            )?;
+                let linked = if let Some(source_instance) = source_instance {
+                    if let Some(source_object_id) = source_object_id {
+                        if let Some(linked) = instances_map.get(&source_object_id) {
+                            Some(Rc::clone(linked))
+                        } else {
+                            instances_map.insert(source_object_id, Rc::clone(&source_instance));
+                            {
+                                let mut linked_instance = source_instance.try_borrow_mut().ok()?;
+                                Self::complete_imported_view_model_links(
+                                    &mut linked_instance,
+                                    instances_map,
+                                )?;
+                            }
+                            Some(source_instance)
                         }
-                        source_instance
+                    } else {
+                        Some(source_instance)
                     }
                 } else {
-                    source_instance
+                    None
                 };
-                let child_relay = Rc::clone(&linked.try_borrow().ok()?.parent_relay);
+                let child_relay = linked.as_ref().and_then(|linked| {
+                    linked
+                        .try_borrow()
+                        .ok()
+                        .map(|linked| Rc::clone(&linked.parent_relay))
+                });
                 let mut item = RuntimeOwnedViewModelListItem {
                     occurrence_identity,
+                    view_model_id,
+                    view_model_instance_id,
                     instance: linked,
                     authored_source_object_id: source_object_id,
                     child_relay,
                     parent_registered: false,
+                    artboard_identity,
                 };
                 if parent_registered {
                     item.attach_parent(&parent_relay);
@@ -4511,7 +4550,7 @@ impl RuntimeOwnedViewModelInstance {
                 .borrow()
                 .items
                 .iter()
-                .map(|item| Rc::clone(&item.instance))
+                .filter_map(|item| item.instance.as_ref().map(Rc::clone))
                 .collect(),
         )
     }
@@ -4692,7 +4731,7 @@ impl RuntimeOwnedViewModelInstance {
         let list_property_path = self.list_property_path_by_names(&list_names)?;
         let list = self.list_handle_by_property_path(&list_property_path)?;
         let list = list.value.borrow();
-        let first = list.items.first()?.instance.borrow();
+        let first = list.items.first()?.instance.as_ref()?.borrow();
         let item_view_model_index = first.view_model_index;
         let string_property_index = first.unique_typed_property_index_by_name(
             string_property_name,
@@ -4703,7 +4742,10 @@ impl RuntimeOwnedViewModelInstance {
             RuntimeOwnedViewModelPropertyKind::Boolean,
         )?;
         if !list.items.iter().all(|item| {
-            let item = item.instance.borrow();
+            let Some(instance) = item.instance.as_ref() else {
+                return false;
+            };
+            let item = instance.borrow();
             item.view_model_index == item_view_model_index
                 && item.unique_typed_property_index_by_name(
                     string_property_name,
@@ -4750,7 +4792,10 @@ impl RuntimeOwnedViewModelInstance {
         }
         let mut changed = false;
         for item in &mut list.items {
-            let mut item = item.instance.borrow_mut();
+            let Some(instance) = item.instance.as_ref() else {
+                return None;
+            };
+            let mut item = instance.borrow_mut();
             let matches = item
                 .string_value_by_property_index(handle.string_property_index)
                 .is_some_and(|value| value.as_ref() == selected);

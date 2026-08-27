@@ -21,11 +21,7 @@ impl ViewModelInstanceListRuntime {
         property_path: Vec<usize>,
     ) -> Self {
         Self {
-            value: ViewModelInstanceValueRuntime::new(
-                name,
-                ViewModelRuntimeDataType::List,
-                cell,
-            ),
+            value: ViewModelInstanceValueRuntime::new(name, ViewModelRuntimeDataType::List, cell),
             file,
             owner,
             property_path,
@@ -42,12 +38,15 @@ impl ViewModelInstanceListRuntime {
 
     pub fn instance_at(&self, index: isize) -> Option<ViewModelInstanceRuntime> {
         let index = usize::try_from(index).ok()?;
-        let entry = self.entries()?.into_iter().nth(index)?;
+        let entry = self
+            .owner
+            .borrow()
+            .list_handle_by_property_path(&self.property_path)?
+            .item_entry_at(index)?;
         if let Some(runtime) = self.items.borrow().get(&entry.occurrence_identity) {
             return Some(runtime.clone());
         }
-        let runtime =
-            ViewModelInstanceRuntime::from_handle(Rc::clone(&self.file), entry.instance);
+        let runtime = ViewModelInstanceRuntime::from_handle(Rc::clone(&self.file), entry.instance);
         self.items
             .borrow_mut()
             .insert(entry.occurrence_identity, runtime.clone());
@@ -61,7 +60,10 @@ impl ViewModelInstanceListRuntime {
         {
             return false;
         }
-        let Some(entry) = self.entries().and_then(|entries| entries.into_iter().last()) else {
+        let Some(entry) = self
+            .entries()
+            .and_then(|entries| entries.into_iter().last())
+        else {
             return false;
         };
         self.items
@@ -70,11 +72,7 @@ impl ViewModelInstanceListRuntime {
         true
     }
 
-    pub fn add_instance_at(
-        &self,
-        instance: &ViewModelInstanceRuntime,
-        index: isize,
-    ) -> bool {
+    pub fn add_instance_at(&self, instance: &ViewModelInstanceRuntime, index: isize) -> bool {
         let Ok(index) = usize::try_from(index) else {
             return false;
         };
@@ -88,7 +86,12 @@ impl ViewModelInstanceListRuntime {
         ) {
             return false;
         }
-        let Some(entry) = self.entries().and_then(|entries| entries.into_iter().nth(index)) else {
+        let Some(entry) = self
+            .owner
+            .borrow()
+            .list_handle_by_property_path(&self.property_path)
+            .and_then(|list| list.item_entry_at(index))
+        else {
             return false;
         };
         self.items
@@ -133,9 +136,10 @@ impl ViewModelInstanceListRuntime {
             return false;
         };
         let Some(occurrence_identity) = self
-            .entries()
-            .and_then(|entries| entries.into_iter().nth(index))
-            .map(|entry| entry.occurrence_identity)
+            .owner
+            .borrow()
+            .list_handle_by_property_path(&self.property_path)
+            .and_then(|list| list.occurrence_identity_at(index))
         else {
             return false;
         };
@@ -168,7 +172,8 @@ impl ViewModelInstanceListRuntime {
     pub fn size(&self) -> usize {
         self.owner
             .borrow()
-            .list_item_count_by_property_path(&self.property_path)
+            .list_handle_by_property_path(&self.property_path)
+            .map(|list| list.item_count())
             .unwrap_or(0)
     }
 

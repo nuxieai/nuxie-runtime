@@ -9992,7 +9992,7 @@ mod tests {
         let converter = RuntimeDataBindGraphConverter::OperationViewModel {
             operation_type: 2,
             operation_value: 2.0,
-            default_operation_value: 2.0,
+            default_operation_value: Some(2.0),
             source_path: Some(vec![1]),
             retained_operation_value: Some(operand.clone()),
         };
@@ -10511,7 +10511,7 @@ mod tests {
         let converter = RuntimeDataBindGraphConverter::OperationViewModel {
             operation_type: 2,
             operation_value: 0.0,
-            default_operation_value: 0.0,
+            default_operation_value: Some(0.0),
             source_path: Some(vec![0, 0]),
             retained_operation_value: Some(operand.clone()),
         };
@@ -10624,7 +10624,7 @@ mod tests {
             |operand: &RuntimeViewModelCell| RuntimeDataBindGraphConverter::OperationViewModel {
                 operation_type: 2,
                 operation_value: 0.0,
-                default_operation_value: 0.0,
+                default_operation_value: Some(0.0),
                 source_path: Some(vec![1]),
                 retained_operation_value: Some(operand.clone()),
             };
@@ -10690,7 +10690,7 @@ mod tests {
         let converter = RuntimeDataBindGraphConverter::OperationViewModel {
             operation_type: 2,
             operation_value: 2.0,
-            default_operation_value: 2.0,
+            default_operation_value: Some(2.0),
             source_path: Some(vec![1]),
             retained_operation_value: Some(operand.clone()),
         };
@@ -12848,7 +12848,7 @@ mod tests {
                 Some(RuntimeDataBindGraphConverter::OperationViewModel {
                     operation_type: 2,
                     operation_value: 3.0,
-                    default_operation_value: 3.0,
+                    default_operation_value: Some(3.0),
                     source_path: Some(vec![1]),
                     retained_operation_value: None,
                 }),

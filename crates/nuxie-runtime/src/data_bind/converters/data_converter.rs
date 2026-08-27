@@ -2913,7 +2913,7 @@ mod tests {
         let operation = RuntimeDataBindGraphConverter::OperationViewModel {
             operation_type: 0,
             operation_value: 5.0,
-            default_operation_value: 0.0,
+            default_operation_value: Some(0.0),
             source_path: Some(vec![0, 0]),
             retained_operation_value: Some(operation_operand.clone()),
         };

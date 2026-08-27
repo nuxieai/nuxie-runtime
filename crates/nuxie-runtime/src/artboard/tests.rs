@@ -11226,7 +11226,7 @@
         let mut converter = RuntimeDataBindGraphConverter::OperationViewModel {
             operation_type: 2,
             operation_value: 0.0,
-            default_operation_value: 0.0,
+            default_operation_value: Some(0.0),
             source_path: Some(vec![1, 0]),
             retained_operation_value: None,
         };

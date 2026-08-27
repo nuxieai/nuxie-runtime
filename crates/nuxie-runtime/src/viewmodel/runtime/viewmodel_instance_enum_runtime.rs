@@ -64,7 +64,11 @@ impl ViewModelInstanceEnumRuntime {
         else {
             return false;
         };
-        self.set_value_index(index as u32)
+        RuntimeOwnedViewModelEnum::set_value_index_cell(
+            self.value.cell(),
+            index,
+            self.data_values().len(),
+        )
     }
 
     pub fn value_index(&self) -> u32 {
@@ -80,12 +84,11 @@ impl ViewModelInstanceEnumRuntime {
     }
 
     pub fn set_value_index(&self, index: u32) -> bool {
-        if (index as usize) >= self.data_values().len() {
-            return false;
-        }
-        self.value
-            .cell()
-            .set_value(RuntimeViewModelCellValue::Enum(index))
+        RuntimeOwnedViewModelEnum::set_value_index_cell(
+            self.value.cell(),
+            index as usize,
+            self.data_values().len(),
+        )
     }
 
     pub fn values(&self) -> Vec<String> {

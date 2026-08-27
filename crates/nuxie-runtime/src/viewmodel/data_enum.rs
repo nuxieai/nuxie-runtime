@@ -12,11 +12,19 @@ fn runtime_owned_view_model_enums(
                 .into_iter()
                 .enumerate()
                 .filter_map(|(property_index, property)| {
-                    (matches!(
+                    if matches!(
                         property.type_name,
                         "ViewModelPropertyEnum" | "ViewModelPropertyEnumCustom"
-                    ) || runtime_view_model_property_is_system_enum(property))
-                    .then_some(RuntimeOwnedViewModelEnum::new(property_index, 0))
+                    ) || runtime_view_model_property_is_system_enum(property)
+                    {
+                        RuntimeOwnedViewModelEnum::for_property(
+                            file,
+                            view_model_index,
+                            property_index,
+                        )
+                    } else {
+                        None
+                    }
                 })
                 .collect()
         })
@@ -31,13 +39,7 @@ fn runtime_owned_view_model_enums_for_instance(
     runtime_owned_view_model_instance_value_objects(file, view_model_index, view_model_instance)
         .into_iter()
         .filter_map(|source| {
-            let value = runtime_data_enum_value_index_for_instance(file, source)?;
-            let property_index =
-                usize::try_from(source.uint_property("viewModelPropertyId")?).ok()?;
-            Some(RuntimeOwnedViewModelEnum::new(
-                property_index,
-                u64::try_from(value).ok()?,
-            ))
+            RuntimeOwnedViewModelEnum::for_instance_value(file, view_model_index, source)
         })
         .collect()
 }

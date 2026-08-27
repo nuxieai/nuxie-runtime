@@ -4172,7 +4172,7 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if !enum_value.set_value(value) {
+        if !enum_value.set_value_index(value) {
             return false;
         }
         true
@@ -4264,7 +4264,14 @@ impl RuntimeOwnedViewModelInstance {
             return changed;
         }
         if property_path.len() == 1 {
-            return self.set_enum_by_property_index(property_path[0], value);
+            let Some(enum_value) = self
+                .enums
+                .iter_mut()
+                .find(|enum_value| enum_value.property_index == property_path[0])
+            else {
+                return false;
+            };
+            return enum_value.apply_value(value);
         }
         let Some((enum_index, view_model_path)) = property_path.split_last() else {
             return false;

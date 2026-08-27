@@ -1326,7 +1326,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if !enum_value.set_value(value) {
+        if !enum_value.set_value_index(value) {
             return false;
         }
         true
@@ -1628,7 +1628,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if !current.set_value(value) {
+        if !current.apply_value(value) {
             return false;
         }
         true

@@ -154,7 +154,8 @@ impl Index<usize> for Vec2D {
 impl Eq for Vec2D {}
 impl Hash for Vec2D {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.x.to_bits().hash(state);
-        self.y.to_bits().hash(state);
+        let x = if self.x == 0.0 { 0 } else { self.x.to_bits() } as usize;
+        let y = if self.y == 0.0 { 0 } else { self.y.to_bits() } as usize;
+        (x ^ y.wrapping_shl(1)).hash(state);
     }
 }

@@ -85,7 +85,8 @@ impl ScrollConstraint {
                 content_size += unsafe { (*child).layout_bounds().width() };
             }
             let len_offset = if self.base.infinite() { 0 } else { 1 };
-            content_size += self.gap().x * (self.layout_children.len() - len_offset) as f32;
+            content_size +=
+                self.gap().x * self.layout_children.len().wrapping_sub(len_offset) as f32;
             if !self.base.infinite() {
                 content_size += self.content().padding_left() + self.content().padding_right();
             }
@@ -104,7 +105,8 @@ impl ScrollConstraint {
                 content_size += unsafe { (*child).layout_bounds().height() };
             }
             let len_offset = if self.base.infinite() { 0 } else { 1 };
-            content_size += self.gap().y * (self.layout_children.len() - len_offset) as f32;
+            content_size +=
+                self.gap().y * self.layout_children.len().wrapping_sub(len_offset) as f32;
             if !self.base.infinite() {
                 content_size += self.content().padding_top() + self.content().padding_bottom();
             }

@@ -121,10 +121,12 @@ impl IkConstraint {
         let b = bv.length();
         let c = cv.length();
         let angle_a = ((-a * a + b * b + c * c) / (2.0 * b * c))
-            .clamp(-1.0, 1.0)
+            .min(1.0)
+            .max(-1.0)
             .acos();
         let angle_c = ((a * a + b * b - c * c) / (2.0 * a * b))
-            .clamp(-1.0, 1.0)
+            .min(1.0)
+            .max(-1.0)
             .acos();
         let (r1, r2);
         unsafe {

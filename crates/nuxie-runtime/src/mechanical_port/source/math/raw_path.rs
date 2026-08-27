@@ -17,12 +17,18 @@ pub struct PathSegment<'a> {
     pub points: &'a [Vec2D],
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default)]
 pub struct RawPath {
     points: Vec<Vec2D>,
     verbs: Vec<PathVerb>,
     last_move_index: usize,
     contour_is_open: bool,
+}
+
+impl PartialEq for RawPath {
+    fn eq(&self, other: &Self) -> bool {
+        self.points == other.points && self.verbs == other.verbs
+    }
 }
 
 impl RawPath {
@@ -472,14 +478,22 @@ impl RawPath {
                     let points: &[Vec2D; 4] = segment.points.try_into().unwrap();
                     let mut count = cubic_wangs_formula(points, 1.0 / 8.0).ceil();
                     if count > 1.0 {
-                        count = count.min(64.0);
+                        count = if 64.0 < count { 64.0 } else { count };
                         let eval = EvalCubic::new(points);
-                        let mut t = 1.0 / count;
-                        while t < 1.0 {
-                            let point = eval.at(t);
+                        let mut low_t = 1.0 / count;
+                        let mut high_t = 2.0 / count;
+                        let delta_t = high_t;
+                        while low_t < 1.0 {
+                            let point = eval.at(low_t);
                             area += Vec2D::cross(last, point);
                             last = point;
-                            t += 1.0 / count;
+                            if low_t < 1.0 {
+                                let point = eval.at(high_t);
+                                area += Vec2D::cross(last, point);
+                                last = point;
+                            }
+                            low_t += delta_t;
+                            high_t += delta_t;
                         }
                     }
                     area += Vec2D::cross(last, points[3]);
@@ -524,10 +538,10 @@ fn expand_bounds_to_cubic_point(
 ) {
     if (0.0..=1.0).contains(&t) {
         let inverse = 1.0 - t;
-        let point = inverse.powi(3) * a
+        let point = inverse * inverse * inverse * a
             + 3.0 * inverse * inverse * t * b
             + 3.0 * inverse * t * t * c
-            + t.powi(3) * d;
+            + t * t * t * d;
         expand_axis_bounds(bounds, axis, point);
     }
 }

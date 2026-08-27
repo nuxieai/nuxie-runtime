@@ -33,9 +33,9 @@ impl ListFollowPathConstraint {
         if target.is_collapsed() {
             return TransformComponents::default();
         }
-        let transform_b = self.base.target_transform(component_offset);
+        let mut transform_b = self.base.target_transform(component_offset);
         self.base
-            .constrain_helper(component_transform, &transform_b, parent_transform)
+            .constrain_helper(component_transform, &mut transform_b, parent_transform)
     }
 
     pub fn build_dependencies(&mut self) {

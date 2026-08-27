@@ -51,9 +51,9 @@ impl ScrollVirtualizer {
     ) -> bool {
         let horizontal = direction == VirtualizedDirection::Horizontal;
         let content_size = if horizontal {
-            scroll.content_width()
+            scroll.content_width() as f64
         } else {
-            scroll.content_height()
+            scroll.content_height() as f64
         };
         if content_size > 0.0 {
             let normalized_offset = -offset;
@@ -66,15 +66,16 @@ impl ScrollVirtualizer {
             self.infinite = scroll.infinite();
             if offset > 0.0 {
                 if self.infinite {
-                    let multiplier = (offset / content_size).floor() as i32 + 1;
-                    self.offset = -1.0 * (offset - multiplier as f32 * content_size);
+                    let multiplier = (f64::from(offset) / content_size).floor() as i32 + 1;
+                    self.offset =
+                        (-1.0 * (f64::from(offset) - f64::from(multiplier) * content_size)) as f32;
                 } else {
                     self.offset = -offset;
                 }
             } else {
-                let multiplier = (normalized_offset / content_size).floor() as i32;
+                let multiplier = (f64::from(normalized_offset) / content_size).floor() as i32;
                 self.offset = if multiplier > 0 {
-                    normalized_offset % (multiplier as f32 * content_size)
+                    (f64::from(normalized_offset) % (f64::from(multiplier) * content_size)) as f32
                 } else {
                     normalized_offset
                 };

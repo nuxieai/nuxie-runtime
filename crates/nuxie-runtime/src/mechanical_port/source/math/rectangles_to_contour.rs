@@ -21,14 +21,13 @@ impl Hash for PointKey {
             0
         } else {
             self.0.x.to_bits()
-        };
+        } as usize;
         let y = if self.0.y == 0.0 {
             0
         } else {
             self.0.y.to_bits()
-        };
-        x.hash(state);
-        y.hash(state);
+        } as usize;
+        (x ^ y.wrapping_shl(1)).hash(state);
     }
 }
 impl PartialOrd for PointKey {
@@ -38,10 +37,7 @@ impl PartialOrd for PointKey {
 }
 impl Ord for PointKey {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0
-            .x
-            .total_cmp(&other.0.x)
-            .then_with(|| self.0.y.total_cmp(&other.0.y))
+        compare_points(self.0, other.0, 0, 1)
     }
 }
 
@@ -269,9 +265,9 @@ impl RectanglesToContour {
             self.sorted_points_y.push(point.0);
         }
         self.sorted_points_x
-            .sort_unstable_by(|a, b| a.x.total_cmp(&b.x).then_with(|| a.y.total_cmp(&b.y)));
+            .sort_unstable_by(|a, b| compare_points(*a, *b, 0, 1));
         self.sorted_points_y
-            .sort_unstable_by(|a, b| a.y.total_cmp(&b.y).then_with(|| a.x.total_cmp(&b.x)));
+            .sort_unstable_by(|a, b| compare_points(*a, *b, 1, 0));
         self.edges_horizontal.clear();
         self.edges_vertical.clear();
         let mut index = 0;
@@ -307,6 +303,18 @@ impl RectanglesToContour {
     }
 }
 
+fn compare_points(a: Vec2D, b: Vec2D, axis_a: usize, axis_b: usize) -> Ordering {
+    let less = a[axis_a] < b[axis_a] || (a[axis_a] == b[axis_a] && a[axis_b] < b[axis_b]);
+    let greater = b[axis_a] < a[axis_a] || (b[axis_a] == a[axis_a] && b[axis_b] < a[axis_b]);
+    if less {
+        Ordering::Less
+    } else if greater {
+        Ordering::Greater
+    } else {
+        Ordering::Equal
+    }
+}
+
 fn sort_rect_events(
     rectangles: &[Aabb],
     output: &mut Vec<RectEvent>,
@@ -339,8 +347,28 @@ fn sort_rect_events(
             output.push(event);
         }
     }
-    output[start..].sort_unstable_by(|a, b| a.get_value(axis_b).total_cmp(&b.get_value(axis_b)));
-    output[start..].sort_unstable_by(|a, b| a.get_value(axis_a).total_cmp(&b.get_value(axis_a)));
+    output[start..].sort_unstable_by(|a, b| {
+        let a = a.get_value(axis_b);
+        let b = b.get_value(axis_b);
+        if a < b {
+            Ordering::Less
+        } else if b < a {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    });
+    output[start..].sort_unstable_by(|a, b| {
+        let a = a.get_value(axis_a);
+        let b = b.get_value(axis_a);
+        if a < b {
+            Ordering::Less
+        } else if b < a {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    });
     start..output.len()
 }
 fn first_horizontal_key(map: &EdgeMap) -> Option<PointKey> {

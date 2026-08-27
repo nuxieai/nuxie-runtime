@@ -1,4 +1,4 @@
-use super::vec2d::Vec2D;
+use super::{math_types, vec2d::Vec2D};
 
 #[derive(Clone, Copy, Debug)]
 pub struct CubicCoeffs {
@@ -48,7 +48,7 @@ impl EvalCubic {
 
 pub fn calc_polar_segments_per_radian<const PRECISION: i32>(approx_dev_stroke_radius: f32) -> f32 {
     let cos_theta = 1.0 - (1.0 / PRECISION as f32) / approx_dev_stroke_radius;
-    0.5 / cos_theta.max(-1.0).acos()
+    0.5 / cpp_max(cos_theta, -1.0).acos()
 }
 pub fn eval_cubic_at(points: &[Vec2D; 4], t: f32) -> Vec2D {
     EvalCubic::new(points).at(t)
@@ -127,8 +127,8 @@ pub fn chop_cubic_at_values(
     while index + 1 < t_count {
         let pair = if let Some(values) = t_values {
             let p = [
-                ((values[index] - last_t) / (1.0 - last_t)).clamp(0.0, 1.0),
-                ((values[index + 1] - last_t) / (1.0 - last_t)).clamp(0.0, 1.0),
+                math_types::clamp((values[index] - last_t) / (1.0 - last_t), 0.0, 1.0),
+                math_types::clamp((values[index + 1] - last_t) / (1.0 - last_t), 0.0, 1.0),
             ];
             last_t = values[index + 1];
             p
@@ -147,7 +147,7 @@ pub fn chop_cubic_at_values(
     }
     if index < t_count {
         let mut t = t_values.map_or(0.5, |values| values[index]);
-        t = ((t - last_t) / (1.0 - last_t)).clamp(0.0, 1.0);
+        t = math_types::clamp((t - last_t) / (1.0 - last_t), 0.0, 1.0);
         let mut chopped = [Vec2D::default(); 7];
         chop_cubic_at(&current, &mut chopped, t);
         dst[offset..offset + 7].copy_from_slice(&chopped);
@@ -211,7 +211,7 @@ pub fn find_cubic_convex_180_chops(
         a = Vec2D::dot(tangent0, coeffs.a);
         b_over_minus_2 = -Vec2D::dot(tangent0, coeffs.b);
         c = Vec2D::dot(tangent0, coeffs.c);
-        discriminant_over_4 = (b_over_minus_2 * b_over_minus_2 - a * c).max(0.0);
+        discriminant_over_4 = cpp_max(b_over_minus_2 * b_over_minus_2 - a * c, 0.0);
     }
     let mut q = discriminant_over_4.sqrt().copysign(b_over_minus_2);
     q += b_over_minus_2;

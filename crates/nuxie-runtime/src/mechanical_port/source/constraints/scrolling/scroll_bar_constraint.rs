@@ -68,6 +68,15 @@ impl ScrollBarConstraint {
         let Some(scroll_pointer) = self.scroll_constraint else {
             return;
         };
+        if !self.base.parent().is::<LayoutComponent>()
+            || !self
+                .base
+                .parent()
+                .parent()
+                .is_some_and(|parent| parent.is::<LayoutComponent>())
+        {
+            return;
+        }
         let scroll = unsafe { &mut *scroll_pointer };
         let mut thumb_offset_x = 0.0;
         let mut thumb_offset_y = 0.0;
@@ -164,6 +173,14 @@ impl ScrollBarConstraint {
         let Some(scroll_pointer) = self.scroll_constraint else {
             return;
         };
+        if !self
+            .base
+            .parent()
+            .parent()
+            .is_some_and(|parent| parent.is::<LayoutComponent>())
+        {
+            return;
+        }
         let Some(inverse_world) = self.track().world_transform().inverted() else {
             return;
         };
@@ -195,6 +212,15 @@ impl ScrollBarConstraint {
         let Some(scroll_pointer) = self.scroll_constraint else {
             return;
         };
+        if !self.base.parent().is::<LayoutComponent>()
+            || !self
+                .base
+                .parent()
+                .parent()
+                .is_some_and(|parent| parent.is::<LayoutComponent>())
+        {
+            return;
+        }
         let scroll = unsafe { &mut *scroll_pointer };
         let previous_x = scroll.offset_x();
         let previous_y = scroll.offset_y();

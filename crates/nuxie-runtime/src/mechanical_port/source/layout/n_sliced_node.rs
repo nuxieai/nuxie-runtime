@@ -101,7 +101,7 @@ impl NSlicedNode {
                         &x_scale_info,
                         (*this).base.width().abs(),
                         local.x,
-                    ) * scale.x.signum()
+                    ) * 1.0_f32.copysign(scale.x)
                 },
                 if scale.y == 0.0 {
                     0.0
@@ -111,7 +111,7 @@ impl NSlicedNode {
                         &y_scale_info,
                         (*this).base.height().abs(),
                         local.y,
-                    ) * scale.y.signum()
+                    ) * 1.0_f32.copysign(scale.y)
                 },
             );
             *world_point = world * sliced;
@@ -152,19 +152,19 @@ impl NSlicedNode {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
+        let measured_width = if width_mode == LayoutMeasureMode::Undefined {
+            f32::MAX
+        } else {
+            width
+        };
+        let measured_height = if height_mode == LayoutMeasureMode::Undefined {
+            f32::MAX
+        } else {
+            height
+        };
         Vec2D::new(
-            if width_mode == LayoutMeasureMode::Undefined {
-                f32::MAX
-            } else {
-                width
-            }
-            .min(self.base.width()),
-            if height_mode == LayoutMeasureMode::Undefined {
-                f32::MAX
-            } else {
-                height
-            }
-            .min(self.base.height()),
+            cpp_min(measured_width, self.base.width()),
+            cpp_min(measured_height, self.base.height()),
         )
     }
     pub fn control_size(
@@ -182,6 +182,10 @@ impl NSlicedNode {
     pub fn should_propagate_size_to_children(&self) -> bool {
         false
     }
+}
+
+fn cpp_min(a: f32, b: f32) -> f32 {
+    if b < a { b } else { a }
 }
 
 impl NSlicerDetails for NSlicedNode {

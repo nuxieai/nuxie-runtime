@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::{
     constraints::scrolling::scroll_physics::{ScrollPhysics, ScrollPhysicsState},
     generated::constraints::scrolling::clamped_scroll_physics_base::ClampedScrollPhysicsBase,
-    math::vec2d::Vec2D,
+    math::{math_types, vec2d::Vec2D},
 };
 
 pub struct ClampedScrollPhysics {
@@ -39,8 +39,8 @@ impl ClampedScrollPhysics {
 
     pub fn clamp(&self, range_min: Vec2D, range_max: Vec2D, value: Vec2D) -> Vec2D {
         Vec2D::new(
-            value.x.clamp(range_min.x, range_max.x),
-            value.y.clamp(range_min.y, range_max.y),
+            math_types::clamp(value.x, range_min.x, range_max.x),
+            math_types::clamp(value.y, range_min.y, range_max.y),
         )
     }
 }

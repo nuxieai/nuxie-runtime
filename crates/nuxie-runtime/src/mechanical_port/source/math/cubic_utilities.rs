@@ -18,7 +18,9 @@ impl CubicUtilities {
         hull[5] = Vec2D::lerp(hull[3], hull[4], t);
     }
     pub fn too_far(a: Vec2D, b: Vec2D, threshold: f32) -> bool {
-        (a.x - b.x).abs().max((a.y - b.y).abs()) > threshold
+        let x = (a.x - b.x).abs();
+        let y = (a.y - b.y).abs();
+        (if x < y { y } else { x }) > threshold
     }
     pub fn should_split_cubic(
         from: Vec2D,
@@ -33,9 +35,9 @@ impl CubicUtilities {
     }
     pub fn cubic_at(t: f32, a: f32, b: f32, c: f32, d: f32) -> f32 {
         let inverse = 1.0 - t;
-        inverse.powi(3) * a
+        inverse * inverse * inverse * a
             + 3.0 * inverse * inverse * t * b
             + 3.0 * inverse * t * t * c
-            + t.powi(3) * d
+            + t * t * t * d
     }
 }

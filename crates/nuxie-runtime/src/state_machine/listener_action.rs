@@ -196,13 +196,11 @@ impl RuntimeScheduledListenerAction {
         action: &nuxie_binary::RuntimeListenerAction<'_>,
     ) -> bool {
         match action.object.type_name {
-            "ListenerBoolChange" => RuntimeListenerInputTarget::from_object(action.object)
-                .validates_for_import(
-                    graph,
-                    state_machine_inputs,
-                    "StateMachineBool",
-                    "NestedBool",
-                ),
+            "ListenerBoolChange" => RuntimeListenerBoolChange::validates_for_import(
+                RuntimeListenerInputTarget::from_object(action.object),
+                graph,
+                state_machine_inputs,
+            ),
             "ListenerNumberChange" => RuntimeListenerNumberChange::validates_for_import(
                 RuntimeListenerInputTarget::from_object(action.object),
                 graph,
@@ -239,11 +237,10 @@ impl RuntimeScheduledListenerAction {
             "ListenerFireEvent" => Self::FireEvent(RuntimeListenerFireEvent { action_owner }),
             "ListenerBoolChange" => {
                 let target = RuntimeListenerInputTarget::from_object(action.object);
-                debug_assert!(target.validates_for_import(
+                debug_assert!(RuntimeListenerBoolChange::validates_for_import(
+                    target,
                     graph,
-                    state_machine_inputs,
-                    "StateMachineBool",
-                    "NestedBool",
+                    state_machine_inputs
                 ));
                 Self::BoolChange(RuntimeListenerBoolChange { action_owner })
             }

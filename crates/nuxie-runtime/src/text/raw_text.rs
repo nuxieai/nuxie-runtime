@@ -48,6 +48,9 @@ pub struct RawTextFont {
     bytes: std::sync::Arc<[u8]>,
     face_index: u32,
     fallbacks: std::sync::Arc<[RawTextFont]>,
+    axis_values: std::sync::Arc<BTreeMap<u32, f32>>,
+    feature_values: std::sync::Arc<BTreeMap<u32, u32>>,
+    color_layer_cache: std::sync::Arc<std::sync::Mutex<BTreeMap<u32, Vec<RuntimeColorGlyphLayer>>>>,
 }
 
 impl std::fmt::Debug for RawTextFont {
@@ -57,6 +60,8 @@ impl std::fmt::Debug for RawTextFont {
             .field("byte_len", &self.bytes.len())
             .field("face_index", &self.face_index)
             .field("fallback_count", &self.fallbacks.len())
+            .field("axis_values", &self.axis_values)
+            .field("feature_values", &self.feature_values)
             .finish()
     }
 }
@@ -84,6 +89,9 @@ impl RawTextFont {
             bytes,
             face_index,
             fallbacks: std::sync::Arc::from([]),
+            axis_values: std::sync::Arc::new(BTreeMap::new()),
+            feature_values: std::sync::Arc::new(BTreeMap::new()),
+            color_layer_cache: std::sync::Arc::new(std::sync::Mutex::new(BTreeMap::new())),
         })
     }
 
@@ -98,6 +106,207 @@ impl RawTextFont {
 
     pub fn face_index(&self) -> u32 {
         self.face_index
+    }
+
+    pub fn line_metrics(&self) -> RawTextFontLineMetrics {
+        let font = SkrifaFontRef::from_index(self.bytes(), self.face_index)
+            .expect("RawTextFont retains bytes validated by decode_face");
+        raw_text_font_line_metrics(&font, &self.axis_values)
+    }
+
+    pub fn ascent(&self, size: f32) -> f32 {
+        self.line_metrics().ascent * size
+    }
+
+    pub fn descent(&self, size: f32) -> f32 {
+        self.line_metrics().descent * size
+    }
+
+    pub fn cap_height(&self, size: f32) -> f32 {
+        self.line_metrics().cap_height * size
+    }
+
+    pub fn x_height(&self, size: f32) -> f32 {
+        self.line_metrics().x_height * size
+    }
+
+    pub fn axis_count(&self) -> u16 {
+        let font = SkrifaFontRef::from_index(self.bytes(), self.face_index)
+            .expect("RawTextFont retains bytes validated by decode_face");
+        u16::try_from(font.axes().len()).unwrap_or(u16::MAX)
+    }
+
+    pub fn axis(&self, index: u16) -> RawTextFontAxis {
+        let font = SkrifaFontRef::from_index(self.bytes(), self.face_index)
+            .expect("RawTextFont retains bytes validated by decode_face");
+        let axis = font
+            .axes()
+            .get(usize::from(index))
+            .expect("font axis index is out of bounds");
+        RawTextFontAxis {
+            tag: u32::from_be_bytes(axis.tag().to_be_bytes()),
+            min: axis.min_value(),
+            default: axis.default_value(),
+            max: axis.max_value(),
+        }
+    }
+
+    pub fn axis_value(&self, tag: u32) -> f32 {
+        if let Some(value) = self.axis_values.get(&tag) {
+            return *value;
+        }
+        let font = SkrifaFontRef::from_index(self.bytes(), self.face_index)
+            .expect("RawTextFont retains bytes validated by decode_face");
+        font.axes()
+            .get_by_tag(SkrifaTag::from_u32(tag))
+            .map(|axis| axis.default_value())
+            .unwrap_or(0.0)
+    }
+
+    pub fn feature_value(&self, tag: u32) -> u32 {
+        self.feature_values.get(&tag).copied().unwrap_or(u32::MAX)
+    }
+
+    pub fn features(&self) -> Vec<u32> {
+        let font = SkrifaFontRef::from_index(self.bytes(), self.face_index)
+            .expect("RawTextFont retains bytes validated by decode_face");
+        raw_text_font_features(&font)
+    }
+
+    pub fn weight(&self) -> u16 {
+        const WGHT: u32 = u32::from_be_bytes(*b"wght");
+        let font = SkrifaFontRef::from_index(self.bytes(), self.face_index)
+            .expect("RawTextFont retains bytes validated by decode_face");
+        let weight = if font.axes().get_by_tag(SkrifaTag::from_u32(WGHT)).is_some() {
+            self.axis_value(WGHT)
+        } else {
+            font.attributes().weight.value()
+        };
+        weight as u16
+    }
+
+    pub fn is_italic(&self) -> bool {
+        const ITAL: u32 = u32::from_be_bytes(*b"ital");
+        let font = SkrifaFontRef::from_index(self.bytes(), self.face_index)
+            .expect("RawTextFont retains bytes validated by decode_face");
+        if font.axes().get_by_tag(SkrifaTag::from_u32(ITAL)).is_some() {
+            self.axis_value(ITAL) != 0.0
+        } else {
+            !matches!(font.attributes().style, skrifa::attribute::Style::Normal)
+        }
+    }
+
+    pub fn make_at_coords(&self, coords: &[RawTextFontCoord]) -> Self {
+        self.with_options(coords, &[])
+    }
+
+    pub fn with_options(
+        &self,
+        coords: &[RawTextFontCoord],
+        features: &[RawTextFontFeature],
+    ) -> Self {
+        let mut axis_values = self.axis_values.as_ref().clone();
+        for coord in coords {
+            axis_values.insert(coord.axis, coord.value);
+        }
+        let mut feature_values = self.feature_values.as_ref().clone();
+        for feature in features {
+            feature_values.insert(feature.tag, feature.value);
+        }
+        Self {
+            bytes: std::sync::Arc::clone(&self.bytes),
+            face_index: self.face_index,
+            fallbacks: std::sync::Arc::clone(&self.fallbacks),
+            axis_values: std::sync::Arc::new(axis_values),
+            feature_values: std::sync::Arc::new(feature_values),
+            color_layer_cache: std::sync::Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+        }
+    }
+
+    pub fn has_glyph(&self, character: char) -> bool {
+        SkrifaFontRef::from_index(self.bytes(), self.face_index)
+            .ok()
+            .and_then(|font| font.charmap().map(character))
+            .is_some_and(|glyph| glyph.to_u32() != 0)
+    }
+
+    pub fn glyph_path(&self, glyph_id: u32) -> nuxie_render_api::RawPath {
+        let Ok(font) = SkrifaFontRef::from_index(self.bytes(), self.face_index) else {
+            return nuxie_render_api::RawPath::new();
+        };
+        let Some(outline) = font.outline_glyphs().get(GlyphId::new(glyph_id)) else {
+            return nuxie_render_api::RawPath::new();
+        };
+        let location = raw_text_font_location(&font, &self.axis_values);
+        let mut pen = TextOutlinePen::new(
+            0.0,
+            0.0,
+            1.0 / TEXT_SHAPE_SCALE_F32,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Mat2D::IDENTITY,
+        );
+        let settings = DrawSettings::unhinted(
+            Size::new(TEXT_SHAPE_SCALE_F32),
+            LocationRef::from(&location),
+        )
+        .with_path_style(PathStyle::FreeType);
+        if outline.draw(settings, &mut pen).is_err() {
+            return nuxie_render_api::RawPath::new();
+        }
+        crate::math::raw_path::runtime_raw_path_from_commands(&pen.commands)
+    }
+
+    pub fn has_color_glyphs(&self) -> bool {
+        let Ok(font) = SkrifaFontRef::from_index(self.bytes(), self.face_index) else {
+            return false;
+        };
+        font.color_glyphs().get(GlyphId::new(0)).is_some()
+            || font.colr().is_ok()
+            || font.sbix().is_ok()
+            || font.cbdt().is_ok()
+    }
+
+    pub fn is_color_glyph(&self, glyph_id: u32) -> bool {
+        runtime_classify_color_glyph_face(self.bytes(), self.face_index, glyph_id)
+            != RuntimeColorGlyphClassification::Monochrome
+    }
+
+    pub fn color_layers(&self, glyph_id: u32, foreground: u32) -> Vec<RuntimeColorGlyphLayer> {
+        if let Some(cached) = self
+            .color_layer_cache
+            .lock()
+            .expect("RawTextFont color cache mutex poisoned")
+            .get(&glyph_id)
+            .cloned()
+        {
+            return cached
+                .into_iter()
+                .map(|mut layer| {
+                    if layer.uses_foreground {
+                        if let RuntimeColorGlyphPaint::Solid { color } = &mut layer.paint {
+                            *color = foreground;
+                        }
+                    }
+                    layer
+                })
+                .collect();
+        }
+        let layers = runtime_extract_color_glyph_layers_face(
+            self.bytes(),
+            self.face_index,
+            glyph_id,
+            foreground,
+        );
+        if !layers.is_empty() {
+            self.color_layer_cache
+                .lock()
+                .expect("RawTextFont color cache mutex poisoned")
+                .insert(glyph_id, layers.clone());
+        }
+        layers
     }
 
     fn bytes(&self) -> &[u8] {
@@ -440,12 +649,9 @@ impl<'factory> RawText<'factory> {
                     }
                 }
                 StandaloneDrawCommand::Color(command) => {
-                    let layers = runtime_extract_color_glyph_layers_face(
-                        command.font.bytes(),
-                        command.font.face_index,
-                        command.glyph_id,
-                        command.foreground,
-                    );
+                    let layers = command
+                        .font
+                        .color_layers(command.glyph_id, command.foreground);
                     if layers.is_empty() {
                         continue;
                     }
@@ -638,12 +844,7 @@ impl<'factory> RawText<'factory> {
                     x += glyph.advance;
                     continue;
                 };
-                let classification = runtime_classify_color_glyph_face(
-                    glyph.font.bytes(),
-                    glyph.font.face_index,
-                    glyph.glyph_id,
-                );
-                if classification != RuntimeColorGlyphClassification::Monochrome {
+                if glyph.font.is_color_glyph(glyph.glyph_id) {
                     self.draw_commands.push(StandaloneDrawCommand::Color(
                         StandaloneColorCommand {
                             font: glyph.font.clone(),
@@ -710,8 +911,12 @@ impl<'factory> RawText<'factory> {
             glyph.offset_y,
             Mat2D::IDENTITY,
         );
-        let settings = DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), LocationRef::default())
-            .with_path_style(PathStyle::FreeType);
+        let location = raw_text_font_location(&font, &glyph.font.axis_values);
+        let settings = DrawSettings::unhinted(
+            Size::new(TEXT_SHAPE_SCALE_F32),
+            LocationRef::from(&location),
+        )
+        .with_path_style(PathStyle::FreeType);
         let _ = outline.draw(settings, &mut pen);
         if let Some(style) = self.styles.get_mut(style_index) {
             let mut commands = crate::draw::runtime_path_commands_from_raw_path(&style.raw_path);
@@ -730,15 +935,33 @@ fn shape_standalone_run(run: &StandaloneTextRun) -> Vec<StandaloneGlyph> {
     let Ok(harf_font) = HarfFontRef::from_index(run.font.bytes(), run.font.face_index) else {
         return Vec::new();
     };
+    let variations = run
+        .font
+        .axis_values
+        .iter()
+        .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
+        .collect::<Vec<_>>();
+    let shaper_instance = (!variations.is_empty())
+        .then(|| ShaperInstance::from_variations(&harf_font, variations.iter().copied()));
     let shaper_data = ShaperData::new(&harf_font);
-    let shaper = shaper_data.shaper(&harf_font).build();
+    let shaper = shaper_data
+        .shaper(&harf_font)
+        .instance(shaper_instance.as_ref())
+        .build();
     let Ok(skrifa_font) = SkrifaFontRef::from_index(run.font.bytes(), run.font.face_index) else {
         return Vec::new();
     };
-    let raw = shape_text_glyphs(
+    let features = run
+        .font
+        .feature_values
+        .iter()
+        .map(|(tag, value)| Feature::new(HarfTag::from_u32(*tag), *value, ..))
+        .collect::<Vec<_>>();
+    let raw = shape_bidi_text_glyphs_with_features(
         &shaper,
         &run.text,
         disable_legacy_kern_for_advances(&skrifa_font),
+        &features,
     );
     raw.iter()
         .enumerate()
@@ -775,14 +998,30 @@ fn standalone_fallback_glyph(
     for fallback in run.font.fallbacks.iter() {
         let harf_font = HarfFontRef::from_index(fallback.bytes(), fallback.face_index).ok()?;
         let skrifa_font = SkrifaFontRef::from_index(fallback.bytes(), fallback.face_index).ok()?;
+        let variations = fallback
+            .axis_values
+            .iter()
+            .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
+            .collect::<Vec<_>>();
+        let shaper_instance = (!variations.is_empty())
+            .then(|| ShaperInstance::from_variations(&harf_font, variations.iter().copied()));
         let shaper_data = ShaperData::new(&harf_font);
-        let shaper = shaper_data.shaper(&harf_font).build();
+        let shaper = shaper_data
+            .shaper(&harf_font)
+            .instance(shaper_instance.as_ref())
+            .build();
         let mut character_buffer = [0; 4];
         let character_text = character.encode_utf8(&mut character_buffer);
-        let shaped = shape_text_glyphs(
+        let features = fallback
+            .feature_values
+            .iter()
+            .map(|(tag, value)| Feature::new(HarfTag::from_u32(*tag), *value, ..))
+            .collect::<Vec<_>>();
+        let shaped = shape_text_glyphs_with_features(
             &shaper,
             character_text,
             disable_legacy_kern_for_advances(&skrifa_font),
+            &features,
         );
         if let Some(glyph) = shaped.into_iter().find(|glyph| glyph.glyph_id != 0) {
             return Some((fallback.clone(), glyph));
@@ -911,7 +1150,8 @@ fn standalone_measure_lines(
             let Ok(font) = SkrifaFontRef::from_index(run.font.bytes(), run.font.face_index) else {
                 continue;
             };
-            let (ascent, descent) = harfbuzz_line_metrics(&font, LocationRef::default());
+            let location = raw_text_font_location(&font, &run.font.axis_values);
+            let (ascent, descent) = harfbuzz_line_metrics(&font, LocationRef::from(&location));
             let natural_ascent_px = ascent * run.size / TEXT_SHAPE_SCALE_F32;
             let natural_descent_px = -descent * run.size / TEXT_SHAPE_SCALE_F32;
             natural_ascent = natural_ascent.max(natural_ascent_px);

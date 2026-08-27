@@ -335,11 +335,11 @@ pub(crate) use state_machine::{
 };
 pub use static_scene::{SceneLoop, StaticScene, StaticSceneArtboard};
 pub use text::{
-    RawText as RuntimeRawText, RawTextFont, RawTextFontError, RawTextPaint,
-    RuntimeColorGlyphClassification, RuntimeColorGlyphGradientStop, RuntimeColorGlyphLayer,
-    RuntimeColorGlyphPaint, TextAlign, TextOverflow, TextSizing, runtime_classify_color_glyph,
-    runtime_classify_color_glyph_face, runtime_extract_color_glyph_layers,
-    runtime_extract_color_glyph_layers_face,
+    RawText as RuntimeRawText, RawTextFont, RawTextFontAxis, RawTextFontCoord, RawTextFontError,
+    RawTextFontFeature, RawTextFontLineMetrics, RawTextPaint, RuntimeColorGlyphClassification,
+    RuntimeColorGlyphGradientStop, RuntimeColorGlyphLayer, RuntimeColorGlyphPaint, TextAlign,
+    TextOverflow, TextSizing, runtime_classify_color_glyph, runtime_classify_color_glyph_face,
+    runtime_extract_color_glyph_layers, runtime_extract_color_glyph_layers_face,
 };
 pub use text::{
     RuntimeTextLayoutDebugReport, RuntimeTextModifierDebugReport,

@@ -41,7 +41,10 @@ mod wave_b4_font_owner_tests {
             0,
             "decoded the exact production font owner"
         );
-        Err("RawTextFont has no public Font weight/italic inspection owner")
+        Ok(WaveB4FontStyle {
+            weight: font.weight(),
+            italic: font.is_italic(),
+        })
     }
 
     fn font_line_metrics(font: &RawTextFont) -> Result<WaveB4LineMetrics, &'static str> {
@@ -50,15 +53,20 @@ mod wave_b4_font_owner_tests {
             0,
             "decoded the exact production font owner"
         );
-        Err("RawTextFont has no public Font::lineMetrics owner")
+        let metrics = font.line_metrics();
+        Ok(WaveB4LineMetrics {
+            ascent: metrics.ascent,
+            cap_height: metrics.cap_height,
+            x_height: metrics.x_height,
+        })
     }
 
-    fn font_cap_height(_font: &RawTextFont, _size: f32) -> Result<f32, &'static str> {
-        Err("RawTextFont has no public Font::capHeight owner")
+    fn font_cap_height(font: &RawTextFont, size: f32) -> Result<f32, &'static str> {
+        Ok(font.cap_height(size))
     }
 
-    fn font_x_height(_font: &RawTextFont, _size: f32) -> Result<f32, &'static str> {
-        Err("RawTextFont has no public Font::xHeight owner")
+    fn font_x_height(font: &RawTextFont, size: f32) -> Result<f32, &'static str> {
+        Ok(font.x_height(size))
     }
 
     fn font_axis_count(font: &RawTextFont) -> Result<u16, &'static str> {
@@ -67,22 +75,33 @@ mod wave_b4_font_owner_tests {
             0,
             "decoded the exact production font owner"
         );
-        Err("RawTextFont has no public Font::getAxisCount owner")
+        Ok(font.axis_count())
     }
 
-    fn font_axis(_font: &RawTextFont, _index: u16) -> Result<WaveB4Axis, &'static str> {
-        Err("RawTextFont has no public Font::getAxis owner")
+    fn font_axis(font: &RawTextFont, index: u16) -> Result<WaveB4Axis, &'static str> {
+        let axis = font.axis(index);
+        Ok(WaveB4Axis {
+            tag: axis.tag,
+            def: axis.default,
+        })
     }
 
-    fn font_axis_value(_font: &RawTextFont, _tag: u32) -> Result<f32, &'static str> {
-        Err("RawTextFont has no public Font::getAxisValue owner")
+    fn font_axis_value(font: &RawTextFont, tag: u32) -> Result<f32, &'static str> {
+        Ok(font.axis_value(tag))
     }
 
     fn font_make_at_coords(
-        _font: &RawTextFont,
-        _coords: &[(u32, f32)],
+        font: &RawTextFont,
+        coords: &[(u32, f32)],
     ) -> Result<RawTextFont, &'static str> {
-        Err("RawTextFont has no public Font::makeAtCoords owner")
+        let coords = coords
+            .iter()
+            .map(|(axis, value)| RawTextFontCoord {
+                axis: *axis,
+                value: *value,
+            })
+            .collect::<Vec<_>>();
+        Ok(font.make_at_coords(&coords))
     }
 
     fn font_features(font: &RawTextFont) -> Result<Vec<u32>, &'static str> {
@@ -91,7 +110,7 @@ mod wave_b4_font_owner_tests {
             0,
             "decoded the exact production font owner"
         );
-        Err("RawTextFont has no public Font::features owner")
+        Ok(font.features())
     }
 
     fn upstream_root() -> PathBuf {
@@ -123,7 +142,6 @@ mod wave_b4_font_owner_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: RawTextFont has no public Font weight/italic inspection owner"]
     fn wave_b4_font_test_001_inspect_font_styles() {
         let cases = [
             (
@@ -145,7 +163,6 @@ mod wave_b4_font_owner_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: RawTextFont has no public Font lineMetrics/capHeight/xHeight owner"]
     fn wave_b4_font_test_002_cap_and_x_height_for_vertical_trim() {
         for path in [
             "assets/fonts/Inter_18pt-Regular.ttf",
@@ -204,7 +221,6 @@ mod wave_b4_font_owner_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: RawTextFont has no public Font variation-axis owner"]
     fn wave_b4_font_test_004_variable_axis_values_can_be_read() {
         const WGHT: u32 = 2_003_265_652;
         const WDTH: u32 = 2_003_072_104;
@@ -246,7 +262,6 @@ mod wave_b4_font_owner_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: RawTextFont has no public Font feature owner"]
     fn wave_b4_font_test_005_font_features_load_as_expected() {
         let font = load_font("assets/RobotoFlex.ttf");
         let features = font_features(&font).expect("Font::features owner");

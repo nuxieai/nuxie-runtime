@@ -352,7 +352,7 @@ impl RuntimeColorLayerCollector<'_> {
                 color_stops,
                 ..
             } => {
-                let (stops, foreground) = self.gradient_stops(color_stops);
+                let (stops, _) = self.gradient_stops(color_stops);
                 (
                     RuntimeColorGlyphPaint::LinearGradient {
                         x0: p0.x / TEXT_SHAPE_SCALE_F32,
@@ -361,7 +361,7 @@ impl RuntimeColorLayerCollector<'_> {
                         y1: -p1.y / TEXT_SHAPE_SCALE_F32,
                         stops,
                     },
-                    foreground,
+                    false,
                 )
             }
             skrifa::color::Brush::RadialGradient {
@@ -372,7 +372,7 @@ impl RuntimeColorLayerCollector<'_> {
                 color_stops,
                 ..
             } => {
-                let (stops, foreground) = self.gradient_stops(color_stops);
+                let (stops, _) = self.gradient_stops(color_stops);
                 (
                     RuntimeColorGlyphPaint::RadialGradient {
                         x0: c0.x / TEXT_SHAPE_SCALE_F32,
@@ -383,7 +383,7 @@ impl RuntimeColorLayerCollector<'_> {
                         r1: r1 / TEXT_SHAPE_SCALE_F32,
                         stops,
                     },
-                    foreground,
+                    false,
                 )
             }
             skrifa::color::Brush::SweepGradient {
@@ -393,7 +393,7 @@ impl RuntimeColorLayerCollector<'_> {
                 color_stops,
                 ..
             } => {
-                let (stops, foreground) = self.gradient_stops(color_stops);
+                let (stops, _) = self.gradient_stops(color_stops);
                 (
                     RuntimeColorGlyphPaint::SweepGradient {
                         x0: c0.x / TEXT_SHAPE_SCALE_F32,
@@ -402,7 +402,7 @@ impl RuntimeColorLayerCollector<'_> {
                         end_angle,
                         stops,
                     },
-                    foreground,
+                    false,
                 )
             }
         };

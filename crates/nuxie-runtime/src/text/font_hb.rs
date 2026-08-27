@@ -4,6 +4,126 @@ where
 {
     std::panic::catch_unwind(parse).unwrap_or(false)
 }
+
+/// Metrics retained by the decoded font owner, in one-em units and with the
+/// same y-down signs as upstream `Font::LineMetrics`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RawTextFontLineMetrics {
+    pub ascent: f32,
+    pub descent: f32,
+    pub cap_height: f32,
+    pub x_height: f32,
+}
+
+/// A variable-font axis exposed by the decoded font owner.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RawTextFontAxis {
+    pub tag: u32,
+    pub min: f32,
+    pub default: f32,
+    pub max: f32,
+}
+
+/// A variable-axis value applied by [`RawTextFont::with_options`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RawTextFontCoord {
+    pub axis: u32,
+    pub value: f32,
+}
+
+/// An OpenType feature value applied by [`RawTextFont::with_options`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RawTextFontFeature {
+    pub tag: u32,
+    pub value: u32,
+}
+
+fn raw_text_font_location(
+    font: &SkrifaFontRef<'_>,
+    axes: &BTreeMap<u32, f32>,
+) -> skrifa::instance::Location {
+    font.axes().location(
+        axes.iter()
+            .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(*tag), *value)),
+    )
+}
+
+fn raw_text_font_line_metrics(
+    font: &SkrifaFontRef<'_>,
+    axes: &BTreeMap<u32, f32>,
+) -> RawTextFontLineMetrics {
+    let location = raw_text_font_location(font, axes);
+    let location_ref = LocationRef::from(&location);
+    let (ascent, descent) = harfbuzz_line_metrics(font, location_ref);
+    let glyph_top = |character| {
+        font.charmap()
+            .map(character)
+            .and_then(|glyph_id| {
+                font.glyph_metrics(Size::new(TEXT_SHAPE_SCALE_F32), location_ref)
+                    .bounds(glyph_id)
+                    .map(|bounds| harfbuzz_scaled_glyph_top(bounds.y_max))
+            })
+            .unwrap_or(ascent)
+    };
+    RawTextFontLineMetrics {
+        ascent: -ascent / TEXT_SHAPE_SCALE_F32,
+        descent: -descent / TEXT_SHAPE_SCALE_F32,
+        cap_height: -glyph_top('H') / TEXT_SHAPE_SCALE_F32,
+        x_height: -glyph_top('x') / TEXT_SHAPE_SCALE_F32,
+    }
+}
+
+fn collect_raw_text_layout_features(
+    scripts: skrifa::raw::tables::layout::ScriptList<'_>,
+    feature_list: skrifa::raw::tables::layout::FeatureList<'_>,
+    features: &mut BTreeSet<u32>,
+) {
+    let mut collect_language = |language: skrifa::raw::tables::layout::LangSys<'_>| {
+        let required = language.required_feature_index();
+        if required != u16::MAX {
+            if let Ok(feature) = feature_list.get(required) {
+                features.insert(u32::from_be_bytes(feature.tag.to_be_bytes()));
+            }
+        }
+        for index in language.feature_indices() {
+            if let Ok(feature) = feature_list.get(index.get()) {
+                features.insert(u32::from_be_bytes(feature.tag.to_be_bytes()));
+            }
+        }
+    };
+
+    for script_index in 0..scripts.script_count() {
+        let Ok(script) = scripts.get(script_index) else {
+            continue;
+        };
+        if script.lang_sys_count() == 0 {
+            if let Some(Ok(language)) = script.default_lang_sys() {
+                collect_language(language);
+            }
+        } else {
+            for language_index in 0..script.lang_sys_count() {
+                if let Ok(language) = script.lang_sys(language_index) {
+                    collect_language(language.element);
+                }
+            }
+        }
+    }
+}
+
+fn raw_text_font_features(font: &SkrifaFontRef<'_>) -> Vec<u32> {
+    let mut features = BTreeSet::new();
+    if let Ok(table) = font.gsub() {
+        if let (Ok(scripts), Ok(feature_list)) = (table.script_list(), table.feature_list()) {
+            collect_raw_text_layout_features(scripts, feature_list, &mut features);
+        }
+    }
+    if let Ok(table) = font.gpos() {
+        if let (Ok(scripts), Ok(feature_list)) = (table.script_list(), table.feature_list()) {
+            collect_raw_text_layout_features(scripts, feature_list, &mut features);
+        }
+    }
+    features.into_iter().collect()
+}
 /// Whether embedded font bytes can be parsed by both runtime text backends.
 ///
 /// Dynamic authoring calls this before publishing a structural edit so a

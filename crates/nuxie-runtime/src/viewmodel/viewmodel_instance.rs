@@ -1521,16 +1521,12 @@ fn remap_owned_view_model_lists(
             .items
             .iter()
             .map(|item| {
-                let mut cloned_item = RuntimeOwnedViewModelListItem::copy_identity_from(
+                RuntimeOwnedViewModelListItem::clone_payload_from(
                     item,
                     item.instance
                         .as_ref()
                         .map(|instance| clone_owned_view_model_graph(instance, memo)),
-                );
-                if item.parent_registered {
-                    cloned_item.attach_parent(parent_relay);
-                }
-                cloned_item
+                )
             })
             .collect();
         cloned_list.value = Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
@@ -2488,16 +2484,12 @@ fn detach_owned_view_model_list_storage(
                 .items
                 .iter()
                 .map(|item| {
-                    let mut detached = RuntimeOwnedViewModelListItem::copy_identity_from(
+                    RuntimeOwnedViewModelListItem::clone_payload_from(
                         item,
                         item.instance
                             .as_ref()
                             .map(|instance| Rc::new(RefCell::new(instance.borrow().clone()))),
-                    );
-                    if item.parent_registered {
-                        detached.attach_parent(parent_relay);
-                    }
-                    detached
+                    )
                 })
                 .collect(),
         };
@@ -3075,14 +3067,33 @@ impl RuntimeOwnedViewModelInstance {
         detach_owned_view_model_child_list_storage(&mut self.view_models, &parent_relay);
     }
 
+    /// Advance one shared instance at its authored graph position. The
+    /// retained allocation identity prevents Rust graph cycles and aliases
+    /// from borrowing or consuming the same instance twice in one frame.
+    pub(crate) fn advance_script_frame(
+        instance: &Rc<RefCell<Self>>,
+        visited: &mut BTreeSet<u64>,
+    ) -> bool {
+        let Ok(instance_ref) = instance.try_borrow() else {
+            // A borrow conflict here can only be an edge back to an ancestor
+            // already being advanced by this single-threaded retained walk.
+            return false;
+        };
+        let identity = instance_ref.allocation_identity;
+        drop(instance_ref);
+        if !visited.insert(identity) {
+            return false;
+        }
+        instance
+            .borrow_mut()
+            .advance_script_frame_with_visited(visited)
+    }
+
     /// Advance the values stored directly in this instance and in embedded
-    /// view-model properties. C++ `ViewModelInstance::advanced()` also walks
-    /// list items; those are shared `Rc` instances in Rust, so they are
-    /// returned for recursion after this `RefCell` borrow is released.
-    pub(crate) fn advance_script_frame_local(
-        &mut self,
-    ) -> (bool, Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>) {
-        let mut shared_children = Vec::new();
+    /// view-model properties, preserving `m_PropertyValues` order. Lists
+    /// recurse into their children and acknowledge their own value before
+    /// the next property is visited, exactly like the pinned virtual call.
+    fn advance_script_frame_with_visited(&mut self, visited: &mut BTreeSet<u64>) -> bool {
         let mut changed = false;
         for occurrence in self.value_order.clone() {
             match occurrence.kind {
@@ -3093,26 +3104,38 @@ impl RuntimeOwnedViewModelInstance {
                 }
                 RuntimeOwnedViewModelValueKind::List => {
                     if let Some(list) = self.lists.get(occurrence.slot_index) {
-                        collect_runtime_owned_list_children(
+                        changed |= advance_runtime_owned_list_script_frame(
                             std::slice::from_ref(list),
-                            &mut shared_children,
+                            visited,
                         );
                     }
                 }
                 RuntimeOwnedViewModelValueKind::Artboard => {
                     if let Some(artboard) = self.artboards.get(occurrence.slot_index) {
-                        changed |= artboard.advance_script_frame(&mut shared_children);
+                        changed |= artboard.advance_script_frame(visited);
                     }
                 }
                 RuntimeOwnedViewModelValueKind::ViewModel => {
                     if let Some(view_model) = self.view_models.get_mut(occurrence.slot_index) {
-                        changed |= view_model.advance_script_frame(&mut shared_children);
+                        changed |= view_model.advance_script_frame(visited);
                     }
                 }
                 _ => {}
             }
         }
-        (changed, shared_children)
+        changed
+    }
+
+    /// Compatibility entry point for callers that hold the root borrow.
+    /// Child traversal is still immediate; no deferred list queue remains.
+    pub(crate) fn advance_script_frame_local(
+        &mut self,
+    ) -> (bool, Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>) {
+        let mut visited = BTreeSet::from([self.allocation_identity]);
+        (
+            self.advance_script_frame_with_visited(&mut visited),
+            Vec::new(),
+        )
     }
 
     pub(crate) fn advanced_data_context(&mut self) {

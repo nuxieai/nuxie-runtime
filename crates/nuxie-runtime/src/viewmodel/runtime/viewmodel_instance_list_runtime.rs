@@ -112,23 +112,32 @@ impl ViewModelInstanceListRuntime {
                     .then_some(entry.occurrence_identity)
             })
             .collect::<Vec<_>>();
-        if occurrence_ids.is_empty()
-            || !self
-                .owner
-                .borrow_mut()
-                .remove_list_items_by_identity_at_property_path(
-                    &self.property_path,
-                    &instance.handle().shared(),
-                    true,
-                )
-        {
+        if occurrence_ids.is_empty() {
             return false;
         }
-        let mut items = self.items.borrow_mut();
+
+        let mut changed = false;
         for occurrence_id in occurrence_ids {
-            items.remove(&occurrence_id);
+            let Some(index) = self.entries().and_then(|entries| {
+                entries
+                    .iter()
+                    .position(|entry| entry.occurrence_identity == occurrence_id)
+            }) else {
+                continue;
+            };
+            // Pinned runtime removal calls `ViewModelInstanceList::removeItem`
+            // once for each matching wrapper, publishing one structural
+            // `propertyValueChanged` notification per wrapper.
+            if self
+                .owner
+                .borrow_mut()
+                .remove_list_item_at_by_property_path(&self.property_path, index)
+            {
+                self.items.borrow_mut().remove(&occurrence_id);
+                changed = true;
+            }
         }
-        true
+        changed
     }
 
     pub fn remove_instance_at(&self, index: isize) -> bool {

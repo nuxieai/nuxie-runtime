@@ -213,13 +213,10 @@ impl RuntimeOwnedViewModelArtboard {
         self.cell.advanced();
     }
 
-    /// Script-frame counterpart of `advanced_data_context`. Direct values of
-    /// the bound instance are advanced at the authored position; shared
-    /// descendants are returned to the existing graph walk.
-    fn advance_script_frame(
-        &self,
-        shared_children: &mut Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
-    ) -> bool {
+    /// Script-frame counterpart of `advanced_data_context`. The bound
+    /// instance advances at the authored position before this value is
+    /// acknowledged.
+    fn advance_script_frame(&self, visited: &mut BTreeSet<u64>) -> bool {
         let mut changed = false;
         let bound = self
             .runtime_state
@@ -227,10 +224,8 @@ impl RuntimeOwnedViewModelArtboard {
             .bound_view_model_instance
             .clone();
         if let Some(bound) = bound {
-            let (bound_changed, mut bound_children) =
-                bound.borrow_mut().advance_script_frame_local();
-            changed |= bound_changed;
-            shared_children.append(&mut bound_children);
+            changed |=
+                RuntimeOwnedViewModelInstance::advance_script_frame(&bound.shared(), visited);
         }
         self.cell.advanced();
         changed

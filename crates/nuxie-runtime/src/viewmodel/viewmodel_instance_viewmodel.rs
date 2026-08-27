@@ -1075,15 +1075,14 @@ impl RuntimeOwnedViewModelViewModel {
 
     /// Mirrors the recursive portion of C++
     /// `ViewModelInstanceViewModel::advanced()` for the currently selected
-    /// nested instance. Shared list children are returned to the caller so it
-    /// can recurse after releasing this instance's mutable borrow.
+    /// nested instance. Every retained child advances immediately at its
+    /// authored property position.
     fn advance_script_frame(
         &mut self,
-        shared_children: &mut Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+        visited: &mut BTreeSet<u64>,
     ) -> bool {
         if let Some(linked) = self.endpoint.linked_instance() {
-            shared_children.push(linked);
-            return false;
+            return RuntimeOwnedViewModelInstance::advance_script_frame(&linked, visited);
         }
         let order = self.active_value_order().to_vec();
         match self.endpoint.value() {
@@ -1099,20 +1098,20 @@ impl RuntimeOwnedViewModelViewModel {
                         }
                         RuntimeOwnedViewModelValueKind::List => {
                             if let Some(list) = self.lists.get(occurrence.slot_index) {
-                                collect_runtime_owned_list_children(
+                                changed |= advance_runtime_owned_list_script_frame(
                                     std::slice::from_ref(list),
-                                    shared_children,
+                                    visited,
                                 );
                             }
                         }
                         RuntimeOwnedViewModelValueKind::Artboard => {
                             if let Some(artboard) = self.artboards.get(occurrence.slot_index) {
-                                changed |= artboard.advance_script_frame(shared_children);
+                                changed |= artboard.advance_script_frame(visited);
                             }
                         }
                         RuntimeOwnedViewModelValueKind::ViewModel => {
                             if let Some(child) = self.children.get_mut(occurrence.slot_index) {
-                                changed |= child.advance_script_frame(shared_children);
+                                changed |= child.advance_script_frame(visited);
                             }
                         }
                         _ => {}
@@ -1140,9 +1139,9 @@ impl RuntimeOwnedViewModelViewModel {
                                 .get(&object_id)
                                 .and_then(|values| values.get(occurrence.slot_index))
                             {
-                                collect_runtime_owned_list_children(
+                                changed |= advance_runtime_owned_list_script_frame(
                                     std::slice::from_ref(list),
-                                    shared_children,
+                                    visited,
                                 );
                             }
                         }
@@ -1152,7 +1151,7 @@ impl RuntimeOwnedViewModelViewModel {
                                 .get(&object_id)
                                 .and_then(|values| values.get(occurrence.slot_index))
                             {
-                                changed |= artboard.advance_script_frame(shared_children);
+                                changed |= artboard.advance_script_frame(visited);
                             }
                         }
                         RuntimeOwnedViewModelValueKind::ViewModel => {
@@ -1161,7 +1160,7 @@ impl RuntimeOwnedViewModelViewModel {
                                 .get_mut(&object_id)
                                 .and_then(|values| values.get_mut(occurrence.slot_index))
                             {
-                                changed |= child.advance_script_frame(shared_children);
+                                changed |= child.advance_script_frame(visited);
                             }
                         }
                         _ => {}

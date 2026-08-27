@@ -425,19 +425,28 @@ fn reset_runtime_owned_triggers(triggers: &mut [RuntimeOwnedViewModelTrigger]) -
     changed
 }
 
-fn collect_runtime_owned_list_children(
+fn advance_runtime_owned_list_script_frame(
     lists: &[RuntimeOwnedViewModelList],
-    children: &mut Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
-) {
+    visited: &mut BTreeSet<u64>,
+) -> bool {
+    let mut changed = false;
     for list in lists {
-        children.extend(
-            list.value
-                .borrow()
-                .items
-                .iter()
-                .filter_map(|item| item.instance.as_ref().map(Rc::clone)),
-        );
+        let children = list
+            .value
+            .borrow()
+            .items
+            .iter()
+            .filter_map(|item| item.instance.as_ref().map(Rc::clone))
+            .collect::<Vec<_>>();
+        for child in children {
+            changed |= RuntimeOwnedViewModelInstance::advance_script_frame(&child, visited);
+        }
+        // Pinned `ViewModelInstanceList::advanced()` advances every child
+        // before acknowledging the inherited list value at this exact
+        // property-order position.
+        list.cell.advanced();
     }
+    changed
 }
 
 fn advance_runtime_owned_list_children(lists: &[RuntimeOwnedViewModelList]) {

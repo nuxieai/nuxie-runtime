@@ -1874,17 +1874,9 @@ impl ScriptViewModel {
 
 fn advance_owned_view_model_instance(
     instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
-    visited: &mut BTreeSet<usize>,
+    visited: &mut BTreeSet<u64>,
 ) -> bool {
-    let identity = Rc::as_ptr(instance) as usize;
-    if !visited.insert(identity) {
-        return false;
-    }
-    let (mut changed, children) = instance.borrow_mut().advance_script_frame_local();
-    for child in children {
-        changed |= advance_owned_view_model_instance(&child, visited);
-    }
-    changed
+    RuntimeOwnedViewModelInstance::advance_script_frame(instance, visited)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -72,6 +72,21 @@ impl RuntimeOwnedViewModelListItem {
         }
     }
 
+    /// Pinned generated `ViewModelInstanceListItemBase::clone()` allocates a
+    /// new wrapper and copies only the two serialized reference ids. The
+    /// private live instance is filled by `File::completeViewModelInstance`;
+    /// wrapper and mounted-artboard identities never carry across the clone.
+    fn clone_payload_from(
+        source: &Self,
+        instance: Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+    ) -> Self {
+        let mut cloned = Self::with_instance(instance);
+        cloned.view_model_id = source.view_model_id;
+        cloned.view_model_instance_id = source.view_model_instance_id;
+        cloned.authored_source_object_id = source.authored_source_object_id;
+        cloned
+    }
+
     fn attach_parent(&mut self, parent: &Rc<RuntimeOwnedViewModelParentRelay>) {
         if let Some(child_relay) = self.child_relay.as_ref() {
             RuntimeOwnedViewModelParentRelay::add_parent(child_relay, parent);

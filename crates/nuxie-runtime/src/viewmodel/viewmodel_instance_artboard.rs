@@ -5,14 +5,7 @@ use crate::ArtboardInstance;
 
 struct RuntimeBindableArtboardInner {
     name: String,
-    // C++ `BindableArtboard` retains the concrete source ArtboardInstance, not
-    // a file-local index. Keeping the cold-clone source here preserves both
-    // cross-file identity and live generated properties such as resized bounds.
-    source: RefCell<Option<ArtboardInstance>>,
-    // `BindableArtboard` is File-owned in pinned C++. The low-level runtime is
-    // intentionally File-agnostic, so retain the facade's concrete authority
-    // opaquely instead of trying to rediscover it from a non-unique numeric id.
-    source_file_authority: Option<Rc<dyn std::any::Any>>,
+    owner: crate::artboard::RuntimeBindableArtboardOwner,
 }
 
 impl std::fmt::Debug for RuntimeBindableArtboardInner {
@@ -20,11 +13,7 @@ impl std::fmt::Debug for RuntimeBindableArtboardInner {
         formatter
             .debug_struct("RuntimeBindableArtboardInner")
             .field("name", &self.name)
-            .field("source", &self.source)
-            .field(
-                "has_source_file_authority",
-                &self.source_file_authority.is_some(),
-            )
+            .field("owner", &self.owner)
             .finish()
     }
 }
@@ -63,8 +52,7 @@ impl RuntimeBindableArtboard {
         Self {
             inner: Rc::new(RuntimeBindableArtboardInner {
                 name: name.into(),
-                source: RefCell::new(None),
-                source_file_authority: None,
+                owner: crate::artboard::RuntimeBindableArtboardOwner::new(None, None),
             }),
         }
     }
@@ -77,8 +65,10 @@ impl RuntimeBindableArtboard {
         Self {
             inner: Rc::new(RuntimeBindableArtboardInner {
                 name: name.into(),
-                source: RefCell::new(Some(artboard.clone())),
-                source_file_authority: None,
+                owner: crate::artboard::RuntimeBindableArtboardOwner::new(
+                    None,
+                    Some(artboard.clone()),
+                ),
             }),
         }
     }
@@ -92,8 +82,10 @@ impl RuntimeBindableArtboard {
         Self {
             inner: Rc::new(RuntimeBindableArtboardInner {
                 name: name.into(),
-                source: RefCell::new(Some(artboard.clone())),
-                source_file_authority: Some(source_file_authority),
+                owner: crate::artboard::RuntimeBindableArtboardOwner::new(
+                    Some(source_file_authority),
+                    Some(artboard.clone()),
+                ),
             }),
         }
     }
@@ -102,7 +94,7 @@ impl RuntimeBindableArtboard {
     /// bindable identity through a host command.
     #[doc(hidden)]
     pub fn refresh_artboard_instance(&self, artboard: &ArtboardInstance) {
-        self.inner.source.replace(Some(artboard.clone()));
+        self.inner.owner.replace_artboard(artboard.clone());
     }
 
     pub fn name(&self) -> &str {
@@ -115,7 +107,7 @@ impl RuntimeBindableArtboard {
 
     #[doc(hidden)]
     pub fn artboard_instance(&self) -> Option<ArtboardInstance> {
-        self.inner.source.borrow().clone()
+        self.inner.owner.artboard()
     }
 
     /// Whether the retained pointer-style source currently names a concrete
@@ -124,17 +116,12 @@ impl RuntimeBindableArtboard {
     /// the actual fresh clone later at the authored phase-two position.
     #[doc(hidden)]
     pub fn has_artboard_instance(&self) -> bool {
-        self.inner.source.borrow().is_some()
+        self.inner.owner.has_artboard()
     }
 
     #[doc(hidden)]
     pub fn source_file_authority<T: 'static>(&self) -> Option<Rc<T>> {
-        self.inner
-            .source_file_authority
-            .as_ref()
-            .cloned()?
-            .downcast::<T>()
-            .ok()
+        self.inner.owner.source_file::<T>()
     }
 }
 

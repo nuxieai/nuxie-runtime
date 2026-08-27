@@ -13,6 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod aabb;
+mod factory;
 mod serializing;
 pub use aabb::{AABBi16, AABBu16, Aabb, AabbInteger, AabbScalarBounds, IntegerAabb, TypedAabb};
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
@@ -2064,15 +2065,12 @@ impl std::error::Error for FontDecodeError {}
 /// Factories call this shared owner so renderer adapters do not duplicate the
 /// exact HarfRust validation and byte-retention behavior.
 pub fn decode_font_bytes(data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
-    harfrust::FontRef::new(data).map_err(|_| FontDecodeError)?;
-    Ok(DecodedFont {
-        bytes: Arc::from(data),
-    })
+    factory::decode_font(data)
 }
 
 /// Backend-independent implementation of pinned `Factory::decodeAudio`.
 pub fn decode_audio_bytes(data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
-    AudioSource::from_encoded(data.to_vec()).map(Arc::new)
+    factory::decode_audio(data)
 }
 
 pub trait RenderPaint: Any {
@@ -2314,9 +2312,7 @@ pub trait Factory {
     /// Direct port of `src/factory.cpp:15-20`; the default keeps the pinned
     /// nonvirtual behavior layered on the adapter-specific raw-path constructor.
     fn make_render_path_from_aabb(&mut self, bounds: Aabb) -> Box<dyn RenderPath> {
-        let mut raw_path = RawPath::new();
-        raw_path.add_rect(bounds);
-        self.make_render_path(raw_path, FillRule::NonZero)
+        factory::make_render_path_from_aabb(self, bounds)
     }
 
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath>;
@@ -2352,7 +2348,7 @@ pub trait Factory {
     /// HarfRust is the project's verified HarfBuzz port, and the owned byte
     /// snapshot supplies the backend views that C++ retains through `HBFont`.
     fn decode_font(&mut self, data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
-        decode_font_bytes(data)
+        factory::decode_font(data)
     }
 
     /// Validate and take ownership of encoded audio bytes.
@@ -2360,7 +2356,7 @@ pub trait Factory {
     /// This is the Rust counterpart of C++ `Factory::decodeAudio`: a
     /// non-renderer-specific helper on the Factory seam, not a backend hook.
     fn decode_audio(&mut self, data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
-        decode_audio_bytes(data)
+        factory::decode_audio(data)
     }
 
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {

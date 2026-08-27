@@ -100,6 +100,18 @@ impl TextInputGeometry {
         Some(line.char_start..line.char_end)
     }
 
+    fn glyph_cluster_range(&self, codepoint_index: usize) -> Option<std::ops::Range<usize>> {
+        self.layout
+            .lines
+            .iter()
+            .flat_map(|line| &line.glyphs)
+            .find_map(|positioned| {
+                let start = positioned.glyph.char_index;
+                let end = start.saturating_add(positioned.glyph.char_len);
+                (start <= codepoint_index && codepoint_index < end).then_some(start..end)
+            })
+    }
+
     pub(crate) fn vertical_cursor(
         &self,
         codepoint_index: usize,
@@ -251,11 +263,8 @@ impl RawTextInput {
     }
 
     fn set_text_impl(&mut self, value: &str, preserve_cursor: bool) -> bool {
-        if self.text.iter().copied().eq(value.chars()) {
-            return false;
-        }
         let starting_cursor = self.cursor;
-        self.text = value.chars().collect();
+        self.text = cpp_string_prefix(value).chars().collect();
         self.cursor = if preserve_cursor {
             Cursor {
                 start: CursorPosition::unresolved(
@@ -268,7 +277,9 @@ impl RawTextInput {
         } else {
             Cursor::at_start()
         };
-        self.ideal_cursor_x = None;
+        if preserve_cursor {
+            self.ideal_cursor_x = None;
+        }
         self.geometry_dirty = true;
         self.measure_cache = None;
         self.selection_dirty = true;
@@ -277,13 +288,10 @@ impl RawTextInput {
     }
 
     pub(crate) fn insert(&mut self, value: &str) -> bool {
-        if value.is_empty() {
-            return false;
-        }
         let starting_cursor = self.cursor;
         self.erase_selection();
         let at = self.cursor.start.codepoint_index;
-        let inserted = value.chars().collect::<Vec<_>>();
+        let inserted = cpp_string_prefix(value).chars().collect::<Vec<_>>();
         let count = inserted.len();
         self.text.splice(at..at, inserted);
         self.cursor = Cursor::collapsed(CursorPosition::unresolved(at.saturating_add(count)));
@@ -301,6 +309,7 @@ impl RawTextInput {
             self.capture_journal_entry(starting_cursor);
             return true;
         }
+        self.ideal_cursor_x = None;
         let at = self.cursor.start.codepoint_index;
         let range = if direction > 0 {
             if at >= self.length() {
@@ -316,7 +325,6 @@ impl RawTextInput {
         let collapsed = range.start;
         self.text.drain(range);
         self.cursor = Cursor::collapsed(CursorPosition::unresolved(collapsed));
-        self.ideal_cursor_x = None;
         self.geometry_dirty = true;
         self.measure_cache = None;
         self.selection_dirty = true;
@@ -349,6 +357,13 @@ impl RawTextInput {
     }
 
     fn cluster_start(&self, mut index: usize) -> usize {
+        if let Some(range) = self
+            .geometry
+            .as_ref()
+            .and_then(|geometry| geometry.glyph_cluster_range(index))
+        {
+            return range.start;
+        }
         while index > 0
             && self
                 .text
@@ -361,6 +376,13 @@ impl RawTextInput {
     }
 
     fn cluster_end(&self, index: usize) -> usize {
+        if let Some(range) = self
+            .geometry
+            .as_ref()
+            .and_then(|geometry| geometry.glyph_cluster_range(index))
+        {
+            return range.end.min(self.length());
+        }
         let mut end = index.saturating_add(1).min(self.length());
         while self
             .text
@@ -677,7 +699,6 @@ impl RawTextInput {
         self.journal_index -= 1;
         self.text = self.journal[self.journal_index].text.chars().collect();
         self.cursor = from_cursor;
-        self.ideal_cursor_x = None;
         self.geometry_dirty = true;
         self.measure_cache = None;
         self.selection_dirty = true;
@@ -692,7 +713,6 @@ impl RawTextInput {
         let entry = &self.journal[self.journal_index];
         self.text = entry.text.chars().collect();
         self.cursor = entry.cursor_to;
-        self.ideal_cursor_x = None;
         self.geometry_dirty = true;
         self.measure_cache = None;
         self.selection_dirty = true;
@@ -710,6 +730,10 @@ impl RawTextInput {
         });
         self.journal_index = self.journal.len().saturating_sub(1);
     }
+}
+
+fn cpp_string_prefix(value: &str) -> &str {
+    value.split_once('\0').map_or(value, |(prefix, _)| prefix)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

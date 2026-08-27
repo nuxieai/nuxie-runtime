@@ -71,6 +71,22 @@ fn edge_activation_distance(position: f32, edge_start: f32) -> f32 {
     }
 }
 
+/// Direct `TextInput::markShapeDirty`: unlike `Text::markShapeDirty`, this
+/// owner publishes only `TextShape` dirt.
+fn mark_text_input_shape_dirty(instance: &mut ArtboardInstance, local_id: usize) -> bool {
+    instance.add_dirt(local_id, ComponentDirt::TEXT_SHAPE, false)
+}
+
+/// Pinned `textChanged`/`updateMultiline` order: notify layout first, then
+/// publish this owner's `TextShape` dirt.
+fn mark_text_input_layout_and_shape_dirty(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+) -> bool {
+    crate::layout_node_provider::mark_layout_node_dirty(instance, local_id)
+        | mark_text_input_shape_dirty(instance, local_id)
+}
+
 impl ArtboardInstance {
     fn text_input_focused(&mut self, local_id: usize) -> bool {
         let Some(state) = self
@@ -247,7 +263,9 @@ impl ArtboardInstance {
         *state.source_text.borrow_mut() = Some(source);
         let mut raw = state.raw.borrow_mut();
         raw.separate_selection_text = has_selected_text;
-        raw.set_text(&display);
+        if raw.text() != display {
+            raw.set_text(&display);
+        }
         true
     }
 
@@ -291,8 +309,12 @@ impl ArtboardInstance {
             return false;
         };
         *state.source_text.borrow_mut() = Some(source);
-        state.raw.borrow_mut().set_text(&display);
-        crate::text_owner::mark_shape_dirty(self, local_id)
+        let mut raw = state.raw.borrow_mut();
+        if raw.text() != display {
+            raw.set_text(&display);
+        }
+        drop(raw);
+        mark_text_input_layout_and_shape_dirty(self, local_id)
     }
 
     pub(crate) fn text_input_multiline_changed(&mut self, local_id: usize) -> bool {
@@ -310,12 +332,16 @@ impl ArtboardInstance {
         } else {
             strip_line_breaks(&source)
         };
-        state.raw.borrow_mut().set_text_preserve_cursor(&display);
+        let mut raw = state.raw.borrow_mut();
+        if raw.text() != display {
+            raw.set_text_preserve_cursor(&display);
+        }
+        drop(raw);
         let scroll_constraint = state.scroll_constraint;
         if let Some(constraint) = scroll_constraint {
             crate::constraints::reset_text_input_cross_axis_scroll(self, constraint, multiline);
         }
-        crate::text_owner::mark_shape_dirty(self, local_id)
+        mark_text_input_layout_and_shape_dirty(self, local_id)
     }
 
     pub(crate) fn text_input_selection_radius_changed(&mut self, local_id: usize) -> bool {
@@ -329,7 +355,7 @@ impl ArtboardInstance {
             return false;
         };
         state.raw.borrow_mut().set_selection_corner_radius(radius);
-        self.add_dirt(local_id, ComponentDirt::PATH, false)
+        mark_text_input_shape_dirty(self, local_id)
     }
 
     fn sync_text_input_source_from_raw(&mut self, local_id: usize) -> bool {
@@ -428,6 +454,11 @@ impl ArtboardInstance {
                 && horizontal_boundary == CursorBoundary::Line))
             .then(|| self.text_input_line_range_for_cursor(local_id))
             .flatten();
+        if matches!(key, KEY_BACKSPACE | KEY_DELETE | KEY_LEFT | KEY_RIGHT) {
+            // Pinned RawTextInput::backspace/cursorHorizontal call ensureShape
+            // before consulting glyph-cluster boundaries.
+            self.ensure_text_input_geometry(local_id);
+        }
         enum Effect {
             SyncShape,
             SyncPaint,
@@ -529,7 +560,7 @@ impl ArtboardInstance {
         match effect {
             Effect::SyncShape => {
                 self.sync_text_input_source_from_raw(local_id);
-                crate::text_owner::mark_shape_dirty(self, local_id);
+                mark_text_input_shape_dirty(self, local_id);
             }
             Effect::SyncPaint => {
                 self.sync_text_input_source_from_raw(local_id);
@@ -554,14 +585,14 @@ impl ArtboardInstance {
         if insert.is_empty() {
             return true;
         }
-        let changed = self
+        if let Some(state) = self
             .component(local_id)
             .and_then(|component| component.concrete.text_input.as_ref())
-            .is_some_and(|state| state.raw.borrow_mut().insert(&insert));
-        if changed {
-            self.sync_text_input_source_from_raw(local_id);
-            crate::text_owner::mark_shape_dirty(self, local_id);
+        {
+            state.raw.borrow_mut().insert(&insert);
         }
+        self.sync_text_input_source_from_raw(local_id);
+        mark_text_input_shape_dirty(self, local_id);
         true
     }
 

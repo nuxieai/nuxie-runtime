@@ -30,7 +30,17 @@ impl RuntimeOwnedViewModelString {
             return false;
         }
         self.cell
-            .set_value(RuntimeViewModelCellValue::String(Arc::from(value)))
+            .set_value(RuntimeViewModelCellValue::String(Arc::from(value)));
+        true
+    }
+
+    /// `ViewModelInstanceString::applyValue(DataValueString*)`.
+    ///
+    /// Rust retains string payloads as bytes so embedded NUL and non-UTF-8
+    /// values survive host writes. The adapted payload still enters through
+    /// the generated property setter's exact equality/dirt path above.
+    pub(super) fn apply_value(&mut self, data_value: &[u8]) -> bool {
+        self.set_value(data_value)
     }
 }
 

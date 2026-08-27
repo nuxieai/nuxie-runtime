@@ -3865,7 +3865,7 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if !string.set_value(value) {
+        if !string.apply_value(value) {
             return false;
         }
         true

@@ -21,14 +21,17 @@ impl RuntimeListenerInputTypeKeyboard {
         input_type: &RuntimeObject,
         inputs: &[&RuntimeObject],
     ) -> Self {
-        Self {
+        let mut owner = Self {
             global_id: input_type.id,
-            keyboard_inputs: inputs
-                .iter()
-                .filter(|input| input.type_name == "KeyboardInput")
-                .map(|input| RuntimeKeyboardInput::from_imported(input))
-                .collect(),
+            keyboard_inputs: Vec::new(),
+        };
+        for input in inputs
+            .iter()
+            .filter(|input| input.type_name == "KeyboardInput")
+        {
+            owner.add_keyboard_input(RuntimeKeyboardInput::from_imported(input));
         }
+        owner
     }
 
     pub(crate) fn keyboard_input_count(&self) -> usize {
@@ -37,6 +40,17 @@ impl RuntimeListenerInputTypeKeyboard {
 
     pub(crate) fn keyboard_input(&self, index: usize) -> Option<&RuntimeKeyboardInput> {
         self.keyboard_inputs.get(index)
+    }
+
+    fn add_keyboard_input(&mut self, input: RuntimeKeyboardInput) {
+        if self
+            .keyboard_inputs
+            .iter()
+            .any(|existing| existing.global_id == input.global_id)
+        {
+            return;
+        }
+        self.keyboard_inputs.push(input);
     }
 
     pub(crate) fn constraints_met(
@@ -53,7 +67,7 @@ impl RuntimeListenerInputTypeKeyboard {
             if input_type
                 .keyboard_inputs
                 .iter()
-                .any(|input| input.matches(key, modifiers, is_pressed, is_repeat))
+                .any(|input| keyboard_input_matches(input, key, modifiers, is_pressed, is_repeat))
             {
                 return true;
             }
@@ -74,6 +88,22 @@ pub(super) fn key_phase_matches(key_phase: u32, is_pressed: bool, is_repeat: boo
         return mask & KEY_PHASE_DOWN != 0;
     }
     mask & KEY_PHASE_UP != 0
+}
+
+fn keyboard_input_matches(
+    input: &RuntimeKeyboardInput,
+    key: u32,
+    modifiers: u32,
+    is_pressed: bool,
+    is_repeat: bool,
+) -> bool {
+    if input.key_type != u32::MAX && input.key_type != key {
+        return false;
+    }
+    if input.modifiers != modifiers {
+        return false;
+    }
+    key_phase_matches(input.key_phase, is_pressed, is_repeat)
 }
 
 #[cfg(test)]
@@ -108,14 +138,14 @@ mod tests {
     #[test]
     fn keyboard_constraint_uses_wildcard_key_and_exact_modifiers() {
         let wildcard = keyboard_input(1, u32::MAX, KEY_PHASE_DOWN, 2);
-        assert!(wildcard.matches(65, 2, true, false));
-        assert!(wildcard.matches(66, 2, true, false));
-        assert!(!wildcard.matches(65, 0, true, false));
+        assert!(keyboard_input_matches(&wildcard, 65, 2, true, false));
+        assert!(keyboard_input_matches(&wildcard, 66, 2, true, false));
+        assert!(!keyboard_input_matches(&wildcard, 65, 0, true, false));
 
         let exact = keyboard_input(2, 65, KEY_PHASE_UP, 0);
-        assert!(exact.matches(65, 0, false, false));
-        assert!(!exact.matches(66, 0, false, false));
-        assert!(!exact.matches(65, 0, true, false));
+        assert!(keyboard_input_matches(&exact, 65, 0, false, false));
+        assert!(!keyboard_input_matches(&exact, 66, 0, false, false));
+        assert!(!keyboard_input_matches(&exact, 65, 0, true, false));
     }
 
     #[test]

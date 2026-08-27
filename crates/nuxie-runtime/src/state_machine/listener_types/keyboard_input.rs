@@ -22,24 +22,4 @@ impl RuntimeKeyboardInput {
             modifiers: object.uint_property("modifiers").unwrap_or(0) as u32,
         }
     }
-
-    pub(super) fn matches(
-        self,
-        key: u32,
-        modifiers: u32,
-        is_pressed: bool,
-        is_repeat: bool,
-    ) -> bool {
-        if self.key_type != u32::MAX && self.key_type != key {
-            return false;
-        }
-        if self.modifiers != modifiers {
-            return false;
-        }
-        super::listener_input_type_keyboard::key_phase_matches(
-            self.key_phase,
-            is_pressed,
-            is_repeat,
-        )
-    }
 }

@@ -33,41 +33,6 @@ struct RuntimeKeyFrameValueContext<'a> {
     holders: Option<&'a HashMap<u32, RuntimeKeyFrameValue>>,
 }
 
-#[derive(Clone, Copy)]
-enum RuntimeScriptedInterpolationContext<'a> {
-    Shared(&'a ArtboardInstance),
-    Stateful(&'a LinearAnimationInstance, &'a ArtboardInstance),
-}
-
-impl RuntimeScriptedInterpolationContext<'_> {
-    fn evaluate(
-        self,
-        key_frame_global_id: u32,
-        interpolator_global_id: u32,
-        method: ScriptInterpolatorMethod,
-        arguments: &[f32],
-        fallback: f32,
-    ) -> f32 {
-        match self {
-            Self::Shared(artboard) => artboard.evaluate_shared_scripted_interpolator(
-                key_frame_global_id,
-                interpolator_global_id,
-                method,
-                arguments,
-                fallback,
-            ),
-            Self::Stateful(animation, artboard) => animation.evaluate_scripted_interpolator(
-                artboard,
-                key_frame_global_id,
-                interpolator_global_id,
-                method,
-                arguments,
-                fallback,
-            ),
-        }
-    }
-}
-
 impl<'a> RuntimeKeyFrameValueContext<'a> {
     fn number(self, key_frame_global_id: u32) -> Option<f32> {
         match self.holders?.get(&key_frame_global_id)? {
@@ -178,14 +143,10 @@ impl RuntimeLinearAnimation {
                             .double_frame_value_at_with_script_context(
                                 seconds,
                                 key_frame_values,
-                                Some(match animation_instance {
-                                    Some(animation) => {
-                                        RuntimeScriptedInterpolationContext::Stateful(
-                                            animation, &*instance,
-                                        )
-                                    }
-                                    None => RuntimeScriptedInterpolationContext::Shared(&*instance),
-                                }),
+                                Some(effective_scripted_interpolation_context(
+                                    animation_instance,
+                                    &*instance,
+                                )),
                             )
                         else {
                             continue;
@@ -231,14 +192,10 @@ impl RuntimeLinearAnimation {
                             .color_frame_value_at_with_script_context(
                                 seconds,
                                 key_frame_values,
-                                Some(match animation_instance {
-                                    Some(animation) => {
-                                        RuntimeScriptedInterpolationContext::Stateful(
-                                            animation, &*instance,
-                                        )
-                                    }
-                                    None => RuntimeScriptedInterpolationContext::Shared(&*instance),
-                                }),
+                                Some(effective_scripted_interpolation_context(
+                                    animation_instance,
+                                    &*instance,
+                                )),
                             )
                         else {
                             continue;

@@ -31,6 +31,7 @@ pub(crate) enum RuntimeKeyFrameDataBindEnrollment {
 }
 
 include!("animation/keyframe_interpolator.rs");
+include!("animation/interpolating_keyframe.rs");
 include!("animation/cubic_interpolator.rs");
 include!("animation/cubic_interpolator_solver.rs");
 include!("animation/cubic_interpolator_component.rs");
@@ -582,37 +583,6 @@ fn keyed_object_target<'a>(
     let slot = slots.get(object_id)?;
     let target = file.object(slot.source_global_id as usize)?;
     Some((object_id, slot.local_id, target))
-}
-
-fn normalized_interpolator_id(object: &RuntimeObject) -> Option<u64> {
-    object
-        .uint_property("interpolatorId")
-        .filter(|id| *id != u64::from(u32::MAX) && *id != u64::MAX)
-}
-
-fn runtime_key_frame_interpolator(
-    file: &RuntimeFile,
-    artboard_index: usize,
-    key_frame: &RuntimeObject,
-) -> Option<RuntimeInterpolator> {
-    let local_index = usize::try_from(normalized_interpolator_id(key_frame)?).ok()?;
-    let interpolator = file.artboard_local_object(artboard_index, local_index)?;
-    RuntimeInterpolator::from_object(interpolator)
-}
-
-fn key_frame_interpolator_id_resolves_to_expected_type(
-    file: &RuntimeFile,
-    artboard_index: usize,
-    key_frame: &RuntimeObject,
-) -> bool {
-    let Some(local_index) =
-        normalized_interpolator_id(key_frame).and_then(|id| usize::try_from(id).ok())
-    else {
-        return false;
-    };
-    file.artboard_local_object(artboard_index, local_index)
-        .and_then(|interpolator| definition_by_type_key(interpolator.type_key))
-        .is_some_and(|definition| definition.is_a("KeyFrameInterpolator"))
 }
 
 include!("animation/linear_animation.rs");

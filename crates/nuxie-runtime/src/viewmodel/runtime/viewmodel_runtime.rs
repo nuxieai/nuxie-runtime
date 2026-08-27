@@ -160,10 +160,9 @@ impl ViewModelRuntime {
                             "ViewModelPropertySymbolListIndex" => {
                                 ViewModelRuntimeDataType::SymbolListIndex
                             }
-                            "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => {
-                                ViewModelRuntimeDataType::AssetImage
-                            }
+                            "ViewModelPropertyAssetImage" => ViewModelRuntimeDataType::AssetImage,
                             "ViewModelPropertyAssetFont" => ViewModelRuntimeDataType::AssetFont,
+                            "ViewModelPropertyAssetBlob" => ViewModelRuntimeDataType::AssetBlob,
                             "ViewModelPropertyArtboard" => ViewModelRuntimeDataType::Artboard,
                             _ => ViewModelRuntimeDataType::None,
                         };

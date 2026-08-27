@@ -7,6 +7,7 @@ animation/animation_state.cpp	translated	crates/nuxie-runtime/src/animation/anim
 animation/animation_state_instance.cpp	translated	crates/nuxie-runtime/src/animation/animation_state_instance.rs	complete pinned owner translated
 animation/blend_animation_1d.cpp	translated	crates/nuxie-runtime/src/animation/blend_animation_1d.rs	complete pinned owner translated
 animation/focus_action_clear.cpp	translated	crates/nuxie-runtime/src/state_machine/focus_action_clear.rs,crates/nuxie-runtime/src/state_machine/state_machine_instance/state_machine_instance.rs	complete pinned null-safe state-machine and focus-manager dispatch invocation ignore and clearFocus body translated under live-instance ownership and changed-result adaptation
+viewmodel/runtime/viewmodel_runtime.cpp	translated	crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_runtime.rs	complete cpp plus primary handwritten header mechanically audited; schema counts/names, exact PropertyData core-type mapping including AssetBlob and generic Asset none, authored instance lookup/clone, default-or-empty construction, and fresh runtime wrapping are routed through retained RuntimeFile/ViewModel owners
 animation/blend_animation.cpp	translated	crates/nuxie-runtime/src/animation/blend_animation.rs	complete pinned owner translated
 animation/blend_animation_direct.cpp	translated	crates/nuxie-runtime/src/animation/blend_animation_direct.rs	complete pinned owner translated
 animation/blend_state_direct.cpp	translated	crates/nuxie-runtime/src/animation/blend_state_direct.rs	complete pinned owner translated

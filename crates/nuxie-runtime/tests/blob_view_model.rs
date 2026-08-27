@@ -1,6 +1,8 @@
 use std::{rc::Rc, sync::Arc};
 
-use nuxie_runtime::{ScriptViewModelProperty, ViewModelRuntime, script_view_models};
+use nuxie_runtime::{
+    ScriptViewModelProperty, ViewModelRuntime, ViewModelRuntimeDataType, script_view_models,
+};
 
 fn fixture_file() -> nuxie_binary::RuntimeFile {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -70,6 +72,9 @@ fn blob_runtime_wrapper_stores_swaps_and_clears_live_values() {
         })
         .expect("fixture exposes a blob view-model property");
     let runtime = ViewModelRuntime::new(file, view_model_index).expect("blob view model runtime");
+    assert!(runtime.properties().iter().any(|property| {
+        property.name == property_name && property.data_type == ViewModelRuntimeDataType::AssetBlob
+    }));
     let instance = runtime.create_instance().expect("blob instance");
     let property = instance
         .property_blob(&property_name)
